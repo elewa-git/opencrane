@@ -15,7 +15,7 @@ export interface RouteMount
 }
 
 /** Optional rate-limiter overrides for the shares router, used mainly by tests. */
-export interface SharesRouteOptions
+export interface ResourceSharesRouteOptions
 {
 	/** Shared HTTP limiter options applied before the shares router. */
 	readonly rateLimit?: RateLimitOptions;

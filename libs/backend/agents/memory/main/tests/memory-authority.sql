@@ -12,9 +12,11 @@ BEGIN
 END;
 $$;
 
+INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at") VALUES ('user-1','silo-memory','https://identity.example.test','user-1','external',clock_timestamp());
+INSERT INTO "groups" ("id", "silo_id", "name", "membership_authority", "updated_at") VALUES ('group-memory-project','silo-memory','Memory project','local',clock_timestamp());
 INSERT INTO "artifacts" ("id", "silo_id", "owner_principal_id", "kind", "updated_at") VALUES ('memory-artifact','silo-memory','user-1','document',clock_timestamp());
 INSERT INTO "artifact_revisions" ("id", "artifact_id", "revision", "content_address", "byte_length", "media_type", "provenance", "created_by") VALUES ('memory-artifact-revision','memory-artifact',1,'sha256:'||repeat('c',64),12,'text/plain','{"source":"memory-test"}','user-1');
-INSERT INTO "memory_datasets" ("id", "silo_id", "scope_kind", "organization_id", "scope_resource_id", "cognee_dataset_id", "created_by") VALUES ('memory-project','silo-memory','project','org-1','project-cross-functional','cognee-project','user-1');
+INSERT INTO "memory_datasets" ("id", "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "cognee_dataset_id", "created_by") VALUES ('memory-project','silo-memory','group','group-memory-project',NULL,'cognee-project','user-1');
 INSERT INTO "memory_fact_catalog" ("id", "dataset_id", "cognee_external_id", "content_digest", "consent_state", "sensitivity", "provenance", "recorded_by") VALUES ('fact-1','memory-project','cognee-fact-1','sha256:'||repeat('d',64),'explicit','ordinary','{"user_statement":true}','user-1');
 INSERT INTO "memory_fact_catalog" ("id", "dataset_id", "cognee_external_id", "content_digest", "consent_state", "sensitivity", "provenance", "supersedes_fact_id", "recorded_by") VALUES ('fact-2','memory-project','cognee-fact-2','sha256:'||repeat('e',64),'explicit','ordinary','{"user_statement":true}','fact-1','user-1');
 SELECT pg_temp.expect_failure('one fact cannot have two active corrections', $statement$INSERT INTO "memory_fact_catalog" ("id", "dataset_id", "cognee_external_id", "content_digest", "consent_state", "sensitivity", "provenance", "supersedes_fact_id", "recorded_by") VALUES ('fact-3','memory-project','cognee-fact-3','sha256:'||repeat('f',64),'explicit','ordinary','{"user_statement":true}','fact-1','user-1')$statement$, 'must supersede an active fact');

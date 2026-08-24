@@ -3,6 +3,9 @@
   "contexts": {
     "gke_opencrane-dev": {
       "protectedClusterTenants": ["testv3"]
+    },
+    "gke_weownai-proto_europe-west1_opencrane-dev": {
+      "protectedClusterTenants": ["testjos", "testlynn", "testv3", "testv4"]
     }
   }
 }

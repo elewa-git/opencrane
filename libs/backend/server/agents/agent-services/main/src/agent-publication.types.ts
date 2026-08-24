@@ -1,5 +1,7 @@
 import type { AgentRevision, AgentRevisionId, AgentService, AgentServiceId, AgentServiceState, SiloId } from "@opencrane/models/agents";
 
+import type { AuditDecisionRecord } from "@opencrane/backend/server/iam/audit";
+
 /** Command that publishes one immutable agent revision as the service's active revision. */
 export interface PublishAgentRevisionCommand
 {
@@ -63,7 +65,7 @@ export type AtomicAgentRevisionPublicationResult =
  * write, and it is built as one locked transaction so two administrators publishing at the same
  * moment cannot both succeed.
  *
- * Implemented by: `PrismaAgentServicePublicationRepository` in `prisma-agent-publication.ts`.
+ * Implemented by: `PrismaAgentServicePublicationRepository` in `db/prisma-agent-publication.ts`.
  * Called by: {@link __PublishAgentRevision} in `agent-publication.ts`; a caller-attributed instance
  * is built per request by `_publicationFor` in `prisma-agent-services.router.ts` so the audit row
  * names the real administrator.
@@ -91,6 +93,23 @@ export interface AgentServicePublicationRepository
 	 *   that into a 500; it is not a `conflict`.
 	 */
 	publishRevisionAtomically(publication: AtomicAgentRevisionPublication): Promise<AtomicAgentRevisionPublicationResult>;
+}
+
+/**
+ * Builds the audit row while the publication transaction is still open.
+ *
+ * The router binds this port to the authenticated administrator, so the database adapter records
+ * the person who published the revision rather than the server process. A failed audit write rolls
+ * back the publication with it.
+ *
+ * Implemented by: `_buildPublicationAuditEvidence` in `prisma-agent-services.router.ts`.
+ * Called by: `PrismaAgentServicePublicationRepository.publishRevisionAtomically` in
+ * `db/prisma-agent-publication.ts`.
+ */
+export interface AgentPublicationAuditEvidencePort
+{
+	/** Builds the audit evidence from the locked records that will commit. */
+	build(publication: AtomicAgentRevisionPublication, service: AgentService, revision: AgentRevision): AuditDecisionRecord;
 }
 
 /**

@@ -68,6 +68,9 @@ class _EventStream implements ConversationEventStream
 		command.onUpdate?.({ status: ConversationEventStreamStatuses.Live, state, reconnectAttempt: 0, lastHeartbeatAt: Date.now() });
 		return state;
 	}
+
+	/** Reject participant commands because this component test double carries projection only. */
+	public async submit(): Promise<never> { throw new Error("Component test stream does not submit messages."); }
 }
 
 /** Build one authorized empty conversation for route-state tests. */
@@ -214,6 +217,18 @@ describe("ConversationWorkspacePageComponent", function _PageSuite()
 		expect(template).toContain("store.selected() !== null && contextPanelOpen()");
 		expect(template).not.toContain("conversation-workspace--onboarding-history");
 		expect(template).not.toContain("Onboarding history");
+	});
+
+	it("places the reconnect bar immediately before the disabled chat composer", function _ConnectionRecoveryLayout()
+	{
+		const template = readFileSync(join(process.cwd(), "src/lib/components/conversation-workspace-page/conversation-workspace-page.component.html"), "utf8");
+		const connectionBar = template.indexOf("wo-conversation-workspace-connection-status");
+		const composer = template.indexOf("wo-conversation-composer");
+
+		expect(connectionBar).toBeGreaterThan(-1);
+		expect(connectionBar).toBeLessThan(composer);
+		expect(template).toContain("[reconnectPending]=\"store.manualReconnectPending()\"");
+		expect(template).toContain("(reconnectRequested)=\"reconnect()\"");
 	});
 
 	it("closes and reopens the context panel while returning focus to its header trigger", async function _ContextPanelFocus()

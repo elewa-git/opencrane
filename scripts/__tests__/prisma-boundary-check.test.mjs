@@ -4,7 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { findingDelta, inspectPrismaBoundary, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy } from "../prisma-boundary/core.mjs";
+import { findingDelta, inspectPrismaBoundary, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy, validateRawProcedureDeclarations } from "../prisma-boundary/core.mjs";
 
 /** Fixture directory for deterministic ownership examples. */
 const _FIXTURES = fileURLToPath(new URL("./fixtures/prisma-boundary/", import.meta.url));
@@ -16,6 +16,16 @@ const _OWNERS = {
 	unitsOfWork: [{ path: "libs/widgets/prisma-widget-unit-of-work.ts", adapter: "PrismaWidgetUnitOfWork", contract: "WidgetUnitOfWork", contractImportPath: "./widget.types.js", constructs: [{ adapter: "PrismaWidgetRepository", importPath: "./prisma-widget-repository.js" }] }],
 	compositions: [],
 };
+/** The sole policy-owned raw database procedure used by the durable engine adapter. */
+const _RAW_PROCEDURE_CALLS = [{
+	path: "libs/widgets/prisma-db-procedure-gateway.ts",
+	adapter: "PrismaDbProcedureGateway",
+	contract: "AbsurdTaskAdmissionProcedure",
+	contractImportPath: "./absurd-transaction-spawner.types",
+	method: "$queryRaw",
+	sqlTemplate: "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${options}::jsonb)",
+	reason: "The test models the reviewed durable-admission procedure boundary.",
+}];
 
 /** Reads one TypeScript fixture stored as inert text. */
 function _Fixture(name)
@@ -25,7 +35,7 @@ function _Fixture(name)
 
 test("allows imported repository and unit-of-work contract owners", function _AllowsOwners()
 {
-	assert.doesNotThrow(function _ValidPolicy() { validatePolicy({ version: 1, owners: _OWNERS, exemptions: [] }); });
+	assert.doesNotThrow(function _ValidPolicy() { validatePolicy({ version: 1, owners: _OWNERS, rawProcedureCalls: [], exemptions: [] }); });
 	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-widget-repository.ts", _Fixture("positive-repository"), ["widget"], _OWNERS), []);
 	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work"), ["widget"], _OWNERS), []);
 });
@@ -37,7 +47,7 @@ test("allows exact live contracts without empty repository aliases", function _A
 		unitsOfWork: [{ ..._OWNERS.unitsOfWork[0], contract: "WidgetAuthority" }],
 		compositions: [],
 	};
-	assert.doesNotThrow(function _ValidPolicy() { validatePolicy({ version: 1, owners: liveContracts, exemptions: [] }); });
+	assert.doesNotThrow(function _ValidPolicy() { validatePolicy({ version: 1, owners: liveContracts, rawProcedureCalls: [], exemptions: [] }); });
 });
 
 test("rejects service code that calls delegates and transactions directly", function _RejectsServiceBypass()
@@ -77,6 +87,16 @@ test("forbids every raw Prisma method inside a policy-authorized repository", fu
 		"$queryRaw",
 		"$queryRawUnsafe",
 	]);
+});
+
+test("allows only the fixed typed Absurd procedure gateway call", function _AllowsRawProcedureGateway()
+{
+	const source = "import { Prisma } from \"@prisma/client\";\nimport type { AbsurdTaskAdmissionProcedure } from \"./absurd-transaction-spawner.types\";\nexport class PrismaDbProcedureGateway implements AbsurdTaskAdmissionProcedure { async ___DbProcedureCall(client: Prisma.TransactionClient) { return client.$queryRaw(Prisma.sql`SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${options}::jsonb)`); } }\n";
+	const alteredTemplate = source.replace("attempt, created", "attempt, created, ignored");
+	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-db-procedure-gateway.ts", source, ["widget"], _OWNERS, new Set(), _RAW_PROCEDURE_CALLS), []);
+	assert.equal(inspectPrismaBoundary("libs/widgets/prisma-db-procedure-gateway.ts", alteredTemplate, ["widget"], _OWNERS, new Set(), _RAW_PROCEDURE_CALLS).some(function _Raw(finding) { return finding.rule === "PRISMA-RAW-QUERY-FORBIDDEN"; }), true);
+	assert.deepEqual(validateRawProcedureDeclarations("libs/widgets/prisma-db-procedure-gateway.ts", source, _RAW_PROCEDURE_CALLS), []);
+	assert.equal(validateRawProcedureDeclarations("libs/widgets/prisma-db-procedure-gateway.ts", source.replace("client.$queryRaw", "client.$executeRaw"), _RAW_PROCEDURE_CALLS).some(function _Policy(finding) { return finding.rule === "PRISMA-POLICY-RAW-PROCEDURE"; }), true);
 });
 
 test("requires transaction-scoped repository construction to match the owning policy entry", function _RejectsUndeclaredConstruction()
@@ -181,9 +201,10 @@ test("fails closed on broad, ownerless, stale, or malformed exemptions", functio
 	], "2026-08-01");
 	assert.equal(resolved.active.size, 0);
 	assert.equal(resolved.errors.length, 5);
-	assert.throws(function _InvalidPolicy() { validatePolicy({ version: 2, owners: { repositories: [], unitsOfWork: [], compositions: [] }, exemptions: [] }); }, /invalid Prisma-boundary policy schema/u);
-	assert.throws(function _BroadOwner() { validatePolicy({ version: 1, owners: { repositories: [{ path: "libs/*/repository.ts", adapter: "PrismaWidgetRepository", contract: "WidgetRepository", contractImportPath: "./widget.types.js", constructs: [] }], unitsOfWork: [], compositions: [] }, exemptions: [] }); }, /invalid Prisma-boundary owner/u);
-	assert.throws(function _WrongAdapterKind() { validatePolicy({ version: 1, owners: { repositories: [{ path: "libs/widget.ts", adapter: "PrismaWidgetService", contract: "WidgetPort", contractImportPath: "./widget.types.js", constructs: [] }], unitsOfWork: [], compositions: [] }, exemptions: [] }); }, /invalid Prisma-boundary owner/u);
+	assert.throws(function _InvalidPolicy() { validatePolicy({ version: 2, owners: { repositories: [], unitsOfWork: [], compositions: [] }, rawProcedureCalls: [], exemptions: [] }); }, /invalid Prisma-boundary policy schema/u);
+	assert.throws(function _BroadOwner() { validatePolicy({ version: 1, owners: { repositories: [{ path: "libs/*/repository.ts", adapter: "PrismaWidgetRepository", contract: "WidgetRepository", contractImportPath: "./widget.types.js", constructs: [] }], unitsOfWork: [], compositions: [] }, rawProcedureCalls: [], exemptions: [] }); }, /invalid Prisma-boundary owner/u);
+	assert.throws(function _WrongAdapterKind() { validatePolicy({ version: 1, owners: { repositories: [{ path: "libs/widget.ts", adapter: "PrismaWidgetService", contract: "WidgetPort", contractImportPath: "./widget.types.js", constructs: [] }], unitsOfWork: [], compositions: [] }, rawProcedureCalls: [], exemptions: [] }); }, /invalid Prisma-boundary owner/u);
+	assert.throws(function _WrongRawProcedure() { validatePolicy({ version: 1, owners: _OWNERS, rawProcedureCalls: [{ ..._RAW_PROCEDURE_CALLS[0], method: "$queryRawUnsafe" }], exemptions: [] }); }, /invalid raw procedure call/u);
 });
 
 test("keeps review, style, package, and CI surfaces on the boundary check", function _VerifiesPipeline()

@@ -24,7 +24,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 		if (existing !== null) return _ReservationMatches(existing, request) ? { outcome: "idempotent", asset: _ConversationAssetView(existing, caller.subjectId) } : { outcome: "denied", reason: "idempotency_conflict" };
 		const artifactId = randomUUID();
 		const leaseId = randomUUID();
-		await this.transaction.artifact.create({ data: { id: artifactId, siloId: caller.siloId, ownerPrincipalId: caller.subjectId, kind: ArtifactKind.Upload } });
+		await this.transaction.artifact.create({ data: { id: artifactId, siloId: caller.siloId, ownerPrincipalId: caller.principalId, kind: ArtifactKind.Upload } });
 		await this.transaction.artifactUploadLease.create({ data: { id: leaseId, artifactId, siloId: caller.siloId, capabilityJti: randomUUID(), expectedContentAddress: request.contentAddress, expectedByteLength: BigInt(request.byteLength), mediaType: request.mediaType, expiresAt: new Date(Date.now() + 15 * 60 * 1_000) } });
 		const asset = await this.transaction.conversationAsset.create({ data: { id: randomUUID(), siloId: caller.siloId, conversationId, artifactId, uploadLeaseId: leaseId, idempotencyKey: request.idempotencyKey, provenance: PersistedProvenance.ParticipantUpload, state: ConversationAssetState.Uploading, displayName: request.displayName.trim(), mediaType: request.mediaType, byteLength: BigInt(request.byteLength), createdByUserId: caller.subjectId } });
 		return { outcome: "accepted", asset: _ConversationAssetView(asset, caller.subjectId) };

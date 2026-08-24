@@ -3,8 +3,10 @@ BEGIN;
 INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
 VALUES ('execution-snapshot-model', 'global', 'execution-snapshot-model', 'litellm-execution-snapshot-model', 'execution-snapshot-model', clock_timestamp());
 
-INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "updated_at")
-VALUES ('snapshot-service', 'silo-snapshot', 'managed', 'Snapshot test', 'managed-agent', clock_timestamp());
+INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
+VALUES ('snapshot-service-principal', 'silo-snapshot', 'urn:opencrane:agent-service', 'snapshot-service', 'internal', clock_timestamp());
+INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
+VALUES ('snapshot-service', 'silo-snapshot', 'managed', 'Snapshot test', 'managed-agent', 'snapshot-service-principal', clock_timestamp());
 INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
 VALUES ('snapshot-revision', 'snapshot-service', 1, 'draft', 'sha256:' || repeat('a', 64), 'prompt-v1', 'execution-snapshot-model', '{}', 'user-snapshot');
 UPDATE "agent_revisions" SET "state" = 'published', "published_at" = clock_timestamp() WHERE "id" = 'snapshot-revision';

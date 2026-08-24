@@ -141,9 +141,9 @@ flowchart TD
   the old server build looks healthy and behaves like the old release.
 - Cluster-wide prerequisites (ingress-nginx, cert-manager, CloudNativePG) are installed once per
   cluster by `bootstrap-prerequisites.sh` and are never part of a silo release.
-- The PostgreSQL transition is resolved and schema-validated *before* the cluster is touched;
-  migration and privileges run as bounded Helm hook Jobs, with an automatic rollback path that
-  restores the exact fenced Helm revision on failure.
+- A reviewed PostgreSQL migration runs as a bounded Helm hook Job. A failure is returned directly;
+  the deployer does not require a migration backup, inspect the source schema, pause writes, or roll
+  back the application.
 - After the umbrella upgrade, the engine stamps a checksum of the published database connection
   Secrets onto the consumer Deployments (`opencrane-server`, `litellm`, `mcp-gateway`). An
   unchanged checksum is a no-op; a changed one triggers exactly one rollout; and a fresh install

@@ -1,4 +1,5 @@
-import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpCredentialField, McpDirectory, McpEntitledUser, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpDirectory, McpEntitledGroup, McpEntitledUser, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+import type { McpAccessPolicyWire, McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
 
 /**
  * Wire shapes + mappers for the live OpenCrane MCP gateway.
@@ -8,55 +9,6 @@ import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpCredentialF
  * coerce them through the known enum values (with a safe default) and fill
  * missing collections, so every field on the read models is always set — components never see undefined.
  */
-
-/** Wire shape of a catalogue server. */
-export interface McpServerWire
-{
-	/** Stable id / slug. */
-	id: string;
-	/** Display name. */
-	name?: string;
-	/** Short description. */
-	description?: string;
-	/** Publisher label. */
-	publisher?: string;
-	/** Tile glyph. */
-	glyph?: string;
-	/** Connection type (raw string). */
-	type?: string;
-	/** Lifecycle status (raw string). */
-	approvalStatus?: string;
-	/** Credential fields. */
-	credentialSchema?: McpCredentialField[];
-	/** Entitlement summary. */
-	entitlementSummary?: string;
-}
-
-/** Wire shape of an installed-server record. */
-export interface McpInstalledWire
-{
-	/** Catalogue server id. */
-	serverId: string;
-	/** Connection status (raw string). */
-	connectionStatus?: string;
-	/** Relative last-used label. */
-	lastUsed?: string | null;
-	/** Connected OAuth account. */
-	connectedAccount?: string;
-}
-
-/** Wire shape of an access policy. */
-export interface McpAccessPolicyWire
-{
-	/** Server id. */
-	serverId: string;
-	/** Org-wide grant flag. */
-	everyoneInOrg?: boolean;
-	/** Entitled groups. */
-	groups?: string[];
-	/** Entitled users. */
-	users?: McpEntitledUser[];
-}
 
 /** Coerce a raw string into a {@link McpServerType}, defaulting to single-user. */
 function _ToServerType(raw: string | undefined): McpServerType
@@ -101,8 +53,7 @@ export function _MapInstalled(wire: McpInstalledWire): McpInstalledServer
 	return {
 		serverId: wire.serverId,
 		connectionStatus: _ToConnectionStatus(wire.connectionStatus),
-		lastUsed: wire.lastUsed ?? null,
-		connectedAccount: wire.connectedAccount
+		lastUsed: wire.lastUsed ?? null
 	};
 }
 
@@ -111,14 +62,13 @@ export function _MapAccessPolicy(wire: McpAccessPolicyWire): McpAccessPolicy
 {
 	return {
 		serverId: wire.serverId,
-		everyoneInOrg: wire.everyoneInOrg ?? false,
 		groups: wire.groups ?? [],
 		users: wire.users ?? []
 	};
 }
 
 /** Map a wire directory onto the {@link McpDirectory} read model. */
-export function _MapDirectory(wire: { users?: McpEntitledUser[]; groups?: string[] }): McpDirectory
+export function _MapDirectory(wire: { users?: McpEntitledUser[]; groups?: McpEntitledGroup[] }): McpDirectory
 {
 	return { users: wire.users ?? [], groups: wire.groups ?? [] };
 }

@@ -3,6 +3,15 @@ BEGIN;
 INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
 VALUES ('phase-d-model', 'global', 'phase-d-model', 'litellm-phase-d-model', 'phase-d-model', clock_timestamp());
 
+INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
+VALUES
+    ('user-1', 'silo-1', 'https://identity.example.test', 'user-1', 'external', clock_timestamp()),
+    ('svc-main-principal', 'silo-1', 'urn:opencrane:agent-service', 'svc-main', 'internal', clock_timestamp()),
+    ('svc-invalid-initial-principal', 'silo-1', 'urn:opencrane:agent-service', 'svc-invalid-initial', 'internal', clock_timestamp()),
+    ('svc-lifecycle-principal', 'silo-1', 'urn:opencrane:agent-service', 'svc-lifecycle', 'internal', clock_timestamp()),
+    ('svc-run-retirement-principal', 'silo-1', 'urn:opencrane:agent-service', 'svc-run-retirement', 'internal', clock_timestamp()),
+    ('svc-run-rollover-principal', 'silo-1', 'urn:opencrane:agent-service', 'svc-run-rollover', 'internal', clock_timestamp());
+
 CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT)
 RETURNS VOID
 LANGUAGE plpgsql AS $$
@@ -36,10 +45,10 @@ $$;
 
 INSERT INTO "agent_services" (
     "id", "silo_id", "kind", "name",
-    "state", "workload_profile", "created_at", "updated_at"
+    "state", "workload_profile", "principal_id", "created_at", "updated_at"
 ) VALUES (
     'svc-main', 'silo-1', 'managed', 'Main service',
-    'draft', 'standard', clock_timestamp(), clock_timestamp()
+    'draft', 'standard', 'svc-main-principal', clock_timestamp(), clock_timestamp()
 );
 
 SELECT pg_temp.expect_failure(
@@ -47,10 +56,10 @@ SELECT pg_temp.expect_failure(
     $statement$
         INSERT INTO "agent_services" (
             "id", "silo_id", "kind", "name",
-            "state", "workload_profile", "created_at", "updated_at"
+            "state", "workload_profile", "principal_id", "created_at", "updated_at"
         ) VALUES (
             'svc-invalid-initial', 'silo-1', 'managed', 'Invalid service',
-            'paused', 'standard', clock_timestamp(), clock_timestamp()
+            'paused', 'standard', 'svc-invalid-initial-principal', clock_timestamp(), clock_timestamp()
         )
     $statement$,
     'must begin Draft without an active revision'
@@ -173,10 +182,10 @@ SELECT pg_temp.expect_failure(
 
 INSERT INTO "agent_services" (
     "id", "silo_id", "kind", "name",
-    "state", "workload_profile", "created_at", "updated_at"
+    "state", "workload_profile", "principal_id", "created_at", "updated_at"
 ) VALUES (
     'svc-lifecycle', 'silo-1', 'managed', 'Lifecycle service',
-    'draft', 'standard', clock_timestamp(), clock_timestamp()
+    'draft', 'standard', 'svc-lifecycle-principal', clock_timestamp(), clock_timestamp()
 );
 
 INSERT INTO "agent_revisions" (
@@ -216,10 +225,10 @@ SELECT pg_temp.expect_failure(
 
 INSERT INTO "agent_services" (
     "id", "silo_id", "kind", "name",
-    "state", "workload_profile", "created_at", "updated_at"
+    "state", "workload_profile", "principal_id", "created_at", "updated_at"
 ) VALUES (
     'svc-run-retirement', 'silo-1', 'managed', 'Run retirement service',
-    'draft', 'standard', clock_timestamp(), clock_timestamp()
+    'draft', 'standard', 'svc-run-retirement-principal', clock_timestamp(), clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
     "id", "agent_service_id", "revision", "state", "digest",
@@ -279,10 +288,10 @@ SELECT pg_temp.expect_failure(
 
 INSERT INTO "agent_services" (
     "id", "silo_id", "kind", "name",
-    "state", "workload_profile", "created_at", "updated_at"
+    "state", "workload_profile", "principal_id", "created_at", "updated_at"
 ) VALUES (
     'svc-run-rollover', 'silo-1', 'managed', 'Run rollover service',
-    'draft', 'standard', clock_timestamp(), clock_timestamp()
+    'draft', 'standard', 'svc-run-rollover-principal', clock_timestamp(), clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
     "id", "agent_service_id", "revision", "state", "digest",
@@ -1474,24 +1483,28 @@ SELECT pg_temp.expect_failure(
 );
 
 INSERT INTO "authorization_grants" (
-    "id", "silo_id", "subject_id", "scope_kind", "organization_id", "scope_resource_id",
+    "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
+    "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
     "catalog_id", "catalog_revision", "catalog_digest", "capability_id", "resource_kind",
     "resource_id", "effect", "priority", "created_by"
 ) VALUES (
-    'grant-org-1', 'silo-1', 'user-1', NULL,
+    'grant-personal-1', 'silo-1', 'principal', NULL, 'user-1',
+    'personal', NULL, 'user-1', 'exact',
     'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send', 'message',
     'message-1', 'allow', 100, 'user-1'
 );
 
 SELECT pg_temp.expect_failure(
-    'duplicate organization grant with NULL scope resource is rejected',
+    'duplicate personal-boundary grant is rejected',
     $statement$
         INSERT INTO "authorization_grants" (
-            "id", "silo_id", "subject_id", "scope_kind", "organization_id", "scope_resource_id",
+            "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
+            "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
             "catalog_id", "catalog_revision", "catalog_digest", "capability_id", "resource_kind",
             "resource_id", "effect", "priority", "created_by"
         ) VALUES (
-            'grant-org-2', 'silo-1', 'user-1', NULL,
+            'grant-personal-2', 'silo-1', 'principal', NULL, 'user-1',
+            'personal', NULL, 'user-1', 'exact',
             'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send', 'message',
             'message-1', 'allow', 100, 'user-1'
         )
@@ -1509,11 +1522,11 @@ INSERT INTO "verified_fleet_membership_revisions" (
      clock_timestamp() + interval '2 hours', 'sha256:' || repeat('b', 64), 'signature-2', clock_timestamp() - interval '10 minutes');
 
 INSERT INTO "verified_fleet_membership_assertions" (
-    "id", "revision_id", "assertion_id", "silo_id", "subject_id", "scope_kind", "organization_id"
+    "id", "revision_id", "assertion_id", "silo_id", "subject_id"
 ) VALUES (
-    'assertion-before-acceptance-1', 'membership-1', 'assertion-1', 'silo-1', 'user-1', 'organization', 'org-1'
+    'assertion-before-acceptance-1', 'membership-1', 'assertion-1', 'silo-1', 'user-1'
 ), (
-    'assertion-before-acceptance-2', 'membership-2', 'assertion-2', 'silo-1', 'user-1', 'organization', 'org-1'
+    'assertion-before-acceptance-2', 'membership-2', 'assertion-2', 'silo-1', 'user-1'
 );
 
 INSERT INTO "highest_accepted_fleet_memberships" (
@@ -1524,10 +1537,10 @@ SELECT pg_temp.expect_failure(
     'accepted fleet membership revision cannot receive another assertion',
     $statement$
         INSERT INTO "verified_fleet_membership_assertions" (
-            "id", "revision_id", "assertion_id", "silo_id", "subject_id", "scope_kind", "organization_id"
+            "id", "revision_id", "assertion_id", "silo_id", "subject_id"
         ) VALUES (
             'assertion-after-acceptance-1', 'membership-1', 'assertion-3',
-            'silo-1', 'user-2', 'organization', 'org-1'
+            'silo-1', 'user-2'
         )
     $statement$,
     'accepted fleet membership assertions are sealed'
@@ -1551,10 +1564,10 @@ SELECT pg_temp.expect_failure(
     'superseded fleet membership revision remains sealed',
     $statement$
         INSERT INTO "verified_fleet_membership_assertions" (
-            "id", "revision_id", "assertion_id", "silo_id", "subject_id", "scope_kind", "organization_id"
+            "id", "revision_id", "assertion_id", "silo_id", "subject_id"
         ) VALUES (
             'assertion-after-supersession', 'membership-1', 'assertion-4',
-            'silo-1', 'user-3', 'organization', 'org-1'
+            'silo-1', 'user-3'
         )
     $statement$,
     'accepted fleet membership assertions are sealed'
@@ -1563,10 +1576,10 @@ SELECT pg_temp.expect_failure(
     'current fleet membership revision is sealed',
     $statement$
         INSERT INTO "verified_fleet_membership_assertions" (
-            "id", "revision_id", "assertion_id", "silo_id", "subject_id", "scope_kind", "organization_id"
+            "id", "revision_id", "assertion_id", "silo_id", "subject_id"
         ) VALUES (
             'assertion-after-acceptance-2', 'membership-2', 'assertion-5',
-            'silo-1', 'user-4', 'organization', 'org-1'
+            'silo-1', 'user-4'
         )
     $statement$,
     'accepted fleet membership assertions are sealed'

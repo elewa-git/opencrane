@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { INITIAL_PERSONAL_AGENT_POLICY } from "../initial-personal-agent-policy";
 import { InitialPersonalAgentDefaultModelResolutionStatuses, type InitialPersonalAgentDefaultModelResolver } from "../initial-personal-agent-publication.types";
 import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type PersonalAgentBootstrapCommand } from "../personal-agent-bootstrap.types";
-import { PrismaPersonalAgentBootstrapRepository } from "../prisma-personal-agent-bootstrap-repository";
+import { PrismaPersonalAgentBootstrapRepository } from "../db/prisma-personal-agent-bootstrap-repository";
 
 /** Trusted bootstrap command shared by focused repository tests. */
 const _COMMAND: PersonalAgentBootstrapCommand = {
@@ -108,7 +108,7 @@ describe("Prisma personal-agent bootstrap repository", function _Suite()
 		transaction.agentService.findMany.mockResolvedValue([{ id: _COMMAND.onboardingId, activeRevisionId: "revision-existing", workloadProfile: "personal-default", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId } }]);
 		transaction.agentService.findUnique.mockResolvedValue({ id: _COMMAND.onboardingId, siloId: _COMMAND.siloId, kind: "Personal", state: "Active", activeRevisionId: "revision-existing", workloadProfile: "personal-default", activeRevision: { personaRevisionId: _COMMAND.onboardingPersonaRevisionId } });
 		transaction.agentService.findFirst.mockResolvedValue({ id: _COMMAND.onboardingId, activeRevisionId: "revision-existing" });
-		const source = { id: "revision-existing", agentServiceId: _COMMAND.onboardingId, revision: 1, state: "Published", personaRevisionId: _COMMAND.onboardingPersonaRevisionId, promptPolicyVersion: "prompt-v1", modelDefinitionId: "model-1", budget: INITIAL_PERSONAL_AGENT_POLICY.budget, skillAssignments: [], integrationAssignments: [], scopeAttachments: [] };
+		const source = { id: "revision-existing", agentServiceId: _COMMAND.onboardingId, revision: 1, state: "Published", personaRevisionId: _COMMAND.onboardingPersonaRevisionId, promptPolicyVersion: "prompt-v1", modelDefinitionId: "model-1", budget: INITIAL_PERSONAL_AGENT_POLICY.budget, skillAssignments: [], integrationAssignments: [], boundaryAttachments: [] };
 		transaction.agentRevision.findFirst.mockResolvedValueOnce(source).mockResolvedValueOnce({ id: "revision-existing" });
 		transaction.agentRevision.create.mockResolvedValue({ ...source, id: "revision-new", revision: 2, personaRevisionId: "persona-newer", digest: `sha256:${"b".repeat(64)}` });
 

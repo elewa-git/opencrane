@@ -77,15 +77,15 @@ model ElicitationRequest {
 
 /// One response submission, retained for exact attribution and idempotent conflict detection.
 model ElicitationResponseAttempt {
-  id                  String                          @id @default(cuid())
-  requestId           String                          @map("request_id")
-  idempotencyKey      String                          @map("idempotency_key")
-  respondingSubjectId String                          @map("responding_subject_id")
+  id                  String             @id @default(cuid())
+  requestId           String             @map("request_id")
+  idempotencyKey      String             @map("idempotency_key")
+  respondingSubjectId String             @map("responding_subject_id")
   response            Json
-  responseDigest      String                          @map("response_digest")
-  verifiedStepUpAt    DateTime?                       @map("verified_step_up_at")
-  submittedAt         DateTime                        @default(now()) @map("submitted_at")
-  request             ElicitationRequest              @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  responseDigest      String             @map("response_digest")
+  verifiedStepUpAt    DateTime?          @map("verified_step_up_at")
+  submittedAt         DateTime           @default(now()) @map("submitted_at")
+  request             ElicitationRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
 
   @@unique([requestId, idempotencyKey])
   @@index([requestId, submittedAt])
@@ -127,7 +127,7 @@ model PersonalMemoryPermissionReceipt {
   consumedAt             DateTime?                            @map("consumed_at")
   createdAt              DateTime                             @default(now()) @map("created_at")
   request                ElicitationRequest                   @relation(fields: [requestId, runId, attempt], references: [id, runId, attempt], onDelete: Restrict)
-  invocation             ToolInvocation                      @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
+  invocation             ToolInvocation                       @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
 
   @@unique([requestId, runId, attempt])
   @@index([runId, attempt, executionSubjectId, state, expiresAt])

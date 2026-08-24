@@ -19,10 +19,11 @@ import { ConversationProjectionOutcomes, type ConversationProjectionDependencies
  * become run, tool, A2UI and interrupt events. Every durable row is redacted before it is mapped or
  * written.
  *
- * Called by: `__CreateConversationReplayRouter` and `__CreateSelfConversationReplayRouter`.
+ * Called by: `__CreateConversationReplayRouter` and `__CreateSelfConversationSocketServer`.
  *
  * @param dependencies Authorised page reader, optional interrupt overlay, time source and safe bounds.
- * @param sink Transport adapter that writes complete Server-Sent Event records.
+ * @param sink Transport adapter that writes complete serialized projection records. The browser
+ * socket adapter translates its internal records to JSON frames before sending them on the wire.
  * @param command Trusted participant coordinates, cursor and cancellation signal.
  * @returns The reason this finite response stopped.
  * @throws {Error} When a canonical row is invalid or interrupt coordinates conflict.

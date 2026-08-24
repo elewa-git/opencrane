@@ -256,8 +256,8 @@ Repository train `0.8.0` also replaces the earlier fresh-database-only decision 
 version-to-version authority. Every Nx application records the last root train that adapted its
 production contract, directly or through its dependency graph; immutable release manifests map the
 compatible app, chart, and database revisions. Adjacent minor trains carry reviewed Helm transitions
-and a bounded, backup-gated database migration Job. Patch, skipped-minor, and major transitions stay
-manual. The `0.7.0` to `0.8.0` SQL path migrates empty legacy persona state automatically and fails
+and a bounded database migration Job. The deferred migration hardening work is tracked in #699.
+The `0.7.0` to `0.8.0` SQL path migrates empty legacy persona state automatically and fails
 closed with `OC708` when semantic mapping of populated persona data requires an operator-reviewed
 manual plan.
 
@@ -496,6 +496,7 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
 | [#602](https://github.com/elewa-git/opencrane/issues/602) | Retain completed onboarding as closed/read-only workspace history |
 | [#603](https://github.com/elewa-git/opencrane/issues/603) | Build governed conversation attachments and durable agent-created outputs |
 | [#604](https://github.com/elewa-git/opencrane/issues/604) | Build reusable approvals, choices, free-text elicitation, recovery, and safe disclosure |
+| [#695](https://github.com/elewa-git/opencrane/issues/695) | Phase 0 durable control-plane foundation: pinned Absurd schema, transaction-bound task admission, engine-neutral contracts, finite respawn helpers, `pg_cron` deployment preflight, and import boundary; live pickup-latency qualification and aggregate migration remain later gates |
 
 Closed issues are intentionally absent from the active list: [#128](https://github.com/elewa-git/opencrane/issues/128),
 [#129](https://github.com/elewa-git/opencrane/issues/129),

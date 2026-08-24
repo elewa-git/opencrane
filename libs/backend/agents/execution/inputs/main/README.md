@@ -57,7 +57,7 @@ caller input.
 - `__AssembleRunInputSnapshot(command, authorities)` — the end-to-end assembly: validate → load all
   sources inside the admission transaction → compile, digest, and persist.
 - `ManagedExecutionIdentityEnvelopeSource` — adapts the agent-service authority's current signed
-  fleet-membership and effective non-personal scope evidence into a tagged `service` identity. Its
+  fleet-membership and effective non-personal boundary evidence into a tagged `service` identity. Its
   canonical `agent-service:<id>` principal must match the admitted service; a requester never
   becomes that service's execution identity.
 - `__CreatePrismaManagedSessionAssemblyAuthorities` — composes the package-private production
@@ -112,7 +112,7 @@ Tagged `scope:execution-inputs`: it may depend only on `scope:agents`, `scope:ag
 `scope:artifacts`, `scope:authorization`, `scope:membership`, `scope:personal-memory`, `scope:execution-runs`,
 `scope:execution-inputs`, and `scope:shared` — never on apps or unrelated domains. The
 agent-services dependency is one-way: this package consumes managed-service evidence but never
-decides service publication, membership, grant, or scope attachment policy.
+decides service publication, membership, grant, or boundary attachment policy.
 
 ## See also
 

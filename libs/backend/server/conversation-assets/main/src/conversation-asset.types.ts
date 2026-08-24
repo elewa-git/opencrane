@@ -7,6 +7,8 @@ export interface ConversationAssetCaller
 	readonly siloId: string;
 	/** Verified participant subject. */
 	readonly subjectId: string;
+	/** Stable local Principal that owns artifact authorization boundaries. */
+	readonly principalId: string;
 }
 
 /** Browser request to reserve one participant upload. */

@@ -23,7 +23,7 @@ function _isUniqueBy<T>(items: readonly T[], key: (item: T) => string): boolean
 
 /**
  * Returns whether executable revision content is structurally valid before persistence.
- * Duplicate composite keys (a skill, an integration, or an exact scope attachment) are rejected
+ * Duplicate composite keys (a skill, an integration, or an exact boundary attachment) are rejected
  * here so they surface as a 400, rather than a Prisma primary-key violation at insert time.
  */
 function _isContentValid(content: AgentRevisionContent): boolean
@@ -36,10 +36,10 @@ function _isContentValid(content: AgentRevisionContent): boolean
 		&& _isPositiveInteger(content.budget.maxDurationMs)
 		&& content.skills.every(skill => _isPresent(skill.skillId) && _isPresent(skill.revisionId))
 		&& content.integrationAssignments.every(assignment => _isPresent(assignment.integrationId) && _isPresent(assignment.custodyReferenceId) && __AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions))
-		&& content.scopeAttachments.every(attachment => _isPresent(attachment.subjectId))
+		&& content.boundaryAttachments.every(attachment => _isPresent(attachment.boundaryId))
 		&& _isUniqueBy(content.skills, skill => skill.skillId)
 		&& _isUniqueBy(content.integrationAssignments, assignment => assignment.integrationId)
-		&& _isUniqueBy(content.scopeAttachments, attachment => `${attachment.scope}\u0000${attachment.subjectType}\u0000${attachment.subjectId}`);
+		&& _isUniqueBy(content.boundaryAttachments, attachment => `${attachment.boundaryKind}\u0000${attachment.boundaryId}\u0000${attachment.boundaryCoverage}`);
 }
 
 /** Maps one lifecycle action to the target stable-service state it requests. */

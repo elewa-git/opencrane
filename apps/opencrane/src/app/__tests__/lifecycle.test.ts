@@ -9,6 +9,7 @@ import type { ExternalActionWorker } from "@opencrane/backend/agents/execution/p
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { ChannelTargetRouteReconciler } from "@opencrane/backend/server/agents/channel-targets";
+import type { SelfConversationSocketServer } from "@opencrane/backend/server/conversations";
 
 import type { OpenCraneProcessConfig } from "../config.types";
 
@@ -77,9 +78,10 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 			{} as k8s.BatchV1Api,
 			{} as ManagedRunAdmissionPort,
 			{} as RunCancellationRepository,
-			{ publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig,
-			channelTargets,
-			function _UnbindConsole() { _calls.push("console"); },
+		{ publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig,
+		channelTargets,
+		{ attach: function _Attach() { _calls.push("socket.attach"); }, close: function _CloseSockets() { _calls.push("sockets"); } } as SelfConversationSocketServer,
+		function _UnbindConsole() { _calls.push("console"); },
 			{} as ExternalActionWorker,
 			function _StopObot() { _calls.push("obot"); },
 		);
@@ -88,10 +90,13 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 		const interrupt = process.listeners("SIGINT").find(function _New(listener) { return !previousInt.has(listener); });
 		if (term === undefined || interrupt === undefined) throw new Error("lifecycle did not register process signal handlers");
 		_registeredListeners.push({ signal: "SIGTERM", listener: term }, { signal: "SIGINT", listener: interrupt });
+		expect(_calls).toContain("socket.attach");
 		term("SIGTERM");
 
 		await vi.waitFor(function _Exited() { expect(exit).toHaveBeenCalledWith(0); });
 		expect(_calls.indexOf("streams")).toBeLessThan(_calls.indexOf("obot"));
+		expect(_calls.indexOf("streams")).toBeLessThan(_calls.indexOf("sockets"));
+		expect(_calls.indexOf("sockets")).toBeLessThan(_calls.indexOf("obot"));
 		expect(_calls.indexOf("obot")).toBeLessThan(_calls.indexOf("workers"));
 		expect(_calls.indexOf("workers")).toBeLessThan(_calls.indexOf("prisma"));
 		expect(_calls.indexOf("prisma")).toBeLessThan(_calls.indexOf("telemetry"));

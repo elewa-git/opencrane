@@ -158,9 +158,9 @@ export interface ManagedRunNowCommand
  *   `memory_unavailable`, `tool_policy_unavailable`, `skill_unavailable`, `budget_unavailable`,
  *   `identity_unavailable` (409): one input the run needs could not be assembled. These are
  *   configuration problems, not transient ones — fix the revision, do not retry the same request.
- * - `memory_scope_unavailable` (409): a scope attachment on the revision is not backed by a real
- *   grant, or a managed service attached a `personal` scope (never allowed). Remove the attachment
- *   or grant the scope.
+ * - `memory_scope_unavailable` (409): a boundary attachment on the revision is not backed by a real
+ *   grant, or a managed service attached a Personal boundary (never allowed). Remove the attachment
+ *   or grant that boundary.
  * - `membership_stale` (503): the signed fleet-membership evidence for the agent principal is
  *   missing or older than the configured limit. Retry after the issuer republishes.
  * - `persistence_unavailable` (503): a database write failed with no safe outcome to report. Retry.
@@ -256,7 +256,7 @@ export interface AgentServiceHistory
  * (`expectedParentRevisionId`); if someone else appended first, the call returns a conflict with the
  * current newest revision instead of silently overwriting the other author's work.
  *
- * Implemented by: `PrismaAgentRevisionLifecycleRepository` in `prisma-agent-revision-lifecycle.ts`.
+ * Implemented by: `PrismaAgentRevisionLifecycleRepository` in `db/prisma-agent-revision-lifecycle.ts`.
  * Called by: the seven `__*` use cases in `agent-revision-lifecycle.ts`; wired in
  * `prisma-agent-services.router.ts`.
  */

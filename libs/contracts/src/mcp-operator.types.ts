@@ -3,9 +3,8 @@
  *
  * These shapes back the `/api/v1/mcp/*` API the WeOwnAI frontend targets: the
  * entitlement-scoped catalogue, per-user installs / credential connect, and the
- * org-admin governance + access-policy endpoints. They sit ON TOP of the existing
- * `/mcp-servers` admin registry (whose source-of-truth shape is {@link McpServer}
- * in `mcp-server.types.ts`) rather than replacing it.
+ * org-admin governance + access-policy endpoints. This is the sole public MCP contract; there is
+ * no parallel unsiloed registry or credential-inventory API.
  *
  * Custody contract: NO type here ever carries credential material. A connected
  * install reports only its {@link McpConnectionStatus}; the secret lives in the
@@ -51,26 +50,19 @@ export enum McpApprovalStatus
 }
 
 /**
- * Whether one user's install of a server is usable yet, and how it was connected.
+ * Reports whether an installed MCP server still needs external activation or is usable through an
+ * administrator-managed shared key.
  *
- * It reports only whether a credential is held and by what route — never the credential itself.
- * `Activating` and `ActivationFailed` are both transient-looking but only the first will change
- * on its own; a UI must offer a retry for the second.
+ * The operator API returns these values from persisted install rows. OpenCrane currently has no
+ * credential or OAuth activation command, so `NeedsCredential` cannot advance through this API.
+ * Renaming either value requires matching database and API changes.
  */
 export enum McpConnectionStatus
 {
-  /** Installed but no credential authored yet. */
+  /** The server is installed but remains unusable until an external custody flow activates it. */
   NeedsCredential = "needs-credential",
-  /** Credential submitted; the gateway is establishing the connection. */
-  Activating = "activating",
-  /** Connected via a per-user credential. */
-  Connected = "connected",
-  /** Connected via a remote OAuth handshake. */
-  OauthConnected = "oauth-connected",
-  /** Connected via the org-wide shared key (multi-user servers). */
+  /** The server is usable through an administrator-managed key; the caller supplies no credential. */
   SharedKey = "shared-key",
-  /** The gateway failed to establish the connection. */
-  ActivationFailed = "activation-failed",
 }
 
 /**
@@ -94,8 +86,7 @@ export interface CredentialField
 }
 
 /**
- * A catalogue server as exposed by the operator API (distinct from the registry
- * {@link McpServer}). Every field beyond `id` is optional so the same shape serves
+ * A catalogue server as exposed by the operator API. Every field beyond `id` is optional so the same shape serves
  * both the entitled user catalogue and the richer admin governance view.
  */
 export interface McpCatalogServer
@@ -121,8 +112,7 @@ export interface McpCatalogServer
 }
 
 /**
- * A server installed by the calling user, with its connection state. Never carries
- * credential material — `connectedAccount` is a non-secret display label only.
+ * A server installed by the calling user, with its connection state.
  */
 export interface McpInstalled
 {
@@ -132,8 +122,6 @@ export interface McpInstalled
   connectionStatus?: McpConnectionStatus;
   /** ISO-8601 timestamp of last use, or null when never used. */
   lastUsed?: string | null;
-  /** Non-secret display label of the connected account (e.g. an email). */
-  connectedAccount?: string;
 }
 
 /**
@@ -141,7 +129,7 @@ export interface McpInstalled
  */
 export interface EntitledUser
 {
-  /** Stable user identifier (sub or email). */
+  /** Stable local Principal identifier. */
   id: string;
   /** Display name. */
   name: string;
@@ -152,17 +140,29 @@ export interface EntitledUser
 }
 
 /**
- * Org-admin access policy deciding which callers may see and install a server.
+ * A group that can receive an MCP authorization grant.
+ *
+ * The identifier is the durable local Group id. The name is display data and never participates
+ * in an authorization decision.
+ */
+export interface EntitledGroup
+{
+  /** Stable local Group identifier used by authorization grants. */
+  id: string;
+  /** Human-readable group name shown in the access editor. */
+  name: string;
+}
+
+/**
+ * Projection of the authorization grants that let principals and groups use an MCP server.
  */
 export interface McpAccessPolicy
 {
   /** Identifier of the governed server. */
   serverId: string;
-  /** When true, every caller in the org is entitled (lists are ignored). */
-  everyoneInOrg?: boolean;
-  /** Entitled group identifiers / names. */
-  groups?: string[];
-  /** Entitled individual users. */
+  /** Groups with an active allow grant for this server. */
+  groups: EntitledGroup[];
+  /** Principals with an active allow grant for this server. */
   users?: EntitledUser[];
 }
 
@@ -171,8 +171,8 @@ export interface McpAccessPolicy
  */
 export interface Directory
 {
-  /** All known users that can be entitled. */
+  /** All local principals that can receive an MCP authorization grant. */
   users: EntitledUser[];
-  /** All known group identifiers / names that can be entitled. */
-  groups: string[];
+  /** All local groups that can receive an MCP authorization grant. */
+  groups: EntitledGroup[];
 }

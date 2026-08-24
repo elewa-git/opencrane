@@ -16,20 +16,20 @@ function _revisionRow()
 		expiresAt: new Date("2026-07-18T01:00:00.000Z"),
 		payloadDigest: `sha256:${"1".repeat(64)}`,
 		signature: "signature-7",
-		assertions: [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1", scopeKind: "Project", organizationId: "org-1", scopeResourceId: "project-1" }],
+		assertions: [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1" }],
 	};
 }
 
 describe("Prisma fleet-membership authority adapter", function _suite()
 {
-	it("maps the latest verified project assertion without inventing department or team parents", async function _latest()
+	it("maps the latest verified silo-membership assertion without categorical scope fields", async function _latest()
 	{
 		const prisma = { verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(_revisionRow()) } } as unknown as PrismaClient;
 		const repository = new PrismaFleetMembershipAuthorityRepository(prisma);
 
 		const revision = await repository.getLatestSignedRevision("fleet-1", "silo-1");
 
-		expect(revision?.assertions[0]?.scope).toEqual({ kind: "project", organizationId: "org-1", projectId: "project-1" });
+		expect(revision?.assertions[0]).toEqual({ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1" });
 	});
 
 	it("commits a newer high-watermark and audit through one serialized transaction", async function _accept()

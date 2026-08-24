@@ -55,6 +55,7 @@ export function validatePolicy(policy)
 {
 	if (policy?.version !== 1
 		|| !Array.isArray(policy?.exemptions)
+		|| !Array.isArray(policy?.rawProcedureCalls)
 		|| !Array.isArray(policy?.owners?.repositories)
 		|| !Array.isArray(policy?.owners?.unitsOfWork)
 		|| !Array.isArray(policy?.owners?.compositions))
@@ -97,6 +98,24 @@ export function validatePolicy(policy)
 		{
 			throw new Error("invalid Prisma-boundary composition path; require an exact repository-relative .ts path");
 		}
+	}
+	const rawProcedureKeys = new Set();
+	for (const procedure of policy.rawProcedureCalls)
+	{
+		const valid = _IsExactTypeScriptPath(procedure?.path)
+			&& procedure.adapter === "PrismaDbProcedureGateway"
+			&& procedure.contract === "AbsurdTaskAdmissionProcedure"
+			&& procedure.contractImportPath === "./absurd-transaction-spawner.types"
+			&& procedure.method === "$queryRaw"
+			&& procedure.sqlTemplate === "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${options}::jsonb)"
+			&& typeof procedure.reason === "string"
+			&& procedure.reason.trim().length >= 20;
+		const key = `${procedure?.path ?? ""}\u0000${procedure?.adapter ?? ""}\u0000${procedure?.method ?? ""}`;
+		if (!valid || rawProcedureKeys.has(key))
+		{
+			throw new Error("invalid raw procedure call; require the exact typed Absurd gateway and fixed SQL template");
+		}
+		rawProcedureKeys.add(key);
 	}
 }
 

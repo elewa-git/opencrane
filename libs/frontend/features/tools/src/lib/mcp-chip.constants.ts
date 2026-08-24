@@ -38,9 +38,5 @@ export const MCP_APPROVAL_CHIPS: Record<McpApprovalStatus, _McpChipPresentation>
 export const MCP_CONNECTION_INDICATORS: Record<McpConnectionStatus, _McpConnectionPresentation> =
 {
 	[McpConnectionStatus.NeedsCredential]: { label: "Needs credential", tone: ScopeChipTones.Warning, pulse: false },
-	[McpConnectionStatus.Activating]: { label: "Activating…", tone: ScopeChipTones.Neutral, pulse: true },
-	[McpConnectionStatus.Connected]: { label: "Connected", tone: ScopeChipTones.Success, pulse: false },
-	[McpConnectionStatus.OauthConnected]: { label: "OAuth connected", tone: ScopeChipTones.Success, pulse: false },
-	[McpConnectionStatus.SharedKey]: { label: "Shared key · set by admin", tone: ScopeChipTones.Info, pulse: false },
-	[McpConnectionStatus.ActivationFailed]: { label: "Activation failed", tone: ScopeChipTones.Danger, pulse: false }
+	[McpConnectionStatus.SharedKey]: { label: "Shared key · set by admin", tone: ScopeChipTones.Info, pulse: false }
 };

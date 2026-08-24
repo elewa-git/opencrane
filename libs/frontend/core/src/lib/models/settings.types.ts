@@ -1,4 +1,4 @@
-import { ScopeLevel } from "./scope.types";
+import { ResourceBoundaryKind } from "./boundary.types";
 
 /** Settings navigation sections. */
 export enum SettingsSection
@@ -88,13 +88,13 @@ export interface SearchModeInfo
 	hint: string;
 }
 
-/** A Cognee scope dataset in the awareness contract settings. */
+/** A Cognee boundary dataset in the awareness contract settings. */
 export interface CogneeDataset
 {
 	/** Stable dataset row id. */
 	id: string;
-	/** Scope level. */
-	scope: ScopeLevel;
+	/** Resource boundary kind. */
+	boundaryKind: ResourceBoundaryKind;
 	/** Dataset display name. */
 	name: string;
 	/** Cognee dataset id. */
@@ -134,8 +134,8 @@ export interface HarvestChannel
 	name: string;
 	/** Single-letter icon glyph. */
 	icon: string;
-	/** Scope level. */
-	scope: ScopeLevel;
+	/** Resource boundary kind. */
+	boundaryKind: ResourceBoundaryKind;
 	/** Target dataset label. */
 	dataset: string;
 	/** Sync status ("healthy" | "syncing" | "error"). */
@@ -151,8 +151,8 @@ export interface DatasetAccess
 {
 	/** Dataset label. */
 	name: string;
-	/** Scope level. */
-	scope: ScopeLevel;
+	/** Resource boundary kind. */
+	boundaryKind: ResourceBoundaryKind;
 	/** Access mode ("read" | "read-write"). */
 	access: string;
 	/** Entry count. */

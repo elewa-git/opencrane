@@ -23,7 +23,6 @@ import type { RequestHandler } from "express";
  * rejected here until their session is refreshed.
  *
  * Called by: libs/backend/server/gateways/mcp/main/src/routes/mcp-operator.ts (8 routes),
- * .../routes/mcp-servers.ts (3 routes),
  * libs/backend/server/gateways/providers/main/src/routes/provider-byok.ts (2 routes), and
  * libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts.
  *

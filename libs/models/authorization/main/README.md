@@ -14,9 +14,9 @@ Three ideas run through it:
 - A **capability** is a named permission drawn from an immutable, versioned catalogue (for example
   "write this file"). References pin the exact catalogue revision by digest, so nobody can quietly
   redefine what a capability means.
-- A **grant** hands one subject a capability, on one exact resource, within one **scope** (a slice
-  of the org — organisation, department, team, project, personal, or direct-user), with an effect
-  (allow/deny), a priority, and validity times.
+- A **grant** hands one Principal or Group a capability on one exact resource and one stored product
+  boundary. A Group boundary may cover only that Group or its persisted descendants; a Personal
+  boundary is always exact. The grant also records its effect, priority, and validity times.
 - A **proof of possession** is how a running workload proves it is the one entitled to act. The
   types describe a short-lived, signed request-binding envelope (DPoP-style: a signature that ties
   the request to a key the workload holds) carrying the exact silo, service account, pod, run, and
@@ -26,8 +26,10 @@ The load-bearing function is `__DecideAuthorization(request, grants)`. It is **f
 deterministic**: it filters grants to those that structurally match the request, rejects any with
 malformed validity or priority, drops future/expired/revoked grants, then lets only the highest-
 priority survivors decide — and **deny always wins** a tie. No matching grant means deny. Helpers
-`__AuthorizationScopeCovers`, `__AuthorizationResourcesEqual` (exact, never wildcard or hierarchical)
-and `fleet-membership` (trust of a signed membership revision) enforce the same strictness.
+`__AuthorizationBoundaryCovers`, `__AuthorizationResourcesEqual` (exact, never wildcard or
+hierarchical), and `fleet-membership` (trust of a signed membership revision) enforce the same
+strictness. Group membership is direct: a parent relationship affects descendant boundary coverage,
+not who belongs to the parent.
 
 Used by the authorization/grants/membership backends and re-exported through `@opencrane/contracts`.
 A mistake here can only ever refuse a legitimate request — never grant access it should not.
@@ -39,8 +41,11 @@ A mistake here can only ever refuse a legitimate request — never grant access 
   deterministic decision.
 - Capability types: `CapabilityReference`, `CapabilityCatalogReference`, `ActionCapability`.
 - Proof types: `CapabilityProof*`, `Es256PublicJwk`, `ValidCapabilityProof`/`InvalidCapabilityProof`.
-- Scope/resource: `AuthorizationScope`, `AuthorizationResourceLocator`, `__AuthorizationScopeCovers`,
-  `__AuthorizationResourcesEqual`, `__IsAuthorizationResourceLocator`.
+- Subjects and boundaries: `AuthorizationSubject`, `AuthorizationBoundary`,
+  `AuthorizationBoundaryCoverages`, `AuthorizationBoundaryContext`, and
+  `__AuthorizationBoundaryCovers`.
+- Resources: `AuthorizationResourceLocator`, `__AuthorizationResourcesEqual`, and
+  `__IsAuthorizationResourceLocator`.
 - Fleet membership: `SignedFleetMembershipRevision`, `FleetMembershipTrustDecision`, and its evaluator.
 
 ## Boundary

@@ -48,7 +48,8 @@ Startup proceeds in six visible stages:
    port, both over the same signed membership configuration. A standalone deployment has no Fleet
    key but deliberately denies run admission until it has a local signed-membership issuer;
 5. build the public and internal Express applications; and
-6. start both listeners and bounded workers under one coordinated shutdown path.
+6. attach the signed-in conversation WebSocket to the public listener, then start both listeners and
+   bounded workers under one coordinated shutdown path.
 
 The route registry is deliberately a catalogue rather than a second application layer:
 
@@ -71,7 +72,9 @@ evidence produces a refusal, never partial authority.
 Both conversation routes compose the transport-neutral
 [conversation projection package](../../libs/backend/conversations/projection/main/README.md). It
 turns authorised direct, group and agent-session timelines into the same safe, resumable browser
-stream while this app keeps authentication, Prisma and Express ownership.
+stream while this app keeps authentication, Prisma and listener ownership. The browser transport is
+a same-origin WebSocket on the public listener: the app restores the existing cookie session before
+the upgrade, rejects a cross-origin request, and closes active sockets before Prisma drains.
 
 ## Public surface
 
@@ -105,10 +108,13 @@ its resources to the lifecycle owner.
 - `src/app/external-action-composition.ts` binds that worker to the immutable execution snapshot,
   canonical tool lifecycle unit of work, deferred-approval authority, and private provider ports.
 - `src/app/lifecycle.ts` starts both listeners, aborts active Obot exchanges before draining workers,
-  drains requests, disconnects Prisma, and flushes telemetry.
+  closes conversation sockets, drains requests, disconnects Prisma, and flushes telemetry.
 - `prisma/schema/*.prisma` defines the product's durable domain models.
-- `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database. Its focused source
-  verifiers prove the seeded persona and onboarding-bootstrap content against the reviewed files in
+- `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database. The baseline publisher
+  installs the pinned `pg_cron` prerequisite before it switches to the application owner, then this
+  file installs the pinned Absurd durable-task schema. The server does not compose a worker until a
+  later product slice registers a reviewed task. Its focused source verifiers prove the seeded
+  persona and onboarding-bootstrap content against the reviewed files in
   `docs/design/persona-archetypes/`.
 - `prisma/migrations/<from>-to-<to>/` owns reviewed, adjacent schema upgrades for existing databases.
   The PostgreSQL deployment Job runs them before an incompatible server rollout; server startup

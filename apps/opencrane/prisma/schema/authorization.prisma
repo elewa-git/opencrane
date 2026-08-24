@@ -1,10 +1,31 @@
-enum AuthorizationScopeKind {
-  Organization @map("organization")
-  Department   @map("department")
-  Team         @map("team")
-  Project      @map("project")
-  Personal     @map("personal")
-  DirectUser   @map("direct-user")
+/// Identifies whether a persisted grant belongs to a Group or directly to a Principal.
+/// Authorization resolves Group subjects through stored direct memberships; changing these mapped
+/// values requires a data migration because AuthorizationGrant rows store them.
+enum AuthorizationSubjectKind {
+  /// The grant applies when the caller has a direct stored membership in the subject Group.
+  Group     @map("group")
+  /// The grant applies directly to the named person or service Principal.
+  Principal @map("principal")
+}
+
+/// Identifies the persisted product boundary that a grant protects.
+/// Authorization loads Group ancestry from product storage, while Personal boundaries never use
+/// hierarchy. Changing these mapped values requires a data migration.
+enum AuthorizationBoundaryKind {
+  /// The grant protects one stored Group node, subject to its AuthorizationBoundaryCoverage.
+  Group    @map("group")
+  /// The grant protects resources owned by one Principal and cannot cover descendants.
+  Personal @map("personal")
+}
+
+/// Controls whether a persisted grant stops at its boundary or follows stored Group descendants.
+/// Authorization rejects Descendants on a Personal boundary. Changing these mapped values requires
+/// a data migration because callers branch on the stored value.
+enum AuthorizationBoundaryCoverage {
+  /// The grant covers the named Group or Personal boundary and nothing below it.
+  Exact       @map("exact")
+  /// The grant covers the named Group and Groups whose stored ancestor path contains it.
+  Descendants @map("descendants")
 }
 
 enum AuthorizationEffect {
@@ -65,33 +86,41 @@ enum ToolResultDeliveryState {
 }
 
 model AuthorizationGrant {
-  id              String                    @id @default(cuid())
-  siloId          String                    @map("silo_id")
-  subjectId       String                    @map("subject_id")
-  scopeKind       AuthorizationScopeKind    @map("scope_kind")
-  organizationId  String                    @map("organization_id")
-  /// Null only for scope kinds without a resource dimension. The reviewed target baseline adds a
-  /// partial unique index for those rows because PostgreSQL treats NULL values as distinct in the
-  /// ordinary exact-authority key.
-  scopeResourceId String?                   @map("scope_resource_id")
-  catalogId       String                    @map("catalog_id")
-  catalogRevision Int                       @map("catalog_revision")
-  catalogDigest   String                    @map("catalog_digest")
-  capabilityId    String                    @map("capability_id")
-  resourceKind    String                    @map("resource_kind")
-  resourceId      String                    @map("resource_id")
-  effect          AuthorizationEffect
-  priority        Int
-  validFrom       DateTime                  @default(now()) @map("valid_from")
-  expiresAt       DateTime?                 @map("expires_at")
-  revokedAt       DateTime?                 @map("revoked_at")
-  requireApproval Boolean                   @default(false) @map("require_approval")
-  createdBy       String                    @map("created_by")
-  createdAt       DateTime                  @default(now()) @map("created_at")
-  catalog         CapabilityCatalogRevision @relation(fields: [catalogId, catalogRevision, catalogDigest], references: [catalogId, revision, digest], onDelete: Restrict)
+  id                     String                        @id @default(cuid())
+  siloId                 String                        @map("silo_id")
+  subjectKind            AuthorizationSubjectKind      @map("subject_kind")
+  subjectGroupId         String?                       @map("subject_group_id")
+  subjectPrincipalId     String?                       @map("subject_principal_id")
+  boundaryKind           AuthorizationBoundaryKind     @map("boundary_kind")
+  boundaryGroupId        String?                       @map("boundary_group_id")
+  boundaryPrincipalId    String?                       @map("boundary_principal_id")
+  boundaryCoverage       AuthorizationBoundaryCoverage @map("boundary_coverage")
+  /// Names the product editor that owns reconciliation of this row. Null means no editor owns it.
+  managerId              String?                       @map("manager_id")
+  catalogId              String                        @map("catalog_id")
+  catalogRevision        Int                           @map("catalog_revision")
+  catalogDigest          String                        @map("catalog_digest")
+  capabilityId           String                        @map("capability_id")
+  resourceKind           String                        @map("resource_kind")
+  resourceId             String                        @map("resource_id")
+  effect                 AuthorizationEffect
+  priority               Int
+  validFrom              DateTime                      @default(now()) @map("valid_from")
+  expiresAt              DateTime?                     @map("expires_at")
+  revokedAt              DateTime?                     @map("revoked_at")
+  requireApproval        Boolean                       @default(false) @map("require_approval")
+  createdBy              String                        @map("created_by")
+  createdAt              DateTime                      @default(now()) @map("created_at")
+  catalog                CapabilityCatalogRevision     @relation(fields: [catalogId, catalogRevision, catalogDigest], references: [catalogId, revision, digest], onDelete: Restrict)
+  subjectGroup           Group?                        @relation("AuthorizationGrantSubjectGroup", fields: [subjectGroupId, siloId], references: [id, siloId], onDelete: Restrict)
+  subjectPrincipal       Principal?                    @relation("AuthorizationGrantSubjectPrincipal", fields: [subjectPrincipalId, siloId], references: [id, siloId], onDelete: Restrict)
+  boundaryGroup          Group?                        @relation("AuthorizationGrantBoundaryGroup", fields: [boundaryGroupId, siloId], references: [id, siloId], onDelete: Restrict)
+  boundaryPrincipal      Principal?                    @relation("AuthorizationGrantBoundaryPrincipal", fields: [boundaryPrincipalId, siloId], references: [id, siloId], onDelete: Restrict)
+  resourceShareRecipient ResourceShareRecipient?
 
-  @@unique([siloId, subjectId, scopeKind, organizationId, scopeResourceId, catalogId, catalogRevision, capabilityId, resourceKind, resourceId, effect, priority], map: "authorization_grant_exact_authority_key")
-  @@index([siloId, subjectId, scopeKind, organizationId, scopeResourceId])
+  @@index([siloId, subjectKind, subjectGroupId, subjectPrincipalId])
+  @@index([siloId, boundaryKind, boundaryGroupId, boundaryPrincipalId, boundaryCoverage])
+  @@index([siloId, managerId])
   @@index([siloId, resourceKind, resourceId, priority])
   @@index([catalogId, catalogRevision, capabilityId])
   @@map("authorization_grants")
@@ -159,7 +188,7 @@ model ApprovalRequest {
   createdAt                DateTime                   @default(now()) @map("created_at")
   run                      AgentRun                   @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
   toolInvocation           ToolInvocation?            @relation(fields: [toolInvocationRowId], references: [id], onDelete: Restrict)
-  elicitationRequest       ElicitationRequest?         @relation(fields: [elicitationRequestId], references: [id], onDelete: Restrict)
+  elicitationRequest       ElicitationRequest?        @relation(fields: [elicitationRequestId], references: [id], onDelete: Restrict)
   proofKey                 RunProofKey                @relation(fields: [proofKeyId, runId, attempt, workloadKind, workloadUid, proofKeyThumbprint, podUid], references: [id, runId, attempt, workloadKind, workloadUid, keyThumbprint, podUid], onDelete: Restrict)
   assignment               WorkloadAssignment         @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, workloadAudience, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, audience, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
   catalog                  CapabilityCatalogRevision? @relation(fields: [catalogId, catalogRevision, catalogDigest], references: [catalogId, revision, digest], onDelete: Restrict)
@@ -174,43 +203,43 @@ model ApprovalRequest {
 /// this Preparing row atomically with acceptance; all later preparation, approval, dispatch,
 /// reconciliation, terminal result delivery, and manual recovery decisions use revision/fence CAS.
 model ToolInvocation {
-  id                       String                     @id @default(cuid())
-  siloId                   String                     @map("silo_id")
-  runId                    String                     @map("run_id")
+  id                       String                           @id @default(cuid())
+  siloId                   String                           @map("silo_id")
+  runId                    String                           @map("run_id")
   attempt                  Int
-  agentServiceId           String                     @map("agent_service_id")
-  agentRevisionId          String                     @map("agent_revision_id")
-  subjectId                String                     @map("subject_id")
-  runtimeInstanceId        String                     @map("runtime_instance_id")
-  commandId                String                     @map("command_id")
-  candidateId              String                     @map("candidate_id")
-  toolRevisionId           String                     @map("tool_revision_id")
-  toolInvocationId         String                     @map("tool_invocation_id")
+  agentServiceId           String                           @map("agent_service_id")
+  agentRevisionId          String                           @map("agent_revision_id")
+  subjectId                String                           @map("subject_id")
+  runtimeInstanceId        String                           @map("runtime_instance_id")
+  commandId                String                           @map("command_id")
+  candidateId              String                           @map("candidate_id")
+  toolRevisionId           String                           @map("tool_revision_id")
+  toolInvocationId         String                           @map("tool_invocation_id")
   arguments                Json
-  argumentsDigest          String                     @map("arguments_digest")
-  effectiveArguments       Json                       @map("effective_arguments")
-  effectiveArgumentsDigest String                     @map("effective_arguments_digest")
-  requestFingerprint       String                     @unique @map("request_fingerprint")
-  requestIdentity          Json                       @map("request_identity")
-  approvalRequired         Boolean                    @default(false) @map("approval_required")
-  recoveryMode             ExternalActionRecoveryMode @map("recovery_mode")
-  recoveryKey              String?                    @map("recovery_key")
-  state                    ToolInvocationState        @default(Preparing)
-  preparationAttempt       Int                        @default(0) @map("preparation_attempt")
-  retryDeadlineAt          DateTime                   @map("retry_deadline_at")
-  nextPreparationAttemptAt DateTime                   @map("next_preparation_attempt_at")
-  claimAttempt             Int                        @default(0) @map("claim_attempt")
-  claimKind                ExternalActionClaimKind?   @map("claim_kind")
-  claimFence               Int                        @default(0) @map("claim_fence")
-  claimExpiresAt           DateTime?                  @map("claim_expires_at")
-  recoveryRequiredAt       DateTime?                  @map("recovery_required_at")
+  argumentsDigest          String                           @map("arguments_digest")
+  effectiveArguments       Json                             @map("effective_arguments")
+  effectiveArgumentsDigest String                           @map("effective_arguments_digest")
+  requestFingerprint       String                           @unique @map("request_fingerprint")
+  requestIdentity          Json                             @map("request_identity")
+  approvalRequired         Boolean                          @default(false) @map("approval_required")
+  recoveryMode             ExternalActionRecoveryMode       @map("recovery_mode")
+  recoveryKey              String?                          @map("recovery_key")
+  state                    ToolInvocationState              @default(Preparing)
+  preparationAttempt       Int                              @default(0) @map("preparation_attempt")
+  retryDeadlineAt          DateTime                         @map("retry_deadline_at")
+  nextPreparationAttemptAt DateTime                         @map("next_preparation_attempt_at")
+  claimAttempt             Int                              @default(0) @map("claim_attempt")
+  claimKind                ExternalActionClaimKind?         @map("claim_kind")
+  claimFence               Int                              @default(0) @map("claim_fence")
+  claimExpiresAt           DateTime?                        @map("claim_expires_at")
+  recoveryRequiredAt       DateTime?                        @map("recovery_required_at")
   result                   Json?
-  failureCode              String?                    @map("failure_code")
-  revision                 Int                        @default(0)
-  createdAt                DateTime                   @default(now()) @map("created_at")
-  updatedAt                DateTime                   @updatedAt @map("updated_at")
-  completedAt              DateTime?                  @map("completed_at")
-  run                      AgentRun                   @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
+  failureCode              String?                          @map("failure_code")
+  revision                 Int                              @default(0)
+  createdAt                DateTime                         @default(now()) @map("created_at")
+  updatedAt                DateTime                         @updatedAt @map("updated_at")
+  completedAt              DateTime?                        @map("completed_at")
+  run                      AgentRun                         @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
   approvalRequests         ApprovalRequest[]
   resultDelivery           ToolResultDelivery?
   skillWorkload            SkillWorkload?

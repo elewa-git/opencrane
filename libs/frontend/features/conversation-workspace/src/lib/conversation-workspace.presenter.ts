@@ -10,6 +10,15 @@ import { AgUiToolStatuses, ConversationCreationStates, ConversationEventStreamSt
 import { _ConversationMessageViews, _ConversationOnboardingContinuationPresentation, _ConversationOnboardingDialogueEntries, _ConversationOnboardingHistoryPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation, _LiveMessageViews } from "./conversation-workspace.mapper";
 import type { ConversationOnboardingContinuationPresentation, ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types";
 
+/** Display-safe connection notice and whether it offers a participant-requested replacement socket. */
+interface ConversationWorkspaceConnectionPresentation
+{
+	/** Shared status-line copy and tone for the current stream phase. */
+	readonly status: ConversationStatusPresentation;
+	/** Whether the current stream phase allows a participant to reconnect immediately. */
+	readonly reconnectAvailable: boolean;
+}
+
 /** Feature-scoped presenter that derives view state and delegates typed intents to owning stores. */
 export class ConversationWorkspacePresenter
 {
@@ -70,8 +79,8 @@ export class ConversationWorkspacePresenter
 	protected readonly a2uiSurfaces = computed(this._A2uiSurfaces.bind(this));
 	/** Shared composer state derived from current command and lifecycle. */
 	protected readonly composerState = computed(this._ComposerState.bind(this));
-	/** Short truthful live status. */
-	protected readonly liveStatus = computed(this._LiveStatus.bind(this));
+	/** In-composer connection notice derived from the selected stream phase. */
+	protected readonly connectionStatus = computed(this._ConnectionStatus.bind(this));
 	/** Run action presentation without command authority. */
 	protected readonly runActions = computed(this._RunActions.bind(this));
 	/** Load once when this route-ready component is constructed. */
@@ -95,6 +104,8 @@ export class ConversationWorkspacePresenter
 		const assetIds = this.assetsStore.messageAssetIds();
 		if (await this.store.send(assetIds)) this.assetsStore.clearMessageSelection(assetIds);
 	}
+	/** Ask the selected workspace store to replace a paused or failed socket. */
+	protected reconnect(): void { this.store.reconnect(); }
 	/** Select files through the existing 200 MB per-message asset state. */
 	protected async selectFiles(event: Event): Promise<void>
 	{
@@ -266,16 +277,17 @@ export class ConversationWorkspacePresenter
 	private _ComposerState(): ConversationComposerStates
 	{
 		if (this.store.sending()) return ConversationComposerStates.Submitting;
+		if (this.store.streamStatus() !== ConversationEventStreamStatuses.Live) return ConversationComposerStates.Disabled;
 		return this.store.selected()?.lifecycle === ConversationLifecycles.Open ? ConversationComposerStates.Available : ConversationComposerStates.Disabled;
 	}
 
-	/** Map stream connection and failure truth to one shared status line. */
-	private _LiveStatus(): ConversationStatusPresentation | null
+	/** Map stream connection and failure truth to the in-composer recovery bar. */
+	private _ConnectionStatus(): ConversationWorkspaceConnectionPresentation | null
 	{
 		const status = this.store.streamStatus();
-		if (status === ConversationEventStreamStatuses.Connecting) return { label: "Connecting", detail: "Loading live updates.", tone: ConversationStatusTones.Neutral };
-		if (status === ConversationEventStreamStatuses.Reconnecting) return { label: "Reconnecting", detail: "Your draft is still here.", tone: ConversationStatusTones.Attention };
-		if (status === ConversationEventStreamStatuses.Failed) return { label: "Live updates stopped", detail: "Reopen the conversation to try again.", tone: ConversationStatusTones.Danger };
+		if (status === ConversationEventStreamStatuses.Connecting) return { status: { label: "Connecting to chat", detail: "Messages will be available when the connection is ready.", tone: ConversationStatusTones.Neutral }, reconnectAvailable: false };
+		if (status === ConversationEventStreamStatuses.Reconnecting) return { status: { label: `Reconnecting — attempt ${this.store.reconnectAttempt()}`, detail: "Your draft is still here. Sending resumes when the connection returns.", tone: ConversationStatusTones.Attention }, reconnectAvailable: true };
+		if (status === ConversationEventStreamStatuses.Failed) return { status: { label: "Connection lost", detail: "Automatic reconnecting stopped. Your draft is still here.", tone: ConversationStatusTones.Danger, assertive: true }, reconnectAvailable: true };
 		return null;
 	}
 

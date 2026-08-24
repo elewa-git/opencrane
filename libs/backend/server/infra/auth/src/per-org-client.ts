@@ -63,7 +63,7 @@ interface ClusterTenantCrForLogin
  * logged at warn, because that one is an operational fault a human must fix.
  *
  * Called by: `OidcAuthService.resolveLoginClient` in
- * libs/backend/server/iam/identity/main/src/oidc.service.ts.
+ * libs/backend/server/iam/identity/main/src/auth/oidc.service.ts.
  *
  * @param customApi - Kubernetes custom-objects client, or null when no cluster is wired.
  * @param host      - The request host, normally from {@link _RequestHost}.

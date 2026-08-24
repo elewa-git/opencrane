@@ -1,24 +1,5 @@
 import type { JsonValue } from "@opencrane/util";
-
-/**
- * How wide a share reaches.
- *
- * These four are a deliberate subset of the scopes authorization supports as a whole — sharing does
- * not offer the others. Because these values cross into the grants package, the Prisma adapter maps
- * each one to its database enum by hand rather than letting generated database names reach callers.
- * A stored grant in any other scope makes `_shareScopeKind` throw.
- */
-export enum ShareAuthorizationScopeKinds
-{
-	/** Applies the share across one organization. */
-	Organization = "organization",
-	/** Applies the share within one department. */
-	Department = "department",
-	/** Applies the share within one independent project. */
-	Project = "project",
-	/** Applies the share to one personal-agent scope. */
-	Personal = "personal",
-}
+import type { AuthorizationBoundary, AuthorizationBoundaryCoverages, AuthorizationSubject } from "@opencrane/models/authorization";
 
 /** A persisted capability-catalog revision used to bind a share to its evaluated capability. */
 export interface ShareCapabilityCatalogRevision
@@ -40,10 +21,12 @@ export interface ShareAuthorizationGrant
 {
 	/** Stable authorization-grant identifier. */
 	readonly id: string;
-	/** Recipient identity, which may be an opaque user or a group identifier. */
-	readonly subjectId: string;
-	/** Independent authorization scope category supported by sharing. */
-	readonly scopeKind: ShareAuthorizationScopeKinds;
+	/** Principal or group that receives the share. */
+	readonly subject: AuthorizationSubject;
+	/** Product boundary covered by the share. */
+	readonly boundary: AuthorizationBoundary;
+	/** Exact or descendant coverage assigned to the boundary. */
+	readonly boundaryCoverage: AuthorizationBoundaryCoverages;
 	/** Stable resource family, for example `mcp-server`. */
 	readonly resourceKind: string;
 	/** Exact resource instance granted to the recipient. */
@@ -59,12 +42,14 @@ export interface CreateShareAuthorizationGrant
 {
 	/** Silo that scopes every participant and resource lookup. */
 	readonly siloId: string;
-	/** Recipient that will receive the grant. */
-	readonly subjectId: string;
-	/** Independent authorization scope category supported by sharing. */
-	readonly scopeKind: ShareAuthorizationScopeKinds;
-	/** Organization dimension required by every share scope. */
-	readonly organizationId: string;
+	/** Optional bounded product editor that owns future reconciliation of this grant. */
+	readonly managerId?: string;
+	/** Principal or group that receives the grant. */
+	readonly subject: AuthorizationSubject;
+	/** Product boundary covered by the share. */
+	readonly boundary: AuthorizationBoundary;
+	/** Exact or descendant coverage assigned to the boundary. */
+	readonly boundaryCoverage: AuthorizationBoundaryCoverages;
 	/** Catalog that owns the share capability. */
 	readonly catalogId: string;
 	/** Revision that defined the share capability. */
@@ -80,7 +65,7 @@ export interface CreateShareAuthorizationGrant
 	/** Deterministic precedence assigned to the new share grant. */
 	readonly priority: number;
 	/** Existing principal who is sharing this capability. */
-	readonly createdBy: string;
+	readonly createdByPrincipalId: string;
 }
 
 /** Result of creating a share or returning the pre-existing durable entitlement. */
@@ -103,4 +88,6 @@ export interface ShareAuthorizationRepository
 	listActiveShares(siloId: string, createdBy: string, catalogId: string, capabilityId: string): Promise<readonly ShareAuthorizationGrant[]>;
 	/** Deletes a share only when it belongs to the requesting subject in the exact silo. */
 	revokeOwnedShare(siloId: string, createdBy: string, grantId: string): Promise<boolean>;
+	/** Deletes an exact share grant only when both the principal and bounded manager own it. */
+	revokeManagedShare(siloId: string, managerId: string, createdBy: string, grantId: string): Promise<boolean>;
 }

@@ -1,5 +1,5 @@
 /**
- * The three verified identity fields that select one user's personal memory dataset.
+ * Verified local identity fields that select one user's personal memory dataset and facts.
  *
  * Every field must come from a verified identity, never from request input. There is
  * deliberately no dataset id here: a caller naming its own dataset is how one user's memory
@@ -11,9 +11,9 @@ export interface ResolvePersonalMemoryDatasetCommand
 {
 	/** Silo in which the personal dataset must exist. */
 	readonly siloId: string;
-	/** Organization taken from the caller's verified membership. */
-	readonly organizationId: string;
-	/** Subject whose personal dataset is being resolved. */
+	/** Stable local Principal whose Personal boundary owns the dataset. */
+	readonly principalId: string;
+	/** Verified OIDC subject retained for existing fact provenance. */
 	readonly subjectId: string;
 }
 
@@ -48,14 +48,14 @@ export interface PersonalMemoryDataset
 export interface PersonalMemoryAdmissionRepository
 {
 	/**
-	 * @param command - The three verified identity fields; all must match.
+	 * @param command - The verified silo and Principal; both must match.
 	 * @returns The user's Active personal dataset, or null when no Active dataset matches all
 	 * three. Null must not be reported as an error to the user: it is turned into the single
 	 * vague `MemoryScopeUnavailable` denial so it cannot be used to probe for other users' scopes.
 	 */
 	findActivePersonalDataset(command: ResolvePersonalMemoryDatasetCommand): Promise<PersonalMemoryDataset | null>;
 	/**
-	 * @param command - The three verified identity fields; all must match.
+	 * @param command - The verified silo and Principal; both must match.
 	 * @returns The ids of the user's Active facts whose consent is Explicit or Confirmed and
 	 * whose provenance names this same user as having stated them. Facts derived from messages,
 	 * and facts stated by anyone else, are excluded. Empty when the user has no personal dataset.

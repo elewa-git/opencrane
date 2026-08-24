@@ -26,9 +26,12 @@ It is the first runtime seam every protected request passes through:
 **In this flow:** [http](../http/README.md) *(mounts the middleware)* · the IAM (identity and access
 management)/tenancy backend domains *(read the resolved identity)*
 
-`___AuthMiddleware` resolves auth in a fixed priority order — public-path bypass, OIDC session,
-env-var token (for CI), per-user database token, then a dev-mode bypass only when nothing is
-configured. Around it the library owns: environment-driven OIDC config (`___LoadOidcAuthConfig`),
+`___AuthMiddleware` resolves auth in a fixed priority order — public-path bypass, exact configured
+OIDC session identity, mandatory local Principal admission, then denial. Principal admission is an
+injected IAM port: it must reconcile the verified group claims and exact-resolve the host silo,
+issuer, and subject before the middleware attaches `request.authenticatedPrincipal` and enters a
+product route. Projection failure returns unavailable and a stale or mismatched projection returns
+unauthenticated; neither path calls the product router. Around it the library owns: environment-driven OIDC config (`___LoadOidcAuthConfig`),
 session lifecycle helpers (`_saveSession`, `_regenerateSession`, `_destroySession`, safe return-to
 sanitising), identity-claim resolution, organisation **membership** facts (which orgs a user belongs
 to / owns), a **per-org login client** seam (each organisation can have its own OIDC settings), silo
@@ -39,7 +42,8 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
 
 ## Public surface
 
-- `___AuthMiddleware`, `AccessTokenReader` — the request authentication middleware and its token-reader port.
+- `___AuthMiddleware`, `AuthenticatedPrincipalAdmission` — the request authentication middleware and
+  its fail-closed durable-identity admission port.
 - `___LoadOidcAuthConfig`, `OidcAuthConfig`, `_IsDevAuthMode` — OIDC configuration.
 - `OidcAuthServiceBase`, `LoginClient`, `AuthStatus` — the login-flow service and per-org login seam.
   Subclasses may declare a post-login admission failure fatal when silently continuing would present
@@ -47,8 +51,8 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
   session before returning the callback error; optional projection work remains best-effort.
 - Session helpers + `AuthUser`; `_ResolveIdentityClaims`; `_ResolveOrgMembershipFacts`,
   `OrgMembershipFacts`, `OrgMembershipRepository`, and `PrismaOrgMembershipRepository`.
-- `_ResolveRequestPrincipal`, `RequestPrincipal` — derive one authenticated subject, host-selected
-  silo, and organisation-admin flag without importing any backend-domain caller type.
+- `_ResolveRequestPrincipal`, `RequestPrincipal` — expose the admitted local Principal, independently
+  rechecked host silo, and organisation-admin flag without importing any backend-domain caller type.
 - `_CreateMountedPublicKeySource`, `MountedPublicKeySource` — fail-closed access to an absolute
   projected public-key file, reloaded on each use so Secret rotation takes effect without restart.
 - `_RequirePlatformOperator`, `_RequireOrgAdmin` — authorization gates.

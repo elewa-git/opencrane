@@ -1,10 +1,12 @@
-import { ScopeLevel } from "./scope.types";
+import { ResourceBoundaryKind } from "./boundary.types";
 
-/** A scope dataset row in the context panel's retrieved-scope rail. */
+/** A boundary dataset row in the context panel's retrieved-context rail. */
 export interface ScopeContextEntry
 {
-	/** Scope level of the dataset. */
-	level: ScopeLevel;
+	/** Stable Principal or Group ID that owns the boundary. */
+	boundaryId: string;
+	/** Stored boundary discriminator; group hierarchy remains separate data. */
+	boundaryKind: ResourceBoundaryKind;
 	/** Dataset label (e.g. "acme-corp"). */
 	label: string;
 	/** Secondary description line. */
@@ -15,7 +17,7 @@ export interface ScopeContextEntry
 	freshness: string;
 	/** Citations contributed to the current thread. */
 	citationCount: number;
-	/** Scope accent colour. */
+	/** Boundary accent colour. */
 	color: string;
 }
 
@@ -24,8 +26,10 @@ export interface ScopeCitation
 {
 	/** Stable citation id. */
 	id: string;
-	/** Scope the citation came from. */
-	scope: ScopeLevel;
+	/** Stable boundary that supplied the citation. */
+	boundaryId: string;
+	/** Stored boundary discriminator. */
+	boundaryKind: ResourceBoundaryKind;
 	/** Source identifier (file, channel, wiki). */
 	source: string;
 	/** Cited snippet text. */
@@ -39,8 +43,8 @@ export interface ActiveSkill
 {
 	/** Skill name. */
 	name: string;
-	/** Scope the skill is granted at. */
-	scope: ScopeLevel;
+	/** Boundary kind at which the skill is granted. */
+	boundaryKind: ResourceBoundaryKind;
 	/** Skill version string ("local" for unpublished). */
 	version: string;
 	/** Whether the skill is active. */
@@ -54,8 +58,8 @@ export interface LedgerEntry
 	id: string;
 	/** Entry kind ("observation" | "policy" | "action"). */
 	type: string;
-	/** Knowledge scope of the entry. */
-	scope: ScopeLevel;
+	/** Resource boundary kind of the entry. */
+	boundaryKind: ResourceBoundaryKind;
 	/** Entry label. */
 	label: string;
 	/** Source reference. */
@@ -164,6 +168,6 @@ export interface CanvasDocument
 	risks: readonly CanvasRisk[];
 	/** Number of citations that grounded this document. */
 	citationCount: number;
-	/** The scope levels the document's citations came from. */
-	citationScopes: readonly ScopeLevel[];
+	/** The boundary kinds the document's citations came from. */
+	citationBoundaryKinds: readonly ResourceBoundaryKind[];
 }

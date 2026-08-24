@@ -40,7 +40,7 @@ export class PersonalMemoryPreferenceFactSource implements PreferenceFactSource
 		// 2. Read only the verified subject's consented facts, through the caller's admission transaction.
 		const ids = await __SelectPersonalPreferenceFactIds(this.createPersonalMemory(transaction), {
 			siloId: command.siloId,
-			organizationId: identity.organizationId,
+			principalId: identity.principalId,
 			subjectId: identity.executionSubjectId,
 		});
 

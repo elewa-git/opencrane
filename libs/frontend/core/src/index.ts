@@ -1,4 +1,4 @@
-export * from "./lib/models/scope.types";
+export * from "./lib/models/boundary.types";
 export * from "./lib/models/session.types";
 export * from "./lib/models/thread.types";
 export * from "./lib/models/context.types";

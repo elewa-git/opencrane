@@ -13,8 +13,8 @@ import { toSanitizedMarkdownHtml } from "@opencrane/state/conversation/render";
  * The workspace feature and its state package are written against injection tokens and never name a
  * transport, so on their own they cannot run. This function is the one place that says which
  * implementation each token gets, and it lives in the app because the app is the layer allowed to
- * know about HTTP: `docs/agents/app-specific.md` keeps feature packages on presentation, state
- * packages on ports, and only a state adapter package on the generated API, and
+ * know about transport: `docs/agents/app-specific.md` keeps feature packages on presentation, state
+ * packages on ports, and only a state adapter package on browser transport, and
  * `docs/agents/app-source-allowlist.json` classifies this file as `browser-composition` for exactly
  * that reason. Adding an adapter import to the feature instead of here would break that direction.
  *
@@ -39,11 +39,12 @@ import { toSanitizedMarkdownHtml } from "@opencrane/state/conversation/render";
 export function provideConversationWorkspaceComposition(): (Provider | EnvironmentProviders)[]
 {
 	return [
+		OpenCraneConversationEventStream,
 		{ provide: CONVERSATION_WORKSPACE_GATEWAY, useClass: OpenCraneConversationWorkspaceGateway },
 		// The stream comes from the shared conversation adapter rather than a workspace-specific one:
 		// direct, group, and Agent-session conversations all read the same event stream, and
 		// docs/agents/app-specific.md keeps that as one implementation instead of a second copy.
-		{ provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useClass: OpenCraneConversationEventStream },
+		{ provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useExisting: OpenCraneConversationEventStream },
 		{ provide: CONVERSATION_ASSETS_GATEWAY, useClass: OpenCraneConversationAssetsGateway },
 		...provideOpenCraneA2ui(toSanitizedMarkdownHtml)
 	];

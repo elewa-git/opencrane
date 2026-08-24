@@ -10,8 +10,7 @@
  * `libs/backend/artifacts/preprocessor/main/src/remote.ts`,
  * `libs/backend/channel-proxy/main/src/target-resolver.ts`,
  * `libs/backend/agents/runtime/controller/src/http-agent-controller-response.ts`,
- * `libs/backend/server/conversations/main/src/replay-cursor.ts`,
- * `libs/frontend/state/conversation/ag-ui/src/ag-ui-sse-decoder.ts`.
+ * `libs/backend/server/conversations/main/src/replay-cursor.ts`.
  * @param value - Raw JSON text from an untrusted source.
  * @param sourceName - Label used in the syntax-error message; it appears in logs, so keep it non-sensitive.
  * @param validate - Validator that returns `T` or throws.

@@ -37,48 +37,6 @@ spec:
           args:
             - |
               deadline="$(( $(date +%s) + {{ $.Values.privileges.timeoutSeconds }} ))"
-              {{- if eq $databaseIndex 0 }}
-              baseline_log="/tmp/${PGDATABASE}-baseline.log"
-              until recorded_origin="$(psql --no-psqlrc -v ON_ERROR_STOP=1 -d "$PGDATABASE" -tA \
-                -c 'SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline" WHERE "singleton" = TRUE' \
-                2>"$baseline_log")"; do
-                if [ "$(date +%s)" -ge "$deadline" ]; then
-                  cat "$baseline_log" >&2
-                  echo "Timed out proving schema convergence for logical database '$PGDATABASE'" >&2
-                  exit 1
-                fi
-                sleep 2
-              done
-              convergence=incompatible
-              if [ "$recorded_origin" = "$CURRENT_PROTECTED_BASELINE_SHA256" ]; then
-                history_exists="$(psql --no-psqlrc -v ON_ERROR_STOP=1 -d "$PGDATABASE" -tA \
-                  -c "SELECT to_regclass('opencrane_migrations.schema_history') IS NOT NULL")"
-                [ "$history_exists" = "f" ] && convergence=current
-              elif [ "$PREVIOUS_MIGRATION_AVAILABLE" = "true" ] \
-                && [ "$recorded_origin" = "$SELECTED_SOURCE_PROTECTED_BASELINE_SHA256" ]; then
-                history_exists="$(psql --no-psqlrc -v ON_ERROR_STOP=1 -d "$PGDATABASE" -tA \
-                  -c "SELECT to_regclass('opencrane_migrations.schema_history') IS NOT NULL")"
-                if [ "$history_exists" = "t" ]; then
-                  # Sends the query over stdin because psql does not substitute -v variables in a -c string.
-                  exact_history="$(psql --no-psqlrc -v ON_ERROR_STOP=1 -d "$PGDATABASE" -tA \
-                    -v current_schema_version="$CURRENT_SCHEMA_VERSION" \
-                    -v target_baseline_sha256="$TARGET_BASELINE_SHA256" \
-                    -v previous_migration_id="$PREVIOUS_MIGRATION_ID" \
-                    -v previous_migration_sql_sha256="$PREVIOUS_MIGRATION_SQL_SHA256" \
-                    -v previous_schema_version="$PREVIOUS_SCHEMA_VERSION" \
-                    -v selected_source_protected_baseline_sha256="$SELECTED_SOURCE_PROTECTED_BASELINE_SHA256" <<'SQL'
-              SELECT count(*) = 1 FROM opencrane_migrations.schema_history WHERE schema_version = :'current_schema_version' AND source_schema_version = :'previous_schema_version' AND source_baseline_sha256 = :'selected_source_protected_baseline_sha256' AND target_baseline_sha256 = :'target_baseline_sha256' AND migration_id = :'previous_migration_id' AND sql_sha256 = :'previous_migration_sql_sha256';
-              SQL
-              )"
-                  [ "$exact_history" = "t" ] && convergence=current
-                fi
-              fi
-              if [ "$convergence" != "current" ]; then
-                cat "$baseline_log" >&2
-                echo "Database '$PGDATABASE' is not an exact fresh or migrated $CURRENT_SCHEMA_VERSION schema" >&2
-                exit 1
-              fi
-              {{- end }}
               privileges_log="/tmp/${PGDATABASE}-privileges.log"
               until psql --single-transaction -v ON_ERROR_STOP=1 -d "$PGDATABASE" -v database="$PGDATABASE" -v owner="$PGUSER" -v database_admin="{{ $.Values.databaseAdmin.name }}" >"$privileges_log" 2>&1 <<'SQL'
               REVOKE CONNECT, TEMPORARY ON DATABASE :"database" FROM PUBLIC;
@@ -108,23 +66,5 @@ spec:
               value: {{ printf "%s-rw" (include "opencrane.postgres.fullname" $) | quote }}
             - name: PGDATABASE
               value: {{ $database.name | quote }}
-            {{- if eq $databaseIndex 0 }}
-            - name: CURRENT_SCHEMA_VERSION
-              value: {{ $.Values.convergence.targetSchemaVersion | quote }}
-            - name: TARGET_BASELINE_SHA256
-              value: {{ $.Values.convergence.targetBaselineSha256 | quote }}
-            - name: CURRENT_PROTECTED_BASELINE_SHA256
-              value: {{ $.Values.convergence.currentProtectedBaselineSha256 | quote }}
-            - name: PREVIOUS_MIGRATION_AVAILABLE
-              value: {{ $.Values.convergence.previousMigration.available | quote }}
-            - name: PREVIOUS_MIGRATION_ID
-              value: {{ $.Values.convergence.previousMigration.id | quote }}
-            - name: PREVIOUS_MIGRATION_SQL_SHA256
-              value: {{ $.Values.convergence.previousMigration.sqlSha256 | quote }}
-            - name: PREVIOUS_SCHEMA_VERSION
-              value: {{ $.Values.convergence.previousMigration.fromSchemaVersion | quote }}
-            - name: SELECTED_SOURCE_PROTECTED_BASELINE_SHA256
-              value: {{ $.Values.convergence.previousMigration.selectedSourceProtectedBaselineSha256 | quote }}
-            {{- end }}
         {{- end }}
 {{- end }}

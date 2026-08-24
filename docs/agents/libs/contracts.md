@@ -11,7 +11,7 @@ from the barrel only.
 - **`index.ts`** — the one barrel; re-exports everything below + the client.
 - **`client.ts`** — `___CreateControlPlaneClient(baseUrl)` builds an `openapi-fetch` client typed by `paths` and sends same-origin OIDC session cookies. Exports `paths`; `ControlPlaneClient` lives in `client.types.ts`.
 - **`generated/api.ts`** — **auto-generated**, do not hand-edit. The `paths` type map.
-- Product contract files cover the ClusterTenant organisation boundary, grants, groups, MCP servers,
+- Product contract files cover the ClusterTenant organisation boundary, grants, groups, MCP governance,
   model routing, memory, approvals, runtime assignments, immutable run input, controller exchange,
   artifact preprocessing, and the display-safe AG-UI event projection.
 
@@ -27,8 +27,7 @@ is `openapi-fetch` (tiny, typed `GET`/`POST`/… over `paths`).
 - `ClusterTenantIsolationTier`: `shared` · `dedicatedNodes` · `dedicatedCluster`
 - `ClusterTenantComputeMode`: `shared` · `dedicated`
 - `ClusterTenantPhase`: `pending` · `provisioning` · `ready` · `failed`
-- `GrantAccess`: `allow`·`deny` · `GrantScope`: `org`·`department`·`project`·`personal` · `GrantSubjectType`: `group`·`tenant`·`user`
-- `McpServerTransport`: `streamable-http`·`sse`·`websocket` · `McpServerStatus`: `active`·`degraded`·`draft`
+- `McpServerType`: `single-user`·`multi-user`·`remote-oauth` · `McpApprovalStatus`: `pending-review`·`approved`·`published`·`disabled`
 - `SkillBundleStatus`: `published`·`review`·`draft` · `SkillPromotionStatus`: `proposed`·`approved`·`rejected`
 - `ThirdPartySourceKind`: `mcp-registry`·`anthropic-skills`·`git-repository`·`manual-upload`
 

@@ -54,6 +54,8 @@ export interface UserRunAdmissionCommand extends RunAdmissionCommandCoordinates
 	readonly trigger: "interactive";
 	/** Subject that must be verified by signed fleet membership before the run can commit. */
 	readonly executionSubjectId: string;
+	/** Verified OIDC issuer that namespaces the execution subject. */
+	readonly executionIssuer: string;
 }
 
 /** Initial admission requested for an autonomous managed AgentService. */

@@ -75,6 +75,28 @@ return reason === FailureReason.Unavailable ? 503 : reason === FailureReason.Not
 return _STATUS_BY_REASON[reason];
 ```
 
+## If Body Placement
+
+Every `if` body starts on the following physical line. This applies whether the body uses braces or
+is a single `return`, `continue`, `throw`, assignment, or function call. Keeping the condition and
+its effect on separate lines makes both parts easy to scan and gives future edits a stable place to
+grow.
+
+```typescript
+// WRONG
+if (decision.outcome !== AuthorizationDecisionOutcomes.Allow) continue;
+
+// CORRECT — a short body may remain braceless, but it starts on the next line.
+if (decision.outcome !== AuthorizationDecisionOutcomes.Allow)
+	continue;
+
+// CORRECT — braces follow the same rule.
+if (decision.outcome !== AuthorizationDecisionOutcomes.Allow)
+{
+	continue;
+}
+```
+
 ## Self-Review Before Finishing
 
 After writing or editing any TypeScript file, run `scripts/agent-style-check.sh` — it checks
@@ -83,9 +105,9 @@ line). Use its output to populate the table; do **not** rely on "it feels right"
 
 When a coding turn writes or edits `.ts` files, include a compact compliance table in the response:
 
-| File | No standalone `=>` | Max one ternary/line | Imports single-line at top | All declarations JSDoc (incl. properties) | Comments in plain English | Types in `*.types.ts` | Naming convention | New test under `__tests__/` |
-|---|---|---|---|---|---|---|---|---|
-| `example.ts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| File | No standalone `=>` | Max one ternary/line | `if` body on next line | Imports single-line at top | All declarations JSDoc (incl. properties) | Comments in plain English | Types in `*.types.ts` | Naming convention | New test under `__tests__/` |
+|---|---|---|---|---|---|---|---|---|---|
+| `example.ts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 Rules to check:
 
@@ -101,6 +123,8 @@ Rules to check:
    protocol/schema/data exemption.
 9. **At most one ternary conditional per physical line** — `INLINE-CONDITIONAL` is an error; expand
    each decision onto its own line or use an exhaustive lookup, `switch`, or named helper.
+10. **Every `if` body starts on the following physical line** — `IF-BODY-NEWLINE` is an error. This
+    includes braceless bodies and opening braces; keep the condition and its effect on separate lines.
 
 The compliance table is **not** optional when TypeScript files were modified. If the table would be incomplete, fix the violations first.
 
@@ -125,7 +149,8 @@ it does or does not grant.
 ```typescript
 // WRONG — the union and branch can silently drift from schemas and persistence filters.
 export type AgentConfigPatch = { readonly kind: "persona_refresh" } | { readonly kind: "model_alias" };
-if (patch.kind === "persona_refresh") return _StartInterview();
+if (patch.kind === "persona_refresh")
+	return _StartInterview();
 
 // CORRECT — one documented vocabulary retains the same serialized strings everywhere.
 /**
@@ -142,7 +167,8 @@ export enum AgentConfigPatchKinds
 }
 
 export type AgentConfigPatch = { readonly kind: AgentConfigPatchKinds.PersonaRefresh } | { readonly kind: AgentConfigPatchKinds.ModelAlias };
-if (patch.kind === AgentConfigPatchKinds.PersonaRefresh) return _StartInterview();
+if (patch.kind === AgentConfigPatchKinds.PersonaRefresh)
+	return _StartInterview();
 ```
 
 Do not manufacture enums for data that OpenCrane does not own: HTTP methods, MIME types, OpenAPI or

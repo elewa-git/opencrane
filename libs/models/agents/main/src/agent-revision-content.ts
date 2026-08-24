@@ -14,7 +14,7 @@ import type { AgentRevisionContent } from "./agent-revision.types";
  * change the result.
  *
  * Called by: `libs/backend/server/agents/agent-services/main/src/agent-publication.ts`,
- * `libs/backend/server/agents/agent-services/main/src/prisma-agent-revision-writer.ts`.
+ * `libs/backend/server/agents/agent-services/main/src/db/prisma-agent-revision-writer.ts`.
  * @param agentServiceId - Service that owns the revision.
  * @param revision - Revision number within that service.
  * @param content - The exact content being stored on the revision.
@@ -55,12 +55,12 @@ export function __DigestAgentRevisionContent(agentServiceId: string, revision: n
 				}),
 			};
 		}),
-		scopeAttachments: content.scopeAttachments.map(function _MapScope(attachment)
+		boundaryAttachments: content.boundaryAttachments.map(function _MapBoundary(attachment)
 		{
 			return {
-				scope: attachment.scope,
-				subjectType: attachment.subjectType,
-				subjectId: attachment.subjectId,
+				boundaryKind: attachment.boundaryKind,
+				boundaryId: attachment.boundaryId,
+				boundaryCoverage: attachment.boundaryCoverage,
 			};
 		}),
 	};

@@ -1,6 +1,4 @@
-import type { AuthorizationScope } from "./authorization-scope.types";
-
-/** A claim that one subject belongs to one silo and one scope. It only means anything inside a signed {@link SignedFleetMembershipRevision}; on its own it is unverified data. */
+/** A claim that one subject is an active member of one silo. It only means anything inside a signed {@link SignedFleetMembershipRevision}; on its own it is unverified data. */
 export interface FleetMembershipAssertion
 {
 	/** Stable assertion identifier referenced by authorization evaluation. */
@@ -9,8 +7,6 @@ export interface FleetMembershipAssertion
 	siloId: string;
 	/** Stable subject identifier whose membership is asserted. */
 	subjectId: string;
-	/** Exact independent authorization scope asserted for the subject. */
-	scope: AuthorizationScope;
 }
 
 /** A signed set of membership claims for one silo. Evaluate it with {@link __EvaluateFleetMembershipRevision} rather than reading `assertions` directly — the signature, expiry, and revision ordering all have to be checked first. */
@@ -55,7 +51,7 @@ export interface FleetSignatureVerificationEvidence
 	signature: string;
 }
 
-/** What the caller requires before trusting a revision: the issuer, silo, subject, assertion and scope it must contain, the highest revision already accepted, the current time, and the staleness limit. */
+/** What the caller requires before trusting a revision: the issuer, silo, subject and assertion it must contain, the highest revision already accepted, the current time, and the staleness limit. */
 export interface FleetMembershipTrustExpectation
 {
 	/** Fleet issuer that is trusted for this evaluation. */
@@ -66,8 +62,6 @@ export interface FleetMembershipTrustExpectation
 	subjectId: string;
 	/** Stable identifier of the required signed assertion. */
 	assertionId: string;
-	/** Exact scope expected in the required assertion. */
-	scope: AuthorizationScope;
 	/** Current epoch-millisecond time supplied by the caller. */
 	nowEpochMs: number;
 	/** Highest revision already accepted for this silo. Anything lower is rejected, which is what stops an old signed snapshot being replayed. */
@@ -102,8 +96,8 @@ export interface TrustedFleetMembershipDecision
 	readonly reason: "trusted";
 	/** Revision evaluated at the trust boundary. */
 	readonly revision: number;
-	/** Organization from the exact signed assertion that matched this decision. */
-	readonly organizationId: string;
+	/** Silo from the signed assertion that matched this decision. */
+	readonly siloId: string;
 	/** Earliest epoch-millisecond boundary after which trust must fail closed. */
 	readonly trustedUntilEpochMs: number;
 }

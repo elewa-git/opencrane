@@ -1,7 +1,10 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 
+import type { AuthenticatedPrincipalAdmission, AuthenticatedPrincipalAdmissionInput, AuthenticatedRequestPrincipal } from "./authenticated-principal-admission.types";
 import { ___LoadOidcAuthConfig } from "./oidc-config";
 import type { OidcAuthConfig } from "./oidc-config.types";
+import { _RequestHost } from "./request-host";
+import { _ClusterTenantFromHost } from "./request-silo";
 
 /**
  * Build the middleware that decides whether a request may proceed at all.
@@ -24,13 +27,13 @@ import type { OidcAuthConfig } from "./oidc-config.types";
  * @returns Middleware that calls `next()` for public paths and session callers, and sends
  *          401 otherwise.
  */
-export function ___AuthMiddleware(): RequestHandler
+export function ___AuthMiddleware(admission: AuthenticatedPrincipalAdmission): RequestHandler
 {
   const oidcConfig = ___LoadOidcAuthConfig();
 
-  return function _authHandler(req, res, next)
+  return async function _authHandler(req, res, next)
   {
-    _resolveAuth(req, res, next, oidcConfig);
+    await _resolveAuth(req, res, next, oidcConfig, admission);
   };
 }
 
@@ -42,12 +45,13 @@ export function ___AuthMiddleware(): RequestHandler
  * @param next       - Express next function (called with no args on success).
  * @param oidcConfig - The OIDC config snapshot taken at factory time.
  */
-function _resolveAuth(
+async function _resolveAuth(
   req: Request,
   res: Response,
   next: NextFunction,
   oidcConfig: OidcAuthConfig,
-): void
+  admission: AuthenticatedPrincipalAdmission,
+): Promise<void>
 {
   // 1. Public paths bypass all auth checks — /healthz and the auth router
   //    itself are always reachable without credentials.
@@ -58,9 +62,36 @@ function _resolveAuth(
   }
 
   // 2. Accept an established OIDC browser session (human operator flow).
-  if (oidcConfig.enabled && req.session?.authUser)
+  const authUser = req.session?.authUser;
+  const siloId = _ClusterTenantFromHost(_RequestHost(req))?.trim() ?? "";
+  const issuer = authUser?.issuer?.trim() ?? "";
+  const subject = authUser?.sub?.trim() ?? "";
+  const authorizationExpiresAt = new Date(authUser?.authorizationExpiresAt ?? "");
+  const authorizationCurrent = Number.isFinite(authorizationExpiresAt.getTime()) && authorizationExpiresAt.getTime() > Date.now();
+  if (oidcConfig.enabled && authUser && siloId && authUser.siloId === siloId && issuer === oidcConfig.issuerUrl && subject && authorizationCurrent)
   {
-    next();
+    const input: AuthenticatedPrincipalAdmissionInput = {
+		siloId,
+		issuer,
+		subject,
+	};
+	let principal: AuthenticatedRequestPrincipal | null;
+	try
+	{
+		principal = await admission.admit(input);
+	}
+	catch
+	{
+		res.status(503).json({ error: "identity_projection_unavailable" });
+		return;
+	}
+	if (principal === null || principal.siloId !== siloId || principal.issuer !== issuer || principal.subject !== subject || !principal.principalId.trim())
+	{
+		res.status(401).json({ error: "authenticated_principal_required" });
+		return;
+	}
+	req.authenticatedPrincipal = principal;
+	next();
     return;
   }
 

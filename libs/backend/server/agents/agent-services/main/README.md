@@ -12,17 +12,20 @@ integrations it may use). A service always points at exactly one *active* revisi
 
 This package owns the whole definition plane and the authoritative management API. It creates a
 managed service with its first draft revision, accepting only the deployed `managed-default`
-workload profile so an admitted service always has an executable controller target; appends immutable draft revisions as edits (each
+workload profile so an admitted service always has an executable controller target. The same
+transaction mints the service's durable internal `Principal`, using the reserved
+`urn:opencrane:agent-service` issuer and a deterministic `agent-service:<AgentService.id>` primary
+key; signed fleet membership and generic grants refer to that stored Principal. The package also appends immutable draft revisions as edits (each
 recording its parent revision and a change message); restores an older revision by cloning it into
 a new revision that records both its parent and its source; publishes a draft (flipping the active
 pointer under compare-and-swap); moves the service through enable/pause/retire under optimistic
 concurrency; compares any two revisions (line-level prompt diff, semantic config diff, and
 security-widening flags); reads run history; and records a run-now admission on the shared run
 substrate. Revisions are immutable and form an ordered lineage — an edit never mutates published
-history. Each revision carries revision-scoped knowledge scope attachments using the canonical
-`{ scope, subjectType, subjectId }` vocabulary; an attachment authorises scoped knowledge
-read/recall and inject/write for that exact scope only, and never implies skills, MCP tools,
-models, credentials, or a neighbouring scope.
+history. Each revision carries knowledge boundary attachments using the canonical
+`{ boundaryKind, boundaryId, boundaryCoverage }` vocabulary. An attachment narrows knowledge access
+to one Group, one stored Group subtree, or one Personal boundary, and never implies skills, Model
+Context Protocol tools, models, credentials, or another boundary.
 
 ```
  author a draft AgentRevision   (prompt policy · registered model · budget · assigned skills + integrations)
@@ -78,7 +81,7 @@ questionnaire may become complete. The app binds that transaction to this packag
    none of it.
 
 The initial revision uses the package-owned initial personal-Agent policy and the
-`personal-default` runtime profile. Its skills, integrations, and knowledge-scope attachments are
+`personal-default` runtime profile. Its skills, integrations, and knowledge-boundary attachments are
 empty. Personal memory access is not silently granted during onboarding; it follows the separate
 user-elicitation and consent flow.
 
@@ -132,8 +135,6 @@ ready personal AgentService, or a fail-closed denial
   and accepts only the shared run-admission port plus the process logger from the app.
 - Lifecycle use cases: `__CreateManagedAgentService`, `__ReviseAgentRevision`, `__RestoreAgentRevision`,
   `__ChangeAgentServiceState`, `__CompareAgentRevisions`, `__ReadAgentServiceHistory`, `__AdmitManagedRunNow`.
-- `PrismaAgentRevisionLifecycleRepository` — Postgres-backed definition-plane adapter (immutable
-  revisions, lineage, optimistic concurrency).
 - `AgentRevisionModelSelectionRepository` and
   `PrismaAgentRevisionModelSelectionRepository` — the port and transaction-scoped model-alias strategy used when
   personal configuration must combine an accepted model selection with its own journal transition.
@@ -151,31 +152,31 @@ ready personal AgentService, or a fail-closed denial
 - `AgentRevisionPersonaSelectionMaterializationCodes` — distinguishes a new revision, an
   idempotent already-current revision, a stale source, unavailable authority, and the valid case
   where persona approval finds no personal agent to update.
-- `__PublishAgentRevision` + `PrismaAgentServicePublicationRepository` — the reused compare-and-swap
-publish path and its Postgres adapter. Retiring a service clears its active-revision pointer in the
-same database update, so no retired service can still look runnable.
+- `__PublishAgentRevision` — the reused compare-and-swap publish path. Retiring a service clears its
+  active-revision pointer in the same database update, so no retired service can still look runnable.
 - `ManagedRunAdmissionPort` — the app-owned seam through which run-now AND the scheduler record an
   admission (`trigger: managed_invocation` or `schedule`). `ManagedRunAdmissionOutcomes` is its
   documented serialized outcome vocabulary, so consumers do not recreate accepted, idempotent, or
   denied branch values.
-- Schedule plane: `__CreateAgentSchedule`, `__UpdateAgentSchedule`, `PrismaAgentScheduleRepository`,
-  the shared `AgentScheduleOverlapPolicies` vocabulary, and the `/:serviceId/schedules` management
-  surface (list/create/update/delete). Evaluation into due runs lives in sibling `scheduling`.
-- Scope attach-authority + effective access: `__ValidateAttachAuthority`,
-  `__ResolveEffectiveScopeAttachments`, `__IntersectScopeAttachments`, `PrismaScopeGrantResolver`.
-- Managed execution evidence: `PrismaManagedExecutionEvidenceAuthority` derives the canonical
-  `agent-service:<id>` principal, verifies its current signed fleet membership, intersects the
-  active revision's non-personal scope attachments with effective grants, and digests the complete
-capability-bearing revision inside the run-admission transaction.
+- Schedule plane: `__CreateAgentSchedule`, `__UpdateAgentSchedule`, the shared
+  `AgentScheduleOverlapPolicies` vocabulary, and the `/:serviceId/schedules` management surface
+  (list/create/update/delete). Evaluation into due runs lives in sibling `scheduling`.
+- Boundary attach-authority + effective access: `__ValidateBoundaryAttachAuthority`,
+  `__ResolveEffectiveBoundaryAttachments`, and `__IntersectBoundaryAttachments`. The resolver
+  evaluates stored generic grants by capability and resource, including current validity, priority,
+  deny precedence, and Group ancestry; an exact allow never widens into a descendants attachment.
+- Managed execution evidence derives the stored Principal relation from the active managed service,
+  verifies its reserved internal origin and current signed fleet membership, intersects the active
+  revision's non-personal boundary attachments with effective grants, and digests the complete
+  capability-bearing revision inside the run-admission transaction.
 - Run history and management projections expose the immutable `conversationId` coordinate carried
   by each admitted run; this package does not own the participant conversation or its timeline.
 - Types: the lifecycle commands/results (`CreateManagedAgentServiceCommand`,
   `ReviseAgentRevisionCommand`, `RestoreAgentRevisionCommand`, `ChangeAgentServiceStateCommand`,
   `ManagedRunNowCommand`, `AgentRevisionLifecycleRepository`, `AgentServiceHistory`, …), the publish
-  contract
-  (`PublishAgentRevisionCommand`/`Result`/`FailureReason`, `AtomicAgentRevisionPublication*`), and
-  `AgentPublicationAuditEvidencePort` — the seam through which publication records audit evidence.
-  The shared `AgentRevisionContent` domain value lives in `@opencrane/models/agents`.
+  contract (`PublishAgentRevisionCommand`/`Result`/`FailureReason`,
+  `AtomicAgentRevisionPublication*`). The shared `AgentRevisionContent` domain value lives in
+  `@opencrane/models/agents`.
 
 - `PrismaPersonalAgentBootstrapRepository(transaction, defaultModelResolver)` and
   `PersonalAgentBootstrapStatuses` — the
@@ -202,6 +203,13 @@ narrow port. This package does not run agents or resolve
 skills/integrations itself. It fails closed:
 any doubt is a `denied` outcome, never a silent partial publish.
 
+## Database adapters
+
+`src/db/` holds the Prisma repositories, transaction factories, row mappers, and revision writer.
+Keeping those details together leaves the package root for domain policies, ports, route assembly,
+and process configuration. The router and environment factory compose the adapters; they do not
+live in `db/` because they own HTTP and deployment concerns rather than database access.
+
 ## Dependency direction
 
 Tagged `scope:agent-services`: it may depend only on `scope:agent-services`, `scope:agents` (shared
@@ -209,20 +217,21 @@ agent models), `scope:audit`, `scope:auth`, `scope:authorization`, `scope:grants
 `scope:membership`, and `scope:shared` — never on apps, gateways, or knowledge domains. The
 `scope:auth` edge resolves only the backend-type-free request principal; run admission remains an
 injected port, so this package never imports `scope:execution-runs`. The `scope:grants` edge is real and
-load-bearing: `PrismaScopeGrantResolver` calls the IAM grant compiler so `__ValidateAttachAuthority`
-(a caller must administer every scope they attach) and `__ResolveEffectiveScopeAttachments` (the
+load-bearing: `PrismaBoundaryGrantRepository` calls the generic IAM decision authority so `__ValidateBoundaryAttachAuthority`
+(a caller must administer every boundary they attach) and `__ResolveEffectiveBoundaryAttachments` (the
 runtime intersection, so a stored attachment grants nothing beyond the agent's actual compiled
-grants) both ride the compiler. The resolver treats a Grant's principal as the receiver and its
-Awareness `payloadId` as the attached knowledge target, preventing a receiver identifier from being
-mistaken for a project, team, department, organization, or personal dataset. The membership edge is equally narrow: managed execution freezes
-fresh signed service-principal evidence into its immutable snapshot. Scope attachments remain
-silo-bounded and org-admin-gated.
+grants) both use the same subject, boundary, capability, resource, priority, and deny semantics.
+The grant subject identifies the receiving Principal or direct-membership Group; its separate Group
+or Personal boundary identifies the knowledge target, so a receiver can never be mistaken for the
+resource boundary. The membership edge is equally narrow: managed
+execution freezes fresh signed service-principal evidence into its immutable snapshot. Boundary
+attachments remain silo-bounded and administrator-gated.
 
 ## Data & persistence
 
 Owns the `AgentService`, `AgentRevision` (with `parentRevisionId`/`sourceRevisionId`/`changeMessage`
-lineage and a required `ModelDefinition` reference), `AgentRevisionScopeAttachment` (revision-scoped `{ scope, subjectType, subjectId }` reusing
-the `GrantScope`/`GrantSubjectType` enums), `AgentRevisionSkillAssignment`,
+lineage and a required `ModelDefinition` reference), `AgentRevisionBoundaryAttachment`
+(`Group` or `Personal`, with exact or stored-descendant coverage), `AgentRevisionSkillAssignment`,
 `AgentRevisionIntegrationAssignment`, and `AgentServiceSchedule` (cron, timezone, overlap policy,
 enabled, catch-up window) models in `apps/opencrane/prisma/schema/agent-services.prisma`.
 

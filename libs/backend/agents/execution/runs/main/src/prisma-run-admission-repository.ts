@@ -212,7 +212,7 @@ function _matchesSnapshotScope(snapshot: { siloId: string; agentServiceId: strin
 	if (!snapshot.identitySnapshot || typeof snapshot.identitySnapshot !== "object" || Array.isArray(snapshot.identitySnapshot)) return false;
 	const identity = snapshot.identitySnapshot as Record<string, unknown>;
 	if (identity["kind"] !== command.identityKind) return false;
-	if (command.identityKind === "user") return identity["executionSubjectId"] === command.executionSubjectId;
+	if (command.identityKind === "user") return identity["executionSubjectId"] === command.executionSubjectId && identity["executionIssuer"] === command.executionIssuer;
 	return identity["agentServiceId"] === command.agentServiceId && identity["executionSubjectId"] === `agent-service:${command.agentServiceId}`;
 }
 
@@ -221,7 +221,7 @@ function _matchesExecutionIdentity(authority: InitialRunAuthority, snapshot: Run
 {
 	if (command.identityKind === "user")
 	{
-		return authority.agentKind === "personal" && authority.trigger === "interactive" && authority.delegatedUserId === command.executionSubjectId && snapshot.identitySnapshot.kind === "user" && snapshot.identitySnapshot.executionSubjectId === command.executionSubjectId;
+		return authority.agentKind === "personal" && authority.trigger === "interactive" && authority.delegatedUserId === command.executionSubjectId && snapshot.identitySnapshot.kind === "user" && snapshot.identitySnapshot.executionSubjectId === command.executionSubjectId && snapshot.identitySnapshot.executionIssuer === command.executionIssuer;
 	}
 	return authority.agentKind === "managed" && authority.trigger === command.trigger && authority.delegatedUserId === null && snapshot.identitySnapshot.kind === "service" && snapshot.identitySnapshot.agentServiceId === command.agentServiceId && snapshot.identitySnapshot.executionSubjectId === `agent-service:${command.agentServiceId}`;
 }

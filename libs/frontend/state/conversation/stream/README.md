@@ -1,21 +1,21 @@
-# @opencrane/state/conversation/stream — the browser stream contract
+# @opencrane/state/conversation/stream — browser conversation transport contract
 
 > [frontend](../../../README.md) › [state](../../README.md) › [conversation](../README.md) › stream
 
 ## What it owns
 
-This package defines what browser state needs from the shared conversation event stream without
-choosing how the stream reaches the browser. The workspace store asks this port for updates; the
-separate HTTP adapter implements it with the signed-in session.
+This package defines what browser state needs from the shared conversation transport without
+choosing how it reaches the browser. The workspace asks this port for live projections and participant
+message submission; the session-authenticated WebSocket adapter implements both operations.
 
 ```text
- workspace state ── asks the port ──► conversation/stream  ◄── HERE
+ workspace state ── projection + submission ──► conversation/stream  ◄── HERE
                                              ▲
                                              │ implements
-                              conversation/adapter ──► server
+                         WebSocket conversation adapter ──► server
 ```
 
-**In this flow:** [workspace state](../workspace/README.md) · [HTTP adapter](../adapter/README.md).
+**In this flow:** [workspace state](../workspace/README.md) · [WebSocket adapter](../adapter/README.md).
 
 The contract keeps reconnecting distinct from failure, carries the last validated Agent User
 Interface (AG-UI) state, and requires an abort signal so a screen can stop its own stream. It
@@ -27,11 +27,14 @@ contains no HTTP client and grants no conversation or run authority.
 - `StreamConversationEventsCommand` — the conversation, abort, resume, retry, and update inputs.
 - `ConversationEventStreamUpdate` — one connection phase with the last accepted projection state.
 - `ConversationEventStreamStatuses` — connecting, live, reconnecting, aborted, and failed states.
+- `SubmitConversationEventStreamMessageCommand` — one retry-stable participant submission.
+- `ConversationEventStreamMessageError` — a display-safe refusal or unsettled submission result.
 
 ## Boundary
 
-Conversation state and features consume this port. The app binds it to a concrete adapter. This
-package never opens a request, decodes Server-Sent Events (SSE), stores data, or starts an Agent run.
+Conversation state and workspace adapters consume this port. The app binds it to a concrete adapter.
+This package never opens a transport, decodes concrete wire frames, stores data, or starts an Agent
+run.
 
 ## Dependency direction
 

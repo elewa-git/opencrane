@@ -9,7 +9,7 @@ import { __PublishAgentRevision } from "./agent-publication";
 import type { PublishAgentRevisionFailureReason } from "./agent-publication.types";
 import { __CreateAgentSchedule, __UpdateAgentSchedule } from "./agent-schedule";
 import type { AgentScheduleDenial, AgentScheduleOverlapPolicy } from "./agent-schedule.types";
-import { __ValidateAttachAuthority } from "./scope-attachment-authority";
+import { __ValidateBoundaryAttachAuthority } from "./boundary-attachment-authority";
 
 /** Legal observed states a caller may claim on a lifecycle transition. */
 const _SERVICE_STATES = ["draft", "active", "paused", "retired"] as const;
@@ -88,18 +88,18 @@ function _publishDenialStatus(reason: PublishAgentRevisionFailureReason): number
 export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDependencies): Router
 {
 	const router = Router();
-	const { lifecycle, publicationFor, runAdmission, schedules, scopeGrantResolver, resolveCaller, clock, logger } = dependencies;
+	const { lifecycle, publicationFor, runAdmission, schedules, boundaryGrantResolver, resolveCaller, clock, logger } = dependencies;
 
 	/**
-	 * Check the caller holds every scope the new revision attaches, before anything is stored.
+	 * Check the caller holds every boundary the new revision attaches, before anything is stored.
 	 *
-	 * @returns True to carry on. On false it has already sent 403 `FORBIDDEN_SCOPE_ATTACHMENT` listing
+	 * @returns True to carry on. On false it has already sent 403 `FORBIDDEN_BOUNDARY_ATTACHMENT` listing
 	 *   the offending attachments, so the caller must return immediately and not touch the response.
 	 */
 	async function _authoriseAttachments(caller: ManagementCaller, content: AgentRevisionContent, res: Response): Promise<boolean>
 	{
-		const authority = await __ValidateAttachAuthority(scopeGrantResolver, [caller.subjectId], content.scopeAttachments);
-		if (authority.outcome === "unauthorized") { res.status(403).json({ error: "Caller does not administer every attached scope.", code: "FORBIDDEN_SCOPE_ATTACHMENT", unauthorized: authority.unauthorized }); return false; }
+		const authority = await __ValidateBoundaryAttachAuthority(boundaryGrantResolver, caller.siloId, [caller.principalId], content.boundaryAttachments, clock.now().getTime());
+		if (authority.outcome === "unauthorized") { res.status(403).json({ error: "Caller does not administer every attached boundary.", code: "FORBIDDEN_BOUNDARY_ATTACHMENT", unauthorized: authority.unauthorized }); return false; }
 		return true;
 	}
 
@@ -141,7 +141,7 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 			const content = _ParseAgentRevisionContent(body.content);
 			if (!_isNonEmptyString(body.name) || !_isNonEmptyString(body.workloadProfile) || !_isNonEmptyString(body.changeMessage) || content === null) { res.status(400).json({ error: "name, workloadProfile, changeMessage, and valid content are required.", code: "VALIDATION_ERROR" }); return; }
 			if (!await _authoriseAttachments(caller, content, res)) return;
-			const result = await __CreateManagedAgentService(lifecycle, { siloId: caller.siloId, name: body.name, workloadProfile: body.workloadProfile, authoredBy: caller.subjectId, changeMessage: body.changeMessage, content }, clock.now().toISOString());
+			const result = await __CreateManagedAgentService(lifecycle, { siloId: caller.siloId, name: body.name, workloadProfile: body.workloadProfile, authoredBy: caller.externalSubject, changeMessage: body.changeMessage, content }, clock.now().toISOString());
 			if (result.outcome === "denied") { res.status(_denialStatus(result.reason)).json({ error: "Create denied.", code: result.reason.toUpperCase() }); return; }
 			res.status(201).json({ service: result.service, revision: result.revision });
 		}
@@ -159,7 +159,7 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 			const expectedParentRevisionId = body.expectedParentRevisionId === undefined || body.expectedParentRevisionId === null ? null : body.expectedParentRevisionId;
 			if (!_isNonEmptyString(body.changeMessage) || content === null || (expectedParentRevisionId !== null && !_isNonEmptyString(expectedParentRevisionId))) { res.status(400).json({ error: "changeMessage, valid content, and an expectedParentRevisionId are required.", code: "VALIDATION_ERROR" }); return; }
 			if (!await _authoriseAttachments(caller, content, res)) return;
-			const result = await __ReviseAgentRevision(lifecycle, { siloId: caller.siloId, agentServiceId: String(req.params.serviceId), expectedParentRevisionId: expectedParentRevisionId as string | null, authoredBy: caller.subjectId, changeMessage: body.changeMessage, content }, clock.now().toISOString());
+			const result = await __ReviseAgentRevision(lifecycle, { siloId: caller.siloId, agentServiceId: String(req.params.serviceId), expectedParentRevisionId: expectedParentRevisionId as string | null, authoredBy: caller.externalSubject, changeMessage: body.changeMessage, content }, clock.now().toISOString());
 			_sendAppend(res, result);
 		}
 		catch (error) { _fail(res, error, "revise"); }
@@ -174,7 +174,7 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 			const body = (req.body ?? {}) as Record<string, unknown>;
 			const expectedParentRevisionId = body.expectedParentRevisionId === undefined || body.expectedParentRevisionId === null ? null : body.expectedParentRevisionId;
 			if (!_isNonEmptyString(body.sourceRevisionId) || !_isNonEmptyString(body.changeMessage) || (expectedParentRevisionId !== null && !_isNonEmptyString(expectedParentRevisionId))) { res.status(400).json({ error: "sourceRevisionId, changeMessage, and an expectedParentRevisionId are required.", code: "VALIDATION_ERROR" }); return; }
-			const result = await __RestoreAgentRevision(lifecycle, { siloId: caller.siloId, agentServiceId: String(req.params.serviceId), sourceRevisionId: body.sourceRevisionId, expectedParentRevisionId: expectedParentRevisionId as string | null, authoredBy: caller.subjectId, changeMessage: body.changeMessage }, clock.now().toISOString());
+			const result = await __RestoreAgentRevision(lifecycle, { siloId: caller.siloId, agentServiceId: String(req.params.serviceId), sourceRevisionId: body.sourceRevisionId, expectedParentRevisionId: expectedParentRevisionId as string | null, authoredBy: caller.externalSubject, changeMessage: body.changeMessage }, clock.now().toISOString());
 			_sendAppend(res, result);
 		}
 		catch (error) { _fail(res, error, "restore"); }
@@ -224,7 +224,7 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 			if (caller === null) return;
 			const body = (req.body ?? {}) as Record<string, unknown>;
 			if (!_isNonEmptyString(body.requestIdempotencyKey)) { res.status(400).json({ error: "requestIdempotencyKey is required.", code: "VALIDATION_ERROR" }); return; }
-			const result = await __AdmitManagedRunNow(lifecycle, runAdmission, { agentServiceId: String(req.params.serviceId), siloId: caller.siloId, requestedBy: caller.subjectId, requestIdempotencyKey: body.requestIdempotencyKey, trigger: "managed_invocation", scheduledSlot: null });
+			const result = await __AdmitManagedRunNow(lifecycle, runAdmission, { agentServiceId: String(req.params.serviceId), siloId: caller.siloId, requestedBy: caller.externalSubject, requestIdempotencyKey: body.requestIdempotencyKey, trigger: "managed_invocation", scheduledSlot: null });
 			if (result.outcome === "denied")
 			{
 				if (result.reason === "admission_concurrency_limited") res.set("Retry-After", "1");

@@ -103,7 +103,7 @@ Verify all of the following against `docs/agents/versioning.md`:
 - the exact predecessor tag and manifest are available;
 - every directly changed or dependency-adapted application has the required version stamp;
 - application, image, chart, chart dependency, migration, and external compatibility fields agree;
-- chart mirrors, packaged dependencies, `Chart.lock`, image pins, and immutable digests agree;
+- chart mirrors, app-owned current-source packaging, image pins, and immutable digests agree;
 - the required Helm value transition and database migration path exist;
 - patch, skipped-minor, and major transitions have an explicit reviewed manual procedure;
 - old immutable manifests and migration artifacts remain unchanged;

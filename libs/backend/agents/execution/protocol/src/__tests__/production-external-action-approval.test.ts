@@ -78,7 +78,7 @@ function _snapshot(): RunInputSnapshot
 		integrationAssignments: [{ integrationId: "calendar", toolDefinitions: [{ name: "read", description: "Read a calendar", parametersSchema, parametersSchemaDigest: __DigestCanonicalJson(parametersSchema) }] }],
 		modelRoute: {},
 		budgetPolicy: {},
-		identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"b".repeat(64)}`, fleetMembershipTrustedUntil: "2026-08-11T11:00:00.000Z" },
+		identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"b".repeat(64)}`, fleetMembershipTrustedUntil: "2026-08-11T11:00:00.000Z" },
 		capabilitySetDigest: `sha256:${"c".repeat(64)}`,
 		effectiveContractDigest: `sha256:${"d".repeat(64)}`,
 		promptCompilerVersion: "prompt-v1",

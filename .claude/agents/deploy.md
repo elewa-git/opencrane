@@ -53,8 +53,10 @@ the next deploy cannot reproduce, which defeats your purpose.
    (`kubectl config current-context`). Wrong-context deploys are the one mistake you
    cannot walk back — if the context does not obviously match the target, STOP and
    return the mismatch as a blocking question rather than proceeding.
-4. `helm dep build` (NOT `dep update`) for the profile chart — dependencies resolve
-   from `Chart.lock` so every run is reproducible.
+4. Prepare the profile chart through its app-owned current-source helper. Every dependency is an
+   in-repo `file://` chart, so the checked-out commit is the version authority and the helper runs
+   `helm dependency update --skip-refresh`. Do not require or introduce the ignored `Chart.lock`
+   and `charts/` outputs as a second release authority.
 5. Run the script's own `--preflight` when available.
 6. **In-place upgrade ≠ fresh render.** If this deploy carries a chart change to an
    immutable or API-defaulted field — a Deployment/StatefulSet `strategy` or

@@ -19,6 +19,7 @@ remaining grouped with the server code that composes them.
 | [`organization-membership-gateway`](./organization-membership-gateway/README.md) | Projected-token-authenticated HTTPS transport to Fleet membership and billing. |
 | [`obot-custody`](./obot-custody/README.md) | Fail-closed Obot custody and MCP invocation ports. |
 | [`sandbox-execution`](./sandbox-execution/README.md) | Fail-closed sandboxed tool-execution port. |
+| [`workflows`](./workflows/README.md) | Engine-neutral durable control-plane tasks, guardrails, scheduling helpers, adapters, and test support. |
 
 ```text
  inbound request ──► http ──► auth ──► backend domain route

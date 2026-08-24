@@ -1,17 +1,18 @@
 import { URL } from "node:url";
 
 import type { Request, RequestHandler } from "express";
-import session from "express-session";
 import * as client from "openid-client";
 import type { Logger } from "pino";
 
 import { ___LoadOidcAuthConfig } from "./oidc-config";
 import type { OidcAuthConfig } from "./oidc-config.types";
-import { _ResolveIdentityClaims } from "./identity-claims";
 import { _ResolveOrgMembershipFacts } from "./org-membership";
 import type { OrgMembershipRepository } from "./org-membership.types";
 import type { AuthStatus, LoginClient } from "./oidc-service.types";
-import { _buildCurrentUrl, _buildPostLogoutRedirectUri, _buildRedirectUri, _destroySession, _regenerateSession, _sanitizeReturnTo, _saveSession } from "./session";
+import { ___BuildOidcAuthUser, ___ResolveOidcClaims } from "./oidc-claims";
+import { ___BuildOidcEndSessionUrl } from "./oidc-logout";
+import { ___CreateOidcSessionMiddleware } from "./oidc-session-middleware";
+import { _buildCurrentUrl, _buildRedirectUri, _destroySession, _regenerateSession, _sanitizeReturnTo, _saveSession } from "./session";
 import type { AuthUser } from "./session.types";
 
 export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from "./oidc-service.types";
@@ -47,9 +48,9 @@ export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from ".
  * on every call, so a user who has just created an organisation counts as an org admin
  * without logging in again.
  *
- * Called by: `OidcAuthService` in libs/backend/server/iam/identity/main/src/oidc.service.ts
+ * Called by: `OidcAuthService` in libs/backend/server/iam/identity/main/src/auth/oidc.service.ts
  * extends it; apps/opencrane/src/app/public-app.ts constructs it and mounts
- * {@link createSessionMiddleware}; libs/backend/server/iam/identity/main/src/auth.router.ts
+ * {@link createSessionMiddleware}; libs/backend/server/iam/identity/main/src/auth/auth.router.ts
  * calls {@link getStatus}, {@link isEnabled}, {@link buildLoginUrl}, and
  * {@link completeLogin}.
  *
@@ -93,7 +94,7 @@ export abstract class OidcAuthServiceBase
    * mode). A PARTIAL configuration never reaches here: {@link ___LoadOidcAuthConfig}
    * throws at startup instead.
    *
-   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts lines 46 and 71,
+   * Called by: libs/backend/server/iam/identity/main/src/auth/auth.router.ts,
    * which refuse `/auth/login` and `/auth/callback` when this is false.
    *
    * @returns True when a login redirect can be issued; false when this deployment can
@@ -131,74 +132,7 @@ export abstract class OidcAuthServiceBase
    */
   createSessionMiddleware(): RequestHandler[]
   {
-    if (!this.config.enabled)
-    {
-      return [function _skipSession(req, res, next) { next(); }];
-    }
-
-    return [
-      session({
-        name: this.config.cookieName,
-        secret: this.config.sessionSecret,
-        resave: false,
-        saveUninitialized: false,
-        proxy: true,
-        unset: "destroy",
-        cookie: {
-          httpOnly: true,
-          sameSite: "lax",
-          secure: this.config.cookieSecure,
-          maxAge: this.config.sessionMaxAgeMs,
-        },
-      }),
-      this._csrfOriginCheck(),
-    ];
-  }
-
-  /** Reject a state-changing request from a session caller whose Origin (or Referer) is not this host. */
-  private _csrfOriginCheck(): RequestHandler
-  {
-    const _SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
-    return function _csrfCheck(req, res, next)
-    {
-      if (_SAFE.has(req.method) || !req.session?.authUser)
-      {
-        return void next();
-      }
-
-      const expected = `${req.protocol}://${req.hostname}`;
-      const origin = req.headers.origin;
-      const referer = req.headers.referer;
-
-      if (origin !== undefined)
-      {
-        if (origin !== expected)
-        {
-          res.status(403).json({ error: "CSRF check failed.", code: "CSRF_ORIGIN_MISMATCH" });
-          return;
-        }
-        return void next();
-      }
-
-      if (referer !== undefined)
-      {
-        let refOrigin: string;
-        try { refOrigin = new URL(referer).origin; }
-        catch
-        {
-          res.status(403).json({ error: "CSRF check failed.", code: "CSRF_INVALID_REFERER" });
-          return;
-        }
-        if (refOrigin !== expected)
-        {
-          res.status(403).json({ error: "CSRF check failed.", code: "CSRF_REFERER_MISMATCH" });
-          return;
-        }
-      }
-      // Neither Origin nor Referer: non-browser API client or strict same-origin fetch.
-      // SameSite=lax already blocks cross-site cookie delivery for these requests.
-      next();
-    };
+    return ___CreateOidcSessionMiddleware(this.config);
   }
 
   /**
@@ -216,7 +150,7 @@ export abstract class OidcAuthServiceBase
    * who created an organisation after logging in gets admin rights without logging in
    * again. Nothing else on the user is recomputed.
    *
-   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts.
+   * Called by: libs/backend/server/iam/identity/main/src/auth/auth.router.ts.
    *
    * @param req - The `/auth/me` request; only its session and host are read.
    * @returns The auth mode plus the caller, or a null user when nobody is logged in.
@@ -264,7 +198,7 @@ export abstract class OidcAuthServiceBase
    * saved before the URL is returned, because a redirect that outran the session write
    * would come back to a callback with no flow to match.
    *
-   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts.
+   * Called by: libs/backend/server/iam/identity/main/src/auth/auth.router.ts.
    *
    * @param req      - The `/auth/login` request; supplies the session and the host the
    *                   redirect_uri is built from.
@@ -328,7 +262,7 @@ export abstract class OidcAuthServiceBase
    * the session and reaches the browser, depending on
    * {@link isPostLoginFailureFatal}. Everything before it always reaches the browser.
    *
-   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts.
+   * Called by: libs/backend/server/iam/identity/main/src/auth/auth.router.ts.
    *
    * @param req - The callback request; the full callback URL and the session are read.
    * @returns The local path to redirect the browser to; `/` when the original return
@@ -360,8 +294,8 @@ export abstract class OidcAuthServiceBase
 
     // 2. Resolve the final set of identity claims and validate them against local allowlists.
     const claims = tokens.claims() as Record<string, unknown>;
-    const mergedClaims = await this._resolveClaims(discoveredConfig, tokens.access_token, claims);
-    const authUser = this._buildAuthUser(mergedClaims);
+    const mergedClaims = await ___ResolveOidcClaims(discoveredConfig, tokens.access_token, claims, this.log);
+    const authUser = ___BuildOidcAuthUser(mergedClaims, this.config);
     const returnTo = _sanitizeReturnTo(flow.returnTo);
 
     // 3. Regenerate the session to prevent fixation, then persist the authenticated user.
@@ -377,7 +311,7 @@ export abstract class OidcAuthServiceBase
     //    best-effort, while an identity domain can make a one-time durable admission visible.
     try
     {
-      await this.onLoginEstablished(req, authUser);
+      await this.onLoginEstablished(req, authUser, flow.clientId);
     }
     catch (err)
     {
@@ -399,7 +333,7 @@ export abstract class OidcAuthServiceBase
    * The local session is always destroyed, even when the provider URL cannot be built —
    * a provider problem must never leave the user logged in here.
    *
-   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts.
+   * Called by: libs/backend/server/iam/identity/main/src/auth/auth.router.ts.
    *
    * @param req - The logout request; its session and host are read.
    * @returns The provider's end-session URL to redirect to, or null when there is nothing
@@ -411,7 +345,7 @@ export abstract class OidcAuthServiceBase
    */
   async logout(req: Request): Promise<string | null>
   {
-    const endSessionUrl = await this._buildEndSessionUrl(req);
+    const endSessionUrl = await ___BuildOidcEndSessionUrl(req, this.config, () => this.getDiscoveredConfig(), this.log);
     await _destroySession(req);
     return endSessionUrl;
   }
@@ -427,7 +361,7 @@ export abstract class OidcAuthServiceBase
    * for another client_id at the same issuer.
    *
    * Overridden by: `OidcAuthService.resolveLoginClient` in
-   * libs/backend/server/iam/identity/main/src/oidc.service.ts, which resolves a
+   * libs/backend/server/iam/identity/main/src/auth/oidc.service.ts, which resolves a
    * per-organisation client from the request host and falls back to `super` when the host
    * maps to no fully provisioned organisation.
    *
@@ -450,7 +384,7 @@ export abstract class OidcAuthServiceBase
    * the intent.
    *
    * Overridden by: `OidcAuthService.enrichStatusUser` in
-   * libs/backend/server/iam/identity/main/src/oidc.service.ts, which adds the caller's
+   * libs/backend/server/iam/identity/main/src/auth/oidc.service.ts, which adds the caller's
    * `clusterTenant` resolved server-side from their verified subject.
    *
    * @param _req      - The status request (unused by the base).
@@ -480,14 +414,14 @@ export abstract class OidcAuthServiceBase
    * so the browser sees the login fail. Nothing else in this class inspects the outcome.
    *
    * Overridden by: `OidcAuthService.onLoginEstablished` in
-   * libs/backend/server/iam/identity/main/src/oidc.service.ts, which mirrors group names
+   * libs/backend/server/iam/identity/main/src/auth/oidc.service.ts, which mirrors group names
    * (best effort), then evaluates first-owner admission; an `AlreadyClaimed` result returns normally so an authenticated invitee can reach guarded invitation acceptance.
    *
    * @param _req      - The completed callback request (unused by the base).
    * @param _authUser - The identity just stored in the session (unused by the base).
    * @throws Whatever the override throws; see above for what happens to it.
    */
-  protected async onLoginEstablished(_req: Request, _authUser: AuthUser): Promise<void>
+  protected async onLoginEstablished(_req: Request, _authUser: AuthUser, _loginClientId?: string): Promise<void>
   {
   }
 
@@ -501,7 +435,7 @@ export abstract class OidcAuthServiceBase
    * would strand them in a half-set-up state.
    *
    * Overridden by: `OidcAuthService.isPostLoginFailureFatal` in
-   * libs/backend/server/iam/identity/main/src/oidc.service.ts, which returns true only
+   * libs/backend/server/iam/identity/main/src/auth/oidc.service.ts, which returns true only
    * when standalone first-owner admission is configured.
    *
    * @returns True to fail the login on a hook error; false to log and continue.
@@ -550,7 +484,7 @@ export abstract class OidcAuthServiceBase
    *
    * Called by: {@link completeLogin} (for the client_id recorded in the session) and
    * `OidcAuthService.resolveLoginClient` in
-   * libs/backend/server/iam/identity/main/src/oidc.service.ts.
+   * libs/backend/server/iam/identity/main/src/auth/oidc.service.ts.
    *
    * @param clientId - The organisation's OIDC client_id, resolved from the request host.
    * @returns The discovered configuration for that client, ready to authorize against.
@@ -582,139 +516,4 @@ export abstract class OidcAuthServiceBase
     }
   }
 
-  /**
-   * Build the IdP's `end_session_endpoint` URL with `id_token_hint` and (when configured)
-   * `post_logout_redirect_uri`. Returns null when not applicable — never blocks local logout.
-   */
-  private async _buildEndSessionUrl(req: Request): Promise<string | null>
-  {
-    if (!this.config.enabled)
-    {
-      return null;
-    }
-
-    const idToken = req.session?.idToken;
-    if (typeof idToken !== "string" || idToken === "")
-    {
-      return null;
-    }
-
-    try
-    {
-      const discoveredConfig = await this.getDiscoveredConfig();
-      const metadata = discoveredConfig.serverMetadata();
-      if (!metadata.end_session_endpoint)
-      {
-        return null;
-      }
-
-      const params: Record<string, string> = { id_token_hint: idToken };
-      if (this.config.postLogoutRedirectUri)
-      {
-        params.post_logout_redirect_uri = _buildPostLogoutRedirectUri(req, this.config.postLogoutRedirectUri);
-      }
-
-      return client.buildEndSessionUrl(discoveredConfig, params).href;
-    }
-    catch (err)
-    {
-      this.log.warn({ err }, "failed to build OIDC end-session URL; logging out locally only");
-      return null;
-    }
-  }
-
-  /** Merge ID token claims with UserInfo claims when an access token is available. */
-  private async _resolveClaims(
-    discoveredConfig: client.Configuration,
-    accessToken: string | undefined,
-    claims: Record<string, unknown>,
-  ): Promise<Record<string, unknown>>
-  {
-    if (!accessToken || typeof claims.sub !== "string")
-    {
-      return claims;
-    }
-
-    try
-    {
-      const userInfo = await client.fetchUserInfo(discoveredConfig, accessToken, claims.sub);
-      return { ...claims, ...userInfo };
-    }
-    catch (err)
-    {
-      this.log.warn({ err }, "failed to fetch OIDC userinfo; continuing with ID token claims only");
-      return claims;
-    }
-  }
-
-  /**
-   * Check the claims a login produced and convert them into the {@link AuthUser} stored
-   * in the session.
-   *
-   * The checks, in order: there must be a `sub`; when either email allowlist is
-   * configured there must be an email; an email the provider marked as NOT verified is
-   * rejected outright; and the email must appear in the allowed-addresses list or its
-   * domain in the allowed-domains list. Group and role claims are then turned into
-   * `groups`, `isPlatformOperator`, and `isOrgAdmin` by {@link _ResolveIdentityClaims}.
-   *
-   * @param claims - The merged ID-token and UserInfo claims.
-   * @returns The user to store in the session.
-   * @throws When there is no usable subject, when an email is required but absent, when
-   *         the email is not verified, or when it is outside the allowlists. Every one of
-   *         these aborts the login and reaches the browser.
-   */
-  private _buildAuthUser(claims: Record<string, unknown>): AuthUser
-  {
-    const subject = typeof claims.sub === "string" ? claims.sub : "";
-    if (!subject)
-    {
-      throw new Error("OIDC login succeeded without a usable subject claim");
-    }
-
-    const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : undefined;
-    const emailVerified = typeof claims.email_verified === "boolean" ? claims.email_verified : undefined;
-
-    if ((this.config.allowedEmailDomains.length || this.config.allowedEmails.length) && !email)
-    {
-      throw new Error("An email claim is required for the configured OIDC allowlist");
-    }
-
-    if (emailVerified === false)
-    {
-      throw new Error("OIDC login was rejected because the email claim is not verified");
-    }
-
-    if (email && this.config.allowedEmails.length && !this.config.allowedEmails.includes(email))
-    {
-      const domain = email.split("@")[1] ?? "";
-      if (!this.config.allowedEmailDomains.includes(domain))
-      {
-        throw new Error(`OIDC login is not allowed for ${email}`);
-      }
-    }
-
-    if (email && !this.config.allowedEmails.length && this.config.allowedEmailDomains.length)
-    {
-      const domain = email.split("@")[1] ?? "";
-      if (!this.config.allowedEmailDomains.includes(domain))
-      {
-        throw new Error(`OIDC login is not allowed for ${email}`);
-      }
-    }
-
-    const identity = _ResolveIdentityClaims(claims, this.config, email);
-
-    return {
-      sub: subject,
-      issuer: this.config.issuerUrl,
-      groups: identity.groups,
-      isPlatformOperator: identity.isPlatformOperator,
-      isOrgAdmin: identity.isOrgAdmin,
-      ...(email ? { email } : {}),
-      ...(emailVerified !== undefined ? { emailVerified } : {}),
-      ...(typeof claims.name === "string" ? { name: claims.name } : {}),
-      ...(typeof claims.picture === "string" ? { picture: claims.picture } : {}),
-      authenticatedAt: new Date().toISOString(),
-    };
-  }
 }

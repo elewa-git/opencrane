@@ -79,13 +79,13 @@ to a managed-agent revision **so that** future runs freeze the reviewed retrieva
 
 Acceptance criteria:
 
-- Selection includes only collections the administrator may attach to the chosen agent scope.
+- Selection includes only collections the administrator may attach to the chosen group or personal boundary.
 - The revision review names the collection, immutable version/snapshot, access basis, and retrieval
   consequence.
 - Publication revalidates collection lifecycle, membership, attachment authority, and revocation.
-- A scope attachment alone is not presented as proof that a dataset was selected.
+- A boundary attachment alone is not presented as proof that a dataset was selected.
 
-Status: `API blocked`; managed-agent scope attachments exist, but there is no public knowledge
+Status: `API blocked`; managed-agent boundary attachments exist, but there is no public knowledge
 selection/version contract.
 
 ## KNO-06 — Retire or delete organisational knowledge

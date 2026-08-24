@@ -25,8 +25,8 @@ older release than this site documents.
 ::: warning Request samples omit the base path
 Every path below is relative to the `/api/v1` prefix. Because OpenCrane declares a relative
 server URL — it is self-hosted and has no canonical host — the generated samples fall back to
-a bare host and drop that prefix. Prepend your own base URL: `GET /mcp-servers` is really
-`GET https://<your-host>/api/v1/mcp-servers`.
+a bare host and drop that prefix. Prepend your own base URL: `GET /mcp/catalog` is really
+`GET https://<your-host>/api/v1/mcp/catalog`.
 :::
 
 <OASpec />

@@ -8,10 +8,9 @@ import { _ClusterTenantFromHost } from "./request-silo";
  * Read the logged-in caller out of an Express request: who they are, which silo they are
  * on, and whether the session says they are an org admin.
  *
- * Both facts must be present. The identity comes from the session (`sub`, falling back to
- * the lower-cased email), and the silo comes from the first DNS label of the trusted
- * request host. Either one missing returns null, so a route can never act for "some
- * caller in no silo".
+ * Both facts must be present. The durable Principal comes from the authenticated admission
+ * context, while the silo is independently re-derived from the trusted request host. Either one
+ * missing or mismatched returns null, so a route can never fall back to the raw OIDC subject.
  *
  * It deliberately returns a plain identity shape rather than any domain caller type: each
  * router converts it into whatever caller type it owns, so this file needs no dependency
@@ -28,15 +27,11 @@ import { _ClusterTenantFromHost } from "./request-silo";
 export function _ResolveRequestPrincipal(request: Request): RequestPrincipal | null
 {
   const authUser = request.session?.authUser;
-  if (!authUser) return null;
-
-  const subject = typeof authUser.sub === "string" ? authUser.sub.trim() : "";
-  const email = typeof authUser.email === "string" ? authUser.email.trim().toLowerCase() : "";
-  const subjectId = subject || email;
+  const admittedPrincipal = request.authenticatedPrincipal;
   const siloId = _ClusterTenantFromHost(_RequestHost(request)) ?? "";
-  if (!subjectId || !siloId) return null;
+	if (!authUser || !admittedPrincipal || !siloId || admittedPrincipal.siloId !== siloId || !admittedPrincipal.principalId.trim()) return null;
 	const authenticatedAt = new Date(authUser.authenticatedAt);
 	const verifiedAuthenticationAt = Number.isFinite(authenticatedAt.getTime()) ? authenticatedAt : null;
 
-  return { subjectId, siloId, isOrgAdmin: authUser.isOrgAdmin === true, verifiedAuthenticationAt };
+  return { principalId: admittedPrincipal.principalId, externalSubject: admittedPrincipal.subject, externalIssuer: admittedPrincipal.issuer, siloId, isOrgAdmin: authUser.isOrgAdmin === true, verifiedAuthenticationAt };
 }

@@ -105,6 +105,73 @@
           }
         }
       },
+      "Group": {
+        "type": "object",
+        "required": [
+          "id",
+          "siloId",
+          "name",
+          "parentId",
+          "membershipAuthority",
+          "members",
+          "memberCount"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "siloId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Parent group identifier, or null for a hierarchy root."
+          },
+          "membershipAuthority": {
+            "type": "string",
+            "enum": [
+              "external",
+              "local"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "memberCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "GroupMutationResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "created",
+              "updated",
+              "deleted"
+            ]
+          }
+        }
+      },
       "OrganizationMember": {
         "type": "object",
         "additionalProperties": false,
@@ -335,74 +402,32 @@
           }
         }
       },
-      "McpServer": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "endpoint": {
-            "type": "string"
-          },
-          "transport": {
-            "type": "string",
-            "enum": [
-              "streamable-http",
-              "sse",
-              "websocket"
-            ]
-          },
-          "grants": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            }
-          },
-          "credentials": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/McpServerCredential"
-            }
-          }
-        }
-      },
-      "McpServerCredential": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable credential identifier."
-          },
-          "displayName": {
-            "type": "string",
-            "description": "Operator-facing label."
-          }
-        }
-      },
       "McpCatalogServer": {
         "type": "object",
+        "description": "An MCP server exposed by the operator API. Fields other than id are optional because this shape serves both the entitled catalogue and the organisation-admin governance view.",
         "required": [
           "id"
         ],
-        "description": "A catalogue server as exposed by the operator API (distinct from the registry McpServer). Every field beyond id is optional so the same shape serves the entitled user catalogue and the admin governance view.",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "Stable server identifier."
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "Display name shown in the catalogue."
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "description": "Short summary shown to callers deciding whether to install the server."
           },
           "publisher": {
-            "type": "string"
+            "type": "string",
+            "description": "Organisation or author label for the server."
           },
           "glyph": {
-            "type": "string"
+            "type": "string",
+            "description": "Frontend icon key for the server."
           },
           "type": {
             "type": "string",
@@ -411,7 +436,7 @@
               "multi-user",
               "remote-oauth"
             ],
-            "description": "Consumption shape; decides the credential-connect flow."
+            "description": "How the server is configured for connection: single-user requires a caller-owned credential through an external custody flow, multi-user uses an administrator-managed shared key, and remote-oauth requires an OAuth handshake outside this API."
           },
           "approvalStatus": {
             "type": "string",
@@ -421,22 +446,24 @@
               "published",
               "disabled"
             ],
-            "description": "Governance lifecycle status."
+            "description": "Organisation-admin review state. Only published servers appear in the user-facing catalogue; approved servers remain hidden until publication."
           },
           "credentialSchema": {
             "type": "array",
+            "description": "Input fields required by an external custody flow for a single-user connection. This API describes requested values but neither receives nor returns credential material.",
             "items": {
               "$ref": "#/components/schemas/CredentialField"
             }
           },
           "entitlementSummary": {
             "type": "string",
-            "description": "Human-readable summary of who is entitled (admin view)."
+            "description": "Human-readable summary of access grants, returned for the governance view."
           }
         }
       },
       "CredentialField": {
         "type": "object",
+        "description": "One input an external custody flow requires to connect a single-user MCP server. This API describes the input but neither receives nor returns its value.",
         "required": [
           "key",
           "label",
@@ -446,50 +473,48 @@
         "properties": {
           "key": {
             "type": "string",
-            "description": "Stable key the value is submitted under."
+            "description": "Stable submission key for the value."
           },
           "label": {
             "type": "string",
-            "description": "Human-readable field label."
+            "description": "Human-readable label for the input."
           },
           "required": {
             "type": "boolean",
-            "description": "Whether the field must be supplied."
+            "description": "Whether a caller must supply this value to connect."
           },
           "sensitive": {
             "type": "boolean",
-            "description": "Whether the value is secret (masked, never echoed back)."
+            "description": "Whether the client must treat the value as a secret, including masking it and never echoing it."
           },
           "placeholder": {
             "type": "string",
-            "description": "Optional input placeholder."
+            "description": "Optional example or placeholder shown in the input."
           },
           "hint": {
             "type": "string",
-            "description": "Optional helper hint."
+            "description": "Optional help text shown below the input."
           }
         }
       },
       "McpInstalled": {
         "type": "object",
+        "description": "An MCP server installed by the calling user, with its current connection state.",
         "required": [
           "serverId"
         ],
-        "description": "A server installed by the calling user. Never carries credential material — only the connection status and a non-secret account label.",
         "properties": {
           "serverId": {
-            "type": "string"
+            "type": "string",
+            "description": "Identifier of the installed server."
           },
           "connectionStatus": {
             "type": "string",
             "enum": [
               "needs-credential",
-              "activating",
-              "connected",
-              "oauth-connected",
-              "shared-key",
-              "activation-failed"
-            ]
+              "shared-key"
+            ],
+            "description": "Recorded activation requirement: needs-credential requires an external custody flow, while shared-key records an administrator-managed shared key. This API does not activate either state."
           },
           "lastUsed": {
             "type": [
@@ -497,44 +522,13 @@
               "null"
             ],
             "format": "date-time",
-            "description": "ISO-8601 timestamp of last use, or null when never used."
-          },
-          "connectedAccount": {
-            "type": "string",
-            "description": "Non-secret display label of the connected account."
-          }
-        }
-      },
-      "McpAccessPolicy": {
-        "type": "object",
-        "required": [
-          "serverId"
-        ],
-        "properties": {
-          "serverId": {
-            "type": "string"
-          },
-          "everyoneInOrg": {
-            "type": "boolean",
-            "description": "When true, every caller in the org is entitled (lists ignored)."
-          },
-          "groups": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Entitled group identifiers / names."
-          },
-          "users": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/EntitledUser"
-            }
+            "description": "ISO-8601 timestamp of the server's last use, or null when it has never been used."
           }
         }
       },
       "EntitledUser": {
         "type": "object",
+        "description": "A local principal displayed in the MCP access editor or its selectable directory.",
         "required": [
           "id",
           "name",
@@ -544,15 +538,15 @@
         "properties": {
           "id": {
             "type": "string",
-            "description": "Stable user identifier (sub or email)."
+            "description": "Stable local Principal identifier used by authorization grants."
           },
           "name": {
             "type": "string",
-            "description": "Display name."
+            "description": "Display name shown in the access editor."
           },
           "initials": {
             "type": "string",
-            "description": "Two-letter initials derived from the name."
+            "description": "Initials derived from the display name for an avatar."
           },
           "color": {
             "type": "string",
@@ -560,22 +554,112 @@
           }
         }
       },
+      "EntitledGroup": {
+        "type": "object",
+        "description": "A local group that can receive an MCP authorization grant.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable local Group identifier used by authorization grants."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name shown in the access editor. Authorization uses the identifier, not this value."
+          }
+        }
+      },
+      "McpAccessPolicy": {
+        "type": "object",
+        "description": "The user and group grants managed by the MCP access editor for one server. It does not list authorization grants managed by other sources.",
+        "required": [
+          "serverId",
+          "groups",
+          "users"
+        ],
+        "properties": {
+          "serverId": {
+            "type": "string",
+            "description": "Identifier of the governed server."
+          },
+          "groups": {
+            "type": "array",
+            "description": "Groups with an active allow grant managed by the MCP access editor.",
+            "items": {
+              "$ref": "#/components/schemas/EntitledGroup"
+            }
+          },
+          "users": {
+            "type": "array",
+            "description": "Principals with an active allow grant managed by the MCP access editor.",
+            "items": {
+              "$ref": "#/components/schemas/EntitledUser"
+            }
+          }
+        }
+      },
       "McpDirectory": {
         "type": "object",
+        "description": "The users and groups that an organisation administrator can select when editing MCP access.",
         "required": [
           "users",
           "groups"
         ],
-        "description": "The selectable universe of users and groups for the admin access editor.",
         "properties": {
           "users": {
             "type": "array",
+            "description": "All local principals eligible to receive an MCP authorization grant.",
             "items": {
               "$ref": "#/components/schemas/EntitledUser"
             }
           },
           "groups": {
             "type": "array",
+            "description": "All local groups eligible to receive an MCP authorization grant.",
+            "items": {
+              "$ref": "#/components/schemas/EntitledGroup"
+            }
+          }
+        }
+      },
+      "ResourceShare": {
+        "type": "object",
+        "description": "A direct file, chat, or dataset share. Each recipient relation is backed by an explicit authorization grant.",
+        "required": [
+          "id",
+          "resourceType",
+          "resourceId",
+          "ownerPrincipalId",
+          "recipientPrincipalIds"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable share identifier used to manage recipients."
+          },
+          "resourceType": {
+            "type": "string",
+            "enum": [
+              "file",
+              "chat",
+              "dataset"
+            ],
+            "description": "Family of the governed resource."
+          },
+          "resourceId": {
+            "type": "string",
+            "description": "Identifier of the governed resource within its family."
+          },
+          "ownerPrincipalId": {
+            "type": "string",
+            "description": "Local Principal that owns the resource and may revoke its recipient relations."
+          },
+          "recipientPrincipalIds": {
+            "type": "array",
+            "description": "Local Principals with explicit live recipient relations and grants.",
             "items": {
               "type": "string"
             }
@@ -806,170 +890,6 @@
             "description": "Total GPUs the customer may request."
           }
         }
-      },
-      "OrgMember": {
-        "type": "object",
-        "required": [
-          "subject",
-          "role"
-        ],
-        "description": "A single organisation membership row — the LOCAL membership registry the org-admin gate reads (an OrgMembership, NOT a Zitadel grant).",
-        "properties": {
-          "subject": {
-            "type": "string",
-            "description": "IdP-verified subject (OIDC `sub`) holding the membership."
-          },
-          "role": {
-            "type": "string",
-            "enum": [
-              "Owner",
-              "Admin",
-              "Member"
-            ],
-            "description": "Role held within the organisation."
-          }
-        }
-      },
-      "OrgMemberWrite": {
-        "type": "object",
-        "required": [
-          "subject",
-          "role"
-        ],
-        "description": "Add or update an organisation member (upsert on the unique [org, subject]).",
-        "properties": {
-          "subject": {
-            "type": "string",
-            "description": "IdP-verified subject (OIDC `sub`) of the member to add/update."
-          },
-          "role": {
-            "type": "string",
-            "enum": [
-              "Owner",
-              "Admin",
-              "Member"
-            ],
-            "description": "Role to grant within the organisation."
-          }
-        }
-      },
-      "Group": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "memberCount": {
-            "type": "integer"
-          },
-          "awarenessGrants": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            }
-          }
-        }
-      },
-      "Share": {
-        "type": "object",
-        "description": "An inter-user share: an Allow grant the caller created on a recipient for an entitlement they hold (S4).",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "payloadType": {
-            "type": "string",
-            "enum": [
-              "mcp-server"
-            ],
-            "description": "The MCP entitlement family shared."
-          },
-          "payloadId": {
-            "type": "string",
-            "description": "Id of the shared MCP server."
-          },
-          "recipientType": {
-            "type": "string",
-            "enum": [
-              "user",
-              "group"
-            ],
-            "description": "Whether the share targets a user (IdP subject) or a group."
-          },
-          "recipientId": {
-            "type": "string",
-            "description": "The recipient user subject or group id."
-          },
-          "scope": {
-            "type": "string",
-            "enum": [
-              "org",
-              "department",
-              "project",
-              "personal"
-            ]
-          },
-          "note": {
-            "type": "string"
-          },
-          "sharedBy": {
-            "type": "string",
-            "description": "IdP subject of the user who created the share."
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "id",
-          "payloadType",
-          "payloadId",
-          "recipientType",
-          "recipientId",
-          "scope",
-          "createdAt"
-        ]
-      },
-      "ResourceShare": {
-        "type": "object",
-        "description": "A direct share of a file/chat (S4c): the resource-scoped Personal group whose members can access it.",
-        "properties": {
-          "groupId": {
-            "type": "string",
-            "description": "Id of the resource-scoped share group."
-          },
-          "resourceType": {
-            "type": "string",
-            "enum": [
-              "file",
-              "chat",
-              "dataset"
-            ]
-          },
-          "resourceId": {
-            "type": "string"
-          },
-          "members": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "IdP subjects the resource is shared with (incl. the owner)."
-          }
-        },
-        "required": [
-          "groupId",
-          "resourceType",
-          "resourceId",
-          "members"
-        ]
       },
       "AuditEntry": {
         "type": "object",
@@ -1930,373 +1850,6 @@
     }
   },
   "paths": {
-    "/mcp-servers": {
-      "get": {
-        "operationId": "listMcpServers",
-        "summary": "List all MCP servers with grants and credentials",
-        "tags": [
-          "MCP Servers"
-        ],
-        "responses": {
-          "200": {
-            "description": "MCP server list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/McpServer"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createMcpServer",
-        "summary": "Create a new MCP server",
-        "tags": [
-          "MCP Servers"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "name",
-                  "endpoint",
-                  "transport"
-                ],
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "endpoint": {
-                    "type": "string"
-                  },
-                  "transport": {
-                    "type": "string"
-                  },
-                  "grants": {
-                    "type": "array",
-                    "items": {
-                      "type": "object"
-                    }
-                  },
-                  "credentials": {
-                    "type": "array",
-                    "items": {
-                      "type": "object"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "MCP server created.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpServer"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/mcp-servers/{id}": {
-      "get": {
-        "operationId": "getMcpServer",
-        "summary": "Get a single MCP server by identifier",
-        "tags": [
-          "MCP Servers"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "MCP server detail.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpServer"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "updateMcpServer",
-        "summary": "Update an MCP server and fully replace grants and credentials",
-        "tags": [
-          "MCP Servers"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "MCP server updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpServer"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteMcpServer",
-        "summary": "Delete an MCP server and its linked grant rows",
-        "tags": [
-          "MCP Servers"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "MCP server deleted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/mcp-servers/{id}/credentials": {
-      "get": {
-        "operationId": "listMcpServerCredentials",
-        "summary": "List the brokered credentials of an MCP server",
-        "tags": [
-          "MCP Servers"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Credential list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/McpServerCredential"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "addMcpServerCredential",
-        "summary": "Add a brokered credential to an MCP server (does not touch grants)",
-        "tags": [
-          "MCP Servers"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "displayName"
-                ],
-                "properties": {
-                  "displayName": {
-                    "type": "string",
-                    "description": "Operator-facing label."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Credential added.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpServerCredential"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Credential payload violates brokering-mode custody rules.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/mcp-servers/{id}/credentials/{credentialId}": {
-      "delete": {
-        "operationId": "deleteMcpServerCredential",
-        "summary": "Remove a single brokered credential from an MCP server",
-        "tags": [
-          "MCP Servers"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "credentialId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Credential deleted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server or credential not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/mcp/catalog": {
       "get": {
         "operationId": "listMcpCatalog",
@@ -2405,7 +1958,7 @@
     "/mcp/installed/{serverId}": {
       "delete": {
         "operationId": "uninstallMcpServer",
-        "summary": "Uninstall a server for the calling user (clears the stored credential)",
+        "summary": "Uninstall a server for the calling user",
         "tags": [
           "MCP Operator"
         ],
@@ -2422,189 +1975,6 @@
         "responses": {
           "204": {
             "description": "Server uninstalled."
-          },
-          "404": {
-            "description": "MCP install not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/mcp/installed/{serverId}/credential": {
-      "put": {
-        "operationId": "setMcpCredential",
-        "summary": "Author a per-user credential (write-only) and mark the install connected",
-        "description": "The submitted values are write-only: stored server-side as an opaque custody handle and NEVER returned by any response.",
-        "tags": [
-          "MCP Operator"
-        ],
-        "parameters": [
-          {
-            "name": "serverId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "values"
-                ],
-                "properties": {
-                  "values": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    },
-                    "description": "Field values keyed by CredentialField.key. Write-only — never echoed back."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Credential connected.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpInstalled"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP install not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "clearMcpCredential",
-        "summary": "Clear a per-user credential, returning the install to needs-credential",
-        "tags": [
-          "MCP Operator"
-        ],
-        "parameters": [
-          {
-            "name": "serverId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Credential cleared.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpInstalled"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP install not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/mcp/installed/{serverId}/oauth": {
-      "post": {
-        "operationId": "connectMcpOauth",
-        "summary": "Mark a remote-OAuth install connected after a successful handshake",
-        "tags": [
-          "MCP Operator"
-        ],
-        "parameters": [
-          {
-            "name": "serverId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OAuth connected.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpInstalled"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP install not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "disconnectMcpOauth",
-        "summary": "Disconnect a remote-OAuth install, returning it to needs-credential",
-        "tags": [
-          "MCP Operator"
-        ],
-        "parameters": [
-          {
-            "name": "serverId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OAuth disconnected.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpInstalled"
-                }
-              }
-            }
           },
           "404": {
             "description": "MCP install not found.",
@@ -2888,7 +2258,7 @@
     "/mcp/servers/{id}/access": {
       "get": {
         "operationId": "getMcpAccessPolicy",
-        "summary": "Read a server's access policy. Org-admin only",
+        "summary": "Read the authorization grants for an MCP server. Org-admin only",
         "tags": [
           "MCP Operator"
         ],
@@ -2937,7 +2307,7 @@
       },
       "put": {
         "operationId": "setMcpAccessPolicy",
-        "summary": "Replace a server's access policy wholesale. Org-admin only",
+        "summary": "Replace the authorization grants for an MCP server. Org-admin only",
         "tags": [
           "MCP Operator"
         ],
@@ -2958,26 +2328,23 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "everyoneInOrg",
-                  "groups",
-                  "users"
+                  "groupIds",
+                  "principalIds"
                 ],
                 "properties": {
-                  "everyoneInOrg": {
-                    "type": "boolean"
-                  },
-                  "groups": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "users": {
+                  "groupIds": {
                     "type": "array",
                     "items": {
                       "type": "string"
                     },
-                    "description": "Entitled user identifiers."
+                    "description": "Stable local Group identifiers."
+                  },
+                  "principalIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Stable local Principal identifiers."
                   }
                 }
               }
@@ -2996,7 +2363,7 @@
             }
           },
           "400": {
-            "description": "everyoneInOrg (boolean), groups (array), and users (array) are required.",
+            "description": "groupIds (array) and principalIds (array) are required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3062,7 +2429,7 @@
     "/resource-shares": {
       "get": {
         "operationId": "listResourceShares",
-        "summary": "List the file/chat resource shares the caller is a member of",
+        "summary": "List the file/chat/dataset shares owned by or granted to the caller",
         "tags": [
           "Shares"
         ],
@@ -3091,100 +2458,9 @@
             }
           }
         }
-      },
-      "post": {
-        "operationId": "shareResource",
-        "summary": "Share a file/chat with a user (creates/extends the resource's share group)",
-        "tags": [
-          "Shares"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "resourceType",
-                  "resourceId",
-                  "recipientSubject"
-                ],
-                "properties": {
-                  "resourceType": {
-                    "type": "string",
-                    "enum": [
-                      "file",
-                      "chat",
-                      "dataset"
-                    ]
-                  },
-                  "resourceId": {
-                    "type": "string"
-                  },
-                  "recipientSubject": {
-                    "type": "string",
-                    "description": "IdP subject of the user to share with."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Recipient added (or already present).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResourceShare"
-                }
-              }
-            }
-          },
-          "201": {
-            "description": "Resource share created.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResourceShare"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid resource share request.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "You can only share a resource you have access to.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
       }
     },
-    "/resource-shares/{groupId}/recipients/{subject}": {
+    "/resource-shares/{shareId}/recipients/{principalId}": {
       "delete": {
         "operationId": "revokeResourceShare",
         "summary": "Revoke a recipient from a resource share",
@@ -3193,7 +2469,7 @@
         ],
         "parameters": [
           {
-            "name": "groupId",
+            "name": "shareId",
             "in": "path",
             "required": true,
             "schema": {
@@ -3201,7 +2477,7 @@
             }
           },
           {
-            "name": "subject",
+            "name": "principalId",
             "in": "path",
             "required": true,
             "schema": {
@@ -3210,15 +2486,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Recipient revoked.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResourceShare"
-                }
-              }
-            }
+          "204": {
+            "description": "Recipient and linked grant revoked."
           },
           "401": {
             "description": "Authentication required.",
@@ -3243,222 +2512,10 @@
         }
       }
     },
-    "/shares": {
-      "get": {
-        "operationId": "listShares",
-        "summary": "List the shares the authenticated caller has created",
-        "tags": [
-          "Shares"
-        ],
-        "responses": {
-          "200": {
-            "description": "Shares created by the caller.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Share"
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createShare",
-        "summary": "Share an entitlement you hold with another user or group (least-privilege bounded)",
-        "tags": [
-          "Shares"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "payloadType",
-                  "payloadId",
-                  "recipientType",
-                  "recipientId"
-                ],
-                "properties": {
-                  "payloadType": {
-                    "type": "string",
-                    "enum": [
-                      "mcp-server"
-                    ]
-                  },
-                  "payloadId": {
-                    "type": "string"
-                  },
-                  "recipientType": {
-                    "type": "string",
-                    "enum": [
-                      "user",
-                      "group"
-                    ]
-                  },
-                  "recipientId": {
-                    "type": "string"
-                  },
-                  "scope": {
-                    "type": "string",
-                    "enum": [
-                      "org",
-                      "department",
-                      "project",
-                      "personal"
-                    ],
-                    "default": "personal"
-                  },
-                  "note": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "An identical share already existed (idempotent).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Share"
-                }
-              }
-            }
-          },
-          "201": {
-            "description": "Share created.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Share"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid share request.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "You can only share an entitlement you currently hold.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Payload or recipient group not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/shares/{id}": {
-      "delete": {
-        "operationId": "revokeShare",
-        "summary": "Revoke a share you created",
-        "tags": [
-          "Shares"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Share revoked.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Share not found, or not one the caller created.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/groups": {
       "get": {
         "operationId": "listGroups",
-        "summary": "List all groups with member counts and awareness grants",
+        "summary": "List groups in the authenticated silo",
         "tags": [
           "Groups"
         ],
@@ -3480,7 +2537,7 @@
       },
       "post": {
         "operationId": "createGroup",
-        "summary": "Create a new group and optional awareness grants",
+        "summary": "Create a group",
         "tags": [
           "Groups"
         ],
@@ -3490,15 +2547,38 @@
             "application/json": {
               "schema": {
                 "type": "object",
+                "additionalProperties": false,
                 "required": [
-                  "name"
+                  "name",
+                  "membershipAuthority"
                 ],
                 "properties": {
                   "name": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "membershipAuthority": {
+                    "type": "string",
+                    "enum": [
+                      "external",
+                      "local"
+                    ]
+                  },
+                  "parentId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "nullable": true
                   },
                   "description": {
                     "type": "string"
+                  },
+                  "members": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "Direct Principal IDs; rejected for externally managed groups."
                   }
                 }
               }
@@ -3511,7 +2591,37 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Group"
+                  "$ref": "#/components/schemas/GroupMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid group request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Parent or principal not found in this silo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Group conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -3522,7 +2632,7 @@
     "/groups/{id}": {
       "get": {
         "operationId": "getGroup",
-        "summary": "Get a single group by identifier",
+        "summary": "Get a group in the authenticated silo",
         "tags": [
           "Groups"
         ],
@@ -3561,7 +2671,7 @@
       },
       "put": {
         "operationId": "updateGroup",
-        "summary": "Update a group and replace awareness grants",
+        "summary": "Update a group",
         "tags": [
           "Groups"
         ],
@@ -3580,7 +2690,30 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "parentId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "nullable": true
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "members": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "Replacement direct Principal IDs for a locally managed group."
+                  }
+                }
               }
             }
           }
@@ -3591,7 +2724,37 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Group"
+                  "$ref": "#/components/schemas/GroupMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid group request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Group reference not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Group hierarchy or membership-authority conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -3600,7 +2763,7 @@
       },
       "delete": {
         "operationId": "deleteGroup",
-        "summary": "Delete a group and its awareness grants",
+        "summary": "Delete a group",
         "tags": [
           "Groups"
         ],
@@ -3620,15 +2783,27 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
+                  "$ref": "#/components/schemas/GroupMutationResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Group not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Group still has active references.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -9198,87 +8373,6 @@
         }
       }
     },
-    "/me/conversations/{conversationId}/events": {
-      "get": {
-        "operationId": "replayMyConversationEvents",
-        "summary": "Replay the signed-in participant's canonical conversation events",
-        "description": "The server derives the participant and silo from the browser session. It streams display-safe canonical events only when that participant belongs to the selected conversation.",
-        "tags": [
-          "Conversations"
-        ],
-        "parameters": [
-          {
-            "name": "conversationId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Opaque conversation identifier."
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Opaque canonical event cursor. The Last-Event-ID header is an equivalent resume mechanism."
-          },
-          {
-            "name": "Last-Event-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Opaque canonical event cursor. It must match cursor when both are supplied."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "A bounded text/event-stream replay. An empty stream does not disclose whether the conversation exists or belongs to another participant.",
-            "content": {
-              "text/event-stream": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The conversation identifier or replay cursor is malformed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No authenticated browser session owns the request.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Canonical history could not be read.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/me/conversations/directory": {
       "get": {
         "operationId": "getMyConversationCreationDirectory",
@@ -13785,129 +12879,6 @@
         }
       }
     },
-    "/auth/me": {
-      "get": {
-        "operationId": "getAuthStatus",
-        "summary": "Return current auth mode and authenticated user identity (if any)",
-        "description": "No authentication required. Returns 200 with the current session or an anonymous identity when no session is established.",
-        "tags": [
-          "Auth"
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Auth status.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "mode",
-                    "authenticated"
-                  ],
-                  "properties": {
-                    "mode": {
-                      "type": "string",
-                      "enum": [
-                        "development",
-                        "oidc"
-                      ],
-                      "description": "Active authentication mode for this instance."
-                    },
-                    "authenticated": {
-                      "type": "boolean"
-                    },
-                    "user": {
-                      "type": "object",
-                      "nullable": true,
-                      "required": [
-                        "sub",
-                        "issuer",
-                        "groups",
-                        "isPlatformOperator",
-                        "isOrgAdmin"
-                      ],
-                      "properties": {
-                        "sub": {
-                          "type": "string"
-                        },
-                        "issuer": {
-                          "type": "string",
-                          "description": "Identity provider that authenticated the user."
-                        },
-                        "groups": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          },
-                          "description": "The caller's group memberships from the OIDC groups claim (empty when none)."
-                        },
-                        "isPlatformOperator": {
-                          "type": "boolean",
-                          "description": "True iff the caller's groups intersect OPENCRANE_PLATFORM_OPERATOR_GROUPS. Empty/unset config ⇒ false (fail-closed). Introspection only — the API stays the enforcement point and the frontend uses this only to hide UI. Superseded once a first-class role model lands."
-                        },
-                        "isOrgAdmin": {
-                          "type": "boolean",
-                          "description": "True iff the caller is an organisation admin (groups intersect OPENCRANE_ORG_ADMIN_GROUPS, or the caller is a platform operator). Gates MCP-catalogue curation/approval (requireOrgAdmin). Empty/unset config ⇒ false (fail-closed). Introspection only — the API stays the enforcement point."
-                        },
-                        "clusterTenant": {
-                          "type": [
-                            "string",
-                            "null"
-                          ],
-                          "description": "The caller's ClusterTenant (customer) key, resolved server-side from their IdP-verified email → tenant → clusterTenantRef. Null when unresolved or ambiguous."
-                        },
-                        "ownedOrgs": {
-                          "type": "array",
-                          "description": "Organisations the caller owns or administers, derived fresh from their OrgMembership rows (owner/admin only; members excluded). Empty when the caller administers no org. The org-scope half of the membership-derived isOrgAdmin. Introspection only — never taken from request input.",
-                          "items": {
-                            "type": "object",
-                            "required": [
-                              "clusterTenant",
-                              "role"
-                            ],
-                            "properties": {
-                              "clusterTenant": {
-                                "type": "string",
-                                "description": "The organisation (ClusterTenant) key."
-                              },
-                              "role": {
-                                "type": "string",
-                                "enum": [
-                                  "owner",
-                                  "admin"
-                                ],
-                                "description": "The administering role the caller holds in this org."
-                              }
-                            }
-                          }
-                        },
-                        "email": {
-                          "type": "string"
-                        },
-                        "emailVerified": {
-                          "type": "boolean"
-                        },
-                        "name": {
-                          "type": "string"
-                        },
-                        "picture": {
-                          "type": "string"
-                        },
-                        "authenticatedAt": {
-                          "type": "string",
-                          "format": "date-time"
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/auth/login": {
       "get": {
         "operationId": "startOidcLogin",
@@ -14003,6 +12974,129 @@
         }
       }
     },
+    "/auth/me": {
+      "get": {
+        "operationId": "getAuthStatus",
+        "summary": "Return current auth mode and authenticated user identity (if any)",
+        "description": "No authentication required. Returns 200 with the current session or an anonymous identity when no session is established.",
+        "tags": [
+          "Auth"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Auth status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "mode",
+                    "authenticated"
+                  ],
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "development",
+                        "oidc"
+                      ],
+                      "description": "Active authentication mode for this instance."
+                    },
+                    "authenticated": {
+                      "type": "boolean"
+                    },
+                    "user": {
+                      "type": "object",
+                      "nullable": true,
+                      "required": [
+                        "sub",
+                        "issuer",
+                        "groups",
+                        "isPlatformOperator",
+                        "isOrgAdmin"
+                      ],
+                      "properties": {
+                        "sub": {
+                          "type": "string"
+                        },
+                        "issuer": {
+                          "type": "string",
+                          "description": "Identity provider that authenticated the user."
+                        },
+                        "groups": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "The caller's stable group identifiers from the OIDC groups claim (empty when none)."
+                        },
+                        "isPlatformOperator": {
+                          "type": "boolean",
+                          "description": "True when the authenticated middleware admitted a platform-operator claim. Introspection only; the API remains the enforcement point."
+                        },
+                        "isOrgAdmin": {
+                          "type": "boolean",
+                          "description": "True when the authenticated middleware admitted organisation administration authority. Introspection only; the API remains the enforcement point."
+                        },
+                        "clusterTenant": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "The caller's admitted silo identifier, or null when the session has no silo projection."
+                        },
+                        "ownedOrgs": {
+                          "type": "array",
+                          "description": "Organisation administration projections resolved by the server. Empty when none are active.",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "clusterTenant",
+                              "role"
+                            ],
+                            "properties": {
+                              "clusterTenant": {
+                                "type": "string",
+                                "description": "The organisation silo identifier."
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "owner",
+                                  "admin"
+                                ],
+                                "description": "The administering role the caller holds."
+                              }
+                            }
+                          }
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "emailVerified": {
+                          "type": "boolean"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "picture": {
+                          "type": "string"
+                        },
+                        "authenticatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/callback": {
       "get": {
         "operationId": "completeOidcLogin",
@@ -14049,7 +13143,7 @@
       "post": {
         "operationId": "logout",
         "summary": "Destroy the current session and return the IdP RP-initiated logout URL",
-        "description": "Invalidates the server-side session. When OIDC is enabled and the identity provider advertises an `end_session_endpoint`, returns the URL the browser should navigate to so the upstream IdP session is also terminated (OIDC RP-Initiated Logout). The local session is always destroyed; `endSessionUrl` is null when no upstream logout is possible (OIDC disabled, IdP exposes no end-session endpoint, or the session captured no id_token). Non-browser callers may ignore the URL.",
+        "description": "Invalidates the server-side session and returns the identity provider logout URL when upstream logout is available.",
         "tags": [
           "Auth"
         ],
@@ -14068,7 +13162,7 @@
                     "endSessionUrl": {
                       "type": "string",
                       "nullable": true,
-                      "description": "Absolute URL the browser should navigate to in order to terminate the upstream IdP session. Null when no upstream logout is configured or possible."
+                      "description": "Absolute upstream logout URL, or null when upstream logout is unavailable."
                     }
                   }
                 }

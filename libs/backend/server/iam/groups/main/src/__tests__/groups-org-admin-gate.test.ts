@@ -1,10 +1,12 @@
 import express from "express";
 import type { Express } from "express";
-import type { PrismaClient } from "@prisma/client";
+import type { Logger } from "pino";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { groupsRouter } from "../routes/groups";
+import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
 
 /**
  * End-to-end check that `_RequireOrgAdmin` is actually wired onto the groups API
@@ -70,7 +72,8 @@ function _buildApp(prisma: PrismaClient, user?: { isOrgAdmin: boolean }): Expres
   {
     app.use(function _seedSession(req, _res, next) { (req as unknown as { session: { authUser: { isOrgAdmin: boolean } } }).session = { authUser: user }; next(); });
   }
-  app.use("/api/v1/groups", groupsRouter(prisma));
+  app.use("/api/v1/groups", groupsRouter(prisma, function _Caller() { return { siloId: "silo-1" }; }));
+  app.use(_ErrorHandler({ warn: vi.fn(), error: vi.fn() } as unknown as Logger));
   return app;
 }
 
@@ -107,12 +110,12 @@ describe("groups router — _RequireOrgAdmin gate (pentest mitigation)", functio
   {
     const { prisma, spies } = _mockPrisma();
     // Mock findUnique to return a group so we don't get 404
-    spies["group.findUnique"] = vi.fn().mockResolvedValue({ id: "grp-1", name: "Test Group", scope: "Org", members: [] });
+    spies["group.findFirst"] = vi.fn().mockResolvedValue({ id: "grp-1", siloId: "silo-1", name: "Test Group", membershipAuthority: "Local", parentId: null, description: null, memberships: [] });
     
     const res = await request(_buildApp(prisma, { isOrgAdmin: false })).get("/api/v1/groups/grp-1");
 
     expect(res.status).toBe(200);
-    expect(spies["group.findUnique"]).toHaveBeenCalled();
+    expect(spies["group.findFirst"]).toHaveBeenCalled();
   });
 
   // -------------------------------------------------------------------------
@@ -124,7 +127,7 @@ describe("groups router — _RequireOrgAdmin gate (pentest mitigation)", functio
     const { prisma, spies } = _mockPrisma();
     const res = await request(_buildApp(prisma, { isOrgAdmin: false }))
       .post("/api/v1/groups")
-      .send({ name: "New Group", scope: "org", members: [] });
+      .send({ name: "New Group", membershipAuthority: "local", members: [] });
 
     expect(res.status).toBe(403);
     expect(res.body).toMatchObject({ code: "FORBIDDEN_NOT_ORG_ADMIN" });
@@ -193,7 +196,7 @@ describe("groups router — _RequireOrgAdmin gate (pentest mitigation)", functio
     const { prisma, spies } = _mockPrisma();
     const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
       .post("/api/v1/groups")
-      .send({ name: "Admin Group", scope: "org", members: [] });
+      .send({ name: "Admin Group", membershipAuthority: "local", members: [] });
 
     expect(res.status).not.toBe(403);
     expect(spies["group.create"]).toHaveBeenCalled();
@@ -220,6 +223,76 @@ describe("groups router — _RequireOrgAdmin gate (pentest mitigation)", functio
     expect(spies["group.delete"]).toHaveBeenCalled();
   });
 
+	it("returns a generic reference error when a requested parent does not exist", async function _missingParent()
+  {
+    const { prisma, spies } = _mockPrisma();
+    spies["group.update"] = vi.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError(
+      "Foreign key constraint failed on groups_parent_id_fkey",
+      { code: "P2003", clientVersion: "6.19.3" },
+    ));
+
+    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
+      .put("/api/v1/groups/grp-1")
+      .send({ parentId: "missing-parent" });
+
+    expect(res.status).toBe(404);
+		expect(res.body.code).toBe("GROUP_REFERENCE_NOT_FOUND");
+  });
+
+  it("rejects a malformed parent before it reaches persistence", async function _invalidParent()
+  {
+    const { prisma, spies } = _mockPrisma();
+    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
+      .put("/api/v1/groups/grp-1")
+      .send({ parentId: 42 });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(res.body.issues).toEqual([{ location: "body", path: ["parentId"], message: "This field has an invalid type." }]);
+    expect(spies["group.update"]).toBeUndefined();
+  });
+
+  it("rejects non-string members before they reach persistence", async function _invalidMembers()
+  {
+    const { prisma, spies } = _mockPrisma();
+    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
+      .post("/api/v1/groups")
+      .send({ name: "Operations", membershipAuthority: "local", members: [42] });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(res.body.issues).toEqual([{ location: "body", path: ["members", 0], message: "This field has an invalid type." }]);
+    expect(spies["group.create"]).toBeUndefined();
+  });
+
+  it("returns conflict when a parent update would create a cycle", async function _cycleConflict()
+  {
+    const { prisma, spies } = _mockPrisma();
+    spies["group.update"] = vi.fn().mockRejectedValue(new Error("group hierarchy cannot contain a cycle"));
+
+    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
+      .put("/api/v1/groups/grp-1")
+      .send({ parentId: "descendant" });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("GROUP_HIERARCHY_CYCLE");
+  });
+
+	it("returns a generic reference conflict when deleting a referenced group", async function _parentDeleteConflict()
+  {
+    const { prisma, spies } = _mockPrisma();
+    spies["group.delete"] = vi.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError(
+      "Foreign key constraint failed on groups_parent_id_fkey",
+      { code: "P2003", clientVersion: "6.19.3" },
+    ));
+
+    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
+      .delete("/api/v1/groups/grp-1");
+
+    expect(res.status).toBe(409);
+		expect(res.body.code).toBe("GROUP_HAS_REFERENCES");
+  });
+
   // -------------------------------------------------------------------------
   // Unauthenticated access — should be blocked
   // -------------------------------------------------------------------------
@@ -238,7 +311,7 @@ describe("groups router — _RequireOrgAdmin gate (pentest mitigation)", functio
     const { prisma, spies } = _mockPrisma();
     const res = await request(_buildApp(prisma))
       .post("/api/v1/groups")
-      .send({ name: "Unauthenticated Group", scope: "org", members: [] });
+      .send({ name: "Unauthenticated Group", membershipAuthority: "local", members: [] });
 
     expect(res.status).toBe(403);
     expect(spies["group.create"]).toBeUndefined();

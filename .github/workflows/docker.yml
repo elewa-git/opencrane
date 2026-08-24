@@ -30,6 +30,7 @@ on:
           - none
           - bootstrap
           - artifact
+          - qualification
           - server
           - ui
 
@@ -269,6 +270,12 @@ jobs:
       - name: Prove the Prisma-boundary classifier
         run: npm run test:prisma-boundaries
 
+      - name: Enforce durable execution engine boundaries
+        run: npm run check:durable-boundary
+
+      - name: Prove the durable execution boundary classifier
+        run: npm run test:durable-boundary
+
       - name: Restore the Nx computation cache
         uses: actions/cache@v4
         with:
@@ -335,10 +342,13 @@ jobs:
             sudo apt-get update && sudo apt-get install --yes --no-install-recommends postgresql-client
           fi
 
+      - name: Build the pg_cron migration fixture
+        run: docker build --platform linux/amd64 --tag opencrane-postgres:migration-test --file apps/postgres/deploy/Dockerfile .
+
       - name: Enforce version-to-version database migration contracts
         run: npm run check:database-migrations
 
-      - name: Prove previous-to-current database convergence and rollback
+      - name: Prove direct database migration SQL contract
         run: npm run test:database-migrations
 
       - name: Generate the database client
@@ -661,6 +671,27 @@ jobs:
             type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.BUILD_CACHE_IMAGE }}:${{ matrix.project }}
             ${{ github.event_name == 'pull_request' && format('type=registry,ref={0}/{1}/{2}:{3}', env.REGISTRY, github.repository_owner, env.BUILD_CACHE_IMAGE_PR, matrix.project) || '' }}
           cache-to: ${{ github.event_name == 'push' && format('type=registry,ref={0}/{1}/{2}:{3},mode=max', env.REGISTRY, github.repository_owner, env.BUILD_CACHE_IMAGE, matrix.project) || (github.event.pull_request.head.repo.full_name == github.repository && format('type=registry,ref={0}/{1}/{2}:{3},mode=max', env.REGISTRY, github.repository_owner, env.BUILD_CACHE_IMAGE_PR, matrix.project) || '') }}
+
+      # CloudNativePG reads the PostgreSQL version from the manifest's tag, while the digest fixes
+      # the qualified image's bytes. Publish that tag as an alias for the manifest's digest in the
+      # job that holds `packages: write`, so no second build can change the bytes behind the release
+      # reference.
+      # @see https://cloudnative-pg.io/docs/1.27/container_images/#image-tag-requirements
+      - name: Publish the manifest-bound CloudNativePG operand tag
+        if: matrix.project == 'postgres' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_deployables != 'none'))
+        shell: bash
+        env:
+          IMAGE_REPOSITORY: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
+        run: |
+          release_version="$(jq -r '.version' package.json)"
+          operand_image="$(jq -r '.database.operandImage' "releases/${release_version}.json")"
+          operand_tag="${operand_image%@*}"
+          operand_digest="${operand_image##*@}"
+          if [[ "$operand_tag" != "${IMAGE_REPOSITORY}:"* ]]; then
+            echo "The release manifest's PostgreSQL operand does not use the matrix image repository." >&2
+            exit 1
+          fi
+          docker buildx imagetools create --tag "$operand_tag" "${IMAGE_REPOSITORY}@${operand_digest}"
 
   publish-develop-smoke-images:
     name: Publish develop smoke image (${{ matrix.project }})

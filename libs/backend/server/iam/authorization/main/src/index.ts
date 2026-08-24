@@ -1,6 +1,12 @@
 export { __ComputeEs256JwkThumbprint, __NormalizeDpopTargetUri, __VerifyCapabilityProof } from "./capability-proof";
 export { __DigestCanonicalJson } from "./canonical-json-digest";
 export { __ResolveEffectiveAccess } from "./effective-access";
+export { __ResolvePrincipalAuthorization } from "./authorization-resolution";
+export type { AuthorizationContextRepository, ResolvePrincipalAuthorizationCommand, ResolvePrincipalAuthorizationResult } from "./authorization-resolution.types";
+export type { CapabilityCatalogRepository } from "./capability-catalog.types";
+export { PrismaCapabilityCatalogRepository } from "./prisma-capability-catalog-repository";
+export type { ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantSpec, ReconcileManagedAuthorizationGrantsCommand } from "./managed-authorization-grants.types";
+export { PrismaManagedAuthorizationGrantRepository } from "./prisma-managed-authorization-grant-repository";
 export { AuthorizationMembershipOutcomes } from "./effective-access.types";
 export type { AuthorizationGrantRepository, AuthorizationMembershipAuthority, AuthorizationMembershipDecision, AuthorizationMembershipRequirement, EffectiveCapabilityEvidence, ResolveEffectiveAccessCommand, ResolveEffectiveAccessResult } from "./effective-access.types";
 export { __ConsumeRuntimeBootstrap, __ExecuteCapabilityAction } from "./runtime-proof";
@@ -29,10 +35,7 @@ export type { ToolInvocationLifecycleInput } from "./tool-invocation-lifecycle.t
 export { PrismaRuntimeAuthorityRepository } from "./prisma-runtime-authority";
 export { PrismaAuthorizationGrantRepository } from "./prisma-authorization-grants";
 export { PrismaShareAuthorizationRepository } from "./prisma-share-authorization-repository";
-export { PrismaShareAuthorizationUnitOfWork } from "./prisma-share-authorization-unit-of-work";
-export { ShareAuthorizationScopeKinds } from "./share-authorization-repository.types";
 export type { CreateOrFindShareAuthorizationGrantResult, CreateShareAuthorizationGrant, ShareAuthorizationGrant, ShareAuthorizationRepository, ShareCapabilityCatalogRevision } from "./share-authorization-repository.types";
-export type { ShareAuthorizationTransaction, ShareAuthorizationUnitOfWork } from "./share-authorization-unit-of-work.types";
 export { __CreateRuntimeBootstrapRouter } from "./runtime-bootstrap.router";
 export { PrismaRuntimeBootstrapExchange } from "./prisma-runtime-bootstrap-exchange";
 export type { RuntimeBootstrapClock, RuntimeBootstrapExchangeRecord, RuntimeBootstrapExchangeRepository, RuntimeBootstrapLogger, RuntimeBootstrapReviewedIdentity, RuntimeBootstrapRouterDependencies, RuntimeBootstrapSubmission, RuntimeBootstrapTokenReviewer } from "./runtime-bootstrap.types";

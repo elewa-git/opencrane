@@ -84,6 +84,22 @@ function _StampOnlyFiles(repositoryRoot, base, changedFiles)
 	return files;
 }
 
+/** Select historical manifests whose current bytes exactly match their immutable release tag. */
+function _RestoredHistoricalManifestFiles(repositoryRoot, rootVersion, changedFiles)
+{
+	const restored = [];
+	for (const file of changedFiles)
+	{
+		const version = /^releases\/(?<version>\d+\.\d+\.\d+)\.json$/u.exec(file)?.groups?.version;
+		if (!version || version === rootVersion) continue;
+		const tag = _ExistingReleaseTag(version);
+		if (!tag) continue;
+		const tagged = _BaseText(tag, file);
+		if (tagged !== null && readFileSync(join(repositoryRoot, file), "utf8") === tagged) restored.push(file);
+	}
+	return restored;
+}
+
 const repositoryRoot = resolve(new URL(".", import.meta.url).pathname, "..");
 const base = _Argument("--base");
 if (!base) throw new Error("--base requires an exact Git commit or ref");
@@ -104,6 +120,7 @@ const errors = await validateWorkspace(
 	newFiles,
 	releaseTag,
 	directChangedFiles,
+	_RestoredHistoricalManifestFiles(repositoryRoot, rootVersion, directChangedFiles),
 );
 if (errors.length > 0)
 {

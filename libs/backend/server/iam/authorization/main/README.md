@@ -89,6 +89,11 @@ carries a concrete, currently authorized human approval subject.
   canonical JSON hash, preserving one SHA-256 implementation across server and browser consumers.
 - `PrismaRuntimeAuthorityRepository`, `PrismaAuthorizationGrantRepository` — the database-backed
   stores for accepted proofs/receipts and for candidate grants.
+- `PrismaCapabilityCatalogRepository` — resolves an exact immutable capability only when the
+  requested identifier exists in the stored catalog revision.
+- `PrismaManagedAuthorizationGrantRepository` — reconciles only one product editor's live grants,
+  soft-revokes omissions, and keeps every other manager's grants untouched. The MCP operator unit
+  of work composes it transaction-locally after pure policy validation.
 - `PrismaToolInvocationUnitOfWork`, the narrow
   `__AdmitPreparingToolInvocationInTransaction` helper, and
   `__PlanToolInvocationLifecycle` — atomically turn an admitted runtime candidate into durable work,
@@ -106,8 +111,6 @@ carries a concrete, currently authorized human approval subject.
   transaction without exporting the full persistence repository.
 - `TOOL_INVOCATION_PREPARATION_POLICY` — the one frozen provider-free retry policy consumed by
   admission, scheduling, lifecycle decisions, cancellation, and durable recovery events.
-- `ShareAuthorizationScopeKinds` — the four domain scope categories that sharing accepts; the
-  Prisma adapter translates them explicitly and rejects any unsupported stored category.
 - Contract types: `ResolveEffectiveAccessCommand`/`Result`, `AuthorizationGrantRepository`,
   `AuthorizationMembershipAuthority`, `CapabilityActionExecutor`, and their siblings.
 
@@ -136,15 +139,17 @@ Tagged `scope:authorization`: it may depend only on `scope:audit` (to record dec
 
 ## Data & persistence
 
-`PrismaShareAuthorizationUnitOfWork` binds the candidate-grant reader and
-`PrismaShareAuthorizationRepository` to one transaction for each sharing procedure. The repository
-owns the narrow catalog-seeding and share-grant persistence seam used by the sharing API. It scopes
-every grant lookup, list and revocation to one `siloId`, so
-a principal can never discover or revoke a delegation held by another ClusterTenant. The catalog
-revision is seeded idempotently; the stored digest, rather than a caller-supplied value, binds later
-grant evaluation to the canonical capability list. Share reads select only the fields in the public
-repository contract and map the generated Prisma scope enum into the narrower sharing vocabulary;
-an unsupported stored scope fails closed rather than being cast into the domain result.
+`PrismaResourceShareUnitOfWork` composes `PrismaShareAuthorizationRepository`, the generic grant
+reader, capability catalogue and resource-share repository in one transaction. The authorization
+repository owns the narrow catalogue-seeding and exact recipient-grant persistence seam used by the
+sharing API. Every lookup, list, and revocation is bound to one `siloId`, so a principal can never
+discover or revoke a delegation held by another ClusterTenant. The stored catalogue digest binds
+later evaluation to the canonical capability list. Share reads map Principal-or-Group subjects and
+Group-or-Personal boundaries explicitly; unsupported combinations fail closed.
+
+Managed grant replacement never deletes evidence and never broadens its ownership boundary:
+`managerId + siloId + resource` selects the only live rows it may revoke. Its transaction records
+the created/revoked counts without copying subject identifiers into the audit message.
 
 Owns `AuthorizationGrant`, `CapabilityCatalogRevision`, `ApprovalRequest`, and
 `ActionExecutionReceipt` in `apps/opencrane/prisma/schema/authorization.prisma`. It also owns

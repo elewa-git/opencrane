@@ -1,31 +1,36 @@
-# deploy-k8s platform internals
+# deploy-k8s platform tools
 
-This directory is the cluster and release substrate owned by `apps/_infra/deploy-k8s`. It is kept
-as an internal subtree—not a top-level `libs` package—because the deploy-k8s application is its only
-local source consumer.
+This directory contains the shared tools that prepare a cluster, deploy an OpenCrane silo, upgrade
+its database, and verify the result. They live beside the deploy application because no other
+OpenCrane package uses them as a general-purpose library.
 
-## Contents
+## What these tools are for
+
+These files help an operator install, upgrade, verify, or retire an OpenCrane silo without having to
+assemble raw Helm and Kubernetes commands by hand. Each script has one job and stops when the live
+cluster does not match the assumptions needed to do that job safely.
 
 | Path | Responsibility |
 |---|---|
-| `Chart.yaml`, `templates/` | Helm library chart providing labels, names, RBAC, endpoint, database, identity, and observability helpers to the parent release. It renders no workload by itself. |
-| `k8s-deploy.sh` | Provider-neutral install and upgrade engine used by the release wrapper. It requires exact repository and source release versions, classifies live database evidence, and runs the state-appropriate PostgreSQL and application transitions. One reviewed image tag is authoritative for the server, channel proxy, memory gateway, and artifact service, and the engine waits for those Deployments across the release's main and artifact namespaces. A supported browser release supplies an exact Open Container Initiative (OCI) image digest for the single-page application (SPA); the engine renders that digest, waits for its Deployment, reports desired and observed image evidence, and rejects a stale or unavailable SPA before it reports success. It republishes each database consumer's URI and waits for the exact server, LiteLLM, and Obot workloads to restart, because Kubernetes environment variables do not reload Secret changes. Its optional `--verify` check reports pod readiness, DNS resolution, and public server/database health without changing deployment success. |
-| `invitation-signing-secret.sh` | Creates the standalone invitation signing key once, validates its stored shape, and preserves it across upgrades so pending links are not rotated by a routine rollout. |
-| `qualified-release-image-policy.sh` | Appends the reviewed first-party tag after operator-supplied Helm values so one release cannot mix server, channel proxy, memory gateway, and artifact service builds. Public deployments require an explicit immutable `sha-*` tag and an installed registry inspector; before Helm changes the cluster, the policy checks the complete four-image release set even when an advanced values override disables one service. Local k3d imports remain verified by their blocking rollout gates. |
-| `control-plane-image-policy.sh` | Small, dependency-free browser-image policy. Public browser releases require an exact OCI digest. The only tag exception is a locally imported image on a k3d context under a reserved `.test` conformance domain, so it cannot be used for a public hostname. |
-| `cluster-tenant-crd-policy.sh` | Classifies the shared `ClusterTenant` CRD as absent, current-release-owned, compatible shared, or incompatible before Helm decides whether to render it. |
-| `database-convergence-classifier.sh` | Read-only classifier for exact bootstrap and migration-history evidence. It reports `current`, `completed`, `source`, or `incompatible`; unreadable or ambiguous evidence is an error. |
-| `database-convergence-policy.sh` | Pure owner of the twelve State × Event lifecycle outcomes across four convergence states and three transition events. Unknown states, events, and outcomes fail closed. |
-| `database-migration-recovery.sh` | Server-fence and failure-recovery owner. It captures the pre-fence Helm revision, proves the write fence, and restores that exact revision only while the migration Job is terminal and the database still proves the source state. |
-| `database-migration-orchestrator.sh` | State-dependent PostgreSQL sequencing for current adoption, previous-version recovery, exact SQL publication, backup evidence, migration, and privilege reconciliation. It consumes a manifest-resolved transition and never selects or edits migration SQL. |
-| `database-release-finalization.sh` | Application finalization owner after the database release transition. It strictly inventories and restarts database consumers, waits for final rollouts, and restores the exact fenced Helm revision if un-fencing or readiness fails. |
-| `bootstrap-prerequisites.sh` | Explicit operator bootstrap for the pinned ingress-nginx, cert-manager, and CloudNativePG cluster-wide controllers, plus the narrowly selected GKE Autopilot database-proof ComputeClass. It validates the exact Kubernetes context and reserved regional address before mutation, fails closed around existing foreign resources, and installs resource-bounded development profiles from `values/prerequisites/`. It is not invoked by a silo deployment. |
-| `prerequisite-chart-lock.sh` | Immutable upstream chart coordinates, SHA-256 archive identities, and complete rendered cluster-scoped resource inventories consumed by the bootstrap and render contract. |
-| `configure-oidc.sh` | Surgical OIDC configuration for an existing installation. |
-| `provision.sh` | Optional local, GKE Autopilot, or VPS cluster provisioning invoked before deployment. The GKE path bootstraps a private, versioned Terraform-state bucket in the cluster region; set `OPENCRANE_TERRAFORM_STATE_BUCKET` only when the deterministic `<project>-<cluster>-tfstate` name cannot be used. |
-| `terraform/` | GKE Autopilot with regional CMEK, plus opt-in networking, DNS, and Artifact Registry resources. Application charts remain owned by `deploy.sh`. |
-| `values/` | Reusable environment and multi-instance deployment profiles. |
-| `tests/` | Rendered contract checks plus the blocking disposable-k3d current-silo smoke used on `develop`. |
+| `Chart.yaml`, `templates/` | Gives all workloads the same naming, access-control, database, identity, and monitoring conventions. The parent release reuses these Helm helpers; they do not install anything on their own. |
+| `k8s-deploy.sh` | Installs or upgrades a silo from reviewed application images. It checks the live database first, applies the matching database and application changes, restarts services when their connection details change, and waits until the intended workloads are actually ready. An optional verification step also checks pods, DNS, and public health. |
+| `invitation-signing-secret.sh` | Keeps invitation links valid across routine upgrades. It creates the silo's signing key once, checks that the saved key is usable, and reuses it instead of silently rotating it. |
+| `qualified-release-image-policy.sh` | Keeps the channel proxy, memory gateway, and artifact service on one reviewed build while allowing the server to use its own reviewed build when needed. It verifies that all four images are available before Helm changes the cluster. |
+| `control-plane-image-policy.sh` | Ensures the browser application is the exact reviewed build. Public deployments must use an immutable image digest; only disposable local test clusters may use a locally imported tag. |
+| `cluster-tenant-crd-policy.sh` | Protects the cluster-wide tenant definition from conflicting ownership. It checks whether the definition is missing, owned by this release, safely shared, or conflicting before Helm proceeds. |
+| `database-migration-orchestrator.sh` | Runs a reviewed database migration Job directly. It publishes the SQL, prepares required PostgreSQL features, waits for the Job, and removes any temporary privileges. |
+| `database-pg-cron-preflight.sh` | Confirms that PostgreSQL can schedule the background work used by durable agent tasks before a migration depends on it. The check is read-only and runs against the database primary. |
+| `qualify-durable-execution.sh` | Proves on a live silo that newly queued agent work is picked up within the expected time. It opens a temporary connection to the database proxy, runs the application-owned timing check, and keeps the application password out of its output. |
+| `database-superuser-access.sh` | Confirms that temporary database-administrator access has been disabled and its generated credential removed before the application resumes. |
+| `database-release-finalization.sh` | Restarts database consumers when connection details change and waits for the normal application rollout. |
+| `k8s-teardown.sh` | Retires one standalone silo without touching shared cluster services or another tenant. It requires the exact cluster, tenant name, and expected release ownership, blocks protected tenants, and can inventory the planned deletion before removing anything. |
+| `bootstrap-prerequisites.sh` | Prepares a development cluster with the shared ingress, certificate, and PostgreSQL controllers OpenCrane expects. It validates the selected cluster and network address first and refuses to take over resources it does not own. A normal silo deployment never runs it automatically. |
+| `prerequisite-chart-lock.sh` | Pins the exact upstream controller packages accepted by the bootstrap. Checksums and expected cluster resources make downloaded dependencies reproducible and tamper-evident. |
+| `configure-oidc.sh` | Updates OpenID Connect login settings on an existing silo without redeploying unrelated configuration. |
+| `provision.sh` | Creates a supported local, Google Kubernetes Engine (GKE), or virtual-private-server cluster before OpenCrane is installed. The GKE path also creates private storage for Terraform's infrastructure record. |
+| `terraform/` | Defines the optional Google Cloud infrastructure used by a GKE deployment, including encryption, networking, DNS, and the image registry. Application installation remains the deployer's responsibility. |
+| `values/` | Holds reusable settings for different environments and for clusters that host more than one isolated silo. |
+| `tests/` | Checks that rendered deployments still enforce the documented safety rules and proves the full install path in a disposable local Kubernetes cluster before changes reach a live environment. |
 
 `tests/develop-smoke.sh` exercises the real silo deploy entrypoint. It rebuilds Nx-affected images
 from the checkout through a per-project BuildKit cache and resolves unaffected owners from the exact
@@ -45,44 +50,16 @@ Business logic does not belong here. Server-process infrastructure belongs in `l
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads
 belong in sibling `apps/_infra/<service>` projects.
 
-## Versioned database deployment
+## Database deployment
 
-Every invocation supplies `--release-version <current-root-version>` and an exact
-`--from-release-version` (`fresh`, the same current version, or the immediately preceding minor).
-The engine resolves both immutable release manifests before cluster mutation. Fresh installs skip
-migration. For an eligible migration transition with a live database, a read-only query classifies
-its protected bootstrap origin and complete history tuple before any SQL publication or server
-fence. `current` covers a current baseline created before the release ledger existed; `completed`
-covers an already-applied exact migration. Both reconcile privileges with migration disabled and
-continue the normal application Helm transition without fencing. Incompatible, unreadable, extra,
-or ambiguous evidence stops before fencing.
+Every invocation supplies a release version and the version it is upgrading from. When a reviewed
+`<from>-to-<to>` migration directory exists, the deployer publishes its SQL as an immutable ConfigMap,
+prepares `pg_cron` when that migration needs it, runs the bounded migration Job, and then continues
+the ordinary application rollout. A failed Job returns its failure directly. It does not create a
+backup, inspect the existing schema, pause application writes, or restore a previous release.
 
-Only `source` publishes the manifest-selected SQL, captures the exact current application Helm
-revision, and then fences the old server. It proves a CloudNativePG (CNPG) backup before running the
-bounded migration Job. If a post-fence stage fails, recovery first proves that Job is absent or
-terminal and reclassifies the database. It rolls back the application to the captured revision only
-when the database remains exactly `source`; an active or unknown Job, advanced database, unreadable
-evidence, or failed rollback leaves the fence active and the original failure status unchanged. A
-previous-version physical restore remains fail-closed: recovery configuration must render before the
-fence, and the restored database must pass the same classifier before SQL can be published.
-If a process stops after migration but before un-fencing, a rerun adopts only the exact persisted
-source/target fence and its positive previous replica count. Final application failure restores that
-fenced revision, never the now-incompatible running source application.
-
-An automatic source migration additionally requires the PostgreSQL chart's plugin-backed `ScheduledBackup`.
-The engine creates a dedicated on-demand `Backup` and waits for completed controller evidence; a
-flag, annotation, or operator acknowledgement is not recovery evidence. An operator may explicitly
-run an approved carry-forward repair with `--allow-unbacked-database-migration` while no provider is available;
-this skips only backup creation and leaves the write fence, exact source classifier, transactional
-migration Job, convergence proof, and failure recovery active. The deployer rejects that override for
-fresh, current, and ordinary migration transitions. A completed carry-forward re-entry accepts the
-flag but performs no backup or migration, so the override is inert. The override is CLI-only so it
-cannot persist as an environment default.
-It preserves an existing
-Cluster's original initdb ConfigMap and protected origin digest while publishing the current baseline
-separately for convergence proof. The Helm-owned `migrationFence` records source/target versions and
-the previous replica count. It stays active whenever failure evidence does not safely permit the
-exact pre-fence rollback, or when the final application upgrade fails.
+Operational backup and restore configuration remains available in the PostgreSQL chart, but it is not
+a condition for running a migration. Deferred migration hardening work is tracked in issue #699.
 
 ## OIDC upgrades
 

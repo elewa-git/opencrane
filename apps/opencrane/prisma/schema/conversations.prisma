@@ -42,34 +42,34 @@ enum AgentThreadDeliveryKind {
 }
 
 model Conversation {
-  id                   String                        @id @default(cuid())
-  siloId               String                        @map("silo_id")
-  mode                 ConversationMode
-  agentServiceId       String?                       @map("agent_service_id")
-  lifecycle            ConversationLifecycle         @default(Open)
-  contextRevisionId    String?                       @map("context_revision_id")
-  closedAt             DateTime?                     @map("closed_at")
-  createdAt            DateTime                      @default(now()) @map("created_at")
+  id                            String                          @id @default(cuid())
+  siloId                        String                          @map("silo_id")
+  mode                          ConversationMode
+  agentServiceId                String?                         @map("agent_service_id")
+  lifecycle                     ConversationLifecycle           @default(Open)
+  contextRevisionId             String?                         @map("context_revision_id")
+  closedAt                      DateTime?                       @map("closed_at")
+  createdAt                     DateTime                        @default(now()) @map("created_at")
   /// Real database append time for display. Lifecycle or context updates do not advance it.
-  updatedAt            DateTime                      @default(now()) @map("updated_at")
+  updatedAt                     DateTime                        @default(now()) @map("updated_at")
   /// Global database allocation order for list sorting. Rollbacks may leave gaps; commit order does not rewrite it.
-  activitySequence     BigInt                        @default(autoincrement()) @unique @map("activity_sequence")
-  participants         ConversationParticipant[]
-  messages             ConversationMessage[]
-  runEvents            ConversationRunEvent[]
-  timelineEntries      ConversationTimelineEntry[]
-  contextRevisions     ConversationContextRevision[] @relation("ConversationContextRevisions")
-  runs                 AgentRun[]
-  elicitationRequests  ElicitationRequest[]
-  activeContext        ConversationContextRevision?  @relation("ActiveConversationContext", fields: [id, contextRevisionId], references: [conversationId, id], onDelete: Restrict)
-  assets               ConversationAsset[]
-  assetOutputTickets   ConversationAssetOutputTicket[]
+  activitySequence              BigInt                          @unique @default(autoincrement()) @map("activity_sequence")
+  participants                  ConversationParticipant[]
+  messages                      ConversationMessage[]
+  runEvents                     ConversationRunEvent[]
+  timelineEntries               ConversationTimelineEntry[]
+  contextRevisions              ConversationContextRevision[]   @relation("ConversationContextRevisions")
+  runs                          AgentRun[]
+  elicitationRequests           ElicitationRequest[]
+  activeContext                 ConversationContextRevision?    @relation("ActiveConversationContext", fields: [id, contextRevisionId], references: [conversationId, id], onDelete: Restrict)
+  assets                        ConversationAsset[]
+  assetOutputTickets            ConversationAssetOutputTicket[]
   originAgentThread             ConversationAgentThread?        @relation("AgentThreadChild")
   childAgentThreads             ConversationAgentThread[]       @relation("AgentThreadParent")
   rootedAgentThreads            ConversationAgentThread[]       @relation("AgentThreadRoot")
   receivedAgentThreadDeliveries AgentThreadParentDelivery[]     @relation("AgentThreadDeliveryParent")
   sentAgentThreadDeliveries     AgentThreadParentDelivery[]     @relation("AgentThreadDeliveryChild")
-  service              AgentService?                 @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
+  service                       AgentService?                   @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
 
   @@unique([id, siloId])
   @@unique([id, siloId, agentServiceId], map: "conversations_exact_service_key")
@@ -80,16 +80,16 @@ model Conversation {
 }
 
 model ConversationParticipant {
-  conversationId      String       @map("conversation_id")
-  userId              String       @map("user_id")
-  visibleFromPosition BigInt       @default(0) @map("visible_from_position")
-  readThroughPosition BigInt       @default(0) @map("read_through_position")
-  accessEndedPosition BigInt?      @map("access_ended_position")
-  archivedAt          DateTime?    @map("archived_at")
-  joinedAt            DateTime     @default(now()) @map("joined_at")
-  conversation        Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  timelineEntries     ConversationTimelineEntry[]
-  assignedElicitations ElicitationRequest[]
+  conversationId        String                      @map("conversation_id")
+  userId                String                      @map("user_id")
+  visibleFromPosition   BigInt                      @default(0) @map("visible_from_position")
+  readThroughPosition   BigInt                      @default(0) @map("read_through_position")
+  accessEndedPosition   BigInt?                     @map("access_ended_position")
+  archivedAt            DateTime?                   @map("archived_at")
+  joinedAt              DateTime                    @default(now()) @map("joined_at")
+  conversation          Conversation                @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  timelineEntries       ConversationTimelineEntry[]
+  assignedElicitations  ElicitationRequest[]
   initiatedAgentThreads ConversationAgentThread[]
 
   @@id([conversationId, userId])
@@ -98,20 +98,20 @@ model ConversationParticipant {
 }
 
 model ConversationMessage {
-  id             String                     @id @default(cuid())
-  conversationId String                     @map("conversation_id")
-  runId          String?                    @map("run_id")
-  userId         String?                    @map("user_id")
-  idempotencyKey String                     @map("idempotency_key")
-  role           ConversationMessageRole
-  state          ConversationMessageState
-  source         String
-  blocks         Json
-  createdAt      DateTime                   @default(now()) @map("created_at")
-  completedAt    DateTime?                  @map("completed_at")
-  conversation   Conversation               @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  timelineEntry  ConversationTimelineEntry?
-  assets         ConversationAsset[]
+  id                 String                     @id @default(cuid())
+  conversationId     String                     @map("conversation_id")
+  runId              String?                    @map("run_id")
+  userId             String?                    @map("user_id")
+  idempotencyKey     String                     @map("idempotency_key")
+  role               ConversationMessageRole
+  state              ConversationMessageState
+  source             String
+  blocks             Json
+  createdAt          DateTime                   @default(now()) @map("created_at")
+  completedAt        DateTime?                  @map("completed_at")
+  conversation       Conversation               @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  timelineEntry      ConversationTimelineEntry?
+  assets             ConversationAsset[]
   invokedAgentThread ConversationAgentThread?   @relation("AgentThreadParentMessage")
 
   @@unique([conversationId, id])
@@ -121,16 +121,16 @@ model ConversationMessage {
 }
 
 model ConversationRunEvent {
-  conversationId String                     @map("conversation_id")
-  runId           String                     @map("run_id")
-  sequence        Int
-  type            String
-  messageId       String?                    @map("message_id")
-  payload         Json
-  occurredAt      DateTime                   @default(now()) @map("occurred_at")
-  conversation    Conversation               @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  timelineEntry   ConversationTimelineEntry?
-  assets          ConversationAsset[]
+  conversationId     String                          @map("conversation_id")
+  runId              String                          @map("run_id")
+  sequence           Int
+  type               String
+  messageId          String?                         @map("message_id")
+  payload            Json
+  occurredAt         DateTime                        @default(now()) @map("occurred_at")
+  conversation       Conversation                    @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  timelineEntry      ConversationTimelineEntry?
+  assets             ConversationAsset[]
   assetOutputTickets ConversationAssetOutputTicket[]
 
   @@id([runId, sequence])
@@ -141,24 +141,24 @@ model ConversationRunEvent {
 }
 
 model ConversationTimelineEntry {
-  conversationId          String                       @map("conversation_id")
-  position                BigInt                       @default(0)
-  kind                    ConversationTimelineEntryKind
-  messageId               String?                      @map("message_id")
-  runId                   String?                      @map("run_id")
-  runEventSequence        Int?                         @map("run_event_sequence")
-  membershipEventId       String?                      @map("membership_event_id")
-  participantUserId       String?                      @map("participant_user_id")
-  systemEventId           String?                      @map("system_event_id")
-  parentDeliveryChildRunId String?                      @map("parent_delivery_child_run_id")
+  conversationId              String                        @map("conversation_id")
+  position                    BigInt                        @default(0)
+  kind                        ConversationTimelineEntryKind
+  messageId                   String?                       @map("message_id")
+  runId                       String?                       @map("run_id")
+  runEventSequence            Int?                          @map("run_event_sequence")
+  membershipEventId           String?                       @map("membership_event_id")
+  participantUserId           String?                       @map("participant_user_id")
+  systemEventId               String?                       @map("system_event_id")
+  parentDeliveryChildRunId    String?                       @map("parent_delivery_child_run_id")
   parentDeliveryAgentThreadId String?                       @map("parent_delivery_agent_thread_id")
-  payload                 Json?
-  occurredAt              DateTime                     @default(now()) @map("occurred_at")
-  conversation            Conversation                 @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-  message                 ConversationMessage?         @relation(fields: [conversationId, messageId], references: [conversationId, id], onDelete: Restrict)
-  runEvent                ConversationRunEvent?        @relation(fields: [conversationId, runId, runEventSequence], references: [conversationId, runId, sequence], onDelete: Restrict)
-  participant             ConversationParticipant?     @relation(fields: [conversationId, participantUserId], references: [conversationId, userId], onDelete: Restrict)
-  parentDelivery          ChildRunCompletionDelivery?  @relation(fields: [parentDeliveryChildRunId], references: [childRunId], onDelete: Restrict)
+  payload                     Json?
+  occurredAt                  DateTime                      @default(now()) @map("occurred_at")
+  conversation                Conversation                  @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  message                     ConversationMessage?          @relation(fields: [conversationId, messageId], references: [conversationId, id], onDelete: Restrict)
+  runEvent                    ConversationRunEvent?         @relation(fields: [conversationId, runId, runEventSequence], references: [conversationId, runId, sequence], onDelete: Restrict)
+  participant                 ConversationParticipant?      @relation(fields: [conversationId, participantUserId], references: [conversationId, userId], onDelete: Restrict)
+  parentDelivery              ChildRunCompletionDelivery?   @relation(fields: [parentDeliveryChildRunId], references: [childRunId], onDelete: Restrict)
   agentThreadDelivery         AgentThreadParentDelivery?    @relation(fields: [parentDeliveryAgentThreadId], references: [id], onDelete: Restrict)
 
   @@id([conversationId, position])
