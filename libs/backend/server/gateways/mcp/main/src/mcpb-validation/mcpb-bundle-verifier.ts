@@ -25,10 +25,20 @@ const _ZIP_DEFLATE_METHOD = 8;
 const _ZIP_MAXIMUM_COMMENT_BYTES = 65_535;
 /** Root file name required by the MCPB specification. */
 const _MCPB_MANIFEST_PATH = "manifest.json";
+/** Keep the central directory small enough to inspect before an isolated worker receives the bundle. */
+const _MCPB_MAXIMUM_ARCHIVE_ENTRIES = 2_048;
+/** Bound the total extracted size so a later worker cannot be given a decompression bomb. */
+const _MCPB_MAXIMUM_EXTRACTED_BYTES = 256 * 1024 * 1024;
+/** Bound one extracted file before a later worker opens it. */
+const _MCPB_MAXIMUM_ENTRY_BYTES = 64 * 1024 * 1024;
+/** Limit one archive path before it can become a later filesystem path. */
+const _MCPB_MAXIMUM_PATH_BYTES = 512;
 
 /** Facts read from one ZIP central-directory entry. */
 interface _ZipEntry
 {
+	/** Exact path read from the central directory. */
+	readonly path: string;
 	/** ZIP compression method stored for this file. */
 	readonly method: number;
 	/** Number of bytes in the ZIP payload. */
@@ -37,6 +47,26 @@ interface _ZipEntry
 	readonly uncompressedSize: number;
 	/** Offset of the matching local-file header. */
 	readonly localHeaderOffset: number;
+}
+
+/** Reject a ZIP entry path that a future worker could not safely join below its empty work directory. */
+function _IsSafeArchivePath(value: string): boolean
+{
+	if (value.length === 0 || Buffer.byteLength(value, "utf8") > _MCPB_MAXIMUM_PATH_BYTES || value.includes("\\") || value.includes("\u0000") || value.startsWith("/"))
+		return false;
+	const parts = value.split("/");
+	if (parts.at(-1) === "")
+		parts.pop();
+	return parts.length > 0 && parts.every(function _IsSafeSegment(segment): boolean
+	{
+		return segment.length > 0 && segment !== "." && segment !== "..";
+	});
+}
+
+/** Normalize a directory marker so a file and directory cannot occupy the same future path. */
+function _ArchivePathKey(value: string): string
+{
+	return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
 /** Convert the stream to one exact bounded buffer before signature verification starts. */
@@ -81,8 +111,8 @@ function _FindZipEnd(zip: Buffer): number
 	return -1;
 }
 
-/** Read one root manifest entry while rejecting duplicate, encrypted, ZIP64, or malformed entries. */
-function _FindManifestEntry(zip: Buffer): _ZipEntry | null
+/** Read and bound every central-directory entry before a later worker receives the archive. */
+function _ReadArchiveEntries(zip: Buffer): readonly _ZipEntry[] | null
 {
 	const endOffset = _FindZipEnd(zip);
 	if (endOffset < 0 || endOffset + 22 > zip.byteLength)
@@ -90,11 +120,13 @@ function _FindManifestEntry(zip: Buffer): _ZipEntry | null
 	const entryCount = zip.readUInt16LE(endOffset + 10);
 	const centralSize = zip.readUInt32LE(endOffset + 12);
 	const centralOffset = zip.readUInt32LE(endOffset + 16);
-	if (entryCount === 0xffff || centralSize === 0xffffffff || centralOffset === 0xffffffff || centralOffset + centralSize > endOffset)
+	if (entryCount === 0xffff || entryCount === 0 || entryCount > _MCPB_MAXIMUM_ARCHIVE_ENTRIES || centralSize === 0xffffffff || centralOffset === 0xffffffff || centralOffset + centralSize > endOffset)
 		return null;
 
 	let offset = centralOffset;
-	let manifest: _ZipEntry | null = null;
+	let extractedBytes = 0;
+	const paths = new Set<string>();
+	const entries: _ZipEntry[] = [];
 	for (let index = 0; index < entryCount; index += 1)
 	{
 		if (offset + 46 > zip.byteLength || zip.readUInt32LE(offset) !== _ZIP_CENTRAL_ENTRY_MARKER)
@@ -108,18 +140,44 @@ function _FindManifestEntry(zip: Buffer): _ZipEntry | null
 		const commentLength = zip.readUInt16LE(offset + 32);
 		const localHeaderOffset = zip.readUInt32LE(offset + 42);
 		const nextOffset = offset + 46 + nameLength + extraLength + commentLength;
-		if ((flags & 0x0001) !== 0 || nextOffset > zip.byteLength)
+		const unixFileType = (zip.readUInt32LE(offset + 38) >>> 16) & 0o170000;
+		if ((flags & 0x0001) !== 0 || nextOffset > zip.byteLength || (method !== _ZIP_STORED_METHOD && method !== _ZIP_DEFLATE_METHOD) || compressedSize > MCPB_MAXIMUM_BUNDLE_BYTES || uncompressedSize > _MCPB_MAXIMUM_ENTRY_BYTES)
 			return null;
-		const name = zip.toString("utf8", offset + 46, offset + 46 + nameLength);
-		if (name === _MCPB_MANIFEST_PATH)
-		{
-			if (manifest !== null || uncompressedSize > MCPB_MAXIMUM_MANIFEST_BYTES || compressedSize > MCPB_MAXIMUM_BUNDLE_BYTES)
-				return null;
-			manifest = { method, compressedSize, uncompressedSize, localHeaderOffset };
-		}
+		const nameBytes = zip.subarray(offset + 46, offset + 46 + nameLength);
+		const name = nameBytes.toString("utf8");
+		const pathKey = _ArchivePathKey(name);
+		if ((unixFileType !== 0 && unixFileType !== 0o100000 && unixFileType !== 0o040000) || !nameBytes.equals(Buffer.from(name, "utf8")) || !_IsSafeArchivePath(name) || paths.has(pathKey))
+			return null;
+		if (localHeaderOffset + 30 > centralOffset || zip.readUInt32LE(localHeaderOffset) !== _ZIP_LOCAL_ENTRY_MARKER || zip.readUInt16LE(localHeaderOffset + 6) !== flags || zip.readUInt16LE(localHeaderOffset + 8) !== method)
+			return null;
+		const localNameLength = zip.readUInt16LE(localHeaderOffset + 26);
+		const localExtraLength = zip.readUInt16LE(localHeaderOffset + 28);
+		const dataOffset = localHeaderOffset + 30 + localNameLength + localExtraLength;
+		if (dataOffset + compressedSize > centralOffset || zip.toString("utf8", localHeaderOffset + 30, localHeaderOffset + 30 + localNameLength) !== name)
+			return null;
+		paths.add(pathKey);
+		extractedBytes += uncompressedSize;
+		if (extractedBytes > _MCPB_MAXIMUM_EXTRACTED_BYTES)
+			return null;
+		entries.push({ path: name, method, compressedSize, uncompressedSize, localHeaderOffset });
 		offset = nextOffset;
 	}
 	if (offset !== centralOffset + centralSize)
+		return null;
+	return entries;
+}
+
+/** Select one bounded root manifest after every archive entry has passed the shared safety checks. */
+function _FindManifestEntry(zip: Buffer): _ZipEntry | null
+{
+	const entries = _ReadArchiveEntries(zip);
+	if (entries === null)
+		return null;
+	const manifests = entries.filter(function _IsManifest(entry): boolean { return entry.path === _MCPB_MANIFEST_PATH; });
+	if (manifests.length !== 1)
+		return null;
+	const manifest = manifests[0];
+	if (manifest.uncompressedSize > MCPB_MAXIMUM_MANIFEST_BYTES)
 		return null;
 	return manifest;
 }
@@ -153,7 +211,7 @@ function _ReadManifest(zip: Buffer): Buffer | null
 	return manifest.byteLength === entry.uncompressedSize ? manifest : null;
 }
 
-/** Parse and validate a trusted bundle against the exact MCPB 0.3 schema. */
+/** Parse a trusted bundle only after its complete archive layout passes fixed safety limits. */
 export function _InspectMcpbBundle(bundle: Buffer, signature: McpbSignatureObservation): McpbVerificationResult
 {
 	if (signature.status !== "signed" || !signature.publisher || !/^[a-f0-9]{64}$/u.test(signature.fingerprint ?? ""))
@@ -219,7 +277,7 @@ export function __CreateMcpbBundleVerifier(reader: McpbBundleArtifactReader): Mc
 				// 2. Verify the detached signature before any untrusted manifest field is accepted.
 				const signature = await _VerifySignature(bundle);
 
-				// 3. Read only the bounded root manifest and validate it against the pinned schema.
+				// 3. Check every archive entry, then read only the bounded root manifest against the pinned schema.
 				return _InspectMcpbBundle(bundle, signature);
 			});
 		},
