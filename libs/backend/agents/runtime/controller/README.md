@@ -63,9 +63,6 @@ ends by the durable expiry; zero Pods means retry while multiple or foreign Pods
   process instead of a Kubernetes Job.
 - `__CreateLocalAgentRuntimeTokenReviewer` — development-only HMAC reviewer that authenticates the
   spawned process UID before returning the fixed runtime namespace and ServiceAccount identity.
-- `LocalAgentRuntimeModelStrategies` — development-only model-boundary state passed to the local
-  Python runtime; production entrypoints never import it.
-
 The same controller performs the bounded retention pass for successfully delivered runtime-outbox
 records. It runs once at startup, then at its configured interval. A failed pass is recorded and
 retried at the next interval; it can never prevent workload reconciliation or keep the controller
@@ -74,7 +71,7 @@ alive after shutdown.
 Internally, the polling loop, runtime-profile policy, model-key projection, assignment reconcile,
 release reconcile, bounded HTTP decoding, Kubernetes Job adoption, conditional release planning,
 Pod proof, and transport calls each have one module owner. The package barrel exposes composition
-capabilities, the profile-map type, and the development-only model strategy. The one-attempt
+capabilities and the profile-map type. The one-attempt
 assignment and release steps remain package-private test seams. Zod validation of controller wire
 models is owned beside those models in `@opencrane/contracts`; this package does not redeclare their
 accepted fields.
@@ -93,9 +90,9 @@ the same authority into local processes.
 
 ## Dependency direction
 
-Tagged `scope:agent-runtime-controller` and `layer:infra`; it may depend only on the runtime Job
-builder and shared contracts/observability. It never imports an app, OpenCrane-server infrastructure,
-or Prisma.
+Tagged `scope:agent-runtime-controller` and `layer:infra`; it may depend on the runtime Job builder,
+shared contracts/observability, and the pure local-development strategy vocabulary used by its local
+process adapter. It never imports an app, OpenCrane-server infrastructure, or Prisma.
 
 ## Runtime & config
 
