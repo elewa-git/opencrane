@@ -14,7 +14,7 @@ import { _SafeLoginReturnTo } from "./login-return-to";
  * Rendered when the session is anonymous; clicking "Log in" hands off to the
  * opencrane-ui OIDC flow with the guarded same-origin `returnTo` path, so the
  * user lands back on the route that required authentication and the access
- * guard re-runs against a fresh session. While `/auth/me` is still loading the
+ * guard re-runs against a fresh session. While session identity is still loading the
  * page renders nothing. Once it resolves, an already-authenticated session is
  * continued to that same path without forcing a second login click.
  * Anonymous invitation routes add the OIDC `prompt=create` value, which makes
@@ -57,9 +57,9 @@ export class LoginPageComponent
 	 */
 	public readonly registrationRequested = this._route.snapshot.queryParamMap.get("prompt") === "create";
 
-	/** Whether the landing card should be shown — once `/auth/me` is no longer
+	/** Whether the landing card should be shown — once session identity is no longer
 	 * loading and the session is anonymous. Reading `isLoading` (rather than
-	 * `hasValue`) means an errored `/auth/me` (backend unreachable) still
+	 * `hasValue`) means an errored live gateway (backend unreachable) still
 	 * surfaces the login affordance instead of staring at a blank page. */
 	public readonly showShell = computed(function _showShell(this: LoginPageComponent): boolean
 	{

@@ -47,7 +47,8 @@ define what it *is* as a deployable:
 the SPA and the API share one origin without this container ever proxying. Inside the app, the platform
 surface is pinned to `"org"`: capabilities derive only from the organisation-admin claim. Change
 detection is zoneless (no zone.js is bundled), and production data gateways always use the live API.
-If the backend is unreachable the app refuses authenticated actions.
+If the backend is unreachable the live app refuses authenticated actions. The default development
+build selects a separate frontend-only profile whose in-memory state is never shipped as authority.
 
 ## Public surface
 
@@ -63,9 +64,11 @@ and child projection purge.
 
 ## Boundary
 
-Browser-only presentation. It holds no server secrets and no database; onboarding progress, persona
-answers, score evidence, bootstrap transcript, invitation policy, membership, and completion remain server-owned. It does not implement authorization
-— it renders what the backend permits and gates screens on backend-supplied capability claims.
+Browser-only presentation. It holds no server secrets and no database. In live builds, onboarding
+progress, persona answers, score evidence, bootstrap transcript, invitation policy, membership, and
+completion remain server-owned. The default development profile provides disposable in-memory
+equivalents for UI work only. It does not implement authorization — live builds render what the
+backend permits and gate screens on backend-supplied capability claims.
 
 ## Dependency direction
 
@@ -79,10 +82,27 @@ Build-time and container config (there is no server-side env here — it is a st
 
 | Concern | Where | Notes |
 |---|---|---|
-| API/environment selection | `src/environments/environment*.ts` | `environment.ts` (mock) · `.prod.ts` (live) · `.dev-live.ts` (dev against live backend); chosen by build `fileReplacements` |
+| Gateway and route profile | `src/app/gateway-profile.providers*.ts`, `src/app/app.routes*.ts` | Production and development-live use live gateways and all routes; default development replaces both entry points with the Tier 1 local profile. |
 | Static serving | `deploy/nginx.conf` | `nginxinc/nginx-unprivileged`, listens `:8080`, `/healthz` probe, immutable caching for hashed assets, SPA fallback to `index.html` |
 | Image | `deploy/Dockerfile` | `ghcr.io/elewa-git/opencrane-ui` |
 | Chart-native SPA workload | `helm/templates/_deployment.tpl`, `_service.tpl` | This app owns its optional Deployment/Service as named templates (see `HELM.md`), composed by the silo umbrella chart. The composer supplies the reviewed image's exact OCI digest; deployment fails rather than reporting success if this workload does not roll out with that digest. |
+
+## Local frontend workflow
+
+`npm run serve:opencrane-ui` starts the Tier 1 profile. It provides an authenticated local user and
+stateful in-memory implementations for persona onboarding, first chat, normal conversations, AG-UI
+run progress, files, approvals, and child Agent threads. It needs no API, PostgreSQL, Docker,
+LiteLLM, Cognee, memory gateway, or Kubernetes cluster. Unsupported administration, settings, and
+invitation URLs redirect to onboarding. Any accidentally retained Angular or native OpenCrane API
+adapter is stopped by a local tripwire.
+
+Use `?mockScenario=slow`, `retry`, `reconnecting`, `failed-run`, or `access-changed` to exercise a
+deterministic non-happy path. `happy-path` is the default. Component-level variants remain in
+Storybook through `npm run storybook:ui`.
+
+`npx nx serve opencrane-ui --configuration=development-live` is the explicit live-backend path. It
+uses the live gateway/route entry points and `proxy.dev-live.conf.json`; plain serve has no backend
+proxy.
 
 ## See also
 

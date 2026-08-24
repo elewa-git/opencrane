@@ -70,29 +70,27 @@
 							"maximumError": "14kB"
 						}
 					],
-					"outputHashing": "all",
-					"fileReplacements": [
-						{
-							"replace": "apps/opencrane-ui/src/environments/environment.ts",
-							"with": "apps/opencrane-ui/src/environments/environment.prod.ts"
-						}
-					]
+					"outputHashing": "all"
 				},
 				"development": {
-					"optimization": false,
-					"extractLicenses": false,
-					"sourceMap": true
-				},
-				"development-live": {
 					"optimization": false,
 					"extractLicenses": false,
 					"sourceMap": true,
 					"fileReplacements": [
 						{
-							"replace": "apps/opencrane-ui/src/environments/environment.ts",
-							"with": "apps/opencrane-ui/src/environments/environment.dev-live.ts"
+							"replace": "apps/opencrane-ui/src/app/gateway-profile.providers.ts",
+							"with": "apps/opencrane-ui/src/app/gateway-profile.providers.local.ts"
+						},
+						{
+							"replace": "apps/opencrane-ui/src/app/app.routes.ts",
+							"with": "apps/opencrane-ui/src/app/app.routes.local.ts"
 						}
 					]
+				},
+				"development-live": {
+					"optimization": false,
+					"extractLicenses": false,
+					"sourceMap": true
 				}
 			},
 			"defaultConfiguration": "production"
@@ -100,7 +98,6 @@
 		"serve": {
 			"executor": "@angular-devkit/build-angular:dev-server",
 			"options": {
-				"proxyConfig": "apps/opencrane-ui/proxy.conf.json",
 				"allowedHosts": [
 					"dev.opencrane.ai",
 					".dev.opencrane.ai"

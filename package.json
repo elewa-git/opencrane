@@ -27,6 +27,7 @@
     "check:pr-stack-integrity": "node scripts/pr-stack-integrity.mjs",
     "test:pr-stack-integrity": "node --test scripts/__tests__/pr-stack-integrity.test.mjs",
     "check:module-growth": "node scripts/module-growth-check.mjs",
+    "check:opencrane-ui-production-profile": "node scripts/opencrane-ui-production-profile-check.mjs",
     "test:module-growth": "node --test scripts/__tests__/module-growth-check.test.mjs",
     "check:release-versioning": "node scripts/release-versioning-check.mjs",
     "test:release-versioning": "node --test scripts/__tests__/release-versioning-check.test.mjs",
