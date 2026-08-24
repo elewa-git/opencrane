@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { ___CreateLogger, ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
-import { DurableExecutionError, DurableTaskCompensationError, DurableTaskRetryableError, DurableTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import { DurableExecutionError, DurableTaskRetryableError, DurableTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { DurableCheckpointOperation, DurableCheckpointStep, DurableEventReceipt, DurableExecution, DurableExecutionTransaction, DurableTaskContext, DurableTaskDefinition, DurableTaskEvent, DurableTaskQueueAuthority, DurableTaskReceipt, DurableTaskSpawn } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { WorkflowStepOutcomes } from "./workflow-kit.types";
@@ -35,10 +35,6 @@ function _NormalizedStepError(error: unknown): DurableExecutionError
 	if (error instanceof DurableTaskRetryableError)
 	{
 		return new DurableTaskRetryableError("Workflow checkpoint failed and may be retried.");
-	}
-	if (error instanceof DurableTaskCompensationError)
-	{
-		return new DurableTaskCompensationError("Workflow checkpoint failed and requires compensation.");
 	}
 	if (error instanceof DurableTaskTerminalError)
 	{

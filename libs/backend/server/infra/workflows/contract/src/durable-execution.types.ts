@@ -252,9 +252,9 @@ export class DurableTaskCancelledError extends DurableExecutionError
  * Tells an execution engine what to do after a task handler deliberately fails.
  *
  * Task handlers select one of these closed outcomes through a {@link DurableTaskFailureError}.
- * `Retryable` permits another attempt, `Terminal` records the failure without another attempt, and
- * `Compensate` requires the engine's compensation path first. A task handler communicates that
- * choice by throwing the matching {@link DurableTaskFailureError} subclass.
+ * `Retryable` permits another attempt, while `Terminal` records the failure without another
+ * attempt. A task handler communicates that choice by throwing the matching
+ * {@link DurableTaskFailureError} subclass.
  */
 export enum DurableTaskFailureKinds
 {
@@ -262,8 +262,6 @@ export enum DurableTaskFailureKinds
 	Retryable = "retryable",
 	/** The task must stop because retrying cannot change the outcome. */
 	Terminal = "terminal",
-	/** The engine must run the task's compensation path before it reports failure. */
-	Compensate = "compensate",
 }
 
 /** Base error for a task handler that deliberately selects one closed engine failure outcome. */
@@ -299,16 +297,5 @@ export class DurableTaskTerminalError extends DurableTaskFailureError
 	{
 		super(DurableTaskFailureKinds.Terminal, message);
 		this.name = "DurableTaskTerminalError";
-	}
-}
-
-/** Error that tells the engine to run compensation before it settles the task. */
-export class DurableTaskCompensationError extends DurableTaskFailureError
-{
-	/** Create a compensation failure without leaking engine-specific compensation details. */
-	constructor(message: string)
-	{
-		super(DurableTaskFailureKinds.Compensate, message);
-		this.name = "DurableTaskCompensationError";
 	}
 }
