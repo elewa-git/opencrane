@@ -7,7 +7,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { OidcAuthServiceBase, PrismaOrgMembershipRepository, _ClusterTenantFromHost, _OrgScope, _RequestHost, _ResolvePerOrgClient, _saveSession, type AuthUser, type LoginClient } from "@opencrane/backend/server/infra/auth";
 
-import { _MirrorGroupsOnLogin, PrismaGroupClaimProjectionUnitOfWork } from "../group-claims/mirror-groups";
+import { PrismaGroupClaimProjectionUnitOfWork } from "../group-claims/mirror-groups";
 import { _AdmitStandaloneFirstUser } from "../standalone-first-user/standalone-first-user-admission";
 import { PrismaStandaloneFirstUserAdmissionUnitOfWork } from "../standalone-first-user/prisma-standalone-first-user-admission-unit-of-work";
 import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "../standalone-first-user/standalone-first-user-admission.types";
@@ -148,7 +148,7 @@ export class OidcAuthService extends OidcAuthServiceBase
       }
     }
 
-    await _MirrorGroupsOnLogin({ siloId: hostClusterTenant, issuer: authUser.issuer, subject: authUser.sub, email: authUser.email, displayName: authUser.name, groups: authUser.groups, log: this.log }, new PrismaGroupClaimProjectionUnitOfWork(this.prisma));
+    await new PrismaGroupClaimProjectionUnitOfWork(this.prisma).reconcile({ siloId: hostClusterTenant, issuer: authUser.issuer, subject: authUser.sub, email: authUser.email, displayName: authUser.name, groups: authUser.groups, log: this.log });
     req.session.authUser = { ...authUser, siloId: hostClusterTenant };
     await _saveSession(req);
 

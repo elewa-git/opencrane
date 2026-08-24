@@ -19,6 +19,25 @@ export interface MirrorGroupsOnLoginOptions
   log: Logger;
 }
 
+/** Validated identity and parsed group IDs passed into one projection transaction. */
+export interface GroupClaimProjectionCommand
+{
+	/** Silo that owns the Principal and groups. */
+	readonly siloId: string;
+	/** Identity-provider issuer that namespaces the subject. */
+	readonly issuer: string;
+	/** Identity-provider subject projected as the Principal. */
+	readonly subject: string;
+	/** Optional verified email stored as profile data. */
+	readonly email: string | undefined;
+	/** Optional provider display name stored as profile data. */
+	readonly displayName: string | undefined;
+	/** Parsed stable group IDs claimed by the verified identity. */
+	readonly groupIds: readonly string[];
+	/** Scoped logger used for unresolved claim warnings. */
+	readonly log: Logger;
+}
+
 /** Transaction boundary that reconciles verified external group claims. */
 export interface GroupClaimProjectionUnitOfWork
 {
@@ -29,6 +48,6 @@ export interface GroupClaimProjectionUnitOfWork
 /** Transaction-scoped repository that writes the Principal projection and direct memberships. */
 export interface GroupClaimProjectionRepository
 {
-	/** Reconcile already parsed stable group IDs for one verified identity. */
-	reconcile(options: MirrorGroupsOnLoginOptions, claimedGroupIds: readonly string[]): Promise<void>;
+	/** Reconcile one validated identity and its parsed stable group IDs. */
+	reconcile(command: GroupClaimProjectionCommand): Promise<void>;
 }
