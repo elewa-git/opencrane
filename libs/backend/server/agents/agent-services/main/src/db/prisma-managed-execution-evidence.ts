@@ -39,7 +39,8 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 	 */
 	constructor(config: ManagedExecutionEvidenceConfig)
 	{
-		if (config.trustedIssuerId.trim().length === 0 || !Number.isSafeInteger(config.maximumStalenessMs) || config.maximumStalenessMs <= 0) throw new Error("managed execution evidence requires a trusted issuer and positive staleness bound");
+		if (config.trustedIssuerId.trim().length === 0 || !Number.isSafeInteger(config.maximumStalenessMs) || config.maximumStalenessMs <= 0)
+			throw new Error("managed execution evidence requires a trusted issuer and positive staleness bound");
 		this.config = config;
 	}
 
@@ -79,7 +80,8 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 				integrationAssignments: { select: { integrationId: true, custodyReferenceId: true, toolDefinitions: true } },
 			},
 		});
-		if (revision === null) return { outcome: "denied", reason: "run_not_admittable" };
+		if (revision === null)
+			return { outcome: "denied", reason: "run_not_admittable" };
 
 		const expectedPrincipalId = __ManagedAgentServicePrincipal(command.agentServiceId);
 		const servicePrincipal = revision.agentService.principal;
@@ -87,10 +89,12 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 			|| servicePrincipal === null
 			|| servicePrincipal.provenance !== PrincipalProvenance.Internal
 			|| servicePrincipal.issuer !== MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER
-			|| servicePrincipal.subject !== command.agentServiceId) return { outcome: "denied", reason: "identity_unavailable" };
+			|| servicePrincipal.subject !== command.agentServiceId)
+			return { outcome: "denied", reason: "identity_unavailable" };
 		const principal = revision.agentService.principalId;
 		const assertion = await _SelectMembershipAssertion(transaction.prisma, this.config.trustedIssuerId, command.siloId, principal);
-		if (assertion === null) return { outcome: "denied", reason: "membership_stale" };
+		if (assertion === null)
+			return { outcome: "denied", reason: "membership_stale" };
 		const membership = await __VerifyCurrentFleetMembershipEvidence(new PrismaFleetMembershipAuthorityRepository(transaction.prisma), this.config.verifier, {
 			trustedIssuerId: this.config.trustedIssuerId,
 			siloId: command.siloId,
@@ -99,13 +103,16 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 			nowEpochMs: transaction.admittedAtEpochMs,
 			maximumStalenessMs: this.config.maximumStalenessMs,
 		});
-		if ("reason" in membership || membership.evidence.subjectId !== principal) return { outcome: "denied", reason: "membership_stale" };
+		if ("reason" in membership || membership.evidence.subjectId !== principal)
+			return { outcome: "denied", reason: "membership_stale" };
 
 		const declared = revision.boundaryAttachments.map(_Attachment);
-		if (declared.some(_IsPersonalAttachment)) return { outcome: "denied", reason: "memory_scope_unavailable" };
+		if (declared.some(_IsPersonalAttachment))
+			return { outcome: "denied", reason: "memory_scope_unavailable" };
 		const resolver = __CreatePrismaBoundaryGrantResolver(transaction.prisma);
 		const effective = await __ResolveEffectiveBoundaryAttachments(resolver, command.siloId, [principal], declared, transaction.admittedAtEpochMs);
-		if (effective.rejected.length > 0) return { outcome: "denied", reason: "memory_scope_unavailable" };
+		if (effective.rejected.length > 0)
+			return { outcome: "denied", reason: "memory_scope_unavailable" };
 		const attachments = _CanonicalAttachments(effective.authorized);
 		const attachmentDigest = __DigestCanonicalJson(attachments as unknown as JsonValue);
 		const capabilitySetDigest = __DigestCanonicalJson({
@@ -174,7 +181,8 @@ function _Attachment(value: { boundaryKind: AuthorizationBoundaryKind; boundaryG
 		const boundaryCoverage = value.boundaryCoverage === AuthorizationBoundaryCoverage.Descendants ? RevisionBoundaryCoverages.Descendants : RevisionBoundaryCoverages.Exact;
 		return { boundaryKind: RevisionBoundaryKinds.Group, boundaryId: value.boundaryGroupId, boundaryCoverage };
 	}
-	if (value.boundaryKind === AuthorizationBoundaryKind.Personal && value.boundaryPrincipalId !== null && value.boundaryGroupId === null && value.boundaryCoverage === AuthorizationBoundaryCoverage.Exact) return { boundaryKind: RevisionBoundaryKinds.Personal, boundaryId: value.boundaryPrincipalId, boundaryCoverage: RevisionBoundaryCoverages.Exact };
+	if (value.boundaryKind === AuthorizationBoundaryKind.Personal && value.boundaryPrincipalId !== null && value.boundaryGroupId === null && value.boundaryCoverage === AuthorizationBoundaryCoverage.Exact)
+		return { boundaryKind: RevisionBoundaryKinds.Personal, boundaryId: value.boundaryPrincipalId, boundaryCoverage: RevisionBoundaryCoverages.Exact };
 	throw new Error("invalid persisted managed revision boundary attachment");
 }
 
@@ -193,8 +201,10 @@ function _IsPersonalAttachment(value: RevisionBoundaryAttachment): boolean
  */
 function _CompareCanonicalCoordinate(left: string, right: string): number
 {
-	if (left < right) return -1;
-	if (left > right) return 1;
+	if (left < right)
+		return -1;
+	if (left > right)
+		return 1;
 	return 0;
 }
 

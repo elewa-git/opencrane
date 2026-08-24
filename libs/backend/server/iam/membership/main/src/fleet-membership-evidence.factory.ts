@@ -47,8 +47,10 @@ export function _CreateFleetMembershipEvidenceConfig(environment: NodeJS.Process
 function _DeploymentMode(environment: NodeJS.ProcessEnv): FleetMembershipDeploymentModes
 {
 	const value = environment["OPENCRANE_MEMBERSHIP_MODE"]?.trim();
-	if (value === FleetMembershipDeploymentModes.Fleet) return FleetMembershipDeploymentModes.Fleet;
-	if (value === FleetMembershipDeploymentModes.Standalone) return FleetMembershipDeploymentModes.Standalone;
+	if (value === FleetMembershipDeploymentModes.Fleet)
+		return FleetMembershipDeploymentModes.Fleet;
+	if (value === FleetMembershipDeploymentModes.Standalone)
+		return FleetMembershipDeploymentModes.Standalone;
 	throw new Error("OPENCRANE_MEMBERSHIP_MODE must be standalone or fleet");
 }
 
@@ -87,7 +89,8 @@ function _CreateReloadingVerifier(read: () => string, issuerKeyId: string): Flee
 function _Required(environment: NodeJS.ProcessEnv, name: string): string
 {
 	const value = environment[name]?.trim();
-	if (!value) throw new Error(`${name} must be configured`);
+	if (!value)
+		throw new Error(`${name} must be configured`);
 	return value;
 }
 
@@ -95,6 +98,7 @@ function _Required(environment: NodeJS.ProcessEnv, name: string): string
 function _PositiveInteger(environment: NodeJS.ProcessEnv, name: string, maximum: number): number
 {
 	const value = Number(_Required(environment, name));
-	if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) throw new Error(`${name} must be a positive integer no greater than ${maximum}`);
+	if (!Number.isSafeInteger(value) || value <= 0 || value > maximum)
+		throw new Error(`${name} must be a positive integer no greater than ${maximum}`);
 	return value;
 }

@@ -49,8 +49,10 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 	{
 		// 1. Resolve one default model so the first revision never stores an arbitrary route.
 		const model = await this.defaultModelResolver.resolve(command.siloId);
-		if (model.status === InitialPersonalAgentDefaultModelResolutionStatuses.Unavailable) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable);
-		if (model.status === InitialPersonalAgentDefaultModelResolutionStatuses.Ambiguous) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelAmbiguous);
+		if (model.status === InitialPersonalAgentDefaultModelResolutionStatuses.Unavailable)
+			return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable);
+		if (model.status === InitialPersonalAgentDefaultModelResolutionStatuses.Ambiguous)
+			return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelAmbiguous);
 
 		// 2. Create the stable service and its first draft through the shared revision writer.
 		const service = await this.transaction.agentService.create({

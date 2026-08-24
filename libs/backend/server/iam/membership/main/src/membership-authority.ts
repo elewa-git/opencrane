@@ -20,7 +20,8 @@ import type { FleetMembershipAuthorityRepository, FleetMembershipSignatureVerifi
 export async function __VerifyCurrentFleetMembership(repository: FleetMembershipAuthorityRepository, verifier: FleetMembershipSignatureVerifier, command: VerifyFleetMembershipCommand): Promise<VerifyFleetMembershipResult>
 {
 	const result = await __VerifyCurrentFleetMembershipEvidence(repository, verifier, command);
-	if (result.outcome === "denied") return result;
+	if (result.outcome === "denied")
+		return result;
 	return { outcome: "trusted", revision: result.evidence.revision, trustedUntilEpochMs: result.evidence.trustedUntilEpochMs };
 }
 

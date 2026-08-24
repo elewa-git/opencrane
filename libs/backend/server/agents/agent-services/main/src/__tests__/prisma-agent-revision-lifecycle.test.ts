@@ -52,7 +52,8 @@ describe("PrismaAgentRevisionLifecycleRepository", function _Suite()
 		}, "2026-08-21T12:00:00.000Z");
 
 		expect(result.outcome).toBe("created");
-		if (result.outcome !== "created") throw new Error("expected managed service creation");
+		if (result.outcome !== "created")
+			throw new Error("expected managed service creation");
 		const expectedPrincipalId = `agent-service:${result.service.id}`;
 		expect(principalCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ id: expectedPrincipalId, siloId: "silo-1", issuer: MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER, subject: result.service.id, provenance: PrincipalProvenance.Internal }) });
 		expect(serviceCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ id: result.service.id, principalId: expectedPrincipalId, kind: AgentServiceKind.Managed, state: AgentServiceState.Draft }) });

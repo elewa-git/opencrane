@@ -41,8 +41,10 @@ function _DefaultModelResolver(status: InitialPersonalAgentDefaultModelResolutio
 	return {
 		async resolve()
 		{
-			if (status === InitialPersonalAgentDefaultModelResolutionStatuses.Resolved) return { status, modelDefinitionId: "configured-default" };
-			if (status === InitialPersonalAgentDefaultModelResolutionStatuses.Ambiguous) return { status };
+			if (status === InitialPersonalAgentDefaultModelResolutionStatuses.Resolved)
+				return { status, modelDefinitionId: "configured-default" };
+			if (status === InitialPersonalAgentDefaultModelResolutionStatuses.Ambiguous)
+				return { status };
 			return { status: InitialPersonalAgentDefaultModelResolutionStatuses.Unavailable };
 		},
 	};

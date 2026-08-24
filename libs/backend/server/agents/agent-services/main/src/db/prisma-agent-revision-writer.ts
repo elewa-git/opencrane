@@ -106,7 +106,8 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 		boundaryAttachments: {
 			create: command.content.boundaryAttachments.map(function _MapBoundary(attachment)
 			{
-				if (attachment.boundaryKind === RevisionBoundaryKinds.Group) return { siloId: command.siloId, boundaryKind: AuthorizationBoundaryKind.Group, boundaryGroupId: attachment.boundaryId, boundaryCoverage: attachment.boundaryCoverage === RevisionBoundaryCoverages.Descendants ? AuthorizationBoundaryCoverage.Descendants : AuthorizationBoundaryCoverage.Exact };
+				if (attachment.boundaryKind === RevisionBoundaryKinds.Group)
+					return { siloId: command.siloId, boundaryKind: AuthorizationBoundaryKind.Group, boundaryGroupId: attachment.boundaryId, boundaryCoverage: attachment.boundaryCoverage === RevisionBoundaryCoverages.Descendants ? AuthorizationBoundaryCoverage.Descendants : AuthorizationBoundaryCoverage.Exact };
 				return { siloId: command.siloId, boundaryKind: AuthorizationBoundaryKind.Personal, boundaryPrincipalId: attachment.boundaryId, boundaryCoverage: AuthorizationBoundaryCoverage.Exact };
 			}),
 		},
@@ -153,6 +154,7 @@ function _FromPrismaBoundary(value: AgentRevisionWithAssignments["boundaryAttach
 		const boundaryCoverage = value.boundaryCoverage === AuthorizationBoundaryCoverage.Descendants ? RevisionBoundaryCoverages.Descendants : RevisionBoundaryCoverages.Exact;
 		return { boundaryKind: RevisionBoundaryKinds.Group, boundaryId: value.boundaryGroupId, boundaryCoverage };
 	}
-	if (value.boundaryKind === AuthorizationBoundaryKind.Personal && value.boundaryPrincipalId !== null && value.boundaryGroupId === null && value.boundaryCoverage === AuthorizationBoundaryCoverage.Exact) return { boundaryKind: RevisionBoundaryKinds.Personal, boundaryId: value.boundaryPrincipalId, boundaryCoverage: RevisionBoundaryCoverages.Exact };
+	if (value.boundaryKind === AuthorizationBoundaryKind.Personal && value.boundaryPrincipalId !== null && value.boundaryGroupId === null && value.boundaryCoverage === AuthorizationBoundaryCoverage.Exact)
+		return { boundaryKind: RevisionBoundaryKinds.Personal, boundaryId: value.boundaryPrincipalId, boundaryCoverage: RevisionBoundaryCoverages.Exact };
 	throw new Error("invalid persisted agent revision boundary attachment");
 }

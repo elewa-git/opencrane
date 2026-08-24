@@ -30,7 +30,8 @@ export function __IntersectBoundaryAttachments(attachments: readonly RevisionBou
 	const rejected: RevisionBoundaryAttachment[] = [];
 	for (const attachment of attachments)
 	{
-		if (allowed.has(_boundaryKey(attachment))) authorized.push(attachment);
+		if (allowed.has(_boundaryKey(attachment)))
+			authorized.push(attachment);
 		else rejected.push(attachment);
 	}
 	return { authorized, rejected };
@@ -54,7 +55,8 @@ export function __IntersectBoundaryAttachments(attachments: readonly RevisionBou
  */
 export async function __ResolveEffectiveBoundaryAttachments(resolver: BoundaryGrantResolver, siloId: string, principalIds: readonly string[], attachments: readonly RevisionBoundaryAttachment[], nowEpochMs: number): Promise<BoundaryAttachmentIntersection>
 {
-	if (attachments.length === 0) return { authorized: [], rejected: [] };
+	if (attachments.length === 0)
+		return { authorized: [], rejected: [] };
 	const effectiveGrants = await resolver.resolveEffectiveBoundaryGrants({ siloId, principalIds, attachments, nowEpochMs });
 	return __IntersectBoundaryAttachments(attachments, effectiveGrants);
 }
@@ -73,8 +75,10 @@ export async function __ResolveEffectiveBoundaryAttachments(resolver: BoundaryGr
  */
 export async function __ValidateBoundaryAttachAuthority(resolver: BoundaryGrantResolver, siloId: string, callerPrincipalIds: readonly string[], attachments: readonly RevisionBoundaryAttachment[], nowEpochMs: number): Promise<BoundaryAttachAuthorityResult>
 {
-	if (attachments.length === 0) return { outcome: "authorized" };
+	if (attachments.length === 0)
+		return { outcome: "authorized" };
 	const intersection = await __ResolveEffectiveBoundaryAttachments(resolver, siloId, callerPrincipalIds, attachments, nowEpochMs);
-	if (intersection.rejected.length > 0) return { outcome: "unauthorized", unauthorized: intersection.rejected };
+	if (intersection.rejected.length > 0)
+		return { outcome: "unauthorized", unauthorized: intersection.rejected };
 	return { outcome: "authorized" };
 }

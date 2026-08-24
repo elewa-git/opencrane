@@ -109,11 +109,13 @@ async function _acceptRevision(transaction: Prisma.TransactionClient, acceptance
 	{
 		return { status: "conflict", highestAcceptedRevision: current.revision } as const;
 	}
-	if (current?.revision === acceptance.revision) return { status: "already_accepted", highestAcceptedRevision: current.revision } as const;
+	if (current?.revision === acceptance.revision)
+		return { status: "already_accepted", highestAcceptedRevision: current.revision } as const;
 
 	// 2. Only move the number when this exact revision and digest is really stored here.
 	const revision = await transaction.verifiedFleetMembershipRevision.findFirst({ where: { issuerId: acceptance.issuerId, siloId: acceptance.siloId, revision: acceptance.revision, payloadDigest: acceptance.payloadDigest } });
-	if (revision === null) return { status: "conflict", highestAcceptedRevision: current?.revision ?? 0 } as const;
+	if (revision === null)
+		return { status: "conflict", highestAcceptedRevision: current?.revision ?? 0 } as const;
 	await transaction.highestAcceptedFleetMembership.upsert({
 		where: { issuerId_siloId: { issuerId: acceptance.issuerId, siloId: acceptance.siloId } },
 		create: { issuerId: acceptance.issuerId, siloId: acceptance.siloId, revisionId: revision.id, revision: acceptance.revision },

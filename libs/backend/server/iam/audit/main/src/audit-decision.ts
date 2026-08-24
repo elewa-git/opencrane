@@ -4,8 +4,10 @@ import type { AuditDecisionRecord } from "./audit-decision.types";
 
 function _WorkloadKind(value: AuditDecisionRecord["workloadKind"]): WorkloadKind | undefined
 {
-	if (value === undefined) return undefined;
-	if (value === "job") return WorkloadKind.Job;
+	if (value === undefined)
+		return undefined;
+	if (value === "job")
+		return WorkloadKind.Job;
 	return WorkloadKind.Deployment;
 }
 

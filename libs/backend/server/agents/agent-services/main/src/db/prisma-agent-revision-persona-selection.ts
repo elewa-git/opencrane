@@ -47,32 +47,39 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 	 */
 	async materialize(command: MaterializeAgentRevisionPersonaSelectionCommand): Promise<MaterializeAgentRevisionPersonaSelectionResult>
 	{
-		if (!_ValidExactCommand(command)) return _Unavailable(command.expectedSourceRevisionId);
+		if (!_ValidExactCommand(command))
+			return _Unavailable(command.expectedSourceRevisionId);
 
 		// 1. Validate the target persona before touching the service lineage.
 		const target = await this._ReadOwnedApprovedPersona(command.siloId, command.subjectId, command.targetPersonaRevisionId);
-		if (target === null) return _Unavailable(command.expectedSourceRevisionId);
+		if (target === null)
+			return _Unavailable(command.expectedSourceRevisionId);
 
 		// 2. Re-read the stable personal service and require the source pointer the caller observed.
 		const service = await this.transaction.agentService.findFirst({
 			where: { id: command.agentServiceId, siloId: command.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active },
 			select: { id: true, activeRevisionId: true },
 		});
-		if (service === null) return _Unavailable(command.expectedSourceRevisionId);
-		if (service.activeRevisionId !== command.expectedSourceRevisionId) return _Stale(command.expectedSourceRevisionId);
+		if (service === null)
+			return _Unavailable(command.expectedSourceRevisionId);
+		if (service.activeRevisionId !== command.expectedSourceRevisionId)
+			return _Stale(command.expectedSourceRevisionId);
 
 		// 3. Load the source and prove the old and new personas belong to the same owner profile.
 		const source = await this.transaction.agentRevision.findFirst({
 			where: { id: command.expectedSourceRevisionId, agentServiceId: command.agentServiceId, state: AgentRevisionState.Published },
 			include: _AGENT_REVISION_INCLUDE,
 		});
-		if (source === null || source.personaRevisionId === null) return _Unavailable(command.expectedSourceRevisionId);
+		if (source === null || source.personaRevisionId === null)
+			return _Unavailable(command.expectedSourceRevisionId);
 		const sourcePersona = await this._ReadOwnedApprovedPersona(command.siloId, command.subjectId, source.personaRevisionId);
-		if (sourcePersona === null || sourcePersona.personaProfileId !== target.personaProfileId) return _Unavailable(command.expectedSourceRevisionId);
+		if (sourcePersona === null || sourcePersona.personaProfileId !== target.personaProfileId)
+			return _Unavailable(command.expectedSourceRevisionId);
 
 		// 4. Require the source to remain the newest lineage entry before allocating its successor.
 		const latest = await this.transaction.agentRevision.findFirst({ where: { agentServiceId: service.id }, orderBy: { revision: "desc" }, select: { id: true } });
-		if (latest?.id !== source.id) return _Stale(command.expectedSourceRevisionId);
+		if (latest?.id !== source.id)
+			return _Stale(command.expectedSourceRevisionId);
 		if (source.personaRevisionId === command.targetPersonaRevisionId)
 		{
 			return { status: AgentRevisionPersonaSelectionMaterializationCodes.AlreadyCurrent, agentRevisionId: source.id, sourceRevisionId: source.id };
@@ -98,7 +105,8 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 			where: { id: service.id, siloId: command.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: source.id },
 			data: { activeRevisionId: draft.id, updatedAt: command.materializedAt },
 		});
-		if (activated.count !== 1) throw new Error("personal Agent revision selection lost its active-revision comparison");
+		if (activated.count !== 1)
+			throw new Error("personal Agent revision selection lost its active-revision comparison");
 		await __AppendAuditDecision(this.transaction, this._BuildAuditDecision(command, source.id, draft.id, draft.digest));
 		return { status: AgentRevisionPersonaSelectionMaterializationCodes.Materialized, agentRevisionId: draft.id, sourceRevisionId: source.id };
 	}
@@ -117,9 +125,11 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 	 */
 	async materializeForOwner(command: MaterializePersonalAgentPersonaSelectionCommand): Promise<MaterializePersonalAgentPersonaSelectionResult>
 	{
-		if (!_ValidOwnerCommand(command)) return _Unavailable("");
+		if (!_ValidOwnerCommand(command))
+			return _Unavailable("");
 		const target = await this._ReadOwnedApprovedPersona(command.siloId, command.subjectId, command.targetPersonaRevisionId);
-		if (target === null) return _Unavailable("");
+		if (target === null)
+			return _Unavailable("");
 		const approvedPersonas = await this.transaction.personaRevision.findMany({
 			where: { personaProfileId: target.personaProfileId, state: PersonaRevisionState.Approved, approvedAt: { not: null } },
 			select: { id: true },
@@ -136,9 +146,11 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 			orderBy: { id: "asc" },
 			take: 2,
 		});
-		if (services.length === 0) return { status: AgentRevisionPersonaSelectionMaterializationCodes.NotApplicable, sourceRevisionId: null };
+		if (services.length === 0)
+			return { status: AgentRevisionPersonaSelectionMaterializationCodes.NotApplicable, sourceRevisionId: null };
 		const service = services[0];
-		if (services.length !== 1 || service === undefined || service.activeRevisionId === null) return _Unavailable("");
+		if (services.length !== 1 || service === undefined || service.activeRevisionId === null)
+			return _Unavailable("");
 		return this.materialize({ ...command, agentServiceId: service.id, expectedSourceRevisionId: service.activeRevisionId });
 	}
 
