@@ -18,7 +18,7 @@ import type { McpEraProbeClient, McpEraProbeDnsAddress, McpEraProbeDnsResolver, 
  * Called by: OpenCrane application composition, which supplies the protocol revision owned by the
  * MCP domain.
  *
- * @param options - Protocol revision, timeout, response limit, and optional deterministic seams.
+ * @param options - Protocol revision, timeout, response limit, and optional test functions.
  * @returns An external transport client with no registration or approval authority.
  * @throws McpEraProbeConfigurationError When its options are invalid.
  * @see https://modelcontextprotocol.io/specification/2026-07-28

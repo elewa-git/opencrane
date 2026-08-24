@@ -13,7 +13,7 @@ function _DiscoveryResponse(protocolVersion = "2026-07-28"): McpEraProbeHttpsRes
 	return { status: 200, headers: { "content-type": "application/json" }, body: new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", id: "opencrane-mcp-era-probe", result: { resultType: "complete", supportedVersions: [protocolVersion], capabilities: {}, ttlMs: 3_600_000, cacheScope: "public" } })) };
 }
 
-/** Builds the client with public DNS by default and a deterministic HTTPS request seam. */
+/** Builds the client with public DNS by default and a deterministic HTTPS request function. */
 function _Client(request: McpEraProbeHttpsRequest, resolve?: McpEraProbeDnsResolver)
 {
 	return __CreateHttpsMcpEraProbeClient({ protocolVersion: "2026-07-28", requestTimeoutMilliseconds: 1_000, maximumResponseBytes: 1_024, resolve: resolve ?? async function _resolve(): Promise<readonly McpEraProbeDnsAddress[]> { return [_PUBLIC_ADDRESS]; }, request });
