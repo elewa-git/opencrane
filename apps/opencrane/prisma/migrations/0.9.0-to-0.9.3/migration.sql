@@ -4317,13 +4317,14 @@ END;
 $$;
 
 SELECT absurd.create_queue('control-plane');
+SELECT absurd.create_queue('mcpb-inspection');
 
 INSERT INTO "opencrane_migrations"."schema_history" (
     "schema_version", "source_schema_version", "source_baseline_sha256",
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.9.3', '0.9.0', :'source_baseline_sha256',
-    '7fa60a4bb68888a69ff2c9cdf23cd85e972c9521f9a51dacd564dead15b0c949',
+    'cc19d4fc620e7d6906467913169cfc2b771481dadd73a484f6d201e2f3f5d05a',
     :'migration_sql_sha256', '0.9.0-to-0.9.3'
 );
 

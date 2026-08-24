@@ -10993,3 +10993,4 @@ END;
 $$;
 
 SELECT absurd.create_queue('control-plane');
+SELECT absurd.create_queue('mcpb-inspection');
