@@ -27,6 +27,7 @@ organisation ingress
                              +-> managed runtime Job namespace
                              +-> skill-authoring Job namespace
                              +-> tool-runner Job namespace
+                             +-> mcpb-validator Job namespace
 
 runtime Jobs ----> LiteLLM (attempt model key)
 opencrane server ----> Obot MCP proxy (service credential, durable action fence)
@@ -57,6 +58,7 @@ Cluster-wide ingress, certificate, DNS, and CloudNativePG controllers are extern
 | Malware scanning | `apps/artifact-scanner` | none; brokered quarantined bytes and fenced result only |
 | Skill authoring Job | `apps/skill-authoring` | none; one governed workload |
 | Tool execution Job | `apps/tool-runner` | none; one governed workload |
+| MCP bundle validation Job | `apps/mcpb-validator` | none; future governed workload |
 
 Every independently deployed workload has one `apps/<name>` owner. Libraries under `libs/*` contain
 reusable behaviour and never own a deployment.
@@ -69,6 +71,8 @@ reusable behaviour and never own a deployment.
   service-account class.
 - **Skill-authoring namespace** — candidate-skill Jobs with no standing worker.
 - **Tool-runner namespace** — governed tool Jobs with no standing worker.
+- **MCP bundle validator namespace** — empty restricted worker plane until its Job controller and
+  server assignment route are delivered together.
 - **Artifact-preprocessor namespace** — bounded document-extraction Jobs with broker-only byte flow.
 - **Artifact-scanner namespace** — an outbound-only scanner Deployment with broker-only quarantined
   byte flow, pinned offline definitions, and no database or ArtifactStore authority.

@@ -27,7 +27,7 @@ wires the pieces and the per-silo networking together.
  │    composes app-owned template libraries into one release:   │
  │    server · opencrane-ui · channel-proxy · artifact-service  │
  │    · artifact-preprocessor · agent-controller                 │
- │    · skill-authoring · tool-runner                            │
+ │    · skill-authoring · tool-runner · mcpb-validator            │
  │    · cognee · litellm · obot                                  │
  └────────────────────────────────────────────────────────────┘
         │  requires (external prerequisites, NOT installed here)
@@ -39,7 +39,7 @@ wires the pieces and the per-silo networking together.
 · [channel-proxy](../../channel-proxy/README.md) · [artifact-service](../../artifact-service/README.md)
 · [artifact-preprocessor](../../artifact-preprocessor/README.md) · [artifact-scanner](../../artifact-scanner/README.md)
 · [agent-controller](../../agent-controller/README.md) · [skill-authoring](../../skill-authoring/README.md)
-· [tool-runner](../../tool-runner/README.md)
+· [tool-runner](../../tool-runner/README.md) · [mcpb-validator](../../mcpb-validator/README.md)
 · [postgres](../../postgres/README.md) · [cognee](../cognee/README.md) · [litellm](../litellm/README.md)
 · [obot](../obot/README.md)
 
@@ -127,6 +127,8 @@ package imports it.
 - `opencrane-tool-runner.toolRunner` — the separate, default-deny tenant-tool namespace and aggregate
   Job quota; it contains no standing worker. The deploy engine derives `<release>-tools` for the
   same per-silo ownership boundary.
+- `opencrane-mcpb-validator.mcpbValidator` — the empty, default-deny MCP bundle worker namespace.
+  The deploy engine derives `<release>-mcpb-validation`; it creates no worker Job yet.
 - `--release` — optional only as a restatement of the silo identity. The wrapper derives and
   enforces `opencrane-<cluster-tenant>` so all Helm-owned namespaces stay inside one release.
 - `crds.install` — resolved authoritatively by the deploy engine: the first silo installs the
