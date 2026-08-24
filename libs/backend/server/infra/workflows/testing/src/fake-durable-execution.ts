@@ -25,7 +25,8 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 	register<TInput, TResult>(definition: DurableTaskDefinition<TInput, TResult>): void
 	{
 		const existing = this.definitions.get(definition.taskName);
-		if (existing !== undefined && existing.run !== definition.run) throw new Error(`A different durable task is already registered for ${definition.taskName}`);
+		if (existing !== undefined && existing.run !== definition.run)
+			throw new Error(`A different durable task is already registered for ${definition.taskName}`);
 		this.definitions.set(definition.taskName, definition as DurableTaskDefinition<unknown, unknown>);
 	}
 
@@ -33,11 +34,13 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 	async spawn<TInput>(_transaction: DurableExecutionTransaction, task: DurableTaskSpawn<TInput>): Promise<DurableTaskReceipt>
 	{
 		const definition = this.definitions.get(task.taskName);
-		if (definition === undefined) throw new DurableTaskNotRegisteredError(task.taskName);
+		if (definition === undefined)
+			throw new DurableTaskNotRegisteredError(task.taskName);
 
 		const receiptKey = _ReceiptKey(task.taskName, task.idempotencyKey);
 		const existing = this.receiptsByKey.get(receiptKey);
-		if (existing !== undefined) return existing;
+		if (existing !== undefined)
+			return existing;
 
 		const receipt = { taskId: `fake-task-${this.nextTaskNumber}`, taskName: task.taskName, idempotencyKey: task.idempotencyKey };
 		this.nextTaskNumber += 1;
@@ -49,9 +52,11 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 	/** Select the positive handler attempt supplied to a pending task in a retry-focused test. */
 	setTaskAttempt(task: DurableTaskReceipt, attempt: number): void
 	{
-		if (!Number.isSafeInteger(attempt) || attempt < 1) throw new Error("Fake durable task attempt must be a positive integer");
+		if (!Number.isSafeInteger(attempt) || attempt < 1)
+			throw new Error("Fake durable task attempt must be a positive integer");
 		const record = this._TaskFor(task);
-		if (record.state !== DurableTaskStates.Pending) throw new Error(`Cannot change attempt for ${record.state} task ${task.taskId}`);
+		if (record.state !== DurableTaskStates.Pending)
+			throw new Error(`Cannot change attempt for ${record.state} task ${task.taskId}`);
 		record.attempt = attempt;
 	}
 
@@ -78,7 +83,8 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 	async cancel(task: DurableTaskReceipt): Promise<DurableTaskReceipt>
 	{
 		const record = this._TaskFor(task);
-		if (record.state === DurableTaskStates.Completed || record.state === DurableTaskStates.Failed) return record.receipt;
+		if (record.state === DurableTaskStates.Completed || record.state === DurableTaskStates.Failed)
+			return record.receipt;
 		record.state = DurableTaskStates.Cancelled;
 		const waiter = this.eventWaiters.get(task.taskId);
 		if (waiter !== undefined)
@@ -106,7 +112,8 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 	{
 		for (const record of this.tasks.values())
 		{
-			if (record.state === DurableTaskStates.Pending) await this._RunTask(record);
+			if (record.state === DurableTaskStates.Pending)
+				await this._RunTask(record);
 		}
 	}
 
@@ -121,9 +128,12 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 	async _AwaitChild<TResult>(task: DurableTaskReceipt): Promise<TResult>
 	{
 		const record = this._TaskFor(task);
-		if (record.state === DurableTaskStates.Pending) await this._RunTask(record);
-		if (record.state === DurableTaskStates.Cancelled) throw new DurableTaskCancelledError(task.taskId);
-		if (record.state === DurableTaskStates.Failed) throw record.error;
+		if (record.state === DurableTaskStates.Pending)
+			await this._RunTask(record);
+		if (record.state === DurableTaskStates.Cancelled)
+			throw new DurableTaskCancelledError(task.taskId);
+		if (record.state === DurableTaskStates.Failed)
+			throw record.error;
 		return record.result as TResult;
 	}
 
@@ -193,7 +203,8 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 			async sleepUntil(instant: Date): Promise<void>
 			{
 				self._AssertNotCancelled(record);
-				if (instant.getTime() > Date.now()) throw new Error("The fake durable execution cannot advance time");
+				if (instant.getTime() > Date.now())
+					throw new Error("The fake durable execution cannot advance time");
 			},
 		};
 	}
@@ -202,14 +213,16 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 	_TaskFor(task: DurableTaskReceipt): _FakeTaskRecord
 	{
 		const record = this.tasks.get(task.taskId);
-		if (record === undefined || record.receipt.taskName !== task.taskName || record.receipt.idempotencyKey !== task.idempotencyKey) throw new Error(`Unknown durable task ${task.taskId}`);
+		if (record === undefined || record.receipt.taskName !== task.taskName || record.receipt.idempotencyKey !== task.idempotencyKey)
+			throw new Error(`Unknown durable task ${task.taskId}`);
 		return record;
 	}
 
 	/** Throw before a cancelled task can perform another fake engine operation. */
 	_AssertNotCancelled(record: _FakeTaskRecord): void
 	{
-		if (record.state === DurableTaskStates.Cancelled) throw new DurableTaskCancelledError(record.receipt.taskId);
+		if (record.state === DurableTaskStates.Cancelled)
+			throw new DurableTaskCancelledError(record.receipt.taskId);
 	}
 
 	/** Read cancellation through one helper because an async handler may change this record. */

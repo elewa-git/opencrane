@@ -26,7 +26,8 @@ interface IQualificationWorkflowResources
 function _QualifiedDatabaseUrl(databaseUrl: string, applicationName: string): string
 {
 	const url = new URL(databaseUrl);
-	if (url.protocol !== "postgresql:" && url.protocol !== "postgres:") throw new Error("databaseUrl must use PostgreSQL.");
+	if (url.protocol !== "postgresql:" && url.protocol !== "postgres:")
+		throw new Error("databaseUrl must use PostgreSQL.");
 	url.searchParams.set("application_name", applicationName);
 	return url.toString();
 }
@@ -79,7 +80,8 @@ export class _AbsurdQualificationWorkflowSession implements IQualificationWorkfl
 			taskName: _TaskName,
 			async run(_context, input): Promise<null>
 			{
-				if (input.siloId !== siloId) throw new Error("Qualification task has no local sample owner.");
+				if (input.siloId !== siloId)
+					throw new Error("Qualification task has no local sample owner.");
 				onStarted(input);
 				return null;
 			},
@@ -100,7 +102,8 @@ export class _AbsurdQualificationWorkflowSession implements IQualificationWorkfl
 		{
 			receipt = await this.resources.execution.spawn(transaction, { taskName: _TaskName, idempotencyKey: `${this.options.runId}:${input.sampleIndex}`, input });
 		});
-		if (receipt === undefined) throw new Error("Qualification admission returned no receipt.");
+		if (receipt === undefined)
+			throw new Error("Qualification admission returned no receipt.");
 		return receipt;
 	}
 
@@ -137,12 +140,15 @@ export class _AbsurdQualificationWorkflowSession implements IQualificationWorkfl
 	async close(): Promise<void>
 	{
 		const failures: unknown[] = [];
-		if (this.workers !== undefined) await this.workers.drain().catch(function _Remember(error) { failures.push(error); });
-		if (this.queueCreated) await this.resources.queueOwner.dropQueue(this.options.queueName).catch(function _Remember(error) { failures.push(error); });
+		if (this.workers !== undefined)
+			await this.workers.drain().catch(function _Remember(error) { failures.push(error); });
+		if (this.queueCreated)
+			await this.resources.queueOwner.dropQueue(this.options.queueName).catch(function _Remember(error) { failures.push(error); });
 		await this.resources.queueOwner.close().catch(function _Remember(error) { failures.push(error); });
 		await this.resources.unitOfWork.close().catch(function _Remember(error) { failures.push(error); });
 		await this.resources.databasePool.end().catch(function _Remember(error) { failures.push(error); });
-		if (failures.length > 0) throw new Error("Durable execution qualification could not remove its queue or release its connections.");
+		if (failures.length > 0)
+			throw new Error("Durable execution qualification could not remove its queue or release its connections.");
 	}
 }
 
@@ -157,7 +163,14 @@ export function _CreateDurableExecutionQualificationSession(options: IQualificat
 	const prismaDatabaseUrl = new URL(databaseUrl);
 	prismaDatabaseUrl.searchParams.set("connection_limit", "1");
 	const databasePool = new Pool({ connectionString: databaseUrl, max: options.databasePoolSize });
-	const queueAuthority = Object.freeze({ queueForTask(taskName: string): string { if (taskName !== _TaskName) throw new Error("Qualification task is not admitted."); return options.queueName; } });
+	const queueAuthority = Object.freeze({
+		queueForTask(taskName: string): string
+		{
+			if (taskName !== _TaskName)
+				throw new Error("Qualification task is not admitted.");
+			return options.queueName;
+		},
+	});
 	const execution = new AbsurdDurableExecution({ databaseUrl, databasePool, databasePoolSize: options.databasePoolSize, queueAuthority, workerConcurrency: 1, pollIntervalMs: options.pollIntervalMs });
 	return new _AbsurdQualificationWorkflowSession(options, {
 		databasePool,
