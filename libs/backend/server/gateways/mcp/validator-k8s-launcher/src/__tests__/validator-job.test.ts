@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { __BuildMcpbValidatorJob } from "../validator-job";
 
-/** Return one deployment-owned validator profile. */
+/** Provide a complete deployment-owned profile that the builder should accept. */
 function _Profile()
 {
 	return { image: `ghcr.io/elewa-git/opencrane-mcpb-validator@sha256:${"a".repeat(64)}`, imagePullPolicy: "IfNotPresent" as const, serverNamespace: "opencrane", namespace: "opencrane-mcpb-validation", serviceAccountName: "mcpb-validator-default", tokenAudience: "opencrane-mcpb-validator", bootstrapUrl: "http://opencrane-server.opencrane.svc.cluster.local:8081/api/internal/mcpb-validator", tokenPath: "/var/run/opencrane/tokens/validator.token", bootstrapReferencePath: "/var/run/opencrane/bootstrap/reference", scratchSize: "128Mi", activeDeadlineSeconds: 300, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "250m", memory: "256Mi" }, limits: { cpu: "1", memory: "1Gi" } } };
 }
 
-/** Return opaque controller-owned coordinates for one validation. */
+/** Provide opaque-shaped controller coordinates accepted by the builder. */
 function _Assignment()
 {
 	return { validationId: "validation-1", siloId: "silo-1", namespace: "opencrane-mcpb-validation", bootstrapReference: `mcpb-validator-v1_${"b".repeat(64)}` };

@@ -1,21 +1,19 @@
 import type { V1ResourceRequirements } from "@kubernetes/client-node";
 
 /**
- * Kubernetes image pull behaviour allowed for the immutable validator image.
+ * Name a Kubernetes image-pull behaviour that the validator profile may supply.
  *
- * Called by: {@link McpbValidatorJobProfile} and the focused builder test. Production has no caller
- * yet. The builder uses this setting only after the profile's digest-pinned image has passed its
- * checks; it never selects an image.
+ * Used by: {@link McpbValidatorJobProfile}. Production has no caller yet. The builder accepts these
+ * values only with a digest-pinned image; it never selects an image.
  */
 export type McpbValidatorImagePullPolicy = "Always" | "IfNotPresent" | "Never";
 
 /**
- * Deployment-owned settings that bound every one-shot MCP bundle validator Job.
+ * Describe the limits that the builder requires for every one-shot MCP bundle validator Job.
  *
- * Called by: `__BuildMcpbValidatorJob` in `validator-job.ts` and the focused builder test.
- * Production has no caller yet. The eventual caller must take this complete object from trusted
- * deployment configuration, not from a bundle submitter or a worker. An invalid setting makes the
- * builder throw before a Kubernetes Job exists.
+ * Used by: `__BuildMcpbValidatorJob` in `validator-job.ts`. Production has no caller yet. The
+ * builder throws before it returns a Job when a setting changes the worker identity, route,
+ * resource bounds, scratch size, or lifetime.
  *
  * @see McpbValidatorJobAssignment
  */
@@ -50,12 +48,11 @@ export interface McpbValidatorJobProfile
 }
 
 /**
- * Controller-owned coordinates for one database-admitted validator Job.
+ * Carry the opaque coordinates that the builder places in one validator Job.
  *
- * Called by: `__BuildMcpbValidatorJob` in `validator-job.ts` and the focused builder test.
- * Production has no caller yet. The eventual caller must create this only after the database has
- * admitted the validation; it must not contain a bundle URL, bytes, command, or secret. An invalid
- * coordinate makes the builder throw before Kubernetes sees it.
+ * Used by: `__BuildMcpbValidatorJob` in `validator-job.ts`. Production has no caller yet. The
+ * builder hashes the silo and validation identifiers for the Job name and rejects a reference or
+ * namespace that does not match its profile before it returns a Job.
  *
  * @see McpbValidatorJobProfile
  */

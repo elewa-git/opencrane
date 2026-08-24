@@ -34,8 +34,8 @@ or assignment would widen those limits, it refuses to make a manifest.
 
 ## Boundary
 
-The future MCPB controller is the only caller that may submit this Job. This package never handles
-artifact locations, bundle bytes, commands, database connections, or long-lived credentials.
+No production code calls this package yet. This package never handles artifact locations, bundle
+bytes, commands, database connections, or long-lived credentials.
 
 ## Dependency direction
 

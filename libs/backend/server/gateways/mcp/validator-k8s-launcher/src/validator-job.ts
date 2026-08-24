@@ -4,23 +4,23 @@ import type { V1Job } from "@kubernetes/client-node";
 
 import type { McpbValidatorJobAssignment, McpbValidatorJobProfile } from "./validator-job.types";
 
-/** Fixed identity assigned to the MCP bundle validator worker. */
+/** Set the fixed validator ServiceAccount name. */
 const _SERVICE_ACCOUNT_NAME = "mcpb-validator-default";
-/** Fixed projected-token audience that no other workload class may use. */
+/** Set the fixed projected-token audience. */
 const _TOKEN_AUDIENCE = "opencrane-mcpb-validator";
-/** Read-only file containing the worker's short-lived projected token. */
+/** Set the path where the Job mounts its projected token. */
 const _TOKEN_PATH = "/var/run/opencrane/tokens/validator.token";
-/** Read-only file containing the controller-created opaque bootstrap reference. */
+/** Mount the opaque bootstrap reference separately from the token. */
 const _REFERENCE_PATH = "/var/run/opencrane/bootstrap/reference";
-/** Smallest scratch volume that can hold a bounded MCP bundle and extracted manifest. */
+/** Minimum scratch volume accepted by this validator Job policy. */
 const _MIN_SCRATCH_BYTES = 134_217_728n;
-/** Largest scratch volume the validator plane may request. */
+/** Cap the scratch volume requested by one validator Job. */
 const _MAX_SCRATCH_BYTES = 536_870_912n;
-/** Largest validator Job lifetime. */
+/** End a stuck validator Job before it can hold a cluster slot indefinitely. */
 const _MAX_ACTIVE_DEADLINE_SECONDS = 600;
-/** Largest CPU limit that this untrusted one-shot worker may receive. */
+/** Cap CPU for this untrusted one-shot worker. */
 const _MAX_CPU_MILLICORES = 2_000;
-/** Largest memory limit that this untrusted one-shot worker may receive. */
+/** Cap memory for this untrusted one-shot worker. */
 const _MAX_MEMORY_BYTES = 2_147_483_648n;
 
 /** Return true only for a bounded Kubernetes-safe trace coordinate. */
@@ -97,13 +97,13 @@ function _AssertAssignment(assignment: McpbValidatorJobAssignment, profile: Mcpb
 }
 
 /**
- * Build a deterministic opaque Kubernetes Job name without exposing the validation identifier.
+ * Build a deterministic Kubernetes Job name without exposing the validation identifier.
  *
- * Called by: `__BuildMcpbValidatorJob` and the focused builder test. Production has no caller yet.
- * It hashes the silo and validation identifiers, so Kubernetes resource names and selectors do not
- * reveal the durable validation record.
+ * Called by: `__BuildMcpbValidatorJob`. Production has no direct caller yet. It hashes the silo and
+ * validation identifiers, so Kubernetes resource names and selectors do not reveal the durable
+ * validation record.
  *
- * @param assignment - Database-admitted coordinates for the one validator Job.
+ * @param assignment - Opaque coordinates used to derive the Job name.
  * @returns A DNS-safe name that stays stable for the same validation in the same silo.
  */
 export function __McpbValidatorJobName(assignment: McpbValidatorJobAssignment): string
@@ -113,14 +113,12 @@ export function __McpbValidatorJobName(assignment: McpbValidatorJobAssignment): 
 }
 
 /**
- * Build the suspended, one-shot, restricted Job a future controller may submit after durable assignment.
+ * Build the suspended, one-shot, restricted Job manifest.
  *
  * Called by: the focused builder test. Production has no caller yet. The returned Job has no bundle
- * bytes, artifact address, command, database connection, or long-lived credential. The future
- * controller must save Kubernetes' returned UID against the same durable assignment before it
- * removes `suspend`.
+ * bytes, artifact address, command, database connection, or long-lived credential.
  *
- * @param assignment - Database-admitted opaque identifiers and the deployment-owned namespace.
+ * @param assignment - Opaque identifiers and the deployment-owned namespace.
  * @param profile - Trusted deployment limits for this worker class.
  * @returns A suspended Kubernetes Job with the exact validator identity, token audience, and limits.
  * @throws Error when either input could widen the worker's identity, route, resources, namespace, or reference.
@@ -128,15 +126,12 @@ export function __McpbValidatorJobName(assignment: McpbValidatorJobAssignment): 
  */
 export function __BuildMcpbValidatorJob(assignment: McpbValidatorJobAssignment, profile: McpbValidatorJobProfile): V1Job
 {
-	// 1. Check fixed deployment policy before Kubernetes sees a manifest that could widen this worker's authority.
 	_AssertProfile(profile);
 	_AssertAssignment(assignment, profile);
 
-	// 2. Derive opaque metadata. The manifest carries no bundle bytes, artifact address, command, or credentials.
 	const name = __McpbValidatorJobName(assignment);
 	const annotations = { "opencrane.ai/silo-id": assignment.siloId, "opencrane.ai/mcpb-validation": assignment.validationId, "opencrane.ai/mcpb-bootstrap-reference": assignment.bootstrapReference };
 
-	// 3. Keep the Job suspended until the controller writes its Kubernetes UID to the durable validation assignment.
 	return {
 		apiVersion: "batch/v1",
 		kind: "Job",
