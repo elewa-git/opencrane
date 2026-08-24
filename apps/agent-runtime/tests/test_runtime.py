@@ -18,7 +18,7 @@ import unittest
 from unittest import mock
 from urllib.error import HTTPError, URLError
 
-from src.bootstrap.exchange import BootstrapDeniedError
+from src.bootstrap.exchange import BootstrapDeniedError, perform_bootstrap as _perform_bootstrap
 from src.bootstrap.proof import rfc7638_thumbprint as _rfc7638_thumbprint
 from src.constants import CHECKPOINT_FILENAME
 from src.model_loop.checkpoints import (
@@ -958,6 +958,34 @@ class RuntimeBootstrapGateTests(unittest.TestCase):
             generate_key=lambda: self._proof_key,
         )
         self.assertEqual(opened, [])
+
+    def test_missing_pod_registration_remains_retryable(self) -> None:
+        """A released workload may retry until its first-Pod registration becomes durable."""
+        unavailable = HTTPError(
+            "https://control.example/bootstrap",
+            409,
+            "conflict",
+            {},
+            io.BytesIO(b'{"error":"bootstrap_unavailable"}'),
+        )
+
+        with mock.patch("src.bootstrap.exchange.post_json", side_effect=unavailable):
+            with self.assertRaises(HTTPError):
+                _perform_bootstrap("https://control.example", "token", "reference", self._proof_key)
+
+    def test_replayed_bootstrap_remains_permanently_denied(self) -> None:
+        """Retry classification never weakens the one-use replay fence."""
+        replay = HTTPError(
+            "https://control.example/bootstrap",
+            409,
+            "conflict",
+            {},
+            io.BytesIO(b'{"error":"bootstrap_replay"}'),
+        )
+
+        with mock.patch("src.bootstrap.exchange.post_json", side_effect=replay):
+            with self.assertRaises(BootstrapDeniedError):
+                _perform_bootstrap("https://control.example", "token", "reference", self._proof_key)
 
     def test_successful_bootstrap_precedes_the_stream(self) -> None:
         """The stream opens only after exactly one successful bootstrap binding."""

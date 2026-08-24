@@ -1,9 +1,12 @@
 """Bind public proof-key evidence to the admitted workload exactly once.
 
-Bootstrap runs before the command stream. A client error means the reference is unknown, consumed,
-expired, or mismatched and is therefore permanent for this process. Transport and server errors stay
-retryable in ``runtime.py`` because the control plane may not have evaluated the one-use claim.
+Bootstrap runs before the command stream. A missing durable binding remains retryable because a
+released workload may start before first-Pod registration commits. Other client errors are permanent
+for this process. Transport and server errors also stay retryable in ``runtime.py`` because the
+control plane may not have evaluated the one-use claim.
 """
+
+import json
 
 from urllib.error import HTTPError
 
@@ -13,6 +16,15 @@ from ..transport.http import post_json
 
 class BootstrapDeniedError(RuntimeError):
     """Signal a permanent bootstrap refusal that must terminate this runtime."""
+
+
+def _error_code(error: HTTPError) -> str | None:
+    """Return one bounded JSON error code without trusting a response body shape."""
+    try:
+        body = json.loads(error.read(1024).decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return body.get("error") if isinstance(body, dict) and isinstance(body.get("error"), str) else None
 
 
 def perform_bootstrap(
@@ -28,7 +40,7 @@ def perform_bootstrap(
 
     Raises:
         BootstrapDeniedError: For any permanent 4xx refusal or unexpected non-success status.
-        HTTPError: For a retryable server-side HTTP failure.
+        HTTPError: For a missing durable binding or retryable server-side HTTP failure.
         OSError: For transport failures before a binding result is known.
     """
     # These three values prove different things and are deliberately submitted together: the
@@ -45,8 +57,11 @@ def perform_bootstrap(
         # stream. Keep this call synchronous so no attempt work can race ahead of proof binding.
         status = post_json(f"{control_plane_url.rstrip('/')}/bootstrap", token, body, timeout=30)
     except HTTPError as error:
-        # A 4xx is a decision, not an availability failure. Retrying it could turn a replayed or
-        # mismatched one-use reference into work if server state later changed.
+        # The controller records the first Pod after workload release, so a newly started runtime
+        # may briefly arrive before that binding exists. Only that named state is retryable. A
+        # replayed or mismatched one-use reference remains a permanent authority decision.
+        if error.code == 409 and _error_code(error) == "bootstrap_unavailable":
+            raise
         if 400 <= error.code < 500:
             raise BootstrapDeniedError(f"bootstrap refused with status {error.code}") from error
         raise
