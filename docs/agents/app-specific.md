@@ -77,7 +77,7 @@ The governed persona onboarding path is split deliberately:
 - [`features/onboarding`](../../libs/frontend/features/onboarding/README.md) owns one routed shell
   with interview, tie-resolution, review, and ready state components;
 - [`models/user-onboarding`](../../libs/models/user-onboarding/main/README.md) owns the validated
-  first-chat projection and pure runtime parser;
+  persona survey/review and first-chat projections with their pure runtime parsers;
 - [`state/onboarding`](../../libs/frontend/state/onboarding/README.md) owns the transport-neutral
   port, route and conflict-envelope validation, and resumable orchestration without becoming a
   persistence authority;
@@ -105,6 +105,16 @@ The normal conversation workspace keeps transport, state, and presentation separ
 - [`state/conversation/workspace`](../../libs/frontend/state/conversation/workspace/README.md) owns snapshot-tail selection, immutable creation choices, controlled drafts, access purge, and separate run command state;
 - [`state/conversation/workspace/adapter`](../../libs/frontend/state/conversation/workspace/adapter/README.md) maps the generated signed-in API into that port; and
 - [`state/conversation/stream`](../../libs/frontend/state/conversation/stream/README.md) owns the transport-neutral browser stream port; the workspace reuses its [`state/conversation/adapter`](../../libs/frontend/state/conversation/adapter/README.md) implementation for direct, group, and Agent-session conversations instead of creating another stream path.
+
+Application-wide identity and development composition keep the same port direction:
+
+- [`state/core`](../../libs/frontend/state/core/README.md) owns `SessionStore`, capability derivation,
+  and the transport-neutral session port;
+- [`state/core/adapter`](../../libs/frontend/state/core/adapter/README.md) implements that port with
+  the live organization or platform API; and
+- [`state/local-development`](../../libs/frontend/state/local-development/README.md) implements the
+  OpenCrane UI's onboarding and chat ports over one disposable in-memory lifecycle for backend-free
+  frontend work.
 
 Organisation membership uses the same browser authority boundary:
 

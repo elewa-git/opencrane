@@ -22,6 +22,16 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Added
 
+- **Frontend developers can now exercise onboarding and chat locally without a backend or
+  infrastructure stack.** Plain `npm run serve:opencrane-ui` selects one coherent browser-only
+  profile for persona approval, first chat, conversations, Agent-run progress, files, approvals,
+  and child Agent threads, with deterministic slow, retry, reconnect, failed-run, and access-change
+  scenarios plus Angular and native-API tripwires for missed live bindings. Build-time profile
+  replacement keeps those fixtures out of production and omits backend-owned routes locally. Local
+  onboarding follows one reviewed
+  production Commander/Guardian survey and first-session path while leaving persona scoring to the
+  backend. The real-backend workflow remains an explicit `development-live` configuration.
+
 - **Users and operators can now see the availability of every user-visible service through
   unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,
   models, memory, files, channels, and integrations as `available`, `unavailable`, or `disabled`

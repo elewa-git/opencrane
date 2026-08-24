@@ -50,6 +50,21 @@ organization memory. These are reusable only where they match the adopted target
 OpenClaw-coupled behavior and retired domain contracts are deletion candidates, not compatibility
 requirements.
 
+### Developer workflow — issue #684
+
+**Tier 1 built on `local-dev-workflow`:** plain `npm run serve:opencrane-ui` selects a coherent
+frontend-only onboarding and chat profile. Persona approval, bootstrap chat, onboarding history,
+normal conversations, AG-UI run progress, files, approvals, and child Agent threads run against one
+disposable in-memory lifecycle; Angular and native API tripwires reject an omitted live binding.
+Build-time provider and route replacements keep local fixtures out of live bundles and leave
+unsupported administration/settings/invitation routes unmounted in Tier 1. Storybook
+retains the detailed component-state catalogue, the profile uses the reviewed production survey and
+one Commander/Guardian first-session path without reproducing backend scoring, and allowlisted URL
+scenarios cover slow, retry, reconnecting, failed-run, and access-change paths.
+
+Tier 2 will branch from `local-dev-workflow` for a frontend plus real-backend Agent-chat profile.
+Tier 3 will branch from the latest completed tier for Kubernetes and full infrastructure validation.
+
 ## Program — personal-agent platform
 
 Issues are cut when a phase opens. Each phase ends with architecture, reaper, validation, and
