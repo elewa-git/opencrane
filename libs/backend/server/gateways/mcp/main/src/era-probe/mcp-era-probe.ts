@@ -60,12 +60,12 @@ async function _RecordResult(unitOfWork: McpOperatorUnitOfWork, input: McpEraPro
 }
 
 /** Record a temporary failure and return the final result when the retry budget is exhausted. */
-async function _RecordRetry(unitOfWork: McpOperatorUnitOfWork, input: McpEraProbeTaskInput): Promise<McpEraProbeTaskResult | null>
+async function _RecordRetry(unitOfWork: McpOperatorUnitOfWork, input: McpEraProbeTaskInput, attempt: number): Promise<McpEraProbeTaskResult | null>
 {
 	const exhaustedResult = __McpEraProbeTerminalResult(McpEraProbeFailureCodes.RetryExhausted);
 	return await unitOfWork.execute(async function _WriteRetry(transaction): Promise<McpEraProbeTaskResult | null>
 	{
-		const retry = await transaction.mcp.recordEraProbeRetry(input.siloId, input.serverId, input.registrationDigest, MCP_ERA_PROBE_MAXIMUM_ATTEMPTS, exhaustedResult);
+		const retry = await transaction.mcp.recordEraProbeRetry(input.siloId, input.serverId, input.registrationDigest, attempt, MCP_ERA_PROBE_MAXIMUM_ATTEMPTS, exhaustedResult);
 		if (!retry)
 			throw new DurableTaskTerminalError("MCP era-probe registration is unavailable.");
 		let stored: McpEraProbeTaskResult | null;
@@ -104,7 +104,7 @@ async function _Run(context: DurableTaskContext, options: McpEraProbeWorkflowOpt
 				const action = __McpEraProbeTransition(McpEraProbeStates.Pending, McpEraProbeEvents.RetryableFailure);
 				if (action !== McpEraProbeActions.Retry)
 					throw new DurableTaskTerminalError("MCP era-probe retry policy is invalid.");
-				const exhausted = await _RecordRetry(options.unitOfWork, input);
+				const exhausted = await _RecordRetry(options.unitOfWork, input, context.attempt);
 				if (exhausted)
 					return exhausted;
 				throw new DurableTaskRetryableError("MCP server protocol check is temporarily unavailable.");

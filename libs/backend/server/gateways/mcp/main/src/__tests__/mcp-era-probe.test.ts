@@ -61,12 +61,12 @@ function _UnitOfWork(state: _EraState): McpOperatorUnitOfWork
 			}
 			return Promise.resolve({ changed, server: _Server(state) });
 		}),
-		recordEraProbeRetry: vi.fn().mockImplementation(function _Retry(_siloId: string, _serverId: string, _registrationDigest: string, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult)
+		recordEraProbeRetry: vi.fn().mockImplementation(function _Retry(_siloId: string, _serverId: string, _registrationDigest: string, attempt: number, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult)
 		{
 			const changed = state.target.eraProbeStatus === McpEraProbeStates.Pending;
 			if (changed)
 			{
-				const eraProbeAttempts = state.target.eraProbeAttempts + 1;
+				const eraProbeAttempts = Math.max(state.target.eraProbeAttempts + 1, attempt);
 				state.target = eraProbeAttempts >= maximumAttempts
 					? { ...state.target, eraProbeStatus: McpEraProbeStates.Rejected, eraProbeEvidenceDigest: exhaustedResult.evidenceDigest, eraProbeFailureCode: exhaustedResult.failureCode ?? null, eraProbeAttempts }
 					: { ...state.target, eraProbeAttempts };
@@ -165,6 +165,22 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 		const probe = { probe: vi.fn().mockRejectedValue(new McpEraProbeFailure(McpEraProbeFailureCodes.RetryableUnavailable)) };
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe });
 		const admitted = await workflow.admit(_Transaction(), _Input());
+
+		await _Drain(execution);
+
+		expect(execution.taskSnapshot(admitted.receipt).result).toMatchObject({ decision: McpEraProbeDecisions.Rejected, failureCode: McpEraProbeFailureCodes.RetryExhausted });
+		expect(state.target).toMatchObject({ eraProbeStatus: "Rejected", eraProbeFailureCode: McpEraProbeFailureCodes.RetryExhausted, eraProbeAttempts: 5 });
+		expect(state.auditCount).toBe(1);
+	});
+
+	it("uses the engine attempt after earlier failures happened before the remote check", async function _ExhaustsAfterEarlierHandlerFailures()
+	{
+		const state = _State();
+		const execution = new __FakeDurableExecution();
+		const probe = { probe: vi.fn().mockRejectedValue(new McpEraProbeFailure(McpEraProbeFailureCodes.RetryableUnavailable)) };
+		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe });
+		const admitted = await workflow.admit(_Transaction(), _Input());
+		execution.setTaskAttempt(admitted.receipt, 5);
 
 		await _Drain(execution);
 

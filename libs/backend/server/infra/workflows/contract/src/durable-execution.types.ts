@@ -181,6 +181,8 @@ export interface DurableTaskContext
 {
 	/** Receipt for the task currently being executed. */
 	readonly task: DurableTaskReceipt;
+	/** Positive engine attempt number for the current handler run. */
+	readonly attempt: number;
 	/** Run one named operation so an engine can resume it without repeating a completed effect. */
 	checkpoint<TResult>(step: DurableCheckpointStep, operation: DurableCheckpointOperation<TResult>): Promise<TResult>;
 	/** Wait until an event with this name is delivered to the current task. */

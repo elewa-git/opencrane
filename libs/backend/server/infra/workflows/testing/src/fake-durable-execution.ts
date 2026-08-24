@@ -42,8 +42,17 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 		const receipt = { taskId: `fake-task-${this.nextTaskNumber}`, taskName: task.taskName, idempotencyKey: task.idempotencyKey };
 		this.nextTaskNumber += 1;
 		this.receiptsByKey.set(receiptKey, receipt);
-		this.tasks.set(receipt.taskId, { receipt, definition, input: task.input, state: DurableTaskStates.Pending, result: undefined, error: undefined });
+		this.tasks.set(receipt.taskId, { receipt, definition, input: task.input, attempt: 1, state: DurableTaskStates.Pending, result: undefined, error: undefined });
 		return receipt;
+	}
+
+	/** Select the positive handler attempt supplied to a pending task in a retry-focused test. */
+	setTaskAttempt(task: DurableTaskReceipt, attempt: number): void
+	{
+		if (!Number.isSafeInteger(attempt) || attempt < 1) throw new Error("Fake durable task attempt must be a positive integer");
+		const record = this._TaskFor(task);
+		if (record.state !== DurableTaskStates.Pending) throw new Error(`Cannot change attempt for ${record.state} task ${task.taskId}`);
+		record.attempt = attempt;
 	}
 
 	/** Deliver an event now or queue it until its task asks for the matching event name. */
@@ -145,6 +154,7 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 		const self = this;
 		return {
 			task: record.receipt,
+			attempt: record.attempt,
 			async checkpoint<TResult>(_step: DurableCheckpointStep, operation: DurableCheckpointOperation<TResult>): Promise<TResult>
 			{
 				self._AssertNotCancelled(record);
@@ -252,6 +262,8 @@ interface _FakeTaskRecord
 	definition: DurableTaskDefinition<unknown, unknown>;
 	/** Input captured at task admission. */
 	input: unknown;
+	/** Positive attempt number supplied to the next handler run. */
+	attempt: number;
 	/** Current engine-like lifecycle state. */
 	state: DurableTaskStates;
 	/** Handler result after a completed task. */

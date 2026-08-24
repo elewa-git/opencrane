@@ -52,14 +52,17 @@ export class _AbsurdTaskContext implements DurableTaskContext
 	private readonly context: TaskContext;
 	/** Registered task receipt supplied to the domain handler. */
 	readonly task: DurableTaskReceipt;
+	/** Positive attempt number read from Absurd's claimed task. */
+	readonly attempt: number;
 	/** Child-task admissions require the adapter's engine and queue policy. */
 	private readonly execution: AbsurdDurableExecution;
 
 	/** Creates a contract context around one Absurd worker invocation. */
-	constructor(context: TaskContext, task: DurableTaskReceipt, execution: AbsurdDurableExecution)
+	constructor(context: TaskContext, task: DurableTaskReceipt, attempt: number, execution: AbsurdDurableExecution)
 	{
 		this.context = context;
 		this.task = task;
+		this.attempt = attempt;
 		this.execution = execution;
 	}
 

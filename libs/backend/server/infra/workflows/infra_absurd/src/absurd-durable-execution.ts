@@ -27,6 +27,11 @@ interface _Worker
 	close(): Promise<void>;
 }
 
+interface _AbsurdTaskContextRuntime
+{
+	readonly task: { readonly attempt: unknown };
+}
+
 /** Require a non-empty engine identity before it becomes a queue, event, or task name. */
 function _RequiredString(name: string, value: string): string
 {
@@ -77,6 +82,17 @@ function _TaskEnvelope(value: unknown): _TaskEnvelope
 		throw new DurableExecutionError("Absurd task payload is not a durable task envelope.");
 	}
 	return { idempotencyKey: value.idempotencyKey, input: value.input, inputUndefined: value.inputUndefined };
+}
+
+/** Read the claimed attempt that the pinned Absurd context keeps on its runtime task. */
+function _AbsurdTaskAttempt(context: TaskContext): number
+{
+	const attempt = (context as unknown as _AbsurdTaskContextRuntime).task?.attempt;
+	if (!Number.isSafeInteger(attempt) || (attempt as number) < 1)
+	{
+		throw new DurableExecutionError("Absurd task attempt is not a positive integer.");
+	}
+	return attempt as number;
 }
 
 /** Encode an absent input explicitly so JSON persistence does not silently discard the property. */
@@ -163,7 +179,7 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 		const task: DurableTaskReceipt = { taskId: context.taskID, taskName: definition.taskName, idempotencyKey: envelope.idempotencyKey };
 		try
 		{
-			return await definition.run(new _AbsurdTaskContext(context, task, this), envelope.inputUndefined ? undefined : envelope.input);
+			return await definition.run(new _AbsurdTaskContext(context, task, _AbsurdTaskAttempt(context), this), envelope.inputUndefined ? undefined : envelope.input);
 		}
 		catch (error)
 		{

@@ -313,6 +313,8 @@ class _WorkflowTaskContext implements DurableTaskContext
 	private readonly policy: WorkflowTaskPolicy;
 	/** Receipt for the task currently running. */
 	readonly task: DurableTaskReceipt;
+	/** Engine attempt number for the current handler run. */
+	readonly attempt: number;
 
 	/** Bind a current task context to its kit and reviewed queue policy. */
 	constructor(context: DurableTaskContext, kit: __WorkflowKit, policy: WorkflowTaskPolicy)
@@ -321,6 +323,7 @@ class _WorkflowTaskContext implements DurableTaskContext
 		this.kit = kit;
 		this.policy = policy;
 		this.task = context.task;
+		this.attempt = context.attempt;
 	}
 
 	/** Delegate one checkpoint through the payload-safe trace and structured-log wrapper. */

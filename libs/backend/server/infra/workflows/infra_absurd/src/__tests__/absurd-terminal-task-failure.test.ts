@@ -2,10 +2,11 @@ import type { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
 
 import { DurableTaskRetryableError, DurableTaskRetryBackoffKinds, DurableTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import type { DurableTaskContext } from "@opencrane/backend/server/infra/workflows/contract";
 
 const _SDK = vi.hoisted(function _SdkHarness()
 {
-	return { handler: undefined as undefined | ((params: unknown, context: { taskID: string }) => Promise<unknown>) };
+	return { handler: undefined as undefined | ((params: unknown, context: { taskID: string; task: { attempt: number } }) => Promise<unknown>) };
 });
 
 vi.mock("absurd-sdk", function _MockAbsurdSdk()
@@ -13,7 +14,7 @@ vi.mock("absurd-sdk", function _MockAbsurdSdk()
 	class FailedTask extends Error {}
 	class Absurd
 	{
-		registerTask(_options: unknown, handler: (params: unknown, context: { taskID: string }) => Promise<unknown>): void
+		registerTask(_options: unknown, handler: (params: unknown, context: { taskID: string; task: { attempt: number } }) => Promise<unknown>): void
 		{
 			_SDK.handler = handler;
 		}
@@ -26,7 +27,7 @@ import { FailedTask } from "absurd-sdk";
 import { AbsurdDurableExecution } from "../absurd-durable-execution";
 
 /** Create one adapter whose database writes can be asserted without a live engine. */
-function _Harness(run: () => Promise<unknown>)
+function _Harness(run: (context: DurableTaskContext) => Promise<unknown>)
 {
 	const query = vi.fn().mockResolvedValue({ rows: [] });
 	const execution = new AbsurdDurableExecution({ databaseUrl: "postgresql://unused", databasePoolSize: 1, databasePool: { query } as unknown as Pool, queueAuthority: { queueForTask: function _Queue(): string { return "control-plane"; } } });
@@ -40,7 +41,7 @@ describe("Absurd terminal task failures", function _TerminalTaskFailuresSuite()
 	{
 		const harness = _Harness(function _Run(): Promise<unknown> { throw new DurableTaskTerminalError("Input cannot become valid."); });
 
-		await expect(harness.handler({ idempotencyKey: "stable-key", input: null, inputUndefined: false }, { taskID: "11111111-1111-4111-8111-111111111111" })).rejects.toBeInstanceOf(FailedTask);
+		await expect(harness.handler({ idempotencyKey: "stable-key", input: null, inputUndefined: false }, { taskID: "11111111-1111-4111-8111-111111111111", task: { attempt: 1 } })).rejects.toBeInstanceOf(FailedTask);
 
 		expect(harness.query).toHaveBeenCalledWith('SELECT public."fail_absurd_task_terminal"($1, $2::uuid, $3::jsonb)', ["control-plane", "11111111-1111-4111-8111-111111111111", JSON.stringify({ name: "DurableTaskTerminalError", message: "Input cannot become valid." })]);
 	});
@@ -50,7 +51,17 @@ describe("Absurd terminal task failures", function _TerminalTaskFailuresSuite()
 		const failure = new DurableTaskRetryableError("Try later.");
 		const harness = _Harness(function _Run(): Promise<unknown> { throw failure; });
 
-		await expect(harness.handler({ idempotencyKey: "stable-key", input: null, inputUndefined: false }, { taskID: "22222222-2222-4222-8222-222222222222" })).rejects.toBe(failure);
+		await expect(harness.handler({ idempotencyKey: "stable-key", input: null, inputUndefined: false }, { taskID: "22222222-2222-4222-8222-222222222222", task: { attempt: 1 } })).rejects.toBe(failure);
 		expect(harness.query).not.toHaveBeenCalled();
+	});
+
+	it("passes the claimed Absurd attempt to the engine-neutral handler", async function _PassesClaimedAttempt()
+	{
+		const run = vi.fn().mockResolvedValue(null);
+		const harness = _Harness(run);
+
+		await harness.handler({ idempotencyKey: "stable-key", input: null, inputUndefined: false }, { taskID: "33333333-3333-4333-8333-333333333333", task: { attempt: 4 } });
+
+		expect(run).toHaveBeenCalledWith(expect.objectContaining({ attempt: 4 }), null);
 	});
 });
