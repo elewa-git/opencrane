@@ -2,13 +2,11 @@
 
 import json
 import os
-import tempfile
 import threading
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from src.attempts.execution import execute_resume_attempt, execute_start_attempt
 from src.development.deterministic_model import (
     deterministic_event_source,
     deterministic_resume_event_source,
@@ -16,26 +14,9 @@ from src.development.deterministic_model import (
 from src.development_runtime import _LITELLM_STRATEGY, _SIMULATED_STRATEGY, development_open_stream
 
 
-def _compiled_input(message: str, tools: list[dict[str, object]] | None = None) -> dict[str, object]:
+def _compiled_input(message: str) -> dict[str, object]:
     """Build the model fields consumed by the deterministic neutral-event strategy."""
-    return {
-        "messages": [{"role": "user", "content": message}],
-        "tools": tools or [],
-    }
-
-
-class _TestCipher:
-    """Provide reversible checkpoint encryption without requiring runtime dependencies in unit tests."""
-
-    def encrypt(self, data: bytes) -> bytes:
-        """Prefix and reverse the checkpoint bytes."""
-        return b"test:" + data[::-1]
-
-    def decrypt(self, token: bytes) -> bytes:
-        """Reverse bytes written by this exact test cipher."""
-        if not token.startswith(b"test:"):
-            raise ValueError("unexpected test checkpoint")
-        return token[len(b"test:"):][::-1]
+    return {"messages": [{"role": "user", "content": message}]}
 
 
 class DeterministicModelStrategyTests(unittest.TestCase):

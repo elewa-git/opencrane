@@ -54,7 +54,7 @@ export function ensureOwnedVolume(volumeName)
 	}
 }
 
-export function ensureOwnedNetwork(networkName)
+function _ensureOwnedNetwork(networkName)
 {
 	const result = runLocalCommand("docker", [
 		"network",
@@ -167,7 +167,7 @@ export function resetLocalDevelopmentContainers(configuration)
 export async function startLocalLiteLLM(configuration, secrets)
 {
 	_removeOwnedContainer(configuration.liteLLMContainerName);
-	ensureOwnedNetwork(configuration.localNetworkName);
+	_ensureOwnedNetwork(configuration.localNetworkName);
 	_connectOwnedContainerToNetwork(configuration.postgresContainerName, configuration.localNetworkName);
 	const specification = createLiteLLMRunCommand(configuration, secrets);
 	runLocalCommandSpecification(specification);
