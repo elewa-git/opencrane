@@ -130,7 +130,7 @@ export default [
             { sourceTag: "scope:skills-launcher", onlyDependOnLibsWithTags: ["scope:skills-launcher", "scope:shared"] },
             { sourceTag: "scope:skills-controller", onlyDependOnLibsWithTags: ["scope:skills-controller", "scope:skills-launcher", "scope:shared"] },
             { sourceTag: "scope:agent-runtime-controller", onlyDependOnLibsWithTags: ["scope:agent-runtime-controller", "scope:agent-runtime-launcher", "scope:shared"] },
-            { sourceTag: "scope:agent-controller", onlyDependOnLibsWithTags: ["scope:agent-controller", "scope:agent-runtime-controller", "scope:skills-controller", "scope:shared"] },
+            { sourceTag: "scope:agent-controller", onlyDependOnLibsWithTags: ["scope:agent-controller", "scope:agent-runtime-controller", "scope:local-development", "scope:skills-controller", "scope:shared"] },
             { sourceTag: "scope:cluster-tenants", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:k8s-api", "scope:shared"] },
 			{ sourceTag: "scope:conversation-projection", onlyDependOnLibsWithTags: ["scope:conversation-agent-threads", "scope:conversation-projection", "scope:shared"] },
 			{ sourceTag: "scope:conversation-agent-threads", onlyDependOnLibsWithTags: ["scope:conversation-agent-threads", "scope:shared"] },
@@ -144,6 +144,7 @@ export default [
             { sourceTag: "scope:integrations", onlyDependOnLibsWithTags: ["scope:agents", "scope:auth", "scope:integrations", "scope:obot-custody", "scope:shared"] },
             { sourceTag: "scope:channel-targets", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:channel-targets", "scope:membership", "scope:shared"] },
             { sourceTag: "scope:k8s-api", onlyDependOnLibsWithTags: ["scope:k8s-api", "scope:shared"] },
+            { sourceTag: "scope:local-development", onlyDependOnLibsWithTags: ["scope:local-development", "scope:shared"] },
             {
               sourceTag: "scope:identity",
               onlyDependOnLibsWithTags: [
@@ -184,6 +185,7 @@ export default [
               sourceTag: "scope:opencrane",
               onlyDependOnLibsWithTags: [
                 "scope:agent-runtime-cleanup",
+                "scope:agent-runtime-controller",
                 "scope:agent-runtime-stream",
                 "scope:agent-services",
                 "scope:api-spec",
@@ -205,6 +207,7 @@ export default [
                 "scope:http",
                 "scope:identity",
                 "scope:integrations",
+                "scope:local-development",
                 "scope:mcp",
                 "scope:memory-gateway-client",
                 "scope:model-routing",
