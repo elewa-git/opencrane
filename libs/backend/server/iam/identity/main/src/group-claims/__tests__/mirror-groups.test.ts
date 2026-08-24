@@ -45,7 +45,7 @@ describe("_ParseGroupClaims", function _ParseGroupClaimSuite()
 	});
 });
 
-describe("PrismaGroupClaimProjectionUnitOfWork", function _ProjectionSuite()
+describe("PrismaGroupClaimProjectionUnitOfWork", function _projectionSuite()
 {
 	it("projects the issuer-scoped Principal and reconciles resolved external group IDs", async function _ReconcileExternalGroups()
 	{

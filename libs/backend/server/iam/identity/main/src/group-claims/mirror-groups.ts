@@ -25,7 +25,7 @@ export function _ParseGroupClaims(groups: readonly string[] | undefined): string
 }
 
 /** Validates the identity tuple once and prepares the transaction command. */
-function _ProjectionCommand(options: MirrorGroupsOnLoginOptions): GroupClaimProjectionCommand | null
+function _projectionCommand(options: MirrorGroupsOnLoginOptions): GroupClaimProjectionCommand | null
 {
 	// 1. Trim the identity coordinates because they become the Principal's stable lookup key.
 	const siloId = options.siloId?.trim() ?? "";
@@ -111,7 +111,7 @@ export class PrismaGroupClaimProjectionUnitOfWork implements GroupClaimProjectio
 	/** Validate the trusted identity tuple before opening its projection transaction. */
 	reconcile(options: MirrorGroupsOnLoginOptions): Promise<void>
 	{
-		const command = _ProjectionCommand(options);
+		const command = _projectionCommand(options);
 		if (command === null)
 			return Promise.resolve();
 		return this.prisma.$transaction(async function _Project(transaction)
