@@ -107,7 +107,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - `RuntimeCommandKinds` and `RuntimeCandidateKinds` — documented string-backed discriminants that
   keep workload command and candidate control flow exhaustive while preserving protocol bytes.
 - `AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE`, `AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME`, and
-  `AgentControllerRunAttempt*`/`AgentControllerSkillWorkload*` — the private controller handshake for claiming one authorised run or governed skill workload,
+  `AgentControllerRunAttempt*`/`AgentControllerSkillWorkload*`/`AgentControllerMcpbValidation*` — the private controller handshake for claiming one authorised run, governed skill workload, or MCP bundle inspection job,
   reporting the Kubernetes-issued Job identity, and committing that identity under the same database
   lease. `AgentControllerRunWorkloadRelease*` then carries the separate durable command, including
   the assignment's absolute expiry, for releasing only that assigned Job and registering its first

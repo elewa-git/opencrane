@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ___ParseAgentControllerSkillWorkloadAssignmentCommand, ___ParseAgentControllerSkillWorkloadAssignmentResult, ___ParseAgentControllerSkillWorkloadClaim, ___ParseAgentControllerSkillWorkloadPodRegistrationCommand, ___ParseAgentControllerSkillWorkloadPodRegistrationResult, ___ParseAgentControllerSkillWorkloadReleaseClaim, ___ParseAgentControllerSkillWorkloadReleaseCommand, ___ParseAgentControllerSkillWorkloadReleaseResult } from "../agent-controller-skill-workload.validator";
+import { ___ParseAgentControllerMcpbValidationAssignmentCommand, ___ParseAgentControllerMcpbValidationAssignmentResult, ___ParseAgentControllerMcpbValidationClaim } from "../agent-controller-mcpb-validation.validator";
 import { ___ParseAgentControllerOutboxPrunedCount, ___ParseAgentControllerRunAttemptAssignmentCommand, ___ParseAgentControllerRunAttemptAssignmentResult, ___ParseAgentControllerRunAttemptClaim, ___ParseAgentControllerRunWorkloadRegistrationCommand, ___ParseAgentControllerRunWorkloadRegistrationResult, ___ParseAgentControllerRunWorkloadReleaseClaim } from "../agent-controller.validator";
 
 /** Return one valid runtime attempt claim with optional untrusted response extensions. */
@@ -37,6 +38,12 @@ function _SkillReleaseClaim()
 	return { workloadId: "workload-1", siloId: "silo-1", kind: "tool-runner", workloadUid: "job-1", releaseClaimedAt: "2026-07-20T00:02:00.000Z", releaseDeliveryCount: 2, expiresAt: "2026-07-20T00:03:00.000Z", ignored: true };
 }
 
+/** Return one valid MCP bundle inspection claim. */
+function _McpbValidationClaim()
+{
+	return { workloadId: "workload-1", siloId: "silo-1", validationId: "validation-1", claimedAt: "2026-07-20T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-20T00:01:00.000Z", ignored: true };
+}
+
 describe("agent-controller contract validators", function _DescribeValidators()
 {
 	it("strips untrusted response extensions while retaining exact typed claims", function _StripsResponseExtensions()
@@ -62,6 +69,17 @@ describe("agent-controller contract validators", function _DescribeValidators()
 		expect(___ParseAgentControllerRunAttemptAssignmentCommand({ ...assignment, policy: "self-asserted" })).toBeNull();
 		expect(___ParseAgentControllerRunWorkloadRegistrationCommand(registration)).toEqual(registration);
 		expect(___ParseAgentControllerRunWorkloadRegistrationCommand({ ...registration, attempt: 0 })).toBeNull();
+	});
+
+	it("validates MCP bundle inspection claims and Job assignments", function _ValidatesMcpbValidationCommands()
+	{
+		const claim = _McpbValidationClaim();
+		const assignment = { claimedAt: "2026-07-20T00:00:00.000Z", deliveryCount: 1, workloadUid: "job-1" };
+		expect(___ParseAgentControllerMcpbValidationClaim(claim)).toEqual({ workloadId: "workload-1", siloId: "silo-1", validationId: "validation-1", claimedAt: "2026-07-20T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-20T00:01:00.000Z" });
+		expect(___ParseAgentControllerMcpbValidationAssignmentCommand(assignment)).toEqual(assignment);
+		expect(___ParseAgentControllerMcpbValidationAssignmentCommand({ ...assignment, callerSelected: "workload-2" })).toBeNull();
+		expect(___ParseAgentControllerMcpbValidationAssignmentResult({ outcome: "assigned", workloadId: "workload-1", workloadUid: "job-1" }, "workload-1", assignment).outcome).toBe("assigned");
+		expect(function _MismatchedMcpbAssignment() { ___ParseAgentControllerMcpbValidationAssignmentResult({ outcome: "assigned", workloadId: "workload-2", workloadUid: "job-1" }, "workload-1", assignment); }).toThrow("mismatched MCP bundle validation assignment result");
 	});
 
 	it("validates every governed skill mutation command with strict schemas", function _ValidatesSkillCommands()
