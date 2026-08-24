@@ -21,8 +21,8 @@ permissions.
 **In this flow:** [OpenCrane server](../opencrane/README.md) ·
 [agent controller](../agent-controller/README.md).
 
-The image currently refuses to run because the server assignment and release protocol does not exist
-yet. This is deliberate: creating a suspended Job must not accidentally make third-party bundle code
+The image currently refuses to run because the worker assignment and Job-release protocols do not
+exist yet. This is deliberate: creating a suspended Job must not accidentally make third-party bundle code
 executable.
 
 ## Public surface
