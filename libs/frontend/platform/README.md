@@ -5,8 +5,8 @@
 ## What it owns
 
 This is a frontend **platform** package: the seam that isolates runtime-specific browser and future
-desktop behavior. Capabilities include picking a native folder and opening and observing an
-authentication window. Rather than let feature code call runtime globals or branch on "am I on
+desktop behavior. Capabilities include picking a native folder, opening and observing an
+authentication window, and storing small runtime preferences. Rather than let feature code call runtime globals or branch on "am I on
 desktop?", this package defines a `PlatformBridge` interface and each app supplies its implementation.
 
 That indirection is the whole point: the web app binds the browser implementation, where
@@ -30,6 +30,10 @@ may appear. Keep them out of features, and the frontend stays portable across sh
   `openAuthenticationWindow(path, onClosed)`) plus its result types.
 - `PLATFORM_BRIDGE` — the injection token features depend on.
 - `provideWebPlatform()` — binds `WebPlatformBridge` (desktop-only methods reject as unsupported).
+- `PLATFORM_PREFERENCE_STORE` and `PlatformPreferenceStore` — isolate small runtime preferences
+  from browser storage APIs.
+- `provideWebPreferenceStore()` — binds the browser-local preference implementation; unavailable or
+  denied storage behaves like an empty store.
 
 ## Boundary
 
