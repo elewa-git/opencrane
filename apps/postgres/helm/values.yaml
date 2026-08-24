@@ -140,7 +140,7 @@ migration:
   siloId: ""
   oidcIssuer: ""
   # This is deliberately not a generic extension-install switch. The only admitted value is the
-  # manifest-bound pg_cron prerequisite for the 0.9.3 durable-execution transition.
+  # manifest-bound pg_cron prerequisite for the 0.9.3 workflow-engine integration.
   privilegedExtension:
     enabled: false
     name: ""

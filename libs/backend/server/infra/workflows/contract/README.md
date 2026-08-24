@@ -39,15 +39,15 @@ the server process that runs workers.
 
 ## Public surface
 
-- `DurableExecution` — starts a task, sends it information, or stops it.
-- `DurableTaskQueueAuthority` — chooses the approved queue, a named list of work for a worker, for each task.
-- `DurableWorkerRuntime` — starts workers and lets them finish their current work before stopping.
-- `DurableTaskContext` — lets a running task save progress, wait, or start and wait for another task.
+- `IWorkflowEngine` — starts a task, sends it information, or stops it.
+- `IWorkflowTaskQueueAuthority` — chooses the approved queue, a named list of work for a worker, for each task.
+- `IWorkflowWorkerRuntime` — starts workers and lets them finish their current work before stopping.
+- `IWorkflowTaskContext` — lets a running task save progress, wait, or start and wait for another task.
 - Task, event, receipt, worker-lifecycle, and error types — describe the information passed between these steps.
 
 ## Boundary
 
-Application code will use `DurableExecution`; only the Absurd adapter talks to the Absurd software.
+Application code will use `IWorkflowEngine`; only the Absurd adapter talks to the Absurd software.
 The adapter receives the database transaction and keeps that database-specific detail out of the
 application's workflow code.
 

@@ -1,9 +1,9 @@
 import { CancelledTask, SuspendTask, type TaskContext } from "absurd-sdk";
 
-import { DurableExecutionError, DurableTaskCancelledError } from "@opencrane/backend/server/infra/workflows/contract";
-import type { DurableCheckpointStep, DurableTaskContext, DurableTaskEvent, DurableTaskReceipt, DurableTaskSpawn } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowError, WorkflowTaskCancelledError } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowTaskContext, IWorkflowTaskEvent, IWorkflowTaskReceipt, IWorkflowTaskSpawn } from "@opencrane/backend/server/infra/workflows/contract";
 
-import type { AbsurdDurableExecution } from "./absurd-durable-execution";
+import type { AbsurdWorkflowEngine } from "./absurd-workflow-engine";
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
 
 /** The terminal Absurd result states that this adapter maps to its engine-neutral contract. */
@@ -20,7 +20,7 @@ function _RequiredString(name: string, value: string): string
 {
 	if (value.trim().length === 0)
 	{
-		throw new DurableExecutionError(`${name} must be a non-empty string.`);
+		throw new WorkflowError(`${name} must be a non-empty string.`);
 	}
 	return value;
 }
@@ -40,23 +40,23 @@ function _NormalizeContextError(taskId: string, error: unknown): never
 	}
 	if (error instanceof CancelledTask)
 	{
-		throw new DurableTaskCancelledError(taskId);
+		throw new WorkflowTaskCancelledError(taskId);
 	}
 	throw new AbsurdWorkflowError("task context operation", error);
 }
 
-/** Adapts one running Absurd task to the replay-safe durable-task context. */
-export class _AbsurdTaskContext implements DurableTaskContext
+/** Adapts one running Absurd task to the replay-safe workflow-task context. */
+export class _AbsurdTaskContext implements IWorkflowTaskContext
 {
 	/** Engine context that persists checkpoints and task waits. */
 	private readonly context: TaskContext;
 	/** Registered task receipt supplied to the domain handler. */
-	readonly task: DurableTaskReceipt;
+	readonly task: IWorkflowTaskReceipt;
 	/** Child-task admissions require the adapter's engine and queue policy. */
-	private readonly execution: AbsurdDurableExecution;
+	private readonly execution: AbsurdWorkflowEngine;
 
 	/** Creates a contract context around one Absurd worker invocation. */
-	constructor(context: TaskContext, task: DurableTaskReceipt, execution: AbsurdDurableExecution)
+	constructor(context: TaskContext, task: IWorkflowTaskReceipt, execution: AbsurdWorkflowEngine)
 	{
 		this.context = context;
 		this.task = task;
@@ -64,7 +64,7 @@ export class _AbsurdTaskContext implements DurableTaskContext
 	}
 
 	/** Persist or replay one named operation result. */
-	async checkpoint<TResult>(step: DurableCheckpointStep, operation: () => Promise<TResult>): Promise<TResult>
+	async checkpoint<TResult>(step: IWorkflowCheckpointStep, operation: IWorkflowCheckpointOperation<TResult>): Promise<TResult>
 	{
 		const stepName = _RequiredString("step.stepName", step.stepName);
 		try
@@ -82,7 +82,7 @@ export class _AbsurdTaskContext implements DurableTaskContext
 	}
 
 	/** Suspend durably until this task receives its private event name. */
-	async waitForEvent<TPayload>(eventName: string): Promise<DurableTaskEvent<TPayload>>
+	async waitForEvent<TPayload>(eventName: string): Promise<IWorkflowTaskEvent<TPayload>>
 	{
 		const acceptedName = _RequiredString("eventName", eventName);
 		try
@@ -96,8 +96,8 @@ export class _AbsurdTaskContext implements DurableTaskContext
 		}
 	}
 
-	/** Spawn a child through the engine's durable API while retaining its deterministic key. */
-	async spawnChild<TInput>(task: DurableTaskSpawn<TInput>): Promise<DurableTaskReceipt>
+	/** Spawn a child through the engine API while retaining its deterministic key. */
+	async spawnChild<TInput>(task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
 		return await this.execution.spawnFromTask(task);
 	}
@@ -106,13 +106,13 @@ export class _AbsurdTaskContext implements DurableTaskContext
 	 * Await a child result only across queues, which is the Absurd 0.5.0 behavior Gate D1 admitted.
 	 * @see https://github.com/elewa-git/opencrane/issues/695 — Gate D1 records child spawn and await across queues.
 	 */
-	async awaitChild<TResult>(task: DurableTaskReceipt): Promise<TResult>
+	async awaitChild<TResult>(task: IWorkflowTaskReceipt): Promise<TResult>
 	{
 		const childQueue = this.execution.queueForTask(task.taskName);
 		const parentQueue = this.execution.queueForTask(this.task.taskName);
 		if (childQueue === parentQueue)
 		{
-			throw new DurableExecutionError(`Child task ${task.taskId} must use a different Absurd queue from parent task ${this.task.taskId}.`);
+			throw new WorkflowError(`Child task ${task.taskId} must use a different Absurd queue from parent task ${this.task.taskId}.`);
 		}
 		try
 		{
@@ -123,13 +123,13 @@ export class _AbsurdTaskContext implements DurableTaskContext
 			}
     if (result.state === _AbsurdTaskResultStates.Cancelled)
 			{
-				throw new DurableTaskCancelledError(task.taskId);
+				throw new WorkflowTaskCancelledError(task.taskId);
 			}
-			throw new DurableExecutionError(`Child task ${task.taskId} finished without a result.`);
+			throw new WorkflowError(`Child task ${task.taskId} finished without a result.`);
 		}
 		catch (error)
 		{
-			if (error instanceof DurableExecutionError)
+			if (error instanceof WorkflowError)
 			{
 				throw error;
 			}
@@ -142,7 +142,7 @@ export class _AbsurdTaskContext implements DurableTaskContext
 	{
 		if (!(instant instanceof Date) || Number.isNaN(instant.getTime()))
 		{
-			throw new DurableExecutionError("sleepUntil requires a valid Date.");
+			throw new WorkflowError("sleepUntil requires a valid Date.");
 		}
 		try
 		{

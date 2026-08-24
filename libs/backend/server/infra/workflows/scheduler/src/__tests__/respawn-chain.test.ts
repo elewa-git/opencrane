@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { DurableTaskStates } from "@opencrane/backend/server/infra/workflows/contract";
-import type { DurableExecution } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskStates } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { __EnsureRespawnChainHead, __RespawnChainTaskKey, __SpawnRespawnChainSuccessor } from "../respawn-chain";
 import type { RespawnChainTransaction } from "../respawn-chain.types";
@@ -12,8 +12,8 @@ interface SpawnCall
 	readonly command: { readonly taskName: string; readonly idempotencyKey: string; readonly input: unknown };
 }
 
-/** Minimal durable port double that makes each scheduling admission observable. */
-class DurableExecutionDouble
+/** Minimal workflow engine double that makes each scheduling admission observable. */
+class WorkflowEngineDouble
 {
 	readonly calls: SpawnCall[] = [];
 
@@ -29,10 +29,10 @@ function _Transaction(): RespawnChainTransaction
 	return { client: {} } as RespawnChainTransaction;
 }
 
-/** Narrow the test double to the one durable operation this package is allowed to call. */
-function _Execution(): DurableExecution
+/** Narrows the test double to the one workflow engine operation this package may call. */
+function _Execution(): IWorkflowEngine
 {
-	return new DurableExecutionDouble() as unknown as DurableExecution;
+	return new WorkflowEngineDouble() as unknown as IWorkflowEngine;
 }
 
 describe("respawn-chain task keys", function _TaskKeySuite()
@@ -52,10 +52,10 @@ describe("respawn-chain task keys", function _TaskKeySuite()
 
 describe("respawn-chain task admission", function _AdmissionSuite()
 {
-	it("ensures a deterministic chain head through the transaction-bound durable port", async function _EnsuresHead()
+	it("ensures a deterministic chain head through the transaction-bound workflow engine", async function _EnsuresHead()
 	{
 		const execution = _Execution();
-		const observed = execution as unknown as DurableExecutionDouble;
+		const observed = execution as unknown as WorkflowEngineDouble;
 		const transaction = _Transaction();
 		const first = await __EnsureRespawnChainHead(execution, { transaction, chainKey: "schedule-1", slotKey: "2026-08-20T09:00:00.000Z", taskName: "harvest", input: { source: "one" } });
 		const repeated = await __EnsureRespawnChainHead(execution, { transaction, chainKey: "schedule-1", slotKey: "2026-08-20T09:00:00.000Z", taskName: "harvest", input: { source: "one" } });
@@ -68,9 +68,9 @@ describe("respawn-chain task admission", function _AdmissionSuite()
 	it("spawns a fresh deterministic successor only from a completed task", async function _SpawnsFreshSuccessor()
 	{
 		const execution = _Execution();
-		const observed = execution as unknown as DurableExecutionDouble;
+		const observed = execution as unknown as WorkflowEngineDouble;
 		const transaction = _Transaction();
-		const result = await __SpawnRespawnChainSuccessor(execution, { transaction, chainKey: "schedule-1", completed: { taskId: "task-1", slotKey: "2026-08-20T09:00:00.000Z", state: DurableTaskStates.Completed }, nextSlotKey: "2026-08-20T10:00:00.000Z", taskName: "harvest", input: { source: "one" } });
+		const result = await __SpawnRespawnChainSuccessor(execution, { transaction, chainKey: "schedule-1", completed: { taskId: "task-1", slotKey: "2026-08-20T09:00:00.000Z", state: WorkflowTaskStates.Completed }, nextSlotKey: "2026-08-20T10:00:00.000Z", taskName: "harvest", input: { source: "one" } });
 
 		expect(result.taskKey).toBe(__RespawnChainTaskKey("schedule-1", "2026-08-20T10:00:00.000Z"));
 		expect(observed.calls[0]?.command.idempotencyKey).toBe(result.taskKey);
@@ -79,23 +79,23 @@ describe("respawn-chain task admission", function _AdmissionSuite()
 	it("refuses to reuse the completed task slot", async function _RefusesReusedSlot()
 	{
 		const execution = _Execution();
-		const observed = execution as unknown as DurableExecutionDouble;
-		await expect(__SpawnRespawnChainSuccessor(execution, { transaction: _Transaction(), chainKey: "schedule-1", completed: { taskId: "task-1", slotKey: "slot-1", state: DurableTaskStates.Completed }, nextSlotKey: "slot-1", taskName: "harvest", input: {} })).rejects.toThrow("fresh slot key");
+		const observed = execution as unknown as WorkflowEngineDouble;
+		await expect(__SpawnRespawnChainSuccessor(execution, { transaction: _Transaction(), chainKey: "schedule-1", completed: { taskId: "task-1", slotKey: "slot-1", state: WorkflowTaskStates.Completed }, nextSlotKey: "slot-1", taskName: "harvest", input: {} })).rejects.toThrow("fresh slot key");
 		expect(observed.calls).toHaveLength(0);
 	});
 
 	it("refuses completion evidence without a stable predecessor slot", async function _RefusesMissingPredecessorSlot()
 	{
 		const execution = _Execution();
-		const observed = execution as unknown as DurableExecutionDouble;
-		await expect(__SpawnRespawnChainSuccessor(execution, { transaction: _Transaction(), chainKey: "schedule-1", completed: { taskId: "task-1", slotKey: "", state: DurableTaskStates.Completed }, nextSlotKey: "slot-2", taskName: "harvest", input: {} })).rejects.toThrow("completed.slotKey");
+		const observed = execution as unknown as WorkflowEngineDouble;
+		await expect(__SpawnRespawnChainSuccessor(execution, { transaction: _Transaction(), chainKey: "schedule-1", completed: { taskId: "task-1", slotKey: "", state: WorkflowTaskStates.Completed }, nextSlotKey: "slot-2", taskName: "harvest", input: {} })).rejects.toThrow("completed.slotKey");
 		expect(observed.calls).toHaveLength(0);
 	});
 
 	it("refuses a terminal state that did not complete", async function _RefusesIncompleteTask()
 	{
 		const execution = _Execution();
-		const observed = execution as unknown as DurableExecutionDouble;
+		const observed = execution as unknown as WorkflowEngineDouble;
 		const command = { transaction: _Transaction(), chainKey: "schedule-1", completed: { taskId: "task-1", slotKey: "slot-1", state: "cancelled" }, nextSlotKey: "slot-2", taskName: "harvest", input: {} } as unknown as Parameters<typeof __SpawnRespawnChainSuccessor>[1];
 
 		await expect(__SpawnRespawnChainSuccessor(execution, command)).rejects.toThrow("Only a completed task");
