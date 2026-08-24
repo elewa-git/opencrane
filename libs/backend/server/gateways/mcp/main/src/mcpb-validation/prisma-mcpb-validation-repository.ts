@@ -13,7 +13,7 @@ const _VALIDATION_SELECT = { id: true, siloId: true, artifactId: true, artifactR
 /** Prisma projection returned for the bounded MCP bundle validation selection. */
 type _ValidationProjection = Prisma.McpbValidationGetPayload<{ select: typeof _VALIDATION_SELECT }>;
 
-/** Fields needed to fence one controller claim without returning bundle or task input. */
+/** Read the database-saved fields needed to fence one controller claim without returning bundle or task input. */
 const _WORKLOAD_CLAIM_SELECT = { id: true, siloId: true, validationId: true, state: true, claimedAt: true, claimExpiresAt: true, deliveryCount: true, workloadUid: true } as const satisfies Prisma.McpbValidationWorkloadSelect;
 
 /** Prisma projection returned while the controller claims or assigns one validator workload. */
@@ -45,7 +45,7 @@ function _Record(value: _ValidationProjection): McpbValidationRecord
 	return { ...value, byteLength: Number(value.byteLength), state: _State(value.state), failureCode: value.failureCode as McpbVerificationFailureCodes | null };
 }
 
-/** Return a controller claim only when every persisted field forms one complete lease. */
+/** Return a controller fence only when the database saved every field of one lease. */
 function _Claim(value: _WorkloadClaimProjection): McpbValidationWorkloadClaim
 {
 	if (value.claimedAt === null || value.claimExpiresAt === null || !Number.isSafeInteger(value.deliveryCount) || value.deliveryCount < 1)
@@ -104,7 +104,7 @@ export class PrismaMcpbValidationRepository implements McpbValidationRepository
 		return workload.id;
 	}
 
-	/** Claim one pending or expired workload for the bounded controller lease. */
+	/** Try a compare-and-swap claim, then return the lease fields the database stored. */
 	async claimNextWorkload(leaseMilliseconds: number): Promise<McpbValidationWorkloadClaim | null>
 	{
 		if (!Number.isSafeInteger(leaseMilliseconds) || leaseMilliseconds < 1 || leaseMilliseconds > 300_000)
@@ -131,7 +131,7 @@ export class PrismaMcpbValidationRepository implements McpbValidationRepository
 		return _Claim(claimed);
 	}
 
-	/** Record the Kubernetes Job UID only while the controller's original claim is still valid. */
+	/** Try to save a Kubernetes Job UID while the database accepts the controller's original claim. */
 	async commitWorkloadAssignment(workloadId: string, assignment: McpbValidationWorkloadAssignment): Promise<"assigned" | "idempotent" | "conflict">
 	{
 		if (!_IsAssignmentValid(workloadId, assignment))

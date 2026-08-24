@@ -17,7 +17,14 @@ export interface McpbValidationWorkloadTask
 	readonly taskKey: string;
 }
 
-/** One temporary controller lease for a pending MCP bundle validator Job. */
+/**
+ * Carries the database-saved fence for one controller claim on a pending MCP bundle validator Job.
+ *
+ * The `enforce_mcpb_validation_workload_assignment` trigger replaces a successful claim's
+ * timestamps with database time and checks its next delivery count. A controller must return these
+ * values when it records the Job UID so an older controller cannot turn a newer lease into an
+ * assignment.
+ */
 export interface McpbValidationWorkloadClaim
 {
 	/** Durable workload identifier used in the later assignment command. */
@@ -26,20 +33,20 @@ export interface McpbValidationWorkloadClaim
 	readonly siloId: string;
 	/** Validation used to derive the deterministic validator Job name. */
 	readonly validationId: string;
-	/** Exact timestamp the repository stored for this controller lease. */
+	/** Timestamp the database stored after accepting this claim. */
 	readonly claimedAt: string;
-	/** Delivery generation that fences an older controller replica. */
+	/** Next delivery count the database accepted for this claim. */
 	readonly deliveryCount: number;
-	/** Timestamp after which another controller may take an unassigned workload. */
+	/** Timestamp after which the database may admit another controller claim. */
 	readonly expiresAt: string;
 }
 
-/** Kubernetes Job identity returned after a controller creates one suspended validator Job. */
+/** Carries a Kubernetes Job UID together with the database fence required to save it. */
 export interface McpbValidationWorkloadAssignment
 {
-	/** Exact controller-lease timestamp returned by {@link McpbValidationWorkloadClaim}. */
+	/** Database-saved claim timestamp returned by {@link McpbValidationWorkloadClaim}. */
 	readonly claimedAt: string;
-	/** Exact controller delivery generation returned by {@link McpbValidationWorkloadClaim}. */
+	/** Database-accepted delivery count returned by {@link McpbValidationWorkloadClaim}. */
 	readonly deliveryCount: number;
 	/** Immutable Kubernetes Job UID returned by the Kubernetes API. */
 	readonly workloadUid: string;
@@ -132,18 +139,33 @@ export interface McpbValidationRepository
 	 */
 	ensureWorkload(siloId: string, validationId: string, task: McpbValidationWorkloadTask): Promise<string | null>;
 	/**
-	 * Claims one pending workload for a short controller lease.
+	 * Tries to claim one pending or expired workload for a controller pass.
+	 *
+	 * The compare-and-swap discards a competing writer, then
+	 * `enforce_mcpb_validation_workload_assignment` stores the database-time lease and validates the
+	 * next delivery count. A `null` result means the caller must not create a Job because no claim
+	 * was saved.
+	 *
+	 * Called by: the focused repository test. Production has no caller yet.
 	 *
 	 * @param leaseMilliseconds - Maximum time that one controller may hold the assignment lease.
-	 * @returns The saved validation coordinates and claim fence, or `null` when no workload is ready.
+	 * @returns The database-saved validation coordinates and claim fence, or `null` when no claim was saved.
+	 * @throws Error when the lease is outside the configured range or the database rejects the update.
 	 */
 	claimNextWorkload(leaseMilliseconds: number): Promise<McpbValidationWorkloadClaim | null>;
 	/**
-	 * Records a Kubernetes Job UID only when the controller still holds the workload lease.
+	 * Tries to record a Kubernetes Job UID under the claim that created it.
+	 *
+	 * `enforce_mcpb_validation_workload_assignment` makes the final live-lease decision with
+	 * database time. `assigned` means the UID was saved, `idempotent` means the same assignment was
+	 * already saved, and `conflict` means the caller must not treat the Job as assigned.
+	 *
+	 * Called by: the focused repository test. Production has no caller yet.
 	 *
 	 * @param workloadId - Identifies the workload the controller claimed.
 	 * @param assignment - Lease fence and immutable Job UID returned by Kubernetes.
-	 * @returns Whether the assignment was saved, already saved, or lost its controller lease.
+	 * @returns `assigned`, `idempotent`, or `conflict` with the meanings described above.
+	 * @throws Error when the database rejects the compare-and-swap update.
 	 */
 	commitWorkloadAssignment(workloadId: string, assignment: McpbValidationWorkloadAssignment): Promise<"assigned" | "idempotent" | "conflict">;
 	/**
