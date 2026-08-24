@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import { createPostgresRunCommand } from "./commands.mjs";
 import { runLocalCommand, runLocalCommandSpecification } from "./command-runner.mjs";
-import { ensureOwnedVolume, inspectOwnedContainer } from "./container-resources.mjs";
+import { ensureOwnedVolume, inspectOwnedContainer, stopOwnedContainer } from "./container-resources.mjs";
 
 function _assertPostgresPasswordMatches(configuration, postgresPassword)
 {
@@ -82,6 +82,19 @@ async function _waitForPostgres(configuration)
 	throw new Error("The local PostgreSQL container did not become ready within 30 seconds");
 }
 
+export async function waitForOwnedPostgres(configuration, waitForPostgres = _waitForPostgres, stopContainer = stopOwnedContainer)
+{
+	try
+	{
+		await waitForPostgres(configuration);
+	}
+	catch (error)
+	{
+		stopContainer(configuration.postgresContainerName);
+		throw error;
+	}
+}
+
 export async function startLocalPostgres(configuration, secrets)
 {
 	ensureOwnedVolume(configuration.postgresVolumeName);
@@ -101,7 +114,21 @@ export async function startLocalPostgres(configuration, secrets)
 		}
 	}
 
-	await _waitForPostgres(configuration);
+	await waitForOwnedPostgres(configuration);
+
+	return true;
+}
+
+export function ensureLocalLiteLLMDatabase(configuration, queryPostgres = _queryPostgres, runCommand = runLocalCommand)
+{
+	const exists = queryPostgres(configuration, "SELECT 1 FROM pg_database WHERE datname = 'litellm';") === "1";
+
+	if (exists)
+	{
+		return false;
+	}
+
+	runCommand("docker", _postgresArguments(configuration, "--command", "CREATE DATABASE litellm;"));
 	return true;
 }
 

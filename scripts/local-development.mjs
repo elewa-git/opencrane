@@ -2,7 +2,7 @@
 
 import { createApplicationCommands, createApplicationEnvironment } from "./local-development/commands.mjs";
 import { createLocalDevelopmentConfiguration } from "./local-development/configuration.mjs";
-import { applyTargetBaseline, resetLocalDevelopmentContainers, startLocalLiteLLM, startLocalPostgres, stopOwnedContainer, validateLocalDevelopmentTools } from "./local-development/docker.mjs";
+import { applyTargetBaseline, ensureLocalLiteLLMDatabase, resetLocalDevelopmentContainers, startLocalLiteLLM, startLocalPostgres, stopOwnedContainer, validateLocalDevelopmentTools } from "./local-development/docker.mjs";
 import { createDevelopmentSeedCommand } from "./local-development/development-seed-command.mjs";
 import { validateLiteLLMModelEndpoint, waitForLiteLLMModelEndpoint } from "./local-development/litellm-validation.mjs";
 import { acquireLocalDevelopmentLock, releaseLocalDevelopmentLock } from "./local-development/lock.mjs";
@@ -77,6 +77,7 @@ async function _main()
 
 		if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
 		{
+			ensureLocalLiteLLMDatabase(configuration);
 			liteLLMStarted = await startLocalLiteLLM(configuration, secrets);
 			await waitForLiteLLMModelEndpoint(`http://127.0.0.1:${configuration.liteLLMPort}`, secrets.liteLLMMasterKey);
 		}

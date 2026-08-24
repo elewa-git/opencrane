@@ -39,6 +39,7 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 		liteLLMPort,
 		postgresContainerName: "opencrane-local-postgres",
 		postgresVolumeName: "opencrane-local-postgres-data",
+		localNetworkName: "opencrane-local-development",
 		liteLLMContainerName: "opencrane-local-litellm",
 		baselinePath: path.join(repositoryRoot, "apps/opencrane/prisma/bootstrap/target-baseline.sql"),
 		seedPath: path.join(repositoryRoot, "apps/postgres/scripts/local-development-seed.sql"),

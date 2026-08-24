@@ -13,6 +13,13 @@ const _EXPECTED_PROXY_TARGET_HOSTS = new Set(["127.0.0.1:8080", "localhost:8080"
 /** Direct backend host accepted for focused API tests and diagnostics. */
 const _EXPECTED_DIRECT_HOST = "local-development.localhost:8080";
 
+/** Browser origins allowed to mutate state through the direct and proxied Tier 2 listeners. */
+const _EXPECTED_DIRECT_ORIGIN = `http://${_EXPECTED_DIRECT_HOST}`;
+const _EXPECTED_FORWARDED_ORIGIN = `http://${_EXPECTED_FORWARDED_HOST}`;
+
+/** Methods that cannot mutate Tier 2 application state. */
+const _SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 /** Return true only for the direct local hostname or the exact dedicated UI proxy pair. */
 function _HasExpectedDevelopmentHost(request: Request): boolean
 {
@@ -27,6 +34,47 @@ function _HasExpectedDevelopmentHost(request: Request): boolean
 	return host === _EXPECTED_DIRECT_HOST;
 }
 
+/** Return the exact browser origin selected by the already-validated host pair. */
+function _ExpectedDevelopmentOrigin(request: Request): string
+{
+	return typeof request.headers["x-forwarded-host"] === "string"
+		? _EXPECTED_FORWARDED_ORIGIN
+		: _EXPECTED_DIRECT_ORIGIN;
+}
+
+/** Refuse browser state changes sent by a page outside the dedicated Tier 2 origin. */
+function _HasExpectedDevelopmentOrigin(request: Request): boolean
+{
+	if (_SAFE_METHODS.has(request.method))
+	{
+		return true;
+	}
+
+	const expected = _ExpectedDevelopmentOrigin(request);
+	const origin = request.get("origin");
+
+	if (origin)
+	{
+		return origin === expected;
+	}
+
+	const referer = request.get("referer");
+
+	if (!referer)
+	{
+		return false;
+	}
+
+	try
+	{
+		return new URL(referer).origin === expected;
+	}
+	catch
+	{
+		return false;
+	}
+}
+
 /** Attach the installation-selected development identity after the exact host pair is verified. */
 function _CreateDevelopmentSessionMiddleware(identity: LocalDevelopmentIdentity): RequestHandler
 {
@@ -37,6 +85,15 @@ function _CreateDevelopmentSessionMiddleware(identity: LocalDevelopmentIdentity)
 			response.status(403).json({
 				error: "Tier 2 requests require the dedicated local development host.",
 				code: "DEVELOPMENT_HOST_MISMATCH",
+			});
+			return;
+		}
+
+		if (!_HasExpectedDevelopmentOrigin(request))
+		{
+			response.status(403).json({
+				error: "Tier 2 state changes require the dedicated local development origin.",
+				code: "DEVELOPMENT_ORIGIN_MISMATCH",
 			});
 			return;
 		}

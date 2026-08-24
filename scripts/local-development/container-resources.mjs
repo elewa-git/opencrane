@@ -54,6 +54,52 @@ export function ensureOwnedVolume(volumeName)
 	}
 }
 
+export function ensureOwnedNetwork(networkName)
+{
+	const result = runLocalCommand("docker", [
+		"network",
+		"inspect",
+		networkName,
+		"--format",
+		`{{ index .Labels "${_OWNER_LABEL_KEY}" }}`
+	], { acceptFailure: true });
+
+	if (result.status !== 0)
+	{
+		runLocalCommand("docker", ["network", "create", "--label", `${_OWNER_LABEL_KEY}=${_OWNER_LABEL_VALUE}`, networkName]);
+		return;
+	}
+
+	if (result.stdout.trim() !== _OWNER_LABEL_VALUE)
+	{
+		throw new Error(`Network ${networkName} exists but is not owned by OpenCrane local development`);
+	}
+}
+
+function _connectOwnedContainerToNetwork(containerName, networkName)
+{
+	const state = inspectOwnedContainer(containerName);
+
+	if (!state.exists)
+	{
+		throw new Error(`Owned container ${containerName} must exist before it can join ${networkName}`);
+	}
+
+	const result = runLocalCommand("docker", [
+		"container",
+		"inspect",
+		containerName,
+		"--format",
+		"{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}"
+	]);
+	const networks = result.stdout.split("\n").map(function _trim(name) { return name.trim(); });
+
+	if (!networks.includes(networkName))
+	{
+		runLocalCommand("docker", ["network", "connect", networkName, containerName]);
+	}
+}
+
 function _removeOwnedContainer(containerName)
 {
 	const state = inspectOwnedContainer(containerName);
@@ -87,16 +133,42 @@ function _removeOwnedVolume(volumeName)
 	runLocalCommand("docker", ["volume", "rm", volumeName]);
 }
 
+function _removeOwnedNetwork(networkName)
+{
+	const result = runLocalCommand("docker", [
+		"network",
+		"inspect",
+		networkName,
+		"--format",
+		`{{ index .Labels "${_OWNER_LABEL_KEY}" }}`
+	], { acceptFailure: true });
+
+	if (result.status !== 0)
+	{
+		return;
+	}
+
+	if (result.stdout.trim() !== _OWNER_LABEL_VALUE)
+	{
+		throw new Error(`Network ${networkName} exists but is not owned by OpenCrane local development`);
+	}
+
+	runLocalCommand("docker", ["network", "rm", networkName]);
+}
+
 export function resetLocalDevelopmentContainers(configuration)
 {
 	_removeOwnedContainer(configuration.liteLLMContainerName);
 	_removeOwnedContainer(configuration.postgresContainerName);
 	_removeOwnedVolume(configuration.postgresVolumeName);
+	_removeOwnedNetwork(configuration.localNetworkName);
 }
 
 export async function startLocalLiteLLM(configuration, secrets)
 {
 	_removeOwnedContainer(configuration.liteLLMContainerName);
+	ensureOwnedNetwork(configuration.localNetworkName);
+	_connectOwnedContainerToNetwork(configuration.postgresContainerName, configuration.localNetworkName);
 	const specification = createLiteLLMRunCommand(configuration, secrets);
 	runLocalCommandSpecification(specification);
 	return true;

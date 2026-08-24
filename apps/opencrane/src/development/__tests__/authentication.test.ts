@@ -18,6 +18,10 @@ function _App()
 	{
 		response.json({ subjectId: request.session.authUser?.sub });
 	});
+	app.post("/api/v1/protected", function _MutateProtected(_request, response): void
+	{
+		response.status(204).end();
+	});
 	return app;
 }
 
@@ -57,5 +61,29 @@ describe("Tier 2 browser authentication", function _Suite()
 			.set("host", "localhost:8080")
 			.set("x-forwarded-host", "attacker.example.com")
 			.expect(403);
+	});
+
+	it("rejects cross-origin browser mutations and accepts the exact direct or proxied origin", async function _ChecksMutationOrigin(): Promise<void>
+	{
+		await request(_App())
+			.post("/api/v1/protected")
+			.set("host", "local-development.localhost:8080")
+			.set("origin", "https://attacker.example.com")
+			.expect(403, { error: "Tier 2 state changes require the dedicated local development origin.", code: "DEVELOPMENT_ORIGIN_MISMATCH" });
+		await request(_App())
+			.post("/api/v1/protected")
+			.set("host", "local-development.localhost:8080")
+			.expect(403, { error: "Tier 2 state changes require the dedicated local development origin.", code: "DEVELOPMENT_ORIGIN_MISMATCH" });
+		await request(_App())
+			.post("/api/v1/protected")
+			.set("host", "local-development.localhost:8080")
+			.set("origin", "http://local-development.localhost:8080")
+			.expect(204);
+		await request(_App())
+			.post("/api/v1/protected")
+			.set("host", "localhost:8080")
+			.set("x-forwarded-host", "local-development.localhost:4200")
+			.set("referer", "http://local-development.localhost:4200/chat")
+			.expect(204);
 	});
 });

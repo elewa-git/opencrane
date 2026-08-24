@@ -4,7 +4,7 @@ import { createAgentControllerProcessEnvironment } from "./process-environments.
 
 const _OWNER_LABEL = "opencrane.local-development.owner=opencrane";
 const _POSTGRES_IMAGE = "postgres:17";
-const _LITELLM_IMAGE = "ghcr.io/berriai/litellm-non_root:main-v1.81.0-stable";
+const _LITELLM_IMAGE = "ghcr.io/berriai/litellm-non_root@sha256:39718a9cc9138c99ec812bcde24896411cf54502967a36b19897c539b796fdc7";
 
 export function createPostgresRunCommand(configuration, secrets)
 {
@@ -53,6 +53,8 @@ export function createLiteLLMRunCommand(configuration, secrets)
 			configuration.liteLLMContainerName,
 			"--label",
 			_OWNER_LABEL,
+			"--network",
+			configuration.localNetworkName,
 			"--publish",
 			`127.0.0.1:${configuration.liteLLMPort}:4000`,
 			"--mount",
@@ -61,6 +63,8 @@ export function createLiteLLMRunCommand(configuration, secrets)
 			"LITELLM_MASTER_KEY",
 			"--env",
 			"OPENAI_API_KEY",
+			"--env",
+			"DATABASE_URL",
 			_LITELLM_IMAGE,
 			"--config",
 			"/app/opencrane-local.yaml",
@@ -69,7 +73,8 @@ export function createLiteLLMRunCommand(configuration, secrets)
 		],
 		environment: {
 			LITELLM_MASTER_KEY: secrets.liteLLMMasterKey,
-			OPENAI_API_KEY: secrets.providerKey
+			OPENAI_API_KEY: secrets.providerKey,
+			DATABASE_URL: `postgresql://opencrane:${secrets.postgresPassword}@${configuration.postgresContainerName}:5432/litellm`
 		}
 	};
 }

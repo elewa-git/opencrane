@@ -1,15 +1,33 @@
 import { spawn } from "node:child_process";
 
+const _SENSITIVE_PARENT_ENVIRONMENT_NAMES = [
+	"LITELLM_MASTER_KEY",
+	"OPENAI_API_KEY",
+	"OPENCRANE_INITIAL_MODEL_API_KEY"
+];
+
+export function createDevelopmentChildEnvironment(parentEnvironment, processEnvironment = {})
+{
+	const environment = { ...parentEnvironment };
+
+	for (const name of _SENSITIVE_PARENT_ENVIRONMENT_NAMES)
+	{
+		delete environment[name];
+	}
+
+	return {
+		...environment,
+		...processEnvironment
+	};
+}
+
 export async function runDevelopmentProcesses(specifications, repositoryRoot)
 {
 	const children = specifications.map(function _start(specification)
 	{
 		const child = spawn(specification.command, specification.arguments, {
 			cwd: repositoryRoot,
-			env: {
-				...process.env,
-				...specification.environment
-			},
+			env: createDevelopmentChildEnvironment(process.env, specification.environment),
 			stdio: "inherit"
 		});
 
