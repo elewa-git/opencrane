@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { ___CreateLogger, ___DoWithTrace, ___GetActiveSpan, type Logger } from "@opencrane/backend/observability";
-import { WorkflowError, WorkflowTaskCompensationError, WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowError, WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowEngine, IWorkflowTaskContext, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskQueueAuthority, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { WorkflowTaskPolicyError } from "./workflow-guard.errors";
@@ -13,17 +13,13 @@ import { _AssertPersistableWorkflowPayload, _ParseWorkflowSiloTaskInput } from "
  * Normalizes an application failure before telemetry or engine state can retain its original text.
  *
  * Called by: `WorkflowGuard._RunCheckpoint`. A task error can include product data, so the guard keeps
- * its retry or compensation category while replacing the message with a safe operator summary.
+ * its retry category while replacing the message with a safe operator summary.
  */
 function _NormalizeStepError(error: unknown): WorkflowError
 {
 	if (error instanceof WorkflowTaskRetryableError)
 	{
 		return new WorkflowTaskRetryableError("Workflow checkpoint failed and may be retried.");
-	}
-	if (error instanceof WorkflowTaskCompensationError)
-	{
-		return new WorkflowTaskCompensationError("Workflow checkpoint failed and requires compensation.");
 	}
 	if (error instanceof WorkflowTaskTerminalError)
 	{
@@ -125,6 +121,7 @@ class WorkflowGuard implements IWorkflowEngine
 		const workflowGuard = this;
 		this.execution.register({
 			taskName: definition.taskName,
+			retryPolicy: definition.retryPolicy,
 			async run(context: IWorkflowTaskContext, input: TInput): Promise<TResult>
 			{
 				workflowGuard._ValidateTaskInput(input);
@@ -259,6 +256,8 @@ class _WorkflowTaskContext implements IWorkflowTaskContext
 	private readonly policy: IWorkflowTaskPolicy;
 	/** Receipt for the task currently running. */
 	readonly task: IWorkflowTaskReceipt;
+	/** Engine attempt number for the current handler run. */
+	readonly attempt: number;
 
 	/** Bind a current task context to its guard and reviewed queue policy. */
 	constructor(context: IWorkflowTaskContext, guard: WorkflowGuard, policy: IWorkflowTaskPolicy)
@@ -267,6 +266,7 @@ class _WorkflowTaskContext implements IWorkflowTaskContext
 		this.guard = guard;
 		this.policy = policy;
 		this.task = context.task;
+		this.attempt = context.attempt;
 	}
 
 	/** Delegate one checkpoint through the payload-safe trace and structured-log wrapper. */

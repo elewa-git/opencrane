@@ -24,11 +24,10 @@ configured silo — the isolated organisation boundary — and that its task nam
 **In this flow:** [workflows/contract](../contract/README.md) *(the engine-neutral task port)* ·
 `workflows/infra_absurd` *(the current PostgreSQL-backed workflow engine adapter)*
 
-The guard parses generic task input with Zod at the engine boundary, then rejects cross-silo input,
-non-JSON values, and fields that look like credentials before they can become saved database
-payloads. Its checkpoint wrapper traces only task name, step name, silo, queue, a hashed task key,
-and outcome metadata. The workflow contract does not expose a truthful engine retry-attempt number,
-so the guard deliberately does not invent one.
+The guard refuses cross-silo input, unreviewed task names, non-JSON values, and fields that look like
+credentials before they can become saved database payloads. Its checkpoint wrapper traces only
+task name, step name, silo, queue, a hashed task key, and outcome metadata. It forwards the attempt
+number reported by the workflow engine so retry-aware tasks can make decisions from stored state.
 
 ## Public surface
 

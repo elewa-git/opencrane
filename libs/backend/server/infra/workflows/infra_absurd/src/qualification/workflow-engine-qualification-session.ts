@@ -1,5 +1,5 @@
 import { Absurd } from "absurd-sdk";
-import { Pool } from "pg";
+import pg, { type Pool as PgPool } from "pg";
 
 import type { IWorkflowTaskReceipt, IWorkflowWorkers } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -8,12 +8,13 @@ import type { IWorkflowEngineQualificationUnitOfWork } from "./workflow-engine-q
 import type { IWorkflowEngineQualificationSession, IWorkflowEngineQualificationSessionOptions, IWorkflowTaskQualificationInput } from "./workflow-engine-qualification-session.types";
 import { PrismaWorkflowEngineQualificationUnitOfWork } from "./prisma-workflow-engine-qualification-unit-of-work";
 
+const { Pool } = pg;
 const _TaskName = "opencrane.workflow-engine.pickup-qualification";
 
 interface IWorkflowEngineQualificationResources
 {
 	/** Provides the SDK pool and application-role connection observations. */
-	readonly databasePool: Pool;
+	readonly databasePool: PgPool;
 	/** Admits and dispatches the temporary qualification task. */
 	readonly execution: AbsurdWorkflowEngine;
 	/** Creates and drops the temporary queue. */
@@ -26,7 +27,8 @@ interface IWorkflowEngineQualificationResources
 function _QualifiedDatabaseUrl(databaseUrl: string, applicationName: string): string
 {
 	const url = new URL(databaseUrl);
-	if (url.protocol !== "postgresql:" && url.protocol !== "postgres:") throw new Error("databaseUrl must use PostgreSQL.");
+	if (url.protocol !== "postgresql:" && url.protocol !== "postgres:")
+		throw new Error("databaseUrl must use PostgreSQL.");
 	url.searchParams.set("application_name", applicationName);
 	return url.toString();
 }
@@ -79,7 +81,8 @@ export class _AbsurdWorkflowEngineQualificationSession implements IWorkflowEngin
 			taskName: _TaskName,
 			async run(_context, input): Promise<null>
 			{
-				if (input.siloId !== siloId) throw new Error("Qualification task has no local sample owner.");
+				if (input.siloId !== siloId)
+					throw new Error("Qualification task has no local sample owner.");
 				onStarted(input);
 				return null;
 			},
@@ -103,7 +106,8 @@ export class _AbsurdWorkflowEngineQualificationSession implements IWorkflowEngin
 			const task = { taskName: _TaskName, idempotencyKey: `${runId}:${input.sampleIndex}`, input };
 			receipt = await execution.spawn(transaction, task);
 		});
-		if (receipt === undefined) throw new Error("Qualification admission returned no receipt.");
+		if (receipt === undefined)
+			throw new Error("Qualification admission returned no receipt.");
 		return receipt;
 	}
 
@@ -140,12 +144,15 @@ export class _AbsurdWorkflowEngineQualificationSession implements IWorkflowEngin
 	async close(): Promise<void>
 	{
 		const failures: unknown[] = [];
-		if (this.workers !== undefined) await this.workers.drain().catch(function _Remember(error) { failures.push(error); });
-		if (this.queueCreated) await this.resources.queueOwner.dropQueue(this.options.queueName).catch(function _Remember(error) { failures.push(error); });
+		if (this.workers !== undefined)
+			await this.workers.drain().catch(function _Remember(error) { failures.push(error); });
+		if (this.queueCreated)
+			await this.resources.queueOwner.dropQueue(this.options.queueName).catch(function _Remember(error) { failures.push(error); });
 		await this.resources.queueOwner.close().catch(function _Remember(error) { failures.push(error); });
 		await this.resources.unitOfWork.close().catch(function _Remember(error) { failures.push(error); });
 		await this.resources.databasePool.end().catch(function _Remember(error) { failures.push(error); });
-		if (failures.length > 0) throw new Error("Workflow engine qualification could not remove its queue or release its connections.");
+		if (failures.length > 0)
+			throw new Error("Workflow engine qualification could not remove its queue or release its connections.");
 	}
 }
 
@@ -160,7 +167,14 @@ export function _CreateWorkflowEngineQualificationSession(options: IWorkflowEngi
 	const prismaDatabaseUrl = new URL(databaseUrl);
 	prismaDatabaseUrl.searchParams.set("connection_limit", "1");
 	const databasePool = new Pool({ connectionString: databaseUrl, max: options.databasePoolSize });
-	const queueAuthority = Object.freeze({ queueForTask(taskName: string): string { if (taskName !== _TaskName) throw new Error("Qualification task is not admitted."); return options.queueName; } });
+	const queueAuthority = Object.freeze({
+		queueForTask(taskName: string): string
+		{
+			if (taskName !== _TaskName)
+				throw new Error("Qualification task is not admitted.");
+			return options.queueName;
+		},
+	});
 	const execution = new AbsurdWorkflowEngine({ databaseUrl, databasePool, databasePoolSize: options.databasePoolSize, queueAuthority, workerConcurrency: 1, pollIntervalMs: options.pollIntervalMs });
 	return new _AbsurdWorkflowEngineQualificationSession(options, {
 		databasePool,

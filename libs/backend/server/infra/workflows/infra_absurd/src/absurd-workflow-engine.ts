@@ -1,13 +1,18 @@
-import { Absurd, type TaskContext } from "absurd-sdk";
-import { Pool } from "pg";
+import { Absurd, FailedTask, type TaskContext } from "absurd-sdk";
+import pg, { type Pool as PgPool } from "pg";
 
-import { WorkflowError, WorkflowTaskNotRegisteredError } from "@opencrane/backend/server/infra/workflows/contract";
-import type { IWorkflowEngine, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowTransaction, IWorkflowWorkerRuntime, IWorkflowWorkers, IWorkflowWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
+import { WorkflowError, WorkflowTaskNotRegisteredError, WorkflowTaskRetryBackoffKinds, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowEngine, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskReceipt, IWorkflowTaskRetryPolicy, IWorkflowTaskSpawn, IWorkflowTransaction, IWorkflowWorkerRuntime, IWorkflowWorkers, IWorkflowWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _TaskScopedIdempotencyKey, WorkflowTaskAdmission } from "./workflow-task-admission";
 import type { IAbsurdWorkflowEngineOptions } from "./absurd-workflow-engine.types";
 import { _AbsurdTaskContext, _AbsurdTaskEventName } from "./absurd-task-context";
+import { _AbsurdTerminalTaskFailure } from "./absurd-terminal-task-failure";
+import type { IWorkflowTaskAdmissionRequest } from "./workflow-task-admission.types";
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
+
+const { Pool } = pg;
 
 /** Preserves the caller's idempotency key and an intentionally absent JSON input. */
 interface ITaskEnvelope
@@ -25,6 +30,13 @@ interface IWorker
 {
 	/** Stops the worker after it finishes its current operation. */
 	close(): Promise<void>;
+}
+
+/** Describes the claimed task field that Absurd 0.5.0 omits from its public context type. */
+interface IAbsurdTaskContextRuntime
+{
+	/** Claimed task data supplied by the worker runtime. */
+	readonly task: { readonly attempt: unknown };
 }
 
 /** Rejects an empty name before it becomes a persisted queue, event, or task identity. */
@@ -47,6 +59,28 @@ function _DatabasePoolSize(value: number): number
 	return value;
 }
 
+/** Validates a task retry policy and defaults tasks that do not retry to one attempt. */
+function _RetryPolicy(policy: IWorkflowTaskRetryPolicy | undefined): IWorkflowTaskRetryPolicy
+{
+	const value = policy ?? { maximumAttempts: 1, backoff: { kind: WorkflowTaskRetryBackoffKinds.Fixed, initialDelaySeconds: 0 } };
+	if (!Number.isSafeInteger(value.maximumAttempts) || value.maximumAttempts < 1 || value.maximumAttempts > 100)
+		throw new WorkflowError("retryPolicy.maximumAttempts must be between 1 and 100.");
+	if (!Number.isSafeInteger(value.backoff.initialDelaySeconds) || value.backoff.initialDelaySeconds < 0 || value.backoff.initialDelaySeconds > 86_400)
+		throw new WorkflowError("retryPolicy.initialDelaySeconds must be between 0 and 86400.");
+	if (value.backoff.multiplier !== undefined && (!Number.isFinite(value.backoff.multiplier) || value.backoff.multiplier < 0))
+		throw new WorkflowError("retryPolicy.multiplier must be a finite non-negative number.");
+	if (value.backoff.maximumDelaySeconds !== undefined && (!Number.isSafeInteger(value.backoff.maximumDelaySeconds) || value.backoff.maximumDelaySeconds < 0 || value.backoff.maximumDelaySeconds > 86_400))
+		throw new WorkflowError("retryPolicy.maximumDelaySeconds must be between 0 and 86400.");
+	return value;
+}
+
+/** Converts the shared retry policy to the field names used by Absurd admission. */
+function _AbsurdRetryPolicy(policy: IWorkflowTaskRetryPolicy | undefined): Pick<IWorkflowTaskAdmissionRequest, "maximumAttempts" | "retryStrategy">
+{
+	const value = _RetryPolicy(policy);
+	return { maximumAttempts: value.maximumAttempts, retryStrategy: { kind: value.backoff.kind, baseSeconds: value.backoff.initialDelaySeconds, factor: value.backoff.multiplier, maxSeconds: value.backoff.maximumDelaySeconds } };
+}
+
 /** Validates the persisted envelope before a worker reconstructs the contract task input. */
 function _TaskEnvelope(value: unknown): ITaskEnvelope
 {
@@ -55,6 +89,22 @@ function _TaskEnvelope(value: unknown): ITaskEnvelope
 		throw new WorkflowError("Absurd task payload is not a workflow task envelope.");
 	}
 	return { idempotencyKey: value.idempotencyKey, input: value.input, inputUndefined: value.inputUndefined };
+}
+
+/**
+ * Reads the attempt that Absurd supplies at runtime but omits from its public `TaskContext` type.
+ *
+ * Rejecting a missing value prevents retry handling from receiving a made-up attempt number.
+ * @see https://github.com/earendil-works/absurd/tree/0.5.0 — supplies `task.attempt` at runtime.
+ */
+function _AbsurdTaskAttempt(context: TaskContext): number
+{
+	const attempt = (context as unknown as IAbsurdTaskContextRuntime).task?.attempt;
+	if (!Number.isSafeInteger(attempt) || (attempt as number) < 1)
+	{
+		throw new WorkflowError("Absurd task attempt is not a positive integer.");
+	}
+	return attempt as number;
 }
 
 /** Encodes an absent input explicitly because JSON persistence would otherwise drop the property. */
@@ -94,9 +144,11 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	/** Stores database, queue, and worker settings selected by application composition. */
 	private readonly options: IAbsurdWorkflowEngineOptions;
 	/** Shares one bounded database pool across every queue in this process. */
-	private readonly databasePool: Pool;
+	private readonly databasePool: PgPool;
 	/** Records whether this engine created the shared pool and must close it. */
 	private readonly ownsDatabasePool: boolean;
+	/** Shares one shutdown promise across concurrent lifecycle callers. */
+	private closePromise: Promise<void> | undefined;
 
 	/**
 	 * Creates the engine without starting workers before task registration is complete.
@@ -155,10 +207,11 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		}
 		// 2. Retain the definition that admissions and worker contexts will share.
 		const stored = definition as unknown as IWorkflowTaskDefinition<unknown, unknown>;
+		const retryPolicy = _RetryPolicy(stored.retryPolicy);
 		this.definitions.set(taskName, stored);
 		// 3. Bind the vendor handler to the same reviewed queue before any task can be admitted.
 		const engine = this;
-		this.engineForQueue(this.queueForTask(taskName)).registerTask({ name: taskName, queue: this.queueForTask(taskName) }, async function _RunTask(params: unknown, context: TaskContext): Promise<unknown> { return await engine.runTask(stored, context, params); });
+		this.engineForQueue(this.queueForTask(taskName)).registerTask({ name: taskName, queue: this.queueForTask(taskName), defaultMaxAttempts: retryPolicy.maximumAttempts }, async function _RunTask(params: unknown, context: TaskContext): Promise<unknown> { return await engine.runTask(stored, context, params); });
 	}
 
 	/**
@@ -174,7 +227,17 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		// 2. Rebuild the engine-neutral receipt that the handler may safely retain.
 		const task: IWorkflowTaskReceipt = { taskId: context.taskID, taskName: definition.taskName, idempotencyKey: envelope.idempotencyKey };
 		// 3. Give the handler a context that routes child work and events through this engine.
-		return await definition.run(new _AbsurdTaskContext(context, task, this), envelope.inputUndefined ? undefined : envelope.input);
+		try
+		{
+			return await definition.run(new _AbsurdTaskContext(context, task, _AbsurdTaskAttempt(context), this), envelope.inputUndefined ? undefined : envelope.input);
+		}
+		catch (error)
+		{
+			if (!(error instanceof WorkflowTaskTerminalError))
+				throw error;
+			await new _AbsurdTerminalTaskFailure(this.databasePool, this.queueForTask(definition.taskName)).fail(context.taskID, error);
+			throw new FailedTask();
+		}
 	}
 
 	/**
@@ -193,7 +256,7 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 			throw new WorkflowTaskNotRegisteredError(task.taskName);
 		}
 		// 2. Use the caller's transaction so the product write and receipt commit together.
-		return await this.spawnWithTransaction(transaction.client, task);
+		return await this.spawnWithTransaction(transaction.client, task, definition);
 	}
 
 	/**
@@ -205,7 +268,8 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	async spawnFromTask<TInput>(task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
 		// 1. Reject a missing handler before asking the SDK to persist child work.
-		if (!this.definitions.has(task.taskName))
+		const definition = this.definitions.get(task.taskName);
+		if (definition === undefined)
 		{
 			throw new WorkflowTaskNotRegisteredError(task.taskName);
 		}
@@ -215,7 +279,8 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		{
 			// 2. Preserve an absent input and scope the key before it reaches the shared queue.
 			const envelope = _EnvelopeForTask(idempotencyKey, task.input);
-			const spawned = await this.engineForQueue(this.queueForTask(taskName)).spawn(taskName, envelope, { queue: this.queueForTask(taskName), idempotencyKey: _TaskScopedIdempotencyKey(taskName, idempotencyKey) });
+			const retry = _AbsurdRetryPolicy(definition.retryPolicy);
+			const spawned = await this.engineForQueue(this.queueForTask(taskName)).spawn(taskName, envelope, { queue: this.queueForTask(taskName), idempotencyKey: _TaskScopedIdempotencyKey(taskName, idempotencyKey), maxAttempts: retry.maximumAttempts, retryStrategy: retry.retryStrategy });
 			return { taskId: spawned.taskID, taskName, idempotencyKey };
 		}
 		catch (error)
@@ -225,11 +290,12 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	}
 
 	/** Calls the fixed, parameterized Absurd procedure on the caller's existing transaction. */
-	private async spawnWithTransaction<TInput>(transactionClient: unknown, task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
+	private async spawnWithTransaction<TInput>(transactionClient: unknown, task: IWorkflowTaskSpawn<TInput>, definition: IWorkflowTaskDefinition<unknown, unknown>): Promise<IWorkflowTaskReceipt>
 	{
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
-		const receipt = await new WorkflowTaskAdmission(this.queueForTask(taskName)).admit(transactionClient, { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input) });
+		const retry = _AbsurdRetryPolicy(definition.retryPolicy);
+		const receipt = await new WorkflowTaskAdmission(this.queueForTask(taskName)).admit(transactionClient, { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input), ...retry });
 		return { taskId: receipt.taskId, taskName, idempotencyKey };
 	}
 
@@ -283,27 +349,31 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		{
 			return existing;
 		}
-		try
+		const queues = [...this.engines.entries()];
+		const execution = this;
+		return await ___DoWithTrace("workflow.worker.start", { workerName, queueCount: queues.length, workerConcurrency: this.options.workerConcurrency ?? 1 }, async function _StartWorkers(): Promise<IWorkflowWorkers>
 		{
-			// 2. Start one SDK worker per queue after all registrations created their clients.
-			const queues = [...this.engines.entries()];
-			const workers = await Promise.all(queues.map(async ([queueName, engine]) => await engine.startWorker({ workerId: `${workerName}:${queueName}`, concurrency: this.options.workerConcurrency, pollInterval: this.options.pollIntervalMs === undefined ? undefined : this.options.pollIntervalMs / 1000 })));
-			// 3. Retain both SDK workers and the engine-neutral shutdown handle.
-			this.workerGroups.set(workerName, workers);
-			const execution = this;
-			const lifecycle: IWorkflowWorkers = {
-				workerId: workerName,
-				workerName,
-				async drain(): Promise<void> { await execution.drainWorkers(workerName); },
-				async stop(): Promise<void> { await execution.drainWorkers(workerName); },
-			};
-			this.workers.set(workerName, lifecycle);
-			return lifecycle;
-		}
-		catch (error)
-		{
-			throw new AbsurdWorkflowError("start workers", error);
-		}
+			try
+			{
+				// 2. Start one SDK worker per queue after all registrations created their clients.
+				const workers = await Promise.all(queues.map(async ([queueName, engine]) => await engine.startWorker({ workerId: `${workerName}:${queueName}`, concurrency: execution.options.workerConcurrency, pollInterval: execution.options.pollIntervalMs === undefined ? undefined : execution.options.pollIntervalMs / 1000 })));
+				// 3. Retain both SDK workers and the engine-neutral shutdown handle.
+				execution.workerGroups.set(workerName, workers);
+				const lifecycle: IWorkflowWorkers = {
+					workerId: workerName,
+					workerName,
+					async drain(): Promise<void> { await execution.drainWorkers(workerName); },
+					async stop(): Promise<void> { await execution.drainWorkers(workerName); },
+				};
+				execution.workers.set(workerName, lifecycle);
+				execution.options.log?.info({ workerName, queueCount: queues.length, workerConcurrency: execution.options.workerConcurrency ?? 1 }, "workflow workers started");
+				return lifecycle;
+			}
+			catch (error)
+			{
+				throw new AbsurdWorkflowError("start workers", error);
+			}
+		});
 	}
 
 	/**
@@ -319,11 +389,23 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		{
 			return;
 		}
-		// 1. Forget the group before awaiting shutdown so retries cannot close it twice.
-		this.workerGroups.delete(workerName);
-		this.workers.delete(workerName);
-		// 2. Let every queue worker finish its accepted work before process resources disappear.
-		await Promise.all(workers.map(async (worker) => await worker.close()));
+		const execution = this;
+		await ___DoWithTrace("workflow.worker.drain", { workerName, workerCount: workers.length }, async function _DrainWorkers(): Promise<void>
+		{
+			try
+			{
+				// 1. Let every queue worker finish its accepted work before process resources disappear.
+				await Promise.all(workers.map(async (worker) => await worker.close()));
+				// 2. Forget the group after a successful drain so a failed close can be retried.
+				execution.workerGroups.delete(workerName);
+				execution.workers.delete(workerName);
+				execution.options.log?.info({ workerName, workerCount: workers.length }, "workflow workers drained");
+			}
+			catch (error)
+			{
+				throw new AbsurdWorkflowError("drain workers", error);
+			}
+		});
 	}
 
 	/**
@@ -335,7 +417,47 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	 */
 	async close(): Promise<void>
 	{
-		await Promise.all([...this.workerGroups.keys()].map(async (workerName) => await this.drainWorkers(workerName)));
-		if (this.ownsDatabasePool) await this.databasePool.end();
+		if (this.closePromise !== undefined)
+		{
+			return await this.closePromise;
+		}
+		const execution = this;
+		const closing = ___DoWithTrace("workflow.runtime.close", { workerGroupCount: this.workerGroups.size, ownsDatabasePool: this.ownsDatabasePool }, async function _CloseRuntime(): Promise<void>
+		{
+			await Promise.all([...execution.workerGroups.keys()].map(async (workerName) => await execution.drainWorkers(workerName)));
+			if (execution.ownsDatabasePool)
+			{
+				try
+				{
+					await execution.databasePool.end();
+				}
+				catch (error)
+				{
+					throw new AbsurdWorkflowError("close database pool", error);
+				}
+			}
+			execution.options.log?.info({ workerGroupCount: 0, databasePoolClosed: execution.ownsDatabasePool }, "workflow runtime closed");
+		});
+		this.closePromise = closing;
+		try
+		{
+			await closing;
+		}
+		catch (error)
+		{
+			if (this.closePromise === closing)
+				this.closePromise = undefined;
+			throw error;
+		}
 	}
+}
+
+/**
+ * Creates the workflow and worker ports without exposing an Absurd SDK object to app composition.
+ *
+ * Called by: the OpenCrane server composition that registers product workflow tasks.
+ */
+export function _CreateAbsurdWorkflowEngine(options: IAbsurdWorkflowEngineOptions): IWorkflowEngine & IWorkflowWorkerRuntime
+{
+	return new AbsurdWorkflowEngine(options);
 }

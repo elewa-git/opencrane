@@ -1,4 +1,5 @@
 import type { IWorkflowTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/contract";
+import type { Logger } from "@opencrane/backend/observability";
 import type { Pool } from "pg";
 
 /**
@@ -16,6 +17,8 @@ export interface IAbsurdWorkflowEngineOptions
 	readonly databasePoolSize: number;
 	/** Optional caller-owned pool for a bounded live qualification or composition root. */
 	readonly databasePool?: Pool;
+	/** Optional structured process logger for worker lifecycle outcomes. */
+	readonly log?: Pick<Logger, "info">;
 	/** Stores the reviewed queue authority that the workflow guard also uses. */
 	readonly queueAuthority: IWorkflowTaskQueueAuthority;
 	/** Maximum parallel handlers each engine queue may execute. */

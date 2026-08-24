@@ -465,6 +465,14 @@ clustertenantManager:
   runAdmission:
     maxConcurrent: 2
     maxQueued: 10
+  # -- Durable control-plane work shares the product database so a product write and its task
+  # admission commit together. These limits keep the worker small in a development silo.
+  workflows:
+    databasePoolSize: 2
+    workerConcurrency: 2
+    pollIntervalMilliseconds: 100
+    mcpEraProbeTimeoutMilliseconds: 5000
+    mcpEraProbeMaximumResponseBytes: 65536
   # -- Optional first model credential. The deploy engine creates the named provider-custody
   # Secret from OPENCRANE_INITIAL_MODEL_API_KEY, then the server seeds it through LiteLLM before
   # becoming ready. Keep both fields empty for a deliberately model-unconfigured install.

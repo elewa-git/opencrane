@@ -22,8 +22,10 @@ describe("opencrane process config", function _ProcessConfigSuite()
 {
 	beforeEach(function _stubRequiredMemoryGatewayEnvironment()
 	{
+		vi.stubEnv("DATABASE_URL", "postgresql://opencrane:test@localhost:5432/opencrane");
 		vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.default.svc.cluster.local:8080");
 		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
+		vi.stubEnv("OPENCRANE_SILO_ID", "silo-test");
 	});
 
 	afterEach(function _restoreEnvironment()
@@ -61,7 +63,30 @@ describe("opencrane process config", function _ProcessConfigSuite()
 			},
 			schedulerEnabled: true,
 			schedulerIntervalMilliseconds: 2500,
+			workflows: {
+				databasePoolSize: 2,
+				databaseUrl: "postgresql://opencrane:test@localhost:5432/opencrane",
+				mcpEraProbeMaximumResponseBytes: 65_536,
+				mcpEraProbeTimeoutMilliseconds: 5_000,
+				pollIntervalMilliseconds: 100,
+				siloId: "silo-test",
+				workerConcurrency: 2,
+			},
 		});
+	});
+
+	it("rejects missing or excessive durable workflow settings", function _RejectInvalidWorkflowConfig()
+	{
+		vi.stubEnv("OPENCRANE_SILO_ID", "");
+		expect(function _readWithoutSilo() { _ReadProcessConfig(); }).toThrow(/OPENCRANE_SILO_ID is required/);
+
+		vi.stubEnv("OPENCRANE_SILO_ID", "silo-test");
+		vi.stubEnv("OPENCRANE_WORKFLOW_WORKER_CONCURRENCY", "21");
+		expect(function _readExcessiveWorkerConcurrency() { _ReadProcessConfig(); }).toThrow(/integer from 1 through 20/);
+
+		vi.stubEnv("OPENCRANE_WORKFLOW_WORKER_CONCURRENCY", "2");
+		vi.stubEnv("OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS", "999");
+		expect(function _readShortProbeTimeout() { _ReadProcessConfig(); }).toThrow(/integer from 1000 through 60000/);
 	});
 
 	it("composes the obot block only when both coordinates are present", function _ReadObotBlock()

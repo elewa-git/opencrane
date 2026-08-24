@@ -9,10 +9,10 @@ import { AbsurdWorkflowError } from "./absurd-workflow-error";
 /** The terminal Absurd result states that this adapter maps to its engine-neutral contract. */
 enum _AbsurdTaskResultStates
 {
-  /** The child handler returned a result that its parent may consume. */
-  Completed = "completed",
-  /** The engine cancelled the child before it produced a result. */
-  Cancelled = "cancelled",
+	/** The child handler returned a result that its parent may consume. */
+	Completed = "completed",
+	/** The engine cancelled the child before it produced a result. */
+	Cancelled = "cancelled",
 }
 
 /** Reject an empty context name before it becomes a persisted engine identity. */
@@ -52,14 +52,17 @@ export class _AbsurdTaskContext implements IWorkflowTaskContext
 	private readonly context: TaskContext;
 	/** Registered task receipt supplied to the domain handler. */
 	readonly task: IWorkflowTaskReceipt;
+	/** Positive attempt number read from Absurd's claimed task. */
+	readonly attempt: number;
 	/** Child-task admissions require the adapter's engine and queue policy. */
 	private readonly execution: AbsurdWorkflowEngine;
 
 	/** Creates a contract context around one Absurd worker invocation. */
-	constructor(context: TaskContext, task: IWorkflowTaskReceipt, execution: AbsurdWorkflowEngine)
+	constructor(context: TaskContext, task: IWorkflowTaskReceipt, attempt: number, execution: AbsurdWorkflowEngine)
 	{
 		this.context = context;
 		this.task = task;
+		this.attempt = attempt;
 		this.execution = execution;
 	}
 
@@ -117,11 +120,11 @@ export class _AbsurdTaskContext implements IWorkflowTaskContext
 		try
 		{
 			const result = await this.context.awaitTaskResult(task.taskId, { queue: childQueue });
-    if (result.state === _AbsurdTaskResultStates.Completed)
+			if (result.state === _AbsurdTaskResultStates.Completed)
 			{
 				return result.result as unknown as TResult;
 			}
-    if (result.state === _AbsurdTaskResultStates.Cancelled)
+			if (result.state === _AbsurdTaskResultStates.Cancelled)
 			{
 				throw new WorkflowTaskCancelledError(task.taskId);
 			}

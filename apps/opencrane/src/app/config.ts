@@ -5,7 +5,7 @@ import { ByokProvider } from "@opencrane/contracts";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneObotConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig } from "./config.types";
+import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneObotConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -24,7 +24,8 @@ const _LEGACY_CHANNEL_ROUTE_RECEIVER_PREFIX = "legacy-route-v0:";
 function _readBoundedInteger(name: string, fallback: number, minimum: number, maximum: number): number
 {
 	const raw = process.env[name]?.trim();
-	if (!raw) return fallback;
+	if (!raw)
+		return fallback;
 	const value = Number(raw);
 	if (!Number.isSafeInteger(value) || value < minimum || value > maximum)
 	{
@@ -43,7 +44,8 @@ function _readBoundedSeconds(name: string, fallbackSeconds: number, minimumSecon
 function _readRequired(name: string): string
 {
 	const value = process.env[name]?.trim() ?? "";
-	if (value.length === 0) throw new Error(`${name} is required`);
+	if (value.length === 0)
+		throw new Error(`${name} is required`);
 	return value;
 }
 
@@ -65,7 +67,8 @@ function _readCredentialFreeHttpsOrigin(name: string): string
 function _readRequiredAbsolutePath(name: string): string
 {
 	const value = _readRequired(name);
-	if (!value.startsWith("/")) throw new Error(`${name} must be an absolute path`);
+	if (!value.startsWith("/"))
+		throw new Error(`${name} must be an absolute path`);
 	return value;
 }
 
@@ -149,7 +152,8 @@ export function _ReadOrganizationMembershipConfig(): OpenCraneOrganizationMember
 		const signingKeyPath = _readRequiredAbsolutePath("OPENCRANE_INVITATION_SIGNING_KEY_PATH");
 		const publicBaseUrl = _readCredentialFreeHttpsOrigin("OPENCRANE_PUBLIC_BASE_URL");
 		const invitationSigningKey = Buffer.from(readFileSync(signingKeyPath, "utf8").trim(), "base64url");
-		if (invitationSigningKey.byteLength < 32) throw new Error("OPENCRANE_INVITATION_SIGNING_KEY_PATH must contain at least 32 base64url-decoded bytes");
+		if (invitationSigningKey.byteLength < 32)
+			throw new Error("OPENCRANE_INVITATION_SIGNING_KEY_PATH must contain at least 32 base64url-decoded bytes");
 		return { mode, standalone: { invitationSigningKey, publicBaseUrl, invitationTtlMilliseconds: _readBoundedSeconds("OPENCRANE_INVITATION_TTL_SECONDS", 604_800, 300, 2_592_000) } };
 	}
 	if (mode === OrganizationMembershipDeploymentModes.Fleet)
@@ -170,9 +174,12 @@ function _readChannelTargetConfig(): ChannelTargetRuntimeConfig | null
 		siloId: process.env.CHANNEL_TARGET_SILO_ID?.trim() ?? "",
 		trustedHost: process.env.CHANNEL_TARGET_TRUSTED_HOST?.trim().toLowerCase() ?? "",
 	};
-	if (Object.values(values).every(value => value.length === 0)) return null;
-	if (Object.values(values).some(value => value.length === 0)) throw new Error("channel target resolver configuration must be complete");
-	if (values.receiverId.startsWith(_LEGACY_CHANNEL_ROUTE_RECEIVER_PREFIX)) throw new Error("CHANNEL_REPLAY_RECEIVER_ID uses the reserved legacy route namespace");
+	if (Object.values(values).every(value => value.length === 0))
+		return null;
+	if (Object.values(values).some(value => value.length === 0))
+		throw new Error("channel target resolver configuration must be complete");
+	if (values.receiverId.startsWith(_LEGACY_CHANNEL_ROUTE_RECEIVER_PREFIX))
+		throw new Error("CHANNEL_REPLAY_RECEIVER_ID uses the reserved legacy route namespace");
 	return { ...values, invocationContextTtlMilliseconds: _readBoundedSeconds("CHANNEL_INVOCATION_CONTEXT_TTL_SECONDS", 60, 1, 300) };
 }
 
@@ -187,7 +194,8 @@ function _readObotConfig(): OpenCraneObotConfig | null
 {
 	const gatewayUrl = process.env.OBOT_GATEWAY_URL?.trim();
 	const serviceTokenPath = process.env.OBOT_SERVICE_TOKEN_PATH?.trim();
-	if (!gatewayUrl && !serviceTokenPath) return null;
+	if (!gatewayUrl && !serviceTokenPath)
+		return null;
 	if (!gatewayUrl || !serviceTokenPath)
 	{
 		throw new Error("OBOT_GATEWAY_URL and OBOT_SERVICE_TOKEN_PATH must be configured together or not at all");
@@ -197,6 +205,20 @@ function _readObotConfig(): OpenCraneObotConfig | null
 		throw new Error("OBOT_SERVICE_TOKEN_PATH must be an absolute mounted file path");
 	}
 	return { gatewayUrl, serviceTokenPath, requestTimeoutMilliseconds: _readBoundedSeconds("OBOT_TIMEOUT_SECONDS", 30, 1, 300) };
+}
+
+/** Read the one bounded Absurd worker and remote MCP protocol-check configuration. */
+function _readWorkflowConfig(): OpenCraneWorkflowConfig
+{
+	return {
+		databasePoolSize: _readBoundedInteger("OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE", 2, 1, 20),
+		databaseUrl: _readRequired("DATABASE_URL"),
+		mcpEraProbeMaximumResponseBytes: _readBoundedInteger("OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES", 65_536, 1_024, 1_048_576),
+		mcpEraProbeTimeoutMilliseconds: _readBoundedInteger("OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS", 5_000, 1_000, 60_000),
+		pollIntervalMilliseconds: _readBoundedInteger("OPENCRANE_WORKFLOW_POLL_INTERVAL_MS", 100, 10, 60_000),
+		siloId: _readRequired("OPENCRANE_SILO_ID"),
+		workerConcurrency: _readBoundedInteger("OPENCRANE_WORKFLOW_WORKER_CONCURRENCY", 2, 1, 20),
+	};
 }
 
 /**
@@ -237,5 +259,6 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 		schedulerEnabled: process.env.OPENCRANE_SCHEDULER_ENABLED === "true",
 		schedulerIntervalMilliseconds: _readBoundedInteger("OPENCRANE_SCHEDULER_INTERVAL_MS", 60_000, 1_000, 3_600_000),
 		standaloneFirstUserAdmission: _readStandaloneFirstUserAdmission(),
+		workflows: _readWorkflowConfig(),
 	};
 }

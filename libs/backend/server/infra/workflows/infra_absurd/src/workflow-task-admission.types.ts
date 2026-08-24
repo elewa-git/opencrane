@@ -30,6 +30,23 @@ export interface IWorkflowTaskAdmissionRequest
 	readonly idempotencyKey: string;
 	/** JSON-compatible input delivered to the registered task. */
 	readonly input: unknown;
+	/** Attempt limit that Absurd stores with this task. */
+	readonly maximumAttempts: number;
+	/** Absurd retry delay stored with this task. */
+	readonly retryStrategy: IWorkflowTaskAdmissionRetryStrategy;
+}
+
+/** Describes the retry fields passed to the Absurd admission procedure. */
+export interface IWorkflowTaskAdmissionRetryStrategy
+{
+	/** Selects a fixed or exponentially increasing delay. */
+	readonly kind: "fixed" | "exponential";
+	/** Sets the first retry delay in whole seconds. */
+	readonly baseSeconds: number;
+	/** Multiplies the previous delay for exponential retries. */
+	readonly factor?: number;
+	/** Caps an increasing retry delay in whole seconds. */
+	readonly maxSeconds?: number;
 }
 
 /**

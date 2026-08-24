@@ -134,8 +134,13 @@ export class WorkflowTaskAdmission implements IWorkflowTaskAdmission
 		{
 		throw new Error("Workflow task input must be JSON-serializable.");
 		}
-		// 3. Scope the key and call the one policy-approved procedure with bound parameters.
-		const admissionOptions = JSON.stringify({ idempotency_key: _TaskScopedIdempotencyKey(taskName, idempotencyKey) });
+		// 3. Translate the retry policy and call the approved procedure with bound parameters.
+		const retryStrategy: Record<string, number | string> = { kind: request.retryStrategy.kind, base_seconds: request.retryStrategy.baseSeconds };
+		if (request.retryStrategy.factor !== undefined)
+			retryStrategy.factor = request.retryStrategy.factor;
+		if (request.retryStrategy.maxSeconds !== undefined)
+			retryStrategy.max_seconds = request.retryStrategy.maxSeconds;
+		const admissionOptions = JSON.stringify({ idempotency_key: _TaskScopedIdempotencyKey(taskName, idempotencyKey), max_attempts: request.maximumAttempts, retry_strategy: retryStrategy });
 		try
 		{
 			const rows = await client.$queryRaw<readonly IAdmissionResultRow[]>(Prisma.sql`

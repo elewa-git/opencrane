@@ -10,7 +10,7 @@ import type { IWorkflowSiloTaskInput } from "./workflow-guard.types";
  * retained field, because a passthrough schema intentionally leaves product task fields open.
  */
 const _WorkflowSiloTaskInputSchema: z.ZodType<IWorkflowSiloTaskInput> = z.object({
-	/** Requires one non-blank canonical identifier without mutating the saved task input. */
+	/** Requires one non-blank identifier without changing the saved task input. */
 	siloId: z.string().min(1).refine(function _HasNoOuterWhitespace(value: string): boolean
 	{
 		return value === value.trim();

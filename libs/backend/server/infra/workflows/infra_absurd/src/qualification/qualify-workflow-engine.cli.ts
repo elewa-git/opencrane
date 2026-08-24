@@ -4,7 +4,8 @@ import { __QualifyWorkflowEnginePickup } from "./workflow-engine-qualification";
 function _Required(name: string): string
 {
 	const value = process.env[name];
-	if (value === undefined || value.trim().length === 0) throw new Error(`${name} is required.`);
+	if (value === undefined || value.trim().length === 0)
+		throw new Error(`${name} is required.`);
 	return value;
 }
 
@@ -26,7 +27,8 @@ try
 		databasePoolSize: _Number("OPENCRANE_WORKFLOW_ENGINE_DATABASE_POOL_SIZE"),
 	});
 	process.stdout.write(`${JSON.stringify(result)}\n`);
-	if (!result.passed) process.exitCode = 2;
+	if (!result.passed)
+		process.exitCode = 2;
 }
 catch (error)
 {

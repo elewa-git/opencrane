@@ -39,8 +39,41 @@ export interface IWorkflowTaskDefinition<TInput, TResult>
 {
 	/** Stable engine-neutral name used by callers to select this task handler. */
 	readonly taskName: string;
+	/** Reviewed attempt limit and delay policy applied whenever the handler asks for a retry. */
+	readonly retryPolicy?: IWorkflowTaskRetryPolicy;
 	/** Runs the task with replay-safe context operations supplied by the execution engine. */
 	readonly run: IWorkflowTaskRunner<TInput, TResult>;
+}
+
+/** Delay shapes available to a task that asks the engine to retry it. */
+export enum WorkflowTaskRetryBackoffKinds
+{
+	/** Every later attempt waits the same number of seconds. */
+	Fixed = "fixed",
+	/** Each later attempt multiplies the previous delay up to the configured ceiling. */
+	Exponential = "exponential",
+}
+
+/** Describes the delay applied before the engine runs a later task attempt. */
+export interface IWorkflowTaskRetryBackoff
+{
+	/** Selects how the delay changes after each failed attempt. */
+	readonly kind: WorkflowTaskRetryBackoffKinds;
+	/** Sets the first retry delay in whole seconds. */
+	readonly initialDelaySeconds: number;
+	/** Multiplies the previous delay when exponential backoff is selected. */
+	readonly multiplier?: number;
+	/** Caps an increasing retry delay in whole seconds. */
+	readonly maximumDelaySeconds?: number;
+}
+
+/** Sets the attempt limit and delay policy stored with an admitted workflow task. */
+export interface IWorkflowTaskRetryPolicy
+{
+	/** Total number of handler attempts, including the first one. */
+	readonly maximumAttempts: number;
+	/** Delay applied before a later attempt becomes available to a worker. */
+	readonly backoff: IWorkflowTaskRetryBackoff;
 }
 
 /** Function a registered workflow task runs when an engine dispatches it. */
@@ -156,6 +189,8 @@ export interface IWorkflowTaskContext
 {
 	/** Receipt for the task currently being executed. */
 	readonly task: IWorkflowTaskReceipt;
+	/** Positive engine attempt number for the current handler run. */
+	readonly attempt: number;
 	/** Run one named operation so an engine can resume it without repeating a completed effect. */
 	checkpoint<TResult>(step: IWorkflowCheckpointStep, operation: IWorkflowCheckpointOperation<TResult>): Promise<TResult>;
 	/** Wait until an event with this name is delivered to the current task. */
@@ -227,9 +262,9 @@ export class WorkflowTaskCancelledError extends WorkflowError
  * Tells an execution engine what to do after a task handler deliberately fails.
  *
  * Task handlers select one of these closed outcomes through a {@link WorkflowTaskFailureError}.
- * `Retryable` permits another attempt, `Terminal` records the failure without another attempt, and
- * `Compensate` requires the engine's compensation path first. A task handler communicates that
- * choice by throwing the matching {@link WorkflowTaskFailureError} subclass.
+ * `Retryable` permits another attempt, while `Terminal` records the failure without another
+ * attempt. A task handler communicates that choice by throwing the matching
+ * {@link WorkflowTaskFailureError} subclass.
  */
 export enum WorkflowTaskFailureKinds
 {
@@ -237,8 +272,6 @@ export enum WorkflowTaskFailureKinds
 	Retryable = "retryable",
 	/** The task must stop because retrying cannot change the outcome. */
 	Terminal = "terminal",
-	/** The engine must run the task's compensation path before it reports failure. */
-	Compensate = "compensate",
 }
 
 /** Base error for a task handler that deliberately selects one closed engine failure outcome. */
@@ -274,16 +307,5 @@ export class WorkflowTaskTerminalError extends WorkflowTaskFailureError
 	{
 		super(WorkflowTaskFailureKinds.Terminal, message);
 		this.name = "WorkflowTaskTerminalError";
-	}
-}
-
-/** Error that tells the engine to run compensation before it settles the task. */
-export class WorkflowTaskCompensationError extends WorkflowTaskFailureError
-{
-	/** Create a compensation failure without leaking engine-specific compensation details. */
-	constructor(message: string)
-	{
-		super(WorkflowTaskFailureKinds.Compensate, message);
-		this.name = "WorkflowTaskCompensationError";
 	}
 }

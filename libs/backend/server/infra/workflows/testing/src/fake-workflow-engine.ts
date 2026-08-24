@@ -25,7 +25,8 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	register<TInput, TResult>(definition: IWorkflowTaskDefinition<TInput, TResult>): void
 	{
 		const existing = this.definitions.get(definition.taskName);
-		if (existing !== undefined && existing.run !== definition.run) throw new Error(`A different workflow task is already registered for ${definition.taskName}`);
+		if (existing !== undefined && existing.run !== definition.run)
+			throw new Error(`A different workflow task is already registered for ${definition.taskName}`);
 		this.definitions.set(definition.taskName, definition as IWorkflowTaskDefinition<unknown, unknown>);
 	}
 
@@ -33,17 +34,30 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	async spawn<TInput>(_transaction: IWorkflowTransaction, task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
 		const definition = this.definitions.get(task.taskName);
-		if (definition === undefined) throw new WorkflowTaskNotRegisteredError(task.taskName);
+		if (definition === undefined)
+			throw new WorkflowTaskNotRegisteredError(task.taskName);
 
 		const receiptKey = _ReceiptKey(task.taskName, task.idempotencyKey);
 		const existing = this.receiptsByKey.get(receiptKey);
-		if (existing !== undefined) return existing;
+		if (existing !== undefined)
+			return existing;
 
 		const receipt = { taskId: `fake-task-${this.nextTaskNumber}`, taskName: task.taskName, idempotencyKey: task.idempotencyKey };
 		this.nextTaskNumber += 1;
 		this.receiptsByKey.set(receiptKey, receipt);
-		this.tasks.set(receipt.taskId, { receipt, definition, input: task.input, state: WorkflowTaskStates.Pending, result: undefined, error: undefined });
+		this.tasks.set(receipt.taskId, { receipt, definition, input: task.input, attempt: 1, state: WorkflowTaskStates.Pending, result: undefined, error: undefined });
 		return receipt;
+	}
+
+	/** Select the positive handler attempt supplied to a pending task in a retry-focused test. */
+	setTaskAttempt(task: IWorkflowTaskReceipt, attempt: number): void
+	{
+		if (!Number.isSafeInteger(attempt) || attempt < 1)
+			throw new Error("Fake workflow task attempt must be a positive integer");
+		const record = this._TaskFor(task);
+		if (record.state !== WorkflowTaskStates.Pending)
+			throw new Error(`Cannot change attempt for ${record.state} task ${task.taskId}`);
+		record.attempt = attempt;
 	}
 
 	/** Deliver an event now or queue it until its task asks for the matching event name. */
@@ -69,7 +83,8 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	async cancel(task: IWorkflowTaskReceipt): Promise<IWorkflowTaskReceipt>
 	{
 		const record = this._TaskFor(task);
-		if (record.state === WorkflowTaskStates.Completed || record.state === WorkflowTaskStates.Failed) return record.receipt;
+		if (record.state === WorkflowTaskStates.Completed || record.state === WorkflowTaskStates.Failed)
+			return record.receipt;
 		record.state = WorkflowTaskStates.Cancelled;
 		const waiter = this.eventWaiters.get(task.taskId);
 		if (waiter !== undefined)
@@ -97,7 +112,8 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	{
 		for (const record of this.tasks.values())
 		{
-			if (record.state === WorkflowTaskStates.Pending) await this._RunTask(record);
+			if (record.state === WorkflowTaskStates.Pending)
+				await this._RunTask(record);
 		}
 	}
 
@@ -112,9 +128,12 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	async _AwaitChild<TResult>(task: IWorkflowTaskReceipt): Promise<TResult>
 	{
 		const record = this._TaskFor(task);
-		if (record.state === WorkflowTaskStates.Pending) await this._RunTask(record);
-		if (record.state === WorkflowTaskStates.Cancelled) throw new WorkflowTaskCancelledError(task.taskId);
-		if (record.state === WorkflowTaskStates.Failed) throw record.error;
+		if (record.state === WorkflowTaskStates.Pending)
+			await this._RunTask(record);
+		if (record.state === WorkflowTaskStates.Cancelled)
+			throw new WorkflowTaskCancelledError(task.taskId);
+		if (record.state === WorkflowTaskStates.Failed)
+			throw record.error;
 		return record.result as TResult;
 	}
 
@@ -145,6 +164,7 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		const self = this;
 		return {
 			task: record.receipt,
+			attempt: record.attempt,
 			async checkpoint<TResult>(_step: IWorkflowCheckpointStep, operation: IWorkflowCheckpointOperation<TResult>): Promise<TResult>
 			{
 				self._AssertNotCancelled(record);
@@ -183,7 +203,8 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 			async sleepUntil(instant: Date): Promise<void>
 			{
 				self._AssertNotCancelled(record);
-				if (instant.getTime() > Date.now()) throw new Error("The fake workflow engine cannot advance time");
+				if (instant.getTime() > Date.now())
+					throw new Error("The fake workflow engine cannot advance time");
 			},
 		};
 	}
@@ -192,14 +213,16 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	_TaskFor(task: IWorkflowTaskReceipt): _FakeTaskRecord
 	{
 		const record = this.tasks.get(task.taskId);
-		if (record === undefined || record.receipt.taskName !== task.taskName || record.receipt.idempotencyKey !== task.idempotencyKey) throw new Error(`Unknown workflow task ${task.taskId}`);
+		if (record === undefined || record.receipt.taskName !== task.taskName || record.receipt.idempotencyKey !== task.idempotencyKey)
+			throw new Error(`Unknown workflow task ${task.taskId}`);
 		return record;
 	}
 
 	/** Throw before a cancelled task can perform another fake engine operation. */
 	_AssertNotCancelled(record: _FakeTaskRecord): void
 	{
-		if (record.state === WorkflowTaskStates.Cancelled) throw new WorkflowTaskCancelledError(record.receipt.taskId);
+		if (record.state === WorkflowTaskStates.Cancelled)
+			throw new WorkflowTaskCancelledError(record.receipt.taskId);
 	}
 
 	/** Read cancellation through one helper because an async handler may change this record. */
@@ -232,7 +255,8 @@ class _FakeWorkflowWorkers implements IWorkflowWorkers
 	/** Dispatch every pending fake task in admission order unless this worker group has stopped. */
 	async drain(): Promise<void>
 	{
-		if (this.stopped) return;
+		if (this.stopped)
+			return;
 		await this.execution._DrainPendingTasks();
 	}
 
@@ -252,6 +276,8 @@ interface _FakeTaskRecord
 	definition: IWorkflowTaskDefinition<unknown, unknown>;
 	/** Input captured at task admission. */
 	input: unknown;
+	/** Positive attempt number supplied to the next handler run. */
+	attempt: number;
 	/** Current engine-like lifecycle state. */
 	state: WorkflowTaskStates;
 	/** Handler result after a completed task. */

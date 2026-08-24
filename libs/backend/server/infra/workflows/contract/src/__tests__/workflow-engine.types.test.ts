@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { WorkflowTaskCompensationError, WorkflowTaskFailureKinds, WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "../workflow-engine.types";
+import { WorkflowTaskFailureKinds, WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "../workflow-engine.types";
 
 describe("workflow task failure contract", function _WorkflowTaskFailureContractSuite()
 {
@@ -8,6 +8,5 @@ describe("workflow task failure contract", function _WorkflowTaskFailureContract
 	{
 		expect(new WorkflowTaskRetryableError("transient").kind).toBe(WorkflowTaskFailureKinds.Retryable);
 		expect(new WorkflowTaskTerminalError("terminal").kind).toBe(WorkflowTaskFailureKinds.Terminal);
-		expect(new WorkflowTaskCompensationError("compensate").kind).toBe(WorkflowTaskFailureKinds.Compensate);
 	});
 });
