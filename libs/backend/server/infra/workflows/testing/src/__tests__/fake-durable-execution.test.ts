@@ -1,11 +1,11 @@
-import type { DurableExecutionContractHarnessFactory } from "../durable-execution-contract.types";
-import { _DescribeDurableExecutionContract } from "../durable-execution-contract";
+import type { IWorkflowHarnessFactory } from "./workflow-engine-contract.types";
+import { __TestWorkflowEngineContract } from "./workflow-engine-contract";
 import { __FakeDurableExecution } from "../fake-durable-execution";
 
 /** Exercise the reusable adapter contract against the deterministic engine-free fake. */
-const _CreateFakeHarness: DurableExecutionContractHarnessFactory = async function _createHarness()
+const _CreateFakeHarness: IWorkflowHarnessFactory = async function _CreateHarness()
 {
 	return { execution: new __FakeDurableExecution(), transaction: { client: { testTransaction: true } } };
 };
 
-_DescribeDurableExecutionContract("fake durable execution", _CreateFakeHarness);
+__TestWorkflowEngineContract("fake workflow engine", _CreateFakeHarness);
