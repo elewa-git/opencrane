@@ -99,9 +99,9 @@ function _AssertAssignment(assignment: McpbValidatorJobAssignment, profile: Mcpb
 /**
  * Build a deterministic opaque Kubernetes Job name without exposing the validation identifier.
  *
- * Called by: `__BuildMcpbValidatorJob` and the future MCPB controller. It hashes the silo and
- * validation identifiers, so Kubernetes resource names and selectors do not reveal the durable
- * validation record.
+ * Called by: `__BuildMcpbValidatorJob` and the focused builder test. Production has no caller yet.
+ * It hashes the silo and validation identifiers, so Kubernetes resource names and selectors do not
+ * reveal the durable validation record.
  *
  * @param assignment - Database-admitted coordinates for the one validator Job.
  * @returns A DNS-safe name that stays stable for the same validation in the same silo.
@@ -115,8 +115,8 @@ export function __McpbValidatorJobName(assignment: McpbValidatorJobAssignment): 
 /**
  * Build the suspended, one-shot, restricted Job a future controller may submit after durable assignment.
  *
- * Called by: the future MCPB-specific controller in `apps/agent-controller`. The returned Job has no
- * bundle bytes, artifact address, command, database connection, or long-lived credential. The
+ * Called by: the focused builder test. Production has no caller yet. The returned Job has no bundle
+ * bytes, artifact address, command, database connection, or long-lived credential. The future
  * controller must save Kubernetes' returned UID against the same durable assignment before it
  * removes `suspend`.
  *

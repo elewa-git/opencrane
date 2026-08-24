@@ -3,17 +3,19 @@ import type { V1ResourceRequirements } from "@kubernetes/client-node";
 /**
  * Kubernetes image pull behaviour allowed for the immutable validator image.
  *
- * Called by: {@link McpbValidatorJobProfile}. The controller uses this setting only after the
- * profile's digest-pinned image has passed the builder's checks; it never selects an image.
+ * Called by: {@link McpbValidatorJobProfile} and the focused builder test. Production has no caller
+ * yet. The builder uses this setting only after the profile's digest-pinned image has passed its
+ * checks; it never selects an image.
  */
 export type McpbValidatorImagePullPolicy = "Always" | "IfNotPresent" | "Never";
 
 /**
  * Deployment-owned settings that bound every one-shot MCP bundle validator Job.
  *
- * Called by: `__BuildMcpbValidatorJob` in `validator-job.ts`. The controller receives this complete
- * object from trusted deployment configuration, not from a bundle submitter or a worker. An invalid
- * setting makes the builder throw before a Kubernetes Job exists.
+ * Called by: `__BuildMcpbValidatorJob` in `validator-job.ts` and the focused builder test.
+ * Production has no caller yet. The eventual caller must take this complete object from trusted
+ * deployment configuration, not from a bundle submitter or a worker. An invalid setting makes the
+ * builder throw before a Kubernetes Job exists.
  *
  * @see McpbValidatorJobAssignment
  */
@@ -50,9 +52,10 @@ export interface McpbValidatorJobProfile
 /**
  * Controller-owned coordinates for one database-admitted validator Job.
  *
- * Called by: `__BuildMcpbValidatorJob` in `validator-job.ts`. A future MCPB controller creates this
- * only after the database has admitted the validation; it must not contain a bundle URL, bytes,
- * command, or secret. An invalid coordinate makes the builder throw before Kubernetes sees it.
+ * Called by: `__BuildMcpbValidatorJob` in `validator-job.ts` and the focused builder test.
+ * Production has no caller yet. The eventual caller must create this only after the database has
+ * admitted the validation; it must not contain a bundle URL, bytes, command, or secret. An invalid
+ * coordinate makes the builder throw before Kubernetes sees it.
  *
  * @see McpbValidatorJobProfile
  */
