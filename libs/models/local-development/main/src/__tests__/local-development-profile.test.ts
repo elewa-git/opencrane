@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import profileContract from "../../profile-contract.json";
-import { __IsLocalDevelopmentProfileKind, LOCAL_DEVELOPMENT_IDENTITY, LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_KEY_ID, LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES, LocalDevelopmentProfileKinds } from "../index";
+import { __IsLocalDevelopmentProfileKind, LOCAL_DEVELOPMENT_IDENTITY, LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_KEY_ID, LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES, LocalAgentRuntimeModelStrategies, LocalDevelopmentProfileKinds } from "../index";
 
 describe("local development profile vocabulary", function _Suite()
 {
 	it("keeps the coordinator profile values stable", function _Profiles(): void
 	{
 		expect(Object.values(LocalDevelopmentProfileKinds)).toEqual(profileContract.profiles);
+		expect(Object.values(LocalAgentRuntimeModelStrategies)).toEqual(profileContract.modelStrategies);
 		expect(profileContract.profiles.every(__IsLocalDevelopmentProfileKind)).toBe(true);
 		expect(__IsLocalDevelopmentProfileKind("production")).toBe(false);
 		expect(LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES).toEqual(profileContract.runtimeIdentities);

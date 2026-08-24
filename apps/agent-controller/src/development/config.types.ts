@@ -1,4 +1,5 @@
-import type { AgentControllerRuntimeProfiles, LocalAgentRuntimeModelStrategies } from "@opencrane/backend/agents/runtime/controller";
+import type { AgentControllerRuntimeProfiles } from "@opencrane/backend/agents/runtime/controller";
+import type { LocalAgentRuntimeModelStrategies } from "@opencrane/models/local-development";
 import type { LocalDevelopmentProfileKinds } from "@opencrane/models/local-development";
 
 /** Model endpoint and strategy derived from one Agent-enabled development profile. */

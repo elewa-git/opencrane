@@ -5,11 +5,12 @@ import { join } from "node:path";
 
 import type { V1Job, V1Pod } from "@kubernetes/client-node";
 import { __DeriveAgentRuntimeReleaseDeadlineSeconds } from "@opencrane/backend/agents/runtime/k8s-launcher";
+import { LocalAgentRuntimeModelStrategies } from "@opencrane/models/local-development";
 
 import { _AssertExactFirstAgentRuntimePod } from "./kubernetes-runtime-pod";
 import { _WriteLocalAgentRuntimeToken } from "./local-agent-runtime-files";
 import { _CreateLocalAgentRuntimeToken } from "./local-agent-runtime-token";
-import { LocalAgentRuntimeModelStrategies, type LocalAgentRuntimeAttempt, type LocalAgentRuntimeProcessSpawner, type LocalAgentRuntimeSpawnOptions, type LocalProcessAgentControllerStoreOptions } from "./local-process-agent-controller-store.types";
+import type { LocalAgentRuntimeAttempt, LocalAgentRuntimeProcessSpawner, LocalAgentRuntimeSpawnOptions, LocalProcessAgentControllerStoreOptions } from "./local-process-agent-controller-store.types";
 
 /** Build the synthetic Pod evidence registered through existing runtime authority. */
 function _LocalRuntimePod(job: V1Job, workloadUid: string, podUid: string): V1Pod

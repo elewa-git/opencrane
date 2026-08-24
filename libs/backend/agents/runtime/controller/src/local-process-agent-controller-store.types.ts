@@ -1,20 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import type { V1Job, V1Pod } from "@kubernetes/client-node";
-
-/**
- * Selects how the development runtime obtains model output after OpenCrane admits an attempt.
- *
- * The controller passes this value only to the development runtime entrypoint. Production images
- * never read it. `litellm` retains the normal attempt-key boundary, while `simulated` replaces the
- * model request with a deterministic event source after the same bootstrap and command-stream flow.
- */
-export enum LocalAgentRuntimeModelStrategies
-{
-	/** Uses the configured LiteLLM endpoint with the attempt key issued by OpenCrane. */
-	LiteLlm = "litellm",
-	/** Produces deterministic neutral events without contacting LiteLLM or reading a provider key. */
-	Simulated = "simulated",
-}
+import type { LocalAgentRuntimeModelStrategies } from "@opencrane/models/local-development";
 
 /**
  * Process-spawning seam used by the local workload host.

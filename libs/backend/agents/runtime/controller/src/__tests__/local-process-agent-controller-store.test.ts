@@ -6,11 +6,12 @@ import { tmpdir } from "node:os";
 
 import type { V1Secret } from "@kubernetes/client-node";
 import { __BuildSuspendedAgentRuntimeJob } from "@opencrane/backend/agents/runtime/k8s-launcher";
+import { LocalAgentRuntimeModelStrategies } from "@opencrane/models/local-development";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { __CreateLocalProcessAgentControllerStore } from "../local-process-agent-controller-store";
 import { __CreateLocalAgentRuntimeTokenReviewer } from "../local-agent-runtime-token";
-import { LocalAgentRuntimeModelStrategies, type LocalAgentRuntimeSpawnOptions } from "../local-process-agent-controller-store.types";
+import type { LocalAgentRuntimeSpawnOptions } from "../local-process-agent-controller-store.types";
 
 /** Temporary directories removed after each local workload-host test. */
 const _temporaryDirectories: string[] = [];

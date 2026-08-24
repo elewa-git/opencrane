@@ -1,6 +1,7 @@
 import { isAbsolute, resolve } from "node:path";
 
-import { __ValidateAgentControllerRuntimeProfiles, LocalAgentRuntimeModelStrategies } from "@opencrane/backend/agents/runtime/controller";
+import { __ValidateAgentControllerRuntimeProfiles } from "@opencrane/backend/agents/runtime/controller";
+import { LocalAgentRuntimeModelStrategies } from "@opencrane/models/local-development";
 import { __IsLocalDevelopmentProfileKind, LocalDevelopmentProfileKinds } from "@opencrane/models/local-development";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 

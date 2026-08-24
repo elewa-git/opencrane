@@ -5,6 +5,10 @@
     "agent-remote",
     "agent-simulated"
   ],
+  "modelStrategies": [
+    "litellm",
+    "simulated"
+  ],
   "runtimeIdentities": {
     "serverNamespace": "local-development-server",
     "personal": {

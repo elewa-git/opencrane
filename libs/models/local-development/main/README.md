@@ -9,8 +9,9 @@ they do not authenticate a caller or grant product authority.
 ## What it owns
 
 - The stable `core`, `agent-local`, `agent-remote`, and `agent-simulated` profile names.
+- The `litellm` and `simulated` runtime model strategies passed from TypeScript to Python.
 - The fixed local human identity and signed-membership identifiers shared by the seed and server.
-- The JSON contract that keeps TypeScript and JavaScript profile and runtime-identity values aligned in tests.
+- The JSON contract that keeps TypeScript, JavaScript, and Python profile, model-strategy, and runtime-identity values aligned in tests.
 - The runtime namespace and ServiceAccount coordinates shared by local token issuers and reviewers.
 
 Production entrypoints must not import this package. Tier 1 also remains independent: it owns an
@@ -18,7 +19,7 @@ in-memory browser profile, while these values select the real API and PostgreSQL
 
 ## Public surface
 
-Import `LocalDevelopmentProfileKinds`, `LocalDevelopmentIdentity`,
+Import `LocalDevelopmentProfileKinds`, `LocalAgentRuntimeModelStrategies`, `LocalDevelopmentIdentity`,
 `LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES`, and `__IsLocalDevelopmentProfileKind` from
 `@opencrane/models/local-development`. The same barrel exports the fixed local identity plus the
 membership issuer, key, and personal assertion identifiers used by the app-owned seed and verifier.

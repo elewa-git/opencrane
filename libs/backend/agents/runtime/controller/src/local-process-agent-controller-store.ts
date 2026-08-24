@@ -3,13 +3,14 @@ import { isAbsolute } from "node:path";
 import { tmpdir } from "node:os";
 
 import type { V1Job } from "@kubernetes/client-node";
+import { LocalAgentRuntimeModelStrategies } from "@opencrane/models/local-development";
 
 import type { AgentControllerWorkloadStore } from "./agent-controller.types";
 import { _AssertExactAssignedAgentRuntimeJob, _AssertExactSuspendedAgentRuntimeJob } from "./kubernetes-agent-job-adoption";
 import { _AssertExactFirstAgentRuntimePod } from "./kubernetes-runtime-pod";
 import { _CreateLocalAgentRuntimeFiles, _EnsureLocalAgentRuntimeAttemptKey } from "./local-agent-runtime-files";
 import { _ReleaseLocalAgentRuntimeAttempt, _StopLocalAgentRuntimeAttempt } from "./local-agent-runtime-process";
-import { LocalAgentRuntimeModelStrategies, type LocalAgentRuntimeAttempt, type LocalProcessAgentControllerStoreOptions } from "./local-process-agent-controller-store.types";
+import type { LocalAgentRuntimeAttempt, LocalProcessAgentControllerStoreOptions } from "./local-process-agent-controller-store.types";
 
 /** Return the deterministic name carried by one expected Job. */
 function _JobName(job: V1Job): string
