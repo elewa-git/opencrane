@@ -274,11 +274,12 @@ export interface IMcpOperatorRepository
 	 * @param siloId - Keeps the update inside the task's admitted silo.
 	 * @param serverId - Identifies the draft server whose failed check is being counted.
 	 * @param registrationDigest - Prevents a task admitted for replaced fields from changing the server.
+	 * @param attempt - Gives the current workflow-engine attempt, including earlier handler failures.
 	 * @param maximumAttempts - Sets the attempt count at which the server becomes rejected.
 	 * @param exhaustedResult - Supplies the rejection evidence stored when no attempts remain.
 	 * @returns The stored server, whether this call changed it, and whether it is now rejected; or `null` when the registration no longer matches.
 	 */
-	recordEraProbeRetry(siloId: string, serverId: string, registrationDigest: string, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult): Promise<McpEraProbeRetryResult | null>;
+	recordEraProbeRetry(siloId: string, serverId: string, registrationDigest: string, attempt: number, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult): Promise<McpEraProbeRetryResult | null>;
 	/**
 	 * Lists groups in the requested silo, optionally restricted to the supplied group IDs.
 	 *

@@ -10,7 +10,7 @@ import { McpEraProbeFailure, McpEraProbeFailureCodes } from "./mcp-era-probe-fai
 import { __McpEraProbeObservationResult, __McpEraProbeReplayResult, __McpEraProbeTerminalResult, __McpEraProbeTransition, McpEraProbeActions, McpEraProbeEvents, McpEraProbeStates } from "./mcp-era-probe-state";
 import { __AssertMcpEraProbeTaskInput, __ParseMcpEraProbeObservation } from "./mcp-era-probe.validator";
 
-/** Total external checks allowed before the catalogue records a final unavailable result. */
+/** Stop the workflow after five handler attempts. */
 const MCP_ERA_PROBE_MAXIMUM_ATTEMPTS = 5;
 
 /** Keep temporary database failures retryable without changing deliberate workflow outcomes. */
@@ -81,14 +81,14 @@ async function _RecordResult(unitOfWork: McpOperatorUnitOfWork, input: McpEraPro
 }
 
 /** Record a temporary failure and return the final result when the retry budget is exhausted. */
-async function _RecordRetry(unitOfWork: McpOperatorUnitOfWork, input: McpEraProbeTaskInput): Promise<McpEraProbeTaskResult | null>
+async function _RecordRetry(unitOfWork: McpOperatorUnitOfWork, input: McpEraProbeTaskInput, attempt: number): Promise<McpEraProbeTaskResult | null>
 {
 	const exhaustedResult = __McpEraProbeTerminalResult(McpEraProbeFailureCodes.RetryExhausted);
 	return await _RetryablePersistence(async function _RecordRetryWithRetry(): Promise<McpEraProbeTaskResult | null>
 	{
 		return await unitOfWork.execute(async function _WriteRetry(transaction): Promise<McpEraProbeTaskResult | null>
 		{
-			const retry = await transaction.mcp.recordEraProbeRetry(input.siloId, input.serverId, input.registrationDigest, MCP_ERA_PROBE_MAXIMUM_ATTEMPTS, exhaustedResult);
+			const retry = await transaction.mcp.recordEraProbeRetry(input.siloId, input.serverId, input.registrationDigest, attempt, MCP_ERA_PROBE_MAXIMUM_ATTEMPTS, exhaustedResult);
 			if (!retry)
 				throw new WorkflowTaskTerminalError("MCP era-probe registration is unavailable.");
 			let stored: McpEraProbeTaskResult | null;
@@ -128,7 +128,7 @@ async function _Run(context: IWorkflowTaskContext, options: McpEraProbeWorkflowO
 				const action = __McpEraProbeTransition(McpEraProbeStates.Pending, McpEraProbeEvents.RetryableFailure);
 				if (action !== McpEraProbeActions.Retry)
 					throw new WorkflowTaskTerminalError("MCP era-probe retry policy is invalid.");
-				const exhausted = await _RecordRetry(options.unitOfWork, input);
+				const exhausted = await _RecordRetry(options.unitOfWork, input, context.attempt);
 				if (exhausted)
 					return exhausted;
 				throw new WorkflowTaskRetryableError("MCP server protocol check is temporarily unavailable.");
