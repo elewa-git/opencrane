@@ -26,6 +26,16 @@ enum McpbValidationWorkloadState {
   Assigned @map("assigned")
 }
 
+// Records the client-visible lifecycle of one asynchronous MCP tool call. Absurd records retries
+// and checkpoints separately; this state is the answer an MCP client can read or update.
+enum McpTaskState {
+  Working       @map("working")
+  InputRequired @map("input_required")
+  Completed     @map("completed")
+  Cancelled     @map("cancelled")
+  Failed        @map("failed")
+}
+
 enum McpServerStatus {
   Active   @map("active")
   Degraded @map("degraded")
@@ -168,6 +178,41 @@ model McpbValidationWorkload {
   @@index([siloId, state, createdAt])
   @@index([state, claimExpiresAt])
   @@map("mcpb_validation_workloads")
+}
+
+// Serializes requests that use the same MCP client task key at the same time.
+model McpTaskClaim {
+  siloId         String   @map("silo_id")
+  identityDigest String   @map("identity_digest")
+  touchedAt      DateTime @updatedAt @map("touched_at")
+
+  @@id([siloId, identityDigest])
+  @@map("mcp_task_claims")
+}
+
+// Saves the client-facing facts for one asynchronous MCP tool call before Absurd runs its workflow.
+model McpTask {
+  id                String       @id @default(cuid())
+  siloId            String       @map("silo_id")
+  principalId       String       @map("principal_id")
+  requestKeyDigest  String       @map("request_key_digest")
+  callDigest        String       @map("call_digest")
+  toolName          String       @map("tool_name")
+  taskId            String?      @unique @map("task_id")
+  taskName          String?      @map("task_name")
+  taskKey           String?      @map("task_key")
+  state             McpTaskState @default(Working)
+  inputRequest      Json?        @map("input_request")
+  inputResponse     Json?        @map("input_response")
+  result            String?
+  failureCode       String?      @map("failure_code")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  @@unique([siloId, requestKeyDigest])
+  @@unique([siloId, taskKey])
+  @@index([siloId, principalId, state, createdAt])
+  @@map("mcp_tasks")
 }
 
 // Per-principal installation of an MCP server (operator API).

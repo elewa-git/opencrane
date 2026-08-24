@@ -28,7 +28,7 @@ check a newly registered MCP server and a submitted signed MCP bundle.
 ```
 
 ```
- administrator sends POST /mcp/bundle-validations
+administrator sends POST /mcp/bundle-validations
         │
         ▼
  database transaction
@@ -47,6 +47,26 @@ The parent job and inspection job use different queues, so Absurd can save the w
 inspection job currently verifies the signature, safe archive layout, and package manifest. Running
 the bundle in an isolated environment, scanning it, building an image, and publishing it are later
 workflow steps.
+
+An MCP task is the saved progress record for a tool call that cannot finish straight away. The first
+task lifecycle accepts a call, asks the client for one needed value, and saves the answer before the
+workflow continues. It does not run a real Skill yet; the next slice will connect this lifecycle to
+the Skills worker.
+
+```
+ MCP client starts a tool call
+        │
+        ▼
+ database transaction
+   ├── save task + requested input
+   └── save an Absurd background job
+        │
+        ▼
+ task waits for client input
+        │  saved answer event
+        ▼
+ task saves its completed result
+```
 
 A future controller asks this package for work through a small internal API. It can claim one saved
 inspection job, then record the Kubernetes Job that will handle it. The server checks the
@@ -81,6 +101,9 @@ returns credentials and never labels an install connected before a real connecti
   package-inspection work.
 - `__CreateMcpbValidationControllerAuthority` — changes a saved inspection-work lease inside a
   database transaction.
+- `submitMcpTask`, `getMcpTask`, and `submitMcpTaskInput` — save, read, and continue the durable
+  lifecycle behind a future asynchronous MCP tool call.
+- `__CreateMcpTaskWorkflow` — registers the saved task lifecycle with Absurd.
 - Operator services: `listEntitledCatalog`, `listInstalled`, `installServer`, `approveServer`,
   `publishServer`, and the access editor.
 - `_McpOpenapiPaths` — the OpenAPI path descriptions for this API.
@@ -112,7 +135,7 @@ an Absurd package directly.
 ## Data and persistence
 
 This package owns the public behavior around `McpServer`, `McpServerInstall`, and
-`McpbValidation` in
+`McpbValidation` and `McpTask` in
 `apps/opencrane/prisma/schema/mcp.prisma`. General `AuthorizationGrant` rows remain owned by the
 authorization package. `McpbValidationWorkload` saves the inspection-work lease and recorded
 Kubernetes Job assignment. `PrismaMcpOperatorUnitOfWork` is the public MCP database boundary.

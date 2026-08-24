@@ -20,5 +20,9 @@ export type { McpbBundleArtifactResolver, McpbValidationSubmissionCommand, McpbV
 export { __CreateMcpbValidationWorkflow, __McpbValidationInspectionTaskKey, __McpbValidationTaskKey } from "./mcpb-validation/mcpb-validation";
 export { MCPB_MANIFEST_VERSION, MCPB_MAXIMUM_BUNDLE_BYTES, McpbValidationStates, McpbValidationTaskNames, McpbVerificationFailureCodes } from "./mcpb-validation/mcpb-validation.types";
 export type { McpbBundleArtifactReader, McpbBundleArtifactTarget, McpbBundleVerifier, McpbValidationAdmission, McpbValidationTaskInput, McpbValidationWorkflow, McpbValidationWorkflowOptions, McpbVerificationResult, McpbVerifiedManifest } from "./mcpb-validation/mcpb-validation.types";
+export { __CreateMcpTaskWorkflow, __McpTaskInputEventName, __McpTaskWorkflowKey } from "./mcp-tasks/mcp-task";
+export { getMcpTask, submitMcpTask, submitMcpTaskInput } from "./mcp-tasks/mcp-task-submission";
+export { McpTaskEvents, McpTaskInputSubmissionOutcomes, McpTaskStates, McpTaskTaskNames } from "./mcp-tasks/mcp-task.types";
+export type { McpTaskAdmission, McpTaskCaller, McpTaskInputRequest, McpTaskInputResponse, McpTaskInputSubmissionResult, McpTaskRecord, McpTaskSubmissionCommand, McpTaskWorkflow, McpTaskWorkflowInput, McpTaskWorkflowOptions } from "./mcp-tasks/mcp-task.types";
 export * from "./routes/mcp-operator";
 export * from "./openapi";
