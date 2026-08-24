@@ -5,7 +5,7 @@ import type { McpbValidationState } from "@prisma/client";
 
 import { McpbValidationStates } from "./mcpb-validation.types";
 import type { McpbVerificationFailureCodes, McpbVerificationResult } from "./mcpb-validation.types";
-import type { McpbValidationCreateResult, McpbValidationRecord, McpbValidationRepository, McpbValidationSubmissionRecord, McpbValidationWriteResult } from "./mcpb-validation-repository.types";
+import type { McpbValidationCreateResult, McpbValidationRecord, McpbValidationRepository, McpbValidationSubmissionRecord, McpbValidationWorkloadTask, McpbValidationWriteResult } from "./mcpb-validation-repository.types";
 
 /** Product fields returned after every MCP bundle validation read or write. */
 const _VALIDATION_SELECT = { id: true, siloId: true, artifactId: true, artifactRevisionId: true, contentAddress: true, byteLength: true, mediaType: true, submissionDigest: true, state: true, manifestName: true, bundleVersion: true, manifestDigest: true, publisher: true, signerFingerprint: true, failureCode: true } as const satisfies Prisma.McpbValidationSelect;
@@ -65,6 +65,23 @@ export class PrismaMcpbValidationRepository implements McpbValidationRepository
 		}
 		const created = await this._transaction.mcpbValidation.create({ data: submission, select: _VALIDATION_SELECT });
 		return { created: true, validation: _Record(created) };
+	}
+
+	/** Save the task-to-worker handoff once, and reject a replay that names different task facts. */
+	async ensureWorkload(siloId: string, validationId: string, task: McpbValidationWorkloadTask): Promise<string | null>
+	{
+		const existing = await this._transaction.mcpbValidationWorkload.findUnique({ where: { validationId }, select: { id: true, siloId: true, taskId: true, taskName: true, taskKey: true } });
+		if (existing)
+		{
+			if (existing.siloId !== siloId || existing.taskId !== task.taskId || existing.taskName !== task.taskName || existing.taskKey !== task.taskKey)
+				return null;
+			return existing.id;
+		}
+		const validation = await this._transaction.mcpbValidation.findFirst({ where: { id: validationId, siloId }, select: { id: true } });
+		if (validation === null)
+			return null;
+		const workload = await this._transaction.mcpbValidationWorkload.create({ data: { siloId, validationId, taskId: task.taskId, taskName: task.taskName, taskKey: task.taskKey }, select: { id: true } });
+		return workload.id;
 	}
 
 	/** Find one validation only inside the authenticated silo. */

@@ -1,5 +1,16 @@
 import type { McpbBundleArtifactTarget, McpbValidationStates, McpbVerificationFailureCodes, McpbVerificationResult } from "./mcpb-validation.types";
 
+/** Task facts saved with an MCP bundle worker handoff. */
+export interface McpbValidationWorkloadTask
+{
+	/** Engine-owned task identifier. */
+	readonly taskId: string;
+	/** Registered workflow task name. */
+	readonly taskName: string;
+	/** Stable task key used for replay-safe admission. */
+	readonly taskKey: string;
+}
+
 /** Fields required to create or replay one MCP bundle submission. */
 export interface McpbValidationSubmissionRecord extends McpbBundleArtifactTarget
 {
@@ -74,6 +85,15 @@ export interface McpbValidationRepository
 	 * @returns A new or existing validation; `null` means the key belongs to different input.
 	 */
 	createOrFind(submission: McpbValidationSubmissionRecord): Promise<McpbValidationCreateResult | null>;
+	/**
+	 * Saves the one worker handoff record for a validation task admitted in this database transaction.
+	 *
+	 * @param siloId - Keeps the saved workload inside its owning silo.
+	 * @param validationId - Binds the workload to one immutable validation.
+	 * @param task - Identifies the admitted workflow task that owns the validation decision.
+	 * @returns The workload identifier, or `null` when a replay names different task facts.
+	 */
+	ensureWorkload(siloId: string, validationId: string, task: McpbValidationWorkloadTask): Promise<string | null>;
 	/**
 	 * Finds one validation for an authenticated administrator without exposing another silo.
 	 *

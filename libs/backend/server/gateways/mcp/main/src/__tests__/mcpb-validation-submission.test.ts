@@ -32,14 +32,15 @@ function _Record(byteLength = 1_024): McpbValidationRecord
 }
 
 /** Build a transaction-bound MCP harness and preserve the calls that prove atomic admission. */
-function _Harness(record: McpbValidationRecord, created: boolean): { unitOfWork: McpOperatorUnitOfWork; transaction: McpOperatorTransaction; createOrFind: ReturnType<typeof vi.fn>; find: ReturnType<typeof vi.fn>; appendAudit: ReturnType<typeof vi.fn> }
+function _Harness(record: McpbValidationRecord, created: boolean): { unitOfWork: McpOperatorUnitOfWork; transaction: McpOperatorTransaction; createOrFind: ReturnType<typeof vi.fn>; ensureWorkload: ReturnType<typeof vi.fn>; find: ReturnType<typeof vi.fn>; appendAudit: ReturnType<typeof vi.fn> }
 {
 	const createOrFind = vi.fn().mockResolvedValue({ created, validation: record });
+	const ensureWorkload = vi.fn().mockResolvedValue("workload-1");
 	const find = vi.fn().mockResolvedValue(record);
 	const appendAudit = vi.fn().mockResolvedValue(undefined);
 	const transaction = {
 		mcp: { appendAudit },
-		mcpbValidations: { createOrFind, find },
+		mcpbValidations: { createOrFind, ensureWorkload, find },
 		workflowTransaction: { client: {} },
 	} as unknown as McpOperatorTransaction;
 	const unitOfWork: McpOperatorUnitOfWork = {
@@ -48,7 +49,7 @@ function _Harness(record: McpbValidationRecord, created: boolean): { unitOfWork:
 			return await operation(transaction);
 		},
 	};
-	return { unitOfWork, transaction, createOrFind, find, appendAudit };
+	return { unitOfWork, transaction, createOrFind, ensureWorkload, find, appendAudit };
 }
 
 /** Return the workflow stub that records whether it received the caller's database transaction. */
@@ -86,6 +87,7 @@ describe("MCP bundle validation submission", function _McpbValidationSubmissionS
 		expect(harness.createOrFind).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-1", createdByPrincipalId: "principal-1", artifactId: "artifact-1", artifactRevisionId: "revision-1" }));
 		expect(harness.appendAudit).toHaveBeenCalledWith("Created", "McpbValidation/validation-1", "MCP bundle validation validation-1 submitted", { siloId: "silo-1", actorPrincipalId: "principal-1" });
 		expect(workflow.admit).toHaveBeenCalledWith(harness.transaction.workflowTransaction, expect.objectContaining({ siloId: "silo-1", validationId: "validation-1", artifactId: "artifact-1", artifactRevisionId: "revision-1" }));
+		expect(harness.ensureWorkload).toHaveBeenCalledWith("silo-1", "validation-1", { taskId: "task-1", taskName: "mcpb-validation.verify", taskKey: "workflows:mcpb-validation:test" });
 	});
 
 	it("does not admit a task when a caller reuses its submission key for different input", async function _RejectsConflict()

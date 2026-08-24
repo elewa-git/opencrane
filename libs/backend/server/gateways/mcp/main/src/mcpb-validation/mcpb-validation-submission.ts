@@ -35,7 +35,10 @@ export async function submitMcpbValidation(unitOfWork: McpOperatorUnitOfWork, wo
 		const validation = stored.validation;
 		if (stored.created)
 			await transaction.mcp.appendAudit("Created", `McpbValidation/${validation.id}`, `MCP bundle validation ${validation.id} submitted`, { siloId: caller.siloId, actorPrincipalId: caller.principalId });
-		await workflow.admit(transaction.workflowTransaction, { siloId: validation.siloId, validationId: validation.id, artifactId: validation.artifactId, artifactRevisionId: validation.artifactRevisionId, contentAddress: validation.contentAddress, byteLength: validation.byteLength, mediaType: validation.mediaType, submissionDigest: validation.submissionDigest });
+		const admission = await workflow.admit(transaction.workflowTransaction, { siloId: validation.siloId, validationId: validation.id, artifactId: validation.artifactId, artifactRevisionId: validation.artifactRevisionId, contentAddress: validation.contentAddress, byteLength: validation.byteLength, mediaType: validation.mediaType, submissionDigest: validation.submissionDigest });
+		const workloadId = await transaction.mcpbValidations.ensureWorkload(validation.siloId, validation.id, { taskId: admission.receipt.taskId, taskName: admission.receipt.taskName, taskKey: admission.taskKey });
+		if (workloadId === null)
+			throw new Error("MCP bundle validation worker handoff conflicts with the admitted task.");
 		return { outcome: McpbValidationSubmissionOutcomes.Submitted, validation };
 	});
 }

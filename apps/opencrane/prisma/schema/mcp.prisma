@@ -19,6 +19,13 @@ enum McpbValidationState {
   Rejected @map("rejected")
 }
 
+// Records where one saved MCP bundle validation is in the isolated worker handoff.
+enum McpbValidationWorkloadState {
+  Pending  @map("pending")
+  Claimed  @map("claimed")
+  Assigned @map("assigned")
+}
+
 enum McpServerStatus {
   Active   @map("active")
   Degraded @map("degraded")
@@ -131,10 +138,35 @@ model McpbValidation {
   completedAt             DateTime?           @map("completed_at")
   createdAt               DateTime            @default(now()) @map("created_at")
   updatedAt               DateTime            @updatedAt @map("updated_at")
+  workload                McpbValidationWorkload?
 
   @@unique([siloId, submissionKeyDigest])
   @@index([siloId, state, createdAt])
   @@map("mcpb_validations")
+}
+
+// Keeps the database-owned handoff from an admitted workflow task to an isolated MCP bundle worker.
+model McpbValidationWorkload {
+  id             String                       @id @default(cuid())
+  siloId         String                       @map("silo_id")
+  validationId   String                       @unique @map("validation_id")
+  taskId         String                       @unique @map("task_id")
+  taskName       String                       @map("task_name")
+  taskKey        String                       @map("task_key")
+  state          McpbValidationWorkloadState  @default(Pending)
+  claimedAt      DateTime?                    @map("claimed_at")
+  claimExpiresAt DateTime?                    @map("claim_expires_at")
+  deliveryCount  Int                          @default(0) @map("delivery_count")
+  workloadUid    String?                      @unique @map("workload_uid")
+  workerPodUid   String?                      @unique @map("worker_pod_uid")
+  createdAt      DateTime                     @default(now()) @map("created_at")
+  updatedAt      DateTime                     @updatedAt @map("updated_at")
+  validation     McpbValidation               @relation(fields: [validationId], references: [id], onDelete: Restrict)
+
+  @@unique([siloId, taskKey])
+  @@index([siloId, state, createdAt])
+  @@index([state, claimExpiresAt])
+  @@map("mcpb_validation_workloads")
 }
 
 // Per-principal installation of an MCP server (operator API).
