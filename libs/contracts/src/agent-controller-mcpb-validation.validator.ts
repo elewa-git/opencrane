@@ -5,7 +5,7 @@ import { _AgentControllerBoundedIdentifierSchema, _AgentControllerMillisecondIns
 
 /** Keep MCP bundle controller messages in one place so the server and controller validate the same fields. */
 
-/** Validate a claimed inspection job and ensure its database lease has not already ended. */
+/** Validate a claimed inspection job and ensure its database lease timestamps are in the right order. */
 const _McpbValidationClaimSchema: z.ZodType<AgentControllerMcpbValidationClaim> = z.object({
 	workloadId: _AgentControllerBoundedIdentifierSchema,
 	siloId: _AgentControllerBoundedIdentifierSchema,
