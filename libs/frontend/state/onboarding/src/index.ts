@@ -17,7 +17,6 @@
  * @see libs/frontend/state/onboarding/README.md for what this package owns and refuses to own.
  */
 export * from "./lib/persona-gateway.types";
-export * from "./lib/persona-gateway.validator";
 export * from "./lib/persona-onboarding.service";
 export * from "./lib/persona-onboarding.store";
 export { PERSONA_FIRST_CHAT_GATEWAY, PersonaFirstChatConflictError } from "./lib/persona-first-chat.types";

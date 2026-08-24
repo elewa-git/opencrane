@@ -1,5 +1,5 @@
 import { ChoiceCardOption, PersonaArchetypeScore, PersonaArchetypeTones } from "@opencrane/elements/ui";
-import { PersonaColours, PersonaModifiers, PersonaOnboardingSnapshot, PersonaQuestion, PersonaResolution, PersonaResolutionKinds, PersonaResult } from "@opencrane/state/onboarding";
+import { PersonaColours, PersonaModifiers, PersonaResolutionKinds, type PersonaOnboardingSnapshot, type PersonaQuestion, type PersonaResolution, type PersonaResult } from "@opencrane/state/onboarding/projection";
 
 import type { PersonaResolutionCopy } from "./persona-onboarding-state.types";
 

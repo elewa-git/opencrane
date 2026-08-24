@@ -2,7 +2,7 @@ import { Injector, runInInjectionContext } from "@angular/core";
 import { describe, expect, it, vi } from "vitest";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { PersonaColours, PersonaModifiers, PersonaOnboardingStates, PersonaResolutionKinds } from "@opencrane/state/onboarding";
+import { PersonaColours, PersonaModifiers, PersonaOnboardingStates, PersonaResolutionKinds } from "@opencrane/models/user-onboarding";
 
 import { OpenCranePersonaGateway } from "../opencrane-persona-gateway";
 

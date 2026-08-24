@@ -9,7 +9,8 @@ import { Router } from "@angular/router";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PersonaFirstChatArchetypes, PersonaFirstChatColours, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/state/onboarding/projection";
-import { PersonaColours, PersonaFirstChatCommandPhases, PersonaFirstChatService, PersonaFirstChatStore, PersonaModifiers, PersonaOnboardingService, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaOnboardingStore, PersonaResolutionKinds, UserOnboardingRouteSnapshot } from "@opencrane/state/onboarding";
+import { PersonaColours, PersonaModifiers, PersonaOnboardingStates, PersonaResolutionKinds, type PersonaOnboardingSnapshot } from "@opencrane/state/onboarding/projection";
+import { PersonaFirstChatCommandPhases, PersonaFirstChatService, PersonaFirstChatStore, PersonaOnboardingService, PersonaOnboardingStore, type UserOnboardingRouteSnapshot } from "@opencrane/state/onboarding";
 
 import { PersonaFirstChatPageComponent } from "../chat/persona-first-chat-page.component";
 import { PersonaOnboardingPageComponent } from "../persona-onboarding-page.component";

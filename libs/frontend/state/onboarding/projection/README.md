@@ -1,11 +1,12 @@
-# @opencrane/state/onboarding/projection — frontend first-chat vocabulary
+# @opencrane/state/onboarding/projection — frontend onboarding vocabulary
 
 > [frontend](../../../README.md) › [state](../../README.md) › [onboarding](../README.md) › projection
 
 ## What it owns
 
-This package is the frontend-facing boundary for the pure first-chat projection vocabulary. It lets
-the onboarding feature present validated route, persona, transcript, and completion values without
+This package is the frontend-facing boundary for the pure persona and first-chat projection
+vocabulary. It lets the onboarding feature present validated survey, review, route, persona,
+transcript, and completion values without
 depending on the command-owning onboarding state package's internal source or widening every
 frontend feature to every model package.
 
@@ -13,7 +14,7 @@ Used by: [`features/onboarding`](../../../features/onboarding/README.md).
 
 ## Public surface
 
-- First-chat projection enums and TypeScript value types re-exported from
+- Persona and first-chat projection enums and TypeScript value types re-exported from
   [`models/user-onboarding`](../../../../models/user-onboarding/main/README.md).
 
 ## Boundary

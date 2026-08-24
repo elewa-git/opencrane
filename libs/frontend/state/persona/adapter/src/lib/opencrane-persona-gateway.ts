@@ -1,9 +1,17 @@
 import { Injectable, inject } from "@angular/core";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { _ParsePersonaOnboardingSnapshot, PersonaGateway, PersonaOnboardingSnapshot, PersonaResolutionKinds } from "@opencrane/state/onboarding";
+import { ___ParsePersonaOnboardingSnapshot, type PersonaOnboardingSnapshot, type PersonaResolutionKinds } from "@opencrane/models/user-onboarding";
+import { type PersonaGateway } from "@opencrane/state/onboarding";
 
-/** Live signed-in-owner persona gateway backed by the generated control-plane client. */
+/**
+ * Implements the signed-in owner's persona port with the generated Control Plane client. Every read
+ * passes through the model-owned parser before reaching state, while command failures become fixed
+ * feature copy rather than exposing response bodies.
+ *
+ * Called by: {@link provideOpenCraneUiLiveGateways}, which binds this class to `PERSONA_GATEWAY`.
+ * @implements PersonaGateway
+ */
 @Injectable()
 export class OpenCranePersonaGateway implements PersonaGateway
 {
@@ -19,7 +27,7 @@ export class OpenCranePersonaGateway implements PersonaGateway
 			throw new Error("The persona authority could not load your saved onboarding position.");
 		}
 
-		return _ParsePersonaOnboardingSnapshot(data);
+		return ___ParsePersonaOnboardingSnapshot(data);
 	}
 
 	/** @inheritdoc */
@@ -71,10 +79,10 @@ export class OpenCranePersonaGateway implements PersonaGateway
 	}
 }
 
-/** Convert any generated non-success response into a bounded feature-safe failure. */
+/** Convert a generated non-success response into fixed feature copy that exposes no response body. */
 function _ThrowOnError(error: unknown, message: string): void
 {
-	if (error !== undefined)
+	if (error)
 	{
 		throw new Error(message);
 	}

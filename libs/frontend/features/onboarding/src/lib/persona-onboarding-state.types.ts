@@ -1,5 +1,4 @@
-import { PersonaOnboardingStates } from "@opencrane/state/onboarding";
-import type { PersonaOnboardingSnapshot, PersonaResolutionKinds } from "@opencrane/state/onboarding";
+import { PersonaOnboardingStates, type PersonaOnboardingSnapshot, type PersonaResolutionKinds } from "@opencrane/state/onboarding/projection";
 
 /** Exact authority coordinates emitted when the owner submits one interview answer. */
 export interface PersonaAnswerIntent

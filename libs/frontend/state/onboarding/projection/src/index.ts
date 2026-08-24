@@ -18,4 +18,5 @@
  * @see libs/frontend/state/onboarding/projection/README.md for the boundary this barrel keeps.
  */
 export { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates } from "@opencrane/models/user-onboarding";
-export type { PersonaFirstChatContentRevision, PersonaFirstChatCurrentQuestion, PersonaFirstChatPersona, PersonaFirstChatSnapshot, PersonaFirstChatTranscriptEntry } from "@opencrane/models/user-onboarding";
+export { PersonaColours, PersonaModifiers, PersonaOnboardingStates, PersonaResolutionKinds } from "@opencrane/models/user-onboarding";
+export type { PersonaColourScores, PersonaFirstChatContentRevision, PersonaFirstChatCurrentQuestion, PersonaFirstChatPersona, PersonaFirstChatSnapshot, PersonaFirstChatTranscriptEntry, PersonaOnboardingSnapshot, PersonaOpennessScores, PersonaQuestion, PersonaQuestionChoice, PersonaResolution, PersonaResult } from "@opencrane/models/user-onboarding";

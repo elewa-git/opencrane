@@ -6,7 +6,8 @@ import { ProgressSpinnerModule } from "primeng/progressspinner";
 
 import { JourneyShellComponent, JourneyShellLayouts } from "@opencrane/elements/ui";
 import { UserOnboardingRouteStates } from "@opencrane/state/onboarding/projection";
-import { PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaOnboardingStore } from "@opencrane/state/onboarding";
+import { PersonaOnboardingStates, type PersonaOnboardingSnapshot } from "@opencrane/state/onboarding/projection";
+import { PersonaOnboardingStore } from "@opencrane/state/onboarding";
 
 import { PersonaInterviewStateComponent } from "./states/interview/persona-interview-state.component";
 import { PersonaReadyStateComponent } from "./states/ready/persona-ready-state.component";

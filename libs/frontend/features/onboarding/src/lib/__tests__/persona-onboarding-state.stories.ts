@@ -2,7 +2,7 @@ import { moduleMetadata } from "@storybook/angular";
 import type { Meta, StoryObj } from "@storybook/angular";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
-import { PersonaColours, PersonaModifiers, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaQuestion, PersonaResolutionKinds } from "@opencrane/state/onboarding";
+import { PersonaColours, PersonaModifiers, PersonaOnboardingStates, PersonaResolutionKinds, type PersonaOnboardingSnapshot } from "@opencrane/state/onboarding/projection";
 
 import { PersonaInterviewStateComponent } from "../states/interview/persona-interview-state.component";
 import { PersonaReadyStateComponent } from "../states/ready/persona-ready-state.component";

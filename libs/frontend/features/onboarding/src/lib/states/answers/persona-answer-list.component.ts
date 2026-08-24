@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 
-import { PersonaQuestion } from "@opencrane/state/onboarding";
+import { type PersonaQuestion } from "@opencrane/state/onboarding/projection";
 
 import { _SelectedChoiceLabel } from "../../onboarding-view.util";
 

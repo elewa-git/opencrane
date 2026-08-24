@@ -4,12 +4,16 @@ import { DialogModule } from "primeng/dialog";
 import { MessageModule } from "primeng/message";
 
 import { JourneyShellComponent, JourneyShellLayouts } from "@opencrane/elements/ui";
-import { PersonaOnboardingStates } from "@opencrane/state/onboarding";
+import { PersonaOnboardingStates } from "@opencrane/state/onboarding/projection";
 
 import type { PersonaApprovalIntent, PersonaOnboardingStateSnapshot } from "../../persona-onboarding-state.types";
 import { PersonaResultEvidenceComponent } from "../result/persona-result-evidence.component";
 
-/** Presentational owner for immutable persona review and approval intent. */
+/**
+ * Renders persona scoring evidence in both pre-draft and approval-ready `Review` states. Missing
+ * revision data emits an explicit draft request; complete immutable evidence opens deliberate
+ * approval confirmation without activating anything inside this component.
+ */
 @Component({
 	selector: "wo-persona-review-state",
 	standalone: true,

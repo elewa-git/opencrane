@@ -5,7 +5,7 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@ang
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { UserOnboardingRouteStates } from "@opencrane/models/user-onboarding";
 
-import { PersonaColours, PersonaModifiers, PersonaOnboardingSnapshot, PersonaOnboardingStates } from "../persona-gateway.types";
+import { PersonaColours, PersonaModifiers, PersonaOnboardingStates, type PersonaOnboardingSnapshot } from "@opencrane/models/user-onboarding";
 import { PersonaFirstChatService } from "../persona-first-chat.service";
 import type { UserOnboardingRouteSnapshot } from "../persona-first-chat.types";
 import { PersonaOnboardingService } from "../persona-onboarding.service";
