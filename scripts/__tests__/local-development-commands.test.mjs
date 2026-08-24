@@ -60,7 +60,7 @@ test("core launches the watched backend and development-live UI only", function 
 
 	assert.deepEqual(commands.map(function _names(command) { return command.name; }), ["server", "opencrane-ui"]);
 	assert.deepEqual(commands[0].arguments, ["run", "dev:tier2", "-w", "@opencrane/server"]);
-	assert.deepEqual(commands[1].arguments, ["nx", "serve", "opencrane-ui", "--configuration=development-live"]);
+	assert.deepEqual(commands[1].arguments, ["nx", "serve", "opencrane-ui", "--configuration=development-live", "--port", "4200"]);
 	assert.equal(environment.OPENCRANE_DEVELOPMENT_PROFILE, "core");
 });
 

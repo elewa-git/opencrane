@@ -15,6 +15,7 @@ test("core is the default local-development profile", function _defaultCore()
 	assert.equal(configuration.developmentProfile, "core");
 	assert.equal(configuration.publicPort, 8080);
 	assert.equal(configuration.internalPort, 8081);
+	assert.equal(configuration.uiPort, 4200);
 	assert.equal(configuration.postgresPort, 54329);
 	assert.equal(configuration.liteLLMPort, 4000);
 });
@@ -132,9 +133,17 @@ test("local service ports are validated before orchestration", function _portVal
 	assert.throws(function _postgresUsesPublicPort()
 	{
 		createLocalDevelopmentConfiguration(parsed, "/repo", { OPENCRANE_LOCAL_POSTGRES_PORT: "8080" });
-	}, /public or internal host port/);
+	}, /application host port/);
 	assert.throws(function _liteLLMUsesInternalPort()
 	{
 		createLocalDevelopmentConfiguration(parsed, "/repo", { OPENCRANE_LOCAL_LITELLM_PORT: "8081" });
-	}, /public or internal host port/);
+	}, /application host port/);
+	assert.throws(function _postgresUsesUiPort()
+	{
+		createLocalDevelopmentConfiguration(parsed, "/repo", { OPENCRANE_LOCAL_POSTGRES_PORT: "4200" });
+	}, /application host port/);
+	assert.throws(function _liteLLMUsesUiPort()
+	{
+		createLocalDevelopmentConfiguration(parsed, "/repo", { OPENCRANE_LOCAL_LITELLM_PORT: "4200" });
+	}, /application host port/);
 });

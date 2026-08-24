@@ -132,7 +132,7 @@ export function createApplicationCommands(configuration, applicationEnvironment)
 	commands.push({
 		name: "opencrane-ui",
 		command: "npx",
-		arguments: ["nx", "serve", "opencrane-ui", "--configuration=development-live"]
+		arguments: ["nx", "serve", "opencrane-ui", "--configuration=development-live", "--port", String(configuration.uiPort)]
 	});
 
 	return commands;
