@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { z } from "zod";
 
 import { DurableTaskRetryableError, DurableTaskRetryBackoffKinds, DurableTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { DurableExecutionTransaction, DurableTaskContext } from "@opencrane/backend/server/infra/workflows/contract";
@@ -9,42 +8,10 @@ import { McpEraProbeTaskNames } from "./mcp-era-probe.types";
 import type { McpEraProbeAdmission, McpEraProbeObservation, McpEraProbeTaskInput, McpEraProbeTaskResult, McpEraProbeWorkflow, McpEraProbeWorkflowOptions } from "./mcp-era-probe.types";
 import { McpEraProbeFailure, McpEraProbeFailureCodes } from "./mcp-era-probe-failure";
 import { __McpEraProbeObservationResult, __McpEraProbeReplayResult, __McpEraProbeTerminalResult, __McpEraProbeTransition, McpEraProbeActions, McpEraProbeEvents, McpEraProbeStates } from "./mcp-era-probe-state";
+import { __AssertMcpEraProbeTaskInput, __ParseMcpEraProbeObservation } from "./mcp-era-probe.validator";
 
 /** Total external checks allowed before the catalogue records a final unavailable result. */
-export const MCP_ERA_PROBE_MAXIMUM_ATTEMPTS = 5;
-
-/** Check task input before it can select a catalogue row. */
-const _TASK_INPUT_SCHEMA: z.ZodType<McpEraProbeTaskInput> = z.object({
-	siloId: z.string().trim().min(1).max(128),
-	serverId: z.string().trim().min(1).max(128),
-	registrationDigest: z.string().trim().min(1).max(128),
-}).strict();
-
-/** Check the small discovery result that may be saved in task and product state. */
-const _OBSERVATION_SCHEMA = z.object({
-	protocolVersion: z.string().trim().min(1).max(64),
-	evidenceDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u).transform(function _EvidenceDigest(value): `sha256:${string}` { return value as `sha256:${string}`; }),
-}).strict();
-
-/** Reject malformed task input without echoing its fields into worker diagnostics. */
-function _AssertTaskInput(input: McpEraProbeTaskInput): void
-{
-	if (!_TASK_INPUT_SCHEMA.safeParse(input).success)
-	{
-		throw new DurableTaskTerminalError("MCP era-probe task input is invalid.");
-	}
-}
-
-/** Reject malformed remote evidence before it reaches a checkpoint or catalogue row. */
-function _Observation(value: McpEraProbeObservation): McpEraProbeObservation
-{
-	const parsed = _OBSERVATION_SCHEMA.safeParse(value);
-	if (!parsed.success)
-	{
-		throw new DurableTaskTerminalError("MCP era-probe response is invalid.");
-	}
-	return parsed.data;
-}
+const MCP_ERA_PROBE_MAXIMUM_ATTEMPTS = 5;
 
 /** Load the product-owned endpoint and reject a task whose registration was replaced. */
 async function _LoadTarget(unitOfWork: McpOperatorUnitOfWork, input: McpEraProbeTaskInput): Promise<McpEraProbeTargetRecord>
@@ -121,7 +88,7 @@ async function _Run(context: DurableTaskContext, options: McpEraProbeWorkflowOpt
 	{
 		try
 		{
-			return __McpEraProbeObservationResult(_Observation(await options.probe.probe({ endpoint: target.endpoint })));
+			return __McpEraProbeObservationResult(__ParseMcpEraProbeObservation(await options.probe.probe({ endpoint: target.endpoint })));
 		}
 		catch (error)
 		{
@@ -146,7 +113,7 @@ async function _Run(context: DurableTaskContext, options: McpEraProbeWorkflowOpt
 /** Derive a stable task key without exposing silo or server identifiers in engine diagnostics. */
 export function __McpEraProbeTaskKey(input: McpEraProbeTaskInput): string
 {
-	_AssertTaskInput(input);
+	__AssertMcpEraProbeTaskInput(input);
 	const digest = createHash("sha256").update(JSON.stringify([input.siloId, input.serverId, input.registrationDigest])).digest("hex");
 	return `workflows:mcp-era-probe:${digest}`;
 }
@@ -159,7 +126,7 @@ export function __CreateMcpEraProbeWorkflow(options: McpEraProbeWorkflowOptions)
 		retryPolicy: { maximumAttempts: MCP_ERA_PROBE_MAXIMUM_ATTEMPTS, backoff: { kind: DurableTaskRetryBackoffKinds.Exponential, initialDelaySeconds: 30, multiplier: 2, maximumDelaySeconds: 300 } },
 		async run(context: DurableTaskContext, input: McpEraProbeTaskInput): Promise<McpEraProbeTaskResult>
 		{
-			_AssertTaskInput(input);
+			__AssertMcpEraProbeTaskInput(input);
 			return await _Run(context, options, input);
 		},
 	});

@@ -8,7 +8,7 @@ export { PrismaMcpOperatorUnitOfWork } from "./core/prisma-mcp-operator-unit-of-
 export { McpEraProbeFailure, McpEraProbeFailureCodes } from "./era-probe/mcp-era-probe-failure";
 export { __CreateMcpEraProbeWorkflow } from "./era-probe/mcp-era-probe";
 export { McpRemoteServerRegistrationValidationError, registerRemoteServer } from "./era-probe/mcp-remote-registration";
-export { MCP_ERA_PROTOCOL_VERSION, McpEraProbeDecisions, McpEraProbeTaskNames, McpRemoteServerRegistrationOutcomes } from "./era-probe/mcp-era-probe.types";
+export { MCP_ERA_PROTOCOL_VERSION, McpEraProbeDecisions, McpEraProbeStates, McpEraProbeTaskNames, McpRemoteServerRegistrationOutcomes } from "./era-probe/mcp-era-probe.types";
 export type { McpEraProbeAdmission, McpEraProbeClient, McpEraProbeObservation, McpEraProbeRequest, McpEraProbeTaskInput, McpEraProbeTaskResult, McpEraProbeWorkflow, McpEraProbeWorkflowOptions, McpRemoteServerRegistration, McpRemoteServerRegistrationCommand, McpRemoteServerRegistrationResult } from "./era-probe/mcp-era-probe.types";
 export * from "./routes/mcp-operator";
 export * from "./openapi";

@@ -2,21 +2,10 @@ import { createHash } from "node:crypto";
 
 import type { McpEraProbeTargetRecord } from "../core/mcp-operator-repository.types";
 import { McpEraProbeFailureCodes } from "./mcp-era-probe-failure";
-import { MCP_ERA_PROTOCOL_VERSION, McpEraProbeDecisions } from "./mcp-era-probe.types";
+import { MCP_ERA_PROTOCOL_VERSION, McpEraProbeDecisions, McpEraProbeStates } from "./mcp-era-probe.types";
 import type { McpEraProbeObservation, McpEraProbeTaskResult } from "./mcp-era-probe.types";
 
-/** Persisted states of the protocol check owned by the MCP catalogue. */
-export enum McpEraProbeStates
-{
-	/** The row predates remote registration and keeps its existing governance lifecycle. */
-	NotRequired = "NotRequired",
-	/** The worker has not stored a final result. */
-	Pending = "Pending",
-	/** The server returned the required protocol revision. */
-	Accepted = "Accepted",
-	/** The server returned another revision or a terminally invalid response. */
-	Rejected = "Rejected",
-}
+export { McpEraProbeStates } from "./mcp-era-probe.types";
 
 /** Events that ask the protocol-check lifecycle for its next action. */
 export enum McpEraProbeEvents
@@ -131,7 +120,7 @@ export function __McpEraProbeTerminalResult(code: McpEraProbeFailureCodes): McpE
 /** Rebuild the final result selected by the stored winner. */
 export function __McpEraProbeReplayResult(target: McpEraProbeTargetRecord): McpEraProbeTaskResult | null
 {
-	const state = target.eraProbeStatus as McpEraProbeStates;
+	const state = target.eraProbeStatus;
 	if (state === McpEraProbeStates.Pending) return null;
 	if (__McpEraProbeTransition(state, McpEraProbeEvents.Replay) !== McpEraProbeActions.ReturnStored || !target.eraProbeEvidenceDigest) throw new Error("MCP stored protocol-check result is incomplete.");
 	if (state === McpEraProbeStates.Accepted && target.eraProtocolVersion && !target.eraProbeFailureCode) return { decision: McpEraProbeDecisions.Accepted, protocolVersion: target.eraProtocolVersion, evidenceDigest: target.eraProbeEvidenceDigest as `sha256:${string}` };

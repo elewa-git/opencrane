@@ -6,7 +6,7 @@ import { __FakeDurableExecution } from "@opencrane/backend/server/infra/workflow
 
 import type { IMcpOperatorRepository, McpEraProbeTargetRecord, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
 import { __CreateMcpEraProbeWorkflow, __McpEraProbeTaskKey } from "../era-probe/mcp-era-probe";
-import { MCP_ERA_PROTOCOL_VERSION, McpEraProbeDecisions } from "../era-probe/mcp-era-probe.types";
+import { MCP_ERA_PROTOCOL_VERSION, McpEraProbeDecisions, McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeClient, McpEraProbeTaskInput, McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
 import { McpEraProbeFailure, McpEraProbeFailureCodes } from "../era-probe/mcp-era-probe-failure";
 
@@ -33,7 +33,7 @@ function _Server(state: _EraState): McpOperatorServerRecord
 		publisher: null,
 		glyph: null,
 		serverType: "MultiUser",
-		approvalStatus: state.target.eraProbeStatus === "Accepted" ? "PendingReview" : "Disabled",
+		approvalStatus: state.target.eraProbeStatus === McpEraProbeStates.Accepted ? "PendingReview" : "Disabled",
 		credentialSchema: [],
 		entitlementSummary: null,
 		endpoint: state.target.endpoint,
@@ -54,24 +54,24 @@ function _UnitOfWork(state: _EraState): McpOperatorUnitOfWork
 		loadEraProbeTarget: vi.fn().mockImplementation(function _Load(): Promise<McpEraProbeTargetRecord> { return Promise.resolve({ ...state.target }); }),
 		recordEraProbeResult: vi.fn().mockImplementation(function _Record(_siloId: string, _serverId: string, _registrationDigest: string, result: McpEraProbeTaskResult)
 		{
-			const changed = state.target.eraProbeStatus === "Pending";
+			const changed = state.target.eraProbeStatus === McpEraProbeStates.Pending;
 			if (changed)
 			{
-				state.target = { ...state.target, eraProbeStatus: result.decision === McpEraProbeDecisions.Accepted ? "Accepted" : "Rejected", eraProtocolVersion: result.protocolVersion ?? null, eraProbeEvidenceDigest: result.evidenceDigest, eraProbeFailureCode: result.failureCode ?? null, eraProbeAttempts: state.target.eraProbeAttempts + 1 };
+				state.target = { ...state.target, eraProbeStatus: result.decision === McpEraProbeDecisions.Accepted ? McpEraProbeStates.Accepted : McpEraProbeStates.Rejected, eraProtocolVersion: result.protocolVersion ?? null, eraProbeEvidenceDigest: result.evidenceDigest, eraProbeFailureCode: result.failureCode ?? null, eraProbeAttempts: state.target.eraProbeAttempts + 1 };
 			}
 			return Promise.resolve({ changed, server: _Server(state) });
 		}),
 		recordEraProbeRetry: vi.fn().mockImplementation(function _Retry(_siloId: string, _serverId: string, _registrationDigest: string, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult)
 		{
-			const changed = state.target.eraProbeStatus === "Pending";
+			const changed = state.target.eraProbeStatus === McpEraProbeStates.Pending;
 			if (changed)
 			{
 				const eraProbeAttempts = state.target.eraProbeAttempts + 1;
 				state.target = eraProbeAttempts >= maximumAttempts
-					? { ...state.target, eraProbeStatus: "Rejected", eraProbeEvidenceDigest: exhaustedResult.evidenceDigest, eraProbeFailureCode: exhaustedResult.failureCode ?? null, eraProbeAttempts }
+					? { ...state.target, eraProbeStatus: McpEraProbeStates.Rejected, eraProbeEvidenceDigest: exhaustedResult.evidenceDigest, eraProbeFailureCode: exhaustedResult.failureCode ?? null, eraProbeAttempts }
 					: { ...state.target, eraProbeAttempts };
 			}
-			const exhausted = state.target.eraProbeStatus === "Rejected" && state.target.eraProbeFailureCode === exhaustedResult.failureCode;
+			const exhausted = state.target.eraProbeStatus === McpEraProbeStates.Rejected && state.target.eraProbeFailureCode === exhaustedResult.failureCode;
 			return Promise.resolve({ changed, exhausted, server: _Server(state) });
 		}),
 		appendAudit: vi.fn().mockImplementation(function _Audit(): Promise<void> { state.auditCount += 1; return Promise.resolve(); }),
@@ -95,7 +95,7 @@ async function _Drain(execution: __FakeDurableExecution): Promise<void>
 /** Return one pending catalogue target. */
 function _State(): _EraState
 {
-	return { target: { endpoint: "https://mcp.example.test/", registrationDigest: _Input().registrationDigest, eraProbeStatus: "Pending", eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 }, auditCount: 0 };
+	return { target: { endpoint: "https://mcp.example.test/", registrationDigest: _Input().registrationDigest, eraProbeStatus: McpEraProbeStates.Pending, eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 }, auditCount: 0 };
 }
 
 describe("MCP era-probe workflow", function _McpEraProbeSuite()
@@ -191,7 +191,7 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 	it("returns stored evidence on replay without contacting the remote server", async function _ReplaysStoredResult()
 	{
 		const state = _State();
-		state.target = { ...state.target, eraProbeStatus: "Accepted", eraProtocolVersion: MCP_ERA_PROTOCOL_VERSION, eraProbeEvidenceDigest: `sha256:${"c".repeat(64)}`, eraProbeFailureCode: null };
+		state.target = { ...state.target, eraProbeStatus: McpEraProbeStates.Accepted, eraProtocolVersion: MCP_ERA_PROTOCOL_VERSION, eraProbeEvidenceDigest: `sha256:${"c".repeat(64)}`, eraProbeFailureCode: null };
 		const execution = new __FakeDurableExecution();
 		const probe = vi.fn();
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe: { probe } });
@@ -207,7 +207,7 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 	it("replays a stored terminal rejection without contacting the remote server", async function _ReplaysStoredFailure()
 	{
 		const state = _State();
-		state.target = { ...state.target, eraProbeStatus: "Rejected", eraProtocolVersion: null, eraProbeEvidenceDigest: `sha256:${"d".repeat(64)}`, eraProbeFailureCode: McpEraProbeFailureCodes.InvalidResponse };
+		state.target = { ...state.target, eraProbeStatus: McpEraProbeStates.Rejected, eraProtocolVersion: null, eraProbeEvidenceDigest: `sha256:${"d".repeat(64)}`, eraProbeFailureCode: McpEraProbeFailureCodes.InvalidResponse };
 		const execution = new __FakeDurableExecution();
 		const probe = vi.fn();
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe: { probe } });

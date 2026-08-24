@@ -15,6 +15,7 @@ import type { AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/
 import { AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
 import { mcpOperatorRouter } from "../routes/mcp-operator";
 import { PrismaMcpOperatorUnitOfWork } from "../core/prisma-mcp-operator-unit-of-work";
+import { McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeWorkflow } from "../era-probe/mcp-era-probe.types";
 
 /**
@@ -206,8 +207,8 @@ describe("mcp-operator router", function _suite()
   {
     /** Two published servers filtered by the generic authorization decision. */
     const _servers = [
-      { id: "srv-open", name: "Open", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, createdAt: new Date() },
-      { id: "srv-closed", name: "Closed", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, createdAt: new Date() },
+      { id: "srv-open", name: "Open", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired, createdAt: new Date() },
+      { id: "srv-closed", name: "Closed", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired, createdAt: new Date() },
     ];
 
     it("returns only the servers the caller is entitled to", async function _filters()
@@ -272,7 +273,7 @@ describe("mcp-operator router", function _suite()
     {
       const store: { install: Record<string, unknown> | null } = { install: null };
       const overrides: Record<string, (...args: unknown[]) => unknown> = {
-        "mcpServer.findFirst": function _serverFind() { return Promise.resolve({ id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType, approvalStatus: "Published", credentialSchema: [], entitlementSummary: null }); },
+        "mcpServer.findFirst": function _serverFind() { return Promise.resolve({ id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType, approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired }); },
         "mcpServerInstall.upsert": function _upsert(arg: unknown) {
           const create = (arg as { create: Record<string, unknown> }).create;
           store.install ??= { mcpServerId: create.mcpServerId, principalId: create.principalId, connectionStatus: create.connectionStatus ?? "NeedsCredential", lastUsedAt: null };

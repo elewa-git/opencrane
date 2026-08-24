@@ -4,7 +4,7 @@ import type { DurableExecutionTransaction } from "@opencrane/backend/server/infr
 
 import type { IMcpOperatorRepository, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork, McpRemoteServerRegistrationRecord } from "../core/mcp-operator-repository.types";
 import { McpRemoteServerRegistrationValidationError, registerRemoteServer } from "../era-probe/mcp-remote-registration";
-import { McpRemoteServerRegistrationOutcomes } from "../era-probe/mcp-era-probe.types";
+import { McpEraProbeStates, McpRemoteServerRegistrationOutcomes } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeWorkflow, McpRemoteServerRegistrationCommand } from "../era-probe/mcp-era-probe.types";
 
 /** Return one valid admin registration command. */
@@ -16,7 +16,7 @@ function _Command(): McpRemoteServerRegistrationCommand
 /** Build a draft row from normalized registration fields. */
 function _Server(registration: McpRemoteServerRegistrationRecord): McpOperatorServerRecord
 {
-	return { id: "server-1", name: registration.name, description: registration.description, publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "PendingReview", credentialSchema: [], entitlementSummary: null, endpoint: registration.endpoint, registrationKeyDigest: registration.registrationKeyDigest, registrationDigest: registration.registrationDigest, eraProbeStatus: "Pending", eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
+	return { id: "server-1", name: registration.name, description: registration.description, publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "PendingReview", credentialSchema: [], entitlementSummary: null, endpoint: registration.endpoint, registrationKeyDigest: registration.registrationKeyDigest, registrationDigest: registration.registrationDigest, eraProbeStatus: McpEraProbeStates.Pending, eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
 }
 
 /** Return a stateful transaction that identifies a retried registration without another audit. */

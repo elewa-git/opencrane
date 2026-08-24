@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PrismaMcpOperatorRepository } from "../core/prisma-mcp-operator-repository";
 import type { McpOperatorServerRecord, McpRemoteServerRegistrationRecord } from "../core/mcp-operator-repository.types";
+import { McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
 
 /** Return the fixed registration used to prove typed claim ordering. */
 function _Registration(): McpRemoteServerRegistrationRecord
@@ -22,7 +23,7 @@ function _Registration(): McpRemoteServerRegistrationRecord
 /** Return the stored draft selected by registration operations. */
 function _Server(registration: McpRemoteServerRegistrationRecord): McpOperatorServerRecord
 {
-	return { id: "server-1", name: registration.name, description: registration.description, publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "PendingReview", credentialSchema: [], entitlementSummary: null, endpoint: registration.endpoint, registrationKeyDigest: registration.registrationKeyDigest, registrationDigest: registration.registrationDigest, eraProbeStatus: "Pending", eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
+	return { id: "server-1", name: registration.name, description: registration.description, publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "PendingReview", credentialSchema: [], entitlementSummary: null, endpoint: registration.endpoint, registrationKeyDigest: registration.registrationKeyDigest, registrationDigest: registration.registrationDigest, eraProbeStatus: McpEraProbeStates.Pending, eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
 }
 
 /** Derive the exact fixed-width claim identity expected from the adapter. */
@@ -85,7 +86,7 @@ describe("Prisma MCP approval transitions", function _ApprovalTransitionsSuite()
 		const findFirst = vi.fn();
 		const transaction = { mcpServer: { updateMany, findFirst } } as unknown as Prisma.TransactionClient;
 
-		const result = await new PrismaMcpOperatorRepository(transaction).setApprovalStatus("silo-1", "server-1", "Published", ["Accepted", "NotRequired"], "Approved");
+		const result = await new PrismaMcpOperatorRepository(transaction).setApprovalStatus("silo-1", "server-1", "Published", [McpEraProbeStates.Accepted, McpEraProbeStates.NotRequired], "Approved");
 
 		expect(result).toBeNull();
 		expect(updateMany).toHaveBeenCalledWith({ where: { id: "server-1", siloId: "silo-1", eraProbeStatus: { in: ["Accepted", "NotRequired"] }, approvalStatus: "Approved" }, data: { approvalStatus: "Published" } });

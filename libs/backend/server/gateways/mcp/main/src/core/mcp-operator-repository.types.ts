@@ -1,7 +1,7 @@
 import type { AuthorizationContextRepository, CapabilityCatalogRepository, ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
 import type { DurableExecutionTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
-import type { McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
+import type { McpEraProbeStates, McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
 
 /**
  * Carries the MCP catalog fields that operator flows return to API clients.
@@ -32,7 +32,8 @@ export interface McpOperatorServerRecord
 	readonly endpoint: string;
 	readonly registrationKeyDigest: string | null;
 	readonly registrationDigest: string | null;
-	readonly eraProbeStatus: string;
+	/** Gives the checked protocol state translated from the database enum. */
+	readonly eraProbeStatus: McpEraProbeStates;
 	readonly eraProtocolVersion: string | null;
 	readonly eraProbeEvidenceDigest: string | null;
 	readonly eraProbeFailureCode: string | null;
@@ -73,7 +74,7 @@ export interface McpEraProbeTargetRecord
 	/** Registration digest that must still match the admitted task. */
 	readonly registrationDigest: string;
 	/** Current result state used to make task replay a no-op. */
-	readonly eraProbeStatus: string;
+	readonly eraProbeStatus: McpEraProbeStates;
 	/** Protocol revision already stored after a completed task. */
 	readonly eraProtocolVersion: string | null;
 	/** Discovery-response digest already stored after a completed task. */
@@ -230,7 +231,7 @@ export interface IMcpOperatorRepository
 	 * @param requiredApprovalStatus - Restricts the change to the required current approval state.
 	 * @returns The updated server row, or `null` when no server with this ID belongs to the silo.
 	 */
-	setApprovalStatus(siloId: string, serverId: string, approvalStatus: string, requiredEraProbeStatuses?: readonly string[], requiredApprovalStatus?: string): Promise<McpOperatorServerRecord | null>;
+	setApprovalStatus(siloId: string, serverId: string, approvalStatus: string, requiredEraProbeStatuses?: readonly McpEraProbeStates[], requiredApprovalStatus?: string): Promise<McpOperatorServerRecord | null>;
 	createOrFindRemoteServer(registration: McpRemoteServerRegistrationRecord): Promise<McpRemoteServerCreateResult | null>;
 	loadEraProbeTarget(siloId: string, serverId: string): Promise<McpEraProbeTargetRecord | null>;
 	recordEraProbeResult(siloId: string, serverId: string, registrationDigest: string, result: McpEraProbeTaskResult): Promise<McpEraProbeWriteResult | null>;

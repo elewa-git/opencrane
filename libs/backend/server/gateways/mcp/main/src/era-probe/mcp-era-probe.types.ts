@@ -6,6 +6,25 @@ import type { McpEraProbeFailureCodes } from "./mcp-era-probe-failure";
 /** MCP protocol revision accepted by OpenCrane's remote server catalogue. */
 export const MCP_ERA_PROTOCOL_VERSION = "2026-07-28" as const;
 
+/**
+ * States saved in `McpServer.eraProbeStatus` for one remote-server protocol check.
+ *
+ * The MCP repository translates Prisma's generated enum into this domain vocabulary before core
+ * code reads it. A database value that is not listed here must fail at that persistence boundary;
+ * it must never reach the workflow state table.
+ */
+export enum McpEraProbeStates
+{
+	/** The row predates remote registration, so its existing governance rules remain in force. */
+	NotRequired = "NotRequired",
+	/** The background job has not saved a final protocol-check result. */
+	Pending = "Pending",
+	/** The remote server returned the protocol revision required by OpenCrane. */
+	Accepted = "Accepted",
+	/** The remote server returned another revision or a final invalid response. */
+	Rejected = "Rejected",
+}
+
 /** Stable task names registered by the MCP catalogue workflow. */
 export enum McpEraProbeTaskNames
 {
@@ -125,7 +144,7 @@ export interface McpRemoteServerRegistration
 	/** Normalized public HTTPS endpoint saved for the worker. */
 	readonly endpoint: string;
 	/** Current era-probe state; a new registration always starts pending. */
-	readonly eraProbeStatus: string;
+	readonly eraProbeStatus: McpEraProbeStates;
 }
 
 /** Result categories for idempotent remote server registration. */

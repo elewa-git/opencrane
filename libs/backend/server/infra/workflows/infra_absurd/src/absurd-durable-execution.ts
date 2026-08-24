@@ -9,6 +9,7 @@ import { _AbsurdTaskScopedIdempotencyKey, PrismaDbProcedureGateway } from "./pri
 import type { AbsurdDurableExecutionOptions } from "./absurd-durable-execution.types";
 import { _AbsurdTaskContext, _AbsurdTaskEventName } from "./absurd-task-context";
 import { _AbsurdTerminalTaskFailure } from "./absurd-terminal-task-failure";
+import type { AbsurdSpawnRequest } from "./absurd-transaction-spawner.types";
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
 
 interface _TaskEnvelope
@@ -55,6 +56,13 @@ function _RetryPolicy(policy: DurableTaskRetryPolicy | undefined): DurableTaskRe
 	if (value.backoff.multiplier !== undefined && (!Number.isFinite(value.backoff.multiplier) || value.backoff.multiplier < 0)) throw new DurableExecutionError("retryPolicy.multiplier must be a finite non-negative number.");
 	if (value.backoff.maximumDelaySeconds !== undefined && (!Number.isSafeInteger(value.backoff.maximumDelaySeconds) || value.backoff.maximumDelaySeconds < 0 || value.backoff.maximumDelaySeconds > 86_400)) throw new DurableExecutionError("retryPolicy.maximumDelaySeconds must be between 0 and 86400.");
 	return value;
+}
+
+/** Translate the engine-neutral retry policy once for both Absurd admission paths. */
+function _AbsurdRetryPolicy(policy: DurableTaskRetryPolicy | undefined): Pick<AbsurdSpawnRequest, "maximumAttempts" | "retryStrategy">
+{
+	const value = _RetryPolicy(policy);
+	return { maximumAttempts: value.maximumAttempts, retryStrategy: { kind: value.backoff.kind, baseSeconds: value.backoff.initialDelaySeconds, factor: value.backoff.multiplier, maxSeconds: value.backoff.maximumDelaySeconds } };
 }
 
 /** Keep task input and its idempotency evidence together for replayed handler contexts. */
@@ -185,8 +193,8 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 		try
 		{
 			const envelope = _EnvelopeForTask(idempotencyKey, task.input);
-			const policy = _RetryPolicy(definition.retryPolicy);
-			const spawned = await this.engineForQueue(this.queueForTask(taskName)).spawn(taskName, envelope, { queue: this.queueForTask(taskName), idempotencyKey: _AbsurdTaskScopedIdempotencyKey(taskName, idempotencyKey), maxAttempts: policy.maximumAttempts, retryStrategy: { kind: policy.backoff.kind, baseSeconds: policy.backoff.initialDelaySeconds, factor: policy.backoff.multiplier, maxSeconds: policy.backoff.maximumDelaySeconds } });
+			const retry = _AbsurdRetryPolicy(definition.retryPolicy);
+			const spawned = await this.engineForQueue(this.queueForTask(taskName)).spawn(taskName, envelope, { queue: this.queueForTask(taskName), idempotencyKey: _AbsurdTaskScopedIdempotencyKey(taskName, idempotencyKey), maxAttempts: retry.maximumAttempts, retryStrategy: retry.retryStrategy });
 			return { taskId: spawned.taskID, taskName, idempotencyKey };
 		}
 		catch (error)
@@ -200,8 +208,8 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 	{
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
-		const policy = _RetryPolicy(definition.retryPolicy);
-		const receipt = await new PrismaDbProcedureGateway(this.queueForTask(taskName)).___DbProcedureCall(transactionClient, { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input), maximumAttempts: policy.maximumAttempts, retryStrategy: { kind: policy.backoff.kind, baseSeconds: policy.backoff.initialDelaySeconds, factor: policy.backoff.multiplier, maxSeconds: policy.backoff.maximumDelaySeconds } });
+		const retry = _AbsurdRetryPolicy(definition.retryPolicy);
+		const receipt = await new PrismaDbProcedureGateway(this.queueForTask(taskName)).___DbProcedureCall(transactionClient, { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input), ...retry });
 		return { taskId: receipt.taskId, taskName, idempotencyKey };
 	}
 
