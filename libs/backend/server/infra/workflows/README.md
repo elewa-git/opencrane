@@ -2,9 +2,9 @@
 
 > [infra](../README.md) › workflows
 
-These Phase-0 libraries define how a future control-plane action can persist work that survives a
-server restart. No OpenCrane application composes an engine or starts a worker yet. Product code will
-depend on the engine-neutral contract; it will never import an execution engine or control a worker.
+These libraries define how a future control-plane action can save work that survives a server restart.
+No OpenCrane application composes an engine or starts a worker yet. Product code will depend on the
+engine-neutral contract; it will never import an execution engine or control a worker.
 
 ## Map
 
@@ -12,6 +12,7 @@ depend on the engine-neutral contract; it will never import an execution engine 
 | --- | --- |
 | [contract](./contract/README.md) | The engine-neutral durable-task port, shared queue authority, and server-only worker lifecycle types. |
 | [kit](./kit/README.md) | Silo, task-name, payload, queue, and tracing guardrails. |
+| [oauth-refresh](./oauth-refresh/README.md) | One saved refresh task for each connection scope and OAuth connection, without storing a credential in the task. |
 | [scheduler](./scheduler/README.md) | Finite respawn chains for product-owned recurrence. |
 | [infra_absurd](./infra_absurd/README.md) | The pinned Absurd engine adapter and its typed transaction procedure gateway. |
 | [testing](./testing/README.md) | Deterministic contract tests and an in-memory execution fake. |
