@@ -50,15 +50,22 @@ export function __CreateSelfConversationSocketServer(dependencies: SelfConversat
 			server.on("upgrade", function _Upgrade(request, socket, head)
 			{
 				const selection = _Selection(request);
-				if (selection === null) { socket.destroy(); return; }
-				// The `void` operator intentionally detaches the async upgrade because Node's upgrade
-				// listener cannot await it; _UpgradeConversation handles its own failures and socket cleanup.
+				if (selection === null)
+				{
+					socket.destroy();
+					return;
+				}
+				// Node's upgrade listener cannot await this work; _UpgradeConversation owns failure cleanup.
 				void _UpgradeConversation(socketServer, dependencies, request, socket, head, selection.conversationId, selection.cursor);
 			});
 		},
-		// `: void` follows close() because it is the TypeScript return annotation, not the void
-		// operator above. This synchronous shutdown signal returns no value after notifying peers.
-		close(): void { socketServer.clients.forEach(function _Close(client) { client.close(1001, "server_shutdown"); }); }
+		close(): void
+		{
+			socketServer.clients.forEach(function _Close(client)
+			{
+				client.close(1001, "server_shutdown");
+			});
+		}
 	};
 }
 
