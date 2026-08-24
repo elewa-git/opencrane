@@ -51,7 +51,7 @@ export async function __ReconcileNextAgentRuntimeAttempt(options: AgentControlle
 	const persistedJob = await options.workloads.__EnsureSuspendedJob(job);
 	const workloadUid = _RequireWorkloadUid(persistedJob.metadata?.uid);
 
-	// 4. Project the attempt key under the suspended workload before release reconciliation can start it.
+	// 4. Let the selected adapter project the attempt key when its model strategy requires one.
 	const attemptKeySecret = _BuildAgentRuntimeAttemptKeySecret(persistedJob, workloadUid, assignment.litellmKeySecretName, claim.attempt.litellmKey);
 	await options.workloads.__EnsureAttemptKeySecret(attemptKeySecret);
 

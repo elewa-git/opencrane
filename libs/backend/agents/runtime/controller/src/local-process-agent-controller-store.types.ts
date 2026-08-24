@@ -97,7 +97,7 @@ export interface LocalAgentRuntimeTokenReviewerOptions
 }
 
 /** Authenticated attempt identity returned after a local runtime token signature matches. */
-export interface LocalAgentRuntimeIdentity
+interface LocalAgentRuntimeIdentity
 {
 	/** Kubernetes-shaped subject retained by the existing assignment authority. */
 	readonly subject: string;

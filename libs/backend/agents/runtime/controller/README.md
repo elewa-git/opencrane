@@ -4,19 +4,17 @@
 
 ## What it owns
 
-This package is the narrow reconciliation step between OpenCrane's durable run authority and
-Kubernetes execution state. It first claims an authorised attempt, resolves its named runtime
-profile, verifies that profile's dedicated runtime namespace, and creates the still-suspended Job
-there. It then creates the
-attempt's immutable, Job-owned LiteLLM key Secret from the transient virtual key delivered on the
-claim response — before the Job can be released — so the released Pod is admitted and the Secret is
-garbage-collected with the Job. A second durable reconciliation releases only the exact assigned Job
-and registers its unique first Pod.
+This package is the narrow reconciliation step between OpenCrane's durable run authority and an
+interchangeable workload projection. It claims an authorised attempt, resolves its named runtime
+profile, verifies that profile's dedicated runtime namespace, and prepares an exact suspended
+workload. It projects the attempt's model key only when the selected strategy needs one, then a
+second durable reconciliation releases the exact assigned workload and registers its first runtime
+instance.
 
-The split exists because a database transaction and a Kubernetes create cannot commit together. The
-controller therefore orders the two authorities so every recoverable partial state is harmless: a
-crash may leave an exact suspended Job to adopt later, but never an executing Job whose UID was not
-accepted by OpenCrane.
+The split exists because a database transaction and workload creation cannot commit together. The
+controller orders the two authorities so every recoverable partial state is harmless: a crash may
+leave an exact suspended workload to adopt later, but never an executing workload whose UID was not
+accepted by OpenCrane. The diagram below shows the production Kubernetes adapter.
 
 ```
  OpenCrane run outbox ........ claims one authorised attempt

@@ -54,9 +54,9 @@ export interface AgentControllerAuthority
 	 */
 	__Claim(signal: AbortSignal): Promise<AgentControllerRunAttemptClaim | null>;
 	/**
-	 * Record the UID of the suspended Job created for this attempt, finishing the assignment.
+	 * Record the UID of the prepared workload created for this attempt, finishing the assignment.
 	 *
-	 * Nothing may unsuspend the Job until this has been recorded, so this call is the point after
+	 * Nothing may release the workload until this has been recorded, so this call is the point after
 	 * which agent code is allowed to run at all.
 	 * @param eventId - The claim's `lease.eventId`; OpenCrane uses it to reject a stale or replayed commit.
 	 * @param command - The recorded coordinates plus the UID the workload store issued.
@@ -71,24 +71,24 @@ export interface AgentControllerAuthority
 	/**
 	 * Take the next already-assigned workload that is ready to be released, under its own lease.
 	 * @param signal - Process shutdown; aborting cancels the in-flight HTTP request.
-	 * @returns The claim, carrying the assignment expiry the released Job must not outlive, or null
+	 * @returns The claim, carrying the assignment expiry the released workload must not outlive, or null
 	 * when nothing is ready and the loop should sleep.
 	 * @throws When OpenCrane answers with anything but 200 or 204, or with a body that fails
 	 * validation. The loop logs it and retries on the next poll.
 	 */
 	__ClaimWorkloadRelease(signal: AbortSignal): Promise<AgentControllerRunWorkloadReleaseClaim | null>;
 	/**
-	 * Record the first Pod-shaped runtime instance once it is confirmed to be the expected one.
+	 * Record the first runtime instance once it is confirmed to be the expected one.
 	 *
-	 * This is what pins the Pod UID that the bootstrap exchange later checks, so it must happen
+	 * This pins the instance UID that the bootstrap exchange later checks, so it must happen
 	 * before the runtime is allowed to exchange its bootstrap reference for credentials.
 	 * @param eventId - The release claim's `lease.eventId`; OpenCrane uses it to reject a stale replay.
-	 * @param command - Recorded coordinates plus the runtime instance's Pod-shaped UID.
+	 * @param command - Recorded coordinates plus the runtime instance's workload-shaped UID.
 	 * @param signal - Process shutdown; aborting cancels the in-flight HTTP request.
-	 * @returns `registered` for the call that took effect, or `idempotent` when this Pod was already
-	 * registered — both mean the Pod now stands recorded.
+	 * @returns `registered` for the call that took effect, or `idempotent` when this instance was
+	 * already registered — both mean the runtime identity now stands recorded.
 	 * @throws When OpenCrane answers with any status other than 200, or returns a result whose run,
-	 * attempt, workload UID, or Pod UID does not match what was submitted.
+	 * attempt, workload UID, or instance UID does not match what was submitted.
 	 */
 	__RegisterFirstPod(eventId: string, command: AgentControllerRunWorkloadRegistrationCommand, signal: AbortSignal): Promise<AgentControllerRunWorkloadRegistrationResult>;
 	/**
@@ -105,10 +105,9 @@ export interface AgentControllerAuthority
 /**
  * Everything the controller asks its workload projection to do.
  *
- * Deliberately small: create a suspended Job, create its key Secret, release the Job, find its
- * first Pod. There is no update, no delete, and no read of a Secret, so a bug in the controller
- * cannot rewrite or remove a workload — and a Job that does not match what OpenCrane recorded
- * makes every method here throw rather than get repaired.
+ * Deliberately small: prepare an exact Job-shaped workload projection, project an attempt key when
+ * its strategy requires one, release the workload, and find its first runtime instance. A projection
+ * that does not match what OpenCrane recorded makes every method throw rather than get repaired.
  *
  * Production projects the shapes into Kubernetes. Tier 2 projects the same evidence into an
  * authenticated local process without changing the controller's authority protocol.
@@ -121,51 +120,39 @@ export interface AgentControllerAuthority
 export interface AgentControllerWorkloadStore
 {
 	/**
-	 * Create the suspended attempt Job, or accept an existing one that matches exactly.
+	 * Prepare the suspended attempt projection, or accept an existing one that matches exactly.
 	 *
-	 * Never modifies what it finds. An AlreadyExists reply means a previous poll got this far before
-	 * failing, so the Job is read back and compared field by field.
-	 * @param expected - The Job this attempt should have, from {@link __BuildSuspendedAgentRuntimeJob}.
-	 * @returns The exact Job-shaped projection, including the UID the caller must commit.
-	 * @throws When the existing Job is not suspended, or differs from `expected` in any owned field.
-	 * The caller must not repair it: a mismatch means OpenCrane and the cluster disagree.
+	 * @param expected - The Job-shaped projection this attempt should have.
+	 * @returns The exact prepared projection, including the UID the caller must commit.
+	 * @throws When an existing projection is not suspended or differs in any owned field.
 	 */
 	__EnsureSuspendedJob(expected: V1Job): Promise<V1Job>;
 	/**
-	 * Create the immutable, Job-owned attempt-scoped key Secret, or accept an existing one.
+	 * Project the attempt-scoped model key when the selected workload strategy requires it.
 	 *
-	 * Create-only: the store has no `get`/`list` on Secrets. An AlreadyExists response is treated as
-	 * the idempotent replay of this exact attempt's prior creation, never re-read.
+	 * A strategy without model access performs no projection. Replays must remain idempotent.
 	 */
 	__EnsureAttemptKeySecret(expected: V1Secret): Promise<void>;
 	/**
-	 * Unsuspend the assigned Job, or accept it if a previous poll already did.
+	 * Release the assigned workload, or accept it if a previous poll already did.
 	 *
-	 * The patch is conditional on the Job's UID and resource version, so a Job that changed under us
-	 * is never released. Before returning, the released Job is checked again to confirm it cannot
-	 * still be running after the assignment expires.
-	 * @param expected - The Job rebuilt from the recorded coordinates.
-	 * @param workloadUid - UID recorded at assignment; the Job's UID must equal it.
-	 * @param assignmentExpiresAt - Canonical UTC instant the released Job must stop before.
+	 * @param expected - The Job-shaped projection rebuilt from the recorded coordinates.
+	 * @param workloadUid - UID recorded at assignment; the projection's UID must equal it.
+	 * @param assignmentExpiresAt - Canonical UTC instant the released workload must stop before.
 	 * @param releaseLeaseExpiresAt - Expiry of the caller's release lease, folded into the deadline so
-	 * a slow request cannot buy the Job extra running time.
+	 * a slow operation cannot buy the workload extra running time.
 	 * @returns The released Job-shaped projection.
-	 * @throws When the Job differs from `expected`, when its UID does not match, when the conditional
-	 * patch is rejected, when Kubernetes did not actually release it, or when the resulting deadline
-	 * would let it outlive `assignmentExpiresAt`.
-	 * @see {@link _PlanAgentRuntimeJobRelease}
+	 * @throws When the projection differs from `expected`, its UID does not match, release fails, or
+	 * its resulting deadline would outlive `assignmentExpiresAt`.
 	 */
 	__EnsureRuntimeJobReleased(expected: V1Job, workloadUid: string, assignmentExpiresAt: string, releaseLeaseExpiresAt: string): Promise<V1Job>;
 	/**
-	 * Return the workload's first Pod-shaped runtime instance, or null while none exists.
-	 * @param expectedJob - The Job whose Pod is wanted; supplies the labels and namespace to match.
-	 * @param workloadUid - UID recorded at assignment; part of the label selector.
-	 * @param serviceAccountName - The ServiceAccount the Pod must be running as.
-	 * @returns The one matching Pod, or null — null is normal and simply means poll again later.
-	 * @throws When more than one Pod matches, since choosing between them could register the wrong
-	 * one; and when the single match is not owned by the assigned Job or does not carry the expected
-	 * labels and ServiceAccount.
-	 * @see {@link _AssertExactFirstAgentRuntimePod}
+	 * Return the workload's first runtime-instance evidence, or null while none exists.
+	 * @param expectedJob - Job-shaped projection whose first instance is wanted.
+	 * @param workloadUid - UID recorded at assignment.
+	 * @param serviceAccountName - Workload identity the runtime instance must carry.
+	 * @returns The one matching instance, or null when the adapter has not produced it yet.
+	 * @throws When evidence is ambiguous or does not belong to the assigned workload.
 	 */
 	__FindFirstRuntimePod(expectedJob: V1Job, workloadUid: string, serviceAccountName: string): Promise<V1Pod | null>;
 }

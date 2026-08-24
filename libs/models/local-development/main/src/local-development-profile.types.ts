@@ -30,7 +30,7 @@ export interface LocalDevelopmentIdentity
 }
 
 /** One local runtime identity admitted by the Tier 2 server and controller. */
-export interface LocalDevelopmentRuntimeIdentity
+interface LocalDevelopmentRuntimeIdentity
 {
 	/** Namespace assigned to the local process as its simulated workload boundary. */
 	readonly namespace: string;
