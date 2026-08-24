@@ -9,7 +9,7 @@ export function findInlineIfBodies(sourceText, fileName = "source.ts")
 	const sourceFile = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
 	const findings = [];
 
-	/** Visits every statement because an `if` can appear inside any expression or block. */
+	/** Walks nested functions, blocks, and statements so every `if` statement is checked. */
 	function _Visit(node)
 	{
 		if (ts.isIfStatement(node))
