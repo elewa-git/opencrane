@@ -74,6 +74,16 @@ async function _Record(options: McpbValidationWorkflowOptions, input: McpbValida
 	});
 }
 
+/** Run the expensive package read in its own saved task so the parent can safely wait for it. */
+async function _Inspect(context: IWorkflowTaskContext, options: McpbValidationWorkflowOptions, input: McpbValidationTaskInput): Promise<McpbVerificationResult>
+{
+	return await context.checkpoint({ stepName: "verify-package" }, async function _VerifyPackage(): Promise<McpbVerificationResult>
+	{
+		try { return await options.verifier.verify(input); }
+		catch { throw new WorkflowTaskRetryableError("MCP bundle verifier is temporarily unavailable."); }
+	});
+}
+
 /** Run the replay-safe manifest and signature check through two saved checkpoints. */
 async function _Run(context: IWorkflowTaskContext, options: McpbValidationWorkflowOptions, input: McpbValidationTaskInput): Promise<McpbVerificationResult>
 {
@@ -83,10 +93,10 @@ async function _Run(context: IWorkflowTaskContext, options: McpbValidationWorkfl
 	catch { throw new WorkflowTaskTerminalError("MCP bundle validation stored state is invalid."); }
 	if (replay)
 		return replay;
-	const result = await context.checkpoint({ stepName: "verify-package" }, async function _VerifyPackage(): Promise<McpbVerificationResult>
+	const result = await context.checkpoint({ stepName: "inspect-package" }, async function _InspectPackage(): Promise<McpbVerificationResult>
 	{
-		try { return await options.verifier.verify(_Target(record)); }
-		catch { throw new WorkflowTaskRetryableError("MCP bundle verifier is temporarily unavailable."); }
+		const child = await context.spawnChild({ taskName: McpbValidationTaskNames.Inspect, idempotencyKey: __McpbValidationInspectionTaskKey(input), input: { ...input, ..._Target(record) } });
+		return await context.awaitChild<McpbVerificationResult>(child);
 	});
 	return await context.checkpoint({ stepName: "record-decision" }, async function _RecordDecision(): Promise<McpbVerificationResult>
 	{
@@ -102,6 +112,14 @@ export function __McpbValidationTaskKey(input: McpbValidationTaskInput): string
 	return `workflows:mcpb-validation:${digest}`;
 }
 
+/** Derive the child key from the parent identity without putting product coordinates in engine logs. */
+export function __McpbValidationInspectionTaskKey(input: McpbValidationTaskInput): string
+{
+	__AssertMcpbValidationTaskInput(input);
+	const digest = createHash("sha256").update(JSON.stringify([input.siloId, input.validationId, input.artifactRevisionId, input.contentAddress, input.submissionDigest, McpbValidationTaskNames.Inspect])).digest("hex");
+	return `workflows:mcpb-validation-inspect:${digest}`;
+}
+
 /** Register the saved MCP bundle verifier and return its transaction-bound admission API. */
 export function __CreateMcpbValidationWorkflow(options: McpbValidationWorkflowOptions): McpbValidationWorkflow
 {
@@ -112,6 +130,15 @@ export function __CreateMcpbValidationWorkflow(options: McpbValidationWorkflowOp
 		{
 			__AssertMcpbValidationTaskInput(input);
 			return await _Run(context, options, input);
+		},
+	});
+	options.execution.register({
+		taskName: McpbValidationTaskNames.Inspect,
+		retryPolicy: { maximumAttempts: _MAXIMUM_ATTEMPTS, backoff: { kind: WorkflowTaskRetryBackoffKinds.Exponential, initialDelaySeconds: 30, multiplier: 2, maximumDelaySeconds: 300 } },
+		async run(context: IWorkflowTaskContext, input: McpbValidationTaskInput): Promise<McpbVerificationResult>
+		{
+			__AssertMcpbValidationTaskInput(input);
+			return await _Inspect(context, options, input);
 		},
 	});
 	return {

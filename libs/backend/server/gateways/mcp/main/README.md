@@ -36,14 +36,17 @@ check a newly registered MCP server and a submitted signed MCP bundle.
    └── save an Absurd background job
         │
         ▼
- worker checks the signed bundle and its manifest
+ parent job waits for a separate package-inspection job
+        ├── checks the signed bundle and its manifest
+        └── returns one saved answer to the parent job
    ├── trusted signature + valid manifest ──► verified
    └── invalid package ─────────────────────► rejected
 ```
 
-The bundle check currently verifies the signature and the package manifest. Running the bundle in
-an isolated environment, scanning it, building an image, and publishing it are later workflow
-steps.
+The parent job and inspection job use different queues, so Absurd can save the wait safely. The
+inspection job currently verifies the signature, safe archive layout, and package manifest. Running
+the bundle in an isolated environment, scanning it, building an image, and publishing it are later
+workflow steps.
 
 The draft server and its background job use one database transaction. Either both are saved, or
 neither is saved. A repeated registration request returns the same draft and the same job.
@@ -68,7 +71,7 @@ returns credentials and never labels an install connected before a real connecti
 - `registerRemoteServer` — saves a draft server and its protocol-check job together.
 - `__CreateMcpEraProbeWorkflow` — registers the saved background job that checks the server.
 - `submitMcpbValidation` and `getMcpbValidation` — save and read signed MCP bundle checks.
-- `__CreateMcpbValidationWorkflow` — registers the saved bundle verification job.
+- `__CreateMcpbValidationWorkflow` — registers the saved parent and package-inspection jobs.
 - Operator services: `listEntitledCatalog`, `listInstalled`, `installServer`, `approveServer`,
   `publishServer`, and the access editor.
 - `_McpOpenapiPaths` — the OpenAPI path descriptions for this API.
