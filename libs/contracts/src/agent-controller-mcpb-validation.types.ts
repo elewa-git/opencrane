@@ -1,4 +1,9 @@
-/** A saved MCP bundle inspection job claimed by the agent controller. */
+/**
+ * Carries the database lease for one MCP bundle inspection job claimed by the agent controller.
+ *
+ * The controller must return the claim timestamp and delivery count when it records a Job UID. Once
+ * the lease expires, those fields can no longer authorise that assignment.
+ */
 export interface AgentControllerMcpbValidationClaim
 {
 	/** Identifies the saved inspection job for the later assignment call. */
@@ -15,7 +20,12 @@ export interface AgentControllerMcpbValidationClaim
 	readonly expiresAt: string;
 }
 
-/** The Kubernetes Job evidence the controller sends back for one saved claim. */
+/**
+ * Carries the claim fence and Kubernetes Job UID that the controller submits for one inspection job.
+ *
+ * The command deliberately excludes workload selection fields: the server selected the workload when
+ * it issued the claim, and the strict parser rejects additional caller fields.
+ */
 export interface AgentControllerMcpbValidationAssignmentCommand
 {
 	/** Repeats the database time from the claim. */
@@ -26,7 +36,12 @@ export interface AgentControllerMcpbValidationAssignmentCommand
 	readonly workloadUid: string;
 }
 
-/** The server response after it saves, or replays, a matching Job assignment. */
+/**
+ * Carries the saved result of a matching MCP bundle inspection Job assignment.
+ *
+ * `assigned` means this request saved the Job UID; `idempotent` means the same UID was already
+ * saved. The controller must verify the echoed workload and Job IDs before trusting either outcome.
+ */
 export interface AgentControllerMcpbValidationAssignmentResult
 {
 	/** Says whether this request saved the assignment or returned the earlier matching assignment. */

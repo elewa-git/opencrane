@@ -5,7 +5,6 @@ import { ___ParseAgentControllerMcpbValidationAssignmentCommand } from "@opencra
 
 import type { McpbValidationControllerRouterDependencies } from "./mcpb-validation-controller.types";
 
-/** Accepts the claim fence and bounded Job UID needed to record one controller assignment. */
 /** Accepts no claim fields, so a caller cannot choose which saved workload to receive. */
 const _EMPTY_COMMAND = z.object({}).strict();
 
