@@ -46,6 +46,12 @@ An app entrypoint (`type:app`, `scope:litellm`); composed by the silo chart, imp
   provider keys and must never be rotated, or those keys become unreadable.
 - `litellm.image.*`, `.podAnnotations`, `.service.port` — image, restart, and port controls.
 
+Tier 2 Alternative A reuses the pinned image with
+[`local-development/config.yaml`](local-development/config.yaml), mounted read-only into a labelled
+loopback container. It reads `keys/.openai-key`, while the coordinator generates a different local
+LiteLLM master key. Alternative B uses an explicit remote HTTPS LiteLLM origin and admin-key file;
+Alternative C starts no LiteLLM process and reads no provider or model credential.
+
 ## See also
 
 - Parent index: [_infra](../README.md)

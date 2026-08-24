@@ -11,6 +11,7 @@
   "scripts": {
     "build": "nx run-many -t build",
     "dev": "nx run-many -t dev --parallel=10",
+    "dev:tier2": "node scripts/local-development.mjs",
     "test": "nx run-many -t test",
     "lint": "nx run-many -t lint",
     "lint:boundaries": "eslint .",
@@ -20,6 +21,7 @@
     "agent-context:doctor": "node scripts/rag-rat.mjs doctor",
     "test:agent-context": "node --test scripts/__tests__/rag-rat-integration.test.mjs",
     "test:agent-style": "node --test scripts/__tests__/inline-conditional-check.test.mjs",
+    "test:local-development": "node --test scripts/__tests__/local-development-*.test.mjs",
     "check:prisma-boundaries": "node scripts/prisma-boundary-check.mjs",
     "test:prisma-boundaries": "node --test scripts/__tests__/prisma-boundary-check.test.mjs",
     "test:affected-deployables": "node --test scripts/__tests__/affected-deployables.test.mjs",
