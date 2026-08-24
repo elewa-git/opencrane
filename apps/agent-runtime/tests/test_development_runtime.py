@@ -1,17 +1,19 @@
 """Prove the simulated profile retains runtime flow without model network access."""
 
+import json
 import os
 import tempfile
 import threading
 import unittest
+from pathlib import Path
 from unittest import mock
 
+from src.attempts.execution import execute_resume_attempt, execute_start_attempt
 from src.development.deterministic_model import (
     deterministic_event_source,
     deterministic_resume_event_source,
 )
-from src.development_runtime import development_open_stream
-from src.attempts.execution import execute_resume_attempt, execute_start_attempt
+from src.development_runtime import _LITELLM_STRATEGY, _SIMULATED_STRATEGY, development_open_stream
 
 
 def _compiled_input(message: str, tools: list[dict[str, object]] | None = None) -> dict[str, object]:
@@ -37,7 +39,7 @@ class _TestCipher:
 
 
 class DeterministicModelStrategyTests(unittest.TestCase):
-    """Validate stable chat, tool, and resume events without importing a model provider."""
+    """Validate stable chat and resume events without importing a model provider."""
 
     def test_plain_chat_returns_stable_text_and_usage(self) -> None:
         """The same accepted input always produces the same neutral events."""
@@ -49,82 +51,13 @@ class DeterministicModelStrategyTests(unittest.TestCase):
         self.assertEqual(first[0], {"type": "output_text", "text": "Simulated agent response: Hello"})
         self.assertEqual(first[1], {"type": "usage", "inputTokens": 0, "outputTokens": 0})
 
-    def test_explicit_tool_directive_uses_only_compiled_grant(self) -> None:
-        """A simulated tool proposal keeps the external-action path bound to the frozen tool set."""
-        tools = [{"name": "search"}]
-        events = list(deterministic_event_source(_compiled_input('/simulate-tool search {"q":"opencrane"}', tools), threading.Event(), []))
-
-        self.assertEqual(events[0], {
-            "type": "tool_call",
-            "toolName": "search",
-            "toolCallId": "simulated-tool-call-1",
-            "arguments": '{"q":"opencrane"}',
-        })
-        with self.assertRaises(ValueError):
-            list(deterministic_event_source(_compiled_input("/simulate-tool unknown {}", tools), threading.Event(), []))
-
     def test_resume_uses_only_already_authorised_results(self) -> None:
-        """The deterministic resume adapter displays its input and performs no tool operation."""
-        events = list(deterministic_resume_event_source({}, {"simulated-tool-call-1": {"ok": True}}, threading.Event(), ["continue"]))
+        """The deterministic resume adapter displays accepted participant input without new work."""
+        events = list(deterministic_resume_event_source({}, {"request-1": {"response": "confirmed"}}, threading.Event(), ["continue"]))
 
         self.assertEqual(events[0]["type"], "output_text")
-        self.assertIn('"ok":true', str(events[0]["text"]))
+        self.assertIn('"response":"confirmed"', str(events[0]["text"]))
         self.assertIn("Steering: continue", str(events[0]["text"]))
-
-    def test_tool_start_and_resume_use_the_existing_candidate_pipeline(self) -> None:
-        """Simulated work pauses on a real external-action candidate and resumes from its saved result."""
-        compiled_input = {
-            "promptCompilerVersion": "v1",
-            "runId": "simulated-run",
-            "attempt": 1,
-            "instructions": "Use the compiled tools.",
-            "messages": [{"role": "user", "content": '/simulate-tool search {"q":"OpenCrane"}'}],
-            "tools": [{
-                "name": "search",
-                "toolRevisionId": "revision-search",
-                "description": "Search a local fixture.",
-                "requiresApproval": False,
-                "parametersSchema": {"type": "object"},
-            }],
-            "model": {"modelAlias": "simulated", "maxOutputTokens": None, "generatedOutputCapabilities": []},
-            "budget": {},
-            "digest": "sha256:simulated",
-        }
-        start = {
-            "kind": "start_attempt",
-            "commandId": "start-simulated",
-            "fence": 1,
-            "assignment": {"runId": "simulated-run", "attempt": 1},
-            "payload": {"snapshot": {"inputGeneration": 4}, "compiledInput": compiled_input},
-        }
-        resume = {
-            "kind": "resume_attempt",
-            "commandId": "resume-simulated",
-            "fence": 2,
-            "assignment": {"runId": "simulated-run", "attempt": 1},
-            "payload": {
-                "inputGeneration": 4,
-                "toolResults": [{
-                    "toolInvocationId": "simulated-tool-call-1",
-                    "outcome": "succeeded",
-                    "result": {"answer": "fixture result"},
-                }],
-                "steeringRequests": [],
-                "elicitationResults": [],
-            },
-        }
-        emitted: list[dict[str, object]] = []
-        cipher = _TestCipher()
-
-        with tempfile.TemporaryDirectory() as checkpoint_dir:
-            with mock.patch.dict(os.environ, {"OPENCRANE_RUNTIME_CHECKPOINT_DIR": checkpoint_dir}, clear=False):
-                execute_start_attempt(start, "instance-simulated", emitted.append, event_source=deterministic_event_source, checkpoint_cipher=cipher)
-                self.assertIn("external_action", [candidate["kind"] for candidate in emitted])
-
-                execute_resume_attempt(resume, "instance-simulated", emitted.append, resume_event_source=deterministic_resume_event_source, checkpoint_cipher=cipher)
-
-        self.assertIn("run.resumed", [candidate.get("eventType") for candidate in emitted])
-        self.assertEqual(emitted[-1]["eventType"], "run.completed")
 
 
 class DevelopmentRuntimeCompositionTests(unittest.TestCase):
@@ -154,6 +87,13 @@ class DevelopmentRuntimeCompositionTests(unittest.TestCase):
         self.assertEqual(call.args, ("http://server", "runtime-token", "instance", "pod"))
         self.assertEqual(call.kwargs["handle_start"].__name__, "_simulated_start")
         self.assertEqual(call.kwargs["handle_resume"].__name__, "_simulated_resume")
+
+    def test_model_strategies_match_the_cross_process_profile_contract(self) -> None:
+        """The Python entrypoint accepts the strategies emitted by the TypeScript controller."""
+        contract_path = Path(__file__).resolve().parents[3] / "libs/models/local-development/main/profile-contract.json"
+        contract = json.loads(contract_path.read_text(encoding="utf8"))
+
+        self.assertEqual(contract["modelStrategies"], [_LITELLM_STRATEGY, _SIMULATED_STRATEGY])
 
 
 if __name__ == "__main__":

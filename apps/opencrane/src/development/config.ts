@@ -1,6 +1,6 @@
 import { isAbsolute } from "node:path";
 
-import { LOCAL_DEVELOPMENT_IDENTITY, LocalDevelopmentProfileKinds } from "@opencrane/models/local-development";
+import { __IsLocalDevelopmentProfileKind, LOCAL_DEVELOPMENT_IDENTITY, LocalDevelopmentProfileKinds } from "@opencrane/models/local-development";
 
 /** Read one bounded local listener port. */
 function _ReadPort(name: string, fallback: number): number
@@ -20,12 +20,12 @@ function _ReadProfile(): LocalDevelopmentProfileKinds
 {
 	const value = process.env.OPENCRANE_DEVELOPMENT_PROFILE?.trim() || LocalDevelopmentProfileKinds.Core;
 
-	if (!Object.values(LocalDevelopmentProfileKinds).includes(value as LocalDevelopmentProfileKinds))
+	if (!__IsLocalDevelopmentProfileKind(value))
 	{
 		throw new Error("OPENCRANE_DEVELOPMENT_PROFILE must be core, agent-local, agent-remote, or agent-simulated");
 	}
 
-	return value as LocalDevelopmentProfileKinds;
+	return value;
 }
 
 /** Require an absolute private identity path for Agent profiles and omit it from core. */

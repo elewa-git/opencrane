@@ -1,7 +1,7 @@
 import { isAbsolute, resolve } from "node:path";
 
 import { __ValidateAgentControllerRuntimeProfiles, LocalAgentRuntimeModelStrategies } from "@opencrane/backend/agents/runtime/controller";
-import { LocalDevelopmentProfileKinds } from "@opencrane/models/local-development";
+import { __IsLocalDevelopmentProfileKind, LocalDevelopmentProfileKinds } from "@opencrane/models/local-development";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { LocalAgentControllerModelConfiguration, LocalAgentControllerProcessConfig } from "./config.types";
@@ -57,7 +57,7 @@ function _Profile(environment: NodeJS.ProcessEnv): Exclude<LocalDevelopmentProfi
 {
 	const value = _Required(environment, "OPENCRANE_DEVELOPMENT_PROFILE");
 
-	if (value === LocalDevelopmentProfileKinds.AgentLocal || value === LocalDevelopmentProfileKinds.AgentRemote || value === LocalDevelopmentProfileKinds.AgentSimulated)
+	if (__IsLocalDevelopmentProfileKind(value) && value !== LocalDevelopmentProfileKinds.Core)
 	{
 		return value;
 	}

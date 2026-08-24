@@ -57,6 +57,7 @@
     { "path": "apps/opencrane/src/development/membership-evidence.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/development/runtime-config.ts", "owner": "apps/opencrane", "classification": "app-config" },
     { "path": "apps/opencrane/src/development/runtime-config.types.ts", "owner": "apps/opencrane", "classification": "app-config" },
+    { "path": "apps/opencrane/src/development/runtime-repair.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/development/unavailable-kubernetes.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/infra/db/db.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
     { "path": "apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts", "owner": "apps/opencrane", "classification": "route-composition" },

@@ -10,15 +10,17 @@ they do not authenticate a caller or grant product authority.
 
 - The stable `core`, `agent-local`, `agent-remote`, and `agent-simulated` profile names.
 - The fixed local human identity and signed-membership identifiers shared by the seed and server.
+- The JSON contract that keeps TypeScript, JavaScript, and Python process values aligned in tests.
 
 Production entrypoints must not import this package. Tier 1 also remains independent: it owns an
 in-memory browser profile, while these values select the real API and PostgreSQL Tier 2 workflow.
 
 ## Public surface
 
-Import `LocalDevelopmentProfileKinds` and `LocalDevelopmentIdentity` from
-`@opencrane/models/local-development`. The same barrel exports the fixed local identity plus the
-membership issuer, key, and personal assertion identifiers used by the app-owned seed and verifier.
+Import `LocalDevelopmentProfileKinds`, `LocalDevelopmentIdentity`, and
+`__IsLocalDevelopmentProfileKind` from `@opencrane/models/local-development`. The same barrel exports
+the fixed local identity plus the membership issuer, key, and personal assertion identifiers used by
+the app-owned seed and verifier.
 
 ## Boundary
 

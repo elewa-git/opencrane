@@ -63,6 +63,8 @@ ends by the durable expiry; zero Pods means retry while multiple or foreign Pods
   process instead of a Kubernetes Job.
 - `__CreateLocalAgentRuntimeTokenReviewer` — development-only HMAC reviewer that authenticates the
   spawned process UID before returning the fixed runtime namespace and ServiceAccount identity.
+- `LocalAgentRuntimeModelStrategies` — development-only model-boundary state passed to the local
+  Python runtime; production entrypoints never import it.
 
 The same controller performs the bounded retention pass for successfully delivered runtime-outbox
 records. It runs once at startup, then at its configured interval. A failed pass is recorded and
@@ -72,9 +74,10 @@ alive after shutdown.
 Internally, the polling loop, runtime-profile policy, model-key projection, assignment reconcile,
 release reconcile, bounded HTTP decoding, Kubernetes Job adoption, conditional release planning,
 Pod proof, and transport calls each have one module owner. The package barrel exposes composition
-capabilities and the profile-map type only. The one-attempt assignment and release steps remain
-package-private test seams. Zod validation of controller wire models is owned beside those models in
-`@opencrane/contracts`; this package does not redeclare their accepted fields.
+capabilities, the profile-map type, and the development-only model strategy. The one-attempt
+assignment and release steps remain package-private test seams. Zod validation of controller wire
+models is owned beside those models in `@opencrane/contracts`; this package does not redeclare their
+accepted fields.
 
 ## Boundary
 

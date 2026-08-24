@@ -69,7 +69,7 @@ async function _Main(): Promise<void>
 	const internalApp = config.controllerTokenPath && config.runtimeLaunchSecretPath
 		? await _CreateDevelopmentInternalApp(prisma, runtimeConfig, config.profile, config.controllerTokenPath, config.runtimeLaunchSecretPath)
 		: null;
-	_StartDevelopmentLifecycle(publicApp, internalApp, prisma, config.publicPort, config.internalPort, unbindConsole);
+	_StartDevelopmentLifecycle(publicApp, internalApp, prisma, runCancellation, config.publicPort, config.internalPort, unbindConsole);
 }
 
 void _Main().catch(function _FatalDevelopmentStartup(err: unknown): void

@@ -2,10 +2,12 @@ import type { Server } from "node:http";
 
 import type { Express } from "express";
 
+import type { RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import { ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
 import { _log } from "../app/log";
 import { _BeginProcessShutdown } from "../app/process-shutdown";
+import { _StartDevelopmentRuntimeRepair } from "./runtime-repair";
 
 /** Prisma client shape returned by the app-owned database composition. */
 type DevelopmentPrismaClient = ReturnType<typeof import("../infra/db/db").___CreatePrismaClient>;
@@ -23,7 +25,7 @@ function _CloseServer(server: Server): Promise<void>
 }
 
 /** Start the Tier 2 public API and optional Agent API on loopback, then bind their shutdown sequence. */
-export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Express | null, prisma: DevelopmentPrismaClient, publicPort: number, internalPort: number, unbindConsole: () => void): void
+export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Express | null, prisma: DevelopmentPrismaClient, runtimeRepairRepository: RunCancellationRepository, publicPort: number, internalPort: number, unbindConsole: () => void): void
 {
 	const publicServer = publicApp.listen(publicPort, "127.0.0.1", function _Listening(): void
 	{
@@ -33,6 +35,7 @@ export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Expr
 	{
 		_log.info({ port: internalPort }, "Tier 2 OpenCrane Agent API listening on loopback");
 	}) ?? null;
+	const runtimeRepair = _StartDevelopmentRuntimeRepair(runtimeRepairRepository);
 	let shutdownStarted = false;
 
 	async function _Shutdown(signal: string): Promise<void>
@@ -54,6 +57,7 @@ export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Expr
 		{
 			// 1. Fence long-lived request work before the listener and durable store are drained.
 			_BeginProcessShutdown();
+			runtimeRepair.stop();
 			await _CloseServer(publicServer);
 
 			if (internalServer)

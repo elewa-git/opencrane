@@ -77,8 +77,8 @@ For local development, `development_runtime.py` preserves bootstrap, command adm
 projection, resume correlation, and candidate delivery. The `litellm` strategy uses the normal model
 driver for Alternatives A and B. The `simulated` strategy replaces only the model request with
 `development/deterministic_model.py`, which emits neutral events into the same projector. Its explicit
-`/simulate-tool <name> <json-object>` message can exercise external-action and resume flow using a
-tool already present in the compiled grant set; it never contacts a model or writes an event directly.
+The simulated profile returns deterministic text and usage events for chat messages. It does not
+propose or execute tools because Tier 2 does not start the server-owned external-action worker.
 
 ## Authority and failure rules
 

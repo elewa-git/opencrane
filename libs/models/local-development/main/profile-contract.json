@@ -1,0 +1,12 @@
+{
+  "profiles": [
+    "core",
+    "agent-local",
+    "agent-remote",
+    "agent-simulated"
+  ],
+  "modelStrategies": [
+    "litellm",
+    "simulated"
+  ]
+}

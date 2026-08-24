@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 import { createLocalDevelopmentConfiguration } from "../local-development/configuration.mjs";
 import { parseLocalDevelopmentArguments } from "../local-development/profiles.mjs";
+
+const _PROFILE_CONTRACT = JSON.parse(fs.readFileSync(new URL("../../libs/models/local-development/main/profile-contract.json", import.meta.url), "utf8"));
 
 test("core is the default local-development profile", function _defaultCore()
 {
@@ -42,6 +45,18 @@ test("agent accepts exact Alternatives A, B, and C", function _exactAlternatives
 	assert.equal(remote.remoteLiteLLMEndpoint, "https://litellm.example.test");
 	assert.equal(simulated.alternative, "C");
 	assert.throws(function _lowercaseAlternative() { parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "a"]); }, /exactly A, B, or C/);
+});
+
+test("coordinator outputs remain aligned with the cross-process profile contract", function _profileContract()
+{
+	const configurations = [
+		createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments([]), "/repo", {}),
+		createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "A"]), "/repo", {}),
+		createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "B", "--remote-litellm-endpoint", "https://litellm.example.test", "--remote-litellm-master-key-file", "/secure/remote.key"]), "/repo", {}),
+		createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "C"]), "/repo", {})
+	];
+
+	assert.deepEqual(configurations.map(configuration => configuration.developmentProfile), _PROFILE_CONTRACT.profiles);
 });
 
 test("Alternative B fails closed without an explicit HTTPS endpoint and key file", function _remoteValidation()

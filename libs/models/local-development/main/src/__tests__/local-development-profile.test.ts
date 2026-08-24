@@ -1,17 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { LOCAL_DEVELOPMENT_IDENTITY, LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_KEY_ID, LocalDevelopmentProfileKinds } from "../index";
+import profileContract from "../../profile-contract.json";
+import { __IsLocalDevelopmentProfileKind, LOCAL_DEVELOPMENT_IDENTITY, LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_KEY_ID, LocalDevelopmentProfileKinds } from "../index";
 
 describe("local development profile vocabulary", function _Suite()
 {
 	it("keeps the coordinator profile values stable", function _Profiles(): void
 	{
-		expect(Object.values(LocalDevelopmentProfileKinds)).toEqual([
-			"core",
-			"agent-local",
-			"agent-remote",
-			"agent-simulated"
-		]);
+		expect(Object.values(LocalDevelopmentProfileKinds)).toEqual(profileContract.profiles);
+		expect(profileContract.profiles.every(__IsLocalDevelopmentProfileKind)).toBe(true);
+		expect(__IsLocalDevelopmentProfileKind("production")).toBe(false);
 	});
 
 	it("keeps the seeded identity and membership identifiers stable", function _Identity(): void
