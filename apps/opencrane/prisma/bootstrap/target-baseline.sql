@@ -3016,6 +3016,9 @@ DECLARE
     requested_lease INTERVAL;
     transition_time TIMESTAMP(3) := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
 BEGIN
+    IF OLD."state" = 'claimed' AND NEW."state" = 'claimed' AND OLD."claim_expires_at" > transition_time AND (NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."claim_expires_at" IS DISTINCT FROM OLD."claim_expires_at" OR NEW."delivery_count" IS DISTINCT FROM OLD."delivery_count") THEN
+        RAISE EXCEPTION 'MCP bundle validation workload cannot replace a live controller lease';
+    END IF;
     IF NEW."state" = 'claimed' AND (OLD."state" = 'pending' OR (OLD."state" = 'claimed' AND OLD."claim_expires_at" <= transition_time)) THEN
         requested_lease := NEW."claim_expires_at" - NEW."claimed_at";
         IF NEW."delivery_count" <> OLD."delivery_count" + 1 OR NEW."workload_uid" IS NOT NULL OR requested_lease <= '0 milliseconds'::INTERVAL OR requested_lease > '5 minutes'::INTERVAL THEN
