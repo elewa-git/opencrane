@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { findingDelta, inspectPrismaBoundary, isProductionTypeScript, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy, validateRawProcedureDeclarations } from "./prisma-boundary/core.mjs";
+import { findingDelta, inspectPrismaBoundary, isProductionTypeScript, prepareBasePolicyForComparison, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy, validateRawProcedureDeclarations } from "./prisma-boundary/core.mjs";
 
 /** Repository root for all path and Git operations. */
 const _ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -154,7 +154,7 @@ function _BasePolicy(base)
 {
 	const source = _BaseSource(base, "docs/agents/prisma-boundary-policy.json");
 	if (source === undefined) throw new Error(`base ref ${base} has no Prisma-boundary policy`);
-	const policy = JSON.parse(source);
+	const policy = prepareBasePolicyForComparison(JSON.parse(source));
 	validatePolicy(policy, true);
 	return policy;
 }

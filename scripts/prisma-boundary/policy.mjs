@@ -139,6 +139,22 @@ function _IsLegacyRawProcedure(procedure)
 		&& procedure.reason.trim().length >= 20;
 }
 
+/**
+ * Supplies the empty raw-procedure list implied by a policy written before that field existed.
+ *
+ * The current policy remains strict; only a historical Git base may omit the list because that
+ * revision could not have approved a raw procedure.
+ *
+ * Called by: the diff-scoped Prisma boundary checker before it compares old findings.
+ * @see scripts/prisma-boundary-check.mjs
+ */
+export function prepareBasePolicyForComparison(policy)
+{
+	if (policy?.version === 1 && policy.rawProcedureCalls === undefined)
+		return { ...policy, rawProcedureCalls: [] };
+	return policy;
+}
+
 /** Returns whether an owner path is exact, repository-relative, and TypeScript. */
 function _IsExactTypeScriptPath(path)
 {
