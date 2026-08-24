@@ -38,7 +38,7 @@ function _revision(): AgentRevision
 		skills: [],
 		integrationAssignments: [],
 		scopeAttachments: [],
-		budget: { maxTurns: 10, maxTokens: 10000, maxDurationMs: 60000 },
+		budget: { maxTurns: 10, maxTokens: 10000, maxCostUsdMicros: 500_000, maxDurationMs: 60000 },
 		authoredBy: "user-1",
 		createdAt: "2026-07-18T00:00:00.000Z",
 		publishedAt: null,

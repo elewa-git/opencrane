@@ -14,7 +14,7 @@ const _STATE_BY_ACTION: Readonly<Record<ChangeAgentServiceStateCommand["action"]
 /** Builds valid executable content for a managed revision. */
 function _content(overrides: Partial<AgentRevisionContent> = {}): AgentRevisionContent
 {
-	return { promptPolicyVersion: "prompt-v1", personaRevisionId: null, modelDefinitionId: "model-definition-a", budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 }, skills: [], integrationAssignments: [], scopeAttachments: [{ scope: "project", subjectType: "group", subjectId: "proj-1" }], ...overrides };
+	return { promptPolicyVersion: "prompt-v1", personaRevisionId: null, modelDefinitionId: "model-definition-a", budget: { maxTurns: 5, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 }, skills: [], integrationAssignments: [], scopeAttachments: [{ scope: "project", subjectType: "group", subjectId: "proj-1" }], ...overrides };
 }
 
 /** Minimal in-memory definition-plane repository, silo-scoped like the Prisma adapter. */
@@ -212,7 +212,7 @@ describe("managed agent revision lifecycle", function _suite()
 	{
 		const repository = new _Repository();
 		const seed = await _seedService(repository);
-		const revised = await __ReviseAgentRevision(repository, { siloId: _SILO, agentServiceId: seed.serviceId, expectedParentRevisionId: seed.revisionId, authoredBy: "admin-1", changeMessage: "edit", content: _content({ budget: { maxTurns: 50, maxTokens: 1000, maxDurationMs: 30000 } }) }, _NOW);
+		const revised = await __ReviseAgentRevision(repository, { siloId: _SILO, agentServiceId: seed.serviceId, expectedParentRevisionId: seed.revisionId, authoredBy: "admin-1", changeMessage: "edit", content: _content({ budget: { maxTurns: 50, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 } }) }, _NOW);
 		if (revised.outcome !== "revised") throw new Error("expected revised");
 		const compared = await __CompareAgentRevisions(repository, _SILO, seed.revisionId, revised.revision.id);
 		if (compared.outcome !== "compared") throw new Error("expected compared");

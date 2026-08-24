@@ -18,7 +18,7 @@ function _Content(overrides: Partial<AgentRevisionContent> = {}): AgentRevisionC
 		promptPolicyVersion: "prompt-v1",
 		personaRevisionId: "persona-1",
 		modelDefinitionId: "model-1",
-		budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
+		budget: { maxTurns: 5, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 },
 		skills: [{ skillId: "skill-1", revisionId: "skill-revision-1" }],
 		integrationAssignments: [{
 			integrationId: "integration-1",
@@ -38,14 +38,14 @@ describe("agent revision content digest", function _AgentRevisionContentDigestSu
 		const second = __DigestAgentRevisionContent("service-1", 2, _Content());
 
 		expect(second).toBe(first);
-		expect(first).toBe("sha256:67c118d709d67426af63354b4d97b0c5ad2e82ea67ad7ae14a606f9bbc8371c2");
+		expect(first).toBe("sha256:e795d21f1d187c75550c2c37096f7c1ed494e310cf6ae0bd3882c389b51b24c2");
 	});
 
 	it.each([
 		["prompt policy", { promptPolicyVersion: "prompt-v2" }],
 		["persona", { personaRevisionId: "persona-2" }],
 		["model", { modelDefinitionId: "model-2" }],
-		["budget", { budget: { maxTurns: 6, maxTokens: 1000, maxDurationMs: 30000 } }],
+		["budget", { budget: { maxTurns: 6, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 } }],
 		["skills", { skills: [{ skillId: "skill-2", revisionId: "skill-revision-2" }] }],
 		["integrations", { integrationAssignments: [{ integrationId: "integration-2", custodyReferenceId: "custody-2", toolDefinitions: [_Tool("mail.read")] }] }],
 		["scope attachments", { scopeAttachments: [{ scope: "team", subjectType: "group", subjectId: "team-1" }] }],

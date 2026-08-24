@@ -146,10 +146,10 @@ function _ParseBudget(value: JsonValue, admittedAtEpochMs: number): BudgetPolicy
 {
 	if (value === null || typeof value !== "object" || Array.isArray(value) || !Number.isSafeInteger(admittedAtEpochMs)) return null;
 	const budget = value as Readonly<Record<string, unknown>>;
-	if (!_IsPositiveSafeInteger(budget.maxTurns) || !_IsPositiveSafeInteger(budget.maxTokens) || !_IsPositiveSafeInteger(budget.maxDurationMs)) return null;
+	if (!_IsPositiveSafeInteger(budget.maxTurns) || !_IsPositiveSafeInteger(budget.maxTokens) || !_IsPositiveSafeInteger(budget.maxCostUsdMicros) || !_IsPositiveSafeInteger(budget.maxDurationMs)) return null;
 	const deadline = admittedAtEpochMs + budget.maxDurationMs;
 	if (!Number.isSafeInteger(deadline)) return null;
-	return { maxModelTurns: budget.maxTurns, maxTotalTokens: budget.maxTokens, wallClockDeadlineEpochMs: deadline };
+	return { maxModelTurns: budget.maxTurns, maxTotalTokens: budget.maxTokens, maxCostUsdMicros: budget.maxCostUsdMicros, wallClockDeadlineEpochMs: deadline };
 }
 
 /** Returns whether a JSON value is a positive safe integer that can be used as a limit. */

@@ -120,6 +120,7 @@ export function __DiffAgentRevisions(base: AgentRevision, target: AgentRevision)
 		_scalarChange("modelDefinitionId", base.modelDefinitionId, target.modelDefinitionId),
 		_scalarChange("budget.maxTurns", String(base.budget.maxTurns), String(target.budget.maxTurns)),
 		_scalarChange("budget.maxTokens", String(base.budget.maxTokens), String(target.budget.maxTokens)),
+		_scalarChange("budget.maxCostUsdMicros", String(base.budget.maxCostUsdMicros), String(target.budget.maxCostUsdMicros)),
 		_scalarChange("budget.maxDurationMs", String(base.budget.maxDurationMs), String(target.budget.maxDurationMs)),
 	].filter(_isPresent);
 
@@ -173,6 +174,7 @@ function _collectWidenings(base: AgentRevision, target: AgentRevision, setChange
 	const budgetWidenings = [
 		_budgetWidening("budget.maxTurns", base.budget.maxTurns, target.budget.maxTurns),
 		_budgetWidening("budget.maxTokens", base.budget.maxTokens, target.budget.maxTokens),
+		_budgetWidening("budget.maxCostUsdMicros", base.budget.maxCostUsdMicros, target.budget.maxCostUsdMicros),
 		_budgetWidening("budget.maxDurationMs", base.budget.maxDurationMs, target.budget.maxDurationMs),
 	].filter(_isPresent);
 	widenings.push(...budgetWidenings);

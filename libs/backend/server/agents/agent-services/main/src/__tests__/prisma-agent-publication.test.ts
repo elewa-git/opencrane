@@ -35,7 +35,7 @@ function _revisionRow()
 		promptPolicyVersion: "prompt-v1",
 		personaRevisionId: "persona-1",
 		modelDefinitionId: "model-definition-1",
-		budget: { maxTurns: 8, maxTokens: 8000, maxDurationMs: 60000 },
+		budget: { maxTurns: 8, maxTokens: 8000, maxCostUsdMicros: 500_000, maxDurationMs: 60000 },
 		authoredBy: "user-1",
 		createdAt: new Date("2026-07-18T00:00:00.000Z"),
 		publishedAt: null,

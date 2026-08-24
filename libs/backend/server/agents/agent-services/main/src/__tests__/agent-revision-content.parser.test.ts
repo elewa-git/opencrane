@@ -9,7 +9,7 @@ import { _ParseAgentRevisionContent } from "../agent-revision-content.parser";
 function _Content(toolOverrides: Record<string, unknown> = {})
 {
 	const parametersSchema = { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string" } } } as const;
-	return { promptPolicyVersion: PROMPT_COMPILER_VERSION, personaRevisionId: null, modelDefinitionId: "model-1", budget: { maxTurns: 1, maxTokens: 100, maxDurationMs: 1_000 }, skills: [], scopeAttachments: [], integrationAssignments: [{ integrationId: "search", custodyReferenceId: "custody-1", toolDefinitions: [{ name: "query", description: "Search records", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema), ...toolOverrides }] }] };
+	return { promptPolicyVersion: PROMPT_COMPILER_VERSION, personaRevisionId: null, modelDefinitionId: "model-1", budget: { maxTurns: 1, maxTokens: 100, maxCostUsdMicros: 500_000, maxDurationMs: 1_000 }, skills: [], scopeAttachments: [], integrationAssignments: [{ integrationId: "search", custodyReferenceId: "custody-1", toolDefinitions: [{ name: "query", description: "Search records", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema), ...toolOverrides }] }] };
 }
 
 describe("agent revision content parser", function _AgentRevisionContentParserSuite()
@@ -23,5 +23,13 @@ describe("agent revision content parser", function _AgentRevisionContentParserSu
 	{
 		expect(_ParseAgentRevisionContent(_Content({ parametersSchema: undefined }))).toBeNull();
 		expect(_ParseAgentRevisionContent(_Content({ parametersSchema: { type: "object", additionalProperties: true } }))).toBeNull();
+	});
+
+	it("rejects a budget without a cost ceiling", function _RejectsMissingCostCeiling()
+	{
+		const content = _Content();
+		delete (content.budget as Partial<typeof content.budget>).maxCostUsdMicros;
+
+		expect(_ParseAgentRevisionContent(content)).toBeNull();
 	});
 });

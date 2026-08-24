@@ -22,6 +22,8 @@ function _isPublishableRevision(revision: AgentRevision): boolean
 		&& revision.budget.maxTurns > 0
 		&& Number.isSafeInteger(revision.budget.maxTokens)
 		&& revision.budget.maxTokens > 0
+		&& Number.isSafeInteger(revision.budget.maxCostUsdMicros)
+		&& revision.budget.maxCostUsdMicros > 0
 		&& Number.isSafeInteger(revision.budget.maxDurationMs)
 		&& revision.budget.maxDurationMs > 0
 		&& revision.integrationAssignments.every(function _Assignment(assignment): boolean { return __AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions); })

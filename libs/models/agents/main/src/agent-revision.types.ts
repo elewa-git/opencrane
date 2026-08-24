@@ -46,6 +46,8 @@ export interface AgentBudget
 	readonly maxTurns: number;
 	/** Maximum input and output tokens permitted in one run. */
 	readonly maxTokens: number;
+	/** Maximum spend permitted in one run, expressed in micro-US-dollars. */
+	readonly maxCostUsdMicros: number;
 	/** Maximum wall-clock duration permitted in milliseconds. */
 	readonly maxDurationMs: number;
 }

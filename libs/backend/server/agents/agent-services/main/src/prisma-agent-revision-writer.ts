@@ -54,6 +54,7 @@ export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments):
 		budget: {
 			maxTurns: budget.maxTurns,
 			maxTokens: budget.maxTokens,
+			maxCostUsdMicros: budget.maxCostUsdMicros,
 			maxDurationMs: budget.maxDurationMs,
 		},
 		skills: row.skillAssignments.map(function _MapSkill(skill)
@@ -111,6 +112,7 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 		budget: {
 			maxTurns: command.content.budget.maxTurns,
 			maxTokens: command.content.budget.maxTokens,
+			maxCostUsdMicros: command.content.budget.maxCostUsdMicros,
 			maxDurationMs: command.content.budget.maxDurationMs,
 		},
 		authoredBy: command.authoredBy,

@@ -27,7 +27,7 @@ function _Transaction(revision: unknown, skills: unknown[] = [], artifacts: unkn
 /** Creates a current revision with one live integration and one published skill artifact. */
 function _Revision(overrides: Record<string, unknown> = {})
 {
-	return { modelDefinition: { id: "model-definition-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" }, integrationAssignments: [{ integrationId: "integration-1", siloId: "silo-1", toolDefinitions: [_Tool()], integration: { state: IntegrationState.Active }, custodyReference: { state: IntegrationCustodyState.Ready, expiresAt: new Date("2026-07-27T00:00:00.000Z") } }], skillAssignments: [{ skillRevisionId: "skill-revision-1" }], budget: { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000 }, ...overrides };
+	return { modelDefinition: { id: "model-definition-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" }, integrationAssignments: [{ integrationId: "integration-1", siloId: "silo-1", toolDefinitions: [_Tool()], integration: { state: IntegrationState.Active }, custodyReference: { state: IntegrationCustodyState.Ready, expiresAt: new Date("2026-07-27T00:00:00.000Z") } }], skillAssignments: [{ skillRevisionId: "skill-revision-1" }], budget: { maxTurns: 4, maxTokens: 1024, maxCostUsdMicros: 5_000_000, maxDurationMs: 60_000 }, ...overrides };
 }
 
 /** Creates one same-silo active skill whose selected revision is published. */
@@ -58,11 +58,11 @@ describe("PrismaRevisionBudgetPolicySource", function _DescribePrismaRevisionBud
 {
 	it("freezes complete positive ceilings into a server-time deadline", async function _LoadsBudget()
 	{
-		await expect(new PrismaRevisionBudgetPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision()))).resolves.toEqual({ outcome: "loaded", value: { budgetPolicy: { maxModelTurns: 4, maxTotalTokens: 1024, wallClockDeadlineEpochMs: Date.parse("2026-07-26T00:01:00.000Z") } } });
+		await expect(new PrismaRevisionBudgetPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision()))).resolves.toEqual({ outcome: "loaded", value: { budgetPolicy: { maxModelTurns: 4, maxTotalTokens: 1024, maxCostUsdMicros: 5_000_000, wallClockDeadlineEpochMs: Date.parse("2026-07-26T00:01:00.000Z") } } });
 	});
 
 	it("denies malformed budget policy before it can enter an immutable snapshot", async function _DeniesMalformedBudget()
 	{
-		await expect(new PrismaRevisionBudgetPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision({ budget: { maxTurns: 0, maxTokens: 1024, maxDurationMs: 60_000 } })))).resolves.toEqual({ outcome: "denied", reason: "budget_unavailable" });
+		await expect(new PrismaRevisionBudgetPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision({ budget: { maxTurns: 0, maxTokens: 1024, maxCostUsdMicros: 5_000_000, maxDurationMs: 60_000 } })))).resolves.toEqual({ outcome: "denied", reason: "budget_unavailable" });
 	});
 });

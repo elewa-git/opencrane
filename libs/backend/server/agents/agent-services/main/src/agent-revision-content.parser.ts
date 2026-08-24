@@ -100,9 +100,9 @@ export function _ParseAgentRevisionContent(raw: unknown): AgentRevisionContent |
 	const body = raw as Record<string, unknown>;
 	const budget = body.budget as Record<string, unknown> | undefined;
 
-	// 2. Require the prompt-compiler version this build ships, plus a model id and all three budget numbers.
+	// 2. Require the prompt-compiler version this build ships, plus a model id and all four budget numbers.
 	if (body.promptPolicyVersion !== PROMPT_COMPILER_VERSION || !_isNonEmptyString(body.modelDefinitionId) || budget === undefined || typeof budget !== "object") return null;
-	if (typeof budget.maxTurns !== "number" || typeof budget.maxTokens !== "number" || typeof budget.maxDurationMs !== "number") return null;
+	if (typeof budget.maxTurns !== "number" || typeof budget.maxTokens !== "number" || typeof budget.maxCostUsdMicros !== "number" || typeof budget.maxDurationMs !== "number") return null;
 	const personaRevisionId = body.personaRevisionId === undefined || body.personaRevisionId === null ? null : body.personaRevisionId;
 	if (personaRevisionId !== null && !_isNonEmptyString(personaRevisionId)) return null;
 
@@ -113,5 +113,5 @@ export function _ParseAgentRevisionContent(raw: unknown): AgentRevisionContent |
 	if (skills === null || integrationAssignments === null || scopeAttachments === null) return null;
 
 	// 4. Rebuild the value field by field, so nothing extra from the request body is carried through.
-	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, scopeAttachments };
+	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxCostUsdMicros: budget.maxCostUsdMicros, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, scopeAttachments };
 }

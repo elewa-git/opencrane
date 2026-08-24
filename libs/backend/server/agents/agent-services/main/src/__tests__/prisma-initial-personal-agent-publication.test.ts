@@ -63,7 +63,7 @@ describe("Prisma initial personal-Agent publication", function _Suite()
 		await expect(_Publisher(transaction).publish(_COMMAND, _PERSONA)).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Ready, agentServiceId: _COMMAND.onboardingId, agentRevisionId: "revision-a", created: true, revised: false });
 		expect(transaction.agentService.create).toHaveBeenCalledWith({ data: expect.objectContaining({ id: _COMMAND.onboardingId, siloId: _COMMAND.siloId, kind: "Personal", state: "Draft", name: "The Commander", workloadProfile: "personal-default" }) });
 		expect(transaction.agentRevision.create).toHaveBeenCalledWith({
-			data: expect.objectContaining({ revision: 1, promptPolicyVersion: INITIAL_PERSONAL_AGENT_POLICY.promptPolicyVersion, personaRevisionId: _COMMAND.onboardingPersonaRevisionId, budget: { maxTurns: 64, maxTokens: 256_000, maxDurationMs: 3_600_000 }, modelDefinition: { connect: { id: "configured-default" } } }),
+			data: expect.objectContaining({ revision: 1, promptPolicyVersion: INITIAL_PERSONAL_AGENT_POLICY.promptPolicyVersion, personaRevisionId: _COMMAND.onboardingPersonaRevisionId, budget: { maxTurns: 64, maxTokens: 256_000, maxCostUsdMicros: 5_000_000, maxDurationMs: 3_600_000 }, modelDefinition: { connect: { id: "configured-default" } } }),
 			include: expect.any(Object),
 		});
 		expect(transaction.agentRevision.update).toHaveBeenCalledWith({ where: { id: "revision-a" }, data: { state: "Published", publishedAt: _COMMAND.provisionedAt } });

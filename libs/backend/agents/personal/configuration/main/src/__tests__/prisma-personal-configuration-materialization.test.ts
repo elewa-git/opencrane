@@ -48,7 +48,7 @@ function _SourceRevision()
 		promptPolicyVersion: "prompt-v1",
 		personaRevisionId: "persona-1",
 		modelDefinitionId: "old-model",
-		budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
+		budget: { maxTurns: 5, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 },
 		skillAssignments: [{ skillId: "skill-1", skillRevisionId: "skill-revision-1" }],
 		integrationAssignments: [{
 			integrationId: "integration-1",
@@ -144,7 +144,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 			promptPolicyVersion: "prompt-v1",
 			personaRevisionId: "persona-1",
 			modelDefinitionId: "tenant-model",
-			budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
+			budget: { maxTurns: 5, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 },
 			skills: [{ skillId: "skill-1", revisionId: "skill-revision-1" }],
 			integrationAssignments: [{
 				integrationId: "integration-1",
@@ -183,7 +183,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 				changeMessage: "Owner accepted model alias: careful-model",
 				promptPolicyVersion: "prompt-v1",
 				personaRevisionId: "persona-1",
-				budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
+				budget: { maxTurns: 5, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 },
 				skillAssignments: {
 					create: [{
 						skillId: "skill-1",

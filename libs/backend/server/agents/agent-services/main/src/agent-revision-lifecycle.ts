@@ -33,6 +33,7 @@ function _isContentValid(content: AgentRevisionContent): boolean
 		&& (content.personaRevisionId === null || _isPresent(content.personaRevisionId))
 		&& _isPositiveInteger(content.budget.maxTurns)
 		&& _isPositiveInteger(content.budget.maxTokens)
+		&& _isPositiveInteger(content.budget.maxCostUsdMicros)
 		&& _isPositiveInteger(content.budget.maxDurationMs)
 		&& content.skills.every(skill => _isPresent(skill.skillId) && _isPresent(skill.revisionId))
 		&& content.integrationAssignments.every(assignment => _isPresent(assignment.integrationId) && _isPresent(assignment.custodyReferenceId) && __AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions))

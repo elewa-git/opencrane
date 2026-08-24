@@ -17,6 +17,7 @@ export const INITIAL_PERSONAL_AGENT_POLICY = Object.freeze({
 	budget: Object.freeze({
 		maxTurns: 64,
 		maxTokens: 256_000,
+		maxCostUsdMicros: 5_000_000,
 		maxDurationMs: 3_600_000,
 	}),
 });
