@@ -75,3 +75,19 @@ describe("Prisma MCP registration claims", function _RegistrationClaimsSuite()
 		expect(result).toEqual({ created: false, server });
 	});
 });
+
+describe("Prisma MCP approval transitions", function _ApprovalTransitionsSuite()
+{
+	it("publishes only a server that is already approved and has accepted probe evidence", async function _RequiresApprovedSource()
+	{
+		const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+		const findFirst = vi.fn();
+		const transaction = { mcpServer: { updateMany, findFirst } } as unknown as Prisma.TransactionClient;
+
+		const result = await new PrismaMcpOperatorRepository(transaction).setApprovalStatus("silo-1", "server-1", "Published", "Accepted", "Approved");
+
+		expect(result).toBeNull();
+		expect(updateMany).toHaveBeenCalledWith({ where: { id: "server-1", siloId: "silo-1", eraProbeStatus: "Accepted", approvalStatus: "Approved" }, data: { approvalStatus: "Published" } });
+		expect(findFirst).not.toHaveBeenCalled();
+	});
+});

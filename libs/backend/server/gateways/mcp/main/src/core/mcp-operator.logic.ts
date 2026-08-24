@@ -14,6 +14,7 @@ const _RESOURCE_KIND = "mcp-server";
 
 const _TYPE = { SingleUser: McpServerType.SingleUser, MultiUser: McpServerType.MultiUser, RemoteOauth: McpServerType.RemoteOauth } as const;
 const _APPROVAL = { PendingReview: McpApprovalStatus.PendingReview, Approved: McpApprovalStatus.Approved, Published: McpApprovalStatus.Published, Disabled: McpApprovalStatus.Disabled } as const;
+const _REQUIRED_APPROVAL = { Approved: "PendingReview", Published: "Approved" } as const;
 const _CONNECTION = { NeedsCredential: McpConnectionStatus.NeedsCredential, SharedKey: McpConnectionStatus.SharedKey } as const;
 const _AVATAR_COLORS = ["#1F3B6E", "#2E7D32", "#6A1B9A", "#C62828", "#00838F", "#EF6C00", "#4527A0", "#283593"];
 
@@ -326,7 +327,8 @@ function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller,
 {
 	return unitOfWork.execute(async function _Update(transaction)
 	{
-		const server = await transaction.mcp.setApprovalStatus(caller.siloId, serverId, status, __McpEraProbeRequiredState(status));
+		const requiredApprovalStatus = status === "Approved" || status === "Published" ? _REQUIRED_APPROVAL[status] : undefined;
+		const server = await transaction.mcp.setApprovalStatus(caller.siloId, serverId, status, __McpEraProbeRequiredState(status), requiredApprovalStatus);
 		if (!server) return null;
 		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} ${verb}`);
 		return _MapServer(server);

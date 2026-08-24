@@ -181,6 +181,18 @@ describe("mcp-operator router", function _suite()
       expect(spies["mcpServer.findMany"]).toHaveBeenCalled();
     });
 
+    it("refuses publication until an accepted server has been approved", async function _RequiresApprovalBeforePublish()
+    {
+      _enableOidc();
+      const { prisma, spies } = _mockPrisma({ "mcpServer.updateMany": function _NoApprovedSource() { return Promise.resolve({ count: 0 }); } });
+
+      const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true })).post("/api/v1/mcp/servers/srv-1/publish");
+
+      expect(response.status).toBe(404);
+      expect(spies["mcpServer.updateMany"]).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ eraProbeStatus: "Accepted", approvalStatus: "Approved" }) }));
+      expect(spies["auditEntry.create"]).toBeUndefined();
+    });
+
     it("fails closed when no session is established", async function _denyUnauthenticated()
     {
       const { prisma } = _mockPrisma();

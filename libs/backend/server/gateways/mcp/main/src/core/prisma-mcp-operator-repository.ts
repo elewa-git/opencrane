@@ -56,11 +56,14 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 		return result.count > 0;
 	}
 
-	async setApprovalStatus(siloId: string, serverId: string, approvalStatus: string, requiredEraProbeStatus?: string): Promise<McpOperatorServerRecord | null>
+	async setApprovalStatus(siloId: string, serverId: string, approvalStatus: string, requiredEraProbeStatus?: string, requiredApprovalStatus?: string): Promise<McpOperatorServerRecord | null>
 	{
-		const exists = await this._transaction.mcpServer.findFirst({ where: { id: serverId, siloId, ...(requiredEraProbeStatus ? { eraProbeStatus: requiredEraProbeStatus as Prisma.McpServerWhereInput["eraProbeStatus"] } : {}) }, select: { id: true } });
-		if (!exists) return null;
-		return this._transaction.mcpServer.update({ where: { id: serverId }, data: { approvalStatus: approvalStatus as Prisma.McpServerUpdateInput["approvalStatus"] }, select: _SERVER_SELECT });
+		const where: Prisma.McpServerWhereInput = { id: serverId, siloId };
+		if (requiredEraProbeStatus) where.eraProbeStatus = requiredEraProbeStatus as Prisma.McpServerWhereInput["eraProbeStatus"];
+		if (requiredApprovalStatus) where.approvalStatus = requiredApprovalStatus as Prisma.McpServerWhereInput["approvalStatus"];
+		const changed = await this._transaction.mcpServer.updateMany({ where, data: { approvalStatus: approvalStatus as Prisma.McpServerUpdateInput["approvalStatus"] } });
+		if (changed.count !== 1) return null;
+		return this._transaction.mcpServer.findFirst({ where: { id: serverId, siloId }, select: _SERVER_SELECT });
 	}
 
 	/** Create a draft server or return the row admitted by the same registration key. */

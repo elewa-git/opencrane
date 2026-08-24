@@ -217,9 +217,10 @@ export interface IMcpOperatorRepository
 	 * @param serverId - Identifies the server whose approval state should change.
 	 * @param approvalStatus - Supplies the persisted approval state to write.
 	 * @param requiredEraProbeStatus - Restricts the change to the required stored protocol-check result.
+	 * @param requiredApprovalStatus - Restricts the change to the required current approval state.
 	 * @returns The updated server row, or `null` when no server with this ID belongs to the silo.
 	 */
-	setApprovalStatus(siloId: string, serverId: string, approvalStatus: string, requiredEraProbeStatus?: string): Promise<McpOperatorServerRecord | null>;
+	setApprovalStatus(siloId: string, serverId: string, approvalStatus: string, requiredEraProbeStatus?: string, requiredApprovalStatus?: string): Promise<McpOperatorServerRecord | null>;
 	createOrFindRemoteServer(registration: McpRemoteServerRegistrationRecord): Promise<McpRemoteServerCreateResult | null>;
 	loadEraProbeTarget(siloId: string, serverId: string): Promise<McpEraProbeTargetRecord | null>;
 	recordEraProbeResult(siloId: string, serverId: string, registrationDigest: string, result: McpEraProbeTaskResult): Promise<McpEraProbeWriteResult | null>;
