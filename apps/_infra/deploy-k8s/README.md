@@ -128,7 +128,8 @@ package imports it.
   Job quota; it contains no standing worker. The deploy engine derives `<release>-tools` for the
   same per-silo ownership boundary.
 - `opencrane-mcpb-validator.mcpbValidator` — the empty, default-deny MCP bundle worker namespace.
-  The deploy engine derives `<release>-mcpb-validation`; it creates no worker Job yet.
+  The deploy engine derives `<release>-mcpb-validation`. The agent controller may create one exact,
+  suspended validator Job in this namespace; no component can start it yet.
 - `--release` — optional only as a restatement of the silo identity. The wrapper derives and
   enforces `opencrane-<cluster-tenant>` so all Helm-owned namespaces stay inside one release.
 - `crds.install` — resolved authoritatively by the deploy engine: the first silo installs the

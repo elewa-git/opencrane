@@ -282,7 +282,6 @@ roleRef:
   kind: Role
   name: {{ $controllerName }}-mcpb-validator
 ---
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -701,7 +700,7 @@ spec:
     resourceRules:
       - apiGroups: ["batch"]
         apiVersions: ["v1"]
-        operations: ["CREATE", "UPDATE"]
+        operations: ["CREATE"]
         resources: ["jobs"]
         scope: "Namespaced"
     namespaceSelector:
@@ -720,13 +719,24 @@ spec:
         object.metadata.labels['opencrane.ai/mcpb-validator'] == object.metadata.name &&
         object.metadata.annotations.size() == 1 &&
         object.metadata.annotations['opencrane.ai/mcpb-bootstrap-reference'].matches('^mcpb-validator-v1_[a-f0-9]{64}$') &&
+        (!has(object.metadata.ownerReferences) || object.metadata.ownerReferences.size() == 0) &&
+        (!has(object.metadata.finalizers) || object.metadata.finalizers.size() == 0) &&
+        (!has(object.metadata.generateName) || object.metadata.generateName == '') &&
         object.spec.suspend == true && object.spec.parallelism == 1 && object.spec.completions == 1 &&
         object.spec.backoffLimit == 0 && object.spec.ttlSecondsAfterFinished == 0 &&
         object.spec.activeDeadlineSeconds == {{ .Values.agentController.mcpbValidatorProfile.activeDeadlineSeconds }} &&
         object.spec.template.spec.serviceAccountName == 'mcpb-validator-default' &&
         object.spec.template.spec.automountServiceAccountToken == false &&
         object.spec.template.spec.enableServiceLinks == false && object.spec.template.spec.restartPolicy == 'Never' &&
+        object.spec.template.spec.terminationGracePeriodSeconds == 0 &&
+        object.spec.template.spec.securityContext.runAsNonRoot == true &&
+        object.spec.template.spec.securityContext.runAsUser == 65532 &&
+        object.spec.template.spec.securityContext.runAsGroup == 65532 &&
+        object.spec.template.spec.securityContext.fsGroup == 65532 &&
+        object.spec.template.spec.securityContext.seccompProfile.type == 'RuntimeDefault' &&
         object.spec.template.spec.containers.size() == 1 && object.spec.template.spec.containers[0].name == 'mcpb-validator' &&
+        (!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.size() == 0) &&
+        (!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0) &&
         object.spec.template.spec.containers[0].image == {{ $mcpbValidatorImage | toJson }} &&
         object.spec.template.spec.containers[0].imagePullPolicy == {{ .Values.agentController.mcpbValidatorProfile.image.pullPolicy | toJson }} &&
         object.spec.template.spec.containers[0].resources.requests.cpu == {{ .Values.agentController.mcpbValidatorProfile.resources.requests.cpu | toString | toJson }} &&
@@ -736,6 +746,14 @@ spec:
         object.spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation == false &&
         object.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem == true &&
         object.spec.template.spec.containers[0].securityContext.capabilities.drop == ['ALL'] &&
+        (!has(object.spec.template.spec.containers[0].securityContext.capabilities.add) || object.spec.template.spec.containers[0].securityContext.capabilities.add.size() == 0) &&
+        (!has(object.spec.template.spec.containers[0].command) || object.spec.template.spec.containers[0].command.size() == 0) &&
+        (!has(object.spec.template.spec.containers[0].args) || object.spec.template.spec.containers[0].args.size() == 0) &&
+        !has(object.spec.template.spec.containers[0].lifecycle) &&
+        !has(object.spec.template.spec.containers[0].livenessProbe) &&
+        !has(object.spec.template.spec.containers[0].readinessProbe) &&
+        !has(object.spec.template.spec.containers[0].startupProbe) &&
+        !has(object.spec.template.spec.containers[0].envFrom) &&
         object.spec.template.spec.containers[0].env.size() == 3 &&
         object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_MCPB_BOOTSTRAP_URL' &&
         object.spec.template.spec.containers[0].env[0].value == {{ $mcpbValidatorBootstrapUrl | toJson }} &&
@@ -743,9 +761,38 @@ spec:
         object.spec.template.spec.containers[0].env[1].value == '/var/run/opencrane/tokens/validator.token' &&
         object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_MCPB_BOOTSTRAP_REFERENCE_PATH' &&
         object.spec.template.spec.containers[0].env[2].value == '/var/run/opencrane/bootstrap/reference' &&
+        object.spec.template.spec.containers[0].volumeMounts.size() == 3 &&
+        object.spec.template.spec.containers[0].volumeMounts[0].name == 'validator-token' &&
+        object.spec.template.spec.containers[0].volumeMounts[0].mountPath == '/var/run/opencrane/tokens' &&
+        object.spec.template.spec.containers[0].volumeMounts[0].readOnly == true &&
+        object.spec.template.spec.containers[0].volumeMounts[1].name == 'bootstrap-reference' &&
+        object.spec.template.spec.containers[0].volumeMounts[1].mountPath == '/var/run/opencrane/bootstrap' &&
+        object.spec.template.spec.containers[0].volumeMounts[1].readOnly == true &&
+        object.spec.template.spec.containers[0].volumeMounts[2].name == 'scratch' &&
+        object.spec.template.spec.containers[0].volumeMounts[2].mountPath == '/tmp' &&
         object.spec.template.spec.volumes.size() == 3 &&
+        object.spec.template.spec.volumes[0].name == 'validator-token' &&
+        object.spec.template.spec.volumes[0].projected.defaultMode == 288 &&
+        object.spec.template.spec.volumes[0].projected.sources.size() == 1 &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.path == 'validator.token' &&
         object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-mcpb-validator' &&
-        quantity(object.spec.template.spec.volumes[2].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.mcpbValidatorProfile.scratchSize | toJson }})) == 0
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.expirationSeconds == 600 &&
+        object.spec.template.spec.volumes[1].name == 'bootstrap-reference' &&
+        object.spec.template.spec.volumes[1].downwardAPI.defaultMode == 288 &&
+        object.spec.template.spec.volumes[1].downwardAPI.items.size() == 1 &&
+        object.spec.template.spec.volumes[1].downwardAPI.items[0].path == 'reference' &&
+        object.spec.template.spec.volumes[1].downwardAPI.items[0].fieldRef.fieldPath == "metadata.annotations['opencrane.ai/mcpb-bootstrap-reference']" &&
+        object.spec.template.spec.volumes[2].name == 'scratch' &&
+        quantity(object.spec.template.spec.volumes[2].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.mcpbValidatorProfile.scratchSize | toJson }})) == 0 &&
+        object.spec.template.metadata.labels.size() == 2 &&
+        object.spec.template.metadata.labels['app.kubernetes.io/component'] == 'mcpb-validator' &&
+        object.spec.template.metadata.labels['opencrane.ai/mcpb-validator'] == object.metadata.name &&
+        object.spec.template.metadata.annotations == object.metadata.annotations &&
+        (!has(object.spec.template.metadata.ownerReferences) || object.spec.template.metadata.ownerReferences.size() == 0) &&
+        (!has(object.spec.template.metadata.finalizers) || object.spec.template.metadata.finalizers.size() == 0) &&
+        (!has(object.spec.template.metadata.name) || object.spec.template.metadata.name == '') &&
+        (!has(object.spec.template.metadata.generateName) || object.spec.template.metadata.generateName == '') &&
+        (!has(object.spec.template.metadata.namespace) || object.spec.template.metadata.namespace == '')
       message: MCP bundle validator Job must remain the exact suspended worker shape
 ---
 apiVersion: admissionregistration.k8s.io/v1

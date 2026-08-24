@@ -29,8 +29,9 @@ function _KubernetesJob(job: V1Job): V1Job
 		throw new Error("expected test Job name");
 	}
 	const generatedLabels = { "batch.kubernetes.io/controller-uid": uid, "batch.kubernetes.io/job-name": name, "controller-uid": uid, "job-name": name };
+	const generatedSelector = { "batch.kubernetes.io/controller-uid": uid };
 	const labels = { ...job.spec?.template.metadata?.labels, ...generatedLabels };
-	return { ...job, metadata: { ...job.metadata, uid }, spec: { ...job.spec!, selector: { matchLabels: generatedLabels }, template: { ...job.spec!.template, metadata: { ...job.spec!.template.metadata, labels } } } };
+	return { ...job, metadata: { ...job.metadata, uid }, spec: { ...job.spec!, selector: { matchLabels: generatedSelector }, template: { ...job.spec!.template, metadata: { ...job.spec!.template.metadata, labels } } } };
 }
 
 describe("MCP bundle validation Kubernetes store", function _McpbValidationStoreSuite()
