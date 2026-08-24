@@ -4,7 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { findingDelta, inspectPrismaBoundary, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy, validateRawProcedureDeclarations } from "../prisma-boundary/core.mjs";
+import { findingDelta, inspectPrismaBoundary, prepareBasePolicyForComparison, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy, validateRawProcedureDeclarations } from "../prisma-boundary/core.mjs";
 
 /** Fixture directory for deterministic ownership examples. */
 const _FIXTURES = fileURLToPath(new URL("./fixtures/prisma-boundary/", import.meta.url));
@@ -38,6 +38,13 @@ test("allows imported repository and unit-of-work contract owners", function _Al
 	assert.doesNotThrow(function _ValidPolicy() { validatePolicy({ version: 1, owners: _OWNERS, rawProcedureCalls: [], exemptions: [] }); });
 	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-widget-repository.ts", _Fixture("positive-repository"), ["widget"], _OWNERS), []);
 	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work"), ["widget"], _OWNERS), []);
+});
+
+test("treats an older base policy as having no approved raw procedures", function _AllowsOlderBasePolicy()
+{
+	const basePolicy = prepareBasePolicyForComparison({ version: 1, owners: _OWNERS, exemptions: [] });
+	assert.deepEqual(basePolicy.rawProcedureCalls, []);
+	assert.doesNotThrow(function _ValidBasePolicy() { validatePolicy(basePolicy); });
 });
 
 test("allows exact live contracts without empty repository aliases", function _AllowsLiveContracts()

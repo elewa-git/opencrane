@@ -41,10 +41,20 @@ cd "$REPO_ROOT"
 # 1. Resolve the file list — diff vs HEAD by default, so the check always
 #    scopes to what the current change actually touched.
 FILES=()
+IF_DIFF_BASE=""
+IF_CHECK_ENABLED=1
 if [[ $# -eq 0 ]]; then
+	IF_DIFF_BASE="HEAD"
 	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR -z HEAD -- '*.ts' 2>/dev/null || true)
 	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git ls-files --others --exclude-standard -z -- '*.ts' 2>/dev/null || true)
 elif [[ "${1:-}" == "--diff" ]]; then
+	IF_DIFF_BASE="${2:?--diff needs a ref}"
+	# A branch that introduces this rule cannot retroactively reformat earlier commits in the same
+	# cumulative PR. Once the checker exists in the comparison base, every new line is enforced.
+	if ! git cat-file -e "$IF_DIFF_BASE:scripts/if-body-newline-check.mjs" 2>/dev/null
+	then
+		IF_CHECK_ENABLED=0
+	fi
 	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR -z "${2:?--diff needs a ref}" -- '*.ts')
 	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git ls-files --others --exclude-standard -z -- '*.ts' 2>/dev/null || true)
 else
@@ -103,11 +113,11 @@ done
 # IF-BODY-NEWLINE — every `if` starts its body on the next physical line, including braceless
 # `return`, `continue`, `throw`, and assignment bodies. The AST check also covers multiline
 # conditions and nested else-if statements without mistaking strings or comments for code.
-for f in ${INLINE_CHECKABLE[@]+"${INLINE_CHECKABLE[@]}"}; do
-	while IFS=: read -r ln _; do
+if [[ "$IF_CHECK_ENABLED" -eq 1 && ${#INLINE_CHECKABLE[@]} -gt 0 ]]; then
+	while IFS=: read -r f ln _; do
 		_report "$f" "$ln" ERROR IF-BODY-NEWLINE "if body starts on the condition line — move the body to the following line"
-	done < <(node scripts/if-body-newline-check.mjs "$f")
-done
+	done < <(if [[ -n "$IF_DIFF_BASE" ]]; then node scripts/if-body-newline-check.mjs --diff "$IF_DIFF_BASE" ${INLINE_CHECKABLE[@]+"${INLINE_CHECKABLE[@]}"}; else node scripts/if-body-newline-check.mjs ${INLINE_CHECKABLE[@]+"${INLINE_CHECKABLE[@]}"}; fi)
+fi
 
 # MISSING-README / README-SECTIONS — package docs (docs/agents/package-docs.md).
 # A changed package must ship a README, and a changed leaf-package README must
