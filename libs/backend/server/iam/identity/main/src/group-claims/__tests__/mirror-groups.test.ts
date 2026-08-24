@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { Logger } from "pino";
 import { describe, expect, it, vi } from "vitest";
 
-import { _MirrorGroupsOnLogin, _ParseGroupClaims, PrismaGroupClaimProjectionUnitOfWork } from "../index";
+import { _MirrorGroupsOnLogin, _ParseGroupClaims, PrismaGroupClaimProjectionUnitOfWork } from "../mirror-groups";
 
 /** Logger spy used by group-claim reconciliation cases. */
 const _log = { warn: vi.fn(), info: vi.fn() } as unknown as Logger;

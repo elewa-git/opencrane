@@ -259,14 +259,14 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/server/iam/identity/main/src/prisma-standalone-first-user-admission-repository.ts",
+        "path": "libs/backend/server/iam/identity/main/src/standalone-first-user/prisma-standalone-first-user-admission-repository.ts",
         "adapter": "PrismaStandaloneFirstUserAdmissionRepository",
         "contract": "StandaloneFirstUserOwnerClaimRepository",
         "contractImportPath": "./standalone-first-user-admission.types",
         "constructs": []
       },
       {
-        "path": "libs/backend/server/iam/identity/main/src/prisma-authenticated-principal-directory.ts",
+        "path": "libs/backend/server/iam/identity/main/src/authenticated-principals/prisma-authenticated-principal-directory.ts",
         "adapter": "PrismaAuthenticatedPrincipalDirectoryRepository",
         "contract": "AuthenticatedPrincipalDirectory",
         "contractImportPath": "./authenticated-principal-directory.types",
@@ -628,7 +628,7 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/server/iam/identity/main/src/mirror-groups.ts",
+        "path": "libs/backend/server/iam/identity/main/src/group-claims/mirror-groups.ts",
         "adapter": "PrismaGroupClaimProjectionRepository",
         "contract": "GroupClaimProjectionRepository",
         "contractImportPath": "./identity-workflows.types",
@@ -656,7 +656,7 @@
         ]
       },
       {
-        "path": "libs/backend/server/iam/identity/main/src/mirror-groups.ts",
+        "path": "libs/backend/server/iam/identity/main/src/group-claims/mirror-groups.ts",
         "adapter": "PrismaGroupClaimProjectionUnitOfWork",
         "contract": "GroupClaimProjectionUnitOfWork",
         "contractImportPath": "./identity-workflows.types",
@@ -732,7 +732,7 @@
         ]
       },
       {
-        "path": "libs/backend/server/iam/identity/main/src/prisma-standalone-first-user-admission-unit-of-work.ts",
+        "path": "libs/backend/server/iam/identity/main/src/standalone-first-user/prisma-standalone-first-user-admission-unit-of-work.ts",
         "adapter": "PrismaStandaloneFirstUserAdmissionUnitOfWork",
         "contract": "StandaloneFirstUserAdmissionUnitOfWork",
         "contractImportPath": "./standalone-first-user-admission.types",
@@ -744,7 +744,7 @@
         ]
       },
       {
-        "path": "libs/backend/server/iam/identity/main/src/prisma-authenticated-principal-directory-unit-of-work.ts",
+        "path": "libs/backend/server/iam/identity/main/src/authenticated-principals/prisma-authenticated-principal-directory-unit-of-work.ts",
         "adapter": "PrismaAuthenticatedPrincipalDirectoryUnitOfWork",
         "contract": "AuthenticatedPrincipalDirectory",
         "contractImportPath": "./authenticated-principal-directory.types",
@@ -756,7 +756,7 @@
         ]
       },
       {
-        "path": "libs/backend/server/iam/identity/main/src/prisma-authenticated-principal-admission-unit-of-work.ts",
+        "path": "libs/backend/server/iam/identity/main/src/authenticated-principals/prisma-authenticated-principal-admission-unit-of-work.ts",
         "adapter": "PrismaAuthenticatedPrincipalAdmissionUnitOfWork",
         "contract": "AuthenticatedPrincipalAdmission",
         "contractImportPath": "@opencrane/backend/server/infra/auth",
@@ -1296,7 +1296,7 @@
 		"libs/backend/agents/execution/runs/main/src/prisma-self-run-cancellation.router.ts",
 		"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
-		"libs/backend/server/iam/identity/main/src/oidc.service.ts",
+		"libs/backend/server/iam/identity/main/src/auth/oidc.service.ts",
 		"libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts"
     ]
   },

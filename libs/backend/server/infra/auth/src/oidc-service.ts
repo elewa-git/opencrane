@@ -48,9 +48,9 @@ export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from ".
  * on every call, so a user who has just created an organisation counts as an org admin
  * without logging in again.
  *
- * Called by: `OidcAuthService` in libs/backend/server/iam/identity/main/src/oidc.service.ts
+ * Called by: `OidcAuthService` in libs/backend/server/iam/identity/main/src/auth/oidc.service.ts
  * extends it; apps/opencrane/src/app/public-app.ts constructs it and mounts
- * {@link createSessionMiddleware}; libs/backend/server/iam/identity/main/src/auth.router.ts
+ * {@link createSessionMiddleware}; libs/backend/server/iam/identity/main/src/auth/auth.router.ts
  * calls {@link getStatus}, {@link isEnabled}, {@link buildLoginUrl}, and
  * {@link completeLogin}.
  *
@@ -94,7 +94,7 @@ export abstract class OidcAuthServiceBase
    * mode). A PARTIAL configuration never reaches here: {@link ___LoadOidcAuthConfig}
    * throws at startup instead.
    *
-   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts lines 46 and 71,
+   * Called by: libs/backend/server/iam/identity/main/src/auth/auth.router.ts,
    * which refuse `/auth/login` and `/auth/callback` when this is false.
    *
    * @returns True when a login redirect can be issued; false when this deployment can
@@ -150,7 +150,7 @@ export abstract class OidcAuthServiceBase
    * who created an organisation after logging in gets admin rights without logging in
    * again. Nothing else on the user is recomputed.
    *
-   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts.
+   * Called by: libs/backend/server/iam/identity/main/src/auth/auth.router.ts.
    *
    * @param req - The `/auth/me` request; only its session and host are read.
    * @returns The auth mode plus the caller, or a null user when nobody is logged in.
@@ -198,7 +198,7 @@ export abstract class OidcAuthServiceBase
    * saved before the URL is returned, because a redirect that outran the session write
    * would come back to a callback with no flow to match.
    *
-   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts.
+   * Called by: libs/backend/server/iam/identity/main/src/auth/auth.router.ts.
    *
    * @param req      - The `/auth/login` request; supplies the session and the host the
    *                   redirect_uri is built from.
@@ -262,7 +262,7 @@ export abstract class OidcAuthServiceBase
    * the session and reaches the browser, depending on
    * {@link isPostLoginFailureFatal}. Everything before it always reaches the browser.
    *
-   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts.
+   * Called by: libs/backend/server/iam/identity/main/src/auth/auth.router.ts.
    *
    * @param req - The callback request; the full callback URL and the session are read.
    * @returns The local path to redirect the browser to; `/` when the original return
@@ -333,7 +333,7 @@ export abstract class OidcAuthServiceBase
    * The local session is always destroyed, even when the provider URL cannot be built —
    * a provider problem must never leave the user logged in here.
    *
-   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts.
+   * Called by: libs/backend/server/iam/identity/main/src/auth/auth.router.ts.
    *
    * @param req - The logout request; its session and host are read.
    * @returns The provider's end-session URL to redirect to, or null when there is nothing
@@ -361,7 +361,7 @@ export abstract class OidcAuthServiceBase
    * for another client_id at the same issuer.
    *
    * Overridden by: `OidcAuthService.resolveLoginClient` in
-   * libs/backend/server/iam/identity/main/src/oidc.service.ts, which resolves a
+   * libs/backend/server/iam/identity/main/src/auth/oidc.service.ts, which resolves a
    * per-organisation client from the request host and falls back to `super` when the host
    * maps to no fully provisioned organisation.
    *
@@ -384,7 +384,7 @@ export abstract class OidcAuthServiceBase
    * the intent.
    *
    * Overridden by: `OidcAuthService.enrichStatusUser` in
-   * libs/backend/server/iam/identity/main/src/oidc.service.ts, which adds the caller's
+   * libs/backend/server/iam/identity/main/src/auth/oidc.service.ts, which adds the caller's
    * `clusterTenant` resolved server-side from their verified subject.
    *
    * @param _req      - The status request (unused by the base).
@@ -414,7 +414,7 @@ export abstract class OidcAuthServiceBase
    * so the browser sees the login fail. Nothing else in this class inspects the outcome.
    *
    * Overridden by: `OidcAuthService.onLoginEstablished` in
-   * libs/backend/server/iam/identity/main/src/oidc.service.ts, which mirrors group names
+   * libs/backend/server/iam/identity/main/src/auth/oidc.service.ts, which mirrors group names
    * (best effort), then evaluates first-owner admission; an `AlreadyClaimed` result returns normally so an authenticated invitee can reach guarded invitation acceptance.
    *
    * @param _req      - The completed callback request (unused by the base).
@@ -435,7 +435,7 @@ export abstract class OidcAuthServiceBase
    * would strand them in a half-set-up state.
    *
    * Overridden by: `OidcAuthService.isPostLoginFailureFatal` in
-   * libs/backend/server/iam/identity/main/src/oidc.service.ts, which returns true only
+   * libs/backend/server/iam/identity/main/src/auth/oidc.service.ts, which returns true only
    * when standalone first-owner admission is configured.
    *
    * @returns True to fail the login on a hook error; false to log and continue.
@@ -484,7 +484,7 @@ export abstract class OidcAuthServiceBase
    *
    * Called by: {@link completeLogin} (for the client_id recorded in the session) and
    * `OidcAuthService.resolveLoginClient` in
-   * libs/backend/server/iam/identity/main/src/oidc.service.ts.
+   * libs/backend/server/iam/identity/main/src/auth/oidc.service.ts.
    *
    * @param clientId - The organisation's OIDC client_id, resolved from the request host.
    * @returns The discovered configuration for that client, ready to authorize against.

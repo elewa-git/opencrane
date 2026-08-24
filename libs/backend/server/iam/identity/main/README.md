@@ -65,13 +65,16 @@ acceptance route can establish membership; it gains no Owner or administrator fa
   lifecycle, and the `/auth/me` enrichment that adds the caller's resolved ClusterTenant.
 - `___AuthRouter` — the Express routes for session introspection (`/me`) and the OIDC browser flow
   (`/login`, `/callback`, `/logout`).
-- `_MirrorGroupsOnLogin` — projects the verified issuer and subject into a local Principal, then
-  reconciles direct membership for existing external groups named by `group:<Group.id>` claims.
 - `PrismaAuthenticatedPrincipalAdmissionUnitOfWork` — atomically reconciles the verified claim set
   and exact-resolves the durable Principal before authenticated middleware admits a product request.
-- `_AdmitStandaloneFirstUser`, `StandaloneFirstUserAdmissionRepository` — the narrow verified-email
-  eligibility check and subject-bound one-time Owner claim for a standalone silo.
-- Workflow contract types from `identity-workflows.types`.
+- `PrismaAuthenticatedPrincipalDirectoryUnitOfWork` — resolves the exact stored Principal for a
+  verified `{siloId, issuer, subject}` tuple.
+- `StandaloneFirstUserAdmissionConfig`, `StandaloneFirstUserAdmissionAuditPort` — composition
+  contracts that configure the optional standalone first-owner claim.
+
+The OIDC service keeps login group projection and standalone first-owner admission as internal
+steps. They are not package entry points because the login flow coordinates their verified inputs,
+transaction boundaries, and failure behavior.
 
 ## Boundary
 

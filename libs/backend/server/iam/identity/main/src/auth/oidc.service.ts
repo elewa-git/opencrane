@@ -7,10 +7,10 @@ import type { PrismaClient } from "@prisma/client";
 
 import { OidcAuthServiceBase, PrismaOrgMembershipRepository, _ClusterTenantFromHost, _OrgScope, _RequestHost, _ResolvePerOrgClient, _saveSession, type AuthUser, type LoginClient } from "@opencrane/backend/server/infra/auth";
 
-import { _MirrorGroupsOnLogin, PrismaGroupClaimProjectionUnitOfWork } from "./mirror-groups";
-import { _AdmitStandaloneFirstUser } from "./standalone-first-user-admission";
-import { PrismaStandaloneFirstUserAdmissionUnitOfWork } from "./prisma-standalone-first-user-admission-unit-of-work";
-import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "./standalone-first-user-admission.types";
+import { _MirrorGroupsOnLogin, PrismaGroupClaimProjectionUnitOfWork } from "../group-claims/mirror-groups";
+import { _AdmitStandaloneFirstUser } from "../standalone-first-user/standalone-first-user-admission";
+import { PrismaStandaloneFirstUserAdmissionUnitOfWork } from "../standalone-first-user/prisma-standalone-first-user-admission-unit-of-work";
+import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "../standalone-first-user/standalone-first-user-admission.types";
 import { _ResolveCallerClusterTenant } from "@opencrane/backend/server/tenancy/cluster-tenants";
 
 /**

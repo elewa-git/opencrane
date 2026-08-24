@@ -41,7 +41,8 @@ vi.mock("openid-client", function _mockClient()
   };
 });
 
-import { ___CreateOidcAuthService, type StandaloneFirstUserAdmissionAuditPort } from "../index";
+import { ___CreateOidcAuthService } from "../oidc.service";
+import type { StandaloneFirstUserAdmissionAuditPort } from "../../standalone-first-user/standalone-first-user-admission.types";
 
 /** Minimal OIDC env so the service is enabled and uses `cid` as the masters client. */
 function _enableOidc(): void

@@ -73,7 +73,7 @@ export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, r
 
 	// 4. Mount session establishment before the product-authentication boundary.
 	app.use(...authentication.sessionMiddleware);
-	app.use("/api/v1/auth", ___AuthRouter(authentication.authService, prisma));
+	app.use("/api/v1/auth", ___AuthRouter(authentication.authService));
 	app.use(authentication.authMiddleware);
 	const organizationMembers = _CreateOrganizationMembersComposition(prisma, _ReadOrganizationMembershipConfig());
 	if (organizationMembers.productAccess !== null) app.use(organizationMembers.productAccess);

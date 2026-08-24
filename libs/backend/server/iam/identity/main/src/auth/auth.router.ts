@@ -1,5 +1,4 @@
 import { Router } from "express";
-import type { PrismaClient } from "@prisma/client";
 
 import type { OidcAuthService } from "./oidc.service";
 
@@ -12,11 +11,10 @@ import type { OidcAuthService } from "./oidc.service";
  *
  * Called by: `_CreatePublicApp` when it mounts `/api/v1/auth` before `___AuthMiddleware`.
  * @param authService - OIDC discovery, browser-flow, and session service.
- * @param _prisma - Product database client accepted by the existing composition; no handler currently reads it.
  * @returns The Express router for session introspection, login, callback, reauthentication, and logout.
  * @see https://zitadel.com/docs/apis/openidoauth/endpoints for ZITADEL's `prompt=create` extension.
  */
-export function ___AuthRouter(authService: OidcAuthService, _prisma: PrismaClient): Router
+export function ___AuthRouter(authService: OidcAuthService): Router
 {
   const router = Router();
 

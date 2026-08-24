@@ -13,7 +13,7 @@ function _App(authService: object, authenticated: boolean)
 		req.session = authenticated ? { authUser: { sub: "user-1" } } as never : {} as never;
 		next();
 	});
-	app.use("/api/v1/auth", ___AuthRouter(authService as never, {} as never));
+	app.use("/api/v1/auth", ___AuthRouter(authService as never));
 	return app;
 }
 
