@@ -4,7 +4,12 @@ import type { AgentControllerMcpbValidationAssignmentCommand, AgentControllerMcp
 import type { McpbValidatorJobProfile } from "@opencrane/backend/server/gateways/mcp/validator-k8s-launcher";
 import type { Logger } from "@opencrane/backend/observability";
 
-/** Calls the internal server API that lends validation work and saves Job evidence. */
+/**
+ * Calls the internal server API to claim validation work and save its Kubernetes Job UID.
+ *
+ * The loop must claim work before it creates a Job, so a missing or rejected claim never becomes a
+ * Kubernetes workload.
+ */
 export interface McpbValidationControllerAuthority
 {
 	/** Claims one pending validation workload, or returns null when nothing is ready. */
@@ -76,7 +81,12 @@ export interface McpbValidationControllerOptions
 	readonly log: Logger;
 }
 
-/** States returned by one MCP bundle validation controller pass. */
+/**
+ * Describes what one MCP bundle controller pass did with its database claim.
+ *
+ * `Idle` means no Job was created. `Assigned` saved a new Job UID; `Idempotent` found that the same
+ * Job UID was already saved. These are in-process results, not persisted workload states.
+ */
 export enum McpbValidationControllerReconcileOutcomes
 {
 	/** No saved inspection work was available during this pass. */
