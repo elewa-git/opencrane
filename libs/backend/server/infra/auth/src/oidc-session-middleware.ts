@@ -5,7 +5,17 @@ import session from "express-session";
 
 import type { OidcAuthConfig } from "./oidc-config.types";
 
-/** Builds cookie-session and same-origin CSRF middleware for one OIDC deployment. */
+/**
+ * Creates the session and CSRF middleware for one OIDC deployment.
+ *
+ * With OIDC disabled, the returned handler does not create a cookie session. With OIDC enabled,
+ * the session cookie is HTTP-only and `SameSite=Lax`, then a second handler checks same-origin
+ * state-changing browser requests that carry authenticated session state.
+ *
+ * Called by: {@link OidcAuthServiceBase.createSessionMiddleware} during Express composition.
+ * @param config - The deployment's OIDC and session-cookie settings.
+ * @returns A pass-through handler when disabled, otherwise the session and CSRF handlers.
+ */
 export function ___CreateOidcSessionMiddleware(config: OidcAuthConfig): RequestHandler[]
 {
 	if (!config.enabled) return [function _skipSession(_request, _response, next) { next(); }];
@@ -23,7 +33,13 @@ export function ___CreateOidcSessionMiddleware(config: OidcAuthConfig): RequestH
 	];
 }
 
-/** Rejects state-changing browser requests whose Origin or Referer names another host. */
+/**
+ * Rejects an authenticated state-changing browser request whose Origin or Referer is another host.
+ *
+ * Read requests and requests without authenticated session state pass through. Checking the origin
+ * only when the browser can send a session cookie prevents another site from acting as that user.
+ * @returns Middleware that responds with a specific 403 code when the origin check fails.
+ */
 function _CsrfOriginCheck(): RequestHandler
 {
 	const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);

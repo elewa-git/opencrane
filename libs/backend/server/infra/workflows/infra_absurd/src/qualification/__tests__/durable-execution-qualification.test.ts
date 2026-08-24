@@ -7,8 +7,8 @@ import type { DurableExecutionTransaction, DurableTaskDefinition } from "@opencr
 import type { AbsurdDurableExecution } from "../../absurd-durable-execution";
 import type { DurableQualificationUnitOfWork } from "../durable-qualification-unit-of-work.types";
 import { __QualifyDurableExecutionPickup, _DurableExecutionQualificationPassed, _DurableExecutionQualificationPercentile } from "../durable-execution-qualification";
-import { _AbsurdDurableExecutionQualificationSession } from "../durable-execution-qualification-session";
-import type { _DurableExecutionQualificationInput, _DurableExecutionQualificationSession } from "../durable-execution-qualification-session.types";
+import { _AbsurdQualificationWorkflowSession } from "../durable-execution-qualification-session";
+import type { IQualificationTaskInput, IQualificationWorkflowSession } from "../durable-execution-qualification-session.types";
 
 const _Options = {
 	databasePoolSize: 2,
@@ -22,14 +22,14 @@ const _Options = {
 /** Create one controllable session for runner orchestration tests. */
 function _FakeSession(connectionCount: number | null = 3)
 {
-	let onStarted: ((input: _DurableExecutionQualificationInput) => void) | undefined;
+	let onStarted: ((input: IQualificationTaskInput) => void) | undefined;
 	let currentTime = 0;
 	const events: string[] = [];
-	const session: _DurableExecutionQualificationSession = {
+	const session: IQualificationWorkflowSession = {
 		async start(handler): Promise<void> { events.push("start"); onStarted = handler; },
-		async admit(input)
+		async next(input)
 		{
-			events.push(`admit:${input.sampleIndex}`);
+			events.push(`next:${input.sampleIndex}`);
 			currentTime += 100;
 			onStarted?.(input);
 			return { taskId: `task-${input.sampleIndex}`, taskName: "qualification", idempotencyKey: `${input.sampleIndex}` };
@@ -40,7 +40,7 @@ function _FakeSession(connectionCount: number | null = 3)
 	return {
 		events,
 		runtime: {
-			createSession: function _Create(): _DurableExecutionQualificationSession { return session; },
+			createSession: function _Create(): IQualificationWorkflowSession { return session; },
 			now: function _Now(): number { return currentTime; },
 			async wait(): Promise<void> {},
 			async withTimeout(sample: Promise<number>): Promise<number> { return await sample; },
@@ -81,7 +81,7 @@ describe("durable execution live qualification statistics", function _Suite()
 
 		expect(result.passed).toBe(true);
 		expect(result.latencyMs).toEqual({ p50: 100, p95: 100, p99: 100, max: 100 });
-		expect(fake.events.filter(event => event.startsWith("admit:"))).toHaveLength(15);
+		expect(fake.events.filter(event => event.startsWith("next:"))).toHaveLength(15);
 		expect(fake.events.at(-1)).toBe("close");
 	});
 
@@ -99,12 +99,12 @@ describe("durable execution live qualification statistics", function _Suite()
 	it("cleans up after admission and timeout failures", async function _FailureCleanup()
 	{
 		const admission = _FakeSession();
-		vi.spyOn(admission.session, "admit").mockRejectedValue(new Error("admission failed"));
-		await expect(__QualifyDurableExecutionPickup(_Options, admission.runtime)).rejects.toThrow("admission failed");
+		vi.spyOn(admission.session, "next").mockRejectedValue(new Error("next sample failed"));
+		await expect(__QualifyDurableExecutionPickup(_Options, admission.runtime)).rejects.toThrow("next sample failed");
 		expect(admission.events.at(-1)).toBe("close");
 
 		const timeout = _FakeSession();
-		vi.spyOn(timeout.session, "admit").mockImplementation(async input => ({ taskId: `task-${input.sampleIndex}`, taskName: "qualification", idempotencyKey: `${input.sampleIndex}` }));
+		vi.spyOn(timeout.session, "next").mockImplementation(async input => ({ taskId: `task-${input.sampleIndex}`, taskName: "qualification", idempotencyKey: `${input.sampleIndex}` }));
 		timeout.runtime.withTimeout = async function _Timeout(): Promise<number> { throw new Error("pickup timed out"); };
 		await expect(__QualifyDurableExecutionPickup(_Options, timeout.runtime)).rejects.toThrow("pickup timed out");
 		expect(timeout.events.at(-1)).toBe("close");
@@ -116,23 +116,23 @@ describe("durable execution qualification session", function _SessionSuite()
 	it("owns admission and ordered cleanup without a live database", async function _Lifecycle()
 	{
 		const events: string[] = [];
-		let definition: DurableTaskDefinition<_DurableExecutionQualificationInput, null> | undefined;
+		let definition: DurableTaskDefinition<IQualificationTaskInput, null> | undefined;
 		const resources = {
 			databasePool: { async query() { return { rows: [{ connection_count: "3" }] }; }, async end() { events.push("pool-end"); } } as unknown as Pool,
 				execution: {
-					register(value: DurableTaskDefinition<_DurableExecutionQualificationInput, null>) { definition = value; events.push("register"); },
+					register(value: DurableTaskDefinition<IQualificationTaskInput, null>) { definition = value; events.push("register"); },
 					async startWorkers() { events.push("worker-start"); return { workerId: "worker", workerName: "worker", async drain() { events.push("worker-drain"); }, async stop() {} }; },
-					async spawn(_transaction: DurableExecutionTransaction, input: { input: _DurableExecutionQualificationInput }) { events.push("spawn"); return { taskId: "task", taskName: "qualification", idempotencyKey: `${input.input.sampleIndex}` }; },
+					async spawn(_transaction: DurableExecutionTransaction, input: { input: IQualificationTaskInput }) { events.push("spawn"); return { taskId: "task", taskName: "qualification", idempotencyKey: `${input.input.sampleIndex}` }; },
 				} as unknown as AbsurdDurableExecution,
 			queueOwner: { async createQueue() { events.push("queue-create"); }, async dropQueue() { events.push("queue-drop"); }, async close() { events.push("queue-close"); } } as unknown as Absurd,
 			unitOfWork: { async admit<TResult>(operation: (transaction: DurableExecutionTransaction) => Promise<TResult>): Promise<TResult> { events.push("transaction"); return await operation({ client: {} }); }, async close() { events.push("uow-close"); } } satisfies DurableQualificationUnitOfWork,
 		};
-		const session = new _AbsurdDurableExecutionQualificationSession({ applicationName: "d2", databasePoolSize: 2, databaseUrl: _Options.databaseUrl, pollIntervalMs: 50, queueName: "queue", runId: "run", siloId: "testlynn" }, resources);
+		const session = new _AbsurdQualificationWorkflowSession({ applicationName: "d2", databasePoolSize: 2, databaseUrl: _Options.databaseUrl, pollIntervalMs: 50, queueName: "queue", runId: "run", siloId: "testlynn" }, resources);
 		const started: number[] = [];
 
 		await session.start(input => started.push(input.sampleIndex));
 		await definition?.run({} as never, { sampleIndex: 1, siloId: "testlynn" });
-		await session.admit({ sampleIndex: 1, siloId: "testlynn" });
+		await session.next({ sampleIndex: 1, siloId: "testlynn" });
 		expect(await session.connectionCount()).toBe(3);
 		await session.close();
 
@@ -149,7 +149,7 @@ describe("durable execution qualification session", function _SessionSuite()
 			queueOwner: { async createQueue() {}, async dropQueue() { events.push("queue-drop"); }, async close() { events.push("queue-close"); } } as unknown as Absurd,
 			unitOfWork: { async admit<TResult>(_operation: (transaction: DurableExecutionTransaction) => Promise<TResult>): Promise<TResult> { throw new Error("unused"); }, async close() { events.push("uow-close"); } } satisfies DurableQualificationUnitOfWork,
 		};
-		const session = new _AbsurdDurableExecutionQualificationSession({ applicationName: "d2", databasePoolSize: 2, databaseUrl: _Options.databaseUrl, pollIntervalMs: 50, queueName: "queue", runId: "run", siloId: "testlynn" }, resources);
+		const session = new _AbsurdQualificationWorkflowSession({ applicationName: "d2", databasePoolSize: 2, databaseUrl: _Options.databaseUrl, pollIntervalMs: 50, queueName: "queue", runId: "run", siloId: "testlynn" }, resources);
 		await session.start(function _Started(): void {});
 
 		await expect(session.close()).rejects.toThrow("could not remove its queue");

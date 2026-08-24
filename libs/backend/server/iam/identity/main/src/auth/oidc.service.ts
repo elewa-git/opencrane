@@ -14,44 +14,40 @@ import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmission
 import { _ResolveCallerClusterTenant } from "@opencrane/backend/server/tenancy/cluster-tenants";
 
 /**
- * The clustertenant-manager's OIDC auth service. Extends the shared
- * {@link OidcAuthServiceBase} (provider discovery, PKCE login, token exchange, claim
- * validation, session lifecycle, membership-derived org-admin facts) with the two
- * parts that differ per silo:
+ * Adds tenant-bound login admission to the shared OIDC flow.
  *
- *   - {@link resolveLoginClient} — per-org login. A host `<org>.<base>` (or a customer
- *     vanity domain) that maps to a fully-provisioned ClusterTenant authorizes against THAT
- *     org's Zitadel client + org-restriction scope, so only its user pool may log in. The
- *     platform host uses the masters client. Unknown and unprovisioned tenant hosts fail closed.
- *   - {@link enrichStatusUser} — `/auth/me` adds the caller's `clusterTenant`, resolved
- *     server-side from their verified email (scoped to the silo whose host they are on),
- *     never from a self-asserted claim.
+ * The request host selects a provisioned tenant's OIDC client and organisation scope; the
+ * platform host uses the masters client. An unknown or partly provisioned tenant host cannot
+ * fall back to the masters client. After the base verifies a callback, this service projects the
+ * identity provider's groups before saving the silo-bound session. When a standalone first-owner
+ * claim is configured, the service then evaluates it through its audit adapter. An ineligible
+ * claim or projection failure fails the login, so the base destroys the newly created session.
+ *
+ * @see _OrgScope — builds the organisation scope used for a tenant login.
  */
 export class OidcAuthService extends OidcAuthServiceBase
 {
-  /** Prisma client for the email→tenant→clusterTenant lookup (`/auth/me` enrichment). */
+  /** Resolves membership and tenant data during login and `/auth/me`. */
   private prisma: PrismaClient;
 
-  /** Kubernetes custom-objects client for reading the ClusterTenant CR (per-org login). */
+  /** Reads ClusterTenant records while resolving a host's login client. */
   private customApi: k8s.CustomObjectsApi | null;
 
   /**
-   * Deployment-owned one-time owner bootstrap. Null leaves the shared OIDC flow unchanged;
-   * a configured standalone silo performs the narrow verified-email admission on every login.
+   * Enables the deployment-selected first-owner claim for a standalone silo.
+   * Null leaves the shared OIDC flow unchanged.
    */
   private readonly standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null;
-  /** App-composed audit boundary retained only for the configured standalone owner claim. */
+  /** Records the configured standalone first-owner claim. */
   private readonly standaloneFirstUserAudit: StandaloneFirstUserAdmissionAuditPort | null;
 
   /**
-   * @param log            - Parent logger; a child scoped to `oidc-auth` is derived by the base.
-   * @param prisma         - Prisma client for the organization-membership repository and `/auth/me`
-   *                         email→tenant lookup.
-   * @param customApi      - Kubernetes custom-objects client used to read the cluster-scoped
-   *                         ClusterTenant CR for per-org login resolution; null in dev/test (login
-   *                         then always uses the masters client).
-   * @param standaloneFirstUserAdmission - Optional standalone-silo first-owner admission contract.
-   * @param standaloneFirstUserAudit - App-composed audit adapter for standalone owner claims.
+   * @param log - Parent logger; the base derives an `oidc-auth` child.
+   * @param prisma - Reads memberships and resolves the caller's cluster tenant.
+   * @param customApi - Reads a ClusterTenant for host-bound login; null uses the masters client.
+   * @param standaloneFirstUserAdmission - Enables a standalone-silo first-owner claim when set.
+   * @param standaloneFirstUserAudit - Records that claim; required when admission is enabled.
+   * @throws When a standalone claim is configured without an audit adapter.
    */
   constructor(log: Logger, prisma: PrismaClient, customApi: k8s.CustomObjectsApi | null = null, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null = null, standaloneFirstUserAudit: StandaloneFirstUserAdmissionAuditPort | null = null)
   {
@@ -67,8 +63,16 @@ export class OidcAuthService extends OidcAuthServiceBase
   }
 
   /**
-   * Resolve the per-org OIDC client for this request host from the ClusterTenant CR; fall
-   * use the masters client only on the configured platform host.
+   * Selects the OIDC client that may authenticate the request host.
+   *
+   * A provisioned tenant host uses the client and organisation scope from its ClusterTenant;
+   * the configured platform or standalone host uses the masters client. Any other host fails
+   * rather than allowing a tenant login to use platform credentials.
+   *
+   * Called by: {@link OidcAuthServiceBase.buildLoginUrl} before it records the callback flow.
+   * @returns The client and scope to use for this authorization request.
+   * @throws When a non-platform host has no provisioned tenant client.
+   * @see _OrgScope — builds the organisation scope for the selected tenant.
    */
   protected override async resolveLoginClient(req: Request): Promise<LoginClient>
   {
@@ -89,9 +93,12 @@ export class OidcAuthService extends OidcAuthServiceBase
   }
 
   /**
-   * Add the caller's `clusterTenant` to `/auth/me`, resolved fresh from their verified subject
-   * scoped to the silo derived from the request host. Null when unresolved/ambiguous (a
-   * multi-silo owner viewing a host they own no workspace on, or "No tenant yet").
+   * Adds the caller's cluster tenant to `/auth/me` from their verified subject and request host.
+   *
+   * A null value means the lookup was unresolved or ambiguous, such as a multi-silo owner on a
+   * host where they have no workspace. The response never accepts a caller-supplied tenant claim.
+   * Called by: {@link OidcAuthServiceBase.getStatus}.
+   * @returns The fresh `clusterTenant` value, which can be null.
    */
   protected override async enrichStatusUser(req: Request, authUser: AuthUser): Promise<Record<string, unknown>>
   {
@@ -100,9 +107,17 @@ export class OidcAuthService extends OidcAuthServiceBase
   }
 
   /**
-   * Bind the callback to its exact silo and project its verified identity and external groups before
-   * the session becomes usable. A projection failure rejects the login so request middleware never
-   * has to recreate authorization state from cached claims.
+   * Binds a verified callback to its host silo before accepting its session.
+   *
+   * The callback must match the tenant client recorded when login began. The service projects
+   * external groups before it saves the silo-bound session, so authorization is stored before
+   * later request middleware can read the session. A configured first-owner claim runs afterwards
+   * through the required audit adapter; it promotes an admitted owner, preserves an invitee after
+   * `AlreadyClaimed`, and rejects an ineligible claim or infrastructure failure.
+   *
+   * Called by: {@link OidcAuthServiceBase.completeLogin} after it exchanges and verifies the OIDC
+   * callback. This service makes failures fatal, so the base destroys the regenerated session.
+   * @throws When the host, callback client, group projection, or first-owner admission is invalid.
    */
   protected override async onLoginEstablished(req: Request, authUser: AuthUser, loginClientId?: string): Promise<void>
   {
@@ -164,7 +179,7 @@ export class OidcAuthService extends OidcAuthServiceBase
     await _saveSession(req);
   }
 
-  /** Reject every login whose exact-silo projection or standalone admission fails. */
+  /** Makes callback-projection and configured first-owner failures reject the login. */
   protected override isPostLoginFailureFatal(): boolean
   {
     return true;
@@ -172,12 +187,17 @@ export class OidcAuthService extends OidcAuthServiceBase
 }
 
 /**
- * Create the OIDC auth service used by the clustertenant-manager Express app.
- * @param log            - Parent logger.
- * @param prisma         - Prisma client for the `/auth/me` email→tenant lookup + membership facts.
- * @param customApi      - Kubernetes custom-objects client for per-org login CR reads (null in dev/test).
- * @param standaloneFirstUserAdmission - Optional one-time owner admission for a standalone silo.
- * @param standaloneFirstUserAudit - App-composed audit adapter for that owner admission.
+ * Creates the identity application's host-bound OIDC service.
+ *
+ * Supplying a standalone first-owner claim without its audit adapter throws before the app accepts
+ * callbacks.
+ * @param log - Parent logger for the service.
+ * @param prisma - Membership and tenant lookup client.
+ * @param customApi - ClusterTenant reader, or null when no per-tenant reader is available.
+ * @param standaloneFirstUserAdmission - Optional standalone first-owner admission configuration.
+ * @param standaloneFirstUserAudit - Audit adapter required by standalone admission.
+ * @returns The service the auth router uses for login and status requests.
+ * @throws When standalone admission is configured without an audit adapter.
  */
 export function ___CreateOidcAuthService(log: Logger, prisma: PrismaClient, customApi: k8s.CustomObjectsApi | null = null, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null = null, standaloneFirstUserAudit: StandaloneFirstUserAdmissionAuditPort | null = null): OidcAuthService
 {

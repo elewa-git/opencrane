@@ -2,9 +2,10 @@ import type { DurableTaskReceipt } from "@opencrane/backend/server/infra/workflo
 
 /**
  * Identifies one temporary Gate D2 task without persisting database or Kubernetes credentials.
+ *
  * The silo check prevents a task from satisfying a run created for another tenant.
  */
-export interface _DurableExecutionQualificationInput
+export interface IQualificationTaskInput
 {
 	/** Zero-based task number used to resolve the matching local latency sample. */
 	readonly sampleIndex: number;
@@ -12,8 +13,8 @@ export interface _DurableExecutionQualificationInput
 	readonly siloId: string;
 }
 
-/** Construction inputs that bind one session to its unique queue and connection identity. */
-export interface _DurableExecutionQualificationSessionOptions
+/** Builds the unique queue and connection identity for one qualification session. */
+export interface IQualificationWorkflowSessionOptions
 {
 	/** PostgreSQL application name used to count only this session's connections. */
 	readonly applicationName: string;
@@ -32,19 +33,22 @@ export interface _DurableExecutionQualificationSessionOptions
 }
 
 /**
- * Owns the temporary queue, worker, transactions, and database connections for one live run.
+ * Defines the resource-owning lifecycle for one live qualification run.
  *
- * The runner sees this narrow lifecycle instead of constructing SDK and Prisma resources itself,
- * so tests can prove admission and cleanup behavior without opening a database connection.
+ * The runner calls {@link start}, repeats {@link next} and {@link connectionCount}, then calls
+ * {@link close} even when a sample fails. The session owns the temporary queue, worker, database
+ * clients, and qualification {@link DurableQualificationUnitOfWork}; that UnitOfWork, rather than
+ * `next`, owns the database transaction which commits a task receipt. Keeping the runner behind
+ * this interface lets its tests prove that lifecycle without opening a database connection.
  */
-export interface _DurableExecutionQualificationSession
+export interface IQualificationWorkflowSession
 {
-	/** Create the unique queue and start its worker before any sample is admitted. */
-	start(onStarted: (input: _DurableExecutionQualificationInput) => void): Promise<void>;
-	/** Admit one sample through the caller-owned Prisma transaction. */
-	admit(input: _DurableExecutionQualificationInput): Promise<DurableTaskReceipt>;
-	/** Count this qualification's application-role connections, or report unavailable evidence. */
+	/** Starts the unique queue and worker before the runner submits a sample. */
+	start(onStarted: (input: IQualificationTaskInput) => void): Promise<void>;
+	/** Submits the next sample through the session's qualification UnitOfWork transaction. */
+	next(input: IQualificationTaskInput): Promise<DurableTaskReceipt>;
+	/** Counts this qualification's application-role connections, or reports unavailable evidence. */
 	connectionCount(): Promise<number | null>;
-	/** Drain work, remove the temporary queue, and release every owned resource. */
+	/** Drains work, removes the temporary queue, and releases every resource this session owns. */
 	close(): Promise<void>;
 }

@@ -2,21 +2,21 @@ import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
 import { _CreateDurableExecutionQualificationSession } from "./durable-execution-qualification-session";
-import type { _DurableExecutionQualificationInput, _DurableExecutionQualificationSession } from "./durable-execution-qualification-session.types";
+import type { IQualificationTaskInput, IQualificationWorkflowSession } from "./durable-execution-qualification-session.types";
 import type { DurableExecutionConnectionEvidence, DurableExecutionQualificationOptions, DurableExecutionQualificationResult } from "./durable-execution-qualification.types";
 
-interface _PendingSample
+interface IPendingSample
 {
-	/** Resolves with the handler's start time for one admitted task. */
+	/** Resolves with the handler's start time for one submitted task. */
 	readonly started: Promise<number>;
 	/** Records the handler's start time when the temporary task begins. */
 	readonly resolve: (startedAt: number) => void;
 }
 
-interface _QualificationRuntime
+interface IQualificationRuntime
 {
-	/** Creates the resource-owning live session, or an injected test session. */
-	readonly createSession: (options: Parameters<typeof _CreateDurableExecutionQualificationSession>[0]) => _DurableExecutionQualificationSession;
+	/** Creates the resource-owning live session, or the session injected by a test. */
+	readonly createSession: (options: Parameters<typeof _CreateDurableExecutionQualificationSession>[0]) => IQualificationWorkflowSession;
 	/** Reads the monotonic clock used for pickup latency. */
 	readonly now: () => number;
 	/** Delays admissions so workers return to idle polling between samples. */
@@ -47,7 +47,7 @@ export function _DurableExecutionQualificationPercentile(samples: readonly numbe
 }
 
 /** Create a local completion signal before its task is transactionally admitted. */
-function _Pending(): _PendingSample
+function _Pending(): IPendingSample
 {
 	let resolve = function _Uninitialized(_startedAt: number): void {};
 	const started = new Promise<number>(function _RememberResolver(accept) { resolve = accept; });
@@ -93,7 +93,7 @@ async function _WithTimeout(sample: Promise<number>, timeoutMs: number): Promise
 	}
 }
 
-const _ProductionRuntime: _QualificationRuntime = {
+const _ProductionRuntime: IQualificationRuntime = {
 	createSession: _CreateDurableExecutionQualificationSession,
 	now: function _Now(): number { return performance.now(); },
 	wait: _Wait,
@@ -101,7 +101,7 @@ const _ProductionRuntime: _QualificationRuntime = {
 };
 
 /**
- * Measure idle-worker pickup through the real adapter and caller-owned Prisma transaction.
+ * Measures idle-worker pickup through the real adapter and session-owned qualification UnitOfWork.
  *
  * The CLI invokes this only against a verified live silo. It returns `passed: false` when either
  * p95 exceeds the threshold or complete connection evidence exceeds the named ceiling. Admission,
@@ -109,21 +109,21 @@ const _ProductionRuntime: _QualificationRuntime = {
  *
  * Called by: `qualify-durable-execution.cli.ts` after the deploy wrapper verifies the exact release.
  */
-export async function __QualifyDurableExecutionPickup(options: DurableExecutionQualificationOptions, runtime: _QualificationRuntime = _ProductionRuntime): Promise<DurableExecutionQualificationResult>
+export async function __QualifyDurableExecutionPickup(options: DurableExecutionQualificationOptions, runtime: IQualificationRuntime = _ProductionRuntime): Promise<DurableExecutionQualificationResult>
 {
 	const sampleCount = _BoundedInteger("sampleCount", options.sampleCount, 10, 500);
 	const pollIntervalMs = _BoundedInteger("pollIntervalMs", options.pollIntervalMs, 10, 1_000);
 	const thresholdMs = _BoundedInteger("thresholdMs", options.thresholdMs, 10, 5_000);
 	const databasePoolSize = _BoundedInteger("databasePoolSize", options.databasePoolSize, 1, 8);
 	const runId = randomUUID().replaceAll("-", "").slice(0, 20);
-	const pending = new Map<number, _PendingSample>();
+	const pending = new Map<number, IPendingSample>();
 	const latencies: number[] = [];
 	const connectionCounts: number[] = [];
 	const session = runtime.createSession({ applicationName: `opencrane-d2-${runId}`, databasePoolSize, databaseUrl: options.databaseUrl, pollIntervalMs, queueName: `opencrane-absurd-qualification-${runId}`, runId, siloId: options.siloId });
 	let runFailure: unknown;
 	try
 	{
-		await session.start(function _TaskStarted(input: _DurableExecutionQualificationInput): void
+		await session.start(function _TaskStarted(input: IQualificationTaskInput): void
 		{
 			const sample = pending.get(input.sampleIndex);
 			if (sample === undefined) throw new Error("Qualification task has no pending sample.");
@@ -136,7 +136,7 @@ export async function __QualifyDurableExecutionPickup(options: DurableExecutionQ
 			const sample = _Pending();
 			pending.set(sampleIndex, sample);
 			const admittedAt = runtime.now();
-			await session.admit({ sampleIndex, siloId: options.siloId });
+			await session.next({ sampleIndex, siloId: options.siloId });
 			const startedAt = await runtime.withTimeout(sample.started, Math.max(5_000, thresholdMs * 10));
 			if (sampleIndex >= _WarmupCount) latencies.push(startedAt - admittedAt);
 			const connectionCount = await session.connectionCount();
