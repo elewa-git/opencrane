@@ -255,7 +255,8 @@ class _FakeDurableWorkers implements DurableWorkers
 	/** Dispatch every pending fake task in admission order unless this worker group has stopped. */
 	async drain(): Promise<void>
 	{
-		if (this.stopped) return;
+		if (this.stopped)
+			return;
 		await this.execution._DrainPendingTasks();
 	}
 
