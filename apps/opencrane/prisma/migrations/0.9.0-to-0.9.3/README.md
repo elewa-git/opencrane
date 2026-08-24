@@ -32,6 +32,6 @@ previous release. Those safeguards are deferred to issue #699.
 
 The same 0.9.3 transition also adds MCP bundle validation records and their durable worker handoff.
 Each validation pins one immutable artifact revision and stores only its manifest and
-trusted-signature decision. Its linked workload records the admitted Absurd task before a controller
-can assign an isolated worker. The MCP rows hold the result shown to administrators; Absurd keeps the
-task attempts and checkpoints in its own tables.
+trusted-signature decision. Its linked workload records the admitted Absurd task. This transition
+does not mean that a controller has claimed or assigned a worker. The MCP rows hold the result shown
+to administrators; Absurd keeps the task attempts and checkpoints in its own tables.

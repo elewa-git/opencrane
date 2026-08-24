@@ -1,13 +1,19 @@
 import type { McpbBundleArtifactTarget, McpbValidationStates, McpbVerificationFailureCodes, McpbVerificationResult } from "./mcpb-validation.types";
 
-/** Task facts saved with an MCP bundle worker handoff. */
+/**
+ * Identifies the workflow task admitted for an MCP bundle validation.
+ *
+ * The repository saves these facts with the validation in the admission transaction. A retry may
+ * reuse that workload record only when every task fact still matches.
+ * @see McpbValidationRepository.ensureWorkload
+ */
 export interface McpbValidationWorkloadTask
 {
-	/** Engine-owned task identifier. */
+	/** Lets a retry reject a workload record for a different admitted task. */
 	readonly taskId: string;
-	/** Registered workflow task name. */
+	/** Lets a retry reject a task that names a different registered handler. */
 	readonly taskName: string;
-	/** Stable task key used for replay-safe admission. */
+	/** Lets a retry reject a task with a different workflow idempotency key. */
 	readonly taskKey: string;
 }
 
@@ -86,12 +92,15 @@ export interface McpbValidationRepository
 	 */
 	createOrFind(submission: McpbValidationSubmissionRecord): Promise<McpbValidationCreateResult | null>;
 	/**
-	 * Saves the one worker handoff record for a validation task admitted in this database transaction.
+	 * Saves or reuses the workload record for a task admitted with this validation.
 	 *
+	 * Submission retries admit the workflow task again, so an existing record is reusable only when
+	 * its silo and every task fact still match. `null` tells the caller that a different task is
+	 * already bound to the validation and the transaction must fail.
 	 * @param siloId - Keeps the saved workload inside its owning silo.
 	 * @param validationId - Binds the workload to one immutable validation.
 	 * @param task - Identifies the admitted workflow task that owns the validation decision.
-	 * @returns The workload identifier, or `null` when a replay names different task facts.
+	 * @returns The workload identifier, or `null` when a different task is already bound.
 	 */
 	ensureWorkload(siloId: string, validationId: string, task: McpbValidationWorkloadTask): Promise<string | null>;
 	/**

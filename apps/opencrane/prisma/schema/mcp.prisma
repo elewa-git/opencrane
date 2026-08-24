@@ -145,7 +145,8 @@ model McpbValidation {
   @@map("mcpb_validations")
 }
 
-// Keeps the database-owned handoff from an admitted workflow task to an isolated MCP bundle worker.
+// Stores the workflow task admitted for one MCP bundle validation before a controller assigns a
+// worker. Its unique task and validation fields let submission retries reuse the same handoff.
 model McpbValidationWorkload {
   id             String                       @id @default(cuid())
   siloId         String                       @map("silo_id")

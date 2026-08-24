@@ -15,7 +15,19 @@ function _Digest(value: unknown): string
 	return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 }
 
-/** Submit one immutable bundle and save its background job in the same database transaction. */
+/**
+ * Submits an immutable MCP bundle validation and saves its admitted workflow task in the same database transaction.
+ *
+ * The workload record proves admission, not that a controller has claimed or assigned a worker.
+ * @param unitOfWork - Runs the validation, audit, workflow admission, and workload save atomically.
+ * @param workflow - Admits the task that will verify the submitted bundle.
+ * @param artifacts - Resolves the caller's published immutable artifact revision.
+ * @param caller - Supplies the authenticated silo and administrator to record.
+ * @param command - Supplies the idempotency key and artifact revision to validate.
+ * @returns `ArtifactNotFound` when the caller cannot read the revision, `Conflict` when a reused key names different input, or `Submitted` with the saved validation.
+ * @throws Error when the command is invalid or the admitted task conflicts with an existing workload record.
+ * @see McpbValidationRepository.ensureWorkload
+ */
 export async function submitMcpbValidation(unitOfWork: McpOperatorUnitOfWork, workflow: McpbValidationWorkflow, artifacts: McpbBundleArtifactResolver, caller: McpOperatorCaller, command: McpbValidationSubmissionCommand): Promise<McpbValidationSubmissionResult>
 {
 	const parsed = ___McpbValidationSubmissionSchema.safeParse(command);

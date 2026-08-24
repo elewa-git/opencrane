@@ -67,7 +67,7 @@ export class PrismaMcpbValidationRepository implements McpbValidationRepository
 		return { created: true, validation: _Record(created) };
 	}
 
-	/** Save the task-to-worker handoff once, and reject a replay that names different task facts. */
+	/** Saves the admitted task once and rejects a retry that names different task facts. */
 	async ensureWorkload(siloId: string, validationId: string, task: McpbValidationWorkloadTask): Promise<string | null>
 	{
 		const existing = await this._transaction.mcpbValidationWorkload.findUnique({ where: { validationId }, select: { id: true, siloId: true, taskId: true, taskName: true, taskKey: true } });
