@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { findingDelta, inspectPrismaBoundary, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy, validateRawProcedureDeclarations } from "../prisma-boundary/core.mjs";
+import { findingDelta, inspectPrismaBoundary, prepareBasePolicyForComparison, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy, validateRawProcedureDeclarations } from "../prisma-boundary/core.mjs";
 
 /** Fixture directory for deterministic ownership examples. */
 const _FIXTURES = fileURLToPath(new URL("./fixtures/prisma-boundary/", import.meta.url));
 /** Repository root used to verify reviewer pipeline integration. */
 const _ROOT = fileURLToPath(new URL("../../", import.meta.url));
+/** Prisma boundary checker copied into temporary Git repositories for CLI regression coverage. */
+const _CHECKER = fileURLToPath(new URL("../prisma-boundary-check.mjs", import.meta.url));
 /** Authoritative owner contracts used by checker fixtures. */
 const _OWNERS = {
 	repositories: [{ path: "libs/widgets/prisma-widget-repository.ts", adapter: "PrismaWidgetRepository", contract: "WidgetRepository", contractImportPath: "./widget.types.js", constructs: [] }],
@@ -38,6 +42,43 @@ test("allows imported repository and unit-of-work contract owners", function _Al
 	assert.doesNotThrow(function _ValidPolicy() { validatePolicy({ version: 1, owners: _OWNERS, rawProcedureCalls: [], exemptions: [] }); });
 	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-widget-repository.ts", _Fixture("positive-repository"), ["widget"], _OWNERS), []);
 	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work"), ["widget"], _OWNERS), []);
+});
+
+test("treats an older base policy as having no approved raw procedures", function _AllowsOlderBasePolicy()
+{
+	const basePolicy = prepareBasePolicyForComparison({ version: 1, owners: _OWNERS, exemptions: [] });
+	assert.deepEqual(basePolicy.rawProcedureCalls, []);
+	assert.doesNotThrow(function _ValidBasePolicy() { validatePolicy(basePolicy); });
+});
+
+test("normalizes only a historical policy when the diff CLI compares schema revisions", function _ComparesOlderPolicy(context)
+{
+	const repository = mkdtempSync(join(tmpdir(), "opencrane-prisma-policy-"));
+	context.after(function _Cleanup() { rmSync(repository, { recursive: true, force: true }); });
+	function _Git(...arguments_)
+	{
+		return execFileSync("git", arguments_, { cwd: repository, encoding: "utf8" }).trim();
+	}
+	mkdirSync(join(repository, "scripts/prisma-boundary"), { recursive: true });
+	mkdirSync(join(repository, "docs/agents"), { recursive: true });
+	mkdirSync(join(repository, "apps/opencrane/prisma/schema"), { recursive: true });
+	cpSync(_CHECKER, join(repository, "scripts/prisma-boundary-check.mjs"));
+	cpSync(fileURLToPath(new URL("../prisma-boundary", import.meta.url)), join(repository, "scripts/prisma-boundary"), { recursive: true });
+	writeFileSync(join(repository, "apps/opencrane/prisma/schema/core.prisma"), "model Widget {\n id String @id\n}\n");
+	const olderPolicy = { version: 1, owners: { repositories: [], unitsOfWork: [], compositions: [] }, exemptions: [] };
+	writeFileSync(join(repository, "docs/agents/prisma-boundary-policy.json"), JSON.stringify(olderPolicy));
+	_Git("init", "-q");
+	_Git("config", "user.name", "OpenCrane test");
+	_Git("config", "user.email", "test@opencrane.invalid");
+	_Git("config", "commit.gpgSign", "false");
+	_Git("add", ".");
+	_Git("commit", "-m", "older policy");
+	const base = _Git("rev-parse", "HEAD");
+	writeFileSync(join(repository, "docs/agents/prisma-boundary-policy.json"), JSON.stringify({ ...olderPolicy, rawProcedureCalls: [] }));
+	const output = execFileSync(process.execPath, ["scripts/prisma-boundary-check.mjs", "--diff", base], { cwd: repository, encoding: "utf8" });
+	assert.match(output, /0 error\(s\)/u);
+	writeFileSync(join(repository, "docs/agents/prisma-boundary-policy.json"), JSON.stringify(olderPolicy));
+	assert.throws(function _RejectCurrentPolicy() { execFileSync(process.execPath, ["scripts/prisma-boundary-check.mjs", "--all"], { cwd: repository, stdio: "pipe" }); }, /Command failed/u);
 });
 
 test("allows exact live contracts without empty repository aliases", function _AllowsLiveContracts()
