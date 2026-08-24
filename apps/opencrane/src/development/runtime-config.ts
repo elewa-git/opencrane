@@ -1,3 +1,5 @@
+import { LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES } from "@opencrane/models/local-development";
+
 import type { DevelopmentRuntimeConfig } from "./runtime-config.types";
 
 /** Build inert runtime coordinates for core, and the shared local coordinates used by Agent profiles. */
@@ -8,10 +10,10 @@ export function _CreateDevelopmentRuntimeConfig(): DevelopmentRuntimeConfig
 		claimLeaseMilliseconds: 30_000,
 		commandRecoveryMilliseconds: 5_000,
 		commandTtlMilliseconds: 60_000,
-		managedRuntimeNamespace: "local-development-managed-runtime",
+		managedRuntimeNamespace: LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES.managed.namespace,
 		outboxPruneBatchSize: 100,
-		personalRuntimeNamespace: "local-development-personal-runtime",
+		personalRuntimeNamespace: LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES.personal.namespace,
 		publishedOutboxRetentionMilliseconds: 604_800_000,
-		serverNamespace: "local-development-server",
+		serverNamespace: LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES.serverNamespace,
 	};
 }

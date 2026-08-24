@@ -1,4 +1,6 @@
-import { LocalDevelopmentProfileKinds, type LocalDevelopmentIdentity } from "./local-development-profile.types";
+import profileContract from "../profile-contract.json";
+
+import { LocalDevelopmentProfileKinds, type LocalDevelopmentIdentity, type LocalDevelopmentRuntimeIdentities } from "./local-development-profile.types";
 
 /** Stable profile values accepted when process environments select a Tier 2 composition. */
 const _LOCAL_DEVELOPMENT_PROFILE_KINDS = new Set<string>(Object.values(LocalDevelopmentProfileKinds));
@@ -15,6 +17,13 @@ export const LOCAL_DEVELOPMENT_IDENTITY: LocalDevelopmentIdentity = Object.freez
 	email: "developer@opencrane.local",
 	displayName: "Local Developer",
 	siloId: "local-development",
+});
+
+/** Runtime coordinates shared by the Tier 2 coordinator, controller, and server verifier. */
+export const LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES: LocalDevelopmentRuntimeIdentities = Object.freeze({
+	serverNamespace: profileContract.runtimeIdentities.serverNamespace,
+	personal: Object.freeze({ ...profileContract.runtimeIdentities.personal }),
+	managed: Object.freeze({ ...profileContract.runtimeIdentities.managed }),
 });
 
 /** Issuer stored with the disposable development membership revision. */

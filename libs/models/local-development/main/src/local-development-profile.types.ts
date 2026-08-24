@@ -28,3 +28,23 @@ export interface LocalDevelopmentIdentity
 	/** Fixed local silo selected from the trusted development host. */
 	readonly siloId: string;
 }
+
+/** One local runtime identity admitted by the Tier 2 server and controller. */
+export interface LocalDevelopmentRuntimeIdentity
+{
+	/** Namespace assigned to the local process as its simulated workload boundary. */
+	readonly namespace: string;
+	/** ServiceAccount name signed into the process token and reconstructed by the server. */
+	readonly serviceAccountName: string;
+}
+
+/** Shared server, personal-runtime, and managed-runtime coordinates for Tier 2 Agent profiles. */
+export interface LocalDevelopmentRuntimeIdentities
+{
+	/** Simulated control-plane namespace used to construct internal service URLs. */
+	readonly serverNamespace: string;
+	/** Identity assigned to personal Agent attempts. */
+	readonly personal: LocalDevelopmentRuntimeIdentity;
+	/** Identity assigned to managed Agent attempts. */
+	readonly managed: LocalDevelopmentRuntimeIdentity;
+}

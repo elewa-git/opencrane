@@ -5,6 +5,7 @@ import { isAbsolute } from "node:path";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { __CreateLocalAgentRuntimeTokenReviewer } from "@opencrane/backend/agents/runtime/controller";
 import type { FixedServiceAccountTokenReviewer, RuntimeIdentityNamespaces, RuntimeTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
+import { LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES } from "@opencrane/models/local-development";
 
 /** Load a private launch secret and reject files that another local account could read. */
 async function _ReadPrivateSecret(path: string): Promise<Buffer>
@@ -68,12 +69,12 @@ export function _CreateDevelopmentRuntimeTokenReviewer(launchSecretPath: string,
 	const personal = __CreateLocalAgentRuntimeTokenReviewer({
 		launchSecretPath,
 		namespace: namespaces.personalRuntimeNamespace,
-		serviceAccountName: "agent-runtime-default"
+		serviceAccountName: LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES.personal.serviceAccountName
 	});
 	const managed = __CreateLocalAgentRuntimeTokenReviewer({
 		launchSecretPath,
 		namespace: namespaces.managedRuntimeNamespace,
-		serviceAccountName: "managed-agent-runtime-default"
+		serviceAccountName: LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES.managed.serviceAccountName
 	});
 
 	return {

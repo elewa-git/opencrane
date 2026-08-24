@@ -8,5 +8,16 @@
   "modelStrategies": [
     "litellm",
     "simulated"
-  ]
+  ],
+  "runtimeIdentities": {
+    "serverNamespace": "local-development-server",
+    "personal": {
+      "namespace": "local-development-personal-runtime",
+      "serviceAccountName": "agent-runtime-default"
+    },
+    "managed": {
+      "namespace": "local-development-managed-runtime",
+      "serviceAccountName": "managed-agent-runtime-default"
+    }
+  }
 }
