@@ -17,10 +17,8 @@ import { mcpOperatorRouter } from "../routes/mcp-operator";
 import { PrismaMcpOperatorUnitOfWork } from "../core/prisma-mcp-operator-unit-of-work";
 
 /**
- * Operator-API coverage (`/api/v1/mcp/*`): the org-admin gate on the governance
- * endpoints, published+entitled filtering of the catalogue, the
- * install→credential→connected lifecycle, and the custody invariant that NO
- * response ever serialises credential material.
+ * Covers the MCP operator routes: the organization-admin gate, published entries filtered by
+ * authorization, install states selected by server type, and install scoping to the local Principal.
  */
 
 /** OIDC environment isolated so authentication configuration cannot leak between tests. */
@@ -107,7 +105,7 @@ describe("mcp-operator router", function _suite()
 {
   const _saved: Record<string, string | undefined> = {};
 
-  /** Snapshot then clear the auth env so each case controls the dev-mode posture. */
+  /** Snapshots then clears the authentication environment so each case configures its own auth setup. */
   beforeEach(function _clearEnv()
   {
     vi.mocked(__ResolvePrincipalAuthorization).mockReset().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, reason: "winning_allow", grantIds: ["grant-1"] });

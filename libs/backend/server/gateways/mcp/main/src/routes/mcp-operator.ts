@@ -10,18 +10,16 @@ import { ___McpAccessPolicySchema, ___McpEnabledSchema, ___McpInstallSchema } fr
 /**
  * Operator-API router for the MCP endpoints under `/api/v1/mcp/*` — using servers, and governing them.
  *
- * Layers the entitlement-scoped catalogue, per-user installs,
- * and org-admin governance + access-policy endpoints over one authenticated authority. Two
- * authorization rules apply:
+ * Serves the entitlement-scoped catalog, per-Principal installs, and organization-admin governance
+ * endpoints from the same authenticated authority. Two authorization rules apply:
  *
- * - **User-facing** (`/catalog`, `/installed/*`) — scoped to the calling user via
- *   {@link _ResolveCaller}; entitlement filtering decides catalogue visibility.
+ * - **User-facing** (`/catalog`, `/installed/*`) — {@link _ResolveCaller} binds the request to a
+ *   local Principal before entitlement filtering or install work begins.
  * - **Admin** (`/servers/*`, `/directory`) — gated by `_RequireOrgAdmin` and bound to the
  *   authenticated silo and local Principal projection.
  *
- * Credential and OAuth activation are absent until verified Obot custody is composed.
- *
- * @param prisma - Prisma client used for persistence.
+ * @param unitOfWork - Runs each MCP operation with transaction-scoped repositories.
+ * @param principalDirectory - Resolves the authenticated identity to a local Principal in its silo.
  * @returns Configured Express router.
  */
 export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDirectory: AuthenticatedPrincipalDirectory): Router
@@ -70,7 +68,7 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     res.status(201).json(installed);
   });
 
-  /** Uninstall a server for the calling user. */
+  /** Removes the calling Principal's install and returns 404 when that Principal has none. */
   router.delete("/installed/:serverId", async function _uninstall(req: Request<{ serverId: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
@@ -97,7 +95,7 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     res.json(await listAllServers(unitOfWork, caller));
   });
 
-  /** Approve a server (pending-review → approved). Org-admin only. */
+  /** Sets a server's status to approved. This endpoint does not require a prior status. Org-admin only. */
   router.post("/servers/:id/approve", _RequireOrgAdmin(), async function _approve(req: Request<{ id: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
@@ -105,7 +103,7 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     _sendServerOrNotFound(res, await approveServer(unitOfWork, caller, req.params.id));
   });
 
-  /** Publish a server (approved → published). Org-admin only. */
+  /** Sets a server's status to published. This endpoint does not require a prior status. Org-admin only. */
   router.post("/servers/:id/publish", _RequireOrgAdmin(), async function _publish(req: Request<{ id: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
@@ -113,7 +111,7 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     _sendServerOrNotFound(res, await publishServer(unitOfWork, caller, req.params.id));
   });
 
-  /** Reject a server (→ disabled). Org-admin only. */
+  /** Sets a server's status to disabled. This endpoint does not require a prior status. Org-admin only. */
   router.post("/servers/:id/reject", _RequireOrgAdmin(), async function _reject(req: Request<{ id: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
@@ -121,7 +119,7 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     _sendServerOrNotFound(res, await rejectServer(unitOfWork, caller, req.params.id));
   });
 
-  /** Toggle a server's availability (true → published, false → disabled). Org-admin only. */
+  /** Sets a server to published or disabled from `enabled`; it does not require a prior status. Org-admin only. */
   router.post("/servers/:id/enabled", _RequireOrgAdmin(), async function _setEnabled(req: Request<{ id: string }>, res)
   {
     const parsed = ___McpEnabledSchema.safeParse(req.body);
@@ -185,13 +183,15 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
 }
 
 /**
- * Resolve the calling user's identity + entitlement context from the session.
+ * Resolves the request into the caller's authenticated silo and local Principal.
  *
- * An established session uses the IdP-verified identity. An unauthenticated caller
- * receives an empty fail-closed context and never a synthetic catalogue grant.
+ * The request must carry a verified identity and trusted silo, then the directory must resolve that
+ * identity to a persisted Principal. Returning `null` makes every route send 401 instead of using
+ * request claims as MCP authorization.
  *
- * @param req - Incoming request carrying the optional auth session.
- * @returns The resolved caller context.
+ * @param principalDirectory - Resolves the verified identity to a local Principal.
+ * @param req - Carries the authenticated session and resolved request silo.
+ * @returns The authenticated caller context, or `null` when local Principal resolution fails.
  */
 async function _ResolveCaller(principalDirectory: AuthenticatedPrincipalDirectory, req: Request): Promise<McpOperatorCaller | null>
 {

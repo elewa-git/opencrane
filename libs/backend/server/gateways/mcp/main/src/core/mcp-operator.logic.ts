@@ -16,7 +16,18 @@ const _APPROVAL = { PendingReview: McpApprovalStatus.PendingReview, Approved: Mc
 const _CONNECTION = { NeedsCredential: McpConnectionStatus.NeedsCredential, SharedKey: McpConnectionStatus.SharedKey } as const;
 const _AVATAR_COLORS = ["#1F3B6E", "#2E7D32", "#6A1B9A", "#C62828", "#00838F", "#EF6C00", "#4527A0", "#283593"];
 
-/** Lists published MCP servers authorized by generic principal/group grants. */
+/**
+ * Lists published MCP catalog entries that the caller's persisted authorization grants allow.
+ *
+ * A published row is not enough to appear in the catalog: this flow resolves the local Principal
+ * and its persisted group subjects for the MCP-use capability. It returns no rows when that
+ * capability is absent, so a missing catalog entry cannot grant catalog access.
+ *
+ * Called by: {@link mcpOperatorRouter} for `GET /catalog`.
+ * @param unitOfWork - Runs the catalog read and authorization decisions in one operation.
+ * @param caller - Supplies the authenticated silo and local Principal to authorize.
+ * @returns Published catalog entries that have an allow decision; otherwise an empty array.
+ */
 export function listEntitledCatalog(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller): Promise<McpCatalogServer[]>
 {
 	return unitOfWork.execute(async function _List(transaction)
@@ -31,7 +42,18 @@ export function listEntitledCatalog(unitOfWork: McpOperatorUnitOfWork, caller: M
 	});
 }
 
-/** Lists all catalog rows in the authenticated silo for governance. */
+/**
+ * Lists every MCP catalog row in the authenticated administrator's silo for governance.
+ *
+ * Unlike {@link listEntitledCatalog}, this view includes unpublished rows because its route is
+ * already gated for organization administrators; the silo still prevents it from reading another
+ * organization's catalog.
+ *
+ * Called by: {@link mcpOperatorRouter} for `GET /servers`.
+ * @param unitOfWork - Runs the silo-scoped catalog read.
+ * @param caller - Supplies the authenticated silo.
+ * @returns All catalog entries in the caller's silo.
+ */
 export function listAllServers(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller): Promise<McpCatalogServer[]>
 {
 	return unitOfWork.execute(async function _List(transaction)
@@ -40,13 +62,36 @@ export function listAllServers(unitOfWork: McpOperatorUnitOfWork, caller: McpOpe
 	});
 }
 
-/** Lists one principal's installed MCP servers. */
+/**
+ * Lists the MCP servers installed for one local Principal.
+ *
+ * The route resolves the external identity to this persisted Principal before calling the flow, so
+ * the result cannot use another principal's installation rows.
+ *
+ * Called by: {@link mcpOperatorRouter} for `GET /installed`.
+ * @param unitOfWork - Runs the installation read.
+ * @param principalId - Identifies the local Principal whose installations to return.
+ * @returns The principal's installed servers and their persisted connection states.
+ */
 export function listInstalled(unitOfWork: McpOperatorUnitOfWork, principalId: string): Promise<McpInstalled[]>
 {
 	return unitOfWork.execute(async function _List(transaction) { return (await transaction.mcp.listInstalls(principalId)).map(_MapInstall); });
 }
 
-/** Re-checks authorization and creates one install with its audit entry atomically. */
+/**
+ * Installs a published MCP server after checking its current authorization again.
+ *
+ * A catalog result may be stale by the time a caller installs it. The flow therefore confirms that
+ * the server is still in the caller's silo, still published, and still allowed by the MCP-use
+ * capability before it writes the install. Multi-user servers start as `SharedKey`; other server
+ * types start as `NeedsCredential`. The install and its audit entry commit or roll back together.
+ *
+ * Called by: {@link mcpOperatorRouter} for `POST /installed`.
+ * @param unitOfWork - Runs the authorization check, installation write, and audit write together.
+ * @param caller - Supplies the authenticated silo and local Principal to authorize.
+ * @param serverId - Identifies the catalog server to install.
+ * @returns The installed-server response, or `null` when the server is absent, unpublished, or not allowed.
+ */
 export function installServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string): Promise<McpInstalled | null>
 {
 	return unitOfWork.execute(async function _Install(transaction)
@@ -60,7 +105,18 @@ export function installServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOper
 	});
 }
 
-/** Removes one principal's install. */
+/**
+ * Removes one local Principal's installation of an MCP server.
+ *
+ * The delete includes both the server and Principal identifiers, so an uninstall request cannot
+ * remove another principal's install. An audit entry is written only when a row was removed.
+ *
+ * Called by: {@link mcpOperatorRouter} for `DELETE /installed/:serverId`.
+ * @param unitOfWork - Runs the deletion and any audit write together.
+ * @param principalId - Identifies the local Principal whose installation may be removed.
+ * @param serverId - Identifies the installed server to remove.
+ * @returns `removed` after deleting an install, or `not_found` when this principal has none.
+ */
 export function uninstallServer(unitOfWork: McpOperatorUnitOfWork, principalId: string, serverId: string): Promise<"removed" | "not_found">
 {
 	return unitOfWork.execute(async function _Delete(transaction)
@@ -71,32 +127,89 @@ export function uninstallServer(unitOfWork: McpOperatorUnitOfWork, principalId: 
 	});
 }
 
-/** Approves a server in the authenticated silo. */
+/**
+ * Sets a server's approval status to `Approved` in the authenticated silo.
+ *
+ * This endpoint is a status setter: it does not require the server to be in a prior approval
+ * status. A missing server in the silo returns `null`; an updated server is audited and returned.
+ *
+ * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/approve`.
+ * @param unitOfWork - Runs the status update and audit write together.
+ * @param caller - Supplies the authenticated silo and acting Principal.
+ * @param serverId - Identifies the server whose status to set.
+ * @returns The updated server, or `null` when the server is outside the caller's silo or absent.
+ */
 export function approveServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string): Promise<McpCatalogServer | null>
 {
 	return _Approval(unitOfWork, caller, serverId, "Approved", "approved");
 }
 
-/** Publishes a server in the authenticated silo. */
+/**
+ * Sets a server's approval status to `Published` in the authenticated silo.
+ *
+ * This endpoint is a status setter: it does not require the server to be in a prior approval
+ * status. A missing server in the silo returns `null`; an updated server is audited and returned.
+ *
+ * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/publish`.
+ * @param unitOfWork - Runs the status update and audit write together.
+ * @param caller - Supplies the authenticated silo and acting Principal.
+ * @param serverId - Identifies the server whose status to set.
+ * @returns The updated server, or `null` when the server is outside the caller's silo or absent.
+ */
 export function publishServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string): Promise<McpCatalogServer | null>
 {
 	return _Approval(unitOfWork, caller, serverId, "Published", "published");
 }
 
-/** Disables a rejected server in the authenticated silo. */
+/**
+ * Sets a server's approval status to `Disabled` in the authenticated silo.
+ *
+ * This endpoint is a status setter: it does not require the server to be in a prior approval
+ * status. A missing server in the silo returns `null`; an updated server is audited and returned.
+ *
+ * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/reject`.
+ * @param unitOfWork - Runs the status update and audit write together.
+ * @param caller - Supplies the authenticated silo and acting Principal.
+ * @param serverId - Identifies the server whose status to set.
+ * @returns The updated server, or `null` when the server is outside the caller's silo or absent.
+ */
 export function rejectServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string): Promise<McpCatalogServer | null>
 {
 	return _Approval(unitOfWork, caller, serverId, "Disabled", "rejected");
 }
 
-/** Publishes or disables a server in the authenticated silo. */
+/**
+ * Sets a server's approval status from an administrator's enabled choice.
+ *
+ * `true` writes `Published` and `false` writes `Disabled`. Like the other approval endpoints,
+ * this is a status setter and does not require the server to be in a prior status.
+ *
+ * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/enabled`.
+ * @param unitOfWork - Runs the status update and audit write together.
+ * @param caller - Supplies the authenticated silo and acting Principal.
+ * @param serverId - Identifies the server whose status to set.
+ * @param enabled - Selects `Published` when true and `Disabled` when false.
+ * @returns The updated server, or `null` when the server is outside the caller's silo or absent.
+ */
 export function setServerEnabled(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, enabled: boolean): Promise<McpCatalogServer | null>
 {
 	if (enabled) return _Approval(unitOfWork, caller, serverId, "Published", "enabled");
 	return _Approval(unitOfWork, caller, serverId, "Disabled", "disabled");
 }
 
-/** Projects only grants owned by the MCP access editor. */
+/**
+ * Reads the access policy represented by grants managed by the MCP access editor.
+ *
+ * The flow first confirms that the server belongs to the caller's silo, then maps the managed
+ * group and Principal subjects back to local directory records. It does not use identity-provider
+ * claims as policy subjects.
+ *
+ * Called by: {@link mcpOperatorRouter} for `GET /servers/:id/access`.
+ * @param unitOfWork - Runs the silo check, grant read, and local directory reads together.
+ * @param caller - Supplies the authenticated silo.
+ * @param serverId - Identifies the server whose managed grants to read.
+ * @returns The access policy, or `null` when the server is outside the caller's silo or absent.
+ */
 export function getAccessPolicy(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string): Promise<McpAccessPolicy | null>
 {
 	return unitOfWork.execute(async function _Read(transaction)
@@ -110,7 +223,20 @@ export function getAccessPolicy(unitOfWork: McpOperatorUnitOfWork, caller: McpOp
 	});
 }
 
-/** Atomically reconciles editor-owned grants and the governance audit entry. */
+/**
+ * Reconciles the MCP access editor's grants for one server and records the governance change.
+ *
+ * The proposed group and Principal identifiers must all resolve inside the caller's silo before the
+ * grants are replaced. This prevents an access policy from naming a record outside that silo. The
+ * reconciliation and audit entry run in the same transaction, so neither persists without the other.
+ *
+ * Called by: {@link mcpOperatorRouter} for `PUT /servers/:id/access`.
+ * @param unitOfWork - Runs the validation reads, grant reconciliation, and audit write together.
+ * @param caller - Supplies the authenticated silo and acting Principal.
+ * @param serverId - Identifies the server whose managed grants to replace.
+ * @param body - Supplies the proposed local group and Principal identifiers.
+ * @returns The reconciled policy, or `null` when the server, a proposed subject, or the capability is absent.
+ */
 export function setAccessPolicy(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, body: McpAccessPolicyCommand): Promise<McpAccessPolicy | null>
 {
 	return unitOfWork.execute(async function _Write(transaction)
@@ -136,7 +262,17 @@ export function setAccessPolicy(unitOfWork: McpOperatorUnitOfWork, caller: McpOp
 	});
 }
 
-/** Lists stable local principals and groups in the authenticated silo. */
+/**
+ * Lists local Principals and persisted groups that an administrator may select for MCP access.
+ *
+ * The directory comes from the authenticated silo's records. This keeps access policy subjects
+ * stable and avoids treating identity-provider group claims as stored authorization subjects.
+ *
+ * Called by: {@link mcpOperatorRouter} for `GET /directory`.
+ * @param unitOfWork - Runs the directory reads in the authenticated silo.
+ * @param caller - Supplies the authenticated silo.
+ * @returns The local group and Principal choices for the MCP access editor.
+ */
 export function getDirectory(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller): Promise<Directory>
 {
 	return unitOfWork.execute(async function _Directory(transaction)
@@ -146,11 +282,23 @@ export function getDirectory(unitOfWork: McpOperatorUnitOfWork, caller: McpOpera
 	});
 }
 
+/**
+ * Finds the MCP-use capability from the configured catalog revision.
+ *
+ * Catalog and install flows deny access when this lookup fails because they cannot evaluate a
+ * grant without the capability it grants.
+ */
 async function _Capability(transaction: McpOperatorTransaction): Promise<CapabilityReference | null>
 {
 	return transaction.capabilityCatalog.findCapability(_CATALOG_ID, _CATALOG_REVISION, _USE_CAPABILITY_ID);
 }
 
+/**
+ * Checks the caller's personal and persisted-group boundaries for MCP-use access to a server.
+ *
+ * The authorization repository supplies the local group subjects. That keeps authorization based
+ * on stored Principal and group records instead of claims carried by the request.
+ */
 async function _Allowed(transaction: McpOperatorTransaction, caller: McpOperatorCaller, capability: CapabilityReference, serverId: string): Promise<boolean>
 {
 	const subjects = await transaction.authorization.resolvePrincipalSubjects(caller.siloId, caller.principalId);
@@ -167,6 +315,12 @@ async function _Allowed(transaction: McpOperatorTransaction, caller: McpOperator
 	return false;
 }
 
+/**
+ * Writes a requested approval status and appends the matching audit entry.
+ *
+ * It delegates to the silo-scoped repository setter and intentionally does not inspect the server's
+ * current status; the route endpoints therefore set a status rather than enforce a transition.
+ */
 function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, status: string, verb: string): Promise<McpCatalogServer | null>
 {
 	return unitOfWork.execute(async function _Update(transaction)
@@ -178,16 +332,24 @@ function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller,
 	});
 }
 
+/** Maps the repository projection into the catalog contract and normalizes optional fields. */
 function _MapServer(server: McpOperatorServerRecord): McpCatalogServer
 {
 	return { id: server.id, name: server.name, description: server.description, publisher: server.publisher ?? undefined, glyph: server.glyph ?? undefined, type: _TYPE[server.serverType as keyof typeof _TYPE], approvalStatus: _APPROVAL[server.approvalStatus as keyof typeof _APPROVAL], credentialSchema: _CredentialSchema(server.credentialSchema), entitlementSummary: server.entitlementSummary ?? undefined };
 }
 
+/** Maps one persisted installation into the response status and ISO timestamp expected by clients. */
 function _MapInstall(install: McpOperatorInstallRecord): McpInstalled
 {
 	return { serverId: install.mcpServerId, connectionStatus: _CONNECTION[install.connectionStatus as keyof typeof _CONNECTION], lastUsed: install.lastUsedAt?.toISOString() ?? null };
 }
 
+/**
+ * Maps a local Principal into the directory shape used by the access editor.
+ *
+ * It prefers a stored display name, then a stored email's local part, and finally the Principal ID
+ * so every persisted subject remains selectable even when profile fields are absent.
+ */
 function _MapPrincipal(principal: McpOperatorPrincipalRecord): EntitledUser
 {
 	const name = principal.displayName?.trim() || principal.email?.split("@")[0] || principal.id;
@@ -198,6 +360,12 @@ function _MapPrincipal(principal: McpOperatorPrincipalRecord): EntitledUser
 	return { id: principal.id, name, initials, color: _AVATAR_COLORS[checksum] };
 }
 
+/**
+ * Converts a stored schema value into contract fields and drops malformed entries.
+ *
+ * The repository exposes this value as `unknown`, so the mapper must verify each field before a
+ * catalog response can claim that the field has a key and label.
+ */
 function _CredentialSchema(value: unknown): CredentialField[]
 {
 	if (!Array.isArray(value)) return [];
@@ -217,6 +385,12 @@ function _CredentialSchema(value: unknown): CredentialField[]
 	});
 }
 
+/**
+ * Trims, de-duplicates, and sorts proposed access-policy identifiers.
+ *
+ * Reconciliation compares the resulting identifiers with records found in the caller's silo, so
+ * repeated or blank request values cannot create duplicate grant subjects.
+ */
 function _Ids(values: readonly string[] | undefined): string[]
 {
 	if (!values) return [];

@@ -1,10 +1,10 @@
 import type { AuthorizationContextRepository, CapabilityCatalogRepository, ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
 
 /**
- * Carries the MCP catalog fields that operator flows project into contract responses.
+ * Carries the MCP catalog fields that operator flows return to API clients.
  *
- * The Prisma adapter selects this shape instead of exposing database rows, so the core mapping can
- * stay independent of persistence while it decides which optional values to send to clients.
+ * An implementation selects this limited shape instead of exposing a database row, so the core can
+ * map optional fields without depending on the persistence model.
  */
 export interface McpOperatorServerRecord
 {
@@ -29,9 +29,9 @@ export interface McpOperatorServerRecord
 }
 
 /**
- * Carries one principal's persisted installation of an MCP server.
+ * Carries one local Principal's persisted installation of an MCP server.
  *
- * Install and uninstall flows use this limited projection so callers receive connection state
+ * Install and uninstall flows use this limited shape so the response exposes the connection state
  * without depending on the database install model.
  */
 export interface McpOperatorInstallRecord
@@ -44,7 +44,12 @@ export interface McpOperatorInstallRecord
 	readonly lastUsedAt: Date | null;
 }
 
-/** Carries the group fields required to build an MCP access-policy or directory response. */
+/**
+ * Carries the persisted group fields needed by the MCP access editor.
+ *
+ * MCP policy flows use these local groups as authorization subjects; identity-provider claims do
+ * not replace them.
+ */
 export interface McpOperatorGroupRecord
 {
 	/** Identifies the local group used in an authorization subject. */
@@ -53,7 +58,12 @@ export interface McpOperatorGroupRecord
 	readonly name: string;
 }
 
-/** Carries the principal fields required to build an MCP access-policy or directory response. */
+/**
+ * Carries the local Principal fields needed by the MCP access editor.
+ *
+ * MCP policy flows use this persisted identity to name a grant subject and to display a selectable
+ * person when profile fields are available.
+ */
 export interface McpOperatorPrincipalRecord
 {
 	/** Identifies the local principal used in an authorization subject. */
@@ -65,12 +75,12 @@ export interface McpOperatorPrincipalRecord
 }
 
 /**
- * Defines the MCP persistence work that one operator operation performs inside a transaction.
+ * Defines the transaction-scoped MCP persistence operations that the operator logic requires.
  *
- * The operator logic reads catalog and directory data through this port, then writes installs,
- * approval changes, and audit entries through the same {@link McpOperatorTransaction}. An
- * implementation must retain the passed silo boundary and the absence signals because callers use
- * them to avoid returning or changing rows from another silo.
+ * The logic reads catalog and directory data through this port, then writes installs, approval
+ * changes, and audit entries through the same {@link McpOperatorTransaction}. Implementations must
+ * apply the supplied silo boundary and preserve `null` or `false` absence outcomes, because callers
+ * use those outcomes to avoid returning or changing another silo's rows.
  */
 export interface IMcpOperatorRepository
 {
@@ -172,11 +182,11 @@ export interface IMcpOperatorRepository
 }
 
 /**
- * Groups the repositories that one MCP operator operation must use within the same transaction.
+ * Groups the repositories that one MCP operator operation uses in one database transaction.
  *
- * The core combines catalog rows with authorization decisions and managed grants, then appends its
- * audit record. Holding these ports together prevents a successful MCP write from being committed
- * separately from the access-policy work that justified it.
+ * The core combines catalog rows with authorization decisions and managed grants, then appends an
+ * audit record. Keeping these ports together lets a unit of work commit all writes from an operation
+ * or roll them all back when the operation fails.
  */
 export interface McpOperatorTransaction
 {
@@ -191,11 +201,11 @@ export interface McpOperatorTransaction
 }
 
 /**
- * Starts the transaction that bounds one MCP operator read or mutation.
+ * Starts the database transaction that bounds one MCP operator read or mutation.
  *
- * Every MCP operator flow receives these repositories through this boundary. The Prisma
- * implementation runs the callback through its database transaction, so a result is returned only
- * after the callback's catalog, authorization, and audit work can commit together.
+ * Every MCP operator flow receives these repositories through this boundary. Implementations commit
+ * every write made during a successful operation and roll back all of those writes when the
+ * operation rejects.
  */
 export interface McpOperatorUnitOfWork
 {
@@ -204,8 +214,8 @@ export interface McpOperatorUnitOfWork
 	 *
 	 * Called by: every exported MCP operator flow before it reads or mutates authority data.
 	 * @param operation - Receives the transaction-scoped repositories and returns the caller's result.
-	 * @returns The operation result after the transaction completes successfully.
-	 * @throws Rejects when the operation or its transaction cannot complete.
+	 * @returns The operation result after all writes made by it commit.
+	 * @throws Rejects after rolling back the operation's writes when it or its transaction cannot complete.
 	 */
 	execute<Result>(operation: (transaction: McpOperatorTransaction) => Promise<Result>): Promise<Result>;
 }
