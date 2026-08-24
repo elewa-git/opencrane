@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import express from "express";
 import type { Express } from "express";
 import type { PrismaClient } from "@prisma/client";
@@ -284,6 +286,27 @@ describe("mcp-operator router", function _suite()
       expect(transaction.client).toBe(prisma);
       expect(task).toEqual(expect.objectContaining({ siloId: "silo-1", serverId: "srv-new" }));
     });
+
+		it("returns the current protocol state when an accepted registration is replayed", async function _ReplaysAcceptedRegistration()
+		{
+			_enableOidc();
+			const workflow = _EraProbeWorkflow();
+			const registrationDigest = `sha256:${createHash("sha256").update(JSON.stringify(["Example MCP", "Public tools", "https://mcp.example.test/"])).digest("hex")}`;
+			const server = { id: "srv-new", name: "Example MCP", description: "Public tools", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "PendingReview", credentialSchema: [], entitlementSummary: null, endpoint: "https://mcp.example.test/", registrationKeyDigest: `sha256:${"a".repeat(64)}`, registrationDigest, eraProbeStatus: "Accepted", eraProtocolVersion: "2026-07-28", eraProbeEvidenceDigest: `sha256:${"c".repeat(64)}`, eraProbeFailureCode: null, eraProbeAttempts: 1 };
+			const { prisma, spies } = _mockPrisma({
+				"mcpRegistrationClaim.upsert": function _Claim(input: unknown) { return Promise.resolve((input as { create: unknown }).create); },
+				"mcpServer.findUnique": function _FindUnique() { return Promise.resolve(server); },
+			});
+
+			const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true }, workflow))
+				.post("/api/v1/mcp/servers")
+				.send({ idempotencyKey: "registration-1", name: "Example MCP", description: "Public tools", endpoint: "https://mcp.example.test/" });
+
+			expect(response.status).toBe(201);
+			expect(response.body).toEqual({ id: "srv-new", name: "Example MCP", endpoint: "https://mcp.example.test/", eraProbeStatus: "Accepted" });
+			expect(spies["mcpServer.findUnique"]).toHaveBeenCalledTimes(1);
+			expect(workflow.admit).toHaveBeenCalledTimes(1);
+		});
   });
 
   describe("install lifecycle", function _lifecycle()

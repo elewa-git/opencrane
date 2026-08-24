@@ -2226,7 +2226,7 @@ export interface operations {
                         /** Format: uri */
                         endpoint: string;
                         /** @enum {string} */
-                        eraProbeStatus: "Pending";
+                        eraProbeStatus: "Pending" | "Accepted" | "Rejected";
                     };
                 };
             };

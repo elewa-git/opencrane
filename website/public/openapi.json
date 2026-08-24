@@ -2092,7 +2092,9 @@
                     "eraProbeStatus": {
                       "type": "string",
                       "enum": [
-                        "Pending"
+                        "Pending",
+                        "Accepted",
+                        "Rejected"
                       ]
                     }
                   }
