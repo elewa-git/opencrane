@@ -15,7 +15,22 @@ export const CONTROL_PLANE_BASE_URL: InjectionToken<string> = new InjectionToken
  */
 export const FLEET_MANAGER_BASE_URL: InjectionToken<string> = new InjectionToken<string>("WO_FLEET_MANAGER_BASE_URL");
 
-/** Configuration shape for constructing a typed OpenCrane client. */
+/**
+ * Supplies the transport used by generated and transitional OpenCrane API requests.
+ *
+ * Called by: `ControlPlaneApiService` and `FleetManagerApiService`; the Tier 1 local profile
+ * replaces it with a rejecting transport so an accidentally retained live adapter cannot leave the
+ * browser.
+ */
+export const OPENCRANE_API_FETCH: InjectionToken<typeof fetch> = new InjectionToken<typeof fetch>("OPENCRANE_API_FETCH", {
+	providedIn: "root",
+	factory: function _BrowserFetch(): typeof fetch
+	{
+		return globalThis.fetch.bind(globalThis);
+	}
+});
+
+/** Configures the base URL used when constructing a typed OpenCrane client. */
 export interface ApiClientConfig
 {
 	/** Absolute or same-origin base URL of the API (no trailing slash). */

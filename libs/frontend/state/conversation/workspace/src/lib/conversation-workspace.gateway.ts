@@ -37,7 +37,8 @@ import type { ConversationWorkspaceGateway } from "./conversation-workspace.type
  *
  * Called by: `ConversationWorkspaceStore` for directory, list, open, create, send, archive and
  * close, and `ConversationRunStore` for run, steer, cancel and retry. Bound to the web app's
- * adapter in `provideConversationWorkspaceComposition`.
+ * live adapter in {@link provideOpenCraneUiLiveGateways} and to the Tier 1 adapter in
+ * {@link provideLocalDevelopmentGateways}.
  *
  * @see ConversationWorkspaceGateway for what each method does and returns.
  * @see OpenCraneConversationWorkspaceGateway — the generated-client implementation the web app
@@ -69,7 +70,8 @@ export const CONVERSATION_WORKSPACE_GATEWAY = new InjectionToken<ConversationWor
  * constructed instead of when a conversation is opened.
  *
  * Called by: `ConversationWorkspaceStore` only, from its `_StartStream` step after a snapshot loads.
- * Bound to the web app's adapter in `provideConversationWorkspaceComposition`.
+ * Bound to the live adapter in {@link provideOpenCraneUiLiveGateways} and to the Tier 1 stream in
+ * {@link provideLocalDevelopmentGateways}.
  *
  * @see ConversationEventStream for the reconnect lifecycle and every field of the command and the
  *   progress update.

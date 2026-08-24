@@ -1,0 +1,29 @@
+{
+	"name": "frontend-state-local-development",
+	"$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+	"projectType": "library",
+	"sourceRoot": "libs/frontend/state/local-development/src",
+	"prefix": "oc",
+	"tags": [
+		"scope:opencrane-ui",
+		"layer:frontend",
+		"type:lib",
+		"frontend-role:adapter"
+	],
+	"targets": {
+		"lint": {
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "tsc -p tsconfig.lint.json",
+				"cwd": "libs/frontend/state/local-development"
+			}
+		},
+		"test": {
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "vitest run --passWithNoTests",
+				"cwd": "libs/frontend/state/local-development"
+			}
+		}
+	}
+}

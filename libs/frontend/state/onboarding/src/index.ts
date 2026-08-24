@@ -10,9 +10,9 @@
  *
  * Import from this barrel only; the `lib/` files are not a public surface, and the first-chat route
  * and conflict-envelope parsers stay internal on purpose — the adapter is the only thing that should
- * ever run them. The app composition root binds {@link PERSONA_FIRST_CHAT_GATEWAY} and
- * PERSONA_GATEWAY in apps/opencrane-ui/src/app/app.config.ts; tests override those same tokens
- * instead of stubbing HTTP.
+ * ever run them. The app's gateway profile binds {@link PERSONA_FIRST_CHAT_GATEWAY} and
+ * PERSONA_GATEWAY before routed features load; tests override those same tokens instead of
+ * stubbing HTTP.
  *
  * @see libs/frontend/state/onboarding/README.md for what this package owns and refuses to own.
  */
@@ -20,7 +20,7 @@ export * from "./lib/persona-gateway.types";
 export * from "./lib/persona-onboarding.service";
 export * from "./lib/persona-onboarding.store";
 export { PERSONA_FIRST_CHAT_GATEWAY, PersonaFirstChatConflictError } from "./lib/persona-first-chat.types";
-export type { UserOnboardingRouteSnapshot } from "./lib/persona-first-chat.types";
+export type { PersonaFirstChatAnswerCommand, PersonaFirstChatGateway, UserOnboardingRouteSnapshot } from "./lib/persona-first-chat.types";
 export * from "./lib/opencrane-persona-first-chat.gateway";
 export * from "./lib/persona-first-chat.service";
 export * from "./lib/persona-first-chat.store";

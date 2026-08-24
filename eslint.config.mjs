@@ -179,7 +179,7 @@ export default [
 			{ sourceTag: "scope:agent-threads", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-elicitation", "scope:conversations", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:conversation-workspace", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-elicitation", "scope:conversation-workspace", "scope:conversations", "scope:shared", "scope:user-onboarding", "scope:web"] },
 			{ sourceTag: "scope:web", onlyDependOnLibsWithTags: ["scope:web", "scope:shared"] },
-			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-workspace", "scope:organization-members", "scope:persona-onboarding", "scope:shared", "scope:web"] },
+			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-elicitation", "scope:conversation-workspace", "scope:conversations", "scope:opencrane-ui", "scope:organization-members", "scope:persona-onboarding", "scope:shared", "scope:user-onboarding", "scope:web"] },
             {
               sourceTag: "scope:opencrane",
               onlyDependOnLibsWithTags: [

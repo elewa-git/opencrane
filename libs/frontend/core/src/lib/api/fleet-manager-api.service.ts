@@ -1,7 +1,7 @@
 import { Injectable, inject } from "@angular/core";
 
 import type { paths } from "./generated/fleet-manager";
-import { FLEET_MANAGER_BASE_URL } from "./api-client.types";
+import { FLEET_MANAGER_BASE_URL, OPENCRANE_API_FETCH } from "./api-client.types";
 import { OpenCraneApiClientBase } from "./api-client.base";
 
 /**
@@ -22,6 +22,9 @@ export class FleetManagerApiService extends OpenCraneApiClientBase<paths>
 {
 	public constructor()
 	{
-		super(inject(FLEET_MANAGER_BASE_URL, { optional: true }) ?? "");
+		super(
+			inject(FLEET_MANAGER_BASE_URL, { optional: true }) ?? "",
+			inject(OPENCRANE_API_FETCH, { optional: true }) ?? globalThis.fetch.bind(globalThis)
+		);
 	}
 }
