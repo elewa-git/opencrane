@@ -1521,63 +1521,111 @@ export interface components {
         AcceptOrganizationInvitationResult: {
             member: components["schemas"]["OrganizationMember"];
         };
+        /** @description An MCP server exposed by the operator API. Fields other than id are optional because this shape serves both the entitled catalogue and the organisation-admin governance view. */
         McpCatalogServer: {
+            /** @description Stable server identifier. */
             id: string;
+            /** @description Display name shown in the catalogue. */
             name?: string;
+            /** @description Short summary shown to callers deciding whether to install the server. */
             description?: string;
+            /** @description Organisation or author label for the server. */
             publisher?: string;
+            /** @description Frontend icon key for the server. */
             glyph?: string;
-            /** @enum {string} */
+            /**
+             * @description How the server is configured for connection: single-user requires a caller-owned credential through an external custody flow, multi-user uses an administrator-managed shared key, and remote-oauth requires an OAuth handshake outside this API.
+             * @enum {string}
+             */
             type?: "single-user" | "multi-user" | "remote-oauth";
-            /** @enum {string} */
+            /**
+             * @description Organisation-admin review state. Only published servers appear in the user-facing catalogue; approved servers remain hidden until publication.
+             * @enum {string}
+             */
             approvalStatus?: "pending-review" | "approved" | "published" | "disabled";
+            /** @description Input fields required by an external custody flow for a single-user connection. This API describes requested values but neither receives nor returns credential material. */
             credentialSchema?: components["schemas"]["CredentialField"][];
+            /** @description Human-readable summary of access grants, returned for the governance view. */
             entitlementSummary?: string;
         };
+        /** @description One input an external custody flow requires to connect a single-user MCP server. This API describes the input but neither receives nor returns its value. */
         CredentialField: {
+            /** @description Stable submission key for the value. */
             key: string;
+            /** @description Human-readable label for the input. */
             label: string;
+            /** @description Whether a caller must supply this value to connect. */
             required: boolean;
+            /** @description Whether the client must treat the value as a secret, including masking it and never echoing it. */
             sensitive: boolean;
+            /** @description Optional example or placeholder shown in the input. */
             placeholder?: string;
+            /** @description Optional help text shown below the input. */
             hint?: string;
         };
+        /** @description An MCP server installed by the calling user, with its current connection state. */
         McpInstalled: {
+            /** @description Identifier of the installed server. */
             serverId: string;
-            /** @enum {string} */
+            /**
+             * @description Recorded activation requirement: needs-credential requires an external custody flow, while shared-key records an administrator-managed shared key. This API does not activate either state.
+             * @enum {string}
+             */
             connectionStatus?: "needs-credential" | "shared-key";
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description ISO-8601 timestamp of the server's last use, or null when it has never been used.
+             */
             lastUsed?: string | null;
         };
+        /** @description A local principal displayed in the MCP access editor or its selectable directory. */
         EntitledUser: {
-            /** @description Stable local Principal identifier. */
+            /** @description Stable local Principal identifier used by authorization grants. */
             id: string;
+            /** @description Display name shown in the access editor. */
             name: string;
+            /** @description Initials derived from the display name for an avatar. */
             initials: string;
+            /** @description Deterministic avatar colour derived from the identifier. */
             color: string;
         };
+        /** @description A local group that can receive an MCP authorization grant. */
         EntitledGroup: {
-            /** @description Stable local Group identifier. */
+            /** @description Stable local Group identifier used by authorization grants. */
             id: string;
-            /** @description Display data; authorization uses the identifier. */
+            /** @description Display name shown in the access editor. Authorization uses the identifier, not this value. */
             name: string;
         };
+        /** @description The user and group grants managed by the MCP access editor for one server. It does not list authorization grants managed by other sources. */
         McpAccessPolicy: {
+            /** @description Identifier of the governed server. */
             serverId: string;
+            /** @description Groups with an active allow grant managed by the MCP access editor. */
             groups: components["schemas"]["EntitledGroup"][];
+            /** @description Principals with an active allow grant managed by the MCP access editor. */
             users: components["schemas"]["EntitledUser"][];
         };
+        /** @description The users and groups that an organisation administrator can select when editing MCP access. */
         McpDirectory: {
+            /** @description All local principals eligible to receive an MCP authorization grant. */
             users: components["schemas"]["EntitledUser"][];
+            /** @description All local groups eligible to receive an MCP authorization grant. */
             groups: components["schemas"]["EntitledGroup"][];
         };
-        /** @description A direct file/chat/dataset share backed by explicit recipients and authorization grants. */
+        /** @description A direct file, chat, or dataset share. Each recipient relation is backed by an explicit authorization grant. */
         ResourceShare: {
+            /** @description Stable share identifier used to manage recipients. */
             id: string;
-            /** @enum {string} */
+            /**
+             * @description Family of the governed resource.
+             * @enum {string}
+             */
             resourceType: "file" | "chat" | "dataset";
+            /** @description Identifier of the governed resource within its family. */
             resourceId: string;
+            /** @description Local Principal that owns the resource and may revoke its recipient relations. */
             ownerPrincipalId: string;
+            /** @description Local Principals with explicit live recipient relations and grants. */
             recipientPrincipalIds: string[];
         };
         ClusterTenant: {

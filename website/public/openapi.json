@@ -404,24 +404,30 @@
       },
       "McpCatalogServer": {
         "type": "object",
+        "description": "An MCP server exposed by the operator API. Fields other than id are optional because this shape serves both the entitled catalogue and the organisation-admin governance view.",
         "required": [
           "id"
         ],
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "Stable server identifier."
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "Display name shown in the catalogue."
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "description": "Short summary shown to callers deciding whether to install the server."
           },
           "publisher": {
-            "type": "string"
+            "type": "string",
+            "description": "Organisation or author label for the server."
           },
           "glyph": {
-            "type": "string"
+            "type": "string",
+            "description": "Frontend icon key for the server."
           },
           "type": {
             "type": "string",
@@ -429,7 +435,8 @@
               "single-user",
               "multi-user",
               "remote-oauth"
-            ]
+            ],
+            "description": "How the server is configured for connection: single-user requires a caller-owned credential through an external custody flow, multi-user uses an administrator-managed shared key, and remote-oauth requires an OAuth handshake outside this API."
           },
           "approvalStatus": {
             "type": "string",
@@ -438,21 +445,25 @@
               "approved",
               "published",
               "disabled"
-            ]
+            ],
+            "description": "Organisation-admin review state. Only published servers appear in the user-facing catalogue; approved servers remain hidden until publication."
           },
           "credentialSchema": {
             "type": "array",
+            "description": "Input fields required by an external custody flow for a single-user connection. This API describes requested values but neither receives nor returns credential material.",
             "items": {
               "$ref": "#/components/schemas/CredentialField"
             }
           },
           "entitlementSummary": {
-            "type": "string"
+            "type": "string",
+            "description": "Human-readable summary of access grants, returned for the governance view."
           }
         }
       },
       "CredentialField": {
         "type": "object",
+        "description": "One input an external custody flow requires to connect a single-user MCP server. This API describes the input but neither receives nor returns its value.",
         "required": [
           "key",
           "label",
@@ -461,52 +472,63 @@
         ],
         "properties": {
           "key": {
-            "type": "string"
+            "type": "string",
+            "description": "Stable submission key for the value."
           },
           "label": {
-            "type": "string"
+            "type": "string",
+            "description": "Human-readable label for the input."
           },
           "required": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether a caller must supply this value to connect."
           },
           "sensitive": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether the client must treat the value as a secret, including masking it and never echoing it."
           },
           "placeholder": {
-            "type": "string"
+            "type": "string",
+            "description": "Optional example or placeholder shown in the input."
           },
           "hint": {
-            "type": "string"
+            "type": "string",
+            "description": "Optional help text shown below the input."
           }
         }
       },
       "McpInstalled": {
         "type": "object",
+        "description": "An MCP server installed by the calling user, with its current connection state.",
         "required": [
           "serverId"
         ],
         "properties": {
           "serverId": {
-            "type": "string"
+            "type": "string",
+            "description": "Identifier of the installed server."
           },
           "connectionStatus": {
             "type": "string",
             "enum": [
               "needs-credential",
               "shared-key"
-            ]
+            ],
+            "description": "Recorded activation requirement: needs-credential requires an external custody flow, while shared-key records an administrator-managed shared key. This API does not activate either state."
           },
           "lastUsed": {
             "type": [
               "string",
               "null"
             ],
-            "format": "date-time"
+            "format": "date-time",
+            "description": "ISO-8601 timestamp of the server's last use, or null when it has never been used."
           }
         }
       },
       "EntitledUser": {
         "type": "object",
+        "description": "A local principal displayed in the MCP access editor or its selectable directory.",
         "required": [
           "id",
           "name",
@@ -516,21 +538,25 @@
         "properties": {
           "id": {
             "type": "string",
-            "description": "Stable local Principal identifier."
+            "description": "Stable local Principal identifier used by authorization grants."
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "Display name shown in the access editor."
           },
           "initials": {
-            "type": "string"
+            "type": "string",
+            "description": "Initials derived from the display name for an avatar."
           },
           "color": {
-            "type": "string"
+            "type": "string",
+            "description": "Deterministic avatar colour derived from the identifier."
           }
         }
       },
       "EntitledGroup": {
         "type": "object",
+        "description": "A local group that can receive an MCP authorization grant.",
         "required": [
           "id",
           "name"
@@ -538,16 +564,17 @@
         "properties": {
           "id": {
             "type": "string",
-            "description": "Stable local Group identifier."
+            "description": "Stable local Group identifier used by authorization grants."
           },
           "name": {
             "type": "string",
-            "description": "Display data; authorization uses the identifier."
+            "description": "Display name shown in the access editor. Authorization uses the identifier, not this value."
           }
         }
       },
       "McpAccessPolicy": {
         "type": "object",
+        "description": "The user and group grants managed by the MCP access editor for one server. It does not list authorization grants managed by other sources.",
         "required": [
           "serverId",
           "groups",
@@ -555,16 +582,19 @@
         ],
         "properties": {
           "serverId": {
-            "type": "string"
+            "type": "string",
+            "description": "Identifier of the governed server."
           },
           "groups": {
             "type": "array",
+            "description": "Groups with an active allow grant managed by the MCP access editor.",
             "items": {
               "$ref": "#/components/schemas/EntitledGroup"
             }
           },
           "users": {
             "type": "array",
+            "description": "Principals with an active allow grant managed by the MCP access editor.",
             "items": {
               "$ref": "#/components/schemas/EntitledUser"
             }
@@ -573,6 +603,7 @@
       },
       "McpDirectory": {
         "type": "object",
+        "description": "The users and groups that an organisation administrator can select when editing MCP access.",
         "required": [
           "users",
           "groups"
@@ -580,12 +611,14 @@
         "properties": {
           "users": {
             "type": "array",
+            "description": "All local principals eligible to receive an MCP authorization grant.",
             "items": {
               "$ref": "#/components/schemas/EntitledUser"
             }
           },
           "groups": {
             "type": "array",
+            "description": "All local groups eligible to receive an MCP authorization grant.",
             "items": {
               "$ref": "#/components/schemas/EntitledGroup"
             }
@@ -594,7 +627,7 @@
       },
       "ResourceShare": {
         "type": "object",
-        "description": "A direct file/chat/dataset share backed by explicit recipients and authorization grants.",
+        "description": "A direct file, chat, or dataset share. Each recipient relation is backed by an explicit authorization grant.",
         "required": [
           "id",
           "resourceType",
@@ -604,7 +637,8 @@
         ],
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "Stable share identifier used to manage recipients."
           },
           "resourceType": {
             "type": "string",
@@ -612,16 +646,20 @@
               "file",
               "chat",
               "dataset"
-            ]
+            ],
+            "description": "Family of the governed resource."
           },
           "resourceId": {
-            "type": "string"
+            "type": "string",
+            "description": "Identifier of the governed resource within its family."
           },
           "ownerPrincipalId": {
-            "type": "string"
+            "type": "string",
+            "description": "Local Principal that owns the resource and may revoke its recipient relations."
           },
           "recipientPrincipalIds": {
             "type": "array",
+            "description": "Local Principals with explicit live recipient relations and grants.",
             "items": {
               "type": "string"
             }
