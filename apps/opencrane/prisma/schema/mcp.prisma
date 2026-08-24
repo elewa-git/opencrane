@@ -11,6 +11,14 @@ enum McpEraProbeStatus {
   Rejected    @map("rejected")
 }
 
+// Records whether a saved MCP bundle check is waiting, verified, or rejected. Absurd owns the
+// job attempts; this state records only the product decision administrators need to review.
+enum McpbValidationState {
+  Pending  @map("pending")
+  Verified @map("verified")
+  Rejected @map("rejected")
+}
+
 enum McpServerStatus {
   Active   @map("active")
   Degraded @map("degraded")
@@ -88,6 +96,45 @@ model McpRegistrationClaim {
 
   @@id([siloId, identityDigest])
   @@map("mcp_registration_claims")
+}
+
+// Serializes two requests that try to use the same bundle submission key at the same time.
+model McpbValidationClaim {
+  siloId         String   @map("silo_id")
+  identityDigest String   @map("identity_digest")
+  touchedAt      DateTime @updatedAt @map("touched_at")
+
+  @@id([siloId, identityDigest])
+  @@map("mcpb_validation_claims")
+}
+
+// Saves the result of checking one immutable MCP bundle before OpenCrane runs or publishes it.
+model McpbValidation {
+  id                      String              @id @default(cuid())
+  siloId                  String              @map("silo_id")
+  artifactId              String              @map("artifact_id")
+  artifactRevisionId      String              @map("artifact_revision_id")
+  contentAddress          String              @map("content_address")
+  byteLength              BigInt              @map("byte_length")
+  mediaType               String              @map("media_type")
+  submissionKeyDigest     String              @map("submission_key_digest")
+  submissionDigest        String              @map("submission_digest")
+  acceptedManifestVersion String              @default("0.3") @map("accepted_manifest_version")
+  state                   McpbValidationState @default(Pending)
+  manifestName            String?             @map("manifest_name")
+  bundleVersion           String?             @map("bundle_version")
+  manifestDigest          String?             @map("manifest_digest")
+  publisher               String?
+  signerFingerprint       String?             @map("signer_fingerprint")
+  failureCode             String?             @map("failure_code")
+  createdByPrincipalId    String              @map("created_by_principal_id")
+  completedAt             DateTime?           @map("completed_at")
+  createdAt               DateTime            @default(now()) @map("created_at")
+  updatedAt               DateTime            @updatedAt @map("updated_at")
+
+  @@unique([siloId, submissionKeyDigest])
+  @@index([siloId, state, createdAt])
+  @@map("mcpb_validations")
 }
 
 // Per-principal installation of an MCP server (operator API).

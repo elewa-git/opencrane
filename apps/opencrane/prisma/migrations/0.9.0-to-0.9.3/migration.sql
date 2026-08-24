@@ -3416,6 +3416,7 @@ ALTER TABLE "mcp_server_installs" ALTER COLUMN "connection_status" SET DEFAULT '
 DROP TYPE "McpConnectionStatus_legacy";
 
 CREATE TYPE "McpEraProbeStatus" AS ENUM ('not-required', 'pending', 'accepted', 'rejected');
+CREATE TYPE "McpbValidationState" AS ENUM ('pending', 'verified', 'rejected');
 
 CREATE TEMPORARY TABLE "_iam_group_reference" (
     "reference" TEXT NOT NULL,
@@ -3773,6 +3774,54 @@ CREATE TABLE "mcp_registration_claims" (
 );
 ALTER TABLE "mcp_registration_claims" ADD CONSTRAINT "mcp_registration_claims_identity_check" CHECK (
     btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
+);
+
+CREATE TABLE "mcpb_validation_claims" (
+    "silo_id" TEXT NOT NULL,
+    "identity_digest" TEXT NOT NULL,
+    "touched_at" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "mcpb_validation_claims_pkey" PRIMARY KEY ("silo_id", "identity_digest")
+);
+ALTER TABLE "mcpb_validation_claims" ADD CONSTRAINT "mcpb_validation_claims_identity_check" CHECK (
+    btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
+);
+
+CREATE TABLE "mcpb_validations" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "artifact_id" TEXT NOT NULL,
+    "artifact_revision_id" TEXT NOT NULL,
+    "content_address" TEXT NOT NULL,
+    "byte_length" BIGINT NOT NULL,
+    "media_type" TEXT NOT NULL,
+    "submission_key_digest" TEXT NOT NULL,
+    "submission_digest" TEXT NOT NULL,
+    "accepted_manifest_version" TEXT NOT NULL DEFAULT '0.3',
+    "state" "McpbValidationState" NOT NULL DEFAULT 'pending',
+    "manifest_name" TEXT,
+    "bundle_version" TEXT,
+    "manifest_digest" TEXT,
+    "publisher" TEXT,
+    "signer_fingerprint" TEXT,
+    "failure_code" TEXT,
+    "created_by_principal_id" TEXT NOT NULL,
+    "completed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "mcpb_validations_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX "mcpb_validations_silo_id_submission_key_digest_key" ON "mcpb_validations"("silo_id", "submission_key_digest");
+CREATE INDEX "mcpb_validations_silo_id_state_created_at_idx" ON "mcpb_validations"("silo_id", "state", "created_at");
+ALTER TABLE "mcpb_validations" ADD CONSTRAINT "mcpb_validations_identity_check" CHECK (
+    btrim("silo_id") <> '' AND btrim("artifact_id") <> '' AND btrim("artifact_revision_id") <> '' AND
+    btrim("created_by_principal_id") <> '' AND btrim("media_type") <> '' AND "byte_length" >= 0 AND
+    "accepted_manifest_version" = '0.3' AND "content_address" ~ '^sha256:[0-9a-f]{64}$' AND
+    "submission_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "submission_digest" ~ '^sha256:[0-9a-f]{64}$'
+);
+ALTER TABLE "mcpb_validations" ADD CONSTRAINT "mcpb_validations_result_check" CHECK (
+    ("state" = 'pending' AND "manifest_name" IS NULL AND "bundle_version" IS NULL AND "manifest_digest" IS NULL AND "publisher" IS NULL AND "signer_fingerprint" IS NULL AND "failure_code" IS NULL AND "completed_at" IS NULL)
+    OR ("state" = 'verified' AND btrim("manifest_name") <> '' AND btrim("bundle_version") <> '' AND "manifest_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("publisher") <> '' AND "signer_fingerprint" ~ '^sha256:[0-9a-f]{64}$' AND "failure_code" IS NULL AND "completed_at" IS NOT NULL)
+    OR ("state" = 'rejected' AND "manifest_name" IS NULL AND "bundle_version" IS NULL AND "manifest_digest" IS NULL AND "publisher" IS NULL AND "signer_fingerprint" IS NULL AND "failure_code" IN ('artifact_mismatch', 'bundle_too_large', 'invalid_archive', 'invalid_manifest', 'invalid_signature', 'unsupported_manifest_version') AND "completed_at" IS NOT NULL)
 );
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_registration_digest_check" CHECK (
     ("registration_key_digest" IS NULL AND "registration_digest" IS NULL)

@@ -1,3 +1,7 @@
+import type { IWorkflowEngine, IWorkflowTaskReceipt, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+
+import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
+
 /** The one MCPB manifest format accepted by OpenCrane in the 0.9.3 release. */
 export const MCPB_MANIFEST_VERSION = "0.3" as const;
 
@@ -27,6 +31,29 @@ export enum McpbVerificationFailureCodes
 	InvalidSignature = "invalid_signature",
 	/** The root manifest uses an MCPB version that this release does not accept. */
 	UnsupportedManifestVersion = "unsupported_manifest_version",
+}
+
+/**
+ * Product states saved for one MCP bundle check.
+ *
+ * The MCP repository maps Prisma values into this enum. Absurd keeps its own task attempts and
+ * checkpoints; these states only tell an administrator whether the exact bundle passed.
+ */
+export enum McpbValidationStates
+{
+	/** The saved background job has not committed a final answer. */
+	Pending = "Pending",
+	/** The exact bundle has a trusted signature and valid pinned manifest. */
+	Verified = "Verified",
+	/** The exact bundle failed a fixed manifest, archive, artifact, or signature check. */
+	Rejected = "Rejected",
+}
+
+/** Stable task names registered for MCP bundle work. */
+export enum McpbValidationTaskNames
+{
+	/** Reads one saved bundle and stores its manifest and signature decision. */
+	Verify = "mcpb-validation.verify",
 }
 
 /** Immutable artifact facts saved before a bundle verification job starts. */
@@ -101,4 +128,46 @@ export interface McpbBundleVerifier
 	 * @returns Bounded accepted metadata or one stable rejection reason.
 	 */
 	verify(target: McpbBundleArtifactTarget): Promise<McpbVerificationResult>;
+}
+
+/** Input saved with one MCP bundle verification task. */
+export interface McpbValidationTaskInput extends McpbBundleArtifactTarget
+{
+	/** Product validation row created in the same database transaction as this task. */
+	readonly validationId: string;
+	/** Digest that binds the task to every immutable submission field. */
+	readonly submissionDigest: string;
+}
+
+/** Receipt returned after a bundle submission transaction admits its saved job. */
+export interface McpbValidationAdmission
+{
+	/** Stable key that makes repeated task admission return the same task. */
+	readonly taskKey: string;
+	/** Engine-neutral receipt for the admitted task. */
+	readonly receipt: IWorkflowTaskReceipt;
+}
+
+/** Transaction-bound admission API for the MCP bundle verification job. */
+export interface McpbValidationWorkflow
+{
+	/**
+	 * Saves or returns the task through the database transaction that created the validation row.
+	 *
+	 * @param transaction - Opaque database transaction owned by the caller.
+	 * @param input - Immutable validation and artifact facts saved with the task.
+	 * @returns Stable task key and engine-neutral receipt.
+	 */
+	admit(transaction: IWorkflowTransaction, input: McpbValidationTaskInput): Promise<McpbValidationAdmission>;
+}
+
+/** Dependencies used to register and run the MCP bundle verification task. */
+export interface McpbValidationWorkflowOptions
+{
+	/** Engine-neutral workflow engine supplied by the OpenCrane composition root. */
+	readonly execution: IWorkflowEngine;
+	/** Manifest and signature checker that reads no database state. */
+	readonly verifier: McpbBundleVerifier;
+	/** MCP database transaction owner used to load and save product state. */
+	readonly unitOfWork: McpOperatorUnitOfWork;
 }
