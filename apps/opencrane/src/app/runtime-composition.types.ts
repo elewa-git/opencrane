@@ -19,7 +19,7 @@ export interface InternalRuntimeComposition
 	readonly agentControllerRunDispatch: Router;
 	/** Controller-only router for governed skill workload dispatch. */
 	readonly skillWorkloadDispatch: Router;
-	/** Controller-only router for MCP bundle validator workload dispatch. */
+	/** Controller-only router that claims MCP bundle validation work and records its Kubernetes Job. */
 	readonly mcpbValidationController: Router;
 	/** Runtime router for one-use workload bootstrap claims. */
 	readonly skillWorkloadBootstrap: Router;

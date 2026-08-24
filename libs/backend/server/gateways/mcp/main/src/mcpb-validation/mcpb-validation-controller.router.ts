@@ -4,9 +4,9 @@ import { z } from "zod";
 
 import type { McpbValidationControllerRouterDependencies } from "./mcpb-validation-controller.types";
 
-/** Controller assignment input accepted only after the projected token has been reviewed. */
+/** Accepts the claim fence and bounded Job UID needed to record one controller assignment. */
 const _ASSIGNMENT = z.object({ claimedAt: z.string().datetime({ offset: true }), deliveryCount: z.number().int().min(1), workloadUid: z.string().trim().min(1).max(256) }).strict();
-/** Empty controller claim command; extra caller fields are rejected. */
+/** Accepts no claim fields, so a caller cannot choose which saved workload to receive. */
 const _EMPTY_COMMAND = z.object({}).strict();
 
 /** Return a bearer token without exposing it to logs or response bodies. */
@@ -32,7 +32,15 @@ async function _IsController(request: Request, dependencies: McpbValidationContr
 	return token !== null && await dependencies.tokenReviewer.__Review(token) !== null;
 }
 
-/** Build the internal controller API for MCP bundle validator workload claims and Job assignments. */
+/**
+ * Builds the controller-only API that claims MCP bundle validation work and records its Kubernetes Job.
+ *
+ * It reviews the projected token before it returns a claim or changes an assignment. A conflict
+ * returns 409, so a controller that lost its database lease cannot treat its Job as assigned.
+ * Called by: `_CreateControllerRuntimeComposition` in the OpenCrane app.
+ * @param dependencies - Supplies token review, database authority, and structured error logging.
+ * @returns A router mounted below `/api/internal/agent-controller`.
+ */
 export function __CreateMcpbValidationControllerRouter(dependencies: McpbValidationControllerRouterDependencies): Router
 {
 	const router = Router();

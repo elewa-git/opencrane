@@ -48,10 +48,10 @@ inspection job currently verifies the signature, safe archive layout, and packag
 the bundle in an isolated environment, scanning it, building an image, and publishing it are later
 workflow steps.
 
-The future package-inspection worker asks this package for work through a small internal controller
-API. It can claim one saved inspection job, then record the Kubernetes Job that will handle it. The
-server checks the controller's own Kubernetes identity and the database lease each time. A controller
-that has lost its lease cannot attach a Job to the work.
+A future controller asks this package for work through a small internal API. It can claim one saved
+inspection job, then record the Kubernetes Job that will handle it. The server checks the
+controller's own Kubernetes identity and the database lease each time. A controller that has lost
+its lease cannot attach a Job to the work.
 
 The draft server and its background job use one database transaction. Either both are saved, or
 neither is saved. A repeated registration request returns the same draft and the same job.

@@ -2,7 +2,16 @@ import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.type
 import type { McpbValidationWorkloadAssignment, McpbValidationWorkloadClaim } from "./mcpb-validation-repository.types";
 import type { McpbValidationControllerAuthority } from "./mcpb-validation-controller.types";
 
-/** Creates the transaction-bound authority behind the MCP bundle validator controller routes. */
+/**
+ * Builds the controller authority that changes claims and Job assignments through one unit of work.
+ *
+ * Each method enters the transaction before it delegates to the repository, so the route never
+ * exposes a partly saved claim or assignment.
+ * Called by: `_CreateControllerRuntimeComposition` in the OpenCrane app.
+ * @param unitOfWork - Owns the MCP validation repository transaction.
+ * @param claimLeaseMilliseconds - Limits how long a controller can hold a returned claim.
+ * @returns The authority used by the internal controller router.
+ */
 export function __CreateMcpbValidationControllerAuthority(unitOfWork: McpOperatorUnitOfWork, claimLeaseMilliseconds: number): McpbValidationControllerAuthority
 {
 	return {

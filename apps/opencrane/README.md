@@ -60,7 +60,7 @@ The route registry is deliberately a catalogue rather than a second application 
 | Public `:8080` | Personal workspace | guided onboarding, assets, persona, approvals, runs, configuration, conversations |
 | Public `:8080` | Gateways | MCP, model routing, providers, bring-your-own-key, model registry |
 | Public `:8080` | Knowledge and reporting | retrieval sources, budgets, token usage |
-| Internal `:8081` | Controller | run-attempt, skill-workload, and MCP bundle-inspection dispatch |
+| Internal `:8081` | Controller | run attempts, skill workloads, and MCP bundle inspection claims and Job assignment |
 | Internal `:8081` | Runtime | one-use bootstrap, command stream, candidate ingest, skill-authoring exchange |
 | Internal `:8081` | Workers and replay | artifact preprocessing and controller-selected conversation replay |
 
