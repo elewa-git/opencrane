@@ -3,68 +3,85 @@ import type { AgentRevision, AgentRevisionContent, AgentRevisionDiff, AgentRevis
 /** Command that creates one managed AgentService with its first draft revision. */
 export interface CreateManagedAgentServiceCommand
 {
-	/** Silo that will own the service. */
-	readonly siloId: SiloId;
-	/** Human-readable service name. */
-	readonly name: string;
-	/** Runtime profile name the agent controller turns into a Kubernetes Job (image, limits, identity). Must be `MANAGED_AGENT_RUNTIME_PROFILE_NAME` — the only profile the controller can resolve. */
-	readonly workloadProfile: string;
-	/** Author of the first revision. */
-	readonly authoredBy: string;
-	/** Human-authored explanation of the initial revision. */
-	readonly changeMessage: string;
-	/** Executable content of the first draft revision. */
-	readonly content: AgentRevisionContent;
+  /** Silo that will own the service. */
+  readonly siloId: SiloId;
+  /** Human-readable service name. */
+  readonly name: string;
+  /** Runtime profile name the agent controller turns into a Kubernetes Job (image, limits, identity). Must be `MANAGED_AGENT_RUNTIME_PROFILE_NAME` — the only profile the controller can resolve. */
+  readonly workloadProfile: string;
+  /** Author of the first revision. */
+  readonly authoredBy: string;
+  /** Human-authored explanation of the initial revision. */
+  readonly changeMessage: string;
+  /** Executable content of the first draft revision. */
+  readonly content: AgentRevisionContent;
 }
 
 /** Request to add a new draft revision on top of the newest one. Carries the revision the author edited so a concurrent append is rejected rather than overwritten. */
 export interface ReviseAgentRevisionCommand
 {
-	/** Silo the caller is operating within; a service in another silo must not resolve. */
-	readonly siloId: SiloId;
-	/** Service being revised. */
-	readonly agentServiceId: AgentServiceId;
-	/** Revision the author based the edit on, for optimistic concurrency. */
-	readonly expectedParentRevisionId: AgentRevisionId | null;
-	/** Author of the new revision. */
-	readonly authoredBy: string;
-	/** Human-authored explanation of the change. */
-	readonly changeMessage: string;
-	/** Executable content of the new draft revision. */
-	readonly content: AgentRevisionContent;
+  /** Silo the caller is operating within; a service in another silo must not resolve. */
+  readonly siloId: SiloId;
+  /** Service being revised. */
+  readonly agentServiceId: AgentServiceId;
+  /** Revision the author based the edit on, for optimistic concurrency. */
+  readonly expectedParentRevisionId: AgentRevisionId | null;
+  /** Author of the new revision. */
+  readonly authoredBy: string;
+  /** Human-authored explanation of the change. */
+  readonly changeMessage: string;
+  /** Executable content of the new draft revision. */
+  readonly content: AgentRevisionContent;
 }
 
 /** Command that restores an older revision by cloning it into a new draft revision. */
 export interface RestoreAgentRevisionCommand
 {
-	/** Silo the caller is operating within; a service in another silo must not resolve. */
-	readonly siloId: SiloId;
-	/** Service being restored. */
-	readonly agentServiceId: AgentServiceId;
-	/** Older revision whose content is cloned; recorded as the source revision. */
-	readonly sourceRevisionId: AgentRevisionId;
-	/** Revision the author based the restore on, for optimistic concurrency. */
-	readonly expectedParentRevisionId: AgentRevisionId | null;
-	/** Author of the restore revision. */
-	readonly authoredBy: string;
-	/** Human-authored explanation of the restore. */
-	readonly changeMessage: string;
+  /** Silo the caller is operating within; a service in another silo must not resolve. */
+  readonly siloId: SiloId;
+  /** Service being restored. */
+  readonly agentServiceId: AgentServiceId;
+  /** Older revision whose content is cloned; recorded as the source revision. */
+  readonly sourceRevisionId: AgentRevisionId;
+  /** Revision the author based the restore on, for optimistic concurrency. */
+  readonly expectedParentRevisionId: AgentRevisionId | null;
+  /** Author of the restore revision. */
+  readonly authoredBy: string;
+  /** Human-authored explanation of the restore. */
+  readonly changeMessage: string;
 }
 
-/** The three state changes a service supports: `enable` → active, `pause` → paused, `retire` → retired. Retiring also clears the active revision and cannot be undone. */
-export type AgentServiceLifecycleAction = "enable" | "pause" | "retire";
+/**
+ * Names the state changes that a managed agent service supports.
+ *
+ * `Enable` activates the service, `Pause` stops it from accepting new work, and `Retire` ends the
+ * service permanently and clears its active revision. The serialized values are part of the HTTP
+ * command contract, so callers must use these names instead of making up another action string.
+ */
+export enum AgentServiceLifecycleActions
+{
+  /** Activates a service that has a published revision. */
+  Enable = "enable",
+  /** Stops a service from accepting new work while preserving its revisions. */
+  Pause = "pause",
+  /** Ends a service permanently and clears its active revision. */
+  Retire = "retire",
+}
+
+/** Keeps the lifecycle command field compatible with its serialized HTTP action values. */
+export type AgentServiceLifecycleAction = `${AgentServiceLifecycleActions}`;
 
 /** Command that changes a stable AgentService state with optimistic concurrency. */
 export interface ChangeAgentServiceStateCommand
 {
-	/** Silo the caller is operating within; a service in another silo must not resolve. */
-	readonly siloId: SiloId;
-	/** Service whose state is changing. */
-	readonly agentServiceId: AgentServiceId;
-	/** State the caller observed, for optimistic concurrency. */
-	readonly expectedState: AgentServiceState;
-	/** Lifecycle action requested. */
-	readonly action: AgentServiceLifecycleAction;
+  /** Silo the caller is operating within; a service in another silo must not resolve. */
+  readonly siloId: SiloId;
+  /** Service whose state is changing. */
+  readonly agentServiceId: AgentServiceId;
+  /** State the caller observed, for optimistic concurrency. */
+  readonly expectedState: AgentServiceState;
+  /** Lifecycle action requested. */
+  readonly action: AgentServiceLifecycleAction;
 }
 
 /**
@@ -93,37 +110,37 @@ export type ManagedRunTrigger = "managed_invocation" | "schedule";
  */
 export enum ManagedRunAdmissionOutcomes
 {
-	/** This call created the run row. The router answers 202 with the new run id. */
-	Accepted = "accepted",
-	/** This key already created a run; the same run id comes back. Success, not a duplicate error. */
-	Idempotent = "idempotent",
-	/** No run was created; `reason` carries one {@link AgentRevisionLifecycleDenial} value. */
-	Denied = "denied",
+  /** This call created the run row. The router answers 202 with the new run id. */
+  Accepted = "accepted",
+  /** This key already created a run; the same run id comes back. Success, not a duplicate error. */
+  Idempotent = "idempotent",
+  /** No run was created; `reason` carries one {@link AgentRevisionLifecycleDenial} value. */
+  Denied = "denied",
 }
 
 /** Command that records one managed run admission request. */
 export interface ManagedRunNowCommand
 {
-	/** Service to run. */
-	readonly agentServiceId: AgentServiceId;
-	/** Silo containing the service and durable run. */
-	readonly siloId: SiloId;
-	/** Subject requesting the run (a human for run-now, the scheduler identity for a schedule). */
-	readonly requestedBy: string;
-	/** User-visible key making duplicate delivery return the first admission. */
-	readonly requestIdempotencyKey: string;
-	/**
-	 * Trigger recorded on the admitted run. `managed_invocation` for an explicit run-now;
-	 * `schedule` for a due schedule slot. The admission adapter maps this to the durable
-	 * `AgentRunTrigger`; it never opens a second run-creation path.
-	 */
-	readonly trigger: ManagedRunTrigger;
-	/**
-	 * Exact ISO-8601 scheduled-slot instant for a `schedule` trigger, or null for run-now. Carried
-	 * so the admission audit can attribute a run to its cron slot; the idempotency key already
-	 * encodes it, so it is descriptive rather than an independent dedup key.
-	 */
-	readonly scheduledSlot: string | null;
+  /** Service to run. */
+  readonly agentServiceId: AgentServiceId;
+  /** Silo containing the service and durable run. */
+  readonly siloId: SiloId;
+  /** Subject requesting the run (a human for run-now, the scheduler identity for a schedule). */
+  readonly requestedBy: string;
+  /** User-visible key making duplicate delivery return the first admission. */
+  readonly requestIdempotencyKey: string;
+  /**
+   * Trigger recorded on the admitted run. `managed_invocation` for an explicit run-now;
+   * `schedule` for a due schedule slot. The admission adapter maps this to the durable
+   * `AgentRunTrigger`; it never opens a second run-creation path.
+   */
+  readonly trigger: ManagedRunTrigger;
+  /**
+   * Exact ISO-8601 scheduled-slot instant for a `schedule` trigger, or null for run-now. Carried
+   * so the admission audit can attribute a run to its cron slot; the idempotency key already
+   * encodes it, so it is descriptive rather than an independent dedup key.
+   */
+  readonly scheduledSlot: string | null;
 }
 
 /**
@@ -178,34 +195,61 @@ export interface ManagedRunNowCommand
  * decides retry-versus-drop.
  * @see {@link ManagedRunAdmissionResult} for how a denial is returned to a run-now caller.
  */
-export type AgentRevisionLifecycleDenial =
-	| "invalid_command"
-	| "service_not_found"
-	| "service_retired"
-	| "revision_not_found"
-	| "revision_service_mismatch"
-	| "model_definition_unavailable"
-	| "transition_not_allowed"
-	| "service_not_runnable"
-	| "run_not_admittable"
-	| "revision_unavailable"
-	| "persona_unavailable"
-	| "conversation_unavailable"
-	| "memory_scope_unavailable"
-	| "memory_unavailable"
-	| "tool_policy_unavailable"
-	| "skill_unavailable"
-	| "budget_unavailable"
-	| "membership_stale"
-	| "identity_unavailable"
-	| "persistence_unavailable"
-	| "authority_conflict"
-	| "admission_concurrency_limited";
+export enum AgentRevisionLifecycleDenials
+{
+  /** Rejects a command whose shape or values do not satisfy the lifecycle contract. */
+  InvalidCommand = "invalid_command",
+  /** Hides a missing or foreign-silo service behind the same absence outcome. */
+  ServiceNotFound = "service_not_found",
+  /** Rejects work against a service that has ended permanently. */
+  ServiceRetired = "service_retired",
+  /** Hides a missing or foreign-silo revision behind the same absence outcome. */
+  RevisionNotFound = "revision_not_found",
+  /** Rejects a revision that belongs to another service in the current silo. */
+  RevisionServiceMismatch = "revision_service_mismatch",
+  /** Rejects a revision that selects no model available to this silo. */
+  ModelDefinitionUnavailable = "model_definition_unavailable",
+  /** Rejects a lifecycle action that the service's current state does not allow. */
+  TransitionNotAllowed = "transition_not_allowed",
+  /** Rejects a service that cannot accept a run because it lacks a runnable revision. */
+  ServiceNotRunnable = "service_not_runnable",
+  /** Rejects a run whose active revision could not be read at admission time. */
+  RunNotAdmittable = "run_not_admittable",
+  /** Rejects a revision whose stored execution inputs cannot be assembled. */
+  RevisionUnavailable = "revision_unavailable",
+  /** Rejects a revision whose selected persona is unavailable. */
+  PersonaUnavailable = "persona_unavailable",
+  /** Rejects a revision whose selected conversation is unavailable. */
+  ConversationUnavailable = "conversation_unavailable",
+  /** Rejects a revision whose memory boundary has no matching grant. */
+  MemoryScopeUnavailable = "memory_scope_unavailable",
+  /** Rejects a revision whose selected memory is unavailable. */
+  MemoryUnavailable = "memory_unavailable",
+  /** Rejects a revision whose tool policy is unavailable. */
+  ToolPolicyUnavailable = "tool_policy_unavailable",
+  /** Rejects a revision whose selected skill is unavailable. */
+  SkillUnavailable = "skill_unavailable",
+  /** Rejects a revision whose budget is unavailable. */
+  BudgetUnavailable = "budget_unavailable",
+  /** Defers a run until fresh membership evidence is available. */
+  MembershipStale = "membership_stale",
+  /** Rejects a revision whose selected identity is unavailable. */
+  IdentityUnavailable = "identity_unavailable",
+  /** Signals that a database write could not report a safe result. */
+  PersistenceUnavailable = "persistence_unavailable",
+  /** Signals that another silo, service, or revision owns the idempotency key. */
+  AuthorityConflict = "authority_conflict",
+  /** Defers a run because the admission queue has reached its limit. */
+  AdmissionConcurrencyLimited = "admission_concurrency_limited",
+}
+
+/** Keeps lifecycle denial values compatible with their serialized HTTP response values. */
+export type AgentRevisionLifecycleDenial = `${AgentRevisionLifecycleDenials}`;
 
 /** Outcome of creating a managed service: the new service plus its first draft revision, or a refusal with a {@link AgentRevisionLifecycleDenial} reason. */
 export type CreateManagedAgentServiceResult =
-	| { readonly outcome: "created"; readonly service: AgentService; readonly revision: AgentRevision }
-	| { readonly outcome: "denied"; readonly reason: AgentRevisionLifecycleDenial };
+  | { readonly outcome: "created"; readonly service: AgentService; readonly revision: AgentRevision }
+  | { readonly outcome: "denied"; readonly reason: AgentRevisionLifecycleDenial };
 
 /**
  * Outcome of appending a revision through revise or restore.
@@ -216,9 +260,9 @@ export type CreateManagedAgentServiceResult =
  * was written, so retrying with the old id will just conflict again. The router maps this to 409.
  */
 export type AppendAgentRevisionResult =
-	| { readonly outcome: "revised"; readonly revision: AgentRevision }
-	| { readonly outcome: "conflict"; readonly currentHeadRevisionId: AgentRevisionId | null }
-	| { readonly outcome: "denied"; readonly reason: AgentRevisionLifecycleDenial };
+  | { readonly outcome: "revised"; readonly revision: AgentRevision }
+  | { readonly outcome: "conflict"; readonly currentHeadRevisionId: AgentRevisionId | null }
+  | { readonly outcome: "denied"; readonly reason: AgentRevisionLifecycleDenial };
 
 /**
  * Outcome of an enable, pause, or retire request.
@@ -227,22 +271,22 @@ export type AppendAgentRevisionResult =
  * `currentState` is what it is now, and nothing was changed. Retry from that state.
  */
 export type ChangeAgentServiceStateResult =
-	| { readonly outcome: "changed"; readonly service: AgentService }
-	| { readonly outcome: "conflict"; readonly currentState: AgentServiceState }
-	| { readonly outcome: "denied"; readonly reason: AgentRevisionLifecycleDenial };
+  | { readonly outcome: "changed"; readonly service: AgentService }
+  | { readonly outcome: "conflict"; readonly currentState: AgentServiceState }
+  | { readonly outcome: "denied"; readonly reason: AgentRevisionLifecycleDenial };
 
 /** Outcome of comparing two revisions: both revisions plus their differences, or a refusal (both revisions must exist in the caller's silo and belong to the same service). */
 export type CompareAgentRevisionsResult =
-	| { readonly outcome: "compared"; readonly base: AgentRevision; readonly target: AgentRevision; readonly diff: AgentRevisionDiff }
-	| { readonly outcome: "denied"; readonly reason: AgentRevisionLifecycleDenial };
+  | { readonly outcome: "compared"; readonly base: AgentRevision; readonly target: AgentRevision; readonly diff: AgentRevisionDiff }
+  | { readonly outcome: "denied"; readonly reason: AgentRevisionLifecycleDenial };
 
 /** Read-only run history for one service. */
 export interface AgentServiceHistory
 {
-	/** Immutable revision lineage, newest first. */
-	readonly revisions: readonly AgentRevision[];
-	/** Durable run-history records, newest first. */
-	readonly runs: readonly AgentRun[];
+  /** Immutable revision lineage, newest first. */
+  readonly revisions: readonly AgentRevision[];
+  /** Durable run-history records, newest first. */
+  readonly runs: readonly AgentRun[];
 }
 
 /**
@@ -262,22 +306,22 @@ export interface AgentServiceHistory
  */
 export interface AgentRevisionLifecycleRepository
 {
-	/** Lists managed services in the caller's silo, most recently updated first, capped at 200 rows. */
-	listManagedServices(siloId: SiloId): Promise<readonly AgentService[]>;
-	/** Loads one stable service identity scoped to the caller's silo, or null when absent. */
-	getService(agentServiceId: AgentServiceId, siloId: SiloId): Promise<AgentService | null>;
-	/** Loads one immutable revision whose parent service is in the caller's silo, or null. */
-	getRevision(agentRevisionId: AgentRevisionId, siloId: SiloId): Promise<AgentRevision | null>;
-	/** Creates the service and its first draft revision in one transaction, so a service can never exist with no revision. */
-	createManagedService(command: CreateManagedAgentServiceCommand, createdAt: string): Promise<CreateManagedAgentServiceResult>;
-	/** Adds a draft revision on top of the newest one, in one transaction; returns a conflict if another author appended first. */
-	reviseRevision(command: ReviseAgentRevisionCommand, createdAt: string): Promise<AppendAgentRevisionResult>;
-	/** Clones an older revision into a new draft revision atomically, silo-scoped. */
-	restoreRevision(command: RestoreAgentRevisionCommand, createdAt: string): Promise<AppendAgentRevisionResult>;
-	/** Changes the service state only if it still matches `expectedState`; otherwise returns a conflict with the current state. */
-	changeServiceState(command: ChangeAgentServiceStateCommand, changedAt: string): Promise<ChangeAgentServiceStateResult>;
-	/** Reads the silo-scoped revision lineage and durable run history for one service. */
-	readHistory(agentServiceId: AgentServiceId, siloId: SiloId, runLimit: number): Promise<AgentServiceHistory>;
+  /** Lists managed services in the caller's silo, most recently updated first, capped at 200 rows. */
+  listManagedServices(siloId: SiloId): Promise<readonly AgentService[]>;
+  /** Loads one stable service identity scoped to the caller's silo, or null when absent. */
+  getService(agentServiceId: AgentServiceId, siloId: SiloId): Promise<AgentService | null>;
+  /** Loads one immutable revision whose parent service is in the caller's silo, or null. */
+  getRevision(agentRevisionId: AgentRevisionId, siloId: SiloId): Promise<AgentRevision | null>;
+  /** Creates the service and its first draft revision in one transaction, so a service can never exist with no revision. */
+  createManagedService(command: CreateManagedAgentServiceCommand, createdAt: string): Promise<CreateManagedAgentServiceResult>;
+  /** Adds a draft revision on top of the newest one, in one transaction; returns a conflict if another author appended first. */
+  reviseRevision(command: ReviseAgentRevisionCommand, createdAt: string): Promise<AppendAgentRevisionResult>;
+  /** Clones an older revision into a new draft revision atomically, silo-scoped. */
+  restoreRevision(command: RestoreAgentRevisionCommand, createdAt: string): Promise<AppendAgentRevisionResult>;
+  /** Changes the service state only if it still matches `expectedState`; otherwise returns a conflict with the current state. */
+  changeServiceState(command: ChangeAgentServiceStateCommand, changedAt: string): Promise<ChangeAgentServiceStateResult>;
+  /** Reads the silo-scoped revision lineage and durable run history for one service. */
+  readHistory(agentServiceId: AgentServiceId, siloId: SiloId, runLimit: number): Promise<AgentServiceHistory>;
 }
 
 /**
@@ -287,9 +331,9 @@ export interface AgentRevisionLifecycleRepository
  * `reason`, and {@link AgentRevisionLifecycleDenial} says which reasons are worth retrying.
  */
 export type ManagedRunAdmissionResult =
-	| { readonly outcome: ManagedRunAdmissionOutcomes.Accepted; readonly runId: string }
-	| { readonly outcome: ManagedRunAdmissionOutcomes.Idempotent; readonly runId: string }
-	| { readonly outcome: ManagedRunAdmissionOutcomes.Denied; readonly reason: AgentRevisionLifecycleDenial };
+  | { readonly outcome: ManagedRunAdmissionOutcomes.Accepted; readonly runId: string }
+  | { readonly outcome: ManagedRunAdmissionOutcomes.Idempotent; readonly runId: string }
+  | { readonly outcome: ManagedRunAdmissionOutcomes.Denied; readonly reason: AgentRevisionLifecycleDenial };
 
 /**
  * Records one managed-agent run in the database, without starting it.
@@ -308,10 +352,10 @@ export type ManagedRunAdmissionResult =
  */
 export interface ManagedRunAdmissionPort
 {
-	/**
-	 * Records one managed run admission for the service's active revision.
-	 * The implementation admits the run through the existing run-admission path with
-	 * `trigger: managed_invocation`; it must not dispatch a Job, schedule, or execute anything.
-	 */
-	admitManagedRun(command: ManagedRunNowCommand): Promise<ManagedRunAdmissionResult>;
+  /**
+   * Records one managed run admission for the service's active revision.
+   * The implementation admits the run through the existing run-admission path with
+   * `trigger: managed_invocation`; it must not dispatch a Job, schedule, or execute anything.
+   */
+  admitManagedRun(command: ManagedRunNowCommand): Promise<ManagedRunAdmissionResult>;
 }
