@@ -1,4 +1,5 @@
 import type { DurableTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/contract";
+import type { Logger } from "@opencrane/backend/observability";
 import type { Pool } from "pg";
 
 /** Configuration for the Absurd adapter's engine-owned connections and queues. */
@@ -10,6 +11,8 @@ export interface AbsurdDurableExecutionOptions
 	readonly databasePoolSize: number;
 	/** Optional caller-owned pool for a bounded live qualification or composition root. */
 	readonly databasePool?: Pool;
+	/** Optional structured process logger for worker lifecycle outcomes. */
+	readonly log?: Pick<Logger, "info">;
 	/** Immutable reviewed queue authority shared with the workflow kit. */
 	readonly queueAuthority: DurableTaskQueueAuthority;
 	/** Maximum parallel handlers each engine queue may execute. */

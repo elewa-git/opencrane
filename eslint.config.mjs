@@ -154,7 +154,7 @@ export default [
                 "scope:shared",
               ],
             },
-            { sourceTag: "scope:mcp", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:identity", "scope:mcp", "scope:shared"] },
+            { sourceTag: "scope:mcp", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:identity", "scope:mcp", "scope:shared", "scope:workflows"] },
             { sourceTag: "scope:membership", onlyDependOnLibsWithTags: ["scope:audit", "scope:auth", "scope:authorization", "scope:membership", "scope:shared"] },
             { sourceTag: "scope:memory", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:memory", "scope:shared"] },
             { sourceTag: "scope:personal-memory", onlyDependOnLibsWithTags: ["scope:personal-memory", "scope:shared"] },

@@ -4,6 +4,7 @@ import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, Authorizati
 import { ___SortBy } from "@opencrane/util";
 import type { McpAccessPolicyCommand, McpOperatorCaller } from "./mcp-operator.logic.types";
 import type { McpOperatorInstallRecord, McpOperatorPrincipalRecord, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork } from "./mcp-operator-repository.types";
+import { __McpEraProbeRequiredState } from "../era-probe/mcp-era-probe-state";
 
 const _CATALOG_ID = "opencrane-core";
 const _CATALOG_REVISION = 1;
@@ -325,7 +326,7 @@ function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller,
 {
 	return unitOfWork.execute(async function _Update(transaction)
 	{
-		const server = await transaction.mcp.setApprovalStatus(caller.siloId, serverId, status);
+		const server = await transaction.mcp.setApprovalStatus(caller.siloId, serverId, status, __McpEraProbeRequiredState(status));
 		if (!server) return null;
 		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} ${verb}`);
 		return _MapServer(server);

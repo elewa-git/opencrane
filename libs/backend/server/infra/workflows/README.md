@@ -2,9 +2,10 @@
 
 > [infra](../README.md) › workflows
 
-These libraries define how a future control-plane action can save work that survives a server restart.
-No OpenCrane application composes an engine or starts a worker yet. Product code will depend on the
-engine-neutral contract; it will never import an execution engine or control a worker.
+These libraries define how a control-plane action saves work that survives a server restart. A
+workflow is work that may take time, wait for something, and continue later. The OpenCrane server
+uses Absurd to save and run this work, while product code uses the shared workflow rules instead of
+talking to Absurd directly.
 
 ## Map
 
@@ -27,10 +28,10 @@ engine-neutral contract; it will never import an execution engine or control a w
 
 ## Dependency rule
 
-Every child has `type:lib`, `layer:infra`, and `scope:workflows`. It may depend only on sibling
-workflow contracts, shared infrastructure, and its external engine adapter. It must never import a
-backend domain or application; product scheduling, authorisation, and aggregate writes stay with
-their existing owners.
+Every child has `type:lib` and `scope:workflows`. The shared API is `layer:contract`; the packages
+that enforce policy or talk to Absurd are `layer:infra`. They may depend only on sibling workflow
+contracts and shared infrastructure. They must never import a backend domain or application;
+product scheduling, authorisation, and database writes stay with their existing owners.
 
 ## See also
 

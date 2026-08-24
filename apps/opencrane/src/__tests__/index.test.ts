@@ -112,12 +112,14 @@ describe("Control Plane", () =>
 {
   beforeEach(function _RuntimeNamespaceBoundary()
   {
+	vi.stubEnv("DATABASE_URL", "postgresql://opencrane:test@localhost:5432/opencrane");
     vi.stubEnv("POD_NAMESPACE", "opencrane-silo");
     vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo-runtime");
     vi.stubEnv("AGENT_RUNTIME_MANAGED_NAMESPACE", "opencrane-silo-managed-runtime");
     vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.opencrane-silo.svc.cluster.local:8080");
     vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
 		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
+		vi.stubEnv("OPENCRANE_SILO_ID", "opencrane-silo");
 		vi.stubEnv("OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS", "86400000");
   });
 

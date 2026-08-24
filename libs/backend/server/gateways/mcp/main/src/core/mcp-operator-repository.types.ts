@@ -1,4 +1,7 @@
 import type { AuthorizationContextRepository, CapabilityCatalogRepository, ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
+import type { DurableExecutionTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+
+import type { McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
 
 /**
  * Carries the MCP catalog fields that operator flows return to API clients.
@@ -26,6 +29,65 @@ export interface McpOperatorServerRecord
 	readonly credentialSchema: unknown;
 	/** Gives the optional entitlement summary exposed in catalog responses. */
 	readonly entitlementSummary: string | null;
+	readonly endpoint: string;
+	readonly registrationKeyDigest: string | null;
+	readonly registrationDigest: string | null;
+	readonly eraProbeStatus: string;
+	readonly eraProtocolVersion: string | null;
+	readonly eraProbeEvidenceDigest: string | null;
+	readonly eraProbeFailureCode: string | null;
+}
+
+/** Fields required to create or find one remote MCP registration. */
+export interface McpRemoteServerRegistrationRecord
+{
+	/** Silo derived from the authenticated request host. */
+	readonly siloId: string;
+	/** Display name that remains unique inside the silo. */
+	readonly name: string;
+	/** Description shown to administrators during review. */
+	readonly description: string;
+	/** Public HTTPS endpoint checked by the worker. */
+	readonly endpoint: string;
+	/** Digest of the client key used to find a retried registration. */
+	readonly registrationKeyDigest: string;
+	/** Digest of every registration field that must remain unchanged on retry. */
+	readonly registrationDigest: string;
+}
+
+/** Result of claiming and resolving one remote MCP registration identity. */
+export interface McpRemoteServerCreateResult
+{
+	/** True only when this transaction created the draft server. */
+	readonly created: boolean;
+	/** Draft server selected by the registration key. */
+	readonly server: McpOperatorServerRecord;
+}
+
+/** Stored target loaded before the workflow contacts a remote server. */
+export interface McpEraProbeTargetRecord
+{
+	/** HTTPS endpoint saved with the draft catalogue row. */
+	readonly endpoint: string;
+	/** Registration digest that must still match the admitted task. */
+	readonly registrationDigest: string;
+	/** Current result state used to make task replay a no-op. */
+	readonly eraProbeStatus: string;
+	/** Protocol revision already stored after a completed task. */
+	readonly eraProtocolVersion: string | null;
+	/** Discovery-response digest already stored after a completed task. */
+	readonly eraProbeEvidenceDigest: string | null;
+	/** Bounded reason stored when the endpoint or response was terminally invalid. */
+	readonly eraProbeFailureCode: string | null;
+}
+
+/** Result returned after a transaction tries to record one probe decision. */
+export interface McpEraProbeWriteResult
+{
+	/** True when this transaction changed the pending row. */
+	readonly changed: boolean;
+	/** Stored server row after the idempotent transition. */
+	readonly server: McpOperatorServerRecord;
 }
 
 /**
@@ -139,15 +201,19 @@ export interface IMcpOperatorRepository
 	 */
 	deleteInstall(serverId: string, principalId: string): Promise<boolean>;
 	/**
-	 * Changes a server's approval state when the server belongs to the requested silo.
+	 * Changes a server's approval state when it belongs to the requested silo and protocol-check state.
 	 *
 	 * Called by: approval and enablement flows before they append their governance audit entry.
 	 * @param siloId - Keeps the update inside the authenticated caller's silo.
 	 * @param serverId - Identifies the server whose approval state should change.
 	 * @param approvalStatus - Supplies the persisted approval state to write.
+	 * @param requiredEraProbeStatus - Restricts the change to the required stored protocol-check result.
 	 * @returns The updated server row, or `null` when no server with this ID belongs to the silo.
 	 */
-	setApprovalStatus(siloId: string, serverId: string, approvalStatus: string): Promise<McpOperatorServerRecord | null>;
+	setApprovalStatus(siloId: string, serverId: string, approvalStatus: string, requiredEraProbeStatus?: string): Promise<McpOperatorServerRecord | null>;
+	createOrFindRemoteServer(registration: McpRemoteServerRegistrationRecord): Promise<McpRemoteServerCreateResult | null>;
+	loadEraProbeTarget(siloId: string, serverId: string): Promise<McpEraProbeTargetRecord | null>;
+	recordEraProbeResult(siloId: string, serverId: string, registrationDigest: string, result: McpEraProbeTaskResult): Promise<McpEraProbeWriteResult | null>;
 	/**
 	 * Lists groups in the requested silo, optionally restricted to the supplied group IDs.
 	 *
@@ -198,6 +264,8 @@ export interface McpOperatorTransaction
 	readonly capabilityCatalog: CapabilityCatalogRepository;
 	/** Reads and reconciles the grant set owned by the MCP access editor. */
 	readonly managedGrants: ManagedAuthorizationGrantRepository;
+	/** Opaque form of this same database transaction used for task admission. */
+	readonly durableExecution: DurableExecutionTransaction;
 }
 
 /**

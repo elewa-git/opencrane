@@ -4,73 +4,76 @@
 
 ## What it owns
 
-This package is part of the **gateway-governance plane** — the side of OpenCrane that governs the
-external tools and models agents may use. It owns the authenticated governance of **MCP servers**.
 MCP (the Model Context Protocol) is an open standard for connecting an agent to external tools and
-data sources; an *MCP server* is one such tool provider. This package decides which MCP servers
-exist and who may install them. Credential and OAuth activation remain unavailable until the
-application composes a verified Obot custody exchange.
+data sources. An *MCP server* provides those tools. This package decides which MCP servers exist,
+which ones administrators approve, and who may install them.
 
-It is the control plane in front of server-owned tool execution. Administrators review and approve servers;
-individual users browse the resulting directory and install the ones they are entitled to. Credential
-and OAuth activation routes are absent; the product never fabricates a local connection handle.
+A workflow is a background job whose progress is saved in the database. If OpenCrane restarts, the
+job can continue instead of starting over. Absurd runs these jobs. This package uses one workflow to
+check a newly registered MCP server before an administrator may approve it.
 
 ```
- admin / operator request     (review · approve · publish · author grants)
-        │                      user request  (browse directory · install)
+ administrator sends POST /mcp/servers
+        │
         ▼
- ┌────────────────────────────────────┐
- │  mcp  ◄── HERE                      │  server registry + approval state + per-user installs
- └────────────────────────────────────┘
-        │  the servers a user is entitled to, with truthful connection status
+ database transaction
+   ├── save the draft MCP server
+   └── save an Absurd background job
+        │
         ▼
- server worker invokes an allowed tool; the runtime receives only its saved result
+ worker checks the server's MCP protocol version
+   ├── supported version ──► ready for administrator review
+   ├── temporary failure ───► Absurd tries again later
+   └── other or bad reply ──► rejected
 ```
 
-**In this flow:** [providers](../../providers/main/README.md) · [integrations](../../integrations/main/README.md) *(sibling tool/model gateways)* · server action worker *(consumes entitlements)*
+The draft server and its background job use one database transaction. Either both are saved, or
+neither is saved. A repeated registration request returns the same draft and the same job.
 
-Invariant: a user only ever sees and installs servers permitted by generic authorization grants and
-the server's approval state (pending review → approved → published, or disabled). The authorization
-authority resolves local Principal and direct Group subjects from persisted membership; this package
-never interprets OIDC group names as entitlement. No credential-bearing endpoint exists while custody
-is unavailable, and the API never labels such an install connected.
-Route handlers stay thin; the registry, entitlement filtering, and approval transitions live in the
-service layer (`src/core/`), and the HTTP surface is generated into the OpenAPI (REST API description) paths.
+Individual users browse the approved directory and install servers they may use. The API never
+returns credentials and never labels an install connected before a real connection exists.
+
+## Rules
+
+- Only an organization administrator may register, review, approve, or publish a server.
+- A server must pass the saved protocol check before it may be approved.
+- Network failures, timeouts, rate limits, and server errors are retried. Unsafe addresses and bad
+  replies are saved as rejected so the same task cannot keep contacting an unchanged endpoint.
+- A user only sees and installs servers allowed by saved access grants.
+- The package reads saved users and groups. It does not treat raw login claims as access rights.
+- Route handlers use the authenticated user's silo. They do not accept a silo from the request body.
 
 ## Public surface
 
 - `mcpOperatorRouter` — the Express router mounted at `/api/v1/mcp`.
+- `registerRemoteServer` — saves a draft server and its protocol-check job together.
+- `__CreateMcpEraProbeWorkflow` — registers the saved background job that checks the server.
 - Operator services: `listEntitledCatalog`, `listInstalled`, `installServer`, `approveServer`,
-  `publishServer`, and the grant-backed access editor.
-- `_McpOpenapiPaths` — the OpenAPI path fragments for this surface.
+  `publishServer`, and the access editor.
+- `_McpOpenapiPaths` — the OpenAPI path descriptions for this API.
 
 ## Boundary
 
-The application layer supplies the query and transaction ports and mounts the routers. Routes never
-receive a Prisma client. `PrismaMcpOperatorUnitOfWork` resolves grants, applies access-editor
-reconciliation, changes installs or governance state, and records audit evidence in one transaction.
-There is no second unsiloed catalogue: every public MCP operation
-uses the authenticated local Principal and request silo through the operator unit of work. This package does not open
-tool connections itself or run agents — it governs *which* servers are available and *whether* a
-user may use them. It fails closed: an unapproved server, or a user outside the access policy, never
-appears in the directory.
+The application supplies the database transaction and starts the Absurd worker. Routes never receive
+a Prisma client. `PrismaMcpOperatorUnitOfWork` checks access, changes installs or server state, admits
+background jobs, and records audit entries in one database transaction.
+
+This package does not run agents or call tools. It governs which servers are available and whether a
+user may use them. The external HTTP adapter performs the actual protocol check for the workflow.
 
 ## Dependency direction
 
-Tagged `scope:mcp`: it may depend on the authentication guard, the generic authorization authority,
-and the authenticated Principal directory port plus shared MCP contracts. It never imports an app or
-another product domain's persistence adapter.
+Tagged `scope:mcp`: it may depend on the authentication guard, the shared authorization package, the
+authenticated user directory, and the engine-neutral workflow contract. It never imports an app or
+an Absurd package directly.
 
-## Data & persistence
+## Data and persistence
 
-Owns the public governance behavior over `McpServer` and `McpServerInstall` in
-`apps/opencrane/prisma/schema/mcp.prisma`. MCP entitlement rows remain generic
-`AuthorizationGrant` records owned by the authorization domain. The named
-The `PrismaMcpOperatorUnitOfWork` is the only public MCP persistence seam: it keeps catalogue state,
-installs, generic grants, and audit evidence in one authenticated transaction. The cutover refuses to
-run while any legacy custody reference remains, then removes the obsolete local custody columns.
+This package owns the public behavior around `McpServer` and `McpServerInstall` in
+`apps/opencrane/prisma/schema/mcp.prisma`. General `AuthorizationGrant` rows remain owned by the
+authorization package. `PrismaMcpOperatorUnitOfWork` is the public MCP database boundary.
 
 ## See also
 
 - Parent index: [gateways](../../README.md)
-- Siblings: [integrations](../../integrations/main/README.md) · [providers](../../providers/main/README.md) · [model-routing](../../model-routing/main/README.md)
+- Related packages: [integrations](../../integrations/main/README.md) · [providers](../../providers/main/README.md) · [model-routing](../../model-routing/main/README.md)

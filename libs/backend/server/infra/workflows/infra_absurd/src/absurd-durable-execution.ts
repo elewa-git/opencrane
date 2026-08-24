@@ -1,6 +1,7 @@
 import { Absurd, type TaskContext } from "absurd-sdk";
 import { Pool } from "pg";
 
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { DurableExecutionError, DurableTaskNotRegisteredError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { DurableEventReceipt, DurableExecution, DurableExecutionTransaction, DurableTaskDefinition, DurableTaskEvent, DurableTaskReceipt, DurableTaskSpawn, DurableWorkerRuntime, DurableWorkers, DurableWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -86,6 +87,8 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 	private readonly databasePool: Pool;
 	/** Whether this adapter created and therefore closes the shared pool. */
 	private readonly ownsDatabasePool: boolean;
+	/** In-flight or completed close shared by concurrent lifecycle callers. */
+	private closePromise: Promise<void> | undefined;
 
 	/** Creates an adapter without opening workers before registration is complete. */
 	constructor(options: AbsurdDurableExecutionOptions)
@@ -215,25 +218,29 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 		{
 			return existing;
 		}
-		try
+		const queues = [...this.engines.entries()];
+		return await ___DoWithTrace("workflow.worker.start", { workerName, queueCount: queues.length, workerConcurrency: this.options.workerConcurrency ?? 1 }, async (): Promise<DurableWorkers> =>
 		{
-			const queues = [...this.engines.entries()];
-			const workers = await Promise.all(queues.map(async ([queueName, engine]) => await engine.startWorker({ workerId: `${workerName}:${queueName}`, concurrency: this.options.workerConcurrency, pollInterval: this.options.pollIntervalMs === undefined ? undefined : this.options.pollIntervalMs / 1000 })));
-			this.workerGroups.set(workerName, workers);
-			const execution = this;
-			const lifecycle: DurableWorkers = {
-				workerId: workerName,
-				workerName,
-				async drain(): Promise<void> { await execution.drainWorkers(workerName); },
-				async stop(): Promise<void> { await execution.drainWorkers(workerName); },
-			};
-			this.workers.set(workerName, lifecycle);
-			return lifecycle;
-		}
-		catch (error)
-		{
-			throw new AbsurdWorkflowError("start workers", error);
-		}
+			try
+			{
+				const workers = await Promise.all(queues.map(async ([queueName, engine]) => await engine.startWorker({ workerId: `${workerName}:${queueName}`, concurrency: this.options.workerConcurrency, pollInterval: this.options.pollIntervalMs === undefined ? undefined : this.options.pollIntervalMs / 1000 })));
+				this.workerGroups.set(workerName, workers);
+				const execution = this;
+				const lifecycle: DurableWorkers = {
+					workerId: workerName,
+					workerName,
+					async drain(): Promise<void> { await execution.drainWorkers(workerName); },
+					async stop(): Promise<void> { await execution.drainWorkers(workerName); },
+				};
+				this.workers.set(workerName, lifecycle);
+				this.options.log?.info({ workerName, queueCount: queues.length, workerConcurrency: this.options.workerConcurrency ?? 1 }, "durable workflow workers started");
+				return lifecycle;
+			}
+			catch (error)
+			{
+				throw new AbsurdWorkflowError("start workers", error);
+			}
+		});
 	}
 
 	/** Drain the worker group after it stops claiming new tasks. */
@@ -244,16 +251,46 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 		{
 			return;
 		}
-		this.workerGroups.delete(workerName);
-		this.workers.delete(workerName);
-		await Promise.all(workers.map(async (worker) => await worker.close()));
+		await ___DoWithTrace("workflow.worker.drain", { workerName, workerCount: workers.length }, async (): Promise<void> =>
+		{
+			try
+			{
+				await Promise.all(workers.map(async (worker) => await worker.close()));
+				this.workerGroups.delete(workerName);
+				this.workers.delete(workerName);
+				this.options.log?.info({ workerName, workerCount: workers.length }, "durable workflow workers drained");
+			}
+			catch (error)
+			{
+				throw new AbsurdWorkflowError("drain workers", error);
+			}
+		});
 	}
 
 	/** Drain every worker group and release the shared SDK connection pool. */
 	async close(): Promise<void>
 	{
-		await Promise.all([...this.workerGroups.keys()].map(async (workerName) => await this.drainWorkers(workerName)));
-		if (this.ownsDatabasePool) await this.databasePool.end();
+		if (this.closePromise !== undefined)
+		{
+			return await this.closePromise;
+		}
+		const closing = ___DoWithTrace("workflow.runtime.close", { workerGroupCount: this.workerGroups.size, ownsDatabasePool: this.ownsDatabasePool }, async (): Promise<void> =>
+		{
+			await Promise.all([...this.workerGroups.keys()].map(async (workerName) => await this.drainWorkers(workerName)));
+			if (this.ownsDatabasePool)
+			{
+				try { await this.databasePool.end(); }
+				catch (error) { throw new AbsurdWorkflowError("close database pool", error); }
+			}
+			this.options.log?.info({ workerGroupCount: 0, databasePoolClosed: this.ownsDatabasePool }, "durable workflow runtime closed");
+		});
+		this.closePromise = closing;
+		try { await closing; }
+		catch (error)
+		{
+			if (this.closePromise === closing) this.closePromise = undefined;
+			throw error;
+		}
 	}
 }
 

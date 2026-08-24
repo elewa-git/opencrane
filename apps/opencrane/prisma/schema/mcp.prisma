@@ -4,6 +4,12 @@ enum McpServerTransport {
   WebSocket        @map("websocket")
 }
 
+enum McpEraProbeStatus {
+  Pending  @map("pending")
+  Accepted @map("accepted")
+  Rejected @map("rejected")
+}
+
 enum McpServerStatus {
   Active   @map("active")
   Degraded @map("degraded")
@@ -32,37 +38,54 @@ enum McpApprovalStatus {
 // credential or OAuth activation command; changing either mapped value requires a data migration.
 enum McpConnectionStatus {
   // The install remains unusable until a custody flow outside the current API activates it.
-  NeedsCredential  @map("needs-credential")
+  NeedsCredential @map("needs-credential")
   // The install is usable through an administrator-managed key and needs no caller credential.
-  SharedKey        @map("shared-key")
+  SharedKey       @map("shared-key")
 }
 
 model McpServer {
-  id                 String                @id @default(cuid())
-  siloId             String                @map("silo_id")
-  name               String
-  description        String                @default("")
-  endpoint           String
-  transport          McpServerTransport
-  status             McpServerStatus       @default(Draft)
-  requiresApproval   Boolean               @default(false) @map("requires_approval")
-  capabilities       String[]              @default([])
-  publisher          String?
-  glyph              String?
-  serverType         McpServerType         @default(SingleUser) @map("server_type")
-  approvalStatus     McpApprovalStatus     @default(PendingReview) @map("approval_status")
-  credentialSchema   Json                  @default("[]") @map("credential_schema")
-  entitlementSummary String?               @map("entitlement_summary")
-  sourceId           String?               @map("source_id")
-  lastSyncedAt       DateTime?             @map("last_synced_at")
-  createdAt          DateTime              @default(now()) @map("created_at")
-  updatedAt          DateTime              @updatedAt @map("updated_at")
-  installs           McpServerInstall[]
-  source             ThirdPartySource?     @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  id                     String             @id @default(cuid())
+  siloId                 String             @map("silo_id")
+  name                   String
+  description            String             @default("")
+  endpoint               String
+  transport              McpServerTransport
+  status                 McpServerStatus    @default(Draft)
+  requiresApproval       Boolean            @default(false) @map("requires_approval")
+  capabilities           String[]           @default([])
+  publisher              String?
+  glyph                  String?
+  serverType             McpServerType      @default(SingleUser) @map("server_type")
+  approvalStatus         McpApprovalStatus  @default(PendingReview) @map("approval_status")
+  credentialSchema       Json               @default("[]") @map("credential_schema")
+  entitlementSummary     String?            @map("entitlement_summary")
+  registrationKeyDigest  String?            @map("registration_key_digest")
+  registrationDigest     String?            @map("registration_digest")
+  eraProbeStatus         McpEraProbeStatus  @default(Pending) @map("era_probe_status")
+  eraProtocolVersion     String?            @map("era_protocol_version")
+  eraProbeEvidenceDigest String?            @map("era_probe_evidence_digest")
+  eraProbeFailureCode    String?            @map("era_probe_failure_code")
+  eraProbedAt            DateTime?          @map("era_probed_at")
+  sourceId               String?            @map("source_id")
+  lastSyncedAt           DateTime?          @map("last_synced_at")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @updatedAt @map("updated_at")
+  installs               McpServerInstall[]
+  source                 ThirdPartySource?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
 
   @@unique([siloId, name])
+  @@unique([siloId, registrationKeyDigest])
   @@index([approvalStatus])
   @@map("mcp_servers")
+}
+
+model McpRegistrationClaim {
+  siloId         String   @map("silo_id")
+  identityDigest String   @map("identity_digest")
+  touchedAt      DateTime @updatedAt @map("touched_at")
+
+  @@id([siloId, identityDigest])
+  @@map("mcp_registration_claims")
 }
 
 // Per-principal installation of an MCP server (operator API).

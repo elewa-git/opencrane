@@ -145,6 +145,8 @@ CREATE TYPE "IntegrationCustodyState" AS ENUM ('ready', 'revoked', 'expired');
 -- CreateEnum
 CREATE TYPE "McpServerTransport" AS ENUM ('streamable-http', 'sse', 'websocket');
 
+CREATE TYPE "McpEraProbeStatus" AS ENUM ('pending', 'accepted', 'rejected');
+
 -- CreateEnum
 CREATE TYPE "McpServerStatus" AS ENUM ('active', 'degraded', 'draft');
 
@@ -971,12 +973,28 @@ CREATE TABLE "mcp_servers" (
     "approval_status" "McpApprovalStatus" NOT NULL DEFAULT 'pending-review',
     "credential_schema" JSONB NOT NULL DEFAULT '[]',
     "entitlement_summary" TEXT,
+    "registration_key_digest" TEXT,
+    "registration_digest" TEXT,
+    "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT 'pending',
+    "era_protocol_version" TEXT,
+    "era_probe_evidence_digest" TEXT,
+    "era_probe_failure_code" TEXT,
+    "era_probed_at" TIMESTAMP(3),
     "source_id" TEXT,
     "last_synced_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "mcp_servers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_registration_claims" (
+    "silo_id" TEXT NOT NULL,
+    "identity_digest" TEXT NOT NULL,
+    "touched_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_registration_claims_pkey" PRIMARY KEY ("silo_id", "identity_digest")
 );
 
 -- CreateTable
@@ -2227,6 +2245,8 @@ CREATE UNIQUE INDEX "integration_custody_references_obot_custody_reference_key" 
 -- CreateIndex
 CREATE UNIQUE INDEX "mcp_servers_silo_id_name_key" ON "mcp_servers"("silo_id", "name");
 
+CREATE UNIQUE INDEX "mcp_servers_silo_id_registration_key_digest_key" ON "mcp_servers"("silo_id", "registration_key_digest");
+
 -- CreateIndex
 CREATE INDEX "mcp_servers_approval_status_idx" ON "mcp_servers"("approval_status");
 
@@ -2864,6 +2884,21 @@ ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody
 
 -- AddForeignKey
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "third_party_sources"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_registration_digest_check" CHECK (
+    ("registration_key_digest" IS NULL AND "registration_digest" IS NULL)
+    OR ("registration_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registration_digest" ~ '^sha256:[0-9a-f]{64}$')
+);
+
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_era_probe_evidence_check" CHECK (
+    ("era_probe_status" = 'pending' AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
+    OR ("era_probe_status" = 'accepted' AND btrim("era_protocol_version") <> '' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NOT NULL)
+    OR ("era_probe_status" = 'rejected' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probed_at" IS NOT NULL AND ((btrim("era_protocol_version") <> '' AND "era_probe_failure_code" IS NULL) OR ("era_protocol_version" IS NULL AND "era_probe_failure_code" IN ('unsafe_endpoint', 'invalid_response'))))
+);
+
+ALTER TABLE "mcp_registration_claims" ADD CONSTRAINT "mcp_registration_claims_identity_check" CHECK (
+    btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
+);
 
 -- AddForeignKey
 ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -10845,3 +10880,5 @@ begin
   end loop;
 end;
 $$;
+
+SELECT absurd.create_queue('control-plane');

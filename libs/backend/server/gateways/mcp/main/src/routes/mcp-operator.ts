@@ -5,6 +5,10 @@ import { _RequireOrgAdmin, _ResolveRequestPrincipal } from "@opencrane/backend/s
 import { approveServer, getAccessPolicy, getDirectory, installServer, listAllServers, listEntitledCatalog, listInstalled, publishServer, rejectServer, setAccessPolicy, setServerEnabled, uninstallServer } from "../core/mcp-operator.logic";
 import type { McpOperatorCaller } from "../core/mcp-operator.logic.types";
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
+import { McpRemoteServerRegistrationValidationError, registerRemoteServer } from "../era-probe/mcp-remote-registration";
+import { ___McpRemoteServerRegistrationSchema } from "../era-probe/mcp-remote-registration.validator";
+import { McpRemoteServerRegistrationOutcomes } from "../era-probe/mcp-era-probe.types";
+import type { McpEraProbeWorkflow } from "../era-probe/mcp-era-probe.types";
 import { ___McpAccessPolicySchema, ___McpEnabledSchema, ___McpInstallSchema } from "./mcp-operator.validator";
 
 /**
@@ -18,11 +22,12 @@ import { ___McpAccessPolicySchema, ___McpEnabledSchema, ___McpInstallSchema } fr
  * - **Admin** (`/servers/*`, `/directory`) — gated by `_RequireOrgAdmin` and bound to the
  *   authenticated silo and local Principal projection.
  *
- * @param unitOfWork - Runs each MCP operation with transaction-scoped repositories.
- * @param principalDirectory - Resolves the authenticated identity to a local Principal in its silo.
+	 * @param unitOfWork - Runs each MCP operation with transaction-scoped repositories.
+	 * @param principalDirectory - Resolves the authenticated identity to a local Principal in its silo.
+	 * @param eraProbeWorkflow - Runs the saved protocol check admitted with a server registration.
  * @returns Configured Express router.
  */
-export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDirectory: AuthenticatedPrincipalDirectory): Router
+export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDirectory: AuthenticatedPrincipalDirectory, eraProbeWorkflow: McpEraProbeWorkflow): Router
 {
   const router = Router();
 
@@ -95,7 +100,36 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     res.json(await listAllServers(unitOfWork, caller));
   });
 
-  /** Sets a server's status to approved. This endpoint does not require a prior status. Org-admin only. */
+	 /** Register a remote server and its era-probe task in one transaction. Org-admin only. */
+  router.post("/servers", _RequireOrgAdmin(), async function _registerServer(req, res)
+  {
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
+    const parsed = ___McpRemoteServerRegistrationSchema.safeParse(req.body);
+    if (!parsed.success)
+    {
+      res.status(400).json({ error: "Remote MCP registration is invalid.", code: "VALIDATION_ERROR" });
+      return;
+    }
+
+    try
+    {
+      const result = await registerRemoteServer(unitOfWork, eraProbeWorkflow, caller, parsed.data);
+      if (result.outcome === McpRemoteServerRegistrationOutcomes.Conflict)
+      {
+        res.status(409).json({ error: "The registration key or server name is already used by different input.", code: "MCP_REGISTRATION_CONFLICT" });
+        return;
+      }
+      res.status(201).json(result.server);
+    }
+    catch (error)
+    {
+      if (!(error instanceof McpRemoteServerRegistrationValidationError)) throw error;
+      res.status(400).json({ error: error.message, code: "VALIDATION_ERROR" });
+    }
+  });
+
+	 /** Approve a server after its saved protocol check succeeds. Org-admin only. */
   router.post("/servers/:id/approve", _RequireOrgAdmin(), async function _approve(req: Request<{ id: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);

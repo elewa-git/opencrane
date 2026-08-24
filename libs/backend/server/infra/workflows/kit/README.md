@@ -26,8 +26,8 @@ configured silo — the isolated organisation boundary — and that its task nam
 
 The kit refuses cross-silo input, unreviewed task names, non-JSON values, and fields that look like
 credentials before they can become durable database payloads. Its checkpoint wrapper traces only
-task name, step name, silo, queue, a hashed task key, and outcome metadata. The Phase 0 contract
-does not expose a truthful engine retry-attempt number, so the kit deliberately does not invent one.
+task name, step name, silo, queue, a hashed task key, and outcome metadata. The shared workflow rules
+do not provide the engine's retry number, so the kit does not report a number it cannot verify.
 
 ## Public surface
 
