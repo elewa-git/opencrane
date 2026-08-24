@@ -8,16 +8,9 @@ can truthfully combine independently evolved server, UI, database, worker, and c
 The `adoptionBaseline` is a one-time observed-composition stamp for history that predates this
 ledger; all later stamps identify the exact last adapted train.
 
-The current root version is the only automatic version source. Adjacent minor transitions are the
-automatic migration boundary. Patch and major transitions require a reviewed `manualTransition` in
-the new manifest; the generic deploy resolver does not execute them. A version-specific reviewed
-operator procedure must own those manual data and chart changes.
-
-An immediate repair patch may declare `database.carriedForwardFromRepositoryVersion` to finish the
-exact adjacent-minor migration owned by its predecessor when that predecessor never reached the
-database. The repair patch must keep the predecessor's database identity unchanged, name the
-predecessor's exact source release, and include an approved `manualTransition`. The resolver rejects
-undeclared, altered, non-adjacent, and multi-hop carry-forward paths.
+The release manifest records the version and the database image used by a deployment. The deployer
+uses a reviewed migration directory when one matches the requested `from` and `to` versions; it does
+not run a release-pair resolver or schema-state check.
 
 When a project changes production source or deployment configuration, update the owning Nx
 application and every application that depends on that project to the current root version in

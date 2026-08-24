@@ -22,8 +22,8 @@ export interface ServiceRuntimeAssignmentIdentity
 	agentServiceId: AgentServiceId;
 	/** Highest verified fleet-membership revision used for this service principal. */
 	fleetMembershipRevision: number;
-	/** Digest binding the exact effective scope-attachment set into the service authority. */
-	effectiveScopeAttachmentDigest: string;
+	/** Digest binding the effective boundary-attachment set into the service authority. */
+	effectiveBoundaryAttachmentDigest: string;
 }
 
 /** Tagged immutable identity carried by every runtime assignment. */

@@ -1,9 +1,8 @@
 import { ChangeDetectionStrategy, Component, Signal, computed, inject, input, linkedSignal, resource } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { RouterLink } from "@angular/router";
-import { ToggleSwitchModule } from "primeng/toggleswitch";
 
-import { McpAccessPolicy, McpApprovalStatus, McpDirectory, McpEntitledUser, McpServer } from "@opencrane/core";
+import { McpAccessPolicy, McpApprovalStatus, McpDirectory, McpEntitledGroup, McpEntitledUser, McpServer } from "@opencrane/core";
 import { MCP_GATEWAY } from "@opencrane/state/mcp/adapter";
 import { SessionStore } from "@opencrane/state/core";
 import { AvatarCircleComponent, AvatarSizes, AvatarTones, ScopeChipComponent, SectionHeadingComponent } from "@opencrane/elements/ui";
@@ -22,7 +21,7 @@ import { MCP_TYPE_CHIPS } from "../../mcp-chip.constants";
 @Component({
 	selector: "wo-access-policy",
 	standalone: true,
-	imports: [SectionHeadingComponent, ScopeChipComponent, AvatarCircleComponent, FormsModule, ToggleSwitchModule, RouterLink],
+	imports: [SectionHeadingComponent, ScopeChipComponent, AvatarCircleComponent, FormsModule, RouterLink],
 	templateUrl: "./access-policy.component.html",
 	styleUrl: "./access-policy.component.scss",
 	changeDetection: ChangeDetectionStrategy.OnPush
@@ -83,11 +82,11 @@ export class AccessPolicyComponent
 	public readonly policy: Signal<McpAccessPolicy | null> = computed((): McpAccessPolicy | null => (this._policy.hasValue() ? this._policy.value() : null));
 
 	/** Groups not yet entitled, for the "add group" select. */
-	public readonly availableGroups: Signal<string[]> = computed((): string[] =>
+	public readonly availableGroups: Signal<McpEntitledGroup[]> = computed((): McpEntitledGroup[] =>
 	{
 		const directory = this._directory.hasValue() ? this._directory.value().groups : [];
 		const current = this.policy()?.groups ?? [];
-		return directory.filter(function notGranted(group: string): boolean { return !current.includes(group); });
+		return directory.filter(function _NotGranted(group: McpEntitledGroup): boolean { return !current.some(function _Same(candidate): boolean { return candidate.id === group.id; }); });
 	});
 
 	/** Users not yet entitled, for the "add user" select. */
@@ -114,29 +113,24 @@ export class AccessPolicyComponent
 		this.selectedId.set(server.id);
 	}
 
-	/** Toggle the everyone-in-org grant. */
-	public async onToggleEveryone(value: boolean): Promise<void>
-	{
-		await this._save(function withEveryone(policy: McpAccessPolicy): McpAccessPolicy { return { ...policy, everyoneInOrg: value }; });
-	}
-
 	/** Add a group entitlement from the select. */
 	public async addGroup(event: Event): Promise<void>
 	{
-		const group = (event.target as HTMLSelectElement).value;
+		const groupId = (event.target as HTMLSelectElement).value;
 		(event.target as HTMLSelectElement).value = "";
+		const group = this.availableGroups().find(function _ById(candidate): boolean { return candidate.id === groupId; });
 		if (group)
 		{
-			await this._save(function withGroup(policy: McpAccessPolicy): McpAccessPolicy { return { ...policy, groups: [...policy.groups, group] }; });
+			await this._save(function _WithGroup(policy: McpAccessPolicy): McpAccessPolicy { return { ...policy, groups: [...policy.groups, group] }; });
 		}
 	}
 
 	/** Remove a group entitlement. */
-	public async removeGroup(group: string): Promise<void>
+	public async removeGroup(groupId: string): Promise<void>
 	{
-		await this._save(function withoutGroup(policy: McpAccessPolicy): McpAccessPolicy
+		await this._save(function _WithoutGroup(policy: McpAccessPolicy): McpAccessPolicy
 		{
-			return { ...policy, groups: policy.groups.filter(function keep(candidate: string): boolean { return candidate !== group; }) };
+			return { ...policy, groups: policy.groups.filter(function _Keep(candidate): boolean { return candidate.id !== groupId; }) };
 		});
 	}
 

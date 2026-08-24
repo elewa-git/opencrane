@@ -1,28 +1,34 @@
-import type { Grant } from "./grant.types";
-import { GrantScope } from "./grant.types";
-
 /**
- * Shared group contract returned by the opencrane-ui group APIs.
+ * Identifies who may change a group's direct membership.
  *
- * Groups model stable domain membership sets such as organization-,
- * department-, project-, or personal-scoped cohorts. The same shape is used by
- * the API layer and the admin UI so the entitlement compiler and the renderer
- * stay aligned on what a group means.
+ * The value crosses the API and database boundary. It does not grant access by itself; grants
+ * refer to the group separately.
  */
+export enum GroupMembershipAuthorities
+{
+	/** Login claims are authoritative, so operator writes may not change direct members. */
+	External = "external",
+	/** OpenCrane operators are authoritative through the group management API. */
+	Local = "local",
+}
+
+/** Shared group contract returned by the group management API. */
 export interface Group
 {
-  /** Stable group identifier. */
-  id: string;
-  /** Human-readable group name shown to operators. */
-  name: string;
-  /** Domain scope represented by the group. */
-  scope: GrantScope;
-  /** Optional operator-facing description. */
-  description?: string;
-  /** Normalized principal identifiers attached to the group. */
-  members: string[];
-  /** Snapshot count derived from the normalized members list. */
-  memberCount: number;
-  /** Grants that the opencrane-ui links to the group. */
-  grants: Grant[];
+	/** Stable identifier used by OIDC claims and authorization grants. */
+	id: string;
+	/** Silo that owns the group. */
+	siloId: string;
+	/** Human-readable group name shown to operators. */
+	name: string;
+	/** Identifies the parent used for arrangement; ancestry does not add members or grants. */
+	parentId: string | null;
+	/** Authority allowed to reconcile the group's direct membership. */
+	membershipAuthority: GroupMembershipAuthorities;
+	/** Optional operator-facing description. */
+	description?: string;
+	/** Stable principal identifiers directly attached to the group. */
+	members: string[];
+	/** Number of direct members. */
+	memberCount: number;
 }

@@ -3,11 +3,13 @@ BEGIN;
 INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
 VALUES ('dispatch-terminal-model', 'global', 'dispatch-terminal-model', 'litellm-dispatch-terminal-model', 'dispatch-terminal-model', clock_timestamp());
 
+INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
+VALUES ('dispatch-terminal-service-principal', 'dispatch-terminal-silo', 'urn:opencrane:agent-service', 'dispatch-terminal-service', 'internal', clock_timestamp());
 INSERT INTO "agent_services" (
-    "id", "silo_id", "kind", "name", "workload_profile", "updated_at"
+    "id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at"
 ) VALUES (
     'dispatch-terminal-service', 'dispatch-terminal-silo', 'managed', 'Dispatch terminal service',
-    'managed-agent', clock_timestamp()
+    'managed-agent', 'dispatch-terminal-service-principal', clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
     "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",

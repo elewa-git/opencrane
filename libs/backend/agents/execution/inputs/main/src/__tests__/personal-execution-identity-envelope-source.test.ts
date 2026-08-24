@@ -8,9 +8,9 @@ import { PersonalExecutionIdentityEnvelopeSource } from "../personal-execution-i
 import type { SessionAssemblyCommand } from "../session-assembly.types";
 
 /** Builds a final-admission command whose silo and subject came from trusted server context. */
-function _Command(): SessionAssemblyCommand
+function _Command(): Extract<SessionAssemblyCommand, { readonly identityKind: "user" }>
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" };
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", identityKind: "user", trigger: "interactive", executionIssuer: "https://issuer.test", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" };
 }
 
 /** Builds the run authority whose personal kind is required for a browser-session admission. */
@@ -20,7 +20,7 @@ function _Run(): InitialRunAuthority
 }
 
 /** Builds one verified revision with the single signed personal assertion available to this user. */
-function _Revision(assertions = [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1", scopeKind: "Personal", organizationId: "org-1", scopeResourceId: "user-1" }])
+function _Revision(assertions = [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1" }])
 {
 	return { id: "membership-7", revision: 7, issuerId: "fleet-1", issuerKeyId: "key-1", siloId: "silo-1", issuedAt: new Date(9000), expiresAt: new Date(20000), payloadDigest: `sha256:${"b".repeat(64)}`, signature: "signature-7", assertions };
 }
@@ -31,10 +31,15 @@ function _Transaction(row = _Revision()): RunAdmissionTransaction
 	return {
 		prisma: {
 			$queryRaw: vi.fn().mockResolvedValue([]),
+			principal: {
+				findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]),
+				findUnique: vi.fn().mockResolvedValue({ id: "principal-1" }),
+			},
+			groupMembership: { findMany: vi.fn().mockResolvedValue([]) },
 			verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(row) },
 			highestAcceptedFleetMembership: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({ revision: 7 }) },
 			auditDecision: { create: vi.fn().mockResolvedValue({ id: "audit-1" }) },
-			authorizationGrant: { findMany: vi.fn().mockResolvedValue([{ catalogId: "catalog-1", catalogRevision: 3, catalogDigest: `sha256:${"c".repeat(64)}`, capabilityId: "conversation:run", resourceKind: "conversation", resourceId: "conversation-1", effect: "allow", priority: 10, validFrom: new Date(8000), expiresAt: null }]) },
+			authorizationGrant: { findMany: vi.fn().mockResolvedValue([{ id: "grant-1", siloId: "silo-1", subjectKind: "Principal", subjectGroupId: null, subjectPrincipalId: "principal-1", boundaryKind: "Personal", boundaryGroupId: null, boundaryPrincipalId: "principal-1", boundaryCoverage: "Exact", catalogId: "catalog-1", catalogRevision: 3, catalogDigest: `sha256:${"c".repeat(64)}`, capabilityId: "conversation:run", resourceKind: "conversation", resourceId: "conversation-1", effect: "Allow", priority: 10, validFrom: new Date(8000), expiresAt: null, revokedAt: null }]) },
 		} as never,
 		admittedAt: new Date(10000).toISOString(),
 		admittedAtEpochMs: 10000,
@@ -64,13 +69,25 @@ describe("PersonalExecutionIdentityEnvelopeSource", function _describePersonalId
 		const transaction = _Transaction();
 		const result = await _Source().load(_Command(), _Run(), transaction);
 
-		expect(result).toMatchObject({ outcome: "loaded", value: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 7, fleetMembershipAssertionId: "assertion-1", capabilitySetDigest: expect.stringMatching(/^sha256:/) } });
-		expect(transaction.prisma.authorizationGrant.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ siloId: "silo-1", subjectId: "user-1", scopeResourceId: "user-1", revokedAt: null }) }));
+		expect(result).toMatchObject({ outcome: "loaded", value: { executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 7, fleetMembershipAssertionId: "assertion-1", capabilitySetDigest: expect.stringMatching(/^sha256:/) } });
+		expect(transaction.prisma.principal.findUnique).toHaveBeenCalledWith({ where: { siloId_issuer_subject: { siloId: "silo-1", issuer: "https://issuer.test", subject: "user-1" } }, select: { id: true } });
+		expect(transaction.prisma.authorizationGrant.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ siloId: "silo-1", OR: [{ subjectKind: "Principal", subjectPrincipalId: "principal-1", subjectGroupId: null }] }) }));
 	});
 
-	it("fails closed when a signed personal assertion is absent or belongs to another scope", async function _deniesForeignPersonalAssertion()
+	it("fails closed when the same subject belongs to another OIDC issuer", async function _deniesForeignIssuer()
 	{
-		const transaction = _Transaction(_Revision([{ assertionId: "assertion-foreign", siloId: "silo-1", subjectId: "user-1", scopeKind: "Personal", organizationId: "org-1", scopeResourceId: "other-user" }]));
+		const transaction = _Transaction();
+		vi.mocked(transaction.prisma.principal.findUnique).mockResolvedValue(null);
+
+		await expect(_Source().load({ ..._Command(), executionIssuer: "https://attacker.test" }, _Run(), transaction)).resolves.toEqual({ outcome: "denied", reason: "identity_unavailable" });
+		expect(transaction.prisma.principal.findUnique).toHaveBeenCalledWith({ where: { siloId_issuer_subject: { siloId: "silo-1", issuer: "https://attacker.test", subject: "user-1" } }, select: { id: true } });
+		expect(transaction.prisma.verifiedFleetMembershipRevision.findFirst).not.toHaveBeenCalled();
+		expect(transaction.prisma.authorizationGrant.findMany).not.toHaveBeenCalled();
+	});
+
+	it("fails closed when the signed silo membership belongs to another subject", async function _deniesForeignPersonalAssertion()
+	{
+		const transaction = _Transaction(_Revision([{ assertionId: "assertion-foreign", siloId: "silo-1", subjectId: "user-other" }]));
 		await expect(_Source().load(_Command(), _Run(), transaction)).resolves.toEqual({ outcome: "denied", reason: "membership_stale" });
 		expect(transaction.prisma.authorizationGrant.findMany).not.toHaveBeenCalled();
 	});
@@ -78,14 +95,14 @@ describe("PersonalExecutionIdentityEnvelopeSource", function _describePersonalId
 	it("fails closed when the latest membership contains ambiguous personal entitlement", async function _deniesAmbiguousPersonalAssertion()
 	{
 		const transaction = _Transaction(_Revision([
-			{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1", scopeKind: "Personal", organizationId: "org-1", scopeResourceId: "user-1" },
-			{ assertionId: "assertion-2", siloId: "silo-1", subjectId: "user-1", scopeKind: "Personal", organizationId: "org-2", scopeResourceId: "user-1" },
+			{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1" },
+			{ assertionId: "assertion-2", siloId: "silo-1", subjectId: "user-1" },
 		]));
 		await expect(_Source().load(_Command(), _Run(), transaction)).resolves.toEqual({ outcome: "denied", reason: "membership_stale" });
 		expect(transaction.prisma.authorizationGrant.findMany).not.toHaveBeenCalled();
 	});
 
-	it("fails closed when a personally scoped signature is older than the configured trust window", async function _deniesStaleMembership()
+	it("fails closed when a silo-membership signature is older than the configured trust window", async function _deniesStaleMembership()
 	{
 		const transaction = _Transaction({ ..._Revision(), issuedAt: new Date(1000) });
 		await expect(_Source().load(_Command(), _Run(), transaction)).resolves.toEqual({ outcome: "denied", reason: "membership_stale" });

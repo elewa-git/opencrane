@@ -189,6 +189,20 @@ assert_auxiliary_namespace_owner()
   if [[ "$retirement_owner" == "$RELEASE" ]]; then
     return
   fi
+  # An interrupted install can create the artifact namespace and both keys before Helm records the main release.
+  # When the PostgreSQL release and cluster remain, those keys prove its owner for recovery teardown.
+  if [[ "$auxiliary_namespace" == "${RELEASE}-artifacts" && "$MAIN_RELEASE_EXISTS" == "0" \
+    && "$POSTGRES_RELEASE_EXISTS" == "1" && "$CNPG_CLUSTER_EXISTS" == "1" ]]; then
+    local catalog_key
+    local service_key
+    catalog_key="$(kubectl --context "$CONTEXT" get secret "${RELEASE}-artifact-catalog-keys" --namespace "$NAMESPACE" -o 'jsonpath={.data.lease-private\.pem}' 2>/dev/null || true)"
+    service_key="$(kubectl --context "$CONTEXT" get secret "${RELEASE}-artifact-service-keys" --namespace "$auxiliary_namespace" -o 'jsonpath={.data.receipt-private\.pem}' 2>/dev/null || true)"
+    [[ -n "$catalog_key" && -n "$service_key" ]] || {
+      err "Cannot prove interrupted artifact namespace '$auxiliary_namespace' belongs to '$RELEASE'; its two deploy-created key Secrets are incomplete."
+      exit 1
+    }
+    return
+  fi
   [[ "$MAIN_RELEASE_EXISTS" == "1" ]] || {
     err "Cannot prove auxiliary namespace '$auxiliary_namespace' belongs to '$RELEASE'; its release and retirement marker are absent."
     exit 1
@@ -247,14 +261,16 @@ assert_cluster_rbac_owner_if_present()
 {
   local resource_kind="$1"
   local resource_name="$2"
-  local instance
   local managed_by
+  local release_name
+  local release_namespace
   if ! resource_exists "$resource_kind" "$resource_name"; then
     return
   fi
-  instance="$(kubectl --context "$CONTEXT" get "$resource_kind/$resource_name" -o jsonpath='{.metadata.labels.app\.kubernetes\.io/instance}')"
   managed_by="$(kubectl --context "$CONTEXT" get "$resource_kind/$resource_name" -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}')"
-  [[ "$instance" == "$RELEASE" && "$managed_by" == "Helm" ]] || {
+  release_name="$(kubectl --context "$CONTEXT" get "$resource_kind/$resource_name" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}')"
+  release_namespace="$(kubectl --context "$CONTEXT" get "$resource_kind/$resource_name" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}')"
+  [[ "$managed_by" == "Helm" && "$release_name" == "$RELEASE" && "$release_namespace" == "$NAMESPACE" ]] || {
     err "Foreign ownership on $resource_kind/$resource_name; refusing cluster-scoped deletion."
     exit 1
   }

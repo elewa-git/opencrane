@@ -1,0 +1,3 @@
+:host { display: block; }
+.conversation-workspace-connection-status { --oc-ink-muted: var(--p-surface-100); display: flex; align-items: center; justify-content: space-between; gap: var(--oc-space-3); padding: var(--oc-space-3) var(--oc-space-4); border: 1px solid var(--p-surface-700); border-radius: var(--oc-radius-card); background: var(--p-surface-900); color: var(--p-surface-0); }
+@media (max-width: 32rem) { .conversation-workspace-connection-status { align-items: flex-start; flex-direction: column; } }

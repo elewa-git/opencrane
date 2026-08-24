@@ -19,8 +19,10 @@ $$;
 
 INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
 VALUES ('run-event-model', 'global', 'run-event-model', 'litellm-run-event-model', 'run-event-model', clock_timestamp());
-INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "updated_at")
-VALUES ('run-event-service', 'silo-run-event', 'managed', 'Run event test', 'managed-agent', clock_timestamp());
+INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
+VALUES ('run-event-service-principal', 'silo-run-event', 'urn:opencrane:agent-service', 'run-event-service', 'internal', clock_timestamp());
+INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
+VALUES ('run-event-service', 'silo-run-event', 'managed', 'Run event test', 'managed-agent', 'run-event-service-principal', clock_timestamp());
 INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
 VALUES ('run-event-revision', 'run-event-service', 1, 'draft', 'sha256:' || repeat('a', 64), 'prompt-v1', 'run-event-model', '{}', 'user-run-event');
 UPDATE "agent_revisions" SET "state" = 'published', "published_at" = clock_timestamp() WHERE "id" = 'run-event-revision';

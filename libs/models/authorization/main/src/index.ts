@@ -1,5 +1,6 @@
 export * from "./authorization-decision";
-export * from "./authorization-scope.types";
+export * from "./authorization-boundary.types";
+export * from "./boundary-matching";
 export * from "./capability-proof.types";
 export * from "./capability.types";
 export * from "./fleet-membership";
@@ -7,4 +8,3 @@ export * from "./fleet-membership.types";
 export * from "./grant.types";
 export * from "./resource-locator";
 export * from "./resource-locator.types";
-export * from "./scope-matching";

@@ -20,7 +20,7 @@ wires the pieces and the per-silo networking together.
 
 ```
  deploy.sh  (per-ClusterTenant silo profile)
-        │  helm dep build (from Chart.lock) → helm upgrade --install
+        │  package checked-out file:// charts → helm upgrade --install
         ▼
  ┌────────────────────────────────────────────────────────────┐
  │  opencrane-silo umbrella chart  ◄── HERE                     │
@@ -57,8 +57,9 @@ Cluster-wide controllers (ingress,
 CloudNativePG, cert-manager) and serving DNS are external prerequisites a silo never installs.
 "External" here means outside the organisation release: a cluster operator may explicitly install
 the pinned development controller set with `platform/bootstrap-prerequisites.sh`, but `deploy.sh`
-never invokes that helper. Dependencies resolve from `Chart.lock` via `helm dep build` (pinned,
-reproducible) — never from open version ranges.
+never invokes that helper. The app-owned chart helper runs `helm dependency update --skip-refresh`
+against the checked-out in-repo `file://` sources. The commit is the version authority; ignored
+`Chart.lock` and `charts/` outputs are derived packaging, not release inputs.
 
 The artifact preprocessor runs in its own PSA-restricted sibling namespace with a fixed zero-RBAC
 identity, bounded scratch, and no ArtifactStore route. The personal `agent-runtime` image is
@@ -109,8 +110,8 @@ package imports it.
 
 ## Runtime & config
 
-- Umbrella chart: `Chart.yaml` (`opencrane-silo`), values in `values.yaml`, schema in
-  `values.schema.json`, pins in `Chart.lock`.
+- Umbrella chart: `Chart.yaml` (`opencrane-silo`), values in `values.yaml`, and schema in
+  `values.schema.json`. Its app-owned helper packages the checked-out local chart sources.
 - `agentController.runtimeNamespace` — optional DNS-label override for the sibling runtime namespace;
   empty derives `<release>-runtime`, and the chart rejects the trusted server namespace.
 - `artifactPreprocessor` — disabled until its immutable image digest is supplied; when enabled, the
@@ -151,9 +152,9 @@ package imports it.
   binds both expected chart identities exactly; a prefix match is never accepted. Run it with
   `--preflight` first to inventory ownership without changing the cluster.
 - Reusable environment/multi-instance profiles live under `values/` and `platform/values/`.
-- `npx nx run deploy-k8s:test` and `npx nx run deploy-k8s:helm-lint` build a disposable copy from
-  the committed `Chart.lock`, linked to the current app-owned chart sources. They therefore validate
-  the release contract without rewriting the tracked `charts/*.tgz` archives.
+- `npx nx run deploy-k8s:test` and `npx nx run deploy-k8s:helm-lint` package a disposable copy of
+  the current app-owned chart sources. They therefore validate the checked-out release contract
+  without treating generated `Chart.lock` or `charts/*.tgz` files as tracked inputs.
 - `npx nx run deploy-k8s:develop-smoke` creates a disposable k3d cluster, rebuilds Nx-affected
   OpenCrane workloads with per-project BuildKit caches and reuses digest-validated baseline images
   for unaffected owners, then installs the silo through `deploy.sh`. Image preparation overlaps
@@ -170,7 +171,8 @@ package imports it.
 
 - **[platform/README.md](platform/README.md)** — the cluster and release substrate: the `k8s-platform`
   Helm library (labels, names, RBAC, endpoint/database/identity/observability helpers), the
-  `k8s-deploy.sh` install engine, explicit shared-controller bootstrap, OIDC configuration, cluster
+  `k8s-deploy.sh` install engine, including the fenced, primary-verified `pg_cron` prerequisite for
+  workflow-task database transitions, explicit shared-controller bootstrap, OIDC configuration, cluster
   provisioning, Terraform, values profiles, and the k3d conformance tests.
 ## See also
 

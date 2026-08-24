@@ -22,7 +22,7 @@ const _STANDALONE_ISSUER_ID = "opencrane-standalone-unconfigured";
  * rather than an unchecked one.
  *
  * Called by: apps/opencrane/src/index.ts, apps/opencrane/src/app/channel-target-composition.ts, and
- * libs/backend/server/agents/agent-services/main/src/prisma-managed-execution-evidence.factory.ts.
+ * libs/backend/server/agents/agent-services/main/src/managed-execution-evidence.factory.ts.
  * @param environment - Process environment to read; defaults to `process.env`, overridden in tests.
  * @returns Trusted issuer, staleness limit in milliseconds, and the verifier to use.
  * @throws Error when the mode is missing or unrecognised, when a required `fleet` variable is
@@ -47,8 +47,10 @@ export function _CreateFleetMembershipEvidenceConfig(environment: NodeJS.Process
 function _DeploymentMode(environment: NodeJS.ProcessEnv): FleetMembershipDeploymentModes
 {
 	const value = environment["OPENCRANE_MEMBERSHIP_MODE"]?.trim();
-	if (value === FleetMembershipDeploymentModes.Fleet) return FleetMembershipDeploymentModes.Fleet;
-	if (value === FleetMembershipDeploymentModes.Standalone) return FleetMembershipDeploymentModes.Standalone;
+	if (value === FleetMembershipDeploymentModes.Fleet)
+		return FleetMembershipDeploymentModes.Fleet;
+	if (value === FleetMembershipDeploymentModes.Standalone)
+		return FleetMembershipDeploymentModes.Standalone;
 	throw new Error("OPENCRANE_MEMBERSHIP_MODE must be standalone or fleet");
 }
 
@@ -87,7 +89,8 @@ function _CreateReloadingVerifier(read: () => string, issuerKeyId: string): Flee
 function _Required(environment: NodeJS.ProcessEnv, name: string): string
 {
 	const value = environment[name]?.trim();
-	if (!value) throw new Error(`${name} must be configured`);
+	if (!value)
+		throw new Error(`${name} must be configured`);
 	return value;
 }
 
@@ -95,6 +98,7 @@ function _Required(environment: NodeJS.ProcessEnv, name: string): string
 function _PositiveInteger(environment: NodeJS.ProcessEnv, name: string, maximum: number): number
 {
 	const value = Number(_Required(environment, name));
-	if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) throw new Error(`${name} must be a positive integer no greater than ${maximum}`);
+	if (!Number.isSafeInteger(value) || value <= 0 || value > maximum)
+		throw new Error(`${name} must be a positive integer no greater than ${maximum}`);
 	return value;
 }

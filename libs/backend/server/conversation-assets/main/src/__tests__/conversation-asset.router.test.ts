@@ -6,7 +6,7 @@ import { ConversationAssetDisposition } from "@opencrane/models/conversation-ass
 
 import { __CreateConversationAssetRouter } from "../conversation-asset.router";
 
-const _CALLER = { siloId: "silo-1", subjectId: "user-1" } as const;
+const _CALLER = { siloId: "silo-1", subjectId: "user-1", principalId: "principal-1" } as const;
 
 /** Build the public asset router with a participant caller and controlled authority. */
 function _App(authority: Record<string, unknown>, caller: typeof _CALLER | null = _CALLER)

@@ -210,7 +210,7 @@ export function ___CanonicalizeJson(value: JsonValue): string
  *
  * Called by: `libs/backend/agents/execution/protocol/src/prisma-run-input-compiler.ts`,
  * `libs/backend/agents/execution/runs/main/src/prisma-run-admission-repository.ts`,
- * `libs/backend/server/agents/agent-services/main/src/prisma-agent-revision-writer.ts`,
+ * `libs/backend/server/agents/agent-services/main/src/db/prisma-agent-revision-writer.ts`,
  * `libs/backend/server/infra/obot-custody/src/http-obot-mcp-invocation.ts`.
  * @param value - JSON value to copy.
  * @returns An equivalent value sharing no references with the input.

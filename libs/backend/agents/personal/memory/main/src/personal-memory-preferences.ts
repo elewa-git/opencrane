@@ -24,8 +24,8 @@ export async function __SelectPersonalPreferenceFactIds(repository: PersonalMemo
 	return repository.findActivePreferenceFactIds(command);
 }
 
-/** Returns whether the silo, organization, and subject ids are all present. */
+/** Returns whether the verified silo, Principal, and provenance subject ids are all present. */
 function _IsValidPersonalMemoryPreferenceCommand(command: ResolvePersonalMemoryDatasetCommand): boolean
 {
-	return command.siloId.trim().length > 0 && command.organizationId.trim().length > 0 && command.subjectId.trim().length > 0;
+	return command.siloId.trim().length > 0 && command.principalId.trim().length > 0 && command.subjectId.trim().length > 0;
 }

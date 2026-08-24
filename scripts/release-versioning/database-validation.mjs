@@ -3,8 +3,38 @@ import { join, relative } from "node:path";
 import { createReleaseManifestValidator } from "./manifest-validation.mjs";
 import { compareSemver, isAdjacentMinor, isAdjacentPatch, readJson, sha256 } from "./version-utils.mjs";
 
-/** Accepts only SHA-256 identities that can become deployment convergence evidence. */
+/** Matches SHA-256 digests recorded in historical migration manifests. */
 const protectedBaselineDigestPattern = /^[a-f0-9]{64}$/u;
+const operandImagePattern = /:[0-9]+(?:\.[0-9]+)*(?:[-_.][A-Za-z0-9_.-]+)?@sha256:[a-f0-9]{64}$/u;
+
+/**
+ * Checks that the current release binds a PostgreSQL operand whose tag exposes its version and
+ * whose digest fixes its bytes.
+ *
+ * CNPG reads the PostgreSQL major version from the tag before it decides how to upgrade. When the
+ * release declares the PostgreSQL chart's external major, the two versions must agree or CNPG would
+ * make that decision from false metadata.
+ *
+ * Called by: `validateWorkspace` and {@link resolveDatabaseTransition}.
+ * @param manifest - Current release manifest whose PostgreSQL operand will be deployed.
+ * @param errors - Validation errors collected for the caller to report together.
+ * @see https://cloudnative-pg.io/docs/1.27/container_images/#image-tag-requirements
+ */
+export function validateDatabaseOperand(manifest, errors)
+{
+	const operandImage = manifest.database.operandImage;
+	if (!operandImage)
+	{
+		errors.push("current release manifest must bind a PostgreSQL operand image");
+		return;
+	}
+	if (!operandImagePattern.test(operandImage)) return;
+	const expectedMajor = manifest.projects.postgres?.externalAppVersion;
+	if (!expectedMajor) return;
+	const tagMajor = /:(?<major>[0-9]+)(?:\.[0-9]+)*(?:[-_.][A-Za-z0-9_.-]+)?@sha256:/u.exec(operandImage)?.groups?.major;
+	if (tagMajor !== expectedMajor)
+		errors.push(`PostgreSQL operand tag major '${tagMajor}' differs from the chart externalAppVersion '${expectedMajor}'`);
+}
 
 function _ReadMigrationManifest(path, description, errors)
 {
@@ -133,98 +163,20 @@ function _SourceHistoryLineages(repositoryRoot, sourceRelease, sourceProtectedBa
 }
 
 /**
- * Checks a release pair's database baseline and migration evidence before the release can be used.
- * It admits a carry-forward only when an approved patch preserves its predecessor's database
- * identity; every violation is appended to `errors` so validation reports the whole release failure.
+ * Checks that a release manifest names existing baseline bytes with the digest it records.
+ * This keeps a manifest from referring to missing or changed fresh-install SQL. Each problem is
+ * appended to `errors` so callers can report every invalid release input together.
+ *
  * Called by: `validateWorkspace` and {@link resolveDatabaseTransition}.
  */
 export function validateDatabase(repositoryRoot, manifest, previousManifest, changedFiles, errors)
 {
 	const database = manifest.database;
-	_ValidateCarriedForwardTransition(repositoryRoot, manifest, previousManifest, errors);
 	const baselinePath = join(repositoryRoot, database.baselinePath);
 	if (!existsSync(baselinePath)) return errors.push(`database baseline '${database.baselinePath}' does not exist`);
 	if (sha256(baselinePath) !== database.baselineSha256) errors.push("database baseline digest differs from the release manifest");
-	if (compareSemver(database.schemaVersion, manifest.repositoryVersion) > 0) errors.push("database schema version exceeds root version");
-	const baselineTouched = changedFiles.includes(database.baselinePath);
-	if (manifest.adoptionBaseline)
-	{
-		if (baselineTouched) errors.push("database baseline changed after adoption; bump the root minor version and add an adjacent migration");
-		return;
-	}
-	const previousDatabase = previousManifest?.database;
-	if (!previousDatabase) return;
-	const from = previousDatabase.schemaVersion;
-	if (!from) return errors.push(`previous release manifest '${manifest.previousRepositoryVersion}' has no database schema version`);
-	if (compareSemver(database.schemaVersion, from) < 0)
-		errors.push(`database schema version regresses from '${from}' to '${database.schemaVersion}'`);
-	if (baselineTouched && database.schemaVersion === from)
-	{
-		errors.push(`database baseline changed without advancing schema version '${database.schemaVersion}'`);
-		return;
-	}
-	if (database.schemaVersion === from)
-	{
-		if (database.baselineSha256 !== previousDatabase.baselineSha256)
-			errors.push(`database baseline digest changed without advancing schema version '${database.schemaVersion}'`);
-		return;
-	}
-	if (database.schemaVersion !== manifest.repositoryVersion)
-		errors.push("changed database schema must be stamped to the root version");
-	const migrationRoot = join(repositoryRoot, "apps/opencrane/prisma/migrations", `${from}-to-${database.schemaVersion}`);
-	const sqlPath = join(migrationRoot, "migration.sql");
-	const migrationManifestPath = join(migrationRoot, "manifest.json");
-	if (!existsSync(sqlPath) || !existsSync(migrationManifestPath))
-	{
-		errors.push(`database change requires reviewed migration '${relative(repositoryRoot, migrationRoot)}'`);
-		return;
-	}
-	const migrationManifest = _ReadMigrationManifest(
-		migrationManifestPath,
-		`database migration manifest '${relative(repositoryRoot, migrationManifestPath)}'`,
-		errors,
-	);
-	if (!migrationManifest) return;
-	if (migrationManifest.fromSchemaVersion !== from || migrationManifest.toSchemaVersion !== database.schemaVersion)
-		errors.push(`database migration manifest does not bind schema ${from} to ${database.schemaVersion}`);
-	if (migrationManifest.sqlSha256 !== sha256(sqlPath)) errors.push("database migration SQL digest differs from its manifest");
-	if (migrationManifest.owner !== "apps/opencrane") errors.push("database migration owner must be 'apps/opencrane'");
-	if (migrationManifest.rollback !== "backup-restore-or-forward-repair")
-		errors.push("database migration rollback must be 'backup-restore-or-forward-repair'");
-	if (!["automatic", "automatic-when-legacy-persona-empty-otherwise-manual-data-mapping-required", "automatic-when-legacy-persona-and-conversations-empty-otherwise-manual-data-mapping-required", "automatic-when-legacy-persona-conversations-approval-requests-and-integration-assignments-empty-otherwise-manual-data-mapping-required", "automatic-when-legacy-persona-conversations-channel-invocation-contexts-approval-requests-and-integration-assignments-empty-otherwise-manual-data-mapping-required"].includes(migrationManifest.executionMode))
-		errors.push("database migration executionMode must declare its automatic upgrade boundary");
-	if (migrationManifest.sourceTargetBaselineSha256 !== previousDatabase.baselineSha256)
-		errors.push("database migration source baseline digest differs from the previous release manifest");
-	if (migrationManifest.targetBaselineSha256 !== database.baselineSha256)
-		errors.push("database migration target baseline digest differs from the current release manifest");
-	const sourceProtectedBaselineSha256s = _SourceProtectedBaselineDigests(migrationManifest);
-	if (sourceProtectedBaselineSha256s.length === 0
-		|| sourceProtectedBaselineSha256s.some((digest) => !protectedBaselineDigestPattern.test(digest))
-		|| new Set(sourceProtectedBaselineSha256s).size !== sourceProtectedBaselineSha256s.length)
-	{
-		errors.push("database migration must bind a non-empty unique set of protected source baseline digests");
-	}
-	else if (!protectedBaselineDigestPattern.test(_FreshSourceProtectedBaselineDigest(migrationManifest) ?? "")
-		|| !sourceProtectedBaselineSha256s.includes(_FreshSourceProtectedBaselineDigest(migrationManifest)))
-	{
-		errors.push("database migration must identify its fresh protected source baseline inside the admitted set");
-	}
-	// Fresh installs hash the bootstrap SQL together with the database owner. The raw baseline digest
-	// therefore cannot prove the protected origin read from a live database.
-	else if (_FreshSourceProtectedBaselineDigest(migrationManifest) === migrationManifest.sourceTargetBaselineSha256)
-	{
-		errors.push("database migration fresh protected source digest must identify the bootstrap envelope, not the raw source baseline");
-	}
 }
 
-/**
- * Validates the requested release pair and describes the database state that deployment must reach.
- * An approved next-patch repair may reuse its predecessor's migration from that migration's original
- * source; every other non-adjacent source is rejected. The result binds migration SQL, every admitted
- * protected origin, and each origin's prior history.
- * Called by: `database-transition.mjs`, which supplies this evidence to the deployment script.
- * @throws {Error} When either manifest or its database transition is invalid.
- */
 /**
  * Finds the migration that last produced this release's database schema version.
  *
@@ -270,8 +222,6 @@ export function resolveSchemaLineage(repositoryRoot, releaseVersion)
 				sourceProtectedBaselineSha256s,
 				freshSourceProtectedBaselineSha256: _FreshSourceProtectedBaselineDigest(migrationManifest),
 				sourceHistoryLineages: _SourceHistoryLineages(repositoryRoot, predecessor, sourceProtectedBaselineSha256s),
-				// Reporting history, not authorizing a carry-forward override.
-				carriedForwardThroughReleaseVersion: null,
 				ownedByReleaseVersion: cursor.repositoryVersion,
 			};
 		}
@@ -280,7 +230,20 @@ export function resolveSchemaLineage(repositoryRoot, releaseVersion)
 	return null;
 }
 
-export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromReleaseVersion)
+/**
+ * Validates a release pair and describes the database state that deployment must reach.
+ * Automatic callers may cross an adjacent minor version; a version-specific resolver may also name
+ * a manifest-approved adjacent patch transition without allowing the generic CLI to admit it.
+ *
+ * Called by: `database-transition.mjs` and the reviewed `database-transition-0.9.3.mjs` exception.
+ * @param repositoryRoot - Repository root that holds release and migration manifests.
+ * @param releaseVersion - Release the deployment must reach.
+ * @param fromReleaseVersion - Installed release, or `fresh` for an empty database.
+ * @param options - A version-specific manual transition identifier, when the release manifest approves it.
+ * @returns The transition kind and the manifest-bound migration evidence needed by deployment.
+ * @throws {Error} When either manifest or the requested database transition is invalid.
+ */
+export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromReleaseVersion, options = {})
 {
 	const rootVersion = readJson(join(repositoryRoot, "package.json")).version;
 	const targetPath = join(repositoryRoot, "releases", `${releaseVersion}.json`);
@@ -288,6 +251,7 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 	const target = readJson(targetPath);
 	const validateManifest = createReleaseManifestValidator(repositoryRoot);
 	const errors = validateManifest(target);
+	validateDatabaseOperand(target, errors);
 	if (releaseVersion !== rootVersion || releaseVersion !== target.repositoryVersion)
 		errors.push(`release version '${releaseVersion}' must equal root and manifest version '${rootVersion}'`);
 	let kind = fromReleaseVersion === "fresh" ? "fresh" : "current";
@@ -317,8 +281,15 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 		}
 		if (source)
 		{
+			// A manual exception must match both the requested pair and its release manifest, so a
+			// version-specific resolver cannot authorize another patch transition by accident.
+			const manualTransitionId = `${fromReleaseVersion}-to-${releaseVersion}`;
+			const approvedManualPatch = options.manualTransitionId === manualTransitionId
+				&& isAdjacentPatch(fromReleaseVersion, releaseVersion)
+				&& target.manualTransition?.approved === true;
 			if (migrationOwner.database.schemaVersion !== source.database.schemaVersion
-				&& !isAdjacentMinor(fromReleaseVersion, migrationOwner.repositoryVersion))
+				&& !isAdjacentMinor(fromReleaseVersion, migrationOwner.repositoryVersion)
+				&& !approvedManualPatch)
 				errors.push(`automatic database migration permits only an adjacent minor transition: '${fromReleaseVersion}' -> '${releaseVersion}'`);
 			if (migrationOwner.database.schemaVersion !== source.database.schemaVersion) kind = "migration";
 		}
@@ -358,13 +329,14 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 			sourceProtectedBaselineSha256s,
 			freshSourceProtectedBaselineSha256: _FreshSourceProtectedBaselineDigest(migrationManifest),
 			sourceHistoryLineages: _SourceHistoryLineages(repositoryRoot, source, sourceProtectedBaselineSha256s),
-			carriedForwardThroughReleaseVersion: migrationOwner === target ? null : migrationOwner.repositoryVersion,
+			privilegedExtension: migrationManifest.privilegedExtension ?? null,
 		};
 	}
 	return {
 		kind,
 		releaseVersion,
 		fromReleaseVersion,
+		operandImage: target.database.operandImage ?? null,
 		targetSchemaVersion: target.database.schemaVersion,
 		targetBaselineSha256: target.database.baselineSha256,
 		migration,

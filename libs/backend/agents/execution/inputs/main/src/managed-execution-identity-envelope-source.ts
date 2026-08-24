@@ -21,7 +21,7 @@ import type { IdentityEnvelopeInput, IdentityEnvelopeSource, SessionAssemblyComm
  */
 export class ManagedExecutionIdentityEnvelopeSource implements IdentityEnvelopeSource
 {
-	/** Checks the service's current signed membership and its scope attachments. */
+	/** Checks the service's current signed membership and its boundary attachments. */
 	private readonly evidenceAuthority: ManagedExecutionEvidenceAuthority;
 
 	/** Creates the adapter over the control-plane authority that owns managed service identity. */
@@ -46,13 +46,13 @@ export class ManagedExecutionIdentityEnvelopeSource implements IdentityEnvelopeS
 		// 1. Stop here for a personal service; only managed services use this evidence path.
 		if (run.agentKind !== "managed" || command.identityKind !== "service") return { outcome: "denied", reason: "identity_unavailable" };
 
-		// 2. Have the control-plane authority re-check membership and scope attachments inside this transaction.
+		// 2. Have the control-plane authority re-check membership and boundary attachments inside this transaction.
 		const evidence = await this.evidenceAuthority.load({ siloId: command.siloId, agentServiceId: run.agentServiceId, agentRevisionId: run.agentRevisionId }, { prisma: transaction.prisma, admittedAtEpochMs: transaction.admittedAtEpochMs });
 		if (evidence.outcome === "denied") return evidence;
 
 		// 3. Re-check here too: the returned identity must be this exact service principal, with valid SHA-256 digests.
 		const expectedSubject = __ManagedAgentServicePrincipal(run.agentServiceId);
-		if (evidence.value.identity.kind !== "service" || evidence.value.identity.agentServiceId !== run.agentServiceId || evidence.value.identity.executionSubjectId !== expectedSubject || !___IsSha256Digest(evidence.value.identity.effectiveScopeAttachmentDigest) || !___IsSha256Digest(evidence.value.capabilitySetDigest)) return { outcome: "denied", reason: "identity_unavailable" };
+		if (evidence.value.identity.kind !== "service" || evidence.value.identity.agentServiceId !== run.agentServiceId || evidence.value.identity.executionSubjectId !== expectedSubject || !___IsSha256Digest(evidence.value.identity.effectiveBoundaryAttachmentDigest) || !___IsSha256Digest(evidence.value.capabilitySetDigest)) return { outcome: "denied", reason: "identity_unavailable" };
 		return { outcome: "loaded", value: { ...evidence.value.identity, capabilitySetDigest: evidence.value.capabilitySetDigest } };
 	}
 }

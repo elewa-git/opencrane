@@ -8,7 +8,7 @@ const _CONVERSATION = { conversationId: "conversation-1", siloId: "silo-1", agen
 /** Canonical read decision input. */
 function _Command()
 {
-	return { subjectId: "user-1", siloId: "silo-1", conversationId: "conversation-1", agentServiceId: "service-1", scope: { kind: "organization", organizationId: "silo-1" }, requiredActions: ["conversation.read"], membershipRevision: 7, nowEpochMs: 1_000 } as const;
+	return { subjectId: "user-1", siloId: "silo-1", conversationId: "conversation-1", agentServiceId: "service-1", requiredActions: ["conversation.read"], membershipRevision: 7, nowEpochMs: 1_000 } as const;
 }
 
 describe("conversation read authorization", function _DescribeConversationReadAuthorization()
@@ -23,9 +23,8 @@ describe("conversation read authorization", function _DescribeConversationReadAu
 		expect(second).not.toEqual(first);
 	});
 
-	it("requires exact organization scope and participant membership", function _RequiresScopeAndParticipant()
+	it("requires explicit participant membership", function _RequiresParticipant()
 	{
-		expect(__AuthorizeConversationRead(_CONVERSATION, { ..._Command(), scope: { kind: "organization", organizationId: "other" } })).toEqual({ outcome: "denied", reason: "scope_mismatch" });
 		expect(__AuthorizeConversationRead({ ..._CONVERSATION, participantUserIds: [] }, _Command())).toEqual({ outcome: "denied", reason: "participant_unavailable" });
 	});
 

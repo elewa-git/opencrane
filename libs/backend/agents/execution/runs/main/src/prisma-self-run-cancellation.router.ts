@@ -13,7 +13,7 @@ import type { SelfRunCancellationCaller } from "./self-run-cancellation.types";
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SelfRunCancellationCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal ? { subjectId: principal.subjectId, siloId: principal.siloId } : null;
+	return principal ? { subjectId: principal.externalSubject, siloId: principal.siloId } : null;
 }
 
 /** Compose the Prisma-backed self-only run-cancellation router. */

@@ -6,7 +6,7 @@ import { ConversationAssetDisposition } from "@opencrane/models/conversation-ass
 import { PrismaConversationAssetRepository } from "../prisma-conversation-asset-repository";
 import { PrismaConversationAssetUnitOfWork } from "../prisma-conversation-asset-unit-of-work";
 
-const _CALLER = { siloId: "silo-1", subjectId: "user-1" } as const;
+const _CALLER = { siloId: "silo-1", subjectId: "user-1", principalId: "principal-1" } as const;
 const _ADDRESS = `sha256:${"a".repeat(64)}`;
 
 /** Active access delegates reused by focused authority tests. */

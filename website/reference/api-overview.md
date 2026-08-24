@@ -38,10 +38,10 @@ The current composition includes:
 | `/me/persona` | Personal persona onboarding |
 | `/me/assets` | Personal artifact catalogue |
 | `/skills` | Skill catalogue and publication |
-| `/mcp-servers`, `/mcp` | MCP registration and operator surfaces |
+| `/mcp` | Principal- and silo-bound MCP catalogue, installation and governance surfaces |
 | `/models`, `/model-routing` | Model registry and routing defaults |
 | `/providers` | Provider credential references and bring-your-own-key configuration |
-| `/groups`, `/shares`, `/resource-shares` | Organisation-scoped access and sharing |
+| `/groups`, `/resource-shares` | Organisation-scoped access and sharing |
 | `/audit`, `/ai-budget`, `/token-usage` | Governance evidence and spend controls |
 
 Routes can evolve independently. Always verify the current OpenAPI document before writing a

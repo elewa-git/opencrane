@@ -51,10 +51,11 @@ function _IsUtcCalendarDate(value)
 }
 
 /** Validates the top-level Prisma-boundary policy schema. */
-export function validatePolicy(policy)
+export function validatePolicy(policy, allowLegacyRawProcedure = false)
 {
 	if (policy?.version !== 1
 		|| !Array.isArray(policy?.exemptions)
+		|| !Array.isArray(policy?.rawProcedureCalls)
 		|| !Array.isArray(policy?.owners?.repositories)
 		|| !Array.isArray(policy?.owners?.unitsOfWork)
 		|| !Array.isArray(policy?.owners?.compositions))
@@ -98,6 +99,60 @@ export function validatePolicy(policy)
 			throw new Error("invalid Prisma-boundary composition path; require an exact repository-relative .ts path");
 		}
 	}
+	const rawProcedureKeys = new Set();
+	for (const procedure of policy.rawProcedureCalls)
+	{
+		const valid = _IsCurrentRawProcedure(procedure)
+			|| (allowLegacyRawProcedure && _IsLegacyRawProcedure(procedure));
+		const key = `${procedure?.path ?? ""}\u0000${procedure?.adapter ?? ""}\u0000${procedure?.method ?? ""}`;
+		if (!valid || rawProcedureKeys.has(key))
+		{
+			throw new Error("invalid raw procedure call; require the exact typed Absurd task admission and fixed SQL template");
+		}
+		rawProcedureKeys.add(key);
+	}
+}
+
+/** Checks the current policy-owned task-admission exception. */
+function _IsCurrentRawProcedure(procedure)
+{
+	return _IsExactTypeScriptPath(procedure?.path)
+		&& procedure.adapter === "WorkflowTaskAdmission"
+		&& procedure.contract === "IWorkflowTaskAdmission"
+		&& procedure.contractImportPath === "./workflow-task-admission.types"
+		&& procedure.method === "$queryRaw"
+		&& procedure.sqlTemplate === "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)"
+		&& typeof procedure.reason === "string"
+		&& procedure.reason.trim().length >= 20;
+}
+
+/** Checks the previous exact declaration while a diff compares this rename with its base revision. */
+function _IsLegacyRawProcedure(procedure)
+{
+	return _IsExactTypeScriptPath(procedure?.path)
+		&& procedure.adapter === "PrismaDbProcedureGateway"
+		&& procedure.contract === "AbsurdTaskAdmissionProcedure"
+		&& procedure.contractImportPath === "./absurd-transaction-spawner.types"
+		&& procedure.method === "$queryRaw"
+		&& procedure.sqlTemplate === "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${options}::jsonb)"
+		&& typeof procedure.reason === "string"
+		&& procedure.reason.trim().length >= 20;
+}
+
+/**
+ * Supplies the empty raw-procedure list implied by a policy written before that field existed.
+ *
+ * The current policy remains strict; only a historical Git base may omit the list because that
+ * revision could not have approved a raw procedure.
+ *
+ * Called by: the diff-scoped Prisma boundary checker before it compares old findings.
+ * @see scripts/prisma-boundary-check.mjs
+ */
+export function prepareBasePolicyForComparison(policy)
+{
+	if (policy?.version === 1 && policy.rawProcedureCalls === undefined)
+		return { ...policy, rawProcedureCalls: [] };
+	return policy;
 }
 
 /** Returns whether an owner path is exact, repository-relative, and TypeScript. */

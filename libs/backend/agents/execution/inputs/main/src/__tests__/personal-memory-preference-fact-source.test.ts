@@ -10,8 +10,8 @@ describe("PersonalMemoryPreferenceFactSource", function _DescribePersonalMemoryP
 		const transaction = { prisma: {} };
 		const source = new PersonalMemoryPreferenceFactSource(function _CreatePersonalMemory() { return personalMemory as never; });
 
-		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, transaction as never)).resolves.toEqual({ outcome: "loaded", value: [{ id: "fact-2" }, { id: "fact-1" }] });
-		expect(personalMemory.findActivePreferenceFactIds).toHaveBeenCalledWith({ siloId: "silo-1", organizationId: "org-1", subjectId: "user-1" });
+		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", principalId: "principal-1", executionSubjectId: "user-1" } as never, transaction as never)).resolves.toEqual({ outcome: "loaded", value: [{ id: "fact-2" }, { id: "fact-1" }] });
+		expect(personalMemory.findActivePreferenceFactIds).toHaveBeenCalledWith({ siloId: "silo-1", principalId: "principal-1", subjectId: "user-1" });
 	});
 
 	it("refuses a managed run before reading personal preference metadata", async function _RejectsManagedRun()

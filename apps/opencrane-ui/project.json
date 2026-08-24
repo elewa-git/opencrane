@@ -2,7 +2,7 @@
 	"name": "opencrane-ui",
 	"$schema": "../../node_modules/nx/schemas/project-schema.json",
 	"projectType": "application",
-	"metadata": { "release": { "adaptedVersion": "0.9.2" } },
+  "metadata": { "release": { "adaptedVersion": "0.9.3" } },
 	"sourceRoot": "apps/opencrane-ui/src",
 	"prefix": "wo",
 	"tags": [

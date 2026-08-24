@@ -1,5 +1,4 @@
 import type { FleetMembershipTrustDecision, FleetMembershipTrustExpectation, FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "./fleet-membership.types";
-import { __AuthorizationScopesEqual } from "./scope-matching";
 
 /**
  * Creates a denied fleet-membership result for one revision.
@@ -129,12 +128,11 @@ export function __EvaluateFleetMembershipRevision(
 		return _deny(revision.revision, "stale");
 	}
 
-	// 5. The signed assertion must match the exact silo, subject, identifier, and scope expected.
+	// 5. The signed assertion must match the exact silo, subject, and identifier expected.
 	const matchedAssertion = revision.assertions.find(assertion =>
 		assertion.assertionId === expectation.assertionId
 			&& assertion.siloId === expectation.siloId
-			&& assertion.subjectId === expectation.subjectId
-			&& __AuthorizationScopesEqual(assertion.scope, expectation.scope));
+			&& assertion.subjectId === expectation.subjectId);
 	if (matchedAssertion === undefined)
 	{
 		return _deny(revision.revision, "assertion_mismatch");
@@ -144,7 +142,7 @@ export function __EvaluateFleetMembershipRevision(
 		outcome: "trusted",
 		reason: "trusted",
 		revision: revision.revision,
-		organizationId: matchedAssertion.scope.organizationId,
+		siloId: matchedAssertion.siloId,
 		trustedUntilEpochMs: Math.min(revision.expiresAtEpochMs, staleAtEpochMs),
 	};
 }

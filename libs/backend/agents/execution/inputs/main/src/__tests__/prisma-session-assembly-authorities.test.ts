@@ -26,7 +26,7 @@ describe("Prisma session assembly authority factories", function _DescribePrisma
 		const authorities = __CreatePrismaPersonalSessionAssemblyAuthorities({ admit: async function _Admit() { throw new Error("not invoked"); } } as never, { load: async function _Load() { return { outcome: "denied", reason: "identity_unavailable" } as const; } } as never, new PrismaSkillRevisionEligibilitySource());
 		const command = { siloId: "silo-1" } as never;
 		const run = { agentKind: "personal" } as never;
-		const identity = { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never;
+		const identity = { kind: "user", principalId: "principal-1", executionSubjectId: "user-1" } as never;
 
 		expect(authorities.memoryScope).toBeInstanceOf(PersonalMemoryScopeSource);
 		await expect(authorities.memoryScope.load(command, run, identity, { messageIds: [], pendingUserMessage: null }, transaction as never)).resolves.toEqual({ outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-dataset-1" } } });

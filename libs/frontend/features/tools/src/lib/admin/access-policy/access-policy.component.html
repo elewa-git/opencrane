@@ -31,21 +31,13 @@
 						</p>
 
 						@if (policy(); as pol) {
-							<div class="wo-ap__everyone">
-								<div>
-									<p class="wo-ap__everyone-title">Everyone in org</p>
-									<p class="wo-ap__everyone-hint">All current and future members can install this server.</p>
-								</div>
-								<p-toggleswitch [ngModel]="pol.everyoneInOrg" (ngModelChange)="onToggleEveryone($event)" />
-							</div>
-
 							<p class="wo-ap__group-label">Groups</p>
 							<div class="wo-ap__chips">
-								@for (group of pol.groups; track group) {
+								@for (group of pol.groups; track group.id) {
 									<span class="wo-ap__chip">
 										<span class="wo-ap__chip-glyph">grp</span>
-										{{ group }}
-										<button type="button" class="wo-ap__chip-x" (click)="removeGroup(group)">✕</button>
+										{{ group.name }}
+										<button type="button" class="wo-ap__chip-x" (click)="removeGroup(group.id)">✕</button>
 									</span>
 								} @empty {
 									<span class="wo-ap__none">No groups</span>
@@ -53,8 +45,8 @@
 								@if (availableGroups().length > 0) {
 									<select class="wo-select wo-ap__add" (change)="addGroup($event)">
 										<option value="">+ Add group</option>
-										@for (group of availableGroups(); track group) {
-											<option [value]="group">{{ group }}</option>
+										@for (group of availableGroups(); track group.id) {
+											<option [value]="group.id">{{ group.name }}</option>
 										}
 									</select>
 								}
@@ -81,11 +73,6 @@
 								}
 							</div>
 
-							@if (pol.everyoneInOrg) {
-								<div class="wo-callout wo-ap__note">
-									"Everyone in org" is <b>on</b>, so groups and users above are additive. Turn it off to restrict access to those lists only.
-								</div>
-							}
 						}
 					}
 				</div>

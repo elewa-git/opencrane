@@ -31,7 +31,7 @@ Acceptance criteria:
 
 - Required inputs include name, workload profile, change message, and revision content.
 - Revision content names the model, prompt-policy version, optional persona, run limits, exact skill
-  revisions, integration assignments, allowed tools, and scope attachments.
+  revisions, integration assignments, allowed tools, and group or personal boundary attachments.
 - The server validates the admin's authority over every attachment.
 - Validation, forbidden, conflict, dependency-unavailable, and success states are designed.
 

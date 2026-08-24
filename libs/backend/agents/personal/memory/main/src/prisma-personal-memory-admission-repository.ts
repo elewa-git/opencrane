@@ -1,4 +1,4 @@
-import { AuthorizationScopeKind, MemoryConsentState, MemoryDatasetState, MemoryFactState, type Prisma } from "@prisma/client";
+import { MemoryConsentState, MemoryDatasetState, MemoryFactState, type Prisma } from "@prisma/client";
 
 import { MemoryFactProvenanceSourceKinds } from "@opencrane/contracts";
 
@@ -27,7 +27,7 @@ export class PrismaPersonalMemoryAdmissionRepository implements PersonalMemoryAd
 	}
 
 	/**
-	 * @param command - The three verified identity fields; every one is used in the query.
+	 * @param command - The verified silo and local Principal; both are used in the query.
 	 * @returns The Active dataset scoped Personal to this subject, or null when none matches.
 	 */
 	async findActivePersonalDataset(command: ResolvePersonalMemoryDatasetCommand): Promise<PersonalMemoryDataset | null>
@@ -35,9 +35,9 @@ export class PrismaPersonalMemoryAdmissionRepository implements PersonalMemoryAd
 		const dataset = await this.transaction.memoryDataset.findFirst({
 			where: {
 				siloId: command.siloId,
-				organizationId: command.organizationId,
-				scopeKind: AuthorizationScopeKind.Personal,
-				scopeResourceId: command.subjectId,
+				boundaryKind: "Personal",
+				boundaryGroupId: null,
+				boundaryPrincipalId: command.principalId,
 				state: MemoryDatasetState.Active,
 			},
 			select: { id: true, cogneeDatasetId: true },
@@ -51,7 +51,7 @@ export class PrismaPersonalMemoryAdmissionRepository implements PersonalMemoryAd
 	 * The dataset is re-read rather than passed in, so a stale id from an earlier lookup can never
 	 * select facts from a dataset that is no longer this user's.
 	 *
-	 * @param command - The three verified identity fields.
+	 * @param command - The verified silo and local Principal.
 	 * @returns Ids of Active facts with Explicit or Confirmed consent whose provenance names this
 	 * subject as having stated them. Empty when the user has no Active dataset.
 	 */

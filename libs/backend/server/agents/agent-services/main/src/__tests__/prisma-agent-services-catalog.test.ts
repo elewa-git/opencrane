@@ -1,7 +1,7 @@
 import { AgentServiceKind, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaAgentRevisionLifecycleRepository } from "../prisma-agent-revision-lifecycle";
+import { PrismaAgentRevisionLifecycleRepository } from "../db/prisma-agent-revision-lifecycle";
 
 /** Creates the persisted fields mapped into one management catalogue service summary. */
 function _serviceRow()

@@ -27,7 +27,7 @@ export interface OrgMembershipRow
  * and by hand-written stubs in ./__tests__.
  * Called by: {@link _ResolveOrgMembershipFacts}; the instance is handed to
  * `OidcAuthServiceBase` at construction (see
- * libs/backend/server/iam/identity/main/src/oidc.service.ts line 56).
+ * libs/backend/server/iam/identity/main/src/auth/oidc.service.ts).
  */
 export interface OrgMembershipRepository
 {

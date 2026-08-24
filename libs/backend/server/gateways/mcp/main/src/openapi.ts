@@ -31,132 +31,8 @@ function created(description: string, schema: object)
   };
 }
 
-const McpServerCredentialInputSchema = {
-  type: "object" as const,
-  required: ["displayName"],
-  properties: {
-    displayName: { type: "string", description: "Operator-facing label." },
-  },
-};
-
 /** OpenAPI path fragments owned by the mcp domain (composed into the opencrane-ui spec). */
 export const _McpOpenapiPaths = {
-  "/mcp-servers": {
-    get: {
-      operationId: "listMcpServers",
-      summary: "List all MCP servers with grants and credentials",
-      tags: ["MCP Servers"],
-      responses: {
-        200: ok("MCP server list.", { type: "array", items: { $ref: "#/components/schemas/McpServer" } }),
-      },
-    },
-    post: {
-      operationId: "createMcpServer",
-      summary: "Create a new MCP server",
-      tags: ["MCP Servers"],
-      requestBody: {
-        required: true,
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              required: ["name", "endpoint", "transport"],
-              properties: {
-                name: { type: "string" },
-                endpoint: { type: "string" },
-                transport: { type: "string" },
-                grants: { type: "array", items: { type: "object" } },
-                credentials: { type: "array", items: { type: "object" } },
-              },
-            },
-          },
-        },
-      },
-      responses: {
-        201: created("MCP server created.", { $ref: "#/components/schemas/McpServer" }),
-      },
-    },
-  },
-
-  "/mcp-servers/{id}": {
-    get: {
-      operationId: "getMcpServer",
-      summary: "Get a single MCP server by identifier",
-      tags: ["MCP Servers"],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("MCP server detail.", { $ref: "#/components/schemas/McpServer" }),
-        404: notFound("MCP server not found."),
-      },
-    },
-    put: {
-      operationId: "updateMcpServer",
-      summary: "Update an MCP server and fully replace grants and credentials",
-      tags: ["MCP Servers"],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-      requestBody: {
-        required: true,
-        content: { "application/json": { schema: { type: "object" } } },
-      },
-      responses: {
-        200: ok("MCP server updated.", { $ref: "#/components/schemas/McpServer" }),
-      },
-    },
-    delete: {
-      operationId: "deleteMcpServer",
-      summary: "Delete an MCP server and its linked grant rows",
-      tags: ["MCP Servers"],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("MCP server deleted.", { type: "object", properties: { id: { type: "string" }, status: { type: "string" } } }),
-      },
-    },
-  },
-
-  "/mcp-servers/{id}/credentials": {
-    get: {
-      operationId: "listMcpServerCredentials",
-      summary: "List the brokered credentials of an MCP server",
-      tags: ["MCP Servers"],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("Credential list.", { type: "array", items: { $ref: "#/components/schemas/McpServerCredential" } }),
-        404: notFound("MCP server not found."),
-      },
-    },
-    post: {
-      operationId: "addMcpServerCredential",
-      summary: "Add a brokered credential to an MCP server (does not touch grants)",
-      tags: ["MCP Servers"],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-      requestBody: {
-        required: true,
-        content: { "application/json": { schema: McpServerCredentialInputSchema } },
-      },
-      responses: {
-        201: created("Credential added.", { $ref: "#/components/schemas/McpServerCredential" }),
-        400: badRequest("Credential payload violates brokering-mode custody rules."),
-        404: notFound("MCP server not found."),
-      },
-    },
-  },
-
-  "/mcp-servers/{id}/credentials/{credentialId}": {
-    delete: {
-      operationId: "deleteMcpServerCredential",
-      summary: "Remove a single brokered credential from an MCP server",
-      tags: ["MCP Servers"],
-      parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string" } },
-        { name: "credentialId", in: "path", required: true, schema: { type: "string" } },
-      ],
-      responses: {
-        200: ok("Credential deleted.", { type: "object", properties: { id: { type: "string" }, status: { type: "string" } } }),
-        404: notFound("MCP server or credential not found."),
-      },
-    },
-  },
-
   "/mcp/catalog": {
     get: {
       operationId: "listMcpCatalog",
@@ -196,62 +72,11 @@ export const _McpOpenapiPaths = {
   "/mcp/installed/{serverId}": {
     delete: {
       operationId: "uninstallMcpServer",
-      summary: "Uninstall a server for the calling user (clears the stored credential)",
+      summary: "Uninstall a server for the calling user",
       tags: ["MCP Operator"],
       parameters: [{ name: "serverId", in: "path", required: true, schema: { type: "string" } }],
       responses: {
         204: { description: "Server uninstalled." },
-        404: notFound("MCP install not found."),
-      },
-    },
-  },
-
-  "/mcp/installed/{serverId}/credential": {
-    put: {
-      operationId: "setMcpCredential",
-      summary: "Author a per-user credential (write-only) and mark the install connected",
-      description: "The submitted values are write-only: stored server-side as an opaque custody handle and NEVER returned by any response.",
-      tags: ["MCP Operator"],
-      parameters: [{ name: "serverId", in: "path", required: true, schema: { type: "string" } }],
-      requestBody: {
-        required: true,
-        content: { "application/json": { schema: { type: "object", required: ["values"], properties: { values: { type: "object", additionalProperties: { type: "string" }, description: "Field values keyed by CredentialField.key. Write-only — never echoed back." } } } } },
-      },
-      responses: {
-        200: ok("Credential connected.", { $ref: "#/components/schemas/McpInstalled" }),
-        404: notFound("MCP install not found."),
-      },
-    },
-    delete: {
-      operationId: "clearMcpCredential",
-      summary: "Clear a per-user credential, returning the install to needs-credential",
-      tags: ["MCP Operator"],
-      parameters: [{ name: "serverId", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("Credential cleared.", { $ref: "#/components/schemas/McpInstalled" }),
-        404: notFound("MCP install not found."),
-      },
-    },
-  },
-
-  "/mcp/installed/{serverId}/oauth": {
-    post: {
-      operationId: "connectMcpOauth",
-      summary: "Mark a remote-OAuth install connected after a successful handshake",
-      tags: ["MCP Operator"],
-      parameters: [{ name: "serverId", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("OAuth connected.", { $ref: "#/components/schemas/McpInstalled" }),
-        404: notFound("MCP install not found."),
-      },
-    },
-    delete: {
-      operationId: "disconnectMcpOauth",
-      summary: "Disconnect a remote-OAuth install, returning it to needs-credential",
-      tags: ["MCP Operator"],
-      parameters: [{ name: "serverId", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("OAuth disconnected.", { $ref: "#/components/schemas/McpInstalled" }),
         404: notFound("MCP install not found."),
       },
     },
@@ -265,6 +90,21 @@ export const _McpOpenapiPaths = {
       responses: {
         200: ok("All catalogue servers.", { type: "array", items: { $ref: "#/components/schemas/McpCatalogServer" } }),
         403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
+    post: {
+      operationId: "registerRemoteMcpServer",
+      summary: "Register a remote MCP server and start its protocol check",
+      tags: ["MCP Operator"],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["idempotencyKey", "name", "endpoint"], properties: { idempotencyKey: { type: "string", minLength: 8, maxLength: 128 }, name: { type: "string", minLength: 1, maxLength: 120 }, description: { type: "string", maxLength: 1000 }, endpoint: { type: "string", format: "uri", maxLength: 2048 } } } } },
+      },
+      responses: {
+        201: created("Remote server and protocol-check job saved.", { type: "object", required: ["id", "name", "endpoint", "eraProbeStatus"], properties: { id: { type: "string" }, name: { type: "string" }, endpoint: { type: "string", format: "uri" }, eraProbeStatus: { type: "string", enum: ["Pending", "Accepted", "Rejected"] } } }),
+        400: badRequest("Registration fields are invalid."),
+        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        409: { description: "Registration key or server name conflicts with another request.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
       },
     },
   },
@@ -333,7 +173,7 @@ export const _McpOpenapiPaths = {
   "/mcp/servers/{id}/access": {
     get: {
       operationId: "getMcpAccessPolicy",
-      summary: "Read a server's access policy. Org-admin only",
+      summary: "Read the authorization grants for an MCP server. Org-admin only",
       tags: ["MCP Operator"],
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
       responses: {
@@ -344,16 +184,16 @@ export const _McpOpenapiPaths = {
     },
     put: {
       operationId: "setMcpAccessPolicy",
-      summary: "Replace a server's access policy wholesale. Org-admin only",
+      summary: "Replace the authorization grants for an MCP server. Org-admin only",
       tags: ["MCP Operator"],
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
       requestBody: {
         required: true,
-        content: { "application/json": { schema: { type: "object", required: ["everyoneInOrg", "groups", "users"], properties: { everyoneInOrg: { type: "boolean" }, groups: { type: "array", items: { type: "string" } }, users: { type: "array", items: { type: "string" }, description: "Entitled user identifiers." } } } } },
+        content: { "application/json": { schema: { type: "object", required: ["groupIds", "principalIds"], properties: { groupIds: { type: "array", items: { type: "string" }, description: "Stable local Group identifiers." }, principalIds: { type: "array", items: { type: "string" }, description: "Stable local Principal identifiers." } } } } },
       },
       responses: {
         200: ok("Access policy updated.", { $ref: "#/components/schemas/McpAccessPolicy" }),
-        400: badRequest("everyoneInOrg (boolean), groups (array), and users (array) are required."),
+        400: badRequest("groupIds (array) and principalIds (array) are required."),
         403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         404: notFound("MCP server not found."),
       },

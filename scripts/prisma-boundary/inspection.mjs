@@ -16,7 +16,7 @@ export function isProductionTypeScript(path)
 }
 
 /** Finds direct Prisma operations that escape repository or unit-of-work owners. */
-export function inspectPrismaBoundary(path, source, modelDelegates, owners, exemption = new Set())
+export function inspectPrismaBoundary(path, source, modelDelegates, owners, exemption = new Set(), rawProcedureCalls = [])
 {
 	if (!isProductionTypeScript(path)) return [];
 	const classOwners = classes(source);
@@ -27,7 +27,11 @@ export function inspectPrismaBoundary(path, source, modelDelegates, owners, exem
 	{
 		return authorizedOwner(candidate, imports, owners.repositories, path) !== undefined || authorizedOwner(candidate, imports, owners.unitsOfWork, path) !== undefined;
 	});
-	if (prismaImport !== null && !hasAuthorizedOwner && !owners.compositions.includes(path))
+	const hasRawProcedureOwner = classOwners.some(function _RawProcedure(candidate)
+	{
+		return authorizedOwner(candidate, imports, rawProcedureCalls, path) !== undefined;
+	});
+	if (prismaImport !== null && !hasAuthorizedOwner && !hasRawProcedureOwner && !owners.compositions.includes(path))
 	{
 		findings.push(_Finding(path, source, prismaImport.index, "PRISMA-IMPORT-OWNER", "@prisma/client import outside an authoritative Repository, UnitOfWork, or exact composition owner", "module"));
 	}
@@ -42,6 +46,7 @@ export function inspectPrismaBoundary(path, source, modelDelegates, owners, exem
 	}
 	for (const match of rawPrismaMethodMatches(source))
 	{
+		if (_IsApprovedRawProcedureCall(path, source, classOwners, imports, match, rawProcedureCalls)) continue;
 		findings.push(_Finding(path, source, match.index ?? 0, "PRISMA-RAW-QUERY-FORBIDDEN", `${match.method} is forbidden in production TypeScript; use typed Prisma delegates behind a policy-authorized Repository adapter`, ownerIdentity(source, classOwners, match.index ?? 0)));
 	}
 	for (const match of delegateMatches(source, modelDelegates, imports))
@@ -66,6 +71,20 @@ export function inspectPrismaBoundary(path, source, modelDelegates, owners, exem
 		}
 	}
 	return findings;
+}
+
+/** Returns whether the raw call is the sole fixed, typed durable-admission procedure. */
+function _IsApprovedRawProcedureCall(path, source, classOwners, imports, match, rawProcedureCalls)
+{
+	const owner = enclosingClass(classOwners, match.index ?? 0);
+	const procedure = authorizedOwner(owner, imports, rawProcedureCalls, path);
+	if (procedure === undefined || procedure.method !== match.method) return false;
+	const callEnd = source.indexOf(");", match.index ?? 0);
+	if (callEnd === -1) return false;
+	const call = source.slice(match.index ?? 0, callEnd + 2);
+	const template = /Prisma\.sql\s*`([\s\S]*)`/u.exec(call)?.[1];
+	if (template === undefined) return false;
+	return template.replace(/\s+/gu, " ").trim() === procedure.sqlTemplate;
 }
 
 /** Validates that policy-declared owners and construction lists still match the live tree. */
@@ -100,6 +119,32 @@ export function validateOwnerDeclarations(path, source, owners)
 			{
 				findings.push(_Finding(path, source, construction.index, "PRISMA-POLICY-CONSTRUCTION", `${construction.adapter} must receive the exact Prisma transaction binding`, `class:${declaration.adapter}`));
 			}
+		}
+	}
+	return findings;
+}
+
+/** Validates that the sole policy-owned raw procedure still has its exact contract and SQL. */
+export function validateRawProcedureDeclarations(path, source, rawProcedureCalls)
+{
+	const findings = [];
+	const classOwners = classes(source);
+	const imports = importedBindings(source);
+	for (const declaration of rawProcedureCalls.filter(function _Path(entry) { return entry.path === path; }))
+	{
+		const owner = classOwners.find(function _Adapter(candidate) { return candidate.name === declaration.adapter; });
+		if (authorizedOwner(owner, imports, [declaration], path) === undefined)
+		{
+			findings.push(_Finding(path, source, 0, "PRISMA-POLICY-RAW-PROCEDURE", `raw task-admission owner ${declaration.adapter} no longer implements its exact declared contract import`, `class:${declaration.adapter}`));
+			continue;
+		}
+		const approved = rawPrismaMethodMatches(source).filter(function _Approved(match)
+		{
+			return _IsApprovedRawProcedureCall(path, source, classOwners, imports, match, [declaration]);
+		});
+		if (approved.length !== 1)
+		{
+			findings.push(_Finding(path, source, owner.start, "PRISMA-POLICY-RAW-PROCEDURE", `raw task-admission owner ${declaration.adapter} must contain exactly one fixed ${declaration.method} call`, `class:${declaration.adapter}`));
 		}
 	}
 	return findings;

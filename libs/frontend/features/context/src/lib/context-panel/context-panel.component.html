@@ -34,7 +34,7 @@
 					<div class="wo-ctx__contract-card">
 						<div>
 							<p class="wo-ctx__contract-version">contract v2.3.1</p>
-							<p class="wo-ctx__contract-scopes wo-mono">scopes: org · dept · project · personal</p>
+							<p class="wo-ctx__contract-scopes wo-mono">boundaries: group · personal</p>
 						</div>
 						<div class="wo-ctx__contract-status">
 							<span class="wo-ctx__contract-dot"></span>
@@ -42,9 +42,9 @@
 						</div>
 					</div>
 					<div class="wo-ctx__scope-strip">
-						@for (level of scopeLevels; track level) {
-							<div class="wo-ctx__scope-cell" [style.background]="scopeColors[level] + '15'" [style.border-color]="scopeColors[level] + '40'">
-								<p class="wo-mono" [style.color]="scopeColors[level]">{{ level }}</p>
+					@for (kind of boundaryKinds; track kind) {
+							<div class="wo-ctx__scope-cell" [style.background]="scopeColors[kind] + '15'" [style.border-color]="scopeColors[kind] + '40'">
+								<p class="wo-mono" [style.color]="scopeColors[kind]">{{ kind }}</p>
 							</div>
 						}
 					</div>
@@ -53,14 +53,14 @@
 
 			<wo-collapsible-section sectionId="context-retrieved-scope" title="Retrieved Scope Context">
 				<div class="wo-ctx__scopes">
-					@for (entry of scopeEntries; track entry.level) {
+					@for (entry of scopeEntries; track entry.boundaryId) {
 						<div>
-							<button type="button" class="wo-ctx__scope-row" [class.wo-ctx__scope-row--active]="expandedScope() === entry.level" (click)="toggleScope(entry.level)">
+							<button type="button" class="wo-ctx__scope-row" [class.wo-ctx__scope-row--active]="expandedBoundaryId() === entry.boundaryId" (click)="toggleBoundary(entry.boundaryId)">
 								<span class="wo-ctx__scope-dot" [style.background]="entry.active ? entry.color : 'var(--oc-ink-muted)'" [style.opacity]="entry.active ? 1 : 0.4"></span>
 								<span class="wo-ctx__scope-body">
 									<span class="wo-ctx__scope-title">
 										<span>{{ entry.label }}</span>
-										<span class="wo-mono" [style.color]="entry.color">{{ entry.level }}</span>
+										<span class="wo-mono" [style.color]="entry.color">{{ entry.boundaryKind }}</span>
 									</span>
 									<span class="wo-ctx__scope-sub">{{ entry.sublabel }}</span>
 								</span>
@@ -68,11 +68,11 @@
 									<span class="wo-ctx__scope-count wo-mono" [style.color]="entry.color" [style.border-color]="entry.color">{{ entry.citationCount }}</span>
 								}
 								<span class="wo-ctx__scope-fresh wo-mono">{{ entry.freshness }}</span>
-								<i class="pi pi-chevron-right wo-ctx__scope-chevron" [class.wo-ctx__scope-chevron--open]="expandedScope() === entry.level"></i>
+								<i class="pi pi-chevron-right wo-ctx__scope-chevron" [class.wo-ctx__scope-chevron--open]="expandedBoundaryId() === entry.boundaryId"></i>
 							</button>
-							@if (expandedScope() === entry.level) {
+							@if (expandedBoundaryId() === entry.boundaryId) {
 								<div class="wo-ctx__citations">
-									@for (citation of citationsFor(entry.level); track citation.id) {
+									@for (citation of citationsFor(entry.boundaryId); track citation.id) {
 										<div class="wo-ctx__citation" [style.background]="entry.color + '12'" [style.border-left-color]="entry.color">
 											<p class="wo-mono" [style.color]="entry.color">{{ citation.source }}</p>
 											<p>{{ citation.snippet }}</p>
@@ -89,9 +89,9 @@
 				<div class="wo-ctx__skills">
 					@for (skill of skills; track skill.name) {
 						<div class="wo-ctx__skill">
-							<i class="pi pi-bolt" [style.color]="scopeColors[skill.scope]"></i>
+							<i class="pi pi-bolt" [style.color]="scopeColors[skill.boundaryKind]"></i>
 							<span class="wo-ctx__skill-name">{{ skill.name }}</span>
-							<span class="wo-mono wo-ctx__skill-scope" [style.color]="scopeColors[skill.scope]">{{ skill.scope }}</span>
+							<span class="wo-mono wo-ctx__skill-scope" [style.color]="scopeColors[skill.boundaryKind]">{{ skill.boundaryKind }}</span>
 							<span class="wo-mono wo-ctx__skill-version">{{ skill.version }}</span>
 						</div>
 					}
@@ -115,7 +115,7 @@
 							[entryId]="entry.id"
 							[kind]="ledgerKind(entry.type)"
 							[label]="entry.label"
-							[scope]="entry.scope"
+							[boundaryKind]="entry.boundaryKind"
 							[entryRef]="entry.ref"
 							[status]="entry.status"
 							[dimmed]="entry.status === 'resolved'"

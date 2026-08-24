@@ -8,8 +8,8 @@
 	<div class="wo-ledger__body">
 		<p class="wo-ledger__label" [class.wo-ledger__label--dimmed]="dimmed()">{{ label() }}</p>
 		<div class="wo-ledger__meta">
-			@if (scope(); as scopeLevel) {
-				<wo-scope-chip [label]="scopeLevel" [tone]="scopeTone()" />
+			@if (boundaryKind(); as renderedBoundaryKind) {
+				<wo-scope-chip [label]="renderedBoundaryKind" [tone]="scopeTone()" />
 			}
 			@if (entryRef(); as refValue) {
 				<span class="wo-ledger__ref wo-mono">{{ refValue }}</span>

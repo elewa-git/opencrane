@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { __DiffAgentRevisions } from "../agent-revision-diff";
 import type { AgentRevision } from "../agent-revision.types";
+import { RevisionBoundaryCoverages, RevisionBoundaryKinds } from "../boundary-attachment.types";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 /** Build one reviewed tool definition fixture. */
@@ -28,7 +29,7 @@ function _revision(overrides: Partial<AgentRevision> = {}): AgentRevision
 	modelDefinitionId: "model-definition-a",
 		skills: [{ skillId: "skill-a", revisionId: "rev-1" }],
 		integrationAssignments: [{ integrationId: "int-a", custodyReferenceId: "cust-1", toolDefinitions: [_Tool("read")] }],
-		scopeAttachments: [{ scope: "project", subjectType: "group", subjectId: "proj-1" }],
+		boundaryAttachments: [{ boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "proj-1", boundaryCoverage: RevisionBoundaryCoverages.Exact }],
 		budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
 		authoredBy: "user-1",
 		createdAt: "2026-07-20T00:00:00.000Z",
@@ -54,7 +55,7 @@ describe("agent revision diff", function _suite()
 	it("flags scope, tool, credential, and budget widening", function _widening()
 	{
 		const target = _revision({
-			scopeAttachments: [{ scope: "project", subjectType: "group", subjectId: "proj-1" }, { scope: "org", subjectType: "tenant", subjectId: "org-1" }],
+			boundaryAttachments: [{ boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "proj-1", boundaryCoverage: RevisionBoundaryCoverages.Exact }, { boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "org-1", boundaryCoverage: RevisionBoundaryCoverages.Descendants }],
 			skills: [{ skillId: "skill-a", revisionId: "rev-1" }, { skillId: "skill-b", revisionId: "rev-1" }],
 			integrationAssignments: [
 				{ integrationId: "int-a", custodyReferenceId: "cust-1", toolDefinitions: [_Tool("read"), _Tool("write")] },
@@ -64,7 +65,7 @@ describe("agent revision diff", function _suite()
 		});
 		const diff = __DiffAgentRevisions(_revision(), target);
 		const kinds = diff.widenings.map(function _kind(widening) { return widening.kind; });
-		expect(kinds).toContain("scope");
+		expect(kinds).toContain("boundary");
 		expect(kinds).toContain("tools");
 		expect(kinds).toContain("credentials");
 		expect(kinds).toContain("budget");

@@ -9,11 +9,14 @@ import type { ExternalActionWorker } from "@opencrane/backend/agents/execution/p
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { ChannelTargetRouteReconciler } from "@opencrane/backend/server/agents/channel-targets";
+import type { SelfConversationSocketServer } from "@opencrane/backend/server/conversations";
+import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { OpenCraneProcessConfig } from "../config.types";
 
 /** Ordered lifecycle calls shared by hoisted dependency mocks and assertions. */
 const _calls = vi.hoisted(function _Calls() { return [] as string[]; });
+const _workerFailures = vi.hoisted(function _WorkerFailures() { return { start: null as Error | null, stop: null as Error | null }; });
 
 vi.mock("@opencrane/backend/observability", function _Observability()
 {
@@ -22,7 +25,9 @@ vi.mock("@opencrane/backend/observability", function _Observability()
 
 vi.mock("../background-workers", function _BackgroundWorkers()
 {
-	return { _StartBackgroundWorkers: function _StartBackgroundWorkers() { return { stop: async function _StopWorkers() { _calls.push("workers"); } }; } };
+	return { _StartBackgroundWorkers: async function _StartBackgroundWorkers() { _calls.push("workers.start"); if (_workerFailures.start)
+		throw _workerFailures.start; return { stop: async function _StopWorkers() { _calls.push("workers"); if (_workerFailures.stop)
+		throw _workerFailures.stop; } }; } };
 });
 
 vi.mock("../log", function _Log()
@@ -46,6 +51,8 @@ afterEach(function _RestoreProcess()
 	_registeredListeners.length = 0;
 	vi.restoreAllMocks();
 	_calls.length = 0;
+	_workerFailures.start = null;
+	_workerFailures.stop = null;
 });
 
 /** Build one fake listener that records its close before resolving. */
@@ -62,6 +69,27 @@ function _App(server: Server): Express
 
 describe("OpenCrane process lifecycle", function _LifecycleSuite()
 {
+	it("closes startup dependencies and flushes telemetry when durable workers cannot start", async function _StartupFailureCleanup()
+	{
+		_workerFailures.start = new Error("worker unavailable");
+		const prisma = { $disconnect: async function _Disconnect() { _calls.push("prisma"); } } as unknown as PrismaClient;
+		const channelTargets = { stop: async function _StopRoutes() { _calls.push("routes"); } } as unknown as ChannelTargetRouteReconciler;
+		const workflowRuntime = { close: async function _CloseWorkflow() { _calls.push("workflow"); } } as IWorkflowWorkerRuntime;
+
+		await expect(_StartProcessLifecycle(
+			_App(_Server("public")), _App(_Server("internal")), prisma, {} as k8s.BatchV1Api,
+			{} as ManagedRunAdmissionPort, {} as RunCancellationRepository,
+			{ publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig, channelTargets,
+			{ attach: vi.fn(), close: vi.fn() } as unknown as SelfConversationSocketServer,
+			function _UnbindConsole() { _calls.push("console"); }, {} as ExternalActionWorker,
+			function _StopObot() { _calls.push("obot"); }, workflowRuntime,
+		)).rejects.toThrow("worker unavailable");
+
+		expect(_calls).toEqual(expect.arrayContaining(["workers.start", "obot", "routes", "workflow", "prisma", "telemetry", "console"]));
+		expect(_calls.indexOf("prisma")).toBeLessThan(_calls.indexOf("telemetry"));
+		expect(_calls.at(-1)).toBe("console");
+	});
+
 	it("aborts Obot before draining workers and flushes telemetry after durable dependencies close", async function _ShutdownOrder()
 	{
 		const previousTerm = new Set(process.listeners("SIGTERM"));
@@ -70,30 +98,59 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 		const prisma = { $disconnect: async function _Disconnect() { _calls.push("prisma"); } } as unknown as PrismaClient;
 		const channelTargets = { stop: async function _StopRoutes() { _calls.push("routes"); } } as unknown as ChannelTargetRouteReconciler;
 
-		_StartProcessLifecycle(
+		await _StartProcessLifecycle(
 			_App(_Server("public")),
 			_App(_Server("internal")),
 			prisma,
 			{} as k8s.BatchV1Api,
 			{} as ManagedRunAdmissionPort,
 			{} as RunCancellationRepository,
-			{ publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig,
-			channelTargets,
-			function _UnbindConsole() { _calls.push("console"); },
+		{ publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig,
+		channelTargets,
+		{ attach: function _Attach() { _calls.push("socket.attach"); }, close: function _CloseSockets() { _calls.push("sockets"); } } as SelfConversationSocketServer,
+		function _UnbindConsole() { _calls.push("console"); },
 			{} as ExternalActionWorker,
 			function _StopObot() { _calls.push("obot"); },
+			{} as IWorkflowWorkerRuntime,
 		);
 
 		const term = process.listeners("SIGTERM").find(function _New(listener) { return !previousTerm.has(listener); });
 		const interrupt = process.listeners("SIGINT").find(function _New(listener) { return !previousInt.has(listener); });
-		if (term === undefined || interrupt === undefined) throw new Error("lifecycle did not register process signal handlers");
+		if (term === undefined || interrupt === undefined)
+			throw new Error("lifecycle did not register process signal handlers");
 		_registeredListeners.push({ signal: "SIGTERM", listener: term }, { signal: "SIGINT", listener: interrupt });
+		expect(_calls).toContain("socket.attach");
+		expect(_calls.indexOf("workers.start")).toBeLessThan(_calls.indexOf("socket.attach"));
 		term("SIGTERM");
 
 		await vi.waitFor(function _Exited() { expect(exit).toHaveBeenCalledWith(0); });
 		expect(_calls.indexOf("streams")).toBeLessThan(_calls.indexOf("obot"));
+		expect(_calls.indexOf("streams")).toBeLessThan(_calls.indexOf("sockets"));
+		expect(_calls.indexOf("sockets")).toBeLessThan(_calls.indexOf("obot"));
 		expect(_calls.indexOf("obot")).toBeLessThan(_calls.indexOf("workers"));
 		expect(_calls.indexOf("workers")).toBeLessThan(_calls.indexOf("prisma"));
+		expect(_calls.indexOf("prisma")).toBeLessThan(_calls.indexOf("telemetry"));
+		expect(_calls.slice(-3)).toEqual(["telemetry", "console", "exit"]);
+	});
+
+	it("flushes telemetry and exits non-zero when durable worker drain fails", async function _FailedDrainExit()
+	{
+		_workerFailures.stop = new Error("drain failed");
+		const previousTerm = new Set(process.listeners("SIGTERM"));
+		const previousInt = new Set(process.listeners("SIGINT"));
+		const exit = vi.spyOn(process, "exit").mockImplementation(function _Exit() { _calls.push("exit"); return undefined as never; });
+		const prisma = { $disconnect: async function _Disconnect() { _calls.push("prisma"); } } as unknown as PrismaClient;
+		const routes = { stop: async function _StopRoutes() { _calls.push("routes"); } } as unknown as ChannelTargetRouteReconciler;
+
+		await _StartProcessLifecycle(_App(_Server("public")), _App(_Server("internal")), prisma, {} as k8s.BatchV1Api, {} as ManagedRunAdmissionPort, {} as RunCancellationRepository, { publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig, routes, { attach: vi.fn(), close: vi.fn() } as unknown as SelfConversationSocketServer, function _Unbind() { _calls.push("console"); }, {} as ExternalActionWorker, vi.fn(), {} as IWorkflowWorkerRuntime);
+		const term = process.listeners("SIGTERM").find(function _New(listener) { return !previousTerm.has(listener); });
+		const interrupt = process.listeners("SIGINT").find(function _New(listener) { return !previousInt.has(listener); });
+		if (term === undefined || interrupt === undefined)
+			throw new Error("lifecycle did not register process signal handlers");
+		_registeredListeners.push({ signal: "SIGTERM", listener: term }, { signal: "SIGINT", listener: interrupt });
+		term("SIGTERM");
+
+		await vi.waitFor(function _Exited() { expect(exit).toHaveBeenCalledWith(1); });
 		expect(_calls.indexOf("prisma")).toBeLessThan(_calls.indexOf("telemetry"));
 		expect(_calls.slice(-3)).toEqual(["telemetry", "console", "exit"]);
 	});

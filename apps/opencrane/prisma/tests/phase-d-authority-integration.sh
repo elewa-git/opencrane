@@ -80,12 +80,22 @@ run_psql <<'SQL'
 INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
 VALUES ('phase-d-model', 'global', 'phase-d-model', 'litellm-phase-d-model', 'phase-d-model', clock_timestamp());
 
+INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at") VALUES
+  ('dispatch-lock-service-principal', 'dispatch-lock-silo', 'urn:opencrane:agent-service', 'dispatch-lock-service', 'internal', clock_timestamp()),
+  ('svc-race-assignment-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-assignment', 'internal', clock_timestamp()),
+  ('svc-race-assignment-first-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-assignment-first', 'internal', clock_timestamp()),
+  ('svc-race-activation-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-activation', 'internal', clock_timestamp()),
+  ('svc-race-retirement-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-retirement', 'internal', clock_timestamp()),
+  ('svc-race-run-rollover-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-run-rollover', 'internal', clock_timestamp()),
+  ('svc-race-run-first-principal', 'silo-race', 'urn:opencrane:agent-service', 'svc-race-run-first', 'internal', clock_timestamp()),
+  ('svc-race-action-authority-principal', 'silo-race-action', 'urn:opencrane:agent-service', 'svc-race-action-authority', 'internal', clock_timestamp());
+
 INSERT INTO "agent_services" (
   "id", "silo_id", "kind", "name",
-  "workload_profile", "updated_at"
+  "workload_profile", "principal_id", "updated_at"
 ) VALUES (
   'dispatch-lock-service', 'dispatch-lock-silo', 'managed', 'Dispatch lock service',
-  'managed-agent', clock_timestamp()
+  'managed-agent', 'dispatch-lock-service-principal', clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
@@ -178,10 +188,10 @@ echo 'PASS: dispatch terminalisation serializes behind concurrent conversation e
 run_psql <<'SQL'
 INSERT INTO "agent_services" (
   "id", "silo_id", "kind", "name",
-  "workload_profile", "created_at", "updated_at"
+  "workload_profile", "principal_id", "created_at", "updated_at"
 ) VALUES (
   'svc-race-assignment', 'silo-race', 'managed', 'Assignment race',
-  'standard', clock_timestamp(), clock_timestamp()
+  'standard', 'svc-race-assignment-principal', clock_timestamp(), clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
@@ -237,10 +247,10 @@ echo 'PASS: concurrent publication serializes and rejects a late revision assign
 run_psql <<'SQL'
 INSERT INTO "agent_services" (
   "id", "silo_id", "kind", "name",
-  "workload_profile", "created_at", "updated_at"
+  "workload_profile", "principal_id", "created_at", "updated_at"
 ) VALUES (
   'svc-race-assignment-first', 'silo-race', 'managed', 'Assignment first race',
-  'standard', clock_timestamp(), clock_timestamp()
+  'standard', 'svc-race-assignment-first-principal', clock_timestamp(), clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
@@ -295,10 +305,10 @@ echo 'PASS: pre-publication assignment commits before serialized revision public
 run_psql <<'SQL'
 INSERT INTO "agent_services" (
   "id", "silo_id", "kind", "name",
-  "workload_profile", "created_at", "updated_at"
+  "workload_profile", "principal_id", "created_at", "updated_at"
 ) VALUES (
   'svc-race-activation', 'silo-race', 'managed', 'Activation race',
-  'standard', clock_timestamp(), clock_timestamp()
+  'standard', 'svc-race-activation-principal', clock_timestamp(), clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
@@ -352,10 +362,10 @@ echo 'PASS: concurrent activation serializes and rejects active revision retirem
 run_psql <<'SQL'
 INSERT INTO "agent_services" (
   "id", "silo_id", "kind", "name",
-  "workload_profile", "created_at", "updated_at"
+  "workload_profile", "principal_id", "created_at", "updated_at"
 ) VALUES (
   'svc-race-retirement', 'silo-race', 'managed', 'Retirement race',
-  'standard', clock_timestamp(), clock_timestamp()
+  'standard', 'svc-race-retirement-principal', clock_timestamp(), clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
@@ -409,10 +419,10 @@ echo 'PASS: concurrent retirement serializes and rejects stale AgentService acti
 run_psql <<'SQL'
 INSERT INTO "agent_services" (
   "id", "silo_id", "kind", "name",
-  "workload_profile", "created_at", "updated_at"
+  "workload_profile", "principal_id", "created_at", "updated_at"
 ) VALUES (
   'svc-race-run-rollover', 'silo-race', 'managed', 'Run rollover race',
-  'standard', clock_timestamp(), clock_timestamp()
+  'standard', 'svc-race-run-rollover-principal', clock_timestamp(), clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
@@ -477,10 +487,10 @@ echo 'PASS: concurrent rollover serializes and rejects a run on the superseded r
 run_psql <<'SQL'
 INSERT INTO "agent_services" (
   "id", "silo_id", "kind", "name",
-  "workload_profile", "created_at", "updated_at"
+  "workload_profile", "principal_id", "created_at", "updated_at"
 ) VALUES (
   'svc-race-run-first', 'silo-race', 'managed', 'Run first race',
-  'standard', clock_timestamp(), clock_timestamp()
+  'standard', 'svc-race-run-first-principal', clock_timestamp(), clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
@@ -584,10 +594,10 @@ wait_for_holder_sleeping 'phase-d-membership-acceptance'
   run_psql >"$RACE_DIR/membership-assert-late.out" 2>&1 <<'SQL'
 SET application_name = 'phase-d-membership-assert-late';
 INSERT INTO "verified_fleet_membership_assertions" (
-  "id", "revision_id", "assertion_id", "silo_id", "subject_id", "scope_kind", "organization_id"
+  "id", "revision_id", "assertion_id", "silo_id", "subject_id"
 ) VALUES (
   'assertion-race-late', 'membership-race-accept-first', 'assertion-race-late',
-  'silo-race', 'user-race', 'organization', 'org-race'
+  'silo-race', 'user-race'
 );
 SQL
   echo "$?" >"$RACE_DIR/membership-assert-late.status"
@@ -602,7 +612,7 @@ if [[ "$(<"$RACE_DIR/membership-accept.status")" != "0" ]]; then
   exit 1
 fi
 if [[ "$(<"$RACE_DIR/membership-assert-late.status")" == "0" ]] \
-  || ! grep -q 'accepted fleet membership assertions are sealed' "$RACE_DIR/membership-assert-late.out"; then
+  || [[ "$(<"$RACE_DIR/membership-assert-late.out")" != *"accepted fleet membership assertions are sealed"* ]]; then
   cat "$RACE_DIR/membership-assert-late.out" >&2
   echo 'FAIL: assertion insertion bypassed concurrent fleet membership acceptance' >&2
   exit 1
@@ -626,10 +636,10 @@ SQL
 SET application_name = 'phase-d-membership-assert-first';
 BEGIN;
 INSERT INTO "verified_fleet_membership_assertions" (
-  "id", "revision_id", "assertion_id", "silo_id", "subject_id", "scope_kind", "organization_id"
+  "id", "revision_id", "assertion_id", "silo_id", "subject_id"
 ) VALUES (
   'assertion-race-first', 'membership-race-assert-first', 'assertion-race-first',
-  'silo-race', 'user-race', 'organization', 'org-race'
+  'silo-race', 'user-race'
 );
 SELECT pg_sleep(3);
 COMMIT;
@@ -669,10 +679,10 @@ echo 'PASS: pre-acceptance assertion commits before the serialized membership se
 run_psql <<'SQL'
 INSERT INTO "agent_services" (
   "id", "silo_id", "kind", "name", "workload_profile",
-  "created_at", "updated_at"
+  "principal_id", "created_at", "updated_at"
 ) VALUES (
   'svc-race-action-authority', 'silo-race-action', 'managed', 'Action authority race',
-  'standard', clock_timestamp(), clock_timestamp()
+  'standard', 'svc-race-action-authority-principal', clock_timestamp(), clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",

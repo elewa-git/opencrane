@@ -47,14 +47,14 @@ helm()
 }
 
 if prepare_current_chart_sources; then
-  printf 'Expected dependency build failure.\n' >&2
+  printf 'Expected current-source packaging failure.\n' >&2
   exit 1
 fi
 failed_chart="$(<"$FAILURE_CHART")"
 failed_fixture="${failed_chart%/apps/_infra/deploy-k8s}"
 [[ "$failed_fixture" != "$failed_chart" ]]
 if [[ -e "$failed_fixture" ]]; then
-  printf 'Failed dependency build left its fixture behind: %s\n' "$failed_fixture" >&2
+  printf 'Failed current-source packaging left its fixture behind: %s\n' "$failed_fixture" >&2
   exit 1
 fi
 [[ -f "$AMBIENT_FIXTURE/must-survive" ]]

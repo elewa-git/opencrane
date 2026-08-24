@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PrismaConversationAssetRepository } from "../prisma-conversation-asset-repository";
 
-const _CALLER = { siloId: "silo-1", subjectId: "user-1" } as const;
+const _CALLER = { siloId: "silo-1", subjectId: "user-1", principalId: "principal-1" } as const;
 
 /** Complete persisted upload fixture used by browser-safe projection tests. */
 function _Asset(overrides: Record<string, unknown> = {}): Record<string, unknown>

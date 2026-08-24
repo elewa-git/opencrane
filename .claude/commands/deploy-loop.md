@@ -41,7 +41,8 @@ For each FINDING in the report, route by class — one destination each:
 - **`chart` / `script` / `config`** → implement the fix in this repo:
   1. Make the change (chart template, script, values preset, `values.schema.json`
      guard). Validate locally: `helm lint` + `helm template` (default and the failing
-     values), `bash -n` for scripts, `helm dep build` untouched.
+     values), `bash -n` for scripts, and the app-owned current-chart-sources helper,
+     which packages the checked-out `file://` dependencies in a disposable fixture.
   2. Confidence gate before it becomes a PR: run the `review` agent (or `/review-loop`
      for a multi-file fix) on the diff.
   3. If the failure is cheap to re-test and the env is dev, re-run Phase 1 once to

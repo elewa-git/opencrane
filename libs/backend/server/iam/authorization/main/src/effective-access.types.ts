@@ -1,4 +1,6 @@
-import type { AuthorizationDecision, AuthorizationGrant, AuthorizationResourceLocator, AuthorizationScope, CapabilityReference } from "@opencrane/models/authorization";
+import type { AuthorizationBoundary, AuthorizationDecision, AuthorizationResourceLocator, CapabilityReference } from "@opencrane/models/authorization";
+
+import type { AuthorizationContextRepository } from "./authorization-resolution.types";
 
 /** Whether the membership authority trusted the request. */
 export enum AuthorizationMembershipOutcomes
@@ -9,7 +11,7 @@ export enum AuthorizationMembershipOutcomes
 	Denied = "denied",
 }
 
-/** Exact signed-membership requirement evaluated before grant intersection. */
+	/** Exact signed-membership requirement evaluated before grant intersection. */
 export interface AuthorizationMembershipRequirement
 {
 	/** Fleet issuer trusted for membership evidence. */
@@ -20,8 +22,6 @@ export interface AuthorizationMembershipRequirement
 	readonly subjectId: string;
 	/** Stable signed assertion identifier required by the request. */
 	readonly assertionId: string;
-	/** Exact independent authorization scope required by the request. */
-	readonly scope: AuthorizationScope;
 	/** Trusted current epoch-millisecond time. */
 	readonly nowEpochMs: number;
 	/** Maximum permitted signed membership age. */
@@ -63,11 +63,7 @@ export interface AuthorizationMembershipAuthority
  *
  * Called by: ./effective-access.ts. Implemented by: ./prisma-authorization-grants.ts.
  */
-export interface AuthorizationGrantRepository
-{
-	/** Lists every candidate grant for deterministic domain evaluation. */
-	listSubjectGrants(siloId: string, subjectId: string): Promise<readonly AuthorizationGrant[]>;
-}
+export type AuthorizationGrantRepository = AuthorizationContextRepository;
 
 /**
  * One request to work out what an agent may do on a person's behalf.
@@ -84,8 +80,8 @@ export interface ResolveEffectiveAccessCommand
 	readonly actorSubjectId: string;
 	/** Stable AgentService authority subject whose grants form the other side. */
 	readonly agentServiceSubjectId: string;
-	/** Exact independent resource scope requested. */
-	readonly scope: AuthorizationScope;
+	/** Exact product boundary requested. */
+	readonly boundary: AuthorizationBoundary;
 	/** Exact resource locator requested within the independent scope. */
 	readonly resource: AuthorizationResourceLocator;
 	/** Candidate immutable capabilities requested for the run or action. */

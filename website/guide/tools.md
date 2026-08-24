@@ -10,10 +10,11 @@ Both kinds of agent use the same tool machinery — your personal assistant can 
 granted to *you*; a managed agent can only use the tools its published revision was configured
 with.
 
-## Register a tool
+## Govern a tool
 
-Use the authenticated `/api/v1/mcp-servers` surface to register and review MCP definitions.
-Retrieve current payloads through the [API reference](/reference/api).
+Use the authenticated `/api/v1/mcp` surface to browse, install and govern MCP definitions. The
+public API does not expose a separate unsiloed registry or credential inventory. Retrieve current
+payloads through the [API reference](/reference/api).
 
 ## Grant it
 

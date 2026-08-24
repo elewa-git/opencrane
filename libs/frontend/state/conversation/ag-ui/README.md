@@ -7,12 +7,12 @@
 This pure browser-state package turns the exact-pinned, display-safe AG-UI event projection from the
 [backend conversation projection package](../../../../backend/conversations/projection/main/README.md) into
 message, tool, run, governed A2UI surface, interrupt, and reconnect-cursor state. The OpenCrane conversation event adapter
-supplies complete SSE records incrementally; this package never opens a connection, reads browser
+supplies complete structured WebSocket projection frames incrementally; this package never opens a connection, reads browser
 storage, or invents conversation authority.
 
 ```
- server-authorised event stream
-             │ safe SSE records
+ server-authorised socket projection
+             │ safe structured frames
              ▼
  ┌───────────────────────┐
  │  conversation/ag-ui   │  validate · fold · resume cursor
@@ -47,13 +47,13 @@ The supported AG-UI packages are exact-pinned together at `@ag-ui/core` **0.0.57
 version remains `opencrane.ag-ui.v1`. Conformance tests drive the actual pinned `AbstractAgent`
 lifecycle through completion, tool calls, approval edits, denial, expiry, failure, cancellation,
 A2UI, and reconnect/resume. Production transport deliberately remains the cookie-authorized
-OpenCrane GET replay adapter: using the client's POST-oriented `HttpAgent` would create a second run
+OpenCrane WebSocket adapter: using the client's POST-oriented `HttpAgent` would create a second run
 and command path outside OpenCrane authority. The generic client resolves `RUN_ERROR` delivery, so
 this reducer remains the explicit owner of failed versus cancelled browser state.
 
 ## Public surface
 
-- `__DecodeAgUiSseRecord` — validates one complete record with pinned `@ag-ui/core` schemas and is
+- `__DecodeAgUiSocketRecord` — validates one complete socket record with pinned `@ag-ui/core` schemas and is
   exercised through the matching pinned `@ag-ui/client` lifecycle.
 - `__ReduceAgUiStream` / `__CreateAgUiStreamState` — builds immutable browser view state while
   preserving truthful success, interruption, failure, and cancellation terminals, display-safe

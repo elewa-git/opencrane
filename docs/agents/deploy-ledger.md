@@ -20,7 +20,9 @@ Full run reports belong in the corresponding pull request or issue.
 
 ## Standing lessons
 
-- Resolve chart dependencies from `Chart.lock` with `helm dep build`.
+- Package every in-repo `file://` chart from the checked-out commit with the app-owned current-source
+  helper. It runs `helm dependency update --skip-refresh`; `Chart.lock` and `charts/` are ignored
+  derived artifacts and must not become a second version authority.
 - Put repeatable environment configuration in a checked-in values profile.
 - A passing render does not prove an in-place upgrade will accept immutable-field changes; inspect
   the live object and release manifest before applying.
@@ -241,3 +243,56 @@ Full run reports belong in the corresponding pull request or issue.
   OIDC session, complete the Zitadel return, and let `/api/v1/organization/members/invitations/accept`
   create the active membership. That authenticated request is also the remaining live proof for the
   personal-Agent repair trigger; do not infer it from health or database readiness alone.
+
+## 2026-08-21 · dev · testlynn durable-execution preflight · 2339c9460f6bd775466de4a18d66f0e0381fe748 · FAILED
+
+- findings: config: the deploy agent followed the removed checked-in `Chart.lock` model and stopped
+  before invoking the app-owned deploy script. Testlynn remained healthy and unchanged at OpenCrane
+  revision 4 and PostgreSQL revision 6; no backup, migration fence, or rollback began.
+- friction: agent and package documentation still required `helm dependency build` even though the
+  repository now ignores those derived files and packages every in-repo `file://` chart through the
+  current-source helper.
+- lesson: treat the checked-out commit as chart authority and run the app-owned current-source
+  packaging helper before deployment; never promote ignored `Chart.lock` or `charts/` output into a
+  second release contract.
+
+## 2026-08-21 · dev · testlynn durable-execution operand reconciliation · 78ff3cb2ddbbcf4df74095e36620434d2c549f7e · FAILED
+
+- findings: chart: CloudNativePG rejected the manifest-bound digest-only PostgreSQL operand because
+  it cannot detect upgrades from an image reference without a tag. The app-owned deployer fenced the
+  server at OpenCrane revision 5, stopped before database mutation, and rolled the application release
+  back to revision 4 content; Helm recorded that rollback as revision 6. PostgreSQL revision 7 records
+  the rejected upgrade, while the existing CNPG Cluster remains healthy with one ready primary and all
+  application Deployments remain available.
+- friction: repository validation proved only digest immutability and did not model CloudNativePG's
+  separate tag requirement, so CI accepted a reference the live admission webhook rejects.
+- lesson: bind CNPG operand images with a PostgreSQL-version-prefixed tag whose major matches the
+  chart's `externalAppVersion`, plus an immutable digest. Reject tag-only, digest-only, unversioned-tag,
+  and wrong-major references before publication.
+
+## 2026-08-21 · dev · testlynn durable-execution PostgreSQL configuration · 25ff6a318b58fd3a8d11168f34e42784bf74ecf6 · FAILED
+
+- findings: chart: CloudNativePG accepted the version-prefixed, digest-bound PostgreSQL operand, then
+  rejected `shared_preload_libraries` under `.spec.postgresql.parameters`. [CloudNativePG 1.27](https://cloudnative-pg.io/docs/1.27/postgresql_conf/)
+  treats it as a fixed parameter in that map and accepts additional libraries through
+  `.spec.postgresql.shared_preload_libraries`. The app-owned deployer fenced the server at OpenCrane
+  revision 7, stopped before backup or database mutation, and restored revision 6 content.
+- friction: the Helm render test asserted the PostgreSQL setting but did not assert which
+  CloudNativePG API field carried it, so a syntactically valid render reached the live admission webhook.
+- lesson: render additional preload libraries through `.spec.postgresql.shared_preload_libraries` and
+  keep ordinary PostgreSQL settings, such as `cron.database_name`, in the parameter map.
+
+## 2026-08-21 · dev · testlynn durable-execution backup gate · ba9d49bf2eab20763c3e5e30319d6d595212e0b6 · FAILED
+
+- findings: infra: the PostgreSQL 17.5 operand reconciliation completed and its replacement primary
+  became ready with `pg_cron` preloaded. The migration then stopped because testlynn has no chart-owned
+  plugin-backed `ScheduledBackup`; the application rollback restored revision 8 before any backup or
+  database migration ran. The cluster has neither the Barman Cloud plugin API nor a
+  `VolumeSnapshotClass`. The current chart supports only plugin-backed backup, so no
+  repository-supported recovery provider is currently available.
+- friction: the deployer discovered the missing backup provider only after it fenced the application
+  and reconciled the PostgreSQL operand, even though the `ScheduledBackup` prerequisite was read-only
+  and could have been checked before either action.
+- lesson: preflight live-Cluster backup capability before the application fence, then recheck it when
+  creating the immediate recovery backup. Never translate approval for the schema transition into an
+  unbacked-migration override.

@@ -3,4 +3,4 @@ name: opencrane-artifact-scanner
 description: App-owned named-template library for the isolated malware-scanning worker.
 type: library
 version: 0.9.2
-appVersion: "0.9.1"
+appVersion: "0.9.2"

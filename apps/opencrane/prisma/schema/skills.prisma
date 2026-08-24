@@ -24,23 +24,23 @@ enum SkillWorkloadKind {
 
 /// Durable lifecycle of one governed worker request; Kubernetes reports identity, never terminal state.
 enum SkillWorkloadState {
-  Pending    @map("pending")
-  Assigned   @map("assigned")
-  Succeeded  @map("succeeded")
-  Failed     @map("failed")
-  Cancelled  @map("cancelled")
+  Pending   @map("pending")
+  Assigned  @map("assigned")
+  Succeeded @map("succeeded")
+  Failed    @map("failed")
+  Cancelled @map("cancelled")
 }
 
 model Skill {
-  id                String       @id @default(cuid())
-  siloId            String       @map("silo_id")
-  ownerPrincipalId  String       @map("owner_principal_id")
+  id                String          @id @default(cuid())
+  siloId            String          @map("silo_id")
+  ownerPrincipalId  String          @map("owner_principal_id")
   name              String
-  description       String       @default("")
-  state             SkillState   @default(Active)
-  currentRevisionId String?      @map("current_revision_id")
-  createdAt         DateTime     @default(now()) @map("created_at")
-  updatedAt         DateTime     @updatedAt @map("updated_at")
+  description       String          @default("")
+  state             SkillState      @default(Active)
+  currentRevisionId String?         @map("current_revision_id")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
   revisions         SkillRevision[] @relation("SkillRevisions")
   currentRevision   SkillRevision?  @relation("CurrentSkillRevision", fields: [id, currentRevisionId], references: [skillId, id], onDelete: Restrict)
 
@@ -84,28 +84,28 @@ model SkillRevision {
 
 /// One canonical future Job request, never a Kubernetes queue or worker-owned receipt.
 model SkillWorkload {
-  id               String             @id @default(cuid())
-  siloId           String             @map("silo_id")
-  kind             SkillWorkloadKind
-  state            SkillWorkloadState @default(Pending)
-  skillRevisionId  String             @map("skill_revision_id")
-  toolInvocationId String?            @unique @map("tool_invocation_id")
-  claimedAt        DateTime?          @map("claimed_at")
-  claimExpiresAt   DateTime?          @map("claim_expires_at")
-  deliveryCount    Int                @default(0) @map("delivery_count")
-  workloadUid      String?            @unique @map("workload_uid")
-  workerPodUid     String?            @unique @map("worker_pod_uid")
-  releaseClaimedAt DateTime?          @map("release_claimed_at")
-  releaseDeliveryCount Int             @default(0) @map("release_delivery_count")
-  releaseExpiresAt DateTime?           @map("release_expires_at")
-  releasedAt        DateTime?          @map("released_at")
-  createdAt        DateTime           @default(now()) @map("created_at")
-  completedAt      DateTime?          @map("completed_at")
-  failureCode      String?            @map("failure_code")
-  cancelledAt      DateTime?          @map("cancelled_at")
-  skillRevision    SkillRevision      @relation(fields: [skillRevisionId], references: [id], onDelete: Restrict)
-  toolInvocation   ToolInvocation?    @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
-  bootstrap        SkillWorkloadBootstrap?
+  id                   String                  @id @default(cuid())
+  siloId               String                  @map("silo_id")
+  kind                 SkillWorkloadKind
+  state                SkillWorkloadState      @default(Pending)
+  skillRevisionId      String                  @map("skill_revision_id")
+  toolInvocationId     String?                 @unique @map("tool_invocation_id")
+  claimedAt            DateTime?               @map("claimed_at")
+  claimExpiresAt       DateTime?               @map("claim_expires_at")
+  deliveryCount        Int                     @default(0) @map("delivery_count")
+  workloadUid          String?                 @unique @map("workload_uid")
+  workerPodUid         String?                 @unique @map("worker_pod_uid")
+  releaseClaimedAt     DateTime?               @map("release_claimed_at")
+  releaseDeliveryCount Int                     @default(0) @map("release_delivery_count")
+  releaseExpiresAt     DateTime?               @map("release_expires_at")
+  releasedAt           DateTime?               @map("released_at")
+  createdAt            DateTime                @default(now()) @map("created_at")
+  completedAt          DateTime?               @map("completed_at")
+  failureCode          String?                 @map("failure_code")
+  cancelledAt          DateTime?               @map("cancelled_at")
+  skillRevision        SkillRevision           @relation(fields: [skillRevisionId], references: [id], onDelete: Restrict)
+  toolInvocation       ToolInvocation?         @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
+  bootstrap            SkillWorkloadBootstrap?
 
   @@index([siloId, state, createdAt])
   @@index([state, claimExpiresAt])

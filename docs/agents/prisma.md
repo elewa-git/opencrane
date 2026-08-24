@@ -51,6 +51,9 @@ Production TypeScript reaches Prisma through reviewed capability boundaries, enf
    declaration binds the repository contract import, adapter class, and source path; renaming or
    moving any of them requires policy review. `$queryRaw`, `$queryRawUnsafe`, `$executeRaw`, and
    `$executeRawUnsafe` are forbidden in production TypeScript, including declared repositories.
+   The sole permanent exception is the typed `WorkflowTaskAdmission` call to the fixed,
+   parameterized `absurd.spawn_task` template, bound by exact path, class, contract, method, and
+   SQL template in the checked policy.
 3. Only an exact declared UnitOfWork adapter may call `$transaction`.
 4. Passing a transaction client into another repository is also policy-owned. Every declared
 	repository constructor accepts `Prisma.TransactionClient`, and each declared construction must
@@ -62,9 +65,9 @@ Production TypeScript reaches Prisma through reviewed capability boundaries, enf
 The checker compares new findings with the base revision, so inherited violations remain visible
 through `--all` without blocking unrelated slices. Exact temporary exemptions require an owner,
 reason, an allowed delegate or transaction operation, and a real UTC calendar expiry; malformed or
-stale policy fails closed. Raw Prisma methods cannot be authorized by an owner declaration or an
-exemption; database-specific invariants belong in the reviewed target baseline while repositories
-access them through typed delegates.
+stale policy fails closed. Raw Prisma methods cannot be authorized by an owner declaration or a
+temporary exemption; apart from the fixed durable-admission procedure above, database-specific
+invariants belong in the reviewed target baseline while repositories access them through typed delegates.
 
 ## Why this exists
 

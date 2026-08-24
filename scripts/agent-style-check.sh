@@ -20,6 +20,7 @@
 #   PKG-IMPORT-EXT    package specifier wrongly carrying .js
 #   CONSOLE           raw console.* in shipped code (use @opencrane/backend/observability)
 #   INLINE-CONDITIONAL more than one ternary conditional on one physical source line
+#   IF-BODY-NEWLINE   if body starts on the same physical line as its condition
 #   CATEGORICAL-LITERAL direct string comparison on a categorical property (heuristic)
 #   TYPES-IN-IMPL     exported interface/type outside a *.types.ts file
 #   JSDOC             exported declaration with no JSDoc directly above (heuristic)
@@ -40,10 +41,13 @@ cd "$REPO_ROOT"
 # 1. Resolve the file list — diff vs HEAD by default, so the check always
 #    scopes to what the current change actually touched.
 FILES=()
+IF_DIFF_BASE=""
 if [[ $# -eq 0 ]]; then
+	IF_DIFF_BASE="HEAD"
 	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR -z HEAD -- '*.ts' 2>/dev/null || true)
 	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git ls-files --others --exclude-standard -z -- '*.ts' 2>/dev/null || true)
 elif [[ "${1:-}" == "--diff" ]]; then
+	IF_DIFF_BASE="${2:?--diff needs a ref}"
 	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR -z "${2:?--diff needs a ref}" -- '*.ts')
 	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git ls-files --others --exclude-standard -z -- '*.ts' 2>/dev/null || true)
 else
@@ -98,6 +102,15 @@ for f in ${INLINE_CHECKABLE[@]+"${INLINE_CHECKABLE[@]}"}; do
 		_report "$f" "$ln" ERROR INLINE-CONDITIONAL "more than one ternary conditional on one line — use an exhaustive lookup, switch, or helper"
 	done < <(node scripts/inline-conditional-check.mjs "$f")
 done
+
+# IF-BODY-NEWLINE — every `if` starts its body on the next physical line, including braceless
+# `return`, `continue`, `throw`, and assignment bodies. The AST check also covers multiline
+# conditions and nested else-if statements without mistaking strings or comments for code.
+if [[ ${#INLINE_CHECKABLE[@]} -gt 0 ]]; then
+	while IFS=: read -r f ln _; do
+		_report "$f" "$ln" ERROR IF-BODY-NEWLINE "if body starts on the condition line — move the body to the following line"
+	done < <(if [[ -n "$IF_DIFF_BASE" ]]; then node scripts/if-body-newline-check.mjs --diff "$IF_DIFF_BASE" ${INLINE_CHECKABLE[@]+"${INLINE_CHECKABLE[@]}"}; else node scripts/if-body-newline-check.mjs ${INLINE_CHECKABLE[@]+"${INLINE_CHECKABLE[@]}"}; fi)
+fi
 
 # MISSING-README / README-SECTIONS — package docs (docs/agents/package-docs.md).
 # A changed package must ship a README, and a changed leaf-package README must

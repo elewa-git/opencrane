@@ -1,4 +1,4 @@
-import { Router, type Express } from "express";
+import { Router, type Express, type Request } from "express";
 import type { PrismaClient } from "@prisma/client";
 import type * as k8s from "@kubernetes/client-node";
 
@@ -6,20 +6,21 @@ import { aiBudgetRouter, tokenUsageRouter } from "@opencrane/backend/server/repo
 import { auditRouter } from "@opencrane/backend/server/iam/audit";
 import { groupsRouter } from "@opencrane/backend/server/iam/groups";
 import { _IssueAttemptLiteLlmKey, modelRoutingDefaultsRouter } from "@opencrane/backend/server/gateways/model-routing";
-import { mcpOperatorRouter, mcpServersRouter } from "@opencrane/backend/server/gateways/mcp";
+import { mcpOperatorRouter } from "@opencrane/backend/server/gateways/mcp";
 import { _CreateIntegrationCustodyRouter } from "@opencrane/backend/server/gateways/integrations";
 import type { ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
-import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/server/iam/grants";
+import { PrismaResourceShareUnitOfWork, ResourceShareService, resourceSharesRouter, type ResourceShareCallerResolver } from "@opencrane/backend/server/iam/grants";
+import { PrismaAuthenticatedPrincipalDirectoryUnitOfWork, type AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
 import { spec } from "@opencrane/backend/server/api-spec";
 import { _CreateAgentServicesRouter, type ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
-import { _CreateElicitationInterruptReader, _CreateSelfElicitationActivityRouter, _CreateSelfElicitationRouter } from "@opencrane/backend/agents/execution/elicitation";
+import { _CreateSelfElicitationActivityRouter, _CreateSelfElicitationRouter } from "@opencrane/backend/agents/execution/elicitation";
 import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/personal/personas";
 import { type UserOnboardingOwnerResolver } from "@opencrane/backend/server/agents/onboarding";
 import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
-import { _CreateSelfConversationReplayRouter, _CreateSelfConversationsRouter } from "@opencrane/backend/server/conversations";
+import { _CreateSelfConversationsRouter } from "@opencrane/backend/server/conversations";
 import { _CreateConversationAttachmentAdmission, __CreateConversationAssetRouter } from "@opencrane/backend/server/conversation-assets";
 import { _CreateSelfRunCancellationRouter, _CreateSelfRunStatusRouter, type RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
@@ -32,10 +33,10 @@ import type { InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
 import { _CreateInternalRuntimeComposition } from "./runtime-composition";
 import { _CreatePersonaAgentRevisionSelectionFactory } from "./persona-approval-composition";
-import type { RouteMount, SharesRouteOptions } from "./routes.types";
+import type { ResourceSharesRouteOptions, RouteMount } from "./routes.types";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition";
-import { _ProcessShutdownSignal } from "./process-shutdown";
 import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
+import type { McpEraProbeComposition } from "./mcp-era-probe-composition.types";
 
 /**
  * Register the authenticated product API from functional route lists.
@@ -52,17 +53,17 @@ import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-u
  * @param obotCustody - Composed Obot custody authority (fail-closed adapter when Obot is off).
  * @param artifactScannerEnabled - Whether upload admission has a live scanner consumer.
  * @param organizationMembersRouter - Startup-selected standalone or Fleet member authority.
+ * @param mcpEraProbe - Transaction-bound remote MCP registration and protocol-check workflow.
  * @returns The configured public listener.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, artifactScannerEnabled: boolean, organizationMembersRouter: Router): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpEraProbe: McpEraProbeComposition): Express
 {
 	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner);
 	const identityAndAccessRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma) },
 		{ method: "use", path: "/api/v1/groups", handler: groupsRouter(prisma) },
 		{ method: "use", path: "/api/v1/organization/members", handler: organizationMembersRouter },
-		{ method: "use", path: "/api/v1/shares", handler: _CreateRateLimitedSharesRouter(prisma) },
-		{ method: "use", path: "/api/v1/resource-shares", handler: resourceSharesRouter(prisma) },
+		{ method: "use", path: "/api/v1/resource-shares", handler: _CreateRateLimitedResourceSharesRouter(prisma) },
 	];
 	const agentRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/agent-services", handler: _CreateAgentServicesRouter(prisma, runAdmission, _log) },
@@ -79,12 +80,10 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationsRouter(prisma, personalRunAdmission, _CreateConversationAttachmentAdmission, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: __CreateConversationAssetRouter({ resolveCaller: _ResolveConversationAssetCaller, authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled), logger: _log }) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfElicitationRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationReplayRouter(prisma, _log, { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal }) },
 		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },
 	];
 	const gatewayRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/v1/mcp-servers", handler: mcpServersRouter(prisma) },
-		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(prisma) },
+		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(mcpEraProbe.unitOfWork, new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma), mcpEraProbe.workflow) },
 		{ method: "use", path: "/api/v1/integrations", handler: _CreateIntegrationCustodyRouter(prisma, obotCustody, _log) },
 		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma) },
 		{ method: "use", path: "/api/v1/providers/credentials", handler: providerCredentialsRouter(prisma) },
@@ -119,34 +118,49 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 const _ResolveUserOnboardingOwner: UserOnboardingOwnerResolver = function _Owner(request)
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal === null ? null : { siloId: principal.siloId, subjectId: principal.subjectId };
+	return principal === null ? null : { siloId: principal.siloId, subjectId: principal.externalSubject };
 };
 
 /** Resolve conversation-file authority only from the verified browser principal. */
 const _ResolveConversationAssetCaller = function _ConversationAssetCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal === null ? null : { siloId: principal.siloId, subjectId: principal.subjectId };
+	return principal === null ? null : { siloId: principal.siloId, subjectId: principal.externalSubject, principalId: principal.principalId };
 };
 
 /**
- * Composes the share authority behind the shared per-IP limiter before identity or database work.
+ * Composes resource-share authority behind the shared per-IP limiter before identity or database work.
  *
  * The grants domain stays transport-agnostic; the OpenCrane app owns HTTP abuse protection.
  *
- * Called by: `_RegisterRoutes` above for `/api/v1/shares`, and
+ * Called by: `_RegisterRoutes` above for `/api/v1/resource-shares`, and
  * apps/opencrane/src/__tests__/shares-rate-limit.test.ts, which is why the limiter is tunable.
  *
  * @param prisma - The main product database client.
  * @param options - Optional bounded limiter tuning for an isolated application test.
  * @returns The protected sharing router.
  */
-export function _CreateRateLimitedSharesRouter(prisma: PrismaClient, options?: SharesRouteOptions): Router
+export function _CreateRateLimitedResourceSharesRouter(prisma: PrismaClient, options?: ResourceSharesRouteOptions): Router
 {
 	const router = Router();
+	const service = new ResourceShareService(new PrismaResourceShareUnitOfWork(prisma));
+	const resolveCaller = _CreateResourceShareCallerResolver(new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma));
 	router.use(_RateLimit(options?.rateLimit));
-	router.use(sharesRouter(prisma));
+	router.use(resourceSharesRouter(service, resolveCaller));
 	return router;
+}
+
+/** Creates the HTTP adapter that resolves verified OIDC coordinates to a local Principal. */
+function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDirectory): ResourceShareCallerResolver
+{
+	return async function _ResolveResourceShareCaller(request: Request)
+	{
+		const requestPrincipal = _ResolveRequestPrincipal(request);
+		const authUser = request.session?.authUser;
+		if (requestPrincipal === null || !authUser?.issuer || !authUser.sub)
+			return null;
+		return directory.resolveAuthenticatedPrincipal(requestPrincipal.siloId, authUser.issuer, authUser.sub);
+	};
 }
 
 /**
@@ -205,7 +219,8 @@ function _MountRouteAreas(app: Express, areas: readonly (readonly RouteMount[])[
 	{
 		for (const route of area)
 		{
-			if (route.method === "get") app.get(route.path, route.handler);
+			if (route.method === "get")
+				app.get(route.path, route.handler);
 			else app.use(route.path, route.handler);
 		}
 	}

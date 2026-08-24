@@ -1,0 +1,9 @@
+{
+  "fromSchemaVersion": "0.9.0",
+  "toSchemaVersion": "0.9.3",
+  "sqlSha256": "0b3a24b7d775ce8ddab1bb22257d44e0232fe364a979d02a380a2425985b29e9",
+  "owner": "apps/opencrane",
+  "privilegedExtension": "pg_cron",
+  "sourceTargetBaselineSha256": "5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f",
+  "targetBaselineSha256": "7fa60a4bb68888a69ff2c9cdf23cd85e972c9521f9a51dacd564dead15b0c949"
+}

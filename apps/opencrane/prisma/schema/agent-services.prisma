@@ -33,6 +33,7 @@ model AgentService {
   state            AgentServiceState      @default(Draft)
   activeRevisionId String?                @map("active_revision_id")
   workloadProfile  String                 @map("workload_profile")
+  principalId      String?                @map("principal_id")
   createdAt        DateTime               @default(now()) @map("created_at")
   updatedAt        DateTime               @updatedAt @map("updated_at")
   revisions        AgentRevision[]        @relation("AgentServiceRevisions")
@@ -40,9 +41,11 @@ model AgentService {
   conversations    Conversation[]
   schedules        AgentServiceSchedule[]
   activeRevision   AgentRevision?         @relation("ActiveAgentRevision", fields: [id, activeRevisionId], references: [agentServiceId, id], onDelete: Restrict)
+  principal        Principal?             @relation("ManagedAgentServicePrincipal", fields: [principalId, siloId], references: [id, siloId], onDelete: Restrict)
 
   @@unique([id, activeRevisionId])
   @@unique([id, siloId])
+  @@unique([principalId, siloId])
   @@index([siloId, kind, state])
   @@map("agent_services")
 }
@@ -74,7 +77,7 @@ model AgentRevision {
   restoredRevisions      AgentRevision[]                      @relation("AgentRevisionRestoreSource")
   skillAssignments       AgentRevisionSkillAssignment[]
   integrationAssignments AgentRevisionIntegrationAssignment[]
-  scopeAttachments       AgentRevisionScopeAttachment[]
+  boundaryAttachments    AgentRevisionBoundaryAttachment[]
   runs                   AgentRun[]
 
   @@unique([agentServiceId, revision])
@@ -86,19 +89,23 @@ model AgentRevision {
   @@map("agent_revisions")
 }
 
-/// Revision-scoped knowledge scope attachment. Reuses the canonical GrantScope/GrantSubjectType
-/// vocabulary; each row authorises scoped knowledge read/recall and inject/write for that exact
-/// scope only, never skills, MCP tools, models, credentials, or a neighbouring scope.
-model AgentRevisionScopeAttachment {
-  agentRevisionId String           @map("agent_revision_id")
-  scope           GrantScope
-  subjectType     GrantSubjectType @map("subject_type")
-  subjectId       String           @map("subject_id")
-  agentRevision   AgentRevision    @relation(fields: [agentRevisionId], references: [id], onDelete: Restrict)
+/// Revision-scoped knowledge boundary. It narrows a revision to an exact group/personal boundary
+/// or a stored group subtree and never grants skills, MCP tools, models, or credentials.
+model AgentRevisionBoundaryAttachment {
+  id                  String                        @id @default(cuid())
+  agentRevisionId     String                        @map("agent_revision_id")
+  siloId              String                        @map("silo_id")
+  boundaryKind        AuthorizationBoundaryKind     @map("boundary_kind")
+  boundaryGroupId     String?                       @map("boundary_group_id")
+  boundaryPrincipalId String?                       @map("boundary_principal_id")
+  boundaryCoverage    AuthorizationBoundaryCoverage @map("boundary_coverage")
+  agentRevision       AgentRevision                 @relation(fields: [agentRevisionId], references: [id], onDelete: Restrict)
+  boundaryGroup       Group?                        @relation(fields: [boundaryGroupId, siloId], references: [id, siloId], onDelete: Restrict)
+  boundaryPrincipal   Principal?                    @relation(fields: [boundaryPrincipalId, siloId], references: [id, siloId], onDelete: Restrict)
 
-  @@id([agentRevisionId, scope, subjectType, subjectId])
-  @@index([scope, subjectType, subjectId])
-  @@map("agent_revision_scope_attachments")
+  @@index([agentRevisionId, boundaryKind, boundaryGroupId, boundaryPrincipalId, boundaryCoverage])
+  @@index([siloId, boundaryKind])
+  @@map("agent_revision_boundary_attachments")
 }
 
 model AgentRevisionSkillAssignment {

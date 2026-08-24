@@ -1,0 +1,12 @@
+{
+  "name": "backend-server-infra-workflows-infra-absurd",
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/server/infra/workflows/infra_absurd/src",
+  "tags": ["type:lib", "layer:infra", "scope:workflows"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/server/infra/workflows/infra_absurd" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/server/infra/workflows/infra_absurd" } },
+    "qualify-live": { "executor": "nx:run-commands", "options": { "command": "tsx src/qualification/qualify-workflow-engine.cli.ts", "cwd": "libs/backend/server/infra/workflows/infra_absurd" } }
+  }
+}

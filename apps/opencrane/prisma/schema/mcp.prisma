@@ -4,6 +4,13 @@ enum McpServerTransport {
   WebSocket        @map("websocket")
 }
 
+enum McpEraProbeStatus {
+  NotRequired @map("not-required")
+  Pending     @map("pending")
+  Accepted    @map("accepted")
+  Rejected    @map("rejected")
+}
+
 enum McpServerStatus {
   Active   @map("active")
   Degraded @map("degraded")
@@ -27,105 +34,75 @@ enum McpApprovalStatus {
   Disabled      @map("disabled")
 }
 
-// Per-user install connection state surfaced by the operator API. `credentialRef`
-// custody is never serialised — this enum reports state, never secret material.
+// Records whether an MCP install awaits external credential activation or is usable through an
+// administrator-managed shared key. The operator API returns these persisted values but exposes no
+// credential or OAuth activation command; changing either mapped value requires a data migration.
 enum McpConnectionStatus {
-  NeedsCredential  @map("needs-credential")
-  Activating       @map("activating")
-  Connected        @map("connected")
-  OauthConnected   @map("oauth-connected")
-  SharedKey        @map("shared-key")
-  ActivationFailed @map("activation-failed")
+  // The install remains unusable until a custody flow outside the current API activates it.
+  NeedsCredential @map("needs-credential")
+  // The install is usable through an administrator-managed key and needs no caller credential.
+  SharedKey       @map("shared-key")
 }
 
 model McpServer {
-  id                 String                 @id @default(cuid())
-  name               String                 @unique
-  description        String                 @default("")
-  endpoint           String
-  scope              GrantScope
-  transport          McpServerTransport
-  status             McpServerStatus        @default(Draft)
-  requiresApproval   Boolean                @default(false) @map("requires_approval")
-  capabilities       String[]               @default([])
-  publisher          String?
-  glyph              String?
-  serverType         McpServerType          @default(SingleUser) @map("server_type")
-  approvalStatus     McpApprovalStatus      @default(PendingReview) @map("approval_status")
-  credentialSchema   Json                   @default("[]") @map("credential_schema")
-  entitlementSummary String?                @map("entitlement_summary")
-  sourceId           String?                @map("source_id")
-  lastSyncedAt       DateTime?              @map("last_synced_at")
-  createdAt          DateTime               @default(now()) @map("created_at")
-  updatedAt          DateTime               @updatedAt @map("updated_at")
-  credentials        McpServerCredential[]
-  installs           McpServerInstall[]
-  accessPolicy       McpServerAccessPolicy?
-  source             ThirdPartySource?      @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  id                     String             @id @default(cuid())
+  siloId                 String             @map("silo_id")
+  name                   String
+  description            String             @default("")
+  endpoint               String
+  transport              McpServerTransport
+  status                 McpServerStatus    @default(Draft)
+  requiresApproval       Boolean            @default(false) @map("requires_approval")
+  capabilities           String[]           @default([])
+  publisher              String?
+  glyph                  String?
+  serverType             McpServerType      @default(SingleUser) @map("server_type")
+  approvalStatus         McpApprovalStatus  @default(PendingReview) @map("approval_status")
+  credentialSchema       Json               @default("[]") @map("credential_schema")
+  entitlementSummary     String?            @map("entitlement_summary")
+  registrationKeyDigest  String?            @map("registration_key_digest")
+  registrationDigest     String?            @map("registration_digest")
+  eraProbeStatus         McpEraProbeStatus  @default(NotRequired) @map("era_probe_status")
+  eraProtocolVersion     String?            @map("era_protocol_version")
+  eraProbeEvidenceDigest String?            @map("era_probe_evidence_digest")
+  eraProbeFailureCode    String?            @map("era_probe_failure_code")
+  eraProbeAttempts       Int                @default(0) @map("era_probe_attempts")
+  eraProbedAt            DateTime?          @map("era_probed_at")
+  sourceId               String?            @map("source_id")
+  lastSyncedAt           DateTime?          @map("last_synced_at")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @updatedAt @map("updated_at")
+  installs               McpServerInstall[]
+  source                 ThirdPartySource?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
 
-  @@index([scope])
+  @@unique([siloId, name])
+  @@unique([siloId, registrationKeyDigest])
   @@index([approvalStatus])
   @@map("mcp_servers")
 }
 
-// Per-user installation of an MCP server (operator API). Holds the caller's
-// connection state and a write-only `credentialRef` custody handle (the actual
-// secret lives in the gateway plane / Obot, never here and never serialised).
+model McpRegistrationClaim {
+  siloId         String   @map("silo_id")
+  identityDigest String   @map("identity_digest")
+  touchedAt      DateTime @updatedAt @map("touched_at")
+
+  @@id([siloId, identityDigest])
+  @@map("mcp_registration_claims")
+}
+
+// Per-principal installation of an MCP server (operator API).
 model McpServerInstall {
   id               String              @id @default(cuid())
   mcpServerId      String              @map("mcp_server_id")
-  userId           String              @map("user_id")
+  principalId      String              @map("principal_id")
   connectionStatus McpConnectionStatus @default(NeedsCredential) @map("connection_status")
-  credentialRef    String?             @map("credential_ref")
-  connectedAccount String?             @map("connected_account")
   lastUsedAt       DateTime?           @map("last_used_at")
   createdAt        DateTime            @default(now()) @map("created_at")
   updatedAt        DateTime            @updatedAt @map("updated_at")
-  mcpServer        McpServer           @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
+  mcpServer        McpServer           @relation(fields: [mcpServerId], references: [id], onDelete: Restrict)
+  principal        Principal           @relation(fields: [principalId], references: [id], onDelete: Restrict)
 
-  @@unique([mcpServerId, userId])
-  @@index([userId])
+  @@unique([mcpServerId, principalId])
+  @@index([principalId])
   @@map("mcp_server_installs")
-}
-
-// Org-admin authored access policy deciding which callers may see and install a
-// server in the user-facing catalogue. `everyoneInOrg` short-circuits the per-user
-// / per-group lists; otherwise membership in `users` or `groups` is required.
-model McpServerAccessPolicy {
-  id            String                @id @default(cuid())
-  mcpServerId   String                @unique @map("mcp_server_id")
-  everyoneInOrg Boolean               @default(false) @map("everyone_in_org")
-  groups        String[]              @default([])
-  createdAt     DateTime              @default(now()) @map("created_at")
-  updatedAt     DateTime              @updatedAt @map("updated_at")
-  mcpServer     McpServer             @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
-  users         McpServerAccessUser[]
-
-  @@map("mcp_server_access_policies")
-}
-
-// A single user entitled to a server via its access policy. Stored as a child row
-// (rather than a String[]) so entitlement can be queried per user without scanning.
-model McpServerAccessUser {
-  id             String                @id @default(cuid())
-  accessPolicyId String                @map("access_policy_id")
-  userId         String                @map("user_id")
-  createdAt      DateTime              @default(now()) @map("created_at")
-  accessPolicy   McpServerAccessPolicy @relation(fields: [accessPolicyId], references: [id], onDelete: Cascade)
-
-  @@unique([accessPolicyId, userId])
-  @@index([userId])
-  @@map("mcp_server_access_users")
-}
-
-model McpServerCredential {
-  id          String    @id @default(cuid())
-  mcpServerId String    @map("mcp_server_id")
-  displayName String    @map("display_name")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  mcpServer   McpServer @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
-
-  @@index([mcpServerId])
-  @@map("mcp_server_credentials")
 }

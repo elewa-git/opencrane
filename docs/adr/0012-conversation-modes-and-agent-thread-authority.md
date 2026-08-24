@@ -50,7 +50,7 @@ provide one deterministic order for a timeline that contains participant message
   and view. Only when the server proves that the same authenticated subject previously held durable
   child authorization may a client render an access-changed transition. Parent access, browser cache,
   or identifier possession is insufficient. Before rendering, the client synchronously purges all
-  child-keyed rendered content, drafts, cursors and `Last-Event-ID`, query/persistent caches,
+  child-keyed rendered content, drafts, socket reconnect cursors, query/persistent caches,
   filenames, run/ask details, and history-restoration state.
 - Run admission and canonical `RunEvent` storage remain the execution authority. Conversation
   projection may expose bounded run state but cannot create a second approval, tool, artifact, or

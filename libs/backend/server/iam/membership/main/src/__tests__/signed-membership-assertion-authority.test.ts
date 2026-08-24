@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FleetMembershipAuthorityRepository, FleetMembershipEvidenceConfig } from "../membership-authority.types";
 import { SignedFleetMembershipAssertionVerifier } from "../signed-membership-assertion-authority";
 
-/** Stable signed revision with one organization assertion. */
+/** Stable signed revision with one silo-membership assertion. */
 const _REVISION: SignedFleetMembershipRevision = {
 	revision: 7,
 	issuerId: "fleet-1",
@@ -14,7 +14,7 @@ const _REVISION: SignedFleetMembershipRevision = {
 	expiresAtEpochMs: 10_000,
 	payloadDigest: "sha256:membership",
 	signature: "signature",
-	assertions: [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1", scope: { kind: "organization", organizationId: "silo-1" } }],
+	assertions: [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1" }],
 };
 
 /** Signature evidence bound to the stable revision. */
@@ -43,17 +43,17 @@ describe("signed fleet-membership assertion adapter", function _Suite()
 		const repository = _Repository();
 		const authority = new SignedFleetMembershipAssertionVerifier(repository, _Evidence());
 
-		await expect(authority.verifyCurrentMembership("user-1", "silo-1", { kind: "organization", organizationId: "silo-1" }, 2_000)).resolves.toEqual({ outcome: "trusted", revision: 7, trustedUntilEpochMs: 6_000 });
+		await expect(authority.verifyCurrentMembership("user-1", "silo-1", 2_000)).resolves.toEqual({ outcome: "trusted", revision: 7, trustedUntilEpochMs: 6_000 });
 		expect(repository.acceptRevisionAtomically).toHaveBeenCalledWith(expect.objectContaining({ issuerId: "fleet-1", revision: 7 }));
 	});
 
-	it("fails closed when no exact subject and scope assertion exists", async function _RejectsMismatch()
+	it("fails closed when no exact subject assertion exists", async function _RejectsMismatch()
 	{
 		const repository = _Repository();
 		const evidence = _Evidence();
 		const authority = new SignedFleetMembershipAssertionVerifier(repository, evidence);
 
-		await expect(authority.verifyCurrentMembership("user-other", "silo-1", { kind: "organization", organizationId: "silo-1" }, 2_000)).resolves.toEqual({ outcome: "denied", reason: "assertion_mismatch", revision: 7 });
+		await expect(authority.verifyCurrentMembership("user-other", "silo-1", 2_000)).resolves.toEqual({ outcome: "denied", reason: "assertion_mismatch", revision: 7 });
 		expect(evidence.verifier.verify).not.toHaveBeenCalled();
 	});
 
@@ -61,6 +61,6 @@ describe("signed fleet-membership assertion adapter", function _Suite()
 	{
 		const authority = new SignedFleetMembershipAssertionVerifier(_Repository(null), _Evidence());
 
-		await expect(authority.verifyCurrentMembership("user-1", "silo-1", { kind: "organization", organizationId: "silo-1" }, 2_000)).resolves.toEqual({ outcome: "denied", reason: "missing_revision", revision: 0 });
+		await expect(authority.verifyCurrentMembership("user-1", "silo-1", 2_000)).resolves.toEqual({ outcome: "denied", reason: "missing_revision", revision: 0 });
 	});
 });

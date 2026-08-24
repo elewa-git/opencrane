@@ -26,7 +26,8 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 		// 1. Rebind caller metadata to the live runtime assignment and canonical assistant message event.
 		const assignment = await this._assignment(identity, command.runId, command.runAttempt);
 		const messageStarted = assignment === null || assignment.run.conversationId === null ? null : await this._messageStarted(assignment.run.conversationId, command);
-		if (assignment === null || assignment.run.conversationId === null || messageStarted === null) return { outcome: ConversationAssetOutputReservationOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.RuntimeUnavailable };
+		const ownerPrincipalId = assignment === null ? null : await this._artifactOwnerPrincipalId(assignment.siloId, assignment.subjectId);
+		if (assignment === null || assignment.run.conversationId === null || messageStarted === null || ownerPrincipalId === null) return { outcome: ConversationAssetOutputReservationOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.RuntimeUnavailable };
 		// 2. Resolve the immutable retry coordinate before creating any new write authority.
 		const existing = await this.transaction.conversationAssetOutputTicket.findUnique({ where: { runId_runAttempt_idempotencyKey: { runId: command.runId, runAttempt: command.runAttempt, idempotencyKey: command.idempotencyKey } }, include: { asset: { include: { uploadLease: true } } } });
 		if (existing !== null)
@@ -44,10 +45,21 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 		const leaseId = randomUUID();
 		// 4. Create the ticket, artifact, exact-content lease, and hidden browser asset in one transaction.
 		await this.transaction.conversationAssetOutputTicket.create({ data: { id: ticketId, siloId: assignment.siloId, conversationId: assignment.run.conversationId, runId: command.runId, runAttempt: command.runAttempt, runEventSequence: messageStarted.sequence, outputMessageId: command.messageId, idempotencyKey: command.idempotencyKey, expiresAt: assignment.expiresAt } });
-		await this.transaction.artifact.create({ data: { id: artifactId, siloId: assignment.siloId, ownerPrincipalId: assignment.subjectId, kind: ArtifactKind.Generated } });
+		await this.transaction.artifact.create({ data: { id: artifactId, siloId: assignment.siloId, ownerPrincipalId, kind: ArtifactKind.Generated } });
 		await this.transaction.artifactUploadLease.create({ data: { id: leaseId, artifactId, siloId: assignment.siloId, capabilityJti: randomUUID(), expectedContentAddress: command.contentAddress, expectedByteLength: BigInt(command.byteLength), mediaType: command.mediaType, expiresAt: assignment.expiresAt } });
 		await this.transaction.conversationAsset.create({ data: { id: randomUUID(), siloId: assignment.siloId, conversationId: assignment.run.conversationId, runId: command.runId, runAttempt: command.runAttempt, runEventSequence: messageStarted.sequence, runMessageId: command.messageId, artifactId, uploadLeaseId: leaseId, outputTicketId: ticketId, idempotencyKey: command.idempotencyKey, provenance: ConversationAssetProvenance.AgentOutput, state: ConversationAssetState.Uploading, displayName: command.displayName.trim(), mediaType: command.mediaType, byteLength: BigInt(command.byteLength) } });
 		return { outcome: ConversationAssetOutputReservationOutcomes.Issued, ticketId };
+	}
+
+	/** Resolves either a human OIDC subject or managed internal id to exactly one local Principal. */
+	private async _artifactOwnerPrincipalId(siloId: string, assignmentSubjectId: string): Promise<string | null>
+	{
+		const principals = await this.transaction.principal.findMany({
+			where: { siloId, OR: [{ id: assignmentSubjectId }, { subject: assignmentSubjectId }] },
+			select: { id: true },
+			take: 2,
+		});
+		return principals.length === 1 ? principals[0].id : null;
 	}
 
 	/** Returns a live server-only lease only to the exact registered runtime assignment. */

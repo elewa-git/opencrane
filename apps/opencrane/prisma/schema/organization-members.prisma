@@ -97,21 +97,21 @@ model OrganizationInvitation {
 /// Idempotency record for one standalone create-invitations batch.
 model OrganizationInvitationRequest {
   /// Surrogate identity retained for audit correlation.
-  id                    String   @id @default(cuid())
+  id                  String   @id @default(cuid())
   /// Silo selected from the trusted request host.
-  siloId                String   @map("silo_id")
+  siloId              String   @map("silo_id")
   /// Verified subject that submitted the command.
-  actorSubject          String   @map("actor_subject")
+  actorSubject        String   @map("actor_subject")
   /// Opaque retry key supplied through the standard HTTP header.
-  idempotencyKey        String   @map("idempotency_key")
+  idempotencyKey      String   @map("idempotency_key")
   /// Digest of normalized recipients and role; mismatched replay is rejected.
-  payloadDigest         String   @map("payload_digest")
+  payloadDigest       String   @map("payload_digest")
   /// Ordered invitation identifiers returned by the winning command.
-  resultInvitationIds   Json     @map("result_invitation_ids")
+  resultInvitationIds Json     @map("result_invitation_ids")
   /// Number of rows created by the winning command.
-  createdCount          Int      @map("created_count")
+  createdCount        Int      @map("created_count")
   /// Creation timestamp.
-  createdAt             DateTime @default(now()) @map("created_at")
+  createdAt           DateTime @default(now()) @map("created_at")
 
   @@unique([siloId, actorSubject, idempotencyKey])
   @@map("organization_invitation_requests")

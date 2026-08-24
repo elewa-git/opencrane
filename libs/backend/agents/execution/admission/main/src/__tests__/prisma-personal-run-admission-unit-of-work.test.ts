@@ -8,7 +8,7 @@ import { PrismaPersonalRunAdmissionUnitOfWork } from "../prisma-personal-run-adm
 /** Builds one trusted personal admission command for persistence-adapter tests. */
 function _Command(): PersonalRunAdmissionCommand
 {
-	return { siloId: "silo-1", executionSubjectId: "user-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", inputMessageId: "message-1", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
+	return { siloId: "silo-1", executionIssuer: "https://issuer.test", executionSubjectId: "user-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", inputMessageId: "message-1", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
 }
 
 /** Builds a Prisma-shaped client that offers one serializable transaction. */

@@ -41,6 +41,8 @@ their capability checks and audit trail. Tool failures stay visible even when a 
   asset, run, archive, or close controls.
 - `ConversationWorkspaceContextPanelComponent` composes closable Activity and Files presentation without
   owning state or navigation.
+- `ConversationWorkspaceConnectionStatusComponent` places stream recovery status beside a reconnect
+  intent. It displays only presenter-provided copy and never opens a socket itself.
 - The feature-local list and create controls render privacy-safe rows and immutable conversation mode
   choices. Each session row is one line: its prefix glyph communicates completed onboarding, Agent,
   direct, group, or closed state while selection changes only the row background. Completed onboarding
@@ -49,10 +51,12 @@ their capability checks and audit trail. Tool failures stay visible even when a 
 
 ## Boundary
 
-This feature does not call HTTP, persist conversations, authorize participants, start streams, or
-decide whether a message creates an Agent run. Those rules remain in the backend and typed state
-ports. It never treats a display role as identity and never renders secrets. A2UI returned by an
-Agent remains unavailable in this phase because its actions have no server-owned capability or audit path.
+This feature does not call HTTP, open or persist conversation sockets, authorize participants, or decide
+whether a message creates an Agent run. Those rules remain in the backend and typed state ports. Its
+connection bar emits a reconnect intent; the workspace store owns the replacement socket and preserves
+the draft and accepted live projection. It never treats a display role as identity and never renders
+secrets. A2UI returned by an Agent remains unavailable in this phase because its actions have no
+server-owned capability or audit path.
 
 ## Dependency direction
 

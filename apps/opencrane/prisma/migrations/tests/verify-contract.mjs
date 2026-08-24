@@ -13,6 +13,8 @@ const targetBaseline = readFileSync(join(migrationRoot, "../bootstrap/target-bas
 const authorizationSchema = readFileSync(join(migrationRoot, "../schema/authorization.prisma"), "utf8");
 const elicitationSchema = readFileSync(join(migrationRoot, "../schema/elicitation.prisma"), "utf8");
 const conversationSchema = readFileSync(join(migrationRoot, "../schema/conversations.prisma"), "utf8");
+const conversationUpdatedAtField = conversationSchema.split("\n").find(line => line.trimStart().startsWith("updatedAt ")) ?? "";
+const conversationActivitySequenceField = conversationSchema.split("\n").find(line => line.trimStart().startsWith("activitySequence ")) ?? "";
 const runtimeSchema = readFileSync(join(migrationRoot, "../schema/runtime.prisma"), "utf8");
 const digest = createHash("sha256").update(sql).digest("hex");
 const targetDigest = createHash("sha256").update(targetBaseline).digest("hex");
@@ -20,10 +22,19 @@ const organizationTransitionRoot = join(migrationRoot, "0.8.0-to-0.9.0");
 const organizationSql = readFileSync(join(organizationTransitionRoot, "migration.sql"), "utf8");
 const organizationManifest = JSON.parse(readFileSync(join(organizationTransitionRoot, "manifest.json"), "utf8"));
 const organizationSqlDigest = createHash("sha256").update(organizationSql).digest("hex");
+const groupHierarchyTransitionRoot = join(migrationRoot, "0.9.0-to-0.9.3");
+const groupHierarchySql = readFileSync(join(groupHierarchyTransitionRoot, "migration.sql"), "utf8");
+const groupHierarchyManifest = JSON.parse(readFileSync(join(groupHierarchyTransitionRoot, "manifest.json"), "utf8"));
+const groupHierarchySqlDigest = createHash("sha256").update(groupHierarchySql).digest("hex");
 
 function requireContract(condition, message)
 {
 	if (!condition) throw new Error(message);
+}
+
+function compactSql(source)
+{
+	return source.replace(/\s+/gu, " ").trim();
 }
 
 const reorderedTable = String.raw`CREATE TABLE public.example (
@@ -129,12 +140,12 @@ requireContract(sql.includes('DROP TYPE "ConversationThreadState"'), "migration 
 requireContract(sql.includes('CREATE TYPE "ConversationMode"'), "migration must create immutable Conversation modes");
 requireContract(sql.includes('CREATE TABLE "conversation_timeline_entries"'), "migration must create the canonical mixed timeline");
 requireContract(
-	conversationSchema.includes('updatedAt            DateTime                      @default(now()) @map("updated_at")'),
+	conversationUpdatedAtField.includes("DateTime") && conversationUpdatedAtField.includes("@default(now())") && conversationUpdatedAtField.includes('@map("updated_at")'),
 	"Conversation activity time must be database-defaulted rather than Prisma-managed",
 );
-requireContract(!conversationSchema.includes('updatedAt            DateTime                      @updatedAt'), "Conversation activity time must not be Prisma-managed");
+requireContract(!conversationUpdatedAtField.includes("@updatedAt"), "Conversation activity time must not be Prisma-managed");
 requireContract(
-	conversationSchema.includes('activitySequence     BigInt                        @default(autoincrement()) @unique @map("activity_sequence")'),
+	conversationActivitySequenceField.includes("BigInt") && conversationActivitySequenceField.includes("@default(autoincrement())") && conversationActivitySequenceField.includes("@unique") && conversationActivitySequenceField.includes('@map("activity_sequence")'),
 	"Conversation list order must use one database-generated global activity sequence",
 );
 requireContract(
@@ -204,7 +215,10 @@ console.log("0.7.0-to-0.8.0 migration contract: PASS");
 requireContract(organizationManifest.fromSchemaVersion === "0.8.0", "organization-member migration source version must be exact");
 requireContract(organizationManifest.toSchemaVersion === "0.9.0", "organization-member migration target version must be exact");
 requireContract(organizationManifest.sqlSha256 === organizationSqlDigest, "organization-member migration SQL digest must match its manifest");
-requireContract(organizationManifest.targetBaselineSha256 === targetDigest, "organization-member migration target digest must match the clean baseline");
+requireContract(
+	organizationManifest.targetBaselineSha256 === "5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f",
+	"organization-member migration target must remain the immutable 0.9.0 baseline",
+);
 requireContract(
 	JSON.stringify(organizationManifest.sourceProtectedBaselineSha256s) === JSON.stringify([
 		"12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c",
@@ -239,3 +253,122 @@ for (const source of [targetBaseline, organizationSql])
 requireContract(organizationSql.trimEnd().endsWith("\\endif"), "organization-member migration retry branch must remain explicit");
 
 console.log("0.8.0-to-0.9.0 migration contract: PASS");
+
+requireContract(groupHierarchyManifest.fromSchemaVersion === "0.9.0", "group-hierarchy migration source version must be exact");
+requireContract(groupHierarchyManifest.toSchemaVersion === "0.9.3", "group-hierarchy migration target version must be exact");
+requireContract(groupHierarchyManifest.sqlSha256 === groupHierarchySqlDigest, "group-hierarchy migration SQL digest must match its manifest");
+requireContract(groupHierarchyManifest.sourceTargetBaselineSha256 === organizationManifest.targetBaselineSha256, "0.9.3 migration must name the immutable 0.9.0 source baseline");
+requireContract(groupHierarchyManifest.targetBaselineSha256 === targetDigest, "group-hierarchy migration target digest must match the clean baseline");
+requireContract(groupHierarchyManifest.privilegedExtension === "pg_cron", "0.9.3 migration must bind its reviewed privileged pg_cron prerequisite");
+requireContract(groupHierarchySql.includes("pg_advisory_lock"), "group-hierarchy migration must acquire the session migration lock");
+requireContract(groupHierarchySql.includes("pg_advisory_xact_lock"), "group-hierarchy migration must serialize hierarchy mutation");
+requireContract(groupHierarchySql.includes("BEGIN;"), "group-hierarchy migration must run transactionally");
+requireContract(groupHierarchySql.includes("migration_already_applied"), "group-hierarchy migration must support exact idempotent retry");
+requireContract(groupHierarchySql.includes("pg_cron extension is missing after the privileged migration prerequisite"), "0.9.3 migration must require pg_cron before mutating application authority");
+requireContract(groupHierarchySql.includes("application owner lacks pg_cron schema access after the privileged migration prerequisite"), "0.9.3 migration must require application-owner cron access");
+requireContract(groupHierarchySql.includes("create schema if not exists absurd"), "0.9.3 migration must install the reviewed Absurd schema");
+requireContract(groupHierarchySql.includes('ADD COLUMN "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT \'not-required\''), "0.9.3 migration must keep existing MCP rows outside remote registration checks");
+requireContract(targetBaseline.includes('"era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT \'not-required\''), "clean schema must require remote registration to opt into protocol checks");
+for (const source of [targetBaseline, groupHierarchySql])
+{
+	requireContract(source.includes('CREATE FUNCTION public."fail_absurd_task_terminal"'), "fresh and migrated schemas must settle terminal Absurd failures without another attempt");
+	requireContract(source.includes("SET max_attempts = $2"), "terminal Absurd settlement must close the current attempt budget");
+	requireContract(source.includes("PERFORM absurd.fail_run(p_queue_name, v_run_id, p_reason, NULL)"), "terminal Absurd settlement must reuse the pinned engine failure transition");
+}
+requireContract(groupHierarchySql.includes("COMMIT;\nSELECT pg_advisory_unlock"), "group-hierarchy migration must commit before releasing its session lock");
+requireContract(groupHierarchySql.trimEnd().endsWith("\\endif"), "group-hierarchy migration retry branch must remain explicit");
+for (const [pattern, expected, description] of [
+	[/SELECT pg_advisory_lock\(/gu, 1, "one session migration-lock acquisition"],
+	[/CREATE TABLE IF NOT EXISTS "opencrane_migrations"\."schema_history"/gu, 1, "one schema-history authority"],
+	[/INSERT INTO "opencrane_migrations"\."schema_history"/gu, 1, "one final schema-history write"],
+	[/^COMMIT;$/gmu, 1, "one transaction commit"],
+])
+{
+	requireContract((groupHierarchySql.match(pattern) ?? []).length === expected, `0.9.3 migration must contain ${description}`);
+}
+for (const input of ["migration_silo_id", "migration_oidc_issuer"])
+{
+	requireContract(groupHierarchySql.includes(`:{?${input}}`), `IAM cutover must require ${input}`);
+}
+for (const source of [targetBaseline, groupHierarchySql])
+{
+	requireContract(source.includes('CREATE TABLE "principals"'), "IAM cutover must persist stable OIDC Principals");
+	requireContract(
+		/CREATE TABLE "principals" \([\s\S]*?"provenance" "PrincipalProvenance" NOT NULL DEFAULT 'external',[\s\S]*?CONSTRAINT "principals_pkey"/u.test(source),
+		"Principal storage must persist external or internal identity provenance",
+	);
+	requireContract(source.includes('CREATE TABLE "group_memberships"'), "IAM cutover must normalize direct Group membership");
+	requireContract(source.includes('"parent_id" TEXT'), "group hierarchy must persist a nullable parent identifier");
+	requireContract(source.includes('CREATE INDEX "groups_silo_id_parent_id_idx"'), "group hierarchy must index parent lookup inside one silo");
+	requireContract(source.includes('CONSTRAINT "groups_parent_id_silo_id_fkey"'), "group hierarchy must retain its silo-bound self-reference");
+	requireContract(source.includes('CREATE FUNCTION "enforce_group_hierarchy"()'), "group hierarchy must retain its cycle authority function");
+	requireContract(source.includes('CREATE CONSTRAINT TRIGGER "groups_hierarchy_guard"'), "group hierarchy must guard every parent mutation");
+	requireContract(source.includes("group hierarchy cannot contain a cycle"), "group hierarchy must reject cycles explicitly");
+	requireContract(source.includes('CREATE TABLE "resource_shares"'), "resource shares must use explicit durable authority");
+	requireContract(source.includes('CREATE TABLE "resource_share_recipients"'), "resource shares must bind explicit recipients");
+	requireContract(source.includes('CREATE FUNCTION "enforce_resource_share_recipient_authority"()'), "resource-share recipients must link their exact active grant");
+	requireContract(!source.includes('JOIN "authorization_grants" grant ON'), "resource-share authority SQL must not use the reserved GRANT keyword as an alias");
+}
+const exactIamDefinitions = [
+	'ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check" CHECK ( btrim("silo_id") <> \'\' AND (("subject_kind" = \'group\' AND "subject_group_id" IS NOT NULL AND "subject_principal_id" IS NULL) OR ("subject_kind" = \'principal\' AND "subject_group_id" IS NULL AND "subject_principal_id" IS NOT NULL)) AND (("boundary_kind" = \'group\' AND "boundary_group_id" IS NOT NULL AND "boundary_principal_id" IS NULL) OR ("boundary_kind" = \'personal\' AND "boundary_group_id" IS NULL AND "boundary_principal_id" IS NOT NULL AND "boundary_coverage" = \'exact\')) AND btrim("catalog_id") <> \'\' AND "catalog_revision" > 0 AND btrim("catalog_digest") <> \'\' AND "catalog_digest" ~ \'^sha256:[0-9a-f]{64}$\' AND btrim("capability_id") <> \'\' AND btrim("resource_kind") NOT IN (\'\', \'*\') AND btrim("resource_id") NOT IN (\'\', \'*\') AND "priority" >= 0 AND btrim("created_by") <> \'\' );',
+	'ALTER TABLE "verified_fleet_membership_assertions" ADD CONSTRAINT "verified_fleet_membership_assertions_exact_check" CHECK ( btrim("assertion_id") <> \'\' AND btrim("silo_id") <> \'\' AND btrim("subject_id") <> \'\' );',
+	'CREATE UNIQUE INDEX "memory_datasets_exact_boundary_key" ON "memory_datasets"("silo_id", "boundary_kind", COALESCE("boundary_group_id", \'\'), COALESCE("boundary_principal_id", \'\'));',
+];
+for (const source of [targetBaseline, groupHierarchySql])
+{
+	const compactSource = compactSql(source);
+	for (const definition of exactIamDefinitions)
+	{
+		requireContract(compactSource.includes(definition), `IAM schema must retain exact definition: ${definition}`);
+	}
+}
+const agentServiceLifecycleStart = targetBaseline.indexOf('CREATE FUNCTION "enforce_agent_service_lifecycle"');
+const agentServiceLifecycleEnd = targetBaseline.indexOf("$$;", agentServiceLifecycleStart) + 3;
+requireContract(agentServiceLifecycleStart >= 0 && agentServiceLifecycleEnd > 2, "target AgentService lifecycle function must exist");
+const targetAgentServiceLifecycle = targetBaseline.slice(agentServiceLifecycleStart, agentServiceLifecycleEnd);
+requireContract(
+	groupHierarchySql.includes(targetAgentServiceLifecycle.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION")),
+	"migration must carry the exact consolidated AgentService lifecycle function",
+);
+requireContract(
+	!/CREATE TABLE "org_memberships" \([\s\S]*?"provenance" "PrincipalProvenance"[\s\S]*?CONSTRAINT "org_memberships_pkey"/u.test(targetBaseline),
+	"organization memberships must not retain Principal provenance",
+);
+requireContract(!groupHierarchySql.includes('enforce_managed_agent_service_principal'), "managed AgentService Principal validation must stay consolidated in its lifecycle function");
+requireContract(!groupHierarchySql.includes('agent_services_managed_principal_guard'), "managed AgentService validation must not retain a duplicate trigger");
+requireContract(groupHierarchySql.includes('CREATE TABLE "opencrane_migrations"."group_claim_cutover"'), "OIDC claim rewrites must remain durable migration evidence");
+requireContract(groupHierarchySql.includes('"migration_sql_sha256" TEXT NOT NULL'), "OIDC claim rewrites must bind the reviewed migration digest");
+requireContract(groupHierarchySql.includes("everyoneInOrg MCP policy has no deterministic"), "ambiguous everyoneInOrg MCP policy must fail closed");
+requireContract(groupHierarchySql.includes("every Artifact owner must resolve to exactly one Principal"), "artifact ownership projection must fail closed on ambiguous legacy identity");
+requireContract(groupHierarchySql.includes('UPDATE "artifacts" artifact\nSET "owner_principal_id" = reference."principal_id"'), "artifact ownership must migrate to stable local Principal ids");
+requireContract(
+	groupHierarchySql.includes('ALTER TABLE "artifacts" DISABLE TRIGGER "artifacts_closed_lifecycle";')
+		&& groupHierarchySql.indexOf('ALTER TABLE "artifacts" DISABLE TRIGGER "artifacts_closed_lifecycle";')
+		< groupHierarchySql.indexOf('UPDATE "artifacts" artifact\nSET "owner_principal_id" = reference."principal_id"'),
+	"artifact ownership projection must suspend the predecessor immutability trigger",
+);
+requireContract(
+	groupHierarchySql.includes('ALTER TABLE "artifacts" ENABLE TRIGGER "artifacts_closed_lifecycle";')
+		&& groupHierarchySql.indexOf('UPDATE "artifacts" artifact\nSET "owner_principal_id" = reference."principal_id"')
+		< groupHierarchySql.indexOf('ALTER TABLE "artifacts" ENABLE TRIGGER "artifacts_closed_lifecycle";'),
+	"artifact ownership projection must restore the predecessor immutability trigger",
+);
+requireContract(groupHierarchySql.includes("every MCP install user must resolve to exactly one Principal"), "MCP install projection must fail closed on ambiguous legacy identity");
+requireContract(groupHierarchySql.includes('UPDATE "mcp_server_installs" install\nSET "user_id" = reference."principal_id"'), "MCP installs must project legacy identities to stable local Principal ids");
+requireContract(groupHierarchySql.includes('RENAME COLUMN "user_id" TO "principal_id"'), "MCP install authority must use explicit Principal naming");
+requireContract(groupHierarchySql.includes('mcp_server_installs_principal_id_fkey'), "MCP installs must bind their local Principal through a restrictive foreign key");
+for (const retired of [
+	'agent_revision_scope_attachments',
+	'mcp_server_access_policies',
+	'mcp_server_access_users',
+	'mcp_server_credentials',
+])
+{
+	requireContract(groupHierarchySql.includes(`DROP TABLE "${retired}"`), `IAM cutover must drop retired ${retired}`);
+}
+for (const retired of ["AuthorizationScopeKind", "GrantScope", "GrantSubjectType", "FleetMembershipScopeKind"])
+{
+	requireContract(groupHierarchySql.includes(`DROP TYPE "${retired}"`), `IAM cutover must drop retired ${retired}`);
+}
+
+console.log("0.9.0-to-0.9.3 migration contract: PASS");

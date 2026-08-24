@@ -28,7 +28,6 @@ import type { ConversationReplayRouterDependencies } from "./conversation-replay
  * @param dependencies - Channel context authority, replay repository, clock, limits, optional
  *   shutdown signal, the receiver id the token must be addressed to, and the server clock.
  * @returns An Express router carrying the single replay route.
- * @see {@link __CreateSelfConversationReplayRouter} for the browser-session equivalent.
  */
 export function __CreateConversationReplayRouter(dependencies: ConversationReplayRouterDependencies): Router
 {

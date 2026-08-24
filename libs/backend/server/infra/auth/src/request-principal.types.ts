@@ -6,8 +6,14 @@
  */
 export interface RequestPrincipal
 {
-  /** Stable identity-provider subject, or the normalised email fallback. */
-  subjectId: string;
+  /** Stable local Principal ID attached after exact identity projection. */
+  principalId: string;
+
+  /** Stable external OIDC subject retained for authorities not yet projected to Principal IDs. */
+  externalSubject: string;
+
+  /** Verified OIDC issuer that namespaces the external subject. */
+  externalIssuer: string;
 
   /** Silo selected by the trusted request host. */
   siloId: string;

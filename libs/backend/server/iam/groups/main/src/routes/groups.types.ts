@@ -1,15 +1,11 @@
-/** Supported organizational scopes for groups. */
-export type GroupRouteScope = "org" | "department" | "project" | "personal";
+import type { Request } from "express";
 
-/** Request body used to create or update a group. */
-export interface GroupWriteRequest
+/** Trusted group route caller resolved from the authenticated session and request host. */
+export interface GroupRouteCaller
 {
-  /** Stable operator-facing group name. */
-  name: string;
-  /** Organizational scope represented by the group. */
-  scope: GroupRouteScope;
-  /** Optional operator-facing description. */
-  description?: string;
-  /** JSON membership list stored on the group record. */
-  members?: unknown[];
+	/** Silo derived from the trusted request host. */
+	siloId: string;
 }
+
+/** Resolves the silo boundary for one authenticated group request. */
+export type GroupRouteCallerResolver = (request: Request) => GroupRouteCaller | null;

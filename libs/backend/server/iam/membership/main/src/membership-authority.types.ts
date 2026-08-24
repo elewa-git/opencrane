@@ -1,7 +1,7 @@
-import type { AuthorizationScope, FleetMembershipTrustReason, FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
+import type { FleetMembershipTrustReason, FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 
 /**
- * One membership question: is this subject still a member of this silo, for this scope, right now?
+ * One membership question: is this subject still a member of this silo right now?
  *
  * A fleet issuer signs a numbered revision that lists every membership assertion for a silo. This
  * command names the single assertion the caller wants proved, plus how stale a revision it will
@@ -23,8 +23,6 @@ export interface VerifyFleetMembershipCommand
 	readonly subjectId: string;
 	/** Identifier of the one signed assertion to prove; read it from the stored revision, not from a request. */
 	readonly assertionId: string;
-	/** Scope the assertion must cover, such as an organization, team, project, or personal scope. */
-	readonly scope: AuthorizationScope;
 	/** Current time in epoch milliseconds, supplied by the caller so one admission uses one instant. */
 	readonly nowEpochMs: number;
 	/** Maximum permitted signed-revision age in milliseconds. */
@@ -123,7 +121,7 @@ export interface FleetMembershipAuthorityRepository
  * Checks the issuer's signature over a stored revision.
  *
  * An implementation holds the issuer's public key and nothing else — it answers "did this issuer
- * sign exactly these bytes?" and leaves every ordering, scope, and freshness rule to the caller. A
+ * sign exactly these bytes?" and leaves every ordering and freshness rule to the caller. A
  * silo with no fleet key still gets an implementation: the standalone one answers `verified: false`
  * for everything, so a missing key can never read as "membership is fine".
  *
@@ -220,12 +218,10 @@ export interface TrustedFleetMembershipEvidence
 	readonly issuerKeyId: string;
 	/** Accepted monotonic signed revision. */
 	readonly revision: number;
-	/** Identifier of the assertion inside the revision that covered this subject and scope. */
+	/** Identifier of the assertion inside the revision that covered this subject. */
 	readonly assertionId: string;
 	/** Subject whose membership was verified. */
 	readonly subjectId: string;
-	/** Organization from the exact signed assertion that authorized this subject. */
-	readonly organizationId: string;
 	/** Digest of the exact signed membership payload. */
 	readonly payloadDigest: string;
 	/** UTC epoch-millisecond limit on trust for this verified evidence. */
@@ -248,7 +244,7 @@ export type VerifyFleetMembershipResult =
 	| { readonly outcome: "denied"; readonly reason: FleetMembershipTrustReason | "missing_revision" | "signature_verifier_failed" | "acceptance_conflict"; readonly revision: number };
 
 /**
- * Answers "may this subject act in this silo at this scope?" for callers that hold no assertion id.
+ * Answers "is this subject an active member of this silo?" for callers that hold no assertion id.
  *
  * The implementation finds the matching assertion itself, so a request never gets to name the
  * assertion that proves its own membership.
@@ -260,16 +256,15 @@ export type VerifyFleetMembershipResult =
 export interface SignedFleetMembershipAssertionAuthority
 {
 	/**
-	 * Finds the single assertion matching this subject, silo, and scope, then runs the full check.
+	 * Finds the single assertion matching this subject and silo, then runs the full check.
 	 *
 	 * @param subjectId - Subject whose membership is in question.
 	 * @param siloId - Silo the request is happening in.
-	 * @param scope - Scope the subject must be a member at.
 	 * @param nowEpochMs - Current time in epoch milliseconds, from the caller.
 	 * @returns `trusted` with the trust window, or `denied` — including `assertion_mismatch` when the
 	 *          stored revision holds no matching assertion, or more than one.
 	 */
-	verifyCurrentMembership(subjectId: string, siloId: string, scope: AuthorizationScope, nowEpochMs: number): Promise<VerifyFleetMembershipResult>;
+	verifyCurrentMembership(subjectId: string, siloId: string, nowEpochMs: number): Promise<VerifyFleetMembershipResult>;
 }
 
 /**

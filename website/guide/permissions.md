@@ -8,9 +8,13 @@ automatically extend it to everyone who can talk to that agent — both sides ha
 
 ## Grant a capability
 
-Grant a skill, tool, model or dataset at the narrowest useful scope: personal, project,
-department or organisation. Both the acting subject and the agent service must remain inside
-the resulting effective access boundary.
+Choose a subject—one principal or one group—and a resource boundary. A boundary is either one
+stored group or one principal's personal space. A group boundary can cover that exact group or
+its descendants. Both the acting principal and the agent service must remain inside the resulting
+effective access boundary.
+
+Department, team and project names are ordinary groups. Their meaning comes from stored parent
+relationships, not from fixed grant categories.
 
 ## What a run freezes
 
@@ -30,8 +34,8 @@ Revocation affects new decisions and pending external actions. It does not erase
 record or mutate an immutable snapshot belonging to an accepted run.
 
 ::: warning
-Do not infer access from a Kubernetes namespace, group label or network path. Membership and
+Do not infer access from a Kubernetes namespace, group name or network path. Membership and
 grant authority must resolve successfully; uncertainty denies the request.
 :::
 
-→ [Organise scopes](/guide/organize) · [Silo IAM](/integrators/silo-iam)
+→ [Organise groups](/guide/organize) · [Silo IAM](/integrators/silo-iam)

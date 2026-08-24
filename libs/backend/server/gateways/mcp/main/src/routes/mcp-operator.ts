@@ -1,30 +1,33 @@
 import { Router, type Request, type Response } from "express";
-import type { PrismaClient } from "@prisma/client";
 
-import { _RequireOrgAdmin } from "@opencrane/backend/server/infra/auth";
-import { approveServer, clearCredential, connectOauth, disconnectOauth, getAccessPolicy, getDirectory, installServer, listAllServers, listEntitledCatalog, listInstalled, publishServer, rejectServer, setAccessPolicy, setCredential, setServerEnabled, uninstallServer } from "../core/mcp-operator.logic";
+import type { AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
+import { _RequireOrgAdmin, _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
+import { approveServer, getAccessPolicy, getDirectory, installServer, listAllServers, listEntitledCatalog, listInstalled, publishServer, rejectServer, setAccessPolicy, setServerEnabled, uninstallServer } from "../core/mcp-operator.logic";
 import type { McpOperatorCaller } from "../core/mcp-operator.logic.types";
-import type { McpAccessPolicyRequest, McpEnabledRequest, McpInstallRequest } from "./mcp-operator.types";
+import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
+import { McpRemoteServerRegistrationValidationError, registerRemoteServer } from "../era-probe/mcp-remote-registration";
+import { ___McpRemoteServerRegistrationSchema } from "../era-probe/mcp-remote-registration.validator";
+import { McpRemoteServerRegistrationOutcomes } from "../era-probe/mcp-era-probe.types";
+import type { McpEraProbeWorkflow } from "../era-probe/mcp-era-probe.types";
+import { ___McpAccessPolicySchema, ___McpEnabledSchema, ___McpInstallSchema } from "./mcp-operator.validator";
 
 /**
  * Operator-API router for the MCP endpoints under `/api/v1/mcp/*` — using servers, and governing them.
  *
- * Layers the entitlement-scoped catalogue, per-user installs / credential connect,
- * and org-admin governance + access-policy endpoints ON TOP of the existing
- * `/mcp-servers` admin registry (which stays as-is). Two authorization rules apply:
+ * Serves the entitlement-scoped catalog, per-Principal installs, and organization-admin governance
+ * endpoints from the same authenticated authority. Two authorization rules apply:
  *
- * - **User-facing** (`/catalog`, `/installed/*`) — scoped to the calling user via
- *   {@link _ResolveCaller}; entitlement filtering decides catalogue visibility.
- * - **Admin** (`/servers/*`, `/directory`) — gated by `_RequireOrgAdmin`, matching
- *   the registry's curate-is-an-admin-action posture (fail-open dev / fail-closed real auth).
+ * - **User-facing** (`/catalog`, `/installed/*`) — {@link _ResolveCaller} binds the request to a
+ *   local Principal before entitlement filtering or install work begins.
+ * - **Admin** (`/servers/*`, `/directory`) — gated by `_RequireOrgAdmin` and bound to the
+ *   authenticated silo and local Principal projection.
  *
- * Secrets: no response on any route returns credential material — a connected
- * install reports only its connection status (the secret is brokered by the gateway plane).
- *
- * @param prisma - Prisma client used for persistence.
+	 * @param unitOfWork - Runs each MCP operation with transaction-scoped repositories.
+	 * @param principalDirectory - Resolves the authenticated identity to a local Principal in its silo.
+	 * @param eraProbeWorkflow - Runs the saved protocol check admitted with a server registration.
  * @returns Configured Express router.
  */
-export function mcpOperatorRouter(prisma: PrismaClient): Router
+export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDirectory: AuthenticatedPrincipalDirectory, eraProbeWorkflow: McpEraProbeWorkflow): Router
 {
   const router = Router();
 
@@ -35,26 +38,35 @@ export function mcpOperatorRouter(prisma: PrismaClient): Router
   /** List the published servers the calling user is entitled to. */
   router.get("/catalog", async function _listCatalog(req, res)
   {
-    res.json(await listEntitledCatalog(prisma, _ResolveCaller(req)));
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    res.json(await listEntitledCatalog(unitOfWork, caller));
   });
 
   /** List the servers the calling user has installed. */
   router.get("/installed", async function _listInstalled(req, res)
   {
-    res.json(await listInstalled(prisma, _ResolveCaller(req).userId));
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    res.json(await listInstalled(unitOfWork, caller.principalId));
   });
 
   /** Install a catalogue server for the calling user. */
   router.post("/installed", async function _install(req, res)
   {
-    const body = req.body as McpInstallRequest;
-    if (typeof body?.serverId !== "string" || body.serverId.trim().length === 0)
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    const parsed = ___McpInstallSchema.safeParse(req.body);
+    if (!parsed.success)
     {
       res.status(400).json({ error: "serverId is required", code: "VALIDATION_ERROR" });
       return;
     }
 
-    const installed = await installServer(prisma, _ResolveCaller(req).userId, body.serverId.trim());
+    const installed = await installServer(unitOfWork, caller, parsed.data.serverId);
     if (!installed)
     {
       res.status(404).json({ error: "MCP server not found", code: "MCP_SERVER_NOT_FOUND" });
@@ -64,47 +76,20 @@ export function mcpOperatorRouter(prisma: PrismaClient): Router
     res.status(201).json(installed);
   });
 
-  /** Uninstall a server for the calling user; clears any stored credential. */
+  /** Removes the calling Principal's install and returns 404 when that Principal has none. */
   router.delete("/installed/:serverId", async function _uninstall(req: Request<{ serverId: string }>, res)
   {
-    const removed = await uninstallServer(prisma, _ResolveCaller(req).userId, req.params.serverId);
-    if (!removed)
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    const removed = await uninstallServer(unitOfWork, caller.principalId, req.params.serverId);
+    if (removed === "not_found")
     {
       res.status(404).json({ error: "MCP install not found", code: "MCP_INSTALL_NOT_FOUND" });
       return;
     }
 
     res.status(204).end();
-  });
-
-  /** Author a per-user credential (WRITE-ONLY) and mark the install connected. */
-  router.put("/installed/:serverId/credential", async function _setCredential(req: Request<{ serverId: string }>, res)
-  {
-    // The submitted `values` are accepted but never persisted as plaintext nor
-    // returned — setCredential mints an opaque custody handle in their place.
-    const installed = await setCredential(prisma, _ResolveCaller(req).userId, req.params.serverId);
-    _sendInstallOrNotFound(res, installed);
-  });
-
-  /** Clear a per-user credential, returning the install to needs-credential. */
-  router.delete("/installed/:serverId/credential", async function _clearCredential(req: Request<{ serverId: string }>, res)
-  {
-    const installed = await clearCredential(prisma, _ResolveCaller(req).userId, req.params.serverId);
-    _sendInstallOrNotFound(res, installed);
-  });
-
-  /** Mark a remote-OAuth install connected after a successful handshake. */
-  router.post("/installed/:serverId/oauth", async function _connectOauth(req: Request<{ serverId: string }>, res)
-  {
-    const installed = await connectOauth(prisma, _ResolveCaller(req).userId, req.params.serverId);
-    _sendInstallOrNotFound(res, installed);
-  });
-
-  /** Disconnect a remote-OAuth install, returning it to needs-credential. */
-  router.delete("/installed/:serverId/oauth", async function _disconnectOauth(req: Request<{ serverId: string }>, res)
-  {
-    const installed = await disconnectOauth(prisma, _ResolveCaller(req).userId, req.params.serverId);
-    _sendInstallOrNotFound(res, installed);
   });
 
   // -------------------------------------------------------------------------
@@ -114,44 +99,93 @@ export function mcpOperatorRouter(prisma: PrismaClient): Router
   /** List every catalogue server regardless of status (governance view). Org-admin only. */
   router.get("/servers", _RequireOrgAdmin(), async function _listServers(req, res)
   {
-    res.json(await listAllServers(prisma));
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    res.json(await listAllServers(unitOfWork, caller));
   });
 
-  /** Approve a server (pending-review → approved). Org-admin only. */
+	 /** Register a remote server and its era-probe task in one transaction. Org-admin only. */
+  router.post("/servers", _RequireOrgAdmin(), async function _registerServer(req, res)
+  {
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    const parsed = ___McpRemoteServerRegistrationSchema.safeParse(req.body);
+    if (!parsed.success)
+    {
+      res.status(400).json({ error: "Remote MCP registration is invalid.", code: "VALIDATION_ERROR" });
+      return;
+    }
+
+    try
+    {
+      const result = await registerRemoteServer(unitOfWork, eraProbeWorkflow, caller, parsed.data);
+      if (result.outcome === McpRemoteServerRegistrationOutcomes.Conflict)
+      {
+        res.status(409).json({ error: "The registration key or server name is already used by different input.", code: "MCP_REGISTRATION_CONFLICT" });
+        return;
+      }
+      res.status(201).json(result.server);
+    }
+    catch (error)
+    {
+      if (!(error instanceof McpRemoteServerRegistrationValidationError))
+        throw error;
+      res.status(400).json({ error: error.message, code: "VALIDATION_ERROR" });
+    }
+  });
+
+	 /** Approve a server after its saved protocol check succeeds. Org-admin only. */
   router.post("/servers/:id/approve", _RequireOrgAdmin(), async function _approve(req: Request<{ id: string }>, res)
   {
-    _sendServerOrNotFound(res, await approveServer(prisma, req.params.id));
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    _sendServerOrNotFound(res, await approveServer(unitOfWork, caller, req.params.id));
   });
 
-  /** Publish a server (approved → published). Org-admin only. */
+  /** Publish an approved server after its saved protocol check succeeds. Org-admin only. */
   router.post("/servers/:id/publish", _RequireOrgAdmin(), async function _publish(req: Request<{ id: string }>, res)
   {
-    _sendServerOrNotFound(res, await publishServer(prisma, req.params.id));
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    _sendServerOrNotFound(res, await publishServer(unitOfWork, caller, req.params.id));
   });
 
-  /** Reject a server (→ disabled). Org-admin only. */
+  /** Sets a server's status to disabled. This endpoint does not require a prior status. Org-admin only. */
   router.post("/servers/:id/reject", _RequireOrgAdmin(), async function _reject(req: Request<{ id: string }>, res)
   {
-    _sendServerOrNotFound(res, await rejectServer(prisma, req.params.id));
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    _sendServerOrNotFound(res, await rejectServer(unitOfWork, caller, req.params.id));
   });
 
-  /** Toggle a server's availability (true → published, false → disabled). Org-admin only. */
+  /** Disable a server or restore a disabled server to published. Org-admin only. */
   router.post("/servers/:id/enabled", _RequireOrgAdmin(), async function _setEnabled(req: Request<{ id: string }>, res)
   {
-    const body = req.body as McpEnabledRequest;
-    if (typeof body?.enabled !== "boolean")
+    const parsed = ___McpEnabledSchema.safeParse(req.body);
+    if (!parsed.success)
     {
       res.status(400).json({ error: "enabled (boolean) is required", code: "VALIDATION_ERROR" });
       return;
     }
 
-    _sendServerOrNotFound(res, await setServerEnabled(prisma, req.params.id, body.enabled));
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    _sendServerOrNotFound(res, await setServerEnabled(unitOfWork, caller, req.params.id, parsed.data.enabled));
   });
 
   /** Read a server's access policy. Org-admin only. */
   router.get("/servers/:id/access", _RequireOrgAdmin(), async function _getAccess(req: Request<{ id: string }>, res)
   {
-    const policy = await getAccessPolicy(prisma, req.params.id);
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    const policy = await getAccessPolicy(unitOfWork, caller, req.params.id);
     if (!policy)
     {
       res.status(404).json({ error: "MCP server not found", code: "MCP_SERVER_NOT_FOUND" });
@@ -164,14 +198,17 @@ export function mcpOperatorRouter(prisma: PrismaClient): Router
   /** Replace a server's access policy wholesale. Org-admin only. */
   router.put("/servers/:id/access", _RequireOrgAdmin(), async function _setAccess(req: Request<{ id: string }>, res)
   {
-    const body = req.body as McpAccessPolicyRequest;
-    if (typeof body?.everyoneInOrg !== "boolean" || !Array.isArray(body.groups) || !Array.isArray(body.users))
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    const parsed = ___McpAccessPolicySchema.safeParse(req.body);
+    if (!parsed.success)
     {
-      res.status(400).json({ error: "everyoneInOrg (boolean), groups (array), and users (array) are required", code: "VALIDATION_ERROR" });
+      res.status(400).json({ error: "groupIds (array) and principalIds (array) are required", code: "VALIDATION_ERROR" });
       return;
     }
 
-    const policy = await setAccessPolicy(prisma, req.params.id, body);
+    const policy = await setAccessPolicy(unitOfWork, caller, req.params.id, parsed.data);
     if (!policy)
     {
       res.status(404).json({ error: "MCP server not found", code: "MCP_SERVER_NOT_FOUND" });
@@ -184,49 +221,55 @@ export function mcpOperatorRouter(prisma: PrismaClient): Router
   /** List the selectable users and groups for the access editor. Org-admin only. */
   router.get("/directory", _RequireOrgAdmin(), async function _directory(req, res)
   {
-    res.json(await getDirectory(prisma));
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    res.json(await getDirectory(unitOfWork, caller));
   });
 
   return router;
 }
 
 /**
- * Resolve the calling user's identity + entitlement context from the session.
+ * Resolves the request into the caller's authenticated silo and local Principal.
  *
- * An established session uses the IdP-verified identity. An unauthenticated caller
- * receives an empty fail-closed context and never a synthetic catalogue grant.
+ * The request must carry a verified identity and trusted silo, then the directory must resolve that
+ * identity to a persisted Principal. Returning `null` makes every route send 401 instead of using
+ * request claims as MCP authorization.
  *
- * @param req - Incoming request carrying the optional auth session.
- * @returns The resolved caller context.
+ * @param principalDirectory - Resolves the verified identity to a local Principal.
+ * @param req - Carries the authenticated session and resolved request silo.
+ * @returns The authenticated caller context, or `null` when local Principal resolution fails.
  */
-function _ResolveCaller(req: Request): McpOperatorCaller
+async function _ResolveCaller(principalDirectory: AuthenticatedPrincipalDirectory, req: Request): Promise<McpOperatorCaller | null>
 {
-  // 1. Established session — derive the stable id and group claims from the IdP.
+  // 1. Resolve the verified OIDC subject and trusted request silo without accepting either from
+  //    the request body.
+  const requestPrincipal = _ResolveRequestPrincipal(req);
   const authUser = req.session?.authUser;
-  if (authUser)
+  if (!requestPrincipal || !authUser?.issuer || !authUser.sub)
   {
-    return { userId: authUser.sub ?? authUser.email ?? "unknown", groups: authUser.groups ?? [], devOpen: false };
+    return null;
   }
 
-  // 2. No session fails closed (empty groups, not dev-open).
-  return { userId: "unknown", groups: [], devOpen: false };
+  // 2. Bind the external identity to the durable local Principal. Missing or stale projections
+  //    fail closed, so raw OIDC claims never become MCP authority by themselves.
+  return principalDirectory.resolveAuthenticatedPrincipal(requestPrincipal.siloId, authUser.issuer, authUser.sub);
 }
 
 /**
- * Send an install response or a 404 when the install / server was absent.
+ * Sends the shared unauthenticated response when local Principal resolution failed.
  *
  * @param res - Express response.
- * @param installed - Install payload, or null when not found.
+ * @param caller - Resolved local caller, or null when authentication cannot authorize work.
+ * @returns True when the route may continue with the caller.
  */
-function _sendInstallOrNotFound(res: Response, installed: object | null): void
+function _SendUnauthorizedWhenMissing(res: Response, caller: McpOperatorCaller | null): caller is McpOperatorCaller
 {
-  if (!installed)
-  {
-    res.status(404).json({ error: "MCP install not found", code: "MCP_INSTALL_NOT_FOUND" });
-    return;
-  }
-
-  res.json(installed);
+  if (caller)
+    return true;
+  res.status(401).json({ error: "Authentication required.", code: "UNAUTHORIZED" });
+  return false;
 }
 
 /**
@@ -240,7 +283,7 @@ function _sendServerOrNotFound(res: Response, server: object | null): void
   if (!server)
   {
     res.status(404).json({ error: "MCP server not found", code: "MCP_SERVER_NOT_FOUND" });
-    return;
+      return;
   }
 
   res.json(server);

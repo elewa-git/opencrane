@@ -742,7 +742,7 @@ function _computeAssignmentDigest(context: { runId: string; attempt: number; age
 function _CanonicalAssignmentIdentity(identity: RuntimeAssignmentIdentity): readonly string[]
 {
 	if (identity.kind === RunInputSnapshotIdentityKinds.User) return [identity.kind, identity.executionSubjectId, String(identity.fleetMembershipRevision)];
-	return [identity.kind, identity.executionSubjectId, identity.agentServiceId, String(identity.fleetMembershipRevision), identity.effectiveScopeAttachmentDigest];
+	return [identity.kind, identity.executionSubjectId, identity.agentServiceId, String(identity.fleetMembershipRevision), identity.effectiveBoundaryAttachmentDigest];
 }
 
 /** Read the execution identity out of the snapshot's JSON, returning null when it is malformed. */
@@ -756,7 +756,7 @@ function _snapshotIdentity(value: unknown): RuntimeAssignmentIdentity | null
 	if ((kind !== "user" && kind !== "service") || typeof executionSubjectId !== "string" || executionSubjectId.trim().length === 0 || typeof fleetMembershipRevision !== "number" || !Number.isSafeInteger(fleetMembershipRevision) || fleetMembershipRevision < 0) return null;
 	if (kind === "user") return { kind, executionSubjectId, fleetMembershipRevision };
 	const agentServiceId = identity["agentServiceId"];
-	const effectiveScopeAttachmentDigest = identity["effectiveScopeAttachmentDigest"];
-	if (typeof agentServiceId !== "string" || agentServiceId.trim().length === 0 || executionSubjectId !== `agent-service:${agentServiceId}` || typeof effectiveScopeAttachmentDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(effectiveScopeAttachmentDigest)) return null;
-	return { kind, executionSubjectId, agentServiceId, fleetMembershipRevision, effectiveScopeAttachmentDigest };
+	const effectiveBoundaryAttachmentDigest = identity["effectiveBoundaryAttachmentDigest"];
+	if (typeof agentServiceId !== "string" || agentServiceId.trim().length === 0 || executionSubjectId !== `agent-service:${agentServiceId}` || typeof effectiveBoundaryAttachmentDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(effectiveBoundaryAttachmentDigest)) return null;
+	return { kind, executionSubjectId, agentServiceId, fleetMembershipRevision, effectiveBoundaryAttachmentDigest };
 }

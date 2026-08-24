@@ -4,8 +4,10 @@ import type { AuditDecisionRecord } from "./audit-decision.types";
 
 function _WorkloadKind(value: AuditDecisionRecord["workloadKind"]): WorkloadKind | undefined
 {
-	if (value === undefined) return undefined;
-	if (value === "job") return WorkloadKind.Job;
+	if (value === undefined)
+		return undefined;
+	if (value === "job")
+		return WorkloadKind.Job;
 	return WorkloadKind.Deployment;
 }
 
@@ -32,7 +34,7 @@ function _Outcome(value: AuditDecisionRecord["outcome"]): AuditDecisionOutcome
  *
  * Called by: libs/backend/server/iam/authorization/main/src/prisma-runtime-authority.ts,
  * libs/backend/server/iam/membership/main/src/prisma-membership-authority.ts,
- * libs/backend/server/agents/agent-services/main/src/prisma-agent-publication.ts, and
+ * libs/backend/server/agents/agent-services/main/src/db/prisma-agent-publication.ts, and
  * standalone-first-user-audit.ts in this package.
  * @param transaction - The open transaction of the change being recorded.
  * @param decision - The decision to record; treat it as final, nothing rewrites these rows.

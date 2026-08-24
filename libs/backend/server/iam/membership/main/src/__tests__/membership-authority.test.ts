@@ -16,7 +16,7 @@ function _revision(issuedAtEpochMs = 1000, revision = 7): SignedFleetMembershipR
 		expiresAtEpochMs: 10000,
 		payloadDigest: `sha256:membership-${revision}`,
 		signature: `signature-${revision}`,
-		assertions: [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1", scope: { kind: "project", organizationId: "org-1", projectId: "project-1" } }],
+		assertions: [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1" }],
 	};
 }
 
@@ -42,7 +42,6 @@ function _command(nowEpochMs = 2000): VerifyFleetMembershipCommand
 		siloId: "silo-1",
 		subjectId: "user-1",
 		assertionId: "assertion-1",
-		scope: { kind: "project", organizationId: "org-1", projectId: "project-1" },
 		nowEpochMs,
 		maximumStalenessMs: 3000,
 	};

@@ -72,7 +72,7 @@
 				</div>
 			}
 
-			<p class="wo-canvas__footer wo-mono">Grounded in {{ canvasDocument.citationCount }} citations · {{ citationScopeSummary(canvasDocument.citationScopes) }}</p>
+			<p class="wo-canvas__footer wo-mono">Grounded in {{ canvasDocument.citationCount }} citations · {{ citationBoundarySummary(canvasDocument.citationBoundaryKinds) }}</p>
 		</div>
 	} @else {
 		<div class="wo-canvas__empty" role="status">

@@ -41,7 +41,13 @@ function _buildApp(prisma: PrismaClient, custody: ObotCustodyPort, user?: { isOr
 	app.use(express.json());
 	if (user)
 	{
-		app.use(function _seedSession(req, _res, next) { (req as unknown as { session: { authUser: unknown } }).session = { authUser: { sub: "admin-1", ...user } }; next(); });
+		app.use(function _seedSession(req, _res, next)
+		{
+			(req as unknown as { session: { authUser: unknown } }).session = { authUser: { sub: "admin-1", authenticatedAt: "2026-01-01T00:00:00.000Z", ...user } };
+			const subject = user.sub ?? "admin-1";
+			if (subject.trim().length > 0) req.authenticatedPrincipal = { principalId: "principal-1", siloId: "silo-1", issuer: "https://issuer.test", subject };
+			next();
+		});
 	}
 	app.use("/api/v1/integrations", _CreateIntegrationCustodyRouter(prisma, custody, { warn: vi.fn(), error: vi.fn() }));
 	return app;

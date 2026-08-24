@@ -12,7 +12,6 @@
 					<div class="conversation-workspace__top">
 						@if (availabilityNotice(); as notice) { <div class="conversation-workspace__availability" role="status"><strong>{{ notice.heading }}</strong><span>{{ notice.detail }}</span></div> }
 						<header class="conversation-workspace__header"><div><small>{{ selectedSummary()?.modeLabel }}</small><h1>{{ selectedSummary()?.title }}</h1><p>{{ selectedSummary()?.participantLabel }}</p></div><div class="conversation-workspace__header-actions"><button #contextPanelToggle type="button" class="conversation-workspace__context-toggle" aria-controls="conversation-workspace-context-panel" [attr.aria-expanded]="contextPanelOpen()" (click)="openContextPanel()"><i class="pi pi-window-maximize" aria-hidden="true"></i>{{ contextPanelLabel() }}</button><p-button label="Archive" icon="pi pi-inbox" severity="secondary" [text]="true" [disabled]="store.conversationCommandBusy()" (onClick)="archiveConversation()" /><p-button label="Close" icon="pi pi-lock" severity="danger" [text]="true" [disabled]="store.conversationCommandBusy() || selected.lifecycle === lifecycles.Closed" (onClick)="store.close()" /></div></header>
-						@if (liveStatus(); as status) { <wo-conversation-status-line class="conversation-workspace__status" [status]="status" /> }
 					</div>
 					<section class="conversation-workspace__transcript" aria-label="Conversation messages" aria-live="polite" tabindex="0">
 						@if (messages().length === 0) { <div class="conversation-workspace__empty"><h2>Start the conversation</h2><p>Messages, tool activity, files, and Agent-created interfaces will appear here.</p></div> }
@@ -27,6 +26,7 @@
 					</section>
 					<footer class="conversation-workspace__composer">
 						@if (runActions(); as actions) { <wo-conversation-run-actions [presentation]="actions" [steeringDraft]="store.runs.steeringDraft()" (steeringDraftChange)="store.runs.updateSteeringDraft($event)" (steerRequested)="store.runs.steer()" (cancelRequested)="store.runs.cancel()" (retryRequested)="store.runs.retry(selected.id)" /> }
+						@if (connectionStatus(); as connection) { <wo-conversation-workspace-connection-status [status]="connection.status" [reconnectAvailable]="connection.reconnectAvailable" [reconnectPending]="store.manualReconnectPending()" (reconnectRequested)="reconnect()" /> }
 						<wo-conversation-attachment-tray [items]="assets()" [feedback]="assetFeedback()" (actionRequested)="assetAction($event)" />
 						<div class="conversation-workspace__attach"><label><span class="sr-only">Attach files</span><input type="file" multiple (change)="selectFiles($event)" /><span class="conversation-workspace__attach-button"><i class="pi pi-paperclip" aria-hidden="true"></i> Attach</span></label></div>
 						@if (store.error(); as error) { <p-message severity="error" [text]="error" /> }

@@ -75,6 +75,7 @@ export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, capacityG
 				identityKind: "user",
 				trigger: "interactive",
 				executionSubjectId: command.executionSubjectId,
+				executionIssuer: command.executionIssuer,
 				requestIdempotencyKey: command.requestIdempotencyKey,
 			}, authorities, commit, prepare);
 		},
