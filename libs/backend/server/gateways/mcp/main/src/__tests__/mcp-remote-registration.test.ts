@@ -53,6 +53,7 @@ describe("remote MCP registration", function _RemoteRegistrationSuite()
 		expect(first).toEqual(retried);
 		expect(first.outcome).toBe(McpRemoteServerRegistrationOutcomes.Registered);
 		expect(harness.audit).toHaveBeenCalledTimes(1);
+		expect(harness.audit).toHaveBeenCalledWith("Created", "McpServer/server-1", "Remote MCP server server-1 registered for protocol check", { siloId: "silo-1", actorPrincipalId: "admin-1" });
 		expect(harness.admit).toHaveBeenCalledTimes(2);
 		expect(harness.admit.mock.calls[0][1]).toEqual(harness.admit.mock.calls[1][1]);
 	});

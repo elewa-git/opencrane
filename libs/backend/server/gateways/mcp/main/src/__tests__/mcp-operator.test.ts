@@ -244,6 +244,7 @@ describe("mcp-operator router", function _suite()
       expect(response.body).toEqual({ id: "srv-new", name: "Example MCP", endpoint: "https://mcp.example.test/", eraProbeStatus: "Pending" });
       expect(spies["mcpRegistrationClaim.upsert"]).toHaveBeenCalledTimes(2);
       expect(spies["mcpServer.create"]).toHaveBeenCalledTimes(1);
+	  expect(spies["auditEntry.create"]).toHaveBeenCalledWith({ data: expect.objectContaining({ metadata: { siloId: "silo-1", actorPrincipalId: "principal-1" } }) });
       const [transaction, task] = vi.mocked(workflow.admit).mock.calls[0] as Parameters<McpEraProbeWorkflow["admit"]>;
       expect(transaction.client).toBe(prisma);
       expect(task).toEqual(expect.objectContaining({ siloId: "silo-1", serverId: "srv-new" }));

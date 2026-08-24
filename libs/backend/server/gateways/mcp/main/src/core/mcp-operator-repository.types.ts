@@ -136,6 +136,15 @@ export interface McpOperatorPrincipalRecord
 	readonly displayName: string | null;
 }
 
+/** Authenticated administrator recorded with a catalogue audit entry. */
+export interface McpOperatorAuditActor
+{
+	/** Silo in which the administrator acted. */
+	readonly siloId: string;
+	/** Saved principal identifier resolved from the authenticated request. */
+	readonly actorPrincipalId: string;
+}
+
 /**
  * Defines the transaction-scoped MCP persistence operations that the operator logic requires.
  *
@@ -242,9 +251,10 @@ export interface IMcpOperatorRepository
 	 * @param action - Records the action category for the audit entry.
 	 * @param resource - Identifies the MCP resource affected by the action.
 	 * @param message - Records the human-readable audit detail.
+	 * @param actor - Identifies the authenticated administrator when this is a governance action.
 	 * @returns Resolves after the audit entry has been added to the transaction.
 	 */
-	appendAudit(action: string, resource: string, message: string): Promise<void>;
+	appendAudit(action: string, resource: string, message: string, actor?: McpOperatorAuditActor): Promise<void>;
 }
 
 /**

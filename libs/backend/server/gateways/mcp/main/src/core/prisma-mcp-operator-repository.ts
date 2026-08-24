@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 
 import { McpEraProbeDecisions } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
-import type { IMcpOperatorRepository, McpEraProbeTargetRecord, McpEraProbeWriteResult, McpOperatorInstallRecord, McpOperatorPrincipalRecord, McpOperatorServerRecord, McpRemoteServerCreateResult, McpRemoteServerRegistrationRecord } from "./mcp-operator-repository.types";
+import type { IMcpOperatorRepository, McpEraProbeTargetRecord, McpEraProbeWriteResult, McpOperatorAuditActor, McpOperatorInstallRecord, McpOperatorPrincipalRecord, McpOperatorServerRecord, McpRemoteServerCreateResult, McpRemoteServerRegistrationRecord } from "./mcp-operator-repository.types";
 
 /** Fields shared by public catalogue mapping and era-probe state transitions. */
 const _SERVER_SELECT = { id: true, name: true, description: true, publisher: true, glyph: true, serverType: true, approvalStatus: true, credentialSchema: true, entitlementSummary: true, endpoint: true, registrationKeyDigest: true, registrationDigest: true, eraProbeStatus: true, eraProtocolVersion: true, eraProbeEvidenceDigest: true, eraProbeFailureCode: true } as const satisfies Prisma.McpServerSelect;
@@ -129,8 +129,8 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 		return this._transaction.principal.findMany({ where: { siloId, ...(principalIds ? { id: { in: [...principalIds] } } : {}) }, select: { id: true, email: true, displayName: true }, orderBy: { id: "asc" } });
 	}
 
-	async appendAudit(action: string, resource: string, message: string): Promise<void>
+	async appendAudit(action: string, resource: string, message: string, actor?: McpOperatorAuditActor): Promise<void>
 	{
-		await this._transaction.auditEntry.create({ data: { action, resource, message } });
+		await this._transaction.auditEntry.create({ data: { action, resource, message, ...(actor ? { metadata: { siloId: actor.siloId, actorPrincipalId: actor.actorPrincipalId } } : {}) } });
 	}
 }
