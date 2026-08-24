@@ -157,6 +157,9 @@
       "@opencrane/models/authorization": [
         "./libs/models/authorization/main/src/index.ts"
       ],
+      "@opencrane/models/local-development": [
+        "./libs/models/local-development/main/src/index.ts"
+      ],
       "@opencrane/backend/observability": [
         "./libs/backend/observability/src/index.ts"
       ],

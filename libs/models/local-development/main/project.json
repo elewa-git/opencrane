@@ -1,0 +1,23 @@
+{
+	"name": "models-local-development",
+	"$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+	"projectType": "library",
+	"sourceRoot": "libs/models/local-development/main/src",
+	"tags": ["type:lib", "layer:model", "scope:local-development"],
+	"targets": {
+		"lint": {
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "tsc -p tsconfig.json --noEmit",
+				"cwd": "libs/models/local-development/main"
+			}
+		},
+		"test": {
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "vitest run",
+				"cwd": "libs/models/local-development/main"
+			}
+		}
+	}
+}
