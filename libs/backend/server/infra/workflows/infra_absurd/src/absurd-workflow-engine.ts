@@ -4,7 +4,7 @@ import { Pool } from "pg";
 import { DurableExecutionError, DurableTaskNotRegisteredError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { DurableEventReceipt, DurableExecution, DurableExecutionTransaction, DurableTaskDefinition, DurableTaskEvent, DurableTaskReceipt, DurableTaskSpawn, DurableWorkerRuntime, DurableWorkers, DurableWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
 
-import { _AbsurdTaskScopedIdempotencyKey, PrismaDbProcedureGateway } from "./prisma-db-procedure-gateway";
+import { _TaskScopedIdempotencyKey, WorkflowTaskAdmission } from "./workflow-task-admission";
 import type { IAbsurdWorkflowEngineOptions } from "./absurd-workflow-engine.types";
 import { _AbsurdTaskContext, _AbsurdTaskEventName } from "./absurd-task-context";
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
@@ -181,7 +181,7 @@ export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRunt
 	 *
 	 * The PostgreSQL procedure records the task before that transaction commits. A process crash
 	 * cannot leave a committed product change without the work it requires.
-	 * @see PrismaDbProcedureGateway — owns the fixed, parameterized procedure call.
+	 * @see WorkflowTaskAdmission — owns the fixed, parameterized procedure call.
 	 */
 	async spawn<TInput>(transaction: DurableExecutionTransaction, task: DurableTaskSpawn<TInput>): Promise<DurableTaskReceipt>
 	{
@@ -214,7 +214,7 @@ export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRunt
 		{
 			// 2. Preserve an absent input and scope the key before it reaches the shared queue.
 			const envelope = _EnvelopeForTask(idempotencyKey, task.input);
-			const spawned = await this.engineForQueue(this.queueForTask(taskName)).spawn(taskName, envelope, { queue: this.queueForTask(taskName), idempotencyKey: _AbsurdTaskScopedIdempotencyKey(taskName, idempotencyKey) });
+			const spawned = await this.engineForQueue(this.queueForTask(taskName)).spawn(taskName, envelope, { queue: this.queueForTask(taskName), idempotencyKey: _TaskScopedIdempotencyKey(taskName, idempotencyKey) });
 			return { taskId: spawned.taskID, taskName, idempotencyKey };
 		}
 		catch (error)
@@ -228,7 +228,7 @@ export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRunt
 	{
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
-		const receipt = await new PrismaDbProcedureGateway(this.queueForTask(taskName)).___DbProcedureCall(transactionClient, { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input) });
+		const receipt = await new WorkflowTaskAdmission(this.queueForTask(taskName)).admit(transactionClient, { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input) });
 		return { taskId: receipt.taskId, taskName, idempotencyKey };
 	}
 

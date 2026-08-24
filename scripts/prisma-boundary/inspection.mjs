@@ -135,7 +135,7 @@ export function validateRawProcedureDeclarations(path, source, rawProcedureCalls
 		const owner = classOwners.find(function _Adapter(candidate) { return candidate.name === declaration.adapter; });
 		if (authorizedOwner(owner, imports, [declaration], path) === undefined)
 		{
-			findings.push(_Finding(path, source, 0, "PRISMA-POLICY-RAW-PROCEDURE", `raw procedure gateway ${declaration.adapter} no longer implements its exact declared contract import`, `class:${declaration.adapter}`));
+			findings.push(_Finding(path, source, 0, "PRISMA-POLICY-RAW-PROCEDURE", `raw task-admission owner ${declaration.adapter} no longer implements its exact declared contract import`, `class:${declaration.adapter}`));
 			continue;
 		}
 		const approved = rawPrismaMethodMatches(source).filter(function _Approved(match)
@@ -144,7 +144,7 @@ export function validateRawProcedureDeclarations(path, source, rawProcedureCalls
 		});
 		if (approved.length !== 1)
 		{
-			findings.push(_Finding(path, source, owner.start, "PRISMA-POLICY-RAW-PROCEDURE", `raw procedure gateway ${declaration.adapter} must contain exactly one fixed ${declaration.method} call`, `class:${declaration.adapter}`));
+			findings.push(_Finding(path, source, owner.start, "PRISMA-POLICY-RAW-PROCEDURE", `raw task-admission owner ${declaration.adapter} must contain exactly one fixed ${declaration.method} call`, `class:${declaration.adapter}`));
 		}
 	}
 	return findings;

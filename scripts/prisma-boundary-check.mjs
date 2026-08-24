@@ -155,7 +155,7 @@ function _BasePolicy(base)
 	const source = _BaseSource(base, "docs/agents/prisma-boundary-policy.json");
 	if (source === undefined) throw new Error(`base ref ${base} has no Prisma-boundary policy`);
 	const policy = JSON.parse(source);
-	validatePolicy(policy);
+	validatePolicy(policy, true);
 	return policy;
 }
 
