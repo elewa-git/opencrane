@@ -44,7 +44,12 @@ function _AddedLineNumbers(diff)
 	return lines;
 }
 
-/** Finds inline `if` bodies introduced after the supplied Git base. */
+/**
+ * Finds inline `if` bodies on lines added after the supplied Git base.
+ *
+ * Git emits no diff for an untracked file, so every inline body in that file is new. For a rename,
+ * comparing the former and current paths keeps inherited lines out of the findings.
+ */
 function _FindAddedInlineIfBodies(sourceText, fileName, base, basePath)
 {
 	const paths = basePath === undefined || basePath === fileName ? [fileName] : [basePath, fileName];
