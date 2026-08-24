@@ -84,7 +84,13 @@ function _TaskEnvelope(value: unknown): _TaskEnvelope
 	return { idempotencyKey: value.idempotencyKey, input: value.input, inputUndefined: value.inputUndefined };
 }
 
-/** Read the claimed attempt that the pinned Absurd context keeps on its runtime task. */
+/**
+ * Reads the attempt from the runtime task because `TaskContext` in absurd-sdk 0.5.0 does not expose
+ * that field in its public type. Rejecting a missing or invalid value prevents retry policy from
+ * receiving a fabricated attempt number.
+ *
+ * @see https://github.com/earendil-works/absurd/tree/0.5.0 — the runtime revision that supplies `task.attempt`.
+ */
 function _AbsurdTaskAttempt(context: TaskContext): number
 {
 	const attempt = (context as unknown as _AbsurdTaskContextRuntime).task?.attempt;

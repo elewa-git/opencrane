@@ -7,7 +7,13 @@ import type { McpEraProbeObservation, McpEraProbeTaskResult } from "./mcp-era-pr
 
 export { McpEraProbeStates } from "./mcp-era-probe.types";
 
-/** Events that ask the protocol-check lifecycle for its next action. */
+/**
+ * Events that drive a remote server's protocol-check lifecycle.
+ *
+ * The workflow, replay path, and catalogue governance checks pass these in memory to the exhaustive
+ * transition table. They are not stored or sent over the API; adding an event requires a decision
+ * for every {@link McpEraProbeStates} value.
+ */
 export enum McpEraProbeEvents
 {
 	/** Valid discovery announced the required revision. */
@@ -26,7 +32,13 @@ export enum McpEraProbeEvents
 	Publish = "publish",
 }
 
-/** Closed actions produced by the protocol-check state table. */
+/**
+ * Actions returned by the protocol-check transition table.
+ *
+ * The workflow interprets `Accept`, `Reject`, `Retry`, and `ReturnStored`, while catalogue updates
+ * interpret `Allow` and `Deny`. These values are not persisted; `Invalid` tells the caller that the
+ * event cannot occur from the supplied state.
+ */
 export enum McpEraProbeActions
 {
 	/** Store accepted evidence. */
@@ -85,7 +97,14 @@ const _TRANSITIONS: Readonly<Record<McpEraProbeStates, Readonly<Record<McpEraPro
 	},
 };
 
-/** Resolve one lifecycle action from stored state and a domain event. */
+/**
+ * Resolves the action for every stored probe state and lifecycle event.
+ *
+ * Workflow execution and catalogue governance share this table so approval cannot diverge from the
+ * result that replay accepts.
+ *
+ * @returns The action the caller must perform; `Invalid` means the event is not allowed in this state.
+ */
 export function __McpEraProbeTransition(state: McpEraProbeStates, event: McpEraProbeEvents): McpEraProbeActions
 {
 	return _TRANSITIONS[state][event];
@@ -103,7 +122,14 @@ function _TerminalFailureCode(value: string): McpEraProbeFailureCodes | null
 	return null;
 }
 
-/** Derive a stored catalogue result from validated discovery evidence. */
+/**
+ * Converts validated discovery evidence into the result saved for the catalogue row.
+ *
+ * The workflow calls this after transport validation so the accepted revision and rejection rule
+ * remain owned by the same state table.
+ *
+ * @returns Accepted evidence for the pinned revision, or rejected evidence for any other revision.
+ */
 export function __McpEraProbeObservationResult(observation: McpEraProbeObservation): McpEraProbeTaskResult
 {
 	const event = observation.protocolVersion === MCP_ERA_PROTOCOL_VERSION ? McpEraProbeEvents.ObservedAcceptedVersion : McpEraProbeEvents.ObservedOtherVersion;
@@ -111,7 +137,14 @@ export function __McpEraProbeObservationResult(observation: McpEraProbeObservati
 	return { decision: action === McpEraProbeActions.Accept ? McpEraProbeDecisions.Accepted : McpEraProbeDecisions.Rejected, protocolVersion: observation.protocolVersion, evidenceDigest: observation.evidenceDigest };
 }
 
-/** Convert a terminal domain failure into stable rejection evidence. */
+/**
+ * Converts a final domain failure into rejection evidence with a repeatable digest.
+ *
+ * The workflow stores this result when retrying cannot change the outcome or the attempt limit is
+ * exhausted, allowing a duplicate task delivery to return the same evidence.
+ *
+ * @returns A rejected result whose digest is derived from the failure code.
+ */
 export function __McpEraProbeTerminalResult(code: McpEraProbeFailureCodes): McpEraProbeTaskResult
 {
 	const action = __McpEraProbeTransition(McpEraProbeStates.Pending, McpEraProbeEvents.TerminalFailure);
@@ -121,7 +154,15 @@ export function __McpEraProbeTerminalResult(code: McpEraProbeFailureCodes): McpE
 	return { decision: McpEraProbeDecisions.Rejected, failureCode: code, evidenceDigest };
 }
 
-/** Rebuild the final result selected by the stored winner. */
+/**
+ * Rebuilds the result committed by the delivery that finished the protocol check first.
+ *
+ * Duplicate task deliveries call this before external discovery and after a write race, so a saved
+ * result prevents the remote endpoint from being queried again.
+ *
+ * @returns The saved final result, or `null` while this registration is still pending.
+ * @throws When stored evidence is missing or conflicts with the saved state.
+ */
 export function __McpEraProbeReplayResult(target: McpEraProbeTargetRecord): McpEraProbeTaskResult | null
 {
 	const state = target.eraProbeStatus;
@@ -139,7 +180,14 @@ export function __McpEraProbeReplayResult(target: McpEraProbeTargetRecord): McpE
 	throw new Error("MCP stored protocol-check result conflicts with its state.");
 }
 
-/** Return the probe states allowed to enter the requested governance state. */
+/**
+ * Selects the probe states that may satisfy an approval or publication update.
+ *
+ * The operator passes these states into the repository update so the governance write and its
+ * protocol-check prerequisite are enforced by one database statement.
+ *
+ * @returns Accepted and pre-registration states for approval or publication, or `undefined` when the update has no probe prerequisite.
+ */
 export function __McpEraProbeRequiredStates(approvalStatus: string): readonly McpEraProbeStates[] | undefined
 {
 	let event: McpEraProbeEvents;

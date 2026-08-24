@@ -3,7 +3,10 @@ import type { DurableExecution, DurableExecutionTransaction, DurableTaskReceipt 
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
 import type { McpEraProbeFailureCodes } from "./mcp-era-probe-failure";
 
-/** MCP protocol revision accepted by OpenCrane's remote server catalogue. */
+/**
+ * MCP protocol revision accepted by OpenCrane's remote server catalogue.
+ * @see https://blog.modelcontextprotocol.io/posts/2026-07-28/ — the pinned specification release.
+ */
 export const MCP_ERA_PROTOCOL_VERSION = "2026-07-28" as const;
 
 /**
