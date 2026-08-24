@@ -65,6 +65,9 @@ export interface InternalRuntimeConfig
 	readonly assignmentTtlMilliseconds: number;
 }
 
+/** Runtime namespaces needed by cancellation without importing unrelated production services. */
+export type RunCancellationRuntimeConfig = Pick<InternalRuntimeConfig, "personalRuntimeNamespace" | "managedRuntimeNamespace">;
+
 /** The Obot management transport settings the deployment supplies: origin, credential path, and timeout. */
 export interface OpenCraneObotConfig
 {

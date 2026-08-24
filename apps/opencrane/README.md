@@ -78,6 +78,10 @@ stream while this app keeps authentication, Prisma and Express ownership.
 `Entrypoint: src/index.ts` — a short, telemetry-first `_Main()` that composes the process and hands
 its resources to the lifecycle owner.
 
+`Development entrypoint: src/development/index.ts` — the explicit Tier 2 composition used by
+`npm run dev:tier2`. It keeps the real API and database authorities but replaces production OIDC,
+Kubernetes identity review, and optional infrastructure with local-only adapters.
+
 - `src/app/config.ts` reads one startup snapshot for listener and worker configuration, including
   the all-or-nothing standalone first-owner contract and HTTPS-only Fleet membership receiver.
 - `src/app/initial-model-bootstrap.ts` makes the deployment-supplied provider key available through
@@ -201,6 +205,12 @@ are:
 
 The app builds into `dist/apps/opencrane`, uses `deploy/Dockerfile`, and ships through its app-owned
 Helm library chart, which [`deploy-k8s`](../_infra/deploy-k8s/README.md) composes into a release.
+
+For local application work, `npm run dev:tier2` supplies the development entrypoint flag, a
+loopback PostgreSQL URL, signed local membership keys, and fixed identity values. Agent profiles
+also supply separate owner-only controller and runtime launch-secret paths. The development
+entrypoint refuses production mode, non-loopback databases, identity overrides, and missing Agent
+credentials before it opens a listener.
 
 In standalone mode, successful OIDC authentication does not itself grant product access. Existing
 active members proceed normally. A verified identity without membership can call only the signed

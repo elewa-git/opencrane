@@ -13,7 +13,7 @@ import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _CheckHealth, _ErrorHandler, _RateLimit, _TransportSecurity, type PublicHealthReportReader } from "@opencrane/backend/server/infra/http";
 
 import { _log } from "./log";
-import { _ReadOrganizationMembershipConfig } from "./config";
+import type { OpenCraneOrganizationMembershipConfig } from "./config.types";
 import { _CreateOrganizationMembersComposition } from "./organization-members-composition";
 import type { PublicAuthenticationComposition } from "./public-app.types";
 import { _RegisterRoutes } from "./routes";
@@ -32,7 +32,11 @@ function _CreateStandaloneFirstUserAudit(config: StandaloneFirstUserAdmissionCon
 export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null): PublicAuthenticationComposition
 {
 	const authService = ___CreateOidcAuthService(_log, prisma, customApi, standaloneFirstUserAdmission, _CreateStandaloneFirstUserAudit(standaloneFirstUserAdmission));
-	return { authService, sessionMiddleware: authService.createSessionMiddleware() };
+	return {
+		productAuthentication: ___AuthMiddleware(),
+		router: ___AuthRouter(authService, prisma),
+		sessionMiddleware: authService.createSessionMiddleware(),
+	};
 }
 
 /**
@@ -48,11 +52,13 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * @param serverNamespace - Namespace in which provider credentials are managed.
  * @param obotCustody - Composed Obot custody authority; fail-closed when the transport is disabled.
  * @param authentication - One browser-session composition shared with the internal resolver.
+ * @param organizationMembership - Startup-selected standalone or Fleet member configuration.
+ * @param artifactServiceEnabled - Whether conversation assets have a backing service.
  * @param artifactScannerEnabled - Whether newly quarantined conversation files can be consumed.
  * @param health - Cached public service report reader with no topology or error details.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader): Express
+export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, authentication: PublicAuthenticationComposition, organizationMembership: OpenCraneOrganizationMembershipConfig, artifactServiceEnabled: boolean, artifactScannerEnabled: boolean, health: PublicHealthReportReader): Express
 {
 	const app = express();
 
@@ -72,13 +78,17 @@ export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, r
 
 	// 4. Mount session establishment before the product-authentication boundary.
 	app.use(...authentication.sessionMiddleware);
-	app.use("/api/v1/auth", ___AuthRouter(authentication.authService, prisma));
-	app.use(___AuthMiddleware());
-	const organizationMembers = _CreateOrganizationMembersComposition(prisma, _ReadOrganizationMembershipConfig());
-	if (organizationMembers.productAccess !== null) app.use(organizationMembers.productAccess);
+	app.use("/api/v1/auth", authentication.router);
+	app.use(authentication.productAuthentication);
+	const organizationMembers = _CreateOrganizationMembersComposition(prisma, organizationMembership);
+
+	if (organizationMembers.productAccess !== null)
+	{
+		app.use(organizationMembers.productAccess);
+	}
 
 	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, runCancellation, serverNamespace, obotCustody, artifactScannerEnabled, organizationMembers.router);
+	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, runCancellation, serverNamespace, obotCustody, artifactServiceEnabled, artifactScannerEnabled, organizationMembers.router);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

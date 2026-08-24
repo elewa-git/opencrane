@@ -45,12 +45,12 @@ export interface PublicHealthReaderDependencies
 {
 	/** Required product database probe that controls API readiness. */
 	readonly database: PublicHealthProbe;
-	/** Required model-routing probe. */
-	readonly models: PublicHealthProbe;
-	/** Required memory-gateway probe. */
-	readonly memory: PublicHealthProbe;
-	/** Required immutable-file service probe. */
-	readonly files: PublicHealthProbe;
+	/** Model-routing probe; null means the selected application profile disables model access. */
+	readonly models: PublicHealthProbe | null;
+	/** Memory-gateway probe; null means the selected application profile disables memory access. */
+	readonly memory: PublicHealthProbe | null;
+	/** Immutable-file probe; null means the selected application profile disables file access. */
+	readonly files: PublicHealthProbe | null;
 	/** Optional live-channel service probe; null means intentionally disabled. */
 	readonly channels: PublicHealthProbe | null;
 	/** Optional integration gateway probe; null means intentionally disabled. */

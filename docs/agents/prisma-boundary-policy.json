@@ -1130,6 +1130,8 @@
     "compositions": [
       "apps/opencrane/src/app/external-action-composition.ts",
       "apps/opencrane/src/app/runtime-composition.ts",
+		"apps/opencrane/src/development/internal-app.ts",
+		"apps/opencrane/src/development/internal-runtime.ts",
       "apps/opencrane/src/app/channel-target-composition.ts",
       "apps/opencrane/src/app/lifecycle.ts",
       "apps/opencrane/src/app/background-workers.ts",

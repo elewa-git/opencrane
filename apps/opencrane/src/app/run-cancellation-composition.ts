@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { PrismaRunCancellationRepository, type RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 
-import type { InternalRuntimeConfig } from "./config.types";
+import type { RunCancellationRuntimeConfig } from "./config.types";
 
 /** How long a cleanup claim stays valid before another pass may reclaim it; the repair and cleanup passes share this value. */
 const _RUNTIME_CLEANUP_CLAIM_LEASE_MILLISECONDS = 30_000;
@@ -11,7 +11,7 @@ const _RUNTIME_CLEANUP_CLAIM_LEASE_MILLISECONDS = 30_000;
 const _RUNTIME_ORPHAN_OBSERVATION_MARGIN_MILLISECONDS = 10_000;
 
 /** Compose one cancellation authority shared by the public route and cleanup workers. */
-export function _CreateRunCancellationAuthority(prisma: PrismaClient, config: InternalRuntimeConfig): RunCancellationRepository
+export function _CreateRunCancellationAuthority(prisma: PrismaClient, config: RunCancellationRuntimeConfig): RunCancellationRepository
 {
 	if (!config.personalRuntimeNamespace || !config.managedRuntimeNamespace || config.personalRuntimeNamespace === config.managedRuntimeNamespace)
 	{

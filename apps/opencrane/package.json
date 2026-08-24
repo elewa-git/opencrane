@@ -9,10 +9,12 @@
     "build:bundle": "rm -rf ../../dist/apps/opencrane && esbuild src/index.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outdir=../../dist/apps/opencrane && tsx scripts/emit-openapi.mts",
     "emit-openapi": "tsx scripts/emit-openapi.mts",
     "dev": "tsx watch src/index.ts",
+    "dev:tier2": "tsx watch src/development/index.ts",
     "start": "node ../../dist/apps/opencrane/index.js",
     "test": "vitest run",
     "lint": "tsc --noEmit",
     "db:generate": "prisma generate",
+    "db:seed-tier2": "npm run db:generate && tsx prisma/development/seed.ts",
     "test:persona-source-seeds": "node prisma/bootstrap/verify-persona-source-seeds.mjs",
     "test:onboarding-bootstrap-seeds": "node prisma/bootstrap/verify-onboarding-bootstrap-seeds.mjs",
     "test:authority-baseline": "node prisma/bootstrap/verify-authority-baseline.mjs"

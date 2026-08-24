@@ -50,11 +50,12 @@ import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-u
  * @param runCancellation - Shared attempt-fenced cancellation authority.
  * @param serverNamespace - Namespace in which provider Secrets are managed.
  * @param obotCustody - Composed Obot custody authority (fail-closed adapter when Obot is off).
+ * @param artifactServiceEnabled - Whether conversation asset routes have a backing service.
  * @param artifactScannerEnabled - Whether upload admission has a live scanner consumer.
  * @param organizationMembersRouter - Startup-selected standalone or Fleet member authority.
  * @returns The configured public listener.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, artifactScannerEnabled: boolean, organizationMembersRouter: Router): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, artifactServiceEnabled: boolean, artifactScannerEnabled: boolean, organizationMembersRouter: Router): Express
 {
 	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner);
 	const identityAndAccessRoutes: readonly RouteMount[] = [
@@ -77,7 +78,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunCancellationRouter(prisma, runCancellation, _log) },
 		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationsRouter(prisma, personalRunAdmission, _CreateConversationAttachmentAdmission, _log) },
-		{ method: "use", path: "/api/v1/me/conversations", handler: __CreateConversationAssetRouter({ resolveCaller: _ResolveConversationAssetCaller, authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled), logger: _log }) },
+		..._CreateConversationAssetRoutes(prisma, artifactServiceEnabled, artifactScannerEnabled),
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfElicitationRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationReplayRouter(prisma, _log, { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal }) },
 		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },
@@ -128,6 +129,25 @@ const _ResolveConversationAssetCaller = function _ConversationAssetCaller(reques
 	const principal = _ResolveRequestPrincipal(request);
 	return principal === null ? null : { siloId: principal.siloId, subjectId: principal.subjectId };
 };
+
+/** Build the conversation asset route only when its backing service is part of this composition. */
+function _CreateConversationAssetRoutes(prisma: PrismaClient, artifactServiceEnabled: boolean, artifactScannerEnabled: boolean): readonly RouteMount[]
+{
+	if (!artifactServiceEnabled)
+	{
+		return [];
+	}
+
+	return [{
+		method: "use",
+		path: "/api/v1/me/conversations",
+		handler: __CreateConversationAssetRouter({
+			resolveCaller: _ResolveConversationAssetCaller,
+			authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled),
+			logger: _log
+		})
+	}];
+}
 
 /**
  * Composes the share authority behind the shared per-IP limiter before identity or database work.

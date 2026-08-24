@@ -4,7 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { findingDelta, inspectPrismaBoundary, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy } from "../prisma-boundary/core.mjs";
+import { findingDelta, inspectPrismaBoundary, isProductionTypeScript, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy } from "../prisma-boundary/core.mjs";
 
 /** Fixture directory for deterministic ownership examples. */
 const _FIXTURES = fileURLToPath(new URL("./fixtures/prisma-boundary/", import.meta.url));
@@ -22,6 +22,12 @@ function _Fixture(name)
 {
 	return readFileSync(join(_FIXTURES, `${name}.ts.txt`), "utf8");
 }
+
+test("excludes app-owned disposable database seed scripts from production ownership checks", function _ExcludesDevelopmentSeed()
+{
+	assert.equal(isProductionTypeScript("apps/opencrane/prisma/development/seed.ts"), false);
+	assert.equal(isProductionTypeScript("apps/opencrane/src/development/index.ts"), true);
+});
 
 test("allows imported repository and unit-of-work contract owners", function _AllowsOwners()
 {

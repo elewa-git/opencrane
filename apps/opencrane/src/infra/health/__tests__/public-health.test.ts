@@ -49,6 +49,22 @@ describe("public health report", function _Suite()
 		});
 	});
 
+	it("reports intentionally absent Tier 2 services as disabled instead of unavailable", async function _ReportsDisabledServices()
+	{
+		const reader = _CreatePublicHealthReportReader(_Dependencies({
+			models: null,
+			memory: null,
+			files: null,
+			channels: null,
+			integrations: null,
+		}));
+		const report = await reader.read();
+		expect(report.status).toBe(PublicHealthStatuses.Ok);
+		expect(report.services[PublicHealthServiceNames.Models]).toBe(PublicHealthServiceStatuses.Disabled);
+		expect(report.services[PublicHealthServiceNames.Memory]).toBe(PublicHealthServiceStatuses.Disabled);
+		expect(report.services[PublicHealthServiceNames.Files]).toBe(PublicHealthServiceStatuses.Disabled);
+	});
+
 	it("keeps the API ready while a user-visible optional dependency is degraded", async function _ReportsOptionalFailure()
 	{
 		const dependencies = _Dependencies({ memory: _Probe(false) });
@@ -78,7 +94,7 @@ describe("public health report", function _Suite()
 		expect(second).toBe(first);
 		await Promise.all([first, second]);
 		expect(dependencies.database.check).toHaveBeenCalledOnce();
-		expect(dependencies.models.check).toHaveBeenCalledOnce();
+		expect(dependencies.models?.check).toHaveBeenCalledOnce();
 	});
 
 	it("refreshes every service after the public cache window expires", async function _RefreshesExpiredReport()
@@ -89,6 +105,6 @@ describe("public health report", function _Suite()
 		await reader.read();
 		await reader.read();
 		expect(dependencies.database.check).toHaveBeenCalledTimes(2);
-		expect(dependencies.models.check).toHaveBeenCalledTimes(2);
+		expect(dependencies.models?.check).toHaveBeenCalledTimes(2);
 	});
 });

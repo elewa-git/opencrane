@@ -35,9 +35,15 @@ class _PublicHealthReportReader implements PublicHealthReportReader
 		// Run independent checks together so an unavailable service does not delay every later check.
 		const [database, models, memory, files, channels, integrations] = await Promise.all([
 			_ReadProbe(PublicHealthServiceNames.Database, this._dependencies.database, this._dependencies.logger),
-			_ReadProbe(PublicHealthServiceNames.Models, this._dependencies.models, this._dependencies.logger),
-			_ReadProbe(PublicHealthServiceNames.Memory, this._dependencies.memory, this._dependencies.logger),
-			_ReadProbe(PublicHealthServiceNames.Files, this._dependencies.files, this._dependencies.logger),
+			this._dependencies.models === null
+				? Promise.resolve(PublicHealthServiceStatuses.Disabled)
+				: _ReadProbe(PublicHealthServiceNames.Models, this._dependencies.models, this._dependencies.logger),
+			this._dependencies.memory === null
+				? Promise.resolve(PublicHealthServiceStatuses.Disabled)
+				: _ReadProbe(PublicHealthServiceNames.Memory, this._dependencies.memory, this._dependencies.logger),
+			this._dependencies.files === null
+				? Promise.resolve(PublicHealthServiceStatuses.Disabled)
+				: _ReadProbe(PublicHealthServiceNames.Files, this._dependencies.files, this._dependencies.logger),
 			this._dependencies.channels === null
 				? Promise.resolve(PublicHealthServiceStatuses.Disabled)
 				: _ReadProbe(PublicHealthServiceNames.Channels, this._dependencies.channels, this._dependencies.logger),

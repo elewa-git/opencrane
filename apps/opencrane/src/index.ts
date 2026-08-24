@@ -7,7 +7,7 @@ import { _CreateManagedExecutionEvidenceAuthority } from "@opencrane/backend/ser
 import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { ___BindConsole } from "@opencrane/backend/observability";
 
-import { _ReadProcessConfig } from "./app/config";
+import { _ReadOrganizationMembershipConfig, _ReadProcessConfig } from "./app/config";
 import { _ReconcileChannelTargetRoutes, _StartChannelTargetRouteReconciler } from "./app/channel-target-composition";
 import { _CreateExternalActionWorker } from "./app/external-action-composition";
 import { _CreateInternalApp } from "./app/internal-app";
@@ -56,7 +56,7 @@ async function _Main(): Promise<void>
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
-	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, obot.custody, authentication, config.runtime.artifactScannerEnabled, publicHealth);
+	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, obot.custody, authentication, _ReadOrganizationMembershipConfig(), true, config.runtime.artifactScannerEnabled, publicHealth);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware);
 
