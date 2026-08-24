@@ -44,8 +44,8 @@ function _ProjectionCommand(options: MirrorGroupsOnLoginOptions): GroupClaimProj
  * Replaces one Principal's login-owned group memberships inside the caller's transaction.
  *
  * The unit of work validates the identity and parses group claims before constructing this adapter.
- * This class therefore owns only database reads and writes: upsert the Principal, resolve existing
- * external groups, replace their direct memberships, and report claims that did not resolve.
+ * The adapter owns the transaction-scoped projection and reports claims that did not resolve;
+ * identity validation and claim parsing stay outside the database workflow.
  *
  * Called by: `PrismaGroupClaimProjectionUnitOfWork.reconcile` in this file.
  * @see GroupClaimProjectionRepository for the transaction-scoped contract.

@@ -7,16 +7,16 @@ export interface MirrorGroupsOnLoginOptions
 	siloId: string | undefined;
 	/** IdP issuer that namespaces the verified subject. */
 	issuer: string | undefined;
-  /** IdP-verified subject. */
-  subject: string | undefined;
+	/** IdP-verified subject. */
+	subject: string | undefined;
 	/** Verified email retained as profile data, never as an identity key. */
 	email: string | undefined;
 	/** Provider display name retained as profile data, never as authority. */
 	displayName: string | undefined;
-  /** Group claims carried by the verified identity token. */
-  groups: readonly string[] | undefined;
-  /** Scoped logger. */
-  log: Logger;
+	/** Group claims carried by the verified identity token. */
+	groups: readonly string[] | undefined;
+	/** Scoped logger. */
+	log: Logger;
 }
 
 /** Validated identity and parsed group IDs passed into one projection transaction. */
