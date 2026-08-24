@@ -75,6 +75,14 @@ export interface McpbValidationRepository
 	 */
 	createOrFind(submission: McpbValidationSubmissionRecord): Promise<McpbValidationCreateResult | null>;
 	/**
+	 * Finds one validation for an authenticated administrator without exposing another silo.
+	 *
+	 * @param siloId - Silo derived from the authenticated request.
+	 * @param validationId - Product validation identifier from the route.
+	 * @returns The validation, or `null` when it is absent or belongs to another silo.
+	 */
+	find(siloId: string, validationId: string): Promise<McpbValidationRecord | null>;
+	/**
 	 * Loads one validation only when its silo and submission digest still match the task.
 	 *
 	 * @param siloId - Keeps the read inside the admitted silo.

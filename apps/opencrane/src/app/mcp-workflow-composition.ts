@@ -1,14 +1,16 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { __CreateMcpEraProbeWorkflow, MCP_ERA_PROTOCOL_VERSION, McpEraProbeFailure, McpEraProbeFailureCodes, McpEraProbeTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
-import type { McpEraProbeClient } from "@opencrane/backend/server/gateways/mcp";
+import { _CreateArtifactCatalogueRepository } from "@opencrane/backend/server/agents/artifacts";
+import { __CreateMcpbBundleVerifier, __CreateMcpbValidationWorkflow, __CreateMcpEraProbeWorkflow, MCP_ERA_PROTOCOL_VERSION, McpEraProbeFailure, McpEraProbeFailureCodes, McpEraProbeTaskNames, McpbValidationTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
+import type { McpEraProbeClient, McpbBundleArtifactResolver } from "@opencrane/backend/server/gateways/mcp";
 import { __CreateHttpsMcpEraProbeClient, McpEraProbeConfigurationError, McpEraProbeProtocolError, McpEraProbeTransportError } from "@opencrane/backend/server/infra/mcp-era-probe";
 import { _CreateAbsurdWorkflowEngine } from "@opencrane/backend/server/infra/workflows/infra_absurd";
 import { __CreateWorkflowGuard, __CreateWorkflowTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/guard";
 
+import { _CreatePublishedArtifactReader } from "../infra/artifacts/artifact-upload.factory";
 import type { OpenCraneWorkflowConfig } from "./config.types";
 import { _log } from "./log";
-import type { McpEraProbeComposition } from "./mcp-era-probe-composition.types";
+import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 
 /** Translate infrastructure failures into the bounded outcomes owned by the MCP domain. */
 export function _McpEraProbeFailure(error: unknown): McpEraProbeFailure
@@ -27,20 +29,14 @@ export function _McpEraProbeFailure(error: unknown): McpEraProbeFailure
 	throw error;
 }
 
-/** Compose one Absurd engine, guarded workflow API, and direct HTTPS MCP protocol checker. */
-export function _CreateMcpEraProbeComposition(prisma: PrismaClient, config: OpenCraneWorkflowConfig): McpEraProbeComposition
+/** Compose one guarded Absurd engine for both remote-server and MCP bundle jobs. */
+export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: OpenCraneWorkflowConfig): McpWorkflowComposition
 {
 	const queueAuthority = __CreateWorkflowTaskQueueAuthority([
 		{ taskName: McpEraProbeTaskNames.Probe, queue: "control-plane" },
+		{ taskName: McpbValidationTaskNames.Verify, queue: "control-plane" },
 	]);
-	const runtime = _CreateAbsurdWorkflowEngine({
-		databasePoolSize: config.databasePoolSize,
-		databaseUrl: config.databaseUrl,
-		log: _log,
-		pollIntervalMs: config.pollIntervalMilliseconds,
-		queueAuthority,
-		workerConcurrency: config.workerConcurrency,
-	});
+	const runtime = _CreateAbsurdWorkflowEngine({ databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
 	const transport = __CreateHttpsMcpEraProbeClient({ protocolVersion: MCP_ERA_PROTOCOL_VERSION, maximumResponseBytes: config.mcpEraProbeMaximumResponseBytes, requestTimeoutMilliseconds: config.mcpEraProbeTimeoutMilliseconds });
 	const probe: McpEraProbeClient = {
@@ -51,6 +47,14 @@ export function _CreateMcpEraProbeComposition(prisma: PrismaClient, config: Open
 		},
 	};
 	const unitOfWork = new PrismaMcpOperatorUnitOfWork(prisma);
-	const workflow = __CreateMcpEraProbeWorkflow({ execution, probe, unitOfWork });
-	return { runtime, unitOfWork, workflow };
+	const eraProbeWorkflow = __CreateMcpEraProbeWorkflow({ execution, probe, unitOfWork });
+	const mcpbValidationWorkflow = __CreateMcpbValidationWorkflow({ execution, verifier: __CreateMcpbBundleVerifier(_CreatePublishedArtifactReader(prisma)), unitOfWork });
+	const artifactCatalogue = _CreateArtifactCatalogueRepository(prisma);
+	const mcpbArtifacts: McpbBundleArtifactResolver = {
+		async resolve(siloId, artifactId, artifactRevisionId)
+		{
+			return await artifactCatalogue.loadPublishedReadTarget({ siloId, artifactId, artifactRevisionId });
+		},
+	};
+	return { runtime, unitOfWork, eraProbeWorkflow, mcpbValidationWorkflow, mcpbArtifacts };
 }

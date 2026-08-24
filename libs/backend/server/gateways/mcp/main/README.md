@@ -9,8 +9,8 @@ data sources. An *MCP server* provides those tools. This package decides which M
 which ones administrators approve, and who may install them.
 
 A workflow is a background job whose progress is saved in the database. If OpenCrane restarts, the
-job can continue instead of starting over. Absurd runs these jobs. This package uses one workflow to
-check a newly registered MCP server before an administrator may approve it.
+job can continue instead of starting over. Absurd runs these jobs. This package uses workflows to
+check a newly registered MCP server and a submitted signed MCP bundle.
 
 ```
  administrator sends POST /mcp/servers
@@ -26,6 +26,24 @@ check a newly registered MCP server before an administrator may approve it.
    ├── temporary failure ───► Absurd tries again later
    └── other or bad reply ──► rejected
 ```
+
+```
+ administrator sends POST /mcp/bundle-validations
+        │
+        ▼
+ database transaction
+   ├── save the exact published bundle revision
+   └── save an Absurd background job
+        │
+        ▼
+ worker checks the signed bundle and its manifest
+   ├── trusted signature + valid manifest ──► verified
+   └── invalid package ─────────────────────► rejected
+```
+
+The bundle check currently verifies the signature and the package manifest. Running the bundle in
+an isolated environment, scanning it, building an image, and publishing it are later workflow
+steps.
 
 The draft server and its background job use one database transaction. Either both are saved, or
 neither is saved. A repeated registration request returns the same draft and the same job.
@@ -49,6 +67,8 @@ returns credentials and never labels an install connected before a real connecti
 - `mcpOperatorRouter` — the Express router mounted at `/api/v1/mcp`.
 - `registerRemoteServer` — saves a draft server and its protocol-check job together.
 - `__CreateMcpEraProbeWorkflow` — registers the saved background job that checks the server.
+- `submitMcpbValidation` and `getMcpbValidation` — save and read signed MCP bundle checks.
+- `__CreateMcpbValidationWorkflow` — registers the saved bundle verification job.
 - Operator services: `listEntitledCatalog`, `listInstalled`, `installServer`, `approveServer`,
   `publishServer`, and the access editor.
 - `_McpOpenapiPaths` — the OpenAPI path descriptions for this API.
@@ -70,7 +90,8 @@ an Absurd package directly.
 
 ## Data and persistence
 
-This package owns the public behavior around `McpServer` and `McpServerInstall` in
+This package owns the public behavior around `McpServer`, `McpServerInstall`, and
+`McpbValidation` in
 `apps/opencrane/prisma/schema/mcp.prisma`. General `AuthorizationGrant` rows remain owned by the
 authorization package. `PrismaMcpOperatorUnitOfWork` is the public MCP database boundary.
 

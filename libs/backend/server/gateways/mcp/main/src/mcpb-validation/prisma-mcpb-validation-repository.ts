@@ -67,6 +67,13 @@ export class PrismaMcpbValidationRepository implements McpbValidationRepository
 		return { created: true, validation: _Record(created) };
 	}
 
+	/** Find one validation only inside the authenticated silo. */
+	async find(siloId: string, validationId: string): Promise<McpbValidationRecord | null>
+	{
+		const validation = await this._transaction.mcpbValidation.findFirst({ where: { id: validationId, siloId }, select: _VALIDATION_SELECT });
+		return validation ? _Record(validation) : null;
+	}
+
 	/** Load one exact saved validation for task replay. */
 	async load(siloId: string, validationId: string, submissionDigest: string): Promise<McpbValidationRecord | null>
 	{

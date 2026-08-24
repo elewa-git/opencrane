@@ -1284,7 +1284,7 @@
       "apps/opencrane/src/app/routes.ts",
       "libs/backend/server/iam/groups/main/src/routes/groups.ts",
       "apps/opencrane/src/app/external-action-composition.ts",
-	  "apps/opencrane/src/app/mcp-era-probe-composition.ts",
+	  "apps/opencrane/src/app/mcp-workflow-composition.ts",
       "apps/opencrane/src/app/runtime-composition.ts",
       "apps/opencrane/src/app/channel-target-composition.ts",
       "apps/opencrane/src/app/lifecycle.ts",
