@@ -9,6 +9,13 @@ MOCK_BIN="$TEST_DIR/bin"
 mkdir -p "$MOCK_BIN"
 trap 'rm -rf -- "$TEST_DIR"' EXIT
 
+grep -Fq "jsonpath={.data.lease-private\\.pem}" "$CORE"
+grep -Fq "jsonpath={.data.receipt-private\\.pem}" "$CORE"
+if grep -Fq "jsonpath={.data.lease-private\\\\.pem}" "$CORE" || grep -Fq "jsonpath={.data.receipt-private\\\\.pem}" "$CORE"; then
+  echo 'interrupted artifact key JSONPath is over-escaped' >&2
+  exit 1
+fi
+
 cat >"$MOCK_BIN/command-mock" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -71,6 +78,14 @@ case "$command_name" in
       printf 'namespace/opencrane-retired-fixture'; exit 0
     fi
     if [[ "$*" == *" get namespace/"* || "$*" == *" get namespace "* ]]; then exit 0; fi
+    if [[ "$*" == *" get secret opencrane-retired-fixture-artifact-catalog-keys "* ]]; then
+      [[ "${MOCK_INTERRUPTED_ARTIFACT_KEYS:-0}" == "1" ]] && printf 'catalog-key'
+      exit 0
+    fi
+    if [[ "$*" == *" get secret opencrane-retired-fixture-artifact-service-keys "* ]]; then
+      [[ "${MOCK_INTERRUPTED_ARTIFACT_KEYS:-0}" == "1" ]] && printf 'service-key'
+      exit 0
+    fi
     if [[ "$*" == *" get deployment/opencrane-retired-fixture-artifact-service "*"app\\.kubernetes\\.io/instance"* ]]; then
       printf 'opencrane-retired-fixture'; exit 0
     fi
@@ -100,6 +115,17 @@ case "$command_name" in
         *"app\\.kubernetes\\.io/instance"*)
           if [[ "${MOCK_FOREIGN_CNPG:-0}" == "1" ]]; then printf 'other-postgres'; else printf 'opencrane-retired-fixture-postgres'; fi ;;
         *"app\\.kubernetes\\.io/managed-by"*) printf 'Helm' ;;
+      esac
+      exit 0
+    fi
+    if [[ "$*" == *" get clusterrole/"* || "$*" == *" get clusterrolebinding/"* ]]; then
+      case "$*" in
+        *" -o name"*) printf '%s' 'rbac' ;;
+        *"app\\.kubernetes\\.io/managed-by"*) printf '%s' 'Helm' ;;
+        *"meta\\.helm\\.sh/release-namespace"*)
+          if [[ "${MOCK_FOREIGN_RBAC_NAMESPACE:-0}" == "1" ]]; then printf '%s' 'foreign-namespace'; else printf '%s' 'opencrane-retired-fixture'; fi ;;
+        *"meta\\.helm\\.sh/release-name"*)
+          if [[ "${MOCK_FOREIGN_RBAC:-0}" == "1" ]]; then printf '%s' 'foreign'; else printf '%s' 'opencrane-retired-fixture'; fi ;;
       esac
       exit 0
     fi
@@ -147,6 +173,10 @@ fi
 
 if run_core foreign-owner MOCK_FOREIGN_CNPG=1; then echo 'foreign CNPG ownership unexpectedly succeeded' >&2; exit 1; fi
 ! grep -Fq ' delete ' "$TEST_DIR/foreign-owner.calls"
+if run_core foreign-rbac MOCK_FOREIGN_RBAC=1; then echo 'foreign RBAC ownership unexpectedly succeeded' >&2; exit 1; fi
+! grep -Fq ' delete ' "$TEST_DIR/foreign-rbac.calls"
+if run_core foreign-rbac-namespace MOCK_FOREIGN_RBAC_NAMESPACE=1; then echo 'foreign RBAC namespace unexpectedly succeeded' >&2; exit 1; fi
+! grep -Fq ' delete ' "$TEST_DIR/foreign-rbac-namespace.calls"
 if run_core foreign-release MOCK_FOREIGN_RELEASE=1; then
   echo 'foreign Helm ownership unexpectedly succeeded' >&2
   cat "$TEST_DIR/foreign-release.output" >&2
@@ -165,6 +195,37 @@ if run_core foreign-sentinel-owner MOCK_FOREIGN_SENTINEL_OWNER=1; then
   exit 1
 fi
 ! grep -Fq ' delete ' "$TEST_DIR/foreign-sentinel-owner.calls"
+
+mkdir -p "$TEST_DIR/interrupted-missing-keys.state"
+touch "$TEST_DIR/interrupted-missing-keys.state/main-uninstalled"
+if env PATH="$MOCK_BIN:$PATH" MOCK_CALLS="$TEST_DIR/interrupted-missing-keys.calls" MOCK_STATE="$TEST_DIR/interrupted-missing-keys.state" \
+  bash "$CORE" "${common_core_args[@]}" --preflight >"$TEST_DIR/interrupted-missing-keys.output" 2>&1; then
+  echo 'interrupted artifact namespace without both keys unexpectedly succeeded' >&2
+  exit 1
+fi
+grep -Fq 'two deploy-created key Secrets are incomplete' "$TEST_DIR/interrupted-missing-keys.output"
+! grep -Fq ' delete ' "$TEST_DIR/interrupted-missing-keys.calls"
+
+mkdir -p "$TEST_DIR/interrupted-preflight.state"
+touch "$TEST_DIR/interrupted-preflight.state/main-uninstalled"
+if ! env PATH="$MOCK_BIN:$PATH" MOCK_CALLS="$TEST_DIR/interrupted-preflight.calls" MOCK_STATE="$TEST_DIR/interrupted-preflight.state" \
+  MOCK_INTERRUPTED_ARTIFACT_KEYS=1 bash "$CORE" "${common_core_args[@]}" --preflight >"$TEST_DIR/interrupted-preflight.output" 2>&1; then
+  cat "$TEST_DIR/interrupted-preflight.output" >&2
+  exit 1
+fi
+! grep -Eq 'helm uninstall|kubectl .* (delete|label) ' "$TEST_DIR/interrupted-preflight.calls"
+
+mkdir -p "$TEST_DIR/interrupted-success.state"
+touch "$TEST_DIR/interrupted-success.state/main-uninstalled"
+if ! env PATH="$MOCK_BIN:$PATH" MOCK_CALLS="$TEST_DIR/interrupted-success.calls" MOCK_STATE="$TEST_DIR/interrupted-success.state" \
+  MOCK_INTERRUPTED_ARTIFACT_KEYS=1 bash "$CORE" "${common_core_args[@]}" >"$TEST_DIR/interrupted-success.output" 2>&1; then
+  cat "$TEST_DIR/interrupted-success.output" >&2
+  cat "$TEST_DIR/interrupted-success.calls" >&2
+  exit 1
+fi
+grep -Fq 'helm uninstall opencrane-retired-fixture-postgres --kube-context gke_opencrane-dev --namespace opencrane-retired-fixture --wait' "$TEST_DIR/interrupted-success.calls"
+grep -Fq 'delete namespace opencrane-retired-fixture-artifacts --ignore-not-found=true --wait=true' "$TEST_DIR/interrupted-success.calls"
+grep -Fq 'delete namespace opencrane-retired-fixture --ignore-not-found=true --wait=true' "$TEST_DIR/interrupted-success.calls"
 
 mkdir -p "$TEST_DIR/testv3.state"
 : >"$TEST_DIR/testv3.calls"
