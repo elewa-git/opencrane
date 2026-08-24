@@ -7,7 +7,7 @@ import type { McpOperatorTransaction, McpOperatorUnitOfWork } from "../core/mcp-
 import { getMcpbValidation, submitMcpbValidation } from "../mcpb-validation/mcpb-validation-submission";
 import { McpbValidationSubmissionOutcomes } from "../mcpb-validation/mcpb-validation-submission.types";
 import type { McpbBundleArtifactResolver } from "../mcpb-validation/mcpb-validation-submission.types";
-import { MCPB_MANIFEST_VERSION, McpbValidationStates } from "../mcpb-validation/mcpb-validation.types";
+import { MCPB_MANIFEST_VERSION, MCPB_MAXIMUM_BUNDLE_BYTES, McpbValidationStates } from "../mcpb-validation/mcpb-validation.types";
 import type { McpbValidationWorkflow } from "../mcpb-validation/mcpb-validation.types";
 import type { McpbValidationRecord } from "../mcpb-validation/mcpb-validation-repository.types";
 
@@ -18,15 +18,15 @@ function _Caller(): McpOperatorCaller
 }
 
 /** Return exact immutable artifact facts that the caller is allowed to submit. */
-function _Target()
+function _Target(byteLength = 1_024)
 {
-	return { siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 1_024, mediaType: "application/zip" };
+	return { siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength, mediaType: "application/zip" };
 }
 
 /** Return the stored validation selected or created by the submission transaction. */
-function _Record(): McpbValidationRecord
+function _Record(byteLength = 1_024): McpbValidationRecord
 {
-	const target = _Target();
+	const target = _Target(byteLength);
 	const submissionDigest = `sha256:${createHash("sha256").update(JSON.stringify([target.artifactId, target.artifactRevisionId, target.contentAddress, target.byteLength, target.mediaType, MCPB_MANIFEST_VERSION])).digest("hex")}`;
 	return { id: "validation-1", ...target, submissionDigest, state: McpbValidationStates.Pending, manifestName: null, bundleVersion: null, manifestDigest: null, publisher: null, signerFingerprint: null, failureCode: null };
 }
@@ -98,6 +98,17 @@ describe("MCP bundle validation submission", function _McpbValidationSubmissionS
 
 		expect(outcome).toEqual({ outcome: McpbValidationSubmissionOutcomes.Conflict });
 		expect(workflow.admit).not.toHaveBeenCalled();
+	});
+
+	it("admits an oversized published bundle so the workflow records its bounded rejection", async function _AdmitsOversizedBundle()
+	{
+		const record = _Record(MCPB_MAXIMUM_BUNDLE_BYTES + 1);
+		const harness = _Harness(record, true);
+		const workflow = _Workflow();
+		const outcome = await submitMcpbValidation(harness.unitOfWork, workflow, _Artifacts(_Target(MCPB_MAXIMUM_BUNDLE_BYTES + 1)), _Caller(), { idempotencyKey: "submission-1", artifactId: "artifact-1", artifactRevisionId: "revision-1" });
+
+		expect(outcome).toEqual({ outcome: McpbValidationSubmissionOutcomes.Submitted, validation: record });
+		expect(workflow.admit).toHaveBeenCalledWith(harness.transaction.workflowTransaction, expect.objectContaining({ byteLength: MCPB_MAXIMUM_BUNDLE_BYTES + 1 }));
 	});
 
 	it("reads a saved validation through the caller's silo-bound repository", async function _ReadsWithinSilo()

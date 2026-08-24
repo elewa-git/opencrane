@@ -1,4 +1,3 @@
-import { MCPB_MAXIMUM_BUNDLE_BYTES } from "./mcpb-validation.types";
 import type { McpbValidationTaskInput } from "./mcpb-validation.types";
 
 /** Durable identifier accepted in an MCP bundle task. */
@@ -15,7 +14,7 @@ export function __AssertMcpbValidationTaskInput(input: McpbValidationTaskInput):
 		throw new Error("MCP bundle task identifiers are invalid.");
 	if (!_DIGEST.test(input.contentAddress) || !_DIGEST.test(input.submissionDigest))
 		throw new Error("MCP bundle task digests are invalid.");
-	if (!Number.isSafeInteger(input.byteLength) || input.byteLength < 0 || input.byteLength > MCPB_MAXIMUM_BUNDLE_BYTES)
+	if (!Number.isSafeInteger(input.byteLength) || input.byteLength < 0)
 		throw new Error("MCP bundle task byte length is invalid.");
 	if (!_MEDIA_TYPE.test(input.mediaType))
 		throw new Error("MCP bundle task media type is invalid.");
