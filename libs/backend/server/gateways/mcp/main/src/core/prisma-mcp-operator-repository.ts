@@ -166,13 +166,13 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 	}
 
 	/** Count a temporary failure and store rejection evidence when it consumes the last attempt. */
-	async recordEraProbeRetry(siloId: string, serverId: string, registrationDigest: string, attempt: number, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult): Promise<McpEraProbeRetryResult | null>
+	async recordEraProbeRetry(siloId: string, serverId: string, registrationDigest: string, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult): Promise<McpEraProbeRetryResult | null>
 	{
 		const storedTarget = await this._transaction.mcpServer.findFirst({ where: { id: serverId, siloId, registrationDigest }, select: _ERA_PROBE_TARGET_SELECT });
 		if (!storedTarget)
 			return null;
 		const target = _EraProbeTargetRecord(storedTarget);
-		const nextAttempt = Math.max(target.eraProbeAttempts + 1, attempt);
+		const nextAttempt = target.eraProbeAttempts + 1;
 		const exhausted = nextAttempt >= maximumAttempts;
 		const data: Prisma.McpServerUpdateManyMutationInput = exhausted
 			? { eraProbeStatus: McpEraProbeStates.Rejected, eraProtocolVersion: null, eraProbeEvidenceDigest: exhaustedResult.evidenceDigest, eraProbeFailureCode: exhaustedResult.failureCode, eraProbeAttempts: nextAttempt, eraProbedAt: new Date(), status: "Degraded", approvalStatus: "Disabled" }

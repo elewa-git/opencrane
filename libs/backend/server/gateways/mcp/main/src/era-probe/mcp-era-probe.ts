@@ -13,17 +13,35 @@ import { __AssertMcpEraProbeTaskInput, __ParseMcpEraProbeObservation } from "./m
 /** Total external checks allowed before the catalogue records a final unavailable result. */
 const MCP_ERA_PROBE_MAXIMUM_ATTEMPTS = 5;
 
+/** Keep temporary database failures retryable without changing deliberate workflow outcomes. */
+async function _RetryablePersistence<TResult>(operation: () => Promise<TResult>): Promise<TResult>
+{
+	try
+	{
+		return await operation();
+	}
+	catch (error)
+	{
+		if (error instanceof WorkflowTaskRetryableError || error instanceof WorkflowTaskTerminalError)
+			throw error;
+		throw new WorkflowTaskRetryableError("MCP era-probe persistence is temporarily unavailable.");
+	}
+}
+
 /** Load the product-owned endpoint and reject a task whose registration was replaced. */
 async function _LoadTarget(unitOfWork: McpOperatorUnitOfWork, input: McpEraProbeTaskInput): Promise<McpEraProbeTargetRecord>
 {
-	return await unitOfWork.execute(async function _Load(transaction): Promise<McpEraProbeTargetRecord>
+	return await _RetryablePersistence(async function _LoadWithRetry(): Promise<McpEraProbeTargetRecord>
 	{
-		const target = await transaction.mcp.loadEraProbeTarget(input.siloId, input.serverId);
-		if (!target || target.registrationDigest !== input.registrationDigest)
+		return await unitOfWork.execute(async function _Load(transaction): Promise<McpEraProbeTargetRecord>
 		{
-			throw new WorkflowTaskTerminalError("MCP era-probe registration is unavailable.");
-		}
-		return target;
+			const target = await transaction.mcp.loadEraProbeTarget(input.siloId, input.serverId);
+			if (!target || target.registrationDigest !== input.registrationDigest)
+			{
+				throw new WorkflowTaskTerminalError("MCP era-probe registration is unavailable.");
+			}
+			return target;
+		});
 	});
 }
 
@@ -36,46 +54,52 @@ function _TargetFromServer(server: McpOperatorServerRecord): McpEraProbeTargetRe
 /** Store one result and verify that an earlier retry did not record different evidence. */
 async function _RecordResult(unitOfWork: McpOperatorUnitOfWork, input: McpEraProbeTaskInput, result: McpEraProbeTaskResult): Promise<McpEraProbeTaskResult>
 {
-	return await unitOfWork.execute(async function _Record(transaction): Promise<McpEraProbeTaskResult>
+	return await _RetryablePersistence(async function _RecordWithRetry(): Promise<McpEraProbeTaskResult>
 	{
-		const write = await transaction.mcp.recordEraProbeResult(input.siloId, input.serverId, input.registrationDigest, result);
-		if (!write)
+		return await unitOfWork.execute(async function _Record(transaction): Promise<McpEraProbeTaskResult>
 		{
-			throw new WorkflowTaskTerminalError("MCP era-probe registration is unavailable.");
-		}
-		let winner: McpEraProbeTaskResult | null;
-		try
-		{
-			winner = __McpEraProbeReplayResult(_TargetFromServer(write.server));
-		}
-		catch { throw new WorkflowTaskTerminalError("MCP era-probe stored winner is invalid."); }
-		if (!winner)
-			throw new WorkflowTaskTerminalError("MCP era-probe stored winner is unavailable.");
-		if (write.changed)
-		{
-			await transaction.mcp.appendAudit("Updated", `McpServer/${input.serverId}`, `MCP server era probe ${result.decision}`);
-		}
-		return winner;
+			const write = await transaction.mcp.recordEraProbeResult(input.siloId, input.serverId, input.registrationDigest, result);
+			if (!write)
+			{
+				throw new WorkflowTaskTerminalError("MCP era-probe registration is unavailable.");
+			}
+			let winner: McpEraProbeTaskResult | null;
+			try
+			{
+				winner = __McpEraProbeReplayResult(_TargetFromServer(write.server));
+			}
+			catch { throw new WorkflowTaskTerminalError("MCP era-probe stored winner is invalid."); }
+			if (!winner)
+				throw new WorkflowTaskTerminalError("MCP era-probe stored winner is unavailable.");
+			if (write.changed)
+			{
+				await transaction.mcp.appendAudit("Updated", `McpServer/${input.serverId}`, `MCP server era probe ${result.decision}`);
+			}
+			return winner;
+		});
 	});
 }
 
 /** Record a temporary failure and return the final result when the retry budget is exhausted. */
-async function _RecordRetry(unitOfWork: McpOperatorUnitOfWork, input: McpEraProbeTaskInput, attempt: number): Promise<McpEraProbeTaskResult | null>
+async function _RecordRetry(unitOfWork: McpOperatorUnitOfWork, input: McpEraProbeTaskInput): Promise<McpEraProbeTaskResult | null>
 {
 	const exhaustedResult = __McpEraProbeTerminalResult(McpEraProbeFailureCodes.RetryExhausted);
-	return await unitOfWork.execute(async function _WriteRetry(transaction): Promise<McpEraProbeTaskResult | null>
+	return await _RetryablePersistence(async function _RecordRetryWithRetry(): Promise<McpEraProbeTaskResult | null>
 	{
-		const retry = await transaction.mcp.recordEraProbeRetry(input.siloId, input.serverId, input.registrationDigest, attempt, MCP_ERA_PROBE_MAXIMUM_ATTEMPTS, exhaustedResult);
-		if (!retry)
-			throw new WorkflowTaskTerminalError("MCP era-probe registration is unavailable.");
-		let stored: McpEraProbeTaskResult | null;
-		try { stored = __McpEraProbeReplayResult(_TargetFromServer(retry.server)); }
-		catch { throw new WorkflowTaskTerminalError("MCP era-probe stored retry state is invalid."); }
-		if (retry.exhausted && !stored)
-			throw new WorkflowTaskTerminalError("MCP era-probe exhausted result is unavailable.");
-		if (retry.exhausted && retry.changed)
-			await transaction.mcp.appendAudit("Updated", `McpServer/${input.serverId}`, "MCP server era probe retry limit exhausted");
-		return stored;
+		return await unitOfWork.execute(async function _WriteRetry(transaction): Promise<McpEraProbeTaskResult | null>
+		{
+			const retry = await transaction.mcp.recordEraProbeRetry(input.siloId, input.serverId, input.registrationDigest, MCP_ERA_PROBE_MAXIMUM_ATTEMPTS, exhaustedResult);
+			if (!retry)
+				throw new WorkflowTaskTerminalError("MCP era-probe registration is unavailable.");
+			let stored: McpEraProbeTaskResult | null;
+			try { stored = __McpEraProbeReplayResult(_TargetFromServer(retry.server)); }
+			catch { throw new WorkflowTaskTerminalError("MCP era-probe stored retry state is invalid."); }
+			if (retry.exhausted && !stored)
+				throw new WorkflowTaskTerminalError("MCP era-probe exhausted result is unavailable.");
+			if (retry.exhausted && retry.changed)
+				await transaction.mcp.appendAudit("Updated", `McpServer/${input.serverId}`, "MCP server era probe retry limit exhausted");
+			return stored;
+		});
 	});
 }
 
@@ -104,7 +128,7 @@ async function _Run(context: IWorkflowTaskContext, options: McpEraProbeWorkflowO
 				const action = __McpEraProbeTransition(McpEraProbeStates.Pending, McpEraProbeEvents.RetryableFailure);
 				if (action !== McpEraProbeActions.Retry)
 					throw new WorkflowTaskTerminalError("MCP era-probe retry policy is invalid.");
-				const exhausted = await _RecordRetry(options.unitOfWork, input, context.attempt);
+				const exhausted = await _RecordRetry(options.unitOfWork, input);
 				if (exhausted)
 					return exhausted;
 				throw new WorkflowTaskRetryableError("MCP server protocol check is temporarily unavailable.");

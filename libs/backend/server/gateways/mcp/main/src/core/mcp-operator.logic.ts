@@ -268,7 +268,7 @@ export function setAccessPolicy(unitOfWork: McpOperatorUnitOfWork, caller: McpOp
 			],
 			now: new Date(),
 		});
-		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} authorization grants updated`);
+		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} authorization grants updated`, { siloId: caller.siloId, actorPrincipalId: caller.principalId });
 		return { serverId, groups: [...groups], users: principals.map(_MapPrincipal) };
 	});
 }
@@ -343,7 +343,7 @@ function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller,
 		const server = await transaction.mcp.setApprovalStatus(caller.siloId, serverId, status, __McpEraProbeRequiredStates(status), requiredApprovalStatus);
 		if (!server)
 			return null;
-		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} ${verb}`);
+		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} ${verb}`, { siloId: caller.siloId, actorPrincipalId: caller.principalId });
 		return _MapServer(server);
 	});
 }
