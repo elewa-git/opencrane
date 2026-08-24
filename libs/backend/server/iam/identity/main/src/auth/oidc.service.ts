@@ -148,7 +148,9 @@ export class OidcAuthService extends OidcAuthServiceBase
       }
     }
 
-    await new PrismaGroupClaimProjectionUnitOfWork(this.prisma).reconcile({ siloId: hostClusterTenant, issuer: authUser.issuer, subject: authUser.sub, email: authUser.email, displayName: authUser.name, groups: authUser.groups, log: this.log });
+    const cmd = { siloId: hostClusterTenant, issuer: authUser.issuer, subject: authUser.sub, email: authUser.email, displayName: authUser.name, groups: authUser.groups, log: this.log };
+    const task = new PrismaGroupClaimProjectionUnitOfWork(this.prisma);
+    await task.reconcile(cmd);
     req.session.authUser = { ...authUser, siloId: hostClusterTenant };
     await _saveSession(req);
 
