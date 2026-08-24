@@ -3,7 +3,7 @@
 		<div class="onboarding-history__title-row"><h1 id="onboarding-history-title">{{ presentation().title }}</h1><wo-scope-chip label="Completed" [tone]="chipTone" [appearance]="chipAppearance" /></div>
 		<span class="onboarding-history__read-only"><i class="pi pi-lock" aria-hidden="true"></i> Read-only</span>
 	</header>
-	<div class="onboarding-history__body">
+	<div class="onboarding-history__body" tabindex="0" aria-label="Completed onboarding conversation history">
 		@if (availability(); as notice) { <p-message severity="warn" [text]="notice.heading + ' — ' + notice.detail" /> }
 		<section class="onboarding-history__transcript" aria-label="Completed onboarding conversation">
 			@for (entry of entries(); track entry.id) {

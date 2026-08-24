@@ -35,7 +35,7 @@ function _Detail(state: ConversationAssetPresentationStates): string
 }
 
 const _READY = _Item("asset-ready", "brief-v2.pdf", ConversationAssetPresentationStates.Ready);
-const _AGENT = _Item("asset-agent", "Pitch outline — Nova.docx", ConversationAssetPresentationStates.Ready, { provenance: ConversationAssetProvenance.AgentOutput, mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", disposition: ConversationAssetDisposition.Download, byteLength: 84_201 });
+const _AGENT = _Item("asset-agent", "Pitch outline — Supplier review.docx", ConversationAssetPresentationStates.Ready, { provenance: ConversationAssetProvenance.AgentOutput, mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", disposition: ConversationAssetDisposition.Download, byteLength: 84_201 });
 
 const meta: Meta<ConversationFilesPanelComponent> = {
 	title: "Conversations/Assets",

@@ -88,7 +88,45 @@ export const MessageAndStatusStates: Story =
 	tags: ["visual-test"],
 	render: function render()
 	{
-		return { props: { messages: [{ id: "participant", authorName: "Alex", authorInitials: "AK", avatarTone: AvatarTones.Blue, timestampLabel: "11:07", body: "Participant message", tone: ConversationMessageTones.Participant }, { id: "agent", authorName: "Nova", authorInitials: "N", avatarTone: AvatarTones.Brand, timestampLabel: "11:08", body: "Agent message", tone: ConversationMessageTones.Agent }, { id: "system", authorName: "OpenCrane", authorInitials: "OC", avatarTone: AvatarTones.Neutral, timestampLabel: "11:09", body: "System notice", tone: ConversationMessageTones.System }], statuses: Object.values(ConversationStatusTones).map(function _Status(tone) { return { label: tone, detail: `Shared ${tone} state`, tone }; }) }, template: `<div style="display:grid;gap:16px;max-width:720px;padding:20px">@for (message of messages; track message.id) { <wo-conversation-message [message]="message" /> } @for (status of statuses; track status.tone) { <wo-conversation-status-line [status]="status" /> }</div>` };
+		return {
+			props: {
+				messages: [
+					{
+						id: "participant",
+						authorName: "Alex",
+						authorInitials: "AK",
+						avatarTone: AvatarTones.Blue,
+						timestampLabel: "11:07",
+						body: "Participant message",
+						tone: ConversationMessageTones.Participant
+					},
+					{
+						id: "agent",
+						authorName: "The Commander (Guardian)",
+						authorInitials: "TC",
+						avatarTone: AvatarTones.Brand,
+						timestampLabel: "11:08",
+						body: "Agent message",
+						tone: ConversationMessageTones.Agent
+					},
+					{
+						id: "system",
+						authorName: "OpenCrane",
+						authorInitials: "OC",
+						avatarTone: AvatarTones.Neutral,
+						timestampLabel: "11:09",
+						body: "System notice",
+						tone: ConversationMessageTones.System
+					}
+				],
+				statuses: Object.values(ConversationStatusTones).map(tone => ({
+					label: tone,
+					detail: `Shared ${tone} state`,
+					tone
+				}))
+			},
+			template: `<div style="display:grid;gap:16px;max-width:720px;padding:20px">@for (message of messages; track message.id) { <wo-conversation-message [message]="message" /> } @for (status of statuses; track status.tone) { <wo-conversation-status-line [status]="status" /> }</div>`
+		};
 	}
 };
 

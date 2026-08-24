@@ -13,7 +13,25 @@ import { PLATFORM_BRIDGE } from "@opencrane/platform";
 import { ConversationWorkspaceRouteComponent } from "../conversation-workspace-route/conversation-workspace-route.component";
 
 /** Privacy-safe directory used by the full workspace stories. */
-const _DIRECTORY: ConversationCreationDirectory = { participants: [{ participantRef: "self", isSelf: true, label: "You" }, { participantRef: "participant-1", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Nova" } };
+const _DIRECTORY: ConversationCreationDirectory = {
+	participants: [
+		{
+			participantRef: "self",
+			isSelf: true,
+			label: "You"
+		},
+		{
+			participantRef: "participant-1",
+			isSelf: false,
+			label: "Participant 1"
+		}
+	],
+	personalAgentStatus: ConversationPersonalAgentStatuses.Ready,
+	personalAgent: {
+		personalAgentRef: "agent-1",
+		displayName: "The Commander (Guardian)"
+	}
+};
 
 /** Directory where direct and group chat remain available without a personal Agent. */
 const _UNAVAILABLE_AGENT_DIRECTORY: ConversationCreationDirectory = { participants: _DIRECTORY.participants, personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null };
@@ -23,6 +41,13 @@ const _AMBIGUOUS_AGENT_DIRECTORY: ConversationCreationDirectory = { participants
 
 /** Directory projection that cannot admit a new chat because it has no self membership. */
 const _NO_MEMBERSHIP_DIRECTORY: ConversationCreationDirectory = { participants: [], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null };
+
+/** Exact reviewed Commander opening that precedes the first calibration question. */
+const _COMMANDER_OPENING = `I'm your personal assistant. Based on your onboarding answers, I'm set up to be direct,
+concise, and results-focused. I'll give you straight answers, challenge you when I see a better
+path, and skip the filler.
+
+Before we start working: three quick things I need from you to be effective.`;
 
 /** Build one authorized conversation with optional hostile source text. */
 function _Detail(body = "I reviewed the proposal and kept the important constraints."): ConversationWorkspaceDetail
@@ -46,7 +71,52 @@ function _SecondDirectDetail(): ConversationWorkspaceDetail
 /** Build one completed onboarding projection with no conversation mode or run. */
 function _OnboardingHistory(): ConversationOnboardingHistoryProjection
 {
-	return { status: ConversationOnboardingHistoryStatuses.Ready, history: { id: "onboarding-1", personaDisplayName: "Nova", startedAt: "2026-08-12T18:00:00.000Z", completedAt: "2026-08-12T18:05:00.000Z", transcript: [{ ordinal: 1, role: MessageRoles.Assistant, text: "What are you working on right now?" }, { ordinal: 2, role: MessageRoles.User, text: "I'm building OpenCrane, you basically! Right now I'm on a test drive." }, { ordinal: 3, role: MessageRoles.Assistant, text: "Good answer. What is the one thing that wastes your time most?" }, { ordinal: 4, role: MessageRoles.User, text: "Chasing status updates across tools." }, { ordinal: 5, role: MessageRoles.Assistant, text: "Noted — I'll watch for those and surface them before you have to ask. That completes your onboarding." }] } };
+	return {
+		status: ConversationOnboardingHistoryStatuses.Ready,
+		history: {
+			id: "onboarding-1",
+			personaDisplayName: "The Commander (Guardian)",
+			startedAt: "2026-08-12T18:00:00.000Z",
+			completedAt: "2026-08-12T18:05:00.000Z",
+			transcript: [
+				{
+					ordinal: 1,
+					role: MessageRoles.Assistant,
+					text: _COMMANDER_OPENING
+				},
+				{
+					ordinal: 2,
+					role: MessageRoles.Assistant,
+					text: "What are you working on right now?"
+				},
+				{
+					ordinal: 3,
+					role: MessageRoles.User,
+					text: "Preparing the Q3 launch plan for the customer portal."
+				},
+				{
+					ordinal: 4,
+					role: MessageRoles.Assistant,
+					text: "What is the one thing that wastes your time most?"
+				},
+				{
+					ordinal: 5,
+					role: MessageRoles.User,
+					text: "Reconciling project updates across too many separate tools."
+				},
+				{
+					ordinal: 6,
+					role: MessageRoles.Assistant,
+					text: "When I push back on your ideas, how hard should I push?"
+				},
+				{
+					ordinal: 7,
+					role: MessageRoles.User,
+					text: "Push back directly when you see a concrete risk, then show me the safer alternative."
+				}
+			]
+		}
+	};
 }
 
 /** Test-only participant API used by one deterministic shell story. */

@@ -195,6 +195,7 @@ describe("ConversationWorkspacePageComponent", function _PageSuite()
 		const template = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-history/conversation-onboarding-history.component.html"), "utf8");
 		const continuationTemplate = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-continuation/conversation-onboarding-continuation.component.html"), "utf8");
 		expect(template).toContain('aria-labelledby="onboarding-history-title"');
+		expect(template).toContain('tabindex="0" aria-label="Completed onboarding conversation history"');
 		expect(template).toContain("onboarding-history__completion");
 		expect(template).toContain("wo-conversation-onboarding-continuation");
 		expect(template).not.toContain("wo-conversation-message");
