@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { DurableTaskRetryBackoffKinds } from "@opencrane/backend/server/infra/workflows/contract";
 import type { DurableExecution, DurableExecutionTransaction, DurableTaskContext } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { OAuthRefreshOutcomes, OAuthRefreshTaskInputSchema, OAuthRefreshTaskNames, type OAuthRefreshConnectionPort, type OAuthRefreshResult, type OAuthRefreshTaskAdmission, type OAuthRefreshTaskInput, type OAuthRefreshWorkflow, type OAuthRefreshWorkflowOptions } from "./oauth-refresh.types";
@@ -72,6 +73,7 @@ export function __CreateOAuthRefreshWorkflow(options: OAuthRefreshWorkflowOption
 	const connections = options.connections;
 	execution.register({
 		taskName: OAuthRefreshTaskNames.Reconcile,
+		retryPolicy: { maximumAttempts: 5, backoff: { kind: DurableTaskRetryBackoffKinds.Exponential, initialDelaySeconds: 30, multiplier: 2, maximumDelaySeconds: 300 } },
 		async run(context: DurableTaskContext, input: OAuthRefreshTaskInput): Promise<OAuthRefreshResult>
 		{
 			_AssertTaskInput(input);

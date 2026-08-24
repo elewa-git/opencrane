@@ -107,6 +107,7 @@ function _TerminalFailureCode(value: string): McpEraProbeFailureCodes | null
 {
 	if (value === McpEraProbeFailureCodes.UnsafeEndpoint) return McpEraProbeFailureCodes.UnsafeEndpoint;
 	if (value === McpEraProbeFailureCodes.InvalidResponse) return McpEraProbeFailureCodes.InvalidResponse;
+	if (value === McpEraProbeFailureCodes.RetryExhausted) return McpEraProbeFailureCodes.RetryExhausted;
 	return null;
 }
 

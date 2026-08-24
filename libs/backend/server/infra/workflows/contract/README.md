@@ -43,6 +43,7 @@ the server process that runs workers.
 - `DurableTaskQueueAuthority` — chooses the approved queue, a named list of work for a worker, for each task.
 - `DurableWorkerRuntime` — starts workers and lets them finish their current work before stopping.
 - `DurableTaskContext` — lets a running task save progress, wait, or start and wait for another task.
+- `DurableTaskRetryPolicy` — sets the total attempt limit and the delay before each later attempt.
 - Task, event, receipt, worker-lifecycle, and error types — describe the information passed between these steps.
 
 ## Boundary

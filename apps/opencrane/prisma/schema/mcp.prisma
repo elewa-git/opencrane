@@ -66,6 +66,7 @@ model McpServer {
   eraProtocolVersion     String?            @map("era_protocol_version")
   eraProbeEvidenceDigest String?            @map("era_probe_evidence_digest")
   eraProbeFailureCode    String?            @map("era_probe_failure_code")
+  eraProbeAttempts       Int                @default(0) @map("era_probe_attempts")
   eraProbedAt            DateTime?          @map("era_probed_at")
   sourceId               String?            @map("source_id")
   lastSyncedAt           DateTime?          @map("last_synced_at")

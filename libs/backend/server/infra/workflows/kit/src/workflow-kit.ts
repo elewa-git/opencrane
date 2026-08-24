@@ -186,6 +186,7 @@ export class __WorkflowKit implements DurableExecution
 		const kit = this;
 		this.execution.register({
 			taskName: definition.taskName,
+			retryPolicy: definition.retryPolicy,
 			async run(context: DurableTaskContext, input: TInput): Promise<TResult>
 			{
 				kit._AssertSiloInput(input as unknown as WorkflowSiloTaskInput);

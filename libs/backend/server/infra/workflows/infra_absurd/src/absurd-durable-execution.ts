@@ -2,8 +2,8 @@ import { Absurd, type TaskContext } from "absurd-sdk";
 import { Pool } from "pg";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { DurableExecutionError, DurableTaskNotRegisteredError } from "@opencrane/backend/server/infra/workflows/contract";
-import type { DurableEventReceipt, DurableExecution, DurableExecutionTransaction, DurableTaskDefinition, DurableTaskEvent, DurableTaskReceipt, DurableTaskSpawn, DurableWorkerRuntime, DurableWorkers, DurableWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
+import { DurableExecutionError, DurableTaskNotRegisteredError, DurableTaskRetryBackoffKinds } from "@opencrane/backend/server/infra/workflows/contract";
+import type { DurableEventReceipt, DurableExecution, DurableExecutionTransaction, DurableTaskDefinition, DurableTaskEvent, DurableTaskReceipt, DurableTaskRetryPolicy, DurableTaskSpawn, DurableWorkerRuntime, DurableWorkers, DurableWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _AbsurdTaskScopedIdempotencyKey, PrismaDbProcedureGateway } from "./prisma-db-procedure-gateway";
 import type { AbsurdDurableExecutionOptions } from "./absurd-durable-execution.types";
@@ -42,6 +42,17 @@ function _DatabasePoolSize(value: number): number
 	{
 		throw new DurableExecutionError("databasePoolSize must be a positive integer.");
 	}
+	return value;
+}
+
+/** Validate a reviewed task policy and default tasks that do not retry to one attempt. */
+function _RetryPolicy(policy: DurableTaskRetryPolicy | undefined): DurableTaskRetryPolicy
+{
+	const value = policy ?? { maximumAttempts: 1, backoff: { kind: DurableTaskRetryBackoffKinds.Fixed, initialDelaySeconds: 0 } };
+	if (!Number.isSafeInteger(value.maximumAttempts) || value.maximumAttempts < 1 || value.maximumAttempts > 100) throw new DurableExecutionError("retryPolicy.maximumAttempts must be between 1 and 100.");
+	if (!Number.isSafeInteger(value.backoff.initialDelaySeconds) || value.backoff.initialDelaySeconds < 0 || value.backoff.initialDelaySeconds > 86_400) throw new DurableExecutionError("retryPolicy.initialDelaySeconds must be between 0 and 86400.");
+	if (value.backoff.multiplier !== undefined && (!Number.isFinite(value.backoff.multiplier) || value.backoff.multiplier < 0)) throw new DurableExecutionError("retryPolicy.multiplier must be a finite non-negative number.");
+	if (value.backoff.maximumDelaySeconds !== undefined && (!Number.isSafeInteger(value.backoff.maximumDelaySeconds) || value.backoff.maximumDelaySeconds < 0 || value.backoff.maximumDelaySeconds > 86_400)) throw new DurableExecutionError("retryPolicy.maximumDelaySeconds must be between 0 and 86400.");
 	return value;
 }
 
@@ -127,8 +138,9 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 			throw new DurableExecutionError(`Durable task ${taskName} is already registered.`);
 		}
 		const stored = definition as unknown as DurableTaskDefinition<unknown, unknown>;
+		const retryPolicy = _RetryPolicy(stored.retryPolicy);
 		this.definitions.set(taskName, stored);
-		this.engineForQueue(this.queueForTask(taskName)).registerTask({ name: taskName, queue: this.queueForTask(taskName) }, async (params: unknown, context: TaskContext) => await this.runTask(stored, context, params));
+		this.engineForQueue(this.queueForTask(taskName)).registerTask({ name: taskName, queue: this.queueForTask(taskName), defaultMaxAttempts: retryPolicy.maximumAttempts }, async (params: unknown, context: TaskContext) => await this.runTask(stored, context, params));
 	}
 
 	/** Run a registered handler with the durable receipt reconstructed from its persisted envelope. */
@@ -147,13 +159,14 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 		{
 			throw new DurableTaskNotRegisteredError(task.taskName);
 		}
-		return await this.spawnWithTransaction(transaction.client, task);
+		return await this.spawnWithTransaction(transaction.client, task, definition);
 	}
 
 	/** Admit a task from a running workflow where product-transaction atomicity is not required. */
 	async spawnFromTask<TInput>(task: DurableTaskSpawn<TInput>): Promise<DurableTaskReceipt>
 	{
-		if (!this.definitions.has(task.taskName))
+		const definition = this.definitions.get(task.taskName);
+		if (definition === undefined)
 		{
 			throw new DurableTaskNotRegisteredError(task.taskName);
 		}
@@ -162,7 +175,8 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 		try
 		{
 			const envelope = _EnvelopeForTask(idempotencyKey, task.input);
-			const spawned = await this.engineForQueue(this.queueForTask(taskName)).spawn(taskName, envelope, { queue: this.queueForTask(taskName), idempotencyKey: _AbsurdTaskScopedIdempotencyKey(taskName, idempotencyKey) });
+			const policy = _RetryPolicy(definition.retryPolicy);
+			const spawned = await this.engineForQueue(this.queueForTask(taskName)).spawn(taskName, envelope, { queue: this.queueForTask(taskName), idempotencyKey: _AbsurdTaskScopedIdempotencyKey(taskName, idempotencyKey), maxAttempts: policy.maximumAttempts, retryStrategy: { kind: policy.backoff.kind, baseSeconds: policy.backoff.initialDelaySeconds, factor: policy.backoff.multiplier, maxSeconds: policy.backoff.maximumDelaySeconds } });
 			return { taskId: spawned.taskID, taskName, idempotencyKey };
 		}
 		catch (error)
@@ -172,11 +186,12 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 	}
 
 	/** Use the blessed parameterized Absurd function on the caller's existing transaction. */
-	private async spawnWithTransaction<TInput>(transactionClient: unknown, task: DurableTaskSpawn<TInput>): Promise<DurableTaskReceipt>
+	private async spawnWithTransaction<TInput>(transactionClient: unknown, task: DurableTaskSpawn<TInput>, definition: DurableTaskDefinition<unknown, unknown>): Promise<DurableTaskReceipt>
 	{
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
-		const receipt = await new PrismaDbProcedureGateway(this.queueForTask(taskName)).___DbProcedureCall(transactionClient, { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input) });
+		const policy = _RetryPolicy(definition.retryPolicy);
+		const receipt = await new PrismaDbProcedureGateway(this.queueForTask(taskName)).___DbProcedureCall(transactionClient, { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input), maximumAttempts: policy.maximumAttempts, retryStrategy: { kind: policy.backoff.kind, baseSeconds: policy.backoff.initialDelaySeconds, factor: policy.backoff.multiplier, maxSeconds: policy.backoff.maximumDelaySeconds } });
 		return { taskId: receipt.taskId, taskName, idempotencyKey };
 	}
 

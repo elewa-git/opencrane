@@ -39,8 +39,33 @@ export interface DurableTaskDefinition<TInput, TResult>
 {
 	/** Stable engine-neutral name used by callers to select this task handler. */
 	readonly taskName: string;
+	/** Reviewed attempt limit and delay policy applied whenever the handler asks for a retry. */
+	readonly retryPolicy?: DurableTaskRetryPolicy;
 	/** Runs the task with replay-safe context operations supplied by the execution engine. */
 	readonly run: DurableTaskRunner<TInput, TResult>;
+}
+
+/** Delay shapes available to a task that asks the engine to retry it. */
+export enum DurableTaskRetryBackoffKinds
+{
+	/** Every later attempt waits the same number of seconds. */
+	Fixed = "fixed",
+	/** Each later attempt multiplies the previous delay up to the configured ceiling. */
+	Exponential = "exponential",
+}
+
+/** Reviewed retry limit stored with an admitted task rather than chosen by a worker failure. */
+export interface DurableTaskRetryPolicy
+{
+	/** Total number of handler attempts, including the first one. */
+	readonly maximumAttempts: number;
+	/** Delay applied before a later attempt becomes available to a worker. */
+	readonly backoff: {
+		readonly kind: DurableTaskRetryBackoffKinds;
+		readonly initialDelaySeconds: number;
+		readonly multiplier?: number;
+		readonly maximumDelaySeconds?: number;
+	};
 }
 
 /** Function a registered durable task runs when an engine dispatches it. */

@@ -32,6 +32,8 @@ policy; those stay above the engine adapter. The server gives it the same approv
 workflow kit, so it cannot choose another queue. Workers use the SDK. Starting a saved job uses the
 database transaction supplied by the product change and the parameterised `absurd.spawn_task`
 function.
+Each registered job also supplies its total attempt limit and retry delay. The adapter stores those
+limits with the Absurd task, including when the task is started inside a product database transaction.
 
 ## Dependency direction
 

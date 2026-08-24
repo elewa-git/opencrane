@@ -38,7 +38,8 @@ returns credentials and never labels an install connected before a real connecti
 - Only an organization administrator may register, review, approve, or publish a server.
 - A server must pass the saved protocol check before it may be approved.
 - Network failures, timeouts, rate limits, and server errors are retried. Unsafe addresses and bad
-  replies are saved as rejected so the same task cannot keep contacting an unchanged endpoint.
+  replies are saved as rejected so the same task cannot keep contacting an unchanged endpoint. A
+  temporary failure is tried at most five times, with a longer delay before each later check.
 - A user only sees and installs servers allowed by saved access grants.
 - The package reads saved users and groups. It does not treat raw login claims as access rights.
 - Route handlers use the authenticated user's silo. They do not accept a silo from the request body.

@@ -240,7 +240,7 @@ describe("mcp-operator router", function _suite()
     {
       _enableOidc();
       const workflow = _EraProbeWorkflow();
-      const server = { id: "srv-new", name: "Example MCP", description: "Public tools", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "PendingReview", credentialSchema: [], entitlementSummary: null, endpoint: "https://mcp.example.test/", registrationKeyDigest: `sha256:${"a".repeat(64)}`, registrationDigest: `sha256:${"b".repeat(64)}`, eraProbeStatus: "Pending", eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null };
+      const server = { id: "srv-new", name: "Example MCP", description: "Public tools", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "PendingReview", credentialSchema: [], entitlementSummary: null, endpoint: "https://mcp.example.test/", registrationKeyDigest: `sha256:${"a".repeat(64)}`, registrationDigest: `sha256:${"b".repeat(64)}`, eraProbeStatus: "Pending", eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
       const { prisma, spies } = _mockPrisma({
         "mcpRegistrationClaim.upsert": function _Claim(input: unknown) { return Promise.resolve((input as { create: unknown }).create); },
         "mcpServer.findUnique": function _FindUnique() { return Promise.resolve(null); },

@@ -36,6 +36,7 @@ export interface McpOperatorServerRecord
 	readonly eraProtocolVersion: string | null;
 	readonly eraProbeEvidenceDigest: string | null;
 	readonly eraProbeFailureCode: string | null;
+	readonly eraProbeAttempts: number;
 }
 
 /** Fields required to create or find one remote MCP registration. */
@@ -79,6 +80,8 @@ export interface McpEraProbeTargetRecord
 	readonly eraProbeEvidenceDigest: string | null;
 	/** Bounded reason stored when the endpoint or response was terminally invalid. */
 	readonly eraProbeFailureCode: string | null;
+	/** Number of external checks already recorded for this registration. */
+	readonly eraProbeAttempts: number;
 }
 
 /** Result returned after a transaction tries to record one probe decision. */
@@ -88,6 +91,13 @@ export interface McpEraProbeWriteResult
 	readonly changed: boolean;
 	/** Stored server row after the idempotent transition. */
 	readonly server: McpOperatorServerRecord;
+}
+
+/** Result of recording one temporary probe failure. */
+export interface McpEraProbeRetryResult extends McpEraProbeWriteResult
+{
+	/** True when this failure consumed the final allowed attempt and stored rejection evidence. */
+	readonly exhausted: boolean;
 }
 
 /**
@@ -224,6 +234,7 @@ export interface IMcpOperatorRepository
 	createOrFindRemoteServer(registration: McpRemoteServerRegistrationRecord): Promise<McpRemoteServerCreateResult | null>;
 	loadEraProbeTarget(siloId: string, serverId: string): Promise<McpEraProbeTargetRecord | null>;
 	recordEraProbeResult(siloId: string, serverId: string, registrationDigest: string, result: McpEraProbeTaskResult): Promise<McpEraProbeWriteResult | null>;
+	recordEraProbeRetry(siloId: string, serverId: string, registrationDigest: string, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult): Promise<McpEraProbeRetryResult | null>;
 	/**
 	 * Lists groups in the requested silo, optionally restricted to the supplied group IDs.
 	 *

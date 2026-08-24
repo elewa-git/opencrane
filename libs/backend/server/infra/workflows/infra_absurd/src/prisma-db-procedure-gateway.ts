@@ -100,7 +100,10 @@ export class PrismaDbProcedureGateway implements AbsurdTaskAdmissionProcedure
 		{
 			throw new Error("Durable task input must be JSON-serializable.");
 		}
-		const options = JSON.stringify({ idempotency_key: _AbsurdTaskScopedIdempotencyKey(taskName, idempotencyKey) });
+		const retryStrategy: Record<string, number | string> = { kind: request.retryStrategy.kind, base_seconds: request.retryStrategy.baseSeconds };
+		if (request.retryStrategy.factor !== undefined) retryStrategy.factor = request.retryStrategy.factor;
+		if (request.retryStrategy.maxSeconds !== undefined) retryStrategy.max_seconds = request.retryStrategy.maxSeconds;
+		const options = JSON.stringify({ idempotency_key: _AbsurdTaskScopedIdempotencyKey(taskName, idempotencyKey), max_attempts: request.maximumAttempts, retry_strategy: retryStrategy });
 		try
 		{
 			const rows = await client.$queryRaw<readonly _SpawnTaskRow[]>(Prisma.sql`

@@ -43,6 +43,7 @@ function _Server(state: _EraState): McpOperatorServerRecord
 		eraProtocolVersion: state.target.eraProtocolVersion,
 		eraProbeEvidenceDigest: state.target.eraProbeEvidenceDigest,
 		eraProbeFailureCode: state.target.eraProbeFailureCode,
+		eraProbeAttempts: state.target.eraProbeAttempts,
 	};
 }
 
@@ -56,9 +57,22 @@ function _UnitOfWork(state: _EraState): McpOperatorUnitOfWork
 			const changed = state.target.eraProbeStatus === "Pending";
 			if (changed)
 			{
-				state.target = { ...state.target, eraProbeStatus: result.decision === McpEraProbeDecisions.Accepted ? "Accepted" : "Rejected", eraProtocolVersion: result.protocolVersion ?? null, eraProbeEvidenceDigest: result.evidenceDigest, eraProbeFailureCode: result.failureCode ?? null };
+				state.target = { ...state.target, eraProbeStatus: result.decision === McpEraProbeDecisions.Accepted ? "Accepted" : "Rejected", eraProtocolVersion: result.protocolVersion ?? null, eraProbeEvidenceDigest: result.evidenceDigest, eraProbeFailureCode: result.failureCode ?? null, eraProbeAttempts: state.target.eraProbeAttempts + 1 };
 			}
 			return Promise.resolve({ changed, server: _Server(state) });
+		}),
+		recordEraProbeRetry: vi.fn().mockImplementation(function _Retry(_siloId: string, _serverId: string, _registrationDigest: string, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult)
+		{
+			const changed = state.target.eraProbeStatus === "Pending";
+			if (changed)
+			{
+				const eraProbeAttempts = state.target.eraProbeAttempts + 1;
+				state.target = eraProbeAttempts >= maximumAttempts
+					? { ...state.target, eraProbeStatus: "Rejected", eraProbeEvidenceDigest: exhaustedResult.evidenceDigest, eraProbeFailureCode: exhaustedResult.failureCode ?? null, eraProbeAttempts }
+					: { ...state.target, eraProbeAttempts };
+			}
+			const exhausted = state.target.eraProbeStatus === "Rejected" && state.target.eraProbeFailureCode === exhaustedResult.failureCode;
+			return Promise.resolve({ changed, exhausted, server: _Server(state) });
 		}),
 		appendAudit: vi.fn().mockImplementation(function _Audit(): Promise<void> { state.auditCount += 1; return Promise.resolve(); }),
 	} as unknown as McpOperatorRepository;
@@ -81,7 +95,7 @@ async function _Drain(execution: __FakeDurableExecution): Promise<void>
 /** Return one pending catalogue target. */
 function _State(): _EraState
 {
-	return { target: { endpoint: "https://mcp.example.test/", registrationDigest: _Input().registrationDigest, eraProbeStatus: "Pending", eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null }, auditCount: 0 };
+	return { target: { endpoint: "https://mcp.example.test/", registrationDigest: _Input().registrationDigest, eraProbeStatus: "Pending", eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 }, auditCount: 0 };
 }
 
 describe("MCP era-probe workflow", function _McpEraProbeSuite()
@@ -139,7 +153,24 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 
 		expect(execution.taskSnapshot(admitted.receipt).error).toBeInstanceOf(DurableTaskRetryableError);
 		expect(state.target.eraProbeStatus).toBe("Pending");
+		expect(state.target.eraProbeAttempts).toBe(1);
 		expect(state.auditCount).toBe(0);
+	});
+
+	it("stores a final rejection when temporary failures consume all attempts", async function _ExhaustsTemporaryFailures()
+	{
+		const state = _State();
+		state.target = { ...state.target, eraProbeAttempts: 4 };
+		const execution = new __FakeDurableExecution();
+		const probe = { probe: vi.fn().mockRejectedValue(new McpEraProbeFailure(McpEraProbeFailureCodes.RetryableUnavailable)) };
+		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe });
+		const admitted = await workflow.admit(_Transaction(), _Input());
+
+		await _Drain(execution);
+
+		expect(execution.taskSnapshot(admitted.receipt).result).toMatchObject({ decision: McpEraProbeDecisions.Rejected, failureCode: McpEraProbeFailureCodes.RetryExhausted });
+		expect(state.target).toMatchObject({ eraProbeStatus: "Rejected", eraProbeFailureCode: McpEraProbeFailureCodes.RetryExhausted, eraProbeAttempts: 5 });
+		expect(state.auditCount).toBe(1);
 	});
 
 	it.each([McpEraProbeFailureCodes.UnsafeEndpoint, McpEraProbeFailureCodes.InvalidResponse])("stores terminal failure %s as a rejected result", async function _StoresTerminalFailure(code)

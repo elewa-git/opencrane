@@ -5,13 +5,13 @@ import type { McpEraProbeStatus } from "@prisma/client";
 
 import { McpEraProbeDecisions } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
-import type { IMcpOperatorRepository, McpEraProbeTargetRecord, McpEraProbeWriteResult, McpOperatorAuditActor, McpOperatorInstallRecord, McpOperatorPrincipalRecord, McpOperatorServerRecord, McpRemoteServerCreateResult, McpRemoteServerRegistrationRecord } from "./mcp-operator-repository.types";
+import type { IMcpOperatorRepository, McpEraProbeRetryResult, McpEraProbeTargetRecord, McpEraProbeWriteResult, McpOperatorAuditActor, McpOperatorInstallRecord, McpOperatorPrincipalRecord, McpOperatorServerRecord, McpRemoteServerCreateResult, McpRemoteServerRegistrationRecord } from "./mcp-operator-repository.types";
 
 /** Fields shared by public catalogue mapping and era-probe state transitions. */
-const _SERVER_SELECT = { id: true, name: true, description: true, publisher: true, glyph: true, serverType: true, approvalStatus: true, credentialSchema: true, entitlementSummary: true, endpoint: true, registrationKeyDigest: true, registrationDigest: true, eraProbeStatus: true, eraProtocolVersion: true, eraProbeEvidenceDigest: true, eraProbeFailureCode: true } as const satisfies Prisma.McpServerSelect;
+const _SERVER_SELECT = { id: true, name: true, description: true, publisher: true, glyph: true, serverType: true, approvalStatus: true, credentialSchema: true, entitlementSummary: true, endpoint: true, registrationKeyDigest: true, registrationDigest: true, eraProbeStatus: true, eraProtocolVersion: true, eraProbeEvidenceDigest: true, eraProbeFailureCode: true, eraProbeAttempts: true } as const satisfies Prisma.McpServerSelect;
 
 /** Fields loaded by a worker before it makes an external request. */
-const _ERA_PROBE_TARGET_SELECT = { endpoint: true, registrationDigest: true, eraProbeStatus: true, eraProtocolVersion: true, eraProbeEvidenceDigest: true, eraProbeFailureCode: true } as const satisfies Prisma.McpServerSelect;
+const _ERA_PROBE_TARGET_SELECT = { endpoint: true, registrationDigest: true, eraProbeStatus: true, eraProtocolVersion: true, eraProbeEvidenceDigest: true, eraProbeFailureCode: true, eraProbeAttempts: true } as const satisfies Prisma.McpServerSelect;
 
 /** Derive a fixed-width claim identity without retaining a server name or client key. */
 function _ClaimDigest(kind: "key" | "name", value: string): string
@@ -116,11 +116,27 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 		const approvalStatus = result.decision === McpEraProbeDecisions.Accepted ? "PendingReview" : "Disabled";
 		const changed = await this._transaction.mcpServer.updateMany({
 			where: { id: serverId, siloId, registrationDigest, eraProbeStatus: "Pending" },
-			data: { eraProbeStatus, eraProtocolVersion: result.protocolVersion ?? null, eraProbeEvidenceDigest: result.evidenceDigest, eraProbeFailureCode: result.failureCode ?? null, eraProbedAt: new Date(), status, approvalStatus },
+			data: { eraProbeStatus, eraProtocolVersion: result.protocolVersion ?? null, eraProbeEvidenceDigest: result.evidenceDigest, eraProbeFailureCode: result.failureCode ?? null, eraProbeAttempts: { increment: 1 }, eraProbedAt: new Date(), status, approvalStatus },
 		});
 		const server = await this._transaction.mcpServer.findFirst({ where: { id: serverId, siloId, registrationDigest }, select: _SERVER_SELECT });
 		if (!server) return null;
 		return { changed: changed.count === 1, server };
+	}
+
+	/** Count a temporary failure and store rejection evidence when it consumes the last attempt. */
+	async recordEraProbeRetry(siloId: string, serverId: string, registrationDigest: string, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult): Promise<McpEraProbeRetryResult | null>
+	{
+		const target = await this._transaction.mcpServer.findFirst({ where: { id: serverId, siloId, registrationDigest }, select: _ERA_PROBE_TARGET_SELECT });
+		if (!target) return null;
+		const nextAttempt = target.eraProbeAttempts + 1;
+		const exhausted = nextAttempt >= maximumAttempts;
+		const data: Prisma.McpServerUpdateManyMutationInput = exhausted
+			? { eraProbeStatus: "Rejected", eraProtocolVersion: null, eraProbeEvidenceDigest: exhaustedResult.evidenceDigest, eraProbeFailureCode: exhaustedResult.failureCode, eraProbeAttempts: { increment: 1 }, eraProbedAt: new Date(), status: "Degraded", approvalStatus: "Disabled" }
+			: { eraProbeAttempts: { increment: 1 } };
+		const changed = await this._transaction.mcpServer.updateMany({ where: { id: serverId, siloId, registrationDigest, eraProbeStatus: "Pending", eraProbeAttempts: target.eraProbeAttempts }, data });
+		const server = await this._transaction.mcpServer.findFirst({ where: { id: serverId, siloId, registrationDigest }, select: _SERVER_SELECT });
+		if (!server) return null;
+		return { changed: changed.count === 1, exhausted: server.eraProbeStatus === "Rejected" && server.eraProbeFailureCode === exhaustedResult.failureCode, server };
 	}
 
 	async listGroups(siloId: string, groupIds?: readonly string[])

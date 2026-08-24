@@ -20,6 +20,15 @@ export interface AbsurdSpawnRequest
 	readonly idempotencyKey: string;
 	/** JSON-compatible input delivered to the registered task. */
 	readonly input: unknown;
+	/** Attempt limit that Absurd stores with this task. */
+	readonly maximumAttempts: number;
+	/** Absurd-native retry delay stored with this task. */
+	readonly retryStrategy: {
+		readonly kind: "fixed" | "exponential";
+		readonly baseSeconds: number;
+		readonly factor?: number;
+		readonly maxSeconds?: number;
+	};
 }
 
 /**

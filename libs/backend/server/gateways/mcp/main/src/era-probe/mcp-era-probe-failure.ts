@@ -7,6 +7,8 @@ export enum McpEraProbeFailureCodes
 	UnsafeEndpoint = "unsafe_endpoint",
 	/** The server returned a redirect, oversized body, client error, or malformed reply. */
 	InvalidResponse = "invalid_response",
+	/** The endpoint remained unavailable through every reviewed retry attempt. */
+	RetryExhausted = "retry_exhausted",
 }
 
 /** Domain-owned probe failure passed from the application adapter boundary. */
