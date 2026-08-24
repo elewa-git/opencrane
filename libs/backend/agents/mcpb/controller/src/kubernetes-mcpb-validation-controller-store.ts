@@ -67,14 +67,49 @@ function _OwnedMetadata(metadata: V1ObjectMeta | undefined): V1ObjectMeta
 	return result;
 }
 
+/** Remove generated ownership selectors after checking that Kubernetes produced the expected values. */
+function _RemoveGeneratedJobSelectors(job: Record<string, unknown>): void
+{
+	const metadata = job.metadata as Record<string, unknown> | undefined;
+	const spec = job.spec as Record<string, unknown> | undefined;
+	const template = spec?.template as Record<string, unknown> | undefined;
+	const labels = (template?.metadata as Record<string, unknown> | undefined)?.labels as Record<string, unknown> | undefined;
+	const selectors = spec?.selector as Record<string, unknown> | undefined;
+	const matchLabels = selectors?.matchLabels as Record<string, unknown> | undefined;
+	const uid = metadata?.uid;
+	const name = metadata?.name;
+	if (!selectors)
+	{
+		return;
+	}
+	if (!spec || !labels || !matchLabels || typeof uid !== "string" || typeof name !== "string")
+	{
+		throw new Error("refusing to adopt a Job with incomplete Kubernetes ownership selectors");
+	}
+	const expected = { "batch.kubernetes.io/controller-uid": uid, "batch.kubernetes.io/job-name": name, "controller-uid": uid, "job-name": name };
+	if (!isDeepStrictEqual(matchLabels, expected))
+	{
+		throw new Error("refusing to adopt a Job with unexpected Kubernetes ownership selectors");
+	}
+	for (const [key, value] of Object.entries(expected))
+	{
+		if (labels[key] !== value)
+		{
+			throw new Error("refusing to adopt a Job with mismatched Kubernetes ownership selectors");
+		}
+		delete labels[key];
+	}
+	delete spec.selector;
+}
+
 /** Remove Kubernetes defaults and generated selectors before comparing exact Job manifests. */
 function _NormalizedJob(job: V1Job): Record<string, unknown>
 {
 	const result = structuredClone(job) as unknown as Record<string, unknown>;
 	delete result.status;
+	_RemoveGeneratedJobSelectors(result);
 	result.metadata = _OwnedMetadata(job.metadata) as unknown as Record<string, unknown>;
 	const spec = result.spec as Record<string, unknown>;
-	delete spec.selector;
 	if (spec.manualSelector === false)
 	{
 		delete spec.manualSelector;

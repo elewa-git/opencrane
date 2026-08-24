@@ -19,12 +19,28 @@ async function _ReadJson(response: Response): Promise<unknown>
 		await response.body?.cancel();
 		throw new Error("OpenCrane MCP bundle validation response exceeded the 16 KiB boundary");
 	}
-	const text = await response.text();
-	if (Buffer.byteLength(text) > _MAX_RESPONSE_BYTES)
+	if (response.body === null)
 	{
-		throw new Error("OpenCrane MCP bundle validation response exceeded the 16 KiB boundary");
+		throw new Error("OpenCrane MCP bundle validation authority returned no response body");
 	}
-	return ___ParseAndValidateJson(text, "OpenCrane MCP bundle validation response", function _Identity(value: unknown): unknown { return value; });
+	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let length = 0;
+	while (true)
+	{
+		const next = await reader.read();
+		if (next.done)
+		{
+			return ___ParseAndValidateJson(Buffer.concat(chunks, length).toString("utf8"), "OpenCrane MCP bundle validation response", function _Identity(value: unknown): unknown { return value; });
+		}
+		length += next.value.byteLength;
+		if (length > _MAX_RESPONSE_BYTES)
+		{
+			await reader.cancel();
+			throw new Error("OpenCrane MCP bundle validation response exceeded the 16 KiB boundary");
+		}
+		chunks.push(next.value);
+	}
 }
 
 /** Read the current Kubernetes-projected controller token. */
