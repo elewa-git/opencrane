@@ -10,9 +10,7 @@ import { _CreateScheduleTicker, PrismaScheduleTickerUnitOfWork } from "@opencran
 import type { OpenCraneBackgroundWorkers } from "./background-workers.types";
 import type { OpenCraneProcessConfig } from "./config.types";
 import { _log } from "./log";
-
-/** Delay between checks for a runtime attempt whose signed workload lease expired. */
-const _RUNTIME_REPAIR_INTERVAL_MILLISECONDS = 30_000;
+import { _StartRuntimeRepair } from "./runtime-repair";
 
 /** Delay between database-fenced runtime workload cleanup claims. */
 const _RUNTIME_CLEANUP_INTERVAL_MILLISECONDS = 5_000;
@@ -50,8 +48,7 @@ export function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8s.Batc
 	});
 
 	// 3. Mark expired runs terminal in the database separately from physical Job cleanup, and fence both in Postgres.
-	const runtimeRepairHandle = setInterval(function _repair() { void runtimeRepairRepository.repairNextExpiredRunAtomically().catch(function _onError(error: unknown) { _log.error({ err: error }, "runtime terminal repair failed"); }); }, _RUNTIME_REPAIR_INTERVAL_MILLISECONDS);
-	runtimeRepairHandle.unref();
+	const runtimeRepair = _StartRuntimeRepair(runtimeRepairRepository);
 	const runtimeCleanupHandle = setInterval(function _cleanup() { void runtimeCleanup.reconcileNext().catch(function _onError(error: unknown) { _log.error({ err: error }, "runtime workload cleanup failed"); }); }, _RUNTIME_CLEANUP_INTERVAL_MILLISECONDS);
 	runtimeCleanupHandle.unref();
 
@@ -64,7 +61,7 @@ export function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8s.Batc
 		{
 			if (schedulerHandle !== null) clearInterval(schedulerHandle);
 			clearInterval(externalActionHandle);
-			clearInterval(runtimeRepairHandle);
+			runtimeRepair.stop();
 			clearInterval(runtimeCleanupHandle);
 			runtimeCleanupShutdown.abort();
 			await Promise.all([runtimeCleanup.drain(), externalActions.drain()]);

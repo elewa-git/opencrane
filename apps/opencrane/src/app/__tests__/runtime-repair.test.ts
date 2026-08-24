@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { _StartDevelopmentRuntimeRepair } from "../runtime-repair";
+import { _StartRuntimeRepair } from "../runtime-repair";
 
 describe("Tier 2 runtime terminal repair", function _Suite()
 {
@@ -13,7 +13,7 @@ describe("Tier 2 runtime terminal repair", function _Suite()
 	{
 		vi.useFakeTimers();
 		const repairNextExpiredRunAtomically = vi.fn().mockResolvedValue({ status: "none" });
-		const repair = _StartDevelopmentRuntimeRepair({ repairNextExpiredRunAtomically }, 1_000);
+		const repair = _StartRuntimeRepair({ repairNextExpiredRunAtomically }, true, 1_000);
 		await vi.runOnlyPendingTimersAsync();
 
 		expect(repairNextExpiredRunAtomically).toHaveBeenCalledTimes(2);

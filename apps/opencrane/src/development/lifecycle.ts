@@ -7,7 +7,7 @@ import { ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
 import { _log } from "../app/log";
 import { _BeginProcessShutdown } from "../app/process-shutdown";
-import { _StartDevelopmentRuntimeRepair } from "./runtime-repair";
+import { _StartRuntimeRepair } from "../app/runtime-repair";
 
 /** Prisma client shape returned by the app-owned database composition. */
 type DevelopmentPrismaClient = ReturnType<typeof import("../infra/db/db").___CreatePrismaClient>;
@@ -35,7 +35,7 @@ export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Expr
 	{
 		_log.info({ port: internalPort }, "Tier 2 OpenCrane Agent API listening on loopback");
 	}) ?? null;
-	const runtimeRepair = _StartDevelopmentRuntimeRepair(runtimeRepairRepository);
+	const runtimeRepair = _StartRuntimeRepair(runtimeRepairRepository, true);
 	let shutdownStarted = false;
 
 	async function _Shutdown(signal: string): Promise<void>
