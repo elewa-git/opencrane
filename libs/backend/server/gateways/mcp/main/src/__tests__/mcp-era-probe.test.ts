@@ -4,7 +4,7 @@ import { DurableTaskRetryableError, DurableTaskTerminalError } from "@opencrane/
 import type { DurableExecutionTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 import { __FakeDurableExecution } from "@opencrane/backend/server/infra/workflows/testing";
 
-import type { McpEraProbeTargetRecord, McpOperatorRepository, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
+import type { IMcpOperatorRepository, McpEraProbeTargetRecord, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
 import { __CreateMcpEraProbeWorkflow, __McpEraProbeTaskKey } from "../era-probe/mcp-era-probe";
 import { MCP_ERA_PROTOCOL_VERSION, McpEraProbeDecisions } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeClient, McpEraProbeTaskInput, McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
@@ -75,7 +75,7 @@ function _UnitOfWork(state: _EraState): McpOperatorUnitOfWork
 			return Promise.resolve({ changed, exhausted, server: _Server(state) });
 		}),
 		appendAudit: vi.fn().mockImplementation(function _Audit(): Promise<void> { state.auditCount += 1; return Promise.resolve(); }),
-	} as unknown as McpOperatorRepository;
+	} as unknown as IMcpOperatorRepository;
 	const transaction = { mcp: repository, durableExecution: _Transaction() } as unknown as McpOperatorTransaction;
 	return { execute: async function _Execute<Result>(operation: (value: McpOperatorTransaction) => Promise<Result>): Promise<Result> { return await operation(transaction); } };
 }

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { DurableExecutionTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
-import type { McpOperatorRepository, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork, McpRemoteServerRegistrationRecord } from "../core/mcp-operator-repository.types";
+import type { IMcpOperatorRepository, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork, McpRemoteServerRegistrationRecord } from "../core/mcp-operator-repository.types";
 import { McpRemoteServerRegistrationValidationError, registerRemoteServer } from "../era-probe/mcp-remote-registration";
 import { McpRemoteServerRegistrationOutcomes } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeWorkflow, McpRemoteServerRegistrationCommand } from "../era-probe/mcp-era-probe.types";
@@ -32,7 +32,7 @@ function _Harness(): { unitOfWork: McpOperatorUnitOfWork; workflow: McpEraProbeW
 			return Promise.resolve({ created: true, server: stored });
 		}),
 		appendAudit: audit,
-	} as unknown as McpOperatorRepository;
+	} as unknown as IMcpOperatorRepository;
 	const durableExecution: DurableExecutionTransaction = { client: {} };
 	const transaction = { mcp: repository, durableExecution } as unknown as McpOperatorTransaction;
 	const unitOfWork: McpOperatorUnitOfWork = { execute: async function _Execute<Result>(operation: (value: McpOperatorTransaction) => Promise<Result>): Promise<Result> { return await operation(transaction); } };
