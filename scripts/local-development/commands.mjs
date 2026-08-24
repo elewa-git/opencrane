@@ -3,7 +3,7 @@ import { createAgentControllerEnvironment } from "./agent-controller-environment
 import { createAgentControllerProcessEnvironment } from "./process-environments.mjs";
 
 const _OWNER_LABEL = "opencrane.local-development.owner=opencrane";
-const _POSTGRES_IMAGE = "postgres:17";
+const _POSTGRES_IMAGE = "postgres@sha256:e38411452a464af89e5adadb8d223bf53b898d47d6ef918b2d58c08707350449";
 const _LITELLM_IMAGE = "ghcr.io/berriai/litellm-non_root@sha256:39718a9cc9138c99ec812bcde24896411cf54502967a36b19897c539b796fdc7";
 
 export function createPostgresRunCommand(configuration, secrets)

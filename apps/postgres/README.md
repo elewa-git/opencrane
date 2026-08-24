@@ -126,9 +126,10 @@ An app entrypoint (Helm chart). It is composed by the silo umbrella chart
 ## Runtime & config
 
 Tier 2 local development uses a separate disposable path owned by `npm run dev:tier2`. It starts a
-labelled `postgres:17` container on loopback, applies the same OpenCrane target baseline, and records
-its baseline digest in local-only state so a changed baseline fails with a `--reset` instruction.
-This path does not invoke CloudNativePG, Helm, backup, recovery, or release migration machinery.
+labelled PostgreSQL 17 container from a pinned multi-platform image digest on loopback, applies the
+same OpenCrane target baseline, and records its baseline digest in local-only state so a changed
+baseline fails with a `--reset` instruction. This path does not invoke CloudNativePG, Helm, backup,
+recovery, or release migration machinery.
 
 Install the database **before** the server release; grow the PVC request as durable data grows:
 

@@ -22,7 +22,7 @@ test("PostgreSQL uses a named PostgreSQL 17 container and keeps secrets out of a
 	const specification = createPostgresRunCommand(_configuration([]), { postgresPassword: "postgres-secret" });
 
 	assert.equal(specification.command, "docker");
-	assert.equal(specification.arguments.at(-1), "postgres:17");
+	assert.equal(specification.arguments.at(-1), "postgres@sha256:e38411452a464af89e5adadb8d223bf53b898d47d6ef918b2d58c08707350449");
 	assert.ok(specification.arguments.includes("opencrane-local-postgres"));
 	assert.ok(specification.arguments.includes("type=volume,source=opencrane-local-postgres-data,target=/var/lib/postgresql/data"));
 	assert.ok(!specification.arguments.includes("postgres-secret"));
