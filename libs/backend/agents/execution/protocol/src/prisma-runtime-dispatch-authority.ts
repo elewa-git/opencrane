@@ -277,7 +277,6 @@ function _IsNamespace(value: string): boolean
 {
 	return value.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
 }
-
 /** Create a new command, or re-send a stored one, inside a single locked transaction. */
 async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, approvalExpiry: RuntimeApprovalExpiry | null, elicitationUnitOfWorkFactory: RuntimeElicitationUnitOfWorkFactory, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen, afterSequence: number): Promise<RuntimeCommandEnvelope | null>
 {
@@ -340,8 +339,10 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		if (advanced.count !== 1) throw new Error("runtime dispatch lost its command sequence fence");
 		// Mark the tool-result rows consumed only after the command that carries them is saved.
 		const stateUnitOfWork = kind === RuntimeCommandKind.ResumeAttempt ? new PrismaRuntimeDispatchStateUnitOfWork(transaction) : null;
-		if (stateUnitOfWork !== null && extras.resumeToolResultDeliveryIds.length > 0) await stateUnitOfWork.consumeToolResultDeliveries(extras.resumeToolResultDeliveryIds, new Date(nowEpochMs));
-		if (stateUnitOfWork !== null && extras.resumeElicitationResultDeliveryIds.length > 0) await stateUnitOfWork.consumeElicitationResultDeliveries(extras.resumeElicitationResultDeliveryIds, new Date(nowEpochMs));
+		if (stateUnitOfWork !== null && extras.resumeToolResultDeliveryIds.length > 0)
+			await stateUnitOfWork.consumeToolResultDeliveries(extras.resumeToolResultDeliveryIds, new Date(nowEpochMs));
+		if (stateUnitOfWork !== null && extras.resumeElicitationResultDeliveryIds.length > 0)
+			await stateUnitOfWork.consumeElicitationResultDeliveries(extras.resumeElicitationResultDeliveryIds, new Date(nowEpochMs));
 		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeSteeringRequestIds.length > 0) await transaction.runtimeSteeringRequest.updateMany({ where: { id: { in: [...extras.resumeSteeringRequestIds] }, state: RuntimeSteeringRequestState.Pending }, data: { state: RuntimeSteeringRequestState.Consumed, consumedAt: new Date(nowEpochMs) } });
 		return envelope;
 	});
@@ -684,7 +685,6 @@ async function _mintCommandExtras(transaction: Prisma.TransactionClient, context
 	if (loaded === null) return null;
 	return { compiledInput: null, resume: loaded.resume, resumeToolResultDeliveryIds: loaded.toolResultDeliveryIds, resumeElicitationResultDeliveryIds: loaded.elicitationResultDeliveryIds, resumeSteeringRequestIds: loaded.steeringRequestIds, cancelReason: "cancelled" };
 }
-
 /** Rebuild the body data for a stored command on redelivery, reading a resume payload from its row. */
 async function _storedCommandExtras(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, row: DispatchedCommandRow, compileRunInput: RunInputCompiler): Promise<CommandExtras | null>
 {
