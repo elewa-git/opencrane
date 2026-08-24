@@ -257,7 +257,6 @@ export class PrismaRuntimeDispatchAuthority
 		});
 	}
 }
-
 /** Validate fixed dispatch policy before any database transaction begins. */
 function _configIsValid(config: RuntimeDispatchAuthorityConfig): boolean
 {
@@ -268,13 +267,11 @@ function _configIsValid(config: RuntimeDispatchAuthorityConfig): boolean
 		&& config.commandTtlMilliseconds >= 1_000
 		&& config.commandTtlMilliseconds <= 300_000;
 }
-
 /** Return whether this namespace is one of the two configured runtime namespaces. */
 function _IsConfiguredRuntimeNamespace(namespace: string, config: RuntimeDispatchAuthorityConfig): boolean
 {
 	return namespace === config.personalRuntimeNamespace || namespace === config.managedRuntimeNamespace;
 }
-
 /** Return whether this value is a valid Kubernetes namespace name. */
 function _IsNamespace(value: string): boolean
 {
@@ -342,8 +339,9 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		const advanced = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { nextCommandSequence: admission.nextCommandSequence } });
 		if (advanced.count !== 1) throw new Error("runtime dispatch lost its command sequence fence");
 		// Mark the tool-result rows consumed only after the command that carries them is saved.
-		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeToolResultDeliveryIds.length > 0) await new PrismaRuntimeDispatchStateUnitOfWork(transaction).consumeToolResultDeliveries(extras.resumeToolResultDeliveryIds, new Date(nowEpochMs));
-		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeElicitationResultDeliveryIds.length > 0) await new PrismaRuntimeDispatchStateUnitOfWork(transaction).consumeElicitationResultDeliveries(extras.resumeElicitationResultDeliveryIds, new Date(nowEpochMs));
+		const stateUnitOfWork = kind === RuntimeCommandKind.ResumeAttempt ? new PrismaRuntimeDispatchStateUnitOfWork(transaction) : null;
+		if (stateUnitOfWork !== null && extras.resumeToolResultDeliveryIds.length > 0) await stateUnitOfWork.consumeToolResultDeliveries(extras.resumeToolResultDeliveryIds, new Date(nowEpochMs));
+		if (stateUnitOfWork !== null && extras.resumeElicitationResultDeliveryIds.length > 0) await stateUnitOfWork.consumeElicitationResultDeliveries(extras.resumeElicitationResultDeliveryIds, new Date(nowEpochMs));
 		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeSteeringRequestIds.length > 0) await transaction.runtimeSteeringRequest.updateMany({ where: { id: { in: [...extras.resumeSteeringRequestIds] }, state: RuntimeSteeringRequestState.Pending }, data: { state: RuntimeSteeringRequestState.Consumed, consumedAt: new Date(nowEpochMs) } });
 		return envelope;
 	});
@@ -374,7 +372,8 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 					return await _OpenRuntimeElicitation(context, candidate, elicitationUnitOfWork, new Date(clock.nowEpochMs())) ? { accepted: true } : { accepted: false, reason: "elicitation_replay_conflict" };
 				}
 				if (candidate.kind !== RuntimeCandidateKinds.ExternalAction) return { accepted: true };
-				const invocation = await new PrismaRuntimeDispatchStateUnitOfWork(transaction).findToolInvocation(candidate.runId, candidate.attempt, candidate.candidateId);
+				const stateUnitOfWork = new PrismaRuntimeDispatchStateUnitOfWork(transaction);
+				const invocation = await stateUnitOfWork.findToolInvocation(candidate.runId, candidate.attempt, candidate.candidateId);
 				const actualArgumentsDigest = __DigestCanonicalJson(candidate.arguments);
 				const requestFingerprint = _ToolInvocationFingerprint(candidate, actualArgumentsDigest);
 				return invocation !== null && actualArgumentsDigest === candidate.argumentsDigest && invocation.runtimeInstanceId === candidate.runtimeInstanceId && invocation.commandId === candidate.commandId && invocation.toolRevisionId === candidate.toolRevisionId && invocation.toolInvocationId === candidate.toolInvocationId && invocation.argumentsDigest === actualArgumentsDigest && invocation.requestFingerprint === requestFingerprint ? { accepted: true } : { accepted: false, reason: "external_action_replay_conflict" };
@@ -680,7 +679,8 @@ async function _mintCommandExtras(transaction: Prisma.TransactionClient, context
 		return { compiledInput, resume: null, resumeToolResultDeliveryIds: [], resumeElicitationResultDeliveryIds: [], resumeSteeringRequestIds: [], cancelReason: "cancelled" };
 	}
 	if (kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeToolResultDeliveryIds: [], resumeElicitationResultDeliveryIds: [], resumeSteeringRequestIds: [], cancelReason: _cancelReason(context.terminalReason) };
-	const loaded = await new PrismaRuntimeResumeInputUnitOfWork(transaction).load(context.runId, context.attempt, inputGeneration);
+	const resumeInputUnitOfWork = new PrismaRuntimeResumeInputUnitOfWork(transaction);
+	const loaded = await resumeInputUnitOfWork.load(context.runId, context.attempt, inputGeneration);
 	if (loaded === null) return null;
 	return { compiledInput: null, resume: loaded.resume, resumeToolResultDeliveryIds: loaded.toolResultDeliveryIds, resumeElicitationResultDeliveryIds: loaded.elicitationResultDeliveryIds, resumeSteeringRequestIds: loaded.steeringRequestIds, cancelReason: "cancelled" };
 }

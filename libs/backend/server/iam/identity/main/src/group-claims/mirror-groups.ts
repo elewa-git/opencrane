@@ -116,7 +116,8 @@ export class PrismaGroupClaimProjectionUnitOfWork implements GroupClaimProjectio
 			return Promise.resolve();
 		return this.prisma.$transaction(async function _Project(transaction)
 		{
-			return new PrismaGroupClaimProjectionRepository(transaction).reconcile(command);
+			const repository = new PrismaGroupClaimProjectionRepository(transaction);
+			return repository.reconcile(command);
 		});
 	}
 }

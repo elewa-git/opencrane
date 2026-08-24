@@ -22,7 +22,8 @@ export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
 		if (run === null || sourceState === null) return { outcome: "denied", reason: "run_not_running" };
 		// A runtime failure can follow a lost response after external-action admission committed. Keep
 		// both terminal outcomes behind the durable tool fence so server-owned work can still settle.
-		const hasPendingTools = await new PrismaRuntimeTerminalPendingToolUnitOfWork(transaction).hasPending(run.id, run.attempt);
+		const pendingToolUnitOfWork = new PrismaRuntimeTerminalPendingToolUnitOfWork(transaction);
+		const hasPendingTools = await pendingToolUnitOfWork.hasPending(run.id, run.attempt);
 		if (hasPendingTools) return { outcome: "denied", reason: "tool_results_pending" };
 
 		const terminal = _terminal(command.eventType);
@@ -67,7 +68,8 @@ class PrismaRuntimeTerminalPendingToolUnitOfWork implements RuntimeTerminalPendi
 	/** Hands the completion check to the repository bound to that transaction. */
 	hasPending(runId: string, attempt: number): Promise<boolean>
 	{
-		return new PrismaRuntimeTerminalPendingToolRepository(this.transaction).hasPending(runId, attempt);
+		const repository = new PrismaRuntimeTerminalPendingToolRepository(this.transaction);
+		return repository.hasPending(runId, attempt);
 	}
 }
 

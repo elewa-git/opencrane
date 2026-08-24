@@ -38,7 +38,8 @@ export class PrismaRuntimeEventReporter implements RuntimeEventReporter
 			const task = new PrismaRuntimeTerminalReporter();
 			return task.reportInTransaction(transaction, cmd);
 		}
-		return new PrismaRuntimeEventAppendUnitOfWork(transaction).append(command);
+		const unitOfWork = new PrismaRuntimeEventAppendUnitOfWork(transaction);
+		return unitOfWork.append(command);
 	}
 }
 
@@ -50,7 +51,11 @@ class PrismaRuntimeEventAppendUnitOfWork implements RuntimeEventAppendUnitOfWork
 	/** Keeps the repository on the caller's transaction. */
 	constructor(transaction: Prisma.TransactionClient) { this._transaction = transaction; }
 	/** Appends the event through a repository bound to that transaction. */
-	async append(command: RuntimeEventReportCommand): Promise<RuntimeEventReportResult> { return new PrismaRuntimeEventAppendRepository(this._transaction).append(command); }
+	async append(command: RuntimeEventReportCommand): Promise<RuntimeEventReportResult>
+	{
+		const repository = new PrismaRuntimeEventAppendRepository(this._transaction);
+		return repository.append(command);
+	}
 }
 
 /** Prisma adapter that numbers the event and writes it. */

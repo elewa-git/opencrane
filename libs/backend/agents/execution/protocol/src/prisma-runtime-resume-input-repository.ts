@@ -115,6 +115,7 @@ export class PrismaRuntimeResumeInputUnitOfWork implements RuntimeResumeInputUni
 	/** Load the pending tool results and steering rows, hiding how the repository is built. */
 	async load(runId: string, attempt: number, inputGeneration: number): Promise<RuntimeResumeInputLoad | null>
 	{
-		return new PrismaRuntimeResumeInputRepository(this._transaction).load(runId, attempt, inputGeneration);
+		const repository = new PrismaRuntimeResumeInputRepository(this._transaction);
+		return repository.load(runId, attempt, inputGeneration);
 	}
 }

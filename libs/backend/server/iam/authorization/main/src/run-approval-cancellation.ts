@@ -124,7 +124,8 @@ export class PrismaRunApprovalCancellationRepository implements RunApprovalCance
  */
 export async function __CancelPendingRunApprovalAuthority(transaction: Prisma.TransactionClient, command: CancelPendingRunApprovalAuthorityCommand): Promise<CancelPendingRunApprovalAuthorityResult>
 {
-	return new PrismaRunApprovalCancellationUnitOfWork(transaction).cancel(command);
+	const unitOfWork = new PrismaRunApprovalCancellationUnitOfWork(transaction);
+	return unitOfWork.cancel(command);
 }
 
 /** Creates the cancellation repository on the caller's transaction and runs the cancellation steps in order. */

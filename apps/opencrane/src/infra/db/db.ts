@@ -25,7 +25,8 @@ class _PrismaDbHealthProbeUnitOfWork implements DbHealthProbeUnitOfWork
   {
     await this._prisma.$transaction(async function _check(transaction: Prisma.TransactionClient)
     {
-      await new _PrismaDbHealthProbeRepository(transaction).check();
+      const repository = new _PrismaDbHealthProbeRepository(transaction);
+      await repository.check();
     });
   }
 }

@@ -149,7 +149,8 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 		}
 
 		// 4. Delegate initial publication after bootstrap has proved that no service exists.
-		return new PrismaInitialPersonalAgentPublicationRepository(this.transaction, this.defaultModelResolver).publish(command, persona);
+		const publicationRepository = new PrismaInitialPersonalAgentPublicationRepository(this.transaction, this.defaultModelResolver);
+		return publicationRepository.publish(command, persona);
 	}
 
 	/** Reconcile one existing service to the owner's current approved persona without replacing it. */
