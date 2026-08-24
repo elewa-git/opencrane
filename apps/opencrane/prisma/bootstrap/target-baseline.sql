@@ -3011,6 +3011,18 @@ ALTER TABLE "mcpb_validation_workloads" ADD CONSTRAINT "mcpb_validation_workload
     "delivery_count" >= 0
 );
 
+CREATE FUNCTION "enforce_mcpb_validation_workload_assignment"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD."state" = 'claimed' AND NEW."state" = 'assigned' AND (OLD."claim_expires_at" IS NULL OR OLD."claim_expires_at" <= clock_timestamp()) THEN
+        RAISE EXCEPTION 'MCP bundle validation workload assignment requires a live controller lease';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "mcpb_validation_workloads_live_claim_assignment"
+    BEFORE UPDATE OF "state" ON "mcpb_validation_workloads"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_mcpb_validation_workload_assignment"();
+
 -- AddForeignKey
 ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 

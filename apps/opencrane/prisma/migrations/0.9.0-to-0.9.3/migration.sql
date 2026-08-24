@@ -3854,6 +3854,17 @@ ALTER TABLE "mcpb_validation_workloads" ADD CONSTRAINT "mcpb_validation_workload
     "task_name" = 'mcpb-validation.verify' AND "task_key" ~ '^workflows:mcpb-validation:[0-9a-f]{64}$' AND
     "delivery_count" >= 0
 );
+CREATE FUNCTION "enforce_mcpb_validation_workload_assignment"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD."state" = 'claimed' AND NEW."state" = 'assigned' AND (OLD."claim_expires_at" IS NULL OR OLD."claim_expires_at" <= clock_timestamp()) THEN
+        RAISE EXCEPTION 'MCP bundle validation workload assignment requires a live controller lease';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "mcpb_validation_workloads_live_claim_assignment"
+    BEFORE UPDATE OF "state" ON "mcpb_validation_workloads"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_mcpb_validation_workload_assignment"();
 ALTER TABLE "mcpb_validation_workloads" ADD CONSTRAINT "mcpb_validation_workloads_validation_id_fkey" FOREIGN KEY ("validation_id") REFERENCES "mcpb_validations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_registration_digest_check" CHECK (
     ("registration_key_digest" IS NULL AND "registration_digest" IS NULL)

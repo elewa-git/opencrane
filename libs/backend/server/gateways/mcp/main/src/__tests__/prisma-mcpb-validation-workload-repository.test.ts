@@ -68,4 +68,13 @@ describe("Prisma MCP bundle validation workload repository", function _McpbValid
 		expect(transaction.mcpbValidationWorkload.updateMany).not.toHaveBeenCalled();
 		vi.useRealTimers();
 	});
+
+	it("does not report an assignment when the database rejects an expired lease during the compare-and-swap", async function _SurfacesDatabaseLeaseRejection()
+	{
+		const transaction = _Transaction();
+		transaction.mcpbValidationWorkload.findUnique.mockResolvedValue(_ClaimedWorkload());
+		transaction.mcpbValidationWorkload.updateMany.mockRejectedValue(new Error("MCP bundle validation workload assignment requires a live controller lease"));
+
+		await expect(new PrismaMcpbValidationRepository(transaction as never).commitWorkloadAssignment("workload-1", { claimedAt: "2099-07-26T05:00:00.000Z", deliveryCount: 1, workloadUid: "job-uid-1" })).rejects.toThrow("live controller lease");
+	});
 });
