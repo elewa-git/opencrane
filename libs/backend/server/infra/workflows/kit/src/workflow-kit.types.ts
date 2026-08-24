@@ -1,15 +1,25 @@
 import type { Logger } from "@opencrane/backend/observability";
 import type { DurableExecution, DurableTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/contract";
 
-/** JSON-shaped task input that identifies the silo that owns the work. */
-export interface WorkflowSiloTaskInput
+/**
+ * Names the minimum input that lets the kit identify the silo that owns a task.
+ *
+ * Called by: the Zod task-input parser. Product workflows add their own fields and validators;
+ * this small shape keeps the shared kit independent of every product task schema.
+ */
+export interface IWorkflowSiloTaskInput
 {
 	/** Silo whose product state and task input this work may use. */
 	readonly siloId: string;
 }
 
-/** One task name and the engine queue that application composition assigns to it. */
-export interface WorkflowTaskPolicy
+/**
+ * Connects one registered task name to the engine queue selected by application composition.
+ *
+ * Called by: {@link __CreateWorkflowTaskQueueAuthority}. Product domains use task names but never
+ * choose a queue, so one reviewed authority must own this mapping.
+ */
+export interface IWorkflowTaskPolicy
 {
 	/** Registered task name that this policy governs. */
 	readonly taskName: string;
@@ -17,8 +27,13 @@ export interface WorkflowTaskPolicy
 	readonly queue: string;
 }
 
-/** Dependencies and policy that bind one kit instance to a single silo. */
-export interface WorkflowKitOptions
+/**
+ * Supplies the execution adapter and the fixed policy for one workflow-kit instance.
+ *
+ * Called by: {@link __CreateWorkflowKit}. One instance accepts only its configured `siloId`; this
+ * prevents a correctly shaped task for another silo from reaching the selected engine adapter.
+ */
+export interface IWorkflowKitOptions
 {
 	/** Engine-neutral durable execution port that stores and dispatches the tasks. */
 	readonly execution: DurableExecution;
@@ -37,6 +52,8 @@ export interface WorkflowKitOptions
  * checkpoint without running it again, and `Failed` means the operation or its context failed.
  * The kit writes these values to the trace and structured log so operators can distinguish a
  * replay from new work.
+ *
+ * Called by: the workflow kit's checkpoint wrapper.
  */
 export enum WorkflowStepOutcomes
 {

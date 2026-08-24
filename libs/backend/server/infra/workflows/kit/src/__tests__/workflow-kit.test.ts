@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { __FakeDurableExecution } from "@opencrane/backend/server/infra/workflows/testing";
 import type { DurableExecutionTransaction, DurableTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
-import { __CreateWorkflowKit, __CreateWorkflowTaskQueueAuthority, __WorkflowTaskKeyDigest, __WorkflowTaskQueueMap, WorkflowPayloadFirewallError, WorkflowTaskPolicyError } from "../index";
+import { __CreateWorkflowKit, __CreateWorkflowTaskQueueAuthority, WorkflowPayloadValidationError, WorkflowTaskPolicyError } from "../index";
 
 /** Task input accepted by this test workflow. */
 interface TestTaskInput
@@ -73,7 +73,27 @@ describe("workflow kit policy", function _PolicySuite()
 		_RegisterArchiveTask(kit);
 		const task = { taskName: "archive", idempotencyKey: "archive:request-1", input: { siloId: "silo-a", requestId: "request-1", nested: { accessToken: "must-not-persist" } } };
 
-		await expect(kit.spawn(_Transaction(), task)).rejects.toBeInstanceOf(WorkflowPayloadFirewallError);
+		await expect(kit.spawn(_Transaction(), task)).rejects.toBeInstanceOf(WorkflowPayloadValidationError);
+	});
+
+	it("rejects non-object input before a registered task handler receives it", async function _RejectsMalformedInput()
+	{
+		const execution = new __FakeDurableExecution();
+		const kit = _Kit(execution);
+		_RegisterArchiveTask(kit);
+
+		await expect(kit.spawn(_Transaction(), { taskName: "archive", idempotencyKey: "task-1", input: "not-an-object" })).rejects.toBeInstanceOf(WorkflowPayloadValidationError);
+	});
+
+	it("rejects a silo identifier with surrounding whitespace instead of changing saved input", async function _RejectsNonCanonicalSiloId()
+	{
+		const execution = new __FakeDurableExecution();
+		const spawn = vi.spyOn(execution, "spawn");
+		const kit = _Kit(execution);
+		_RegisterArchiveTask(kit);
+
+		await expect(kit.spawn(_Transaction(), _Task({ siloId: " silo-a ", requestId: "request-1" }))).rejects.toBeInstanceOf(WorkflowPayloadValidationError);
+		expect(spawn).not.toHaveBeenCalled();
 	});
 
 	it("rejects a task name that is absent from the reviewed queue policy", async function _RejectsUnknownTask()
@@ -106,27 +126,13 @@ describe("workflow kit policy", function _PolicySuite()
 
 describe("workflow kit helpers", function _HelperSuite()
 {
-	it("returns one frozen queue map and rejects duplicate policy entries", function _BuildsQueueMap()
-	{
-		const queues = __WorkflowTaskQueueMap([{ taskName: "archive", queue: "maintenance" }]);
-
-		expect(queues).toEqual({ archive: "maintenance" });
-		expect(Object.isFrozen(queues)).toBe(true);
-		expect(function _DuplicatePolicy(): void { __WorkflowTaskQueueMap([{ taskName: "archive", queue: "maintenance" }, { taskName: "archive", queue: "maintenance" }]); }).toThrow(WorkflowTaskPolicyError);
-	});
-
-	it("rejects an unreviewed task through the shared queue authority", function _RejectsUnknownQueueAuthorityTask()
+	it("builds one frozen authority and rejects duplicate or unknown task policies", function _RejectsInvalidQueueAuthorityPolicy()
 	{
 		const queues = __CreateWorkflowTaskQueueAuthority([{ taskName: "archive", queue: "maintenance" }]);
 
 		expect(queues.queueForTask("archive")).toBe("maintenance");
+		expect(Object.isFrozen(queues)).toBe(true);
+		expect(function _DuplicatePolicy(): void { __CreateWorkflowTaskQueueAuthority([{ taskName: "archive", queue: "maintenance" }, { taskName: "archive", queue: "maintenance" }]); }).toThrow(WorkflowTaskPolicyError);
 		expect(function _UnknownTask(): void { queues.queueForTask("unreviewed"); }).toThrow(WorkflowTaskPolicyError);
 	});
-
-	it("hashes task keys before callers place them in diagnostics", function _DigestsTaskKey()
-	{
-		expect(__WorkflowTaskKeyDigest("archive:request-1")).not.toContain("archive:request-1");
-		expect(__WorkflowTaskKeyDigest("archive:request-1")).toHaveLength(64);
-	});
-
 });

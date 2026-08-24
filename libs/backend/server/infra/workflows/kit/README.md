@@ -14,7 +14,7 @@ configured silo — the isolated organisation boundary — and that its task nam
                          │
                          ▼
  ┌─────────────────────────────────────────┐
- │ workflows/kit  ◄── HERE                  │  policy check + payload firewall
+ │ workflows/kit  ◄── HERE                  │  policy check + payload validation
  └─────────────────────────────────────────┘
                          │  safe task + shared queue authority
                          ▼
@@ -24,20 +24,19 @@ configured silo — the isolated organisation boundary — and that its task nam
 **In this flow:** [workflows/contract](../contract/README.md) *(the engine-neutral task port)* ·
 `workflows/infra_absurd` *(the current PostgreSQL-backed engine adapter)*
 
-The kit refuses cross-silo input, unreviewed task names, non-JSON values, and fields that look like
-credentials before they can become durable database payloads. Its checkpoint wrapper traces only
-task name, step name, silo, queue, a hashed task key, and outcome metadata. The Phase 0 contract
-does not expose a truthful engine retry-attempt number, so the kit deliberately does not invent one.
+The kit parses generic task input with Zod at the engine boundary, then rejects cross-silo input,
+non-JSON values, and fields that look like credentials before they can become durable database
+payloads. Its checkpoint wrapper traces only task name, step name, silo, queue, a hashed task key,
+and outcome metadata. The Phase 0 contract does not expose a truthful engine retry-attempt number,
+so the kit deliberately does not invent one.
 
 ## Public surface
 
 - `__CreateWorkflowKit` — apply one silo's policy and shared queue authority to a durable engine.
 - `__CreateWorkflowTaskQueueAuthority` — build the immutable reviewed task-to-queue authority that
   both the kit and engine adapter receive.
-- `__WorkflowTaskQueueMap` — derive the reviewed task-to-queue map used by that authority.
-- `__WorkflowTaskKeyDigest` — hash an idempotency key before diagnostics use it.
-- `WorkflowPayloadFirewallError`, `WorkflowTaskPolicyError` — fail-closed policy outcomes.
-- `WorkflowKitOptions`, `WorkflowSiloTaskInput`, `WorkflowTaskPolicy`, and
+- `WorkflowPayloadValidationError`, `WorkflowTaskPolicyError` — fail-closed policy outcomes.
+- `IWorkflowKitOptions`, `IWorkflowTaskPolicy`, and
   `WorkflowStepOutcomes` — the policy and integration types.
 
 ## Boundary

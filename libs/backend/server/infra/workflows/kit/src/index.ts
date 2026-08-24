@@ -1,4 +1,5 @@
-/** Policy, payload firewall, and observability helpers for durable workflows. */
-export { __CreateWorkflowKit, __CreateWorkflowTaskQueueAuthority, __WorkflowTaskKeyDigest, __WorkflowTaskQueueMap, WorkflowPayloadFirewallError, WorkflowTaskPolicyError } from "./workflow-kit";
+/** Exposes the workflow kit's policy, payload-validation, and observability boundary. */
+export { WorkflowPayloadValidationError, WorkflowTaskPolicyError } from "./workflow-kit.errors";
+export { __CreateWorkflowKit, __CreateWorkflowTaskQueueAuthority } from "./workflow-kit";
 export { WorkflowStepOutcomes } from "./workflow-kit.types";
-export type { WorkflowKitOptions, WorkflowSiloTaskInput, WorkflowTaskPolicy } from "./workflow-kit.types";
+export type { IWorkflowKitOptions, IWorkflowTaskPolicy } from "./workflow-kit.types";
