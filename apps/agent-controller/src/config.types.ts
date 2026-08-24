@@ -1,5 +1,6 @@
 import type { AgentControllerRuntimeProfiles } from "@opencrane/backend/agents/runtime/controller";
 import type { SkillWorkloadControllerProfiles } from "@opencrane/backend/agents/skills/controller";
+import type { McpbValidatorJobProfile } from "@opencrane/backend/server/gateways/mcp/validator-k8s-launcher";
 
 /** Fully validated process configuration for the per-silo agent controller. */
 export interface AgentControllerProcessConfig
@@ -18,4 +19,6 @@ export interface AgentControllerProcessConfig
 	readonly profiles: AgentControllerRuntimeProfiles;
 	/** Immutable profiles for the only governed skill Job classes. */
 	readonly skillWorkloadProfiles: SkillWorkloadControllerProfiles;
+	/** Immutable profile for the only MCP bundle validator Job class. */
+	readonly mcpbValidatorProfile: McpbValidatorJobProfile;
 }

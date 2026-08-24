@@ -4,13 +4,13 @@
 
 ## What it owns
 
-This app owns the future worker image and Kubernetes namespace for checking and running accepted
-MCP bundles. An MCP bundle is a packaged MCP server. The worker has its own empty namespace and a
-service account with no Kubernetes permissions.
+This app owns the worker image and Kubernetes namespace for checking MCP bundles. An MCP bundle is a
+packaged MCP server. The worker has its own empty namespace and a service account with no Kubernetes
+permissions.
 
 ```
  saved MCP bundle check
-          │ future controller creates one Job
+          │ agent controller creates one suspended Job
           ▼
  ┌─────────────────────────────────┐
  │ mcpb-validator  ◄── HERE         │
@@ -18,10 +18,11 @@ service account with no Kubernetes permissions.
  └─────────────────────────────────┘
 ```
 
-**In this flow:** [OpenCrane server](../opencrane/README.md) · the future MCPB controller.
+**In this flow:** [OpenCrane server](../opencrane/README.md) ·
+[agent controller](../agent-controller/README.md).
 
-The image currently refuses to run because the server assignment protocol does not exist yet. This
-is deliberate: creating the image and namespace must not accidentally make third-party bundle code
+The image currently refuses to run because the server assignment and release protocol does not exist
+yet. This is deliberate: creating a suspended Job must not accidentally make third-party bundle code
 executable.
 
 ## Public surface
@@ -33,8 +34,8 @@ executable.
 ## Boundary
 
 The image accepts no command, artifact URL, database credential, registry credential, or Kubernetes
-credential. It has no running Job or network exception until the later controller and server route
-are reviewed together.
+credential. The agent controller can create a suspended Job with the fixed worker shape, but no
+component can unsuspend it yet.
 
 ## Dependency direction
 
@@ -44,8 +45,8 @@ or library source.
 ## Runtime & config
 
 The chart creates a namespace but no Pod. Its only settings are the namespace, the fixed service
-account name, and resource quota. A future release must publish the worker image by digest before a
-controller can create a Job.
+account name, and resource quota. The controller requires a worker image digest before it can create
+a Job.
 
 ## See also
 

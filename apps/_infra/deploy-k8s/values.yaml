@@ -438,6 +438,16 @@ agentController:
       resources:
         requests: { cpu: 100m, memory: 128Mi }
         limits: { cpu: 500m, memory: 256Mi }
+  mcpbValidatorProfile:
+    image:
+      repository: ghcr.io/elewa-git/opencrane-mcpb-validator
+      digest: ""
+      pullPolicy: IfNotPresent
+    scratchSize: 128Mi
+    activeDeadlineSeconds: 300
+    resources:
+      requests: { cpu: 250m, memory: 256Mi }
+      limits: { cpu: "1", memory: 1Gi }
   resources:
     requests:
       cpu: 25m

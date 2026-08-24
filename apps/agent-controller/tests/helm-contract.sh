@@ -34,6 +34,7 @@ render_enabled() {
     --set-string managedAgentRuntimePlane.managedAgentRuntime.serviceAccountName=managed-agent-runtime-default \
     --set-string agentController.skillWorkloadProfiles.authoring.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
     --set-string agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
+    --set-string agentController.mcpbValidatorProfile.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
     --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
     --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
     --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
@@ -131,6 +132,16 @@ if grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -E '
   echo "skill workload Roles exceed fenced Job release and Pod discovery authority" >&2
   exit 1
 fi
+# MCP bundle validation has a separate namespace, create/get-only controller Role, and an admission
+# policy that permits only the fixed suspended validator Job profile.
+grep -A14 -F 'name: agent-controller-mcpb-validator' "$MANIFEST" | grep -F 'namespace: opencrane-mcpb-validation' >/dev/null
+grep -A14 -F 'name: agent-controller-mcpb-validator' "$MANIFEST" | grep -F 'verbs: ["get", "create"]' >/dev/null
+if grep -A14 -F 'name: agent-controller-mcpb-validator' "$MANIFEST" | grep -E '"(delete|update|patch|watch|list)"' >/dev/null; then
+  echo "MCP bundle validator controller Role exceeds get/create" >&2
+  exit 1
+fi
+grep -Fq 'MCP bundle validator Job must remain the exact suspended worker shape' "$ADMISSION"
+grep -Fq "mcpb-validator-default" "$ADMISSION"
 
 # The controller receives both profile-owned namespaces in one immutable map; it never gets a
 # process-wide runtime namespace that could let one profile borrow another's RoleBinding.
