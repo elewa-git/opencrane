@@ -5,7 +5,7 @@ import { __DecideAuthorization, AuthorizationBoundaryCoverages, AuthorizationBou
 import type { AuthorizationBoundary, AuthorizationGrant } from "@opencrane/models/authorization";
 import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
 
-import type { BoundaryGrantResolutionCommand, BoundaryGrantResolver, EffectiveBoundaryGrant } from "./boundary-attachment-authority.types";
+import type { BoundaryGrantResolutionCommand, BoundaryGrantResolver, EffectiveBoundaryGrant } from "../boundary-attachment-authority.types";
 
 /** Converts one revision attachment into the generic authorization boundary vocabulary. */
 function _Boundary(attachment: RevisionBoundaryAttachment): AuthorizationBoundary

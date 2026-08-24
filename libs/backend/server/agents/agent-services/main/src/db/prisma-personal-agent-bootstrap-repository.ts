@@ -1,9 +1,9 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, PersonaRevisionState, type Prisma } from "@prisma/client";
 
-import { INITIAL_PERSONAL_AGENT_POLICY } from "./initial-personal-agent-policy";
-import type { InitialPersonalAgentDefaultModelResolver } from "./initial-personal-agent-publication.types";
-import { AgentRevisionPersonaSelectionMaterializationCodes } from "./agent-revision-persona-selection.types";
-import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapRepository, type PersonalAgentBootstrapResult, type ReadyPersonalAgentBootstrapResult } from "./personal-agent-bootstrap.types";
+import { INITIAL_PERSONAL_AGENT_POLICY } from "../initial-personal-agent-policy";
+import type { InitialPersonalAgentDefaultModelResolver } from "../initial-personal-agent-publication.types";
+import { AgentRevisionPersonaSelectionMaterializationCodes } from "../agent-revision-persona-selection.types";
+import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapRepository, type PersonalAgentBootstrapResult, type ReadyPersonalAgentBootstrapResult } from "../personal-agent-bootstrap.types";
 import { PrismaAgentRevisionPersonaSelectionRepository } from "./prisma-agent-revision-persona-selection";
 import { PrismaInitialPersonalAgentPublicationRepository } from "./prisma-initial-personal-agent-publication";
 

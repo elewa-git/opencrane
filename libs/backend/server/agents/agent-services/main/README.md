@@ -135,8 +135,6 @@ ready personal AgentService, or a fail-closed denial
   and accepts only the shared run-admission port plus the process logger from the app.
 - Lifecycle use cases: `__CreateManagedAgentService`, `__ReviseAgentRevision`, `__RestoreAgentRevision`,
   `__ChangeAgentServiceState`, `__CompareAgentRevisions`, `__ReadAgentServiceHistory`, `__AdmitManagedRunNow`.
-- `PrismaAgentRevisionLifecycleRepository` — Postgres-backed definition-plane adapter (immutable
-  revisions, lineage, optimistic concurrency).
 - `AgentRevisionModelSelectionRepository` and
   `PrismaAgentRevisionModelSelectionRepository` — the port and transaction-scoped model-alias strategy used when
   personal configuration must combine an accepted model selection with its own journal transition.
@@ -154,35 +152,31 @@ ready personal AgentService, or a fail-closed denial
 - `AgentRevisionPersonaSelectionMaterializationCodes` — distinguishes a new revision, an
   idempotent already-current revision, a stale source, unavailable authority, and the valid case
   where persona approval finds no personal agent to update.
-- `__PublishAgentRevision` + `PrismaAgentServicePublicationRepository` — the reused compare-and-swap
-publish path and its Postgres adapter. Retiring a service clears its active-revision pointer in the
-same database update, so no retired service can still look runnable.
+- `__PublishAgentRevision` — the reused compare-and-swap publish path. Retiring a service clears its
+  active-revision pointer in the same database update, so no retired service can still look runnable.
 - `ManagedRunAdmissionPort` — the app-owned seam through which run-now AND the scheduler record an
   admission (`trigger: managed_invocation` or `schedule`). `ManagedRunAdmissionOutcomes` is its
   documented serialized outcome vocabulary, so consumers do not recreate accepted, idempotent, or
   denied branch values.
-- Schedule plane: `__CreateAgentSchedule`, `__UpdateAgentSchedule`, `PrismaAgentScheduleRepository`,
-  the shared `AgentScheduleOverlapPolicies` vocabulary, and the `/:serviceId/schedules` management
-  surface (list/create/update/delete). Evaluation into due runs lives in sibling `scheduling`.
+- Schedule plane: `__CreateAgentSchedule`, `__UpdateAgentSchedule`, the shared
+  `AgentScheduleOverlapPolicies` vocabulary, and the `/:serviceId/schedules` management surface
+  (list/create/update/delete). Evaluation into due runs lives in sibling `scheduling`.
 - Boundary attach-authority + effective access: `__ValidateBoundaryAttachAuthority`,
-  `__ResolveEffectiveBoundaryAttachments`, `__IntersectBoundaryAttachments`,
-  `PrismaBoundaryGrantRepository`. The resolver evaluates stored generic grants by exact capability
-  and resource coordinates, including current validity, winning priority, deny precedence, and
-  stored Group ancestry; an exact allow never widens into a descendants attachment.
-- Managed execution evidence: `PrismaManagedExecutionEvidenceAuthority` derives the canonical
-  Principal relation from the active managed service, verifies its reserved internal provenance and
-  current signed fleet membership, intersects the active revision's non-personal boundary
-  attachments with effective grants, and digests the complete capability-bearing revision inside
-  the run-admission transaction.
+  `__ResolveEffectiveBoundaryAttachments`, and `__IntersectBoundaryAttachments`. The resolver
+  evaluates stored generic grants by capability and resource, including current validity, priority,
+  deny precedence, and Group ancestry; an exact allow never widens into a descendants attachment.
+- Managed execution evidence derives the stored Principal relation from the active managed service,
+  verifies its reserved internal origin and current signed fleet membership, intersects the active
+  revision's non-personal boundary attachments with effective grants, and digests the complete
+  capability-bearing revision inside the run-admission transaction.
 - Run history and management projections expose the immutable `conversationId` coordinate carried
   by each admitted run; this package does not own the participant conversation or its timeline.
 - Types: the lifecycle commands/results (`CreateManagedAgentServiceCommand`,
   `ReviseAgentRevisionCommand`, `RestoreAgentRevisionCommand`, `ChangeAgentServiceStateCommand`,
   `ManagedRunNowCommand`, `AgentRevisionLifecycleRepository`, `AgentServiceHistory`, …), the publish
-  contract
-  (`PublishAgentRevisionCommand`/`Result`/`FailureReason`, `AtomicAgentRevisionPublication*`), and
-  `AgentPublicationAuditEvidencePort` — the seam through which publication records audit evidence.
-  The shared `AgentRevisionContent` domain value lives in `@opencrane/models/agents`.
+  contract (`PublishAgentRevisionCommand`/`Result`/`FailureReason`,
+  `AtomicAgentRevisionPublication*`). The shared `AgentRevisionContent` domain value lives in
+  `@opencrane/models/agents`.
 
 - `PrismaPersonalAgentBootstrapRepository(transaction, defaultModelResolver)` and
   `PersonalAgentBootstrapStatuses` — the
@@ -208,6 +202,13 @@ accessible-definition resolution; the app only translates its result vocabulary 
 narrow port. This package does not run agents or resolve
 skills/integrations itself. It fails closed:
 any doubt is a `denied` outcome, never a silent partial publish.
+
+## Database adapters
+
+`src/db/` holds the Prisma repositories, transaction factories, row mappers, and revision writer.
+Keeping those details together leaves the package root for domain policies, ports, route assembly,
+and process configuration. The router and environment factory compose the adapters; they do not
+live in `db/` because they own HTTP and deployment concerns rather than database access.
 
 ## Dependency direction
 

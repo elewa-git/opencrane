@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
-import type { BoundaryGrantResolutionCommand, BoundaryGrantResolver, EffectiveBoundaryGrant } from "./boundary-attachment-authority.types";
+import type { BoundaryGrantResolutionCommand, BoundaryGrantResolver, EffectiveBoundaryGrant } from "../boundary-attachment-authority.types";
 import { PrismaBoundaryGrantRepository } from "./prisma-boundary-grant-resolver";
 
 /** Opens one repeatable-read boundary decision transaction for management routes. */

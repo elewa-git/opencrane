@@ -4,9 +4,9 @@ import type { AgentRevisionContent } from "@opencrane/models/agents";
 import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 
-import { INITIAL_PERSONAL_AGENT_POLICY } from "./initial-personal-agent-policy";
-import { InitialPersonalAgentDefaultModelResolutionStatuses, type InitialPersonalAgentDefaultModelResolver, type InitialPersonalAgentPublicationPersona, type InitialPersonalAgentPublicationRepository } from "./initial-personal-agent-publication.types";
-import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapResult } from "./personal-agent-bootstrap.types";
+import { INITIAL_PERSONAL_AGENT_POLICY } from "../initial-personal-agent-policy";
+import { InitialPersonalAgentDefaultModelResolutionStatuses, type InitialPersonalAgentDefaultModelResolver, type InitialPersonalAgentPublicationPersona, type InitialPersonalAgentPublicationRepository } from "../initial-personal-agent-publication.types";
+import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapResult } from "../personal-agent-bootstrap.types";
 import { PrismaAgentRevisionWriterRepository } from "./prisma-agent-revision-writer";
 
 /** Capability catalogue recorded for the onboarding-owned initial publication. */

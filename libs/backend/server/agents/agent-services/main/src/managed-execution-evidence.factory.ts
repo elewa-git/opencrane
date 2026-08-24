@@ -1,6 +1,6 @@
 import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 
-import { PrismaManagedExecutionEvidenceAuthority } from "./prisma-managed-execution-evidence";
+import { PrismaManagedExecutionEvidenceAuthority } from "./db/prisma-managed-execution-evidence";
 import type { ManagedExecutionEvidenceAuthority } from "./managed-execution-evidence.types";
 
 /**

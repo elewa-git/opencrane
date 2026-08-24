@@ -30,6 +30,8 @@ function _Main()
 		.map(function _ReadSchema(path) { return readFileSync(join(schemaDirectory, path), "utf8"); });
 	const delegates = prismaModelDelegates(schemaSources);
 	const scope = _Scope(process.argv.slice(2));
+	const basePolicy = scope.base === undefined ? undefined : _BasePolicy(scope.base);
+	const baseExemptions = basePolicy === undefined ? undefined : resolveExemptions(basePolicy.exemptions, today);
 	const files = _Unique([...scope.files, ...policy.rawProcedureCalls.map(function _Path(procedure) { return procedure.path; })]);
 	let findings = 0;
 	const ownerPaths = [...new Set([...policy.owners.repositories, ...policy.owners.unitsOfWork].map(function _Path(entry) { return entry.path; }))];
@@ -79,8 +81,11 @@ function _Main()
 		if (!isProductionTypeScript(path) || !existsSync(join(_ROOT, path))) continue;
 		const source = readFileSync(join(_ROOT, path), "utf8");
 		const current = inspectPrismaBoundary(path, source, delegates, policy.owners, exemptions.active.get(path), policy.rawProcedureCalls);
-		const baseSource = scope.base === undefined ? undefined : _BaseSource(scope.base, path);
-		const base = baseSource === undefined ? [] : inspectPrismaBoundary(path, baseSource, delegates, policy.owners, exemptions.active.get(path), policy.rawProcedureCalls);
+		const basePath = scope.basePaths?.get(path) ?? path;
+		const baseSource = scope.base === undefined ? undefined : _BaseSource(scope.base, basePath);
+		const base = baseSource === undefined || basePolicy === undefined || baseExemptions === undefined
+			? []
+			: inspectPrismaBoundary(basePath, baseSource, delegates, basePolicy.owners, baseExemptions.active.get(basePath), basePolicy.rawProcedureCalls);
 		for (const finding of scope.base === undefined ? current : findingDelta(base, current))
 		{
 			console.error(`${finding.path}:${finding.line}\tERROR\t${finding.rule}\t${finding.message}`);
@@ -101,18 +106,57 @@ function _Scope(arguments_)
 	if (arguments_[0] === "--diff")
 	{
 		if (!arguments_[1]) throw new Error("--diff requires a base ref");
+		const changes = _DiffChanges(arguments_[1]);
 		return {
 			files: _Unique([
-				..._GitNull(["diff", "--name-only", "--diff-filter=ACMR", "-z", arguments_[1], "--", "*.ts"]),
+				...changes.files,
 				..._GitNull(["ls-files", "--others", "--exclude-standard", "-z", "--", "*.ts"]),
 			]),
 			base: arguments_[1],
+			basePaths: changes.basePaths,
 		};
 	}
 	if (arguments_.length > 0) return { files: _Unique(arguments_) };
 	const tracked = _GitNull(["diff", "--name-only", "--diff-filter=ACMR", "-z", "HEAD", "--", "*.ts"]);
 	const untracked = _GitNull(["ls-files", "--others", "--exclude-standard", "-z", "--", "*.ts"]);
 	return { files: _Unique([...tracked, ...untracked]), base: "HEAD" };
+}
+
+/** Resolves current diff paths and remembers the original path of every detected rename. */
+function _DiffChanges(base)
+{
+	const fields = _GitNull(["diff", "--find-renames=50%", "--name-status", "--diff-filter=ACMR", "-z", base, "--", "*.ts"]);
+	const files = [];
+	const basePaths = new Map();
+	for (let index = 0; index < fields.length;)
+	{
+		const status = fields[index++] ?? "";
+		if (status.startsWith("R") || status.startsWith("C"))
+		{
+			const basePath = fields[index++] ?? "";
+			const path = fields[index++] ?? "";
+			if (path.length > 0)
+			{
+				files.push(path);
+				basePaths.set(path, basePath);
+			}
+			continue;
+		}
+		const path = fields[index++] ?? "";
+		if (path.length > 0)
+			files.push(path);
+	}
+	return { files, basePaths };
+}
+
+/** Loads the policy from the base tree so moved legacy code is compared against its former owner. */
+function _BasePolicy(base)
+{
+	const source = _BaseSource(base, "docs/agents/prisma-boundary-policy.json");
+	if (source === undefined) throw new Error(`base ref ${base} has no Prisma-boundary policy`);
+	const policy = JSON.parse(source);
+	validatePolicy(policy);
+	return policy;
 }
 
 /** Reads a file from the base tree, returning undefined when it is newly added. */

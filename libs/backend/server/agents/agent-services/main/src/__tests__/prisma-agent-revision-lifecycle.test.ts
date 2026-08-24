@@ -2,7 +2,7 @@ import { AgentServiceKind, AgentServiceState, PrincipalProvenance } from "@prism
 import { describe, expect, it, vi } from "vitest";
 
 import { MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER } from "../managed-agent-service-principal";
-import { PrismaAgentRevisionLifecycleRepository } from "../prisma-agent-revision-lifecycle";
+import { PrismaAgentRevisionLifecycleRepository } from "../db/prisma-agent-revision-lifecycle";
 
 describe("PrismaAgentRevisionLifecycleRepository", function _Suite()
 {

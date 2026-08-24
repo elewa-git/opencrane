@@ -24,10 +24,10 @@ export interface EffectiveBoundaryGrant
  * ever remove entries — it can never hand out access a principal does not already have. Every caller
  * in this file depends on that property.
  *
- * Implemented by: `PrismaBoundaryGrantRepository` in `prisma-boundary-grant-resolver.ts`.
+ * Implemented by: `PrismaBoundaryGrantRepository` in `db/prisma-boundary-grant-resolver.ts`.
  * Called by: {@link __ResolveEffectiveBoundaryAttachments} and {@link __ValidateBoundaryAttachAuthority} in
  * `boundary-attachment-authority.ts`; injected as `boundaryGrantResolver` by
- * `prisma-agent-services.router.ts` and constructed inline by `prisma-managed-execution-evidence.ts`.
+ * `prisma-agent-services.router.ts` and constructed inline by `db/prisma-managed-execution-evidence.ts`.
  */
 export interface BoundaryGrantResolver
 {

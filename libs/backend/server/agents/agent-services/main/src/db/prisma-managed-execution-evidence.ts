@@ -7,10 +7,10 @@ import { __VerifyCurrentFleetMembershipEvidence, PrismaFleetMembershipAuthorityR
 import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type ReviewedIntegrationToolDefinition, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
-import { __ResolveEffectiveBoundaryAttachments } from "./boundary-attachment-authority";
+import { __ResolveEffectiveBoundaryAttachments } from "../boundary-attachment-authority";
 import { __CreatePrismaBoundaryGrantResolver } from "./prisma-boundary-grant.factory";
-import { __ManagedAgentServicePrincipal, MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER } from "./managed-agent-service-principal";
-import type { ManagedExecutionEvidenceAuthority, ManagedExecutionEvidenceCommand, ManagedExecutionEvidenceConfig, ManagedExecutionEvidenceResult, ManagedExecutionEvidenceTransaction } from "./managed-execution-evidence.types";
+import { __ManagedAgentServicePrincipal, MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER } from "../managed-agent-service-principal";
+import type { ManagedExecutionEvidenceAuthority, ManagedExecutionEvidenceCommand, ManagedExecutionEvidenceConfig, ManagedExecutionEvidenceResult, ManagedExecutionEvidenceTransaction } from "../managed-execution-evidence.types";
 
 /**
  * Checks a managed service's membership and access against Postgres, inside the caller's transaction.
@@ -24,7 +24,7 @@ import type { ManagedExecutionEvidenceAuthority, ManagedExecutionEvidenceCommand
  * Called by: `ManagedExecutionIdentityEnvelopeSource` in
  * libs/backend/agents/execution/inputs/main/src/managed-execution-identity-envelope-source.ts;
  * constructed by `_CreateManagedExecutionEvidenceAuthority` in
- * `prisma-managed-execution-evidence.factory.ts`.
+ * `managed-execution-evidence.factory.ts`.
  */
 export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecutionEvidenceAuthority
 {

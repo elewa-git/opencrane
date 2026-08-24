@@ -4,7 +4,7 @@ import type { AgentRevisionContent } from "@opencrane/models/agents";
 import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 
-import { AgentRevisionPersonaSelectionMaterializationCodes, type AgentRevisionPersonaSelectionRepository, type MaterializeAgentRevisionPersonaSelectionCommand, type MaterializeAgentRevisionPersonaSelectionResult, type MaterializePersonalAgentPersonaSelectionCommand, type MaterializePersonalAgentPersonaSelectionResult } from "./agent-revision-persona-selection.types";
+import { AgentRevisionPersonaSelectionMaterializationCodes, type AgentRevisionPersonaSelectionRepository, type MaterializeAgentRevisionPersonaSelectionCommand, type MaterializeAgentRevisionPersonaSelectionResult, type MaterializePersonalAgentPersonaSelectionCommand, type MaterializePersonalAgentPersonaSelectionResult } from "../agent-revision-persona-selection.types";
 import { _AGENT_REVISION_INCLUDE, _AgentRevisionContentFromRow, PrismaAgentRevisionWriterRepository } from "./prisma-agent-revision-writer";
 
 /** Capability catalogue recorded when an approved persona is published into an AgentRevision. */

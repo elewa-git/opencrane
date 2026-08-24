@@ -2,7 +2,7 @@ import { AgentRevisionState, AgentServiceKind, AgentServiceState, PrincipalProve
 import { describe, expect, it, vi } from "vitest";
 
 import { MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER } from "../managed-agent-service-principal";
-import { PrismaManagedExecutionEvidenceAuthority } from "../prisma-managed-execution-evidence";
+import { PrismaManagedExecutionEvidenceAuthority } from "../db/prisma-managed-execution-evidence";
 
 /** Returns an active revision projection with an overridable persisted service Principal. */
 function _Revision(principal: { readonly issuer: string; readonly subject: string; readonly provenance: PrincipalProvenance })

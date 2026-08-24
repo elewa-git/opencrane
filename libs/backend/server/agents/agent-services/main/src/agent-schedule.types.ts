@@ -165,7 +165,7 @@ export type AgentScheduleDeletionResult =
  * foreign services. This port only stores rows; the scheduler in
  * libs/backend/server/agents/scheduling reads them and decides when runs happen.
  *
- * Implemented by: `PrismaAgentScheduleRepository` in `prisma-agent-schedule.ts`.
+ * Implemented by: `PrismaAgentScheduleRepository` in `db/prisma-agent-schedule.ts`.
  * Called by: {@link __CreateAgentSchedule} and {@link __UpdateAgentSchedule} in `agent-schedule.ts`;
  * `deleteSchedule` and `listSchedules` are called straight from the schedule handlers in
  * `agent-revision.router.ts`.

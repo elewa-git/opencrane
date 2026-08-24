@@ -22,7 +22,7 @@ const _STANDALONE_ISSUER_ID = "opencrane-standalone-unconfigured";
  * rather than an unchecked one.
  *
  * Called by: apps/opencrane/src/index.ts, apps/opencrane/src/app/channel-target-composition.ts, and
- * libs/backend/server/agents/agent-services/main/src/prisma-managed-execution-evidence.factory.ts.
+ * libs/backend/server/agents/agent-services/main/src/managed-execution-evidence.factory.ts.
  * @param environment - Process environment to read; defaults to `process.env`, overridden in tests.
  * @returns Trusted issuer, staleness limit in milliseconds, and the verifier to use.
  * @throws Error when the mode is missing or unrecognised, when a required `fleet` variable is

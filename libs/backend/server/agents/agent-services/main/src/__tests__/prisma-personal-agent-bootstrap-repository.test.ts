@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { INITIAL_PERSONAL_AGENT_POLICY } from "../initial-personal-agent-policy";
 import { InitialPersonalAgentDefaultModelResolutionStatuses, type InitialPersonalAgentDefaultModelResolver } from "../initial-personal-agent-publication.types";
 import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type PersonalAgentBootstrapCommand } from "../personal-agent-bootstrap.types";
-import { PrismaPersonalAgentBootstrapRepository } from "../prisma-personal-agent-bootstrap-repository";
+import { PrismaPersonalAgentBootstrapRepository } from "../db/prisma-personal-agent-bootstrap-repository";
 
 /** Trusted bootstrap command shared by focused repository tests. */
 const _COMMAND: PersonalAgentBootstrapCommand = {

@@ -94,7 +94,7 @@ export type ManagedExecutionEvidenceResult =
  * returns a denial rather than a partial answer.
  *
  * Implemented by: `PrismaManagedExecutionEvidenceAuthority` in
- * `prisma-managed-execution-evidence.ts`; built for the process by
+ * `db/prisma-managed-execution-evidence.ts`; built for the process by
  * `_CreateManagedExecutionEvidenceAuthority` and composed in apps/opencrane/src/index.ts.
  * Called by: `ManagedExecutionIdentityEnvelopeSource` in
  * libs/backend/agents/execution/inputs/main/src/managed-execution-identity-envelope-source.ts, and

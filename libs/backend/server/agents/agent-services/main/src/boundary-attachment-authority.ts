@@ -44,7 +44,7 @@ export function __IntersectBoundaryAttachments(attachments: readonly RevisionBou
  * to. Exact and Descendants coverage remain different grants and never match implicitly.
  *
  * Called by: {@link __ValidateBoundaryAttachAuthority} in this file, and
- * `PrismaManagedExecutionEvidenceAuthority.load` in `prisma-managed-execution-evidence.ts`, which
+ * `PrismaManagedExecutionEvidenceAuthority.load` in `db/prisma-managed-execution-evidence.ts`, which
  * denies the run outright if anything is rejected.
  *
  * @param resolver - Grant lookup. Not called at all when `attachments` is empty.

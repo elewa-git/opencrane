@@ -38,7 +38,7 @@ function _revision(row: { revision: number; issuerId: string; issuerKeyId: strin
  * run can never exist while the membership it relied on was rolled back.
  *
  * Called by: libs/backend/agents/execution/inputs/main/src/personal-execution-identity-envelope-source.ts
- * and libs/backend/server/agents/agent-services/main/src/prisma-managed-execution-evidence.ts, which
+ * and libs/backend/server/agents/agent-services/main/src/db/prisma-managed-execution-evidence.ts, which
  * both pass their admission transaction, and apps/opencrane/src/app/channel-target-composition.ts.
  * @implements FleetMembershipAuthorityRepository
  */

@@ -88,7 +88,7 @@ export type PersonalAgentBootstrapResult = ReadyPersonalAgentBootstrapResult | D
  * Resolves or creates a personal AgentService inside a transaction owned by onboarding.
  *
  * Implemented by: `PrismaPersonalAgentBootstrapRepository` in
- * `prisma-personal-agent-bootstrap-repository.ts`.
+ * `db/prisma-personal-agent-bootstrap-repository.ts`.
  */
 export interface PersonalAgentBootstrapRepository
 {
