@@ -99,6 +99,14 @@ module-growth threshold.
 - State adapters make HTTP calls through the typed client in `core/api`.
 - Do not issue HTTP requests from templates or presentational components.
 
+## Development Fixture Fidelity
+
+Frontend-only profiles and Storybook stories use the same reviewed user-visible vocabulary as the
+live product. Copy questions, persona names, bootstrap text, and source identities from their
+authoritative model, database seed, or reviewed content source; do not invent plausible product copy
+such as an unregistered archetype. Storybook is the presentation-state reference, not the authority
+for domain text, and stale story fixtures must be corrected when a local profile exposes them.
+
 ## Angular Signals, Resources, and Forms
 
 - Prefer `resource(...)` for async read/loading flows in components instead of imperative `ngOnInit` data-fetch logic.
