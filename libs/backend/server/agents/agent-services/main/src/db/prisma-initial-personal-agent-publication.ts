@@ -76,7 +76,7 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 			integrationAssignments: [],
 			boundaryAttachments: [],
 		};
-		const revision = await new PrismaAgentRevisionWriterRepository(this.transaction).createDraft({
+		const cmd = {
 			siloId: command.siloId,
 			agentServiceId: service.id,
 			revision: 1,
@@ -86,7 +86,9 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 			changeMessage: "Created by completed personal onboarding.",
 			authoredBy: command.subjectId,
 			createdAt: command.provisionedAt,
-		});
+		};
+		const task = new PrismaAgentRevisionWriterRepository(this.transaction);
+		const revision = await task.createDraft(cmd);
 
 		// 3. Publish, activate, and audit before the surrounding onboarding transaction commits.
 		await this.transaction.agentRevision.update({

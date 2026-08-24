@@ -168,7 +168,9 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 				const cancellation = await __CancelPendingRunApprovalAuthority(transaction, { runId: run.id, attempt: run.attempt, now });
 				if (cancellation.activeClaimCount > 0)
 				{
-					const deferred = await new PrismaRunCancellationEventDeferralUnitOfWork(transaction).defer({ eventId: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, availableAt: new Date(now.getTime() + config.orphanObservationMarginMilliseconds) });
+					const cmd = { eventId: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, availableAt: new Date(now.getTime() + config.orphanObservationMarginMilliseconds) };
+					const task = new PrismaRunCancellationEventDeferralUnitOfWork(transaction);
+					const deferred = await task.defer(cmd);
 					if (!deferred) throw new Error("run workload cleanup lost its active-claim deferral fence");
 					return { status: "confirmed", runId: run.id, attempt: event.attempt, runFinalized: false };
 				}
@@ -195,7 +197,9 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			const workload = _ParseCleanupProjection(locked?.payload);
 			if (!locked || !now || !workload || workload.mode !== "unassigned_orphan" || workload.orphanAbsenceObservedAt !== null || locked.claimedAt?.getTime() !== Date.parse(claim.lease.claimedAt) || locked.deliveryCount !== claim.lease.deliveryCount || locked.publishedAt !== null || locked.failedAt !== null) return "conflict";
 			const payload = { ...workload, orphanAbsenceObservedAt: now.toISOString() };
-			const deferred = await new PrismaRunCancellationEventDeferralUnitOfWork(transaction).defer({ eventId, claimedAt: locked.claimedAt, deliveryCount: locked.deliveryCount, availableAt: new Date(now.getTime() + config.orphanObservationMarginMilliseconds), payload });
+			const cmd = { eventId, claimedAt: locked.claimedAt, deliveryCount: locked.deliveryCount, availableAt: new Date(now.getTime() + config.orphanObservationMarginMilliseconds), payload };
+			const task = new PrismaRunCancellationEventDeferralUnitOfWork(transaction);
+			const deferred = await task.defer(cmd);
 			return deferred ? "deferred" : "conflict";
 		});
 	}

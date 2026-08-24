@@ -89,7 +89,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 			const agentServiceId = randomUUID();
 			const principalId = await __CreateManagedAgentServicePrincipalRepository(transaction).create(command.siloId, agentServiceId, command.name, createdAtDate);
 			const serviceRow = await transaction.agentService.create({ data: { id: agentServiceId, siloId: command.siloId, kind: AgentServiceKind.Managed, name: command.name, state: AgentServiceState.Draft, workloadProfile: command.workloadProfile, principalId, createdAt: createdAtDate, updatedAt: createdAtDate } });
-			const revisionRow = await new PrismaAgentRevisionWriterRepository(transaction).createDraft({
+			const cmd = {
 				siloId: command.siloId,
 				agentServiceId: serviceRow.id,
 				revision: 1,
@@ -99,7 +99,9 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 				changeMessage: command.changeMessage,
 				authoredBy: command.authoredBy,
 				createdAt: createdAtDate,
-			});
+			};
+			const task = new PrismaAgentRevisionWriterRepository(transaction);
+			const revisionRow = await task.createDraft(cmd);
 			return { outcome: "created", service: _mapService(serviceRow), revision: _mapRevision(revisionRow) };
 		});
 	}
@@ -115,7 +117,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 				return guard.result;
 			if (!await _isModelDefinitionAvailable(transaction, command.content.modelDefinitionId, guard.siloId))
 				return { outcome: "denied", reason: "model_definition_unavailable" };
-			const revisionRow = await new PrismaAgentRevisionWriterRepository(transaction).createDraft({
+			const cmd = {
 				siloId: guard.siloId,
 				agentServiceId: command.agentServiceId,
 				revision: guard.head.revision + 1,
@@ -125,7 +127,9 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 				changeMessage: command.changeMessage,
 				authoredBy: command.authoredBy,
 				createdAt: createdAtDate,
-			});
+			};
+			const task = new PrismaAgentRevisionWriterRepository(transaction);
+			const revisionRow = await task.createDraft(cmd);
 			return { outcome: "revised", revision: _mapRevision(revisionRow) };
 		});
 	}
@@ -147,7 +151,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 			if (source.agentServiceId !== command.agentServiceId)
 				return { outcome: "denied", reason: "revision_service_mismatch" };
 			const content = _AgentRevisionContentFromRow(source);
-			const revisionRow = await new PrismaAgentRevisionWriterRepository(transaction).createDraft({
+			const cmd = {
 				siloId: guard.siloId,
 				agentServiceId: command.agentServiceId,
 				revision: guard.head.revision + 1,
@@ -157,7 +161,9 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 				changeMessage: command.changeMessage,
 				authoredBy: command.authoredBy,
 				createdAt: createdAtDate,
-			});
+			};
+			const task = new PrismaAgentRevisionWriterRepository(transaction);
+			const revisionRow = await task.createDraft(cmd);
 			return { outcome: "revised", revision: _mapRevision(revisionRow) };
 		});
 	}
