@@ -66,7 +66,8 @@ export interface paths {
         /** List every catalogue server regardless of status (org-admin governance view) */
         get: operations["listMcpGovernanceServers"];
         put?: never;
-        post?: never;
+        /** Register a remote MCP server and start its protocol check */
+        post: operations["registerRemoteMcpServer"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2185,6 +2186,70 @@ export interface operations {
             };
             /** @description Caller is not an organisation admin. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    registerRemoteMcpServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    idempotencyKey: string;
+                    name: string;
+                    description?: string;
+                    /** Format: uri */
+                    endpoint: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Remote server and protocol-check job saved. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        name: string;
+                        /** Format: uri */
+                        endpoint: string;
+                        /** @enum {string} */
+                        eraProbeStatus: "Pending";
+                    };
+                };
+            };
+            /** @description Registration fields are invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Caller is not an organisation admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Registration key or server name conflicts with another request. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
