@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { __RunAgentController } from "../agent-controller";
 import { __ValidateAgentControllerRuntimeProfiles } from "../agent-controller-profiles";
-import type { AgentControllerAuthority, AgentControllerKubernetesStore, AgentControllerOptions, AgentControllerRuntimeProfiles } from "../agent-controller.types";
+import type { AgentControllerAuthority, AgentControllerWorkloadStore, AgentControllerOptions, AgentControllerRuntimeProfiles } from "../agent-controller.types";
 import { __ReconcileNextAgentRuntimeAttempt } from "../agent-runtime-attempt-assignment";
 import { __ReconcileNextRuntimeRelease } from "../agent-runtime-release";
 
@@ -80,7 +80,7 @@ function _Authority(overrides: Partial<AgentControllerAuthority>): AgentControll
 }
 
 /** Build a full Kubernetes fake; any operation a test does not override throws if it is called. */
-function _Kubernetes(overrides: Partial<AgentControllerKubernetesStore>): AgentControllerKubernetesStore
+function _Workloads(overrides: Partial<AgentControllerWorkloadStore>): AgentControllerWorkloadStore
 {
 	return {
 		async __EnsureSuspendedJob() { throw new Error("unexpected Job"); },
@@ -92,9 +92,9 @@ function _Kubernetes(overrides: Partial<AgentControllerKubernetesStore>): AgentC
 }
 
 /** Compose controller options from focused fake ports. */
-function _Options(authority: AgentControllerAuthority, kubernetes: AgentControllerKubernetesStore): AgentControllerOptions
+function _Options(authority: AgentControllerAuthority, workloads: AgentControllerWorkloadStore): AgentControllerOptions
 {
-	return { authority, kubernetes, profiles: _Profiles(), pollIntervalMilliseconds: 1_000, log: _log };
+	return { authority, workloads, profiles: _Profiles(), pollIntervalMilliseconds: 1_000, log: _log };
 }
 
 describe("agent-controller orchestration", function _Suite()
@@ -114,7 +114,7 @@ describe("agent-controller orchestration", function _Suite()
 			async __Claim() { calls.push("claim"); return _Claim(); },
 			async __CommitAssignment(_eventId, command) { calls.push("commit"); committed = command; return { outcome: "assigned", runId: command.runId, attempt: command.attempt, workloadUid: command.workloadUid }; },
 		});
-		const kubernetes = _Kubernetes({
+		const kubernetes = _Workloads({
 			async __EnsureSuspendedJob(expected: V1Job) { calls.push("job"); jobName = expected.metadata?.name; return { ...expected, metadata: { ...expected.metadata, uid: "job-uid-1" } }; },
 			async __EnsureAttemptKeySecret(expected: V1Secret) { calls.push("secret"); createdSecret = expected; },
 		});
@@ -141,14 +141,14 @@ describe("agent-controller orchestration", function _Suite()
 	it("does no Kubernetes work when OpenCrane has no desired attempt", async function _Idle()
 	{
 		const authority = _Authority({});
-		const kubernetes = _Kubernetes({});
+		const kubernetes = _Workloads({});
 		expect(await __ReconcileNextAgentRuntimeAttempt(_Options(authority, kubernetes), new AbortController().signal)).toEqual({ outcome: "idle" });
 	});
 
 	it("fails closed before resource creation for a profile namespace mismatch or an unknown profile", async function _RejectsUnownedClaim()
 	{
 		let resourceCalls = 0;
-		const kubernetes = _Kubernetes({ async __EnsureSuspendedJob(expected) { resourceCalls += 1; return expected; } });
+		const kubernetes = _Workloads({ async __EnsureSuspendedJob(expected) { resourceCalls += 1; return expected; } });
 		const otherNamespace = _Authority({ async __Claim() { return { ..._Claim(), attempt: { ..._Claim().attempt, namespace: "silo-b" } }; } });
 		const unknownProfile = _Authority({ async __Claim() { return { ..._Claim(), attempt: { ..._Claim().attempt, workloadProfile: "unknown" } }; } });
 
@@ -164,7 +164,7 @@ describe("agent-controller orchestration", function _Suite()
 			async __Claim() { return { ..._Claim(), attempt: { ..._Claim().attempt, namespace: "silo-a-managed-runtime", workloadProfile: "managed-default" } }; },
 			async __CommitAssignment(_eventId, command) { committed = command; return { outcome: "assigned", runId: command.runId, attempt: command.attempt, workloadUid: command.workloadUid }; },
 		});
-		const kubernetes = _Kubernetes({
+		const kubernetes = _Workloads({
 			async __EnsureSuspendedJob(expected) { return { ...expected, metadata: { ...expected.metadata, uid: "managed-job-uid" } }; },
 			async __EnsureAttemptKeySecret() {},
 		});
@@ -178,8 +178,8 @@ describe("agent-controller orchestration", function _Suite()
 	{
 		let commits = 0;
 		const authority = _Authority({ async __Claim() { return _Claim(); }, async __CommitAssignment() { commits += 1; throw new Error("unexpected commit"); } });
-		const jobFailure = _Kubernetes({ async __EnsureSuspendedJob() { throw new Error("Job denied"); } });
-		const missingUid = _Kubernetes({ async __EnsureSuspendedJob(expected) { return expected; } });
+		const jobFailure = _Workloads({ async __EnsureSuspendedJob() { throw new Error("Job denied"); } });
+		const missingUid = _Workloads({ async __EnsureSuspendedJob(expected) { return expected; } });
 
 		await expect(__ReconcileNextAgentRuntimeAttempt(_Options(authority, jobFailure), new AbortController().signal)).rejects.toThrow(/Job denied/);
 		await expect(__ReconcileNextAgentRuntimeAttempt(_Options(authority, missingUid), new AbortController().signal)).rejects.toThrow(/immutable UID/);
@@ -197,7 +197,7 @@ describe("agent-controller orchestration", function _Suite()
 			async __ClaimWorkloadRelease() { calls.push("claim-release"); reconcileTraceFields = ___GetContext()?.extra; return _ReleaseClaim(); },
 			async __RegisterFirstPod(_eventId, command) { calls.push("register-pod"); registered = command; return { outcome: "registered", runId: command.runId, attempt: command.attempt, workloadUid: command.workloadUid, podUid: command.podUid }; },
 		});
-		const kubernetes = _Kubernetes({
+		const kubernetes = _Workloads({
 			async __EnsureRuntimeJobReleased(expected, workloadUid, assignmentExpiresAt, releaseLeaseExpiresAt) { calls.push("release-job"); expect([workloadUid, assignmentExpiresAt, releaseLeaseExpiresAt]).toEqual(["job-uid-1", "2026-07-20T00:25:00.000Z", "2026-07-20T00:03:00.000Z"]); return { ...expected, metadata: { ...expected.metadata, uid: workloadUid }, spec: { ...expected.spec!, suspend: false, activeDeadlineSeconds: 299 } }; },
 			async __FindFirstRuntimePod(_expected, workloadUid, serviceAccountName): Promise<V1Pod | null> { calls.push("find-pod"); expect([workloadUid, serviceAccountName]).toEqual(["job-uid-1", "agent-runtime-default"]); return { metadata: { uid: "pod-uid-1" } }; },
 		});
@@ -217,7 +217,7 @@ describe("agent-controller orchestration", function _Suite()
 		vi.setSystemTime(new Date("2026-07-20T00:20:00.000Z"));
 		let registrations = 0;
 		const authority = _Authority({ async __ClaimWorkloadRelease() { return _ReleaseClaim(); }, async __RegisterFirstPod() { registrations += 1; throw new Error("unexpected registration"); } });
-		const kubernetes = _Kubernetes({ async __EnsureRuntimeJobReleased(expected) { return { ...expected, spec: { ...expected.spec!, suspend: false } }; }, async __FindFirstRuntimePod() { return null; } });
+		const kubernetes = _Workloads({ async __EnsureRuntimeJobReleased(expected) { return { ...expected, spec: { ...expected.spec!, suspend: false } }; }, async __FindFirstRuntimePod() { return null; } });
 
 		expect(await __ReconcileNextRuntimeRelease(_Options(authority, kubernetes), new AbortController().signal)).toEqual({ outcome: "pending-pod", eventId: "release-1", runId: "run-1", attempt: 3, workloadUid: "job-uid-1" });
 		expect(registrations).toBe(0);
@@ -229,7 +229,7 @@ describe("agent-controller orchestration", function _Suite()
 		vi.setSystemTime(new Date("2026-07-20T00:25:00.000Z"));
 		let kubernetesCalls = 0;
 		const authority = _Authority({ async __ClaimWorkloadRelease() { return _ReleaseClaim(); } });
-		const kubernetes = _Kubernetes({ async __EnsureRuntimeJobReleased(expected) { kubernetesCalls += 1; return expected; } });
+		const kubernetes = _Workloads({ async __EnsureRuntimeJobReleased(expected) { kubernetesCalls += 1; return expected; } });
 
 		await expect(__ReconcileNextRuntimeRelease(_Options(authority, kubernetes), new AbortController().signal)).rejects.toThrow(/expires before a safe Job release/);
 		expect(kubernetesCalls).toBe(0);
@@ -239,7 +239,7 @@ describe("agent-controller orchestration", function _Suite()
 	{
 		let kubernetesCalls = 0;
 		const authority = _Authority({ async __ClaimWorkloadRelease() { return { ..._ReleaseClaim(), workload: { ..._ReleaseClaim().workload, serviceAccountName: "agent-runtime-foreign" } }; } });
-		const kubernetes = _Kubernetes({ async __EnsureRuntimeJobReleased(expected) { kubernetesCalls += 1; return expected; } });
+		const kubernetes = _Workloads({ async __EnsureRuntimeJobReleased(expected) { kubernetesCalls += 1; return expected; } });
 
 		await expect(__ReconcileNextRuntimeRelease(_Options(authority, kubernetes), new AbortController().signal)).rejects.toThrow(/bounded workload profile/);
 		expect(kubernetesCalls).toBe(0);
@@ -259,7 +259,7 @@ describe("agent-controller orchestration", function _Suite()
 				return null;
 			},
 		});
-		const kubernetes = _Kubernetes({});
+		const kubernetes = _Workloads({});
 
 		const running = __RunAgentController(_Options(authority, kubernetes), shutdown.signal);
 		await vi.advanceTimersByTimeAsync(1_000);
@@ -285,7 +285,7 @@ describe("agent-controller orchestration", function _Suite()
 			},
 		});
 
-		await __RunAgentController(_Options(authority, _Kubernetes({})), shutdown.signal);
+		await __RunAgentController(_Options(authority, _Workloads({})), shutdown.signal);
 
 		expect(pruneAttempts).toBe(0);
 	});
@@ -306,7 +306,7 @@ describe("agent-controller orchestration", function _Suite()
 				return 2;
 			},
 		});
-		const options = { ..._Options(authority, _Kubernetes({})), outboxPruneIntervalMilliseconds: 60_000, log: { info: vi.fn(), error } as unknown as Logger };
+		const options = { ..._Options(authority, _Workloads({})), outboxPruneIntervalMilliseconds: 60_000, log: { info: vi.fn(), error } as unknown as Logger };
 
 		const running = __RunAgentController(options, shutdown.signal);
 		await vi.advanceTimersByTimeAsync(60_000);

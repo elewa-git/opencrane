@@ -4,12 +4,12 @@ import { _ResolveAgentControllerRuntimeProfile } from "./agent-controller-profil
 import { AgentControllerReconcileOutcomes, type AgentControllerOptions, type AgentControllerReconcileResult } from "./agent-controller.types";
 import { _AgentRuntimeAttemptKeySecretName, _BuildAgentRuntimeAttemptKeySecret } from "./agent-runtime-attempt-key";
 
-/** Return the Job UID Kubernetes assigned, or throw when it is missing. */
+/** Return the workload UID the projection store assigned, or throw when it is missing. */
 function _RequireWorkloadUid(uid: string | undefined): string
 {
 	if (!uid || uid.trim().length === 0)
 	{
-		throw new Error("Kubernetes did not return an immutable UID for the suspended runtime Job");
+		throw new Error("workload store did not return an immutable UID for the suspended runtime projection");
 	}
 	return uid;
 }
@@ -17,15 +17,15 @@ function _RequireWorkloadUid(uid: string | undefined): string
 /**
  * Reconcile one claimed attempt into a durable, still-suspended assignment.
  *
- * Kubernetes changes before the database commit are safe only because the Job remains suspended.
+ * Workload changes before the database commit are safe only because the projection remains suspended.
  * A retry may exact-adopt that inert object, but unrecorded agent code can never start.
- * @param options - Fixed authority, profiles, Kubernetes adapter, and logger.
+ * @param options - Fixed authority, profiles, workload adapter, and logger.
  * @param signal - Process shutdown propagated to authority calls.
  * @returns Idle or the exact durable assignment outcome.
  */
 export async function __ReconcileNextAgentRuntimeAttempt(options: AgentControllerOptions, signal: AbortSignal): Promise<AgentControllerReconcileResult>
 {
-	// 1. Take the next claim from OpenCrane, so what should run is decided there and never in Kubernetes.
+	// 1. Take the next claim from OpenCrane, so what should run is decided there and never by the workload adapter.
 	const claim = await options.authority.__Claim(signal);
 	if (!claim) return { outcome: AgentControllerReconcileOutcomes.Idle };
 
@@ -47,13 +47,13 @@ export async function __ReconcileNextAgentRuntimeAttempt(options: AgentControlle
 	};
 	const job = __BuildSuspendedAgentRuntimeJob(assignment, profile);
 
-	// 3. Create the suspended Job (or accept an identical existing one) and take the UID Kubernetes gave it.
-	const persistedJob = await options.kubernetes.__EnsureSuspendedJob(job);
+	// 3. Create the suspended projection (or accept an identical existing one) and take its workload UID.
+	const persistedJob = await options.workloads.__EnsureSuspendedJob(job);
 	const workloadUid = _RequireWorkloadUid(persistedJob.metadata?.uid);
 
 	// 4. Create the Job-owned key Secret before any release reconciliation can unsuspend the Job.
 	const attemptKeySecret = _BuildAgentRuntimeAttemptKeySecret(persistedJob, workloadUid, assignment.litellmKeySecretName, claim.attempt.litellmKey);
-	await options.kubernetes.__EnsureAttemptKeySecret(attemptKeySecret);
+	await options.workloads.__EnsureAttemptKeySecret(attemptKeySecret);
 
 	// 5. Commit the exact Job UID so a separate durable claim may release it.
 	const committed = await options.authority.__CommitAssignment(claim.lease.eventId, {

@@ -12,6 +12,7 @@ results and therefore cannot repeat a provider action after reconnecting.
 
 ```text
 runtime.py  process lifecycle and bounded reconnects
+development_runtime.py  explicit local model-strategy composition
 │
 ├── bootstrap/ ───────────────────────┐
 │   proof evidence + one-use exchange │
@@ -35,6 +36,8 @@ config.py · constants.py · observability.py support the components above.
 | Component | Consumes | Produces | Must never own |
 | --- | --- | --- | --- |
 | `runtime.py` | Mounted settings and projected identity files | One bootstrapped outbound stream | Run selection or durable state |
+| `development_runtime.py` | An explicit Tier 2 Agent profile | The same stream with real or deterministic model handlers | Production composition or durable candidate writes |
+| `development/` | Accepted compiled input and authorised resume results | Deterministic neutral events for simulated development | Model network, provider keys, tool execution, or database writes |
 | `bootstrap/` | Bootstrap reference, projected token, generated public key evidence | One accepted proof-key binding | Retry after permanent refusal |
 | `transport/` | Authenticated server-sent events and candidate dictionaries | Dispatched commands and bounded HTTP requests | An inbound listener or local queue |
 | `attempts/` | Fenced start, resume, and cancel commands | Ordered candidates, exact saved tool and elicitation results, and safe run evidence | Tool execution, participant selection, approval, or canonical cancellation |
@@ -69,6 +72,13 @@ config.py · constants.py · observability.py support the components above.
    Starting or resuming
    supersedes any prior local worker; a `cancel_attempt` signals the current worker, while dropped
    transport cancels every registered worker and suppresses late runtime output.
+
+For local development, `development_runtime.py` preserves bootstrap, command admission, event
+projection, resume correlation, and candidate delivery. The `litellm` strategy uses the normal model
+driver for Alternatives A and B. The `simulated` strategy replaces only the model request with
+`development/deterministic_model.py`, which emits neutral events into the same projector. Its explicit
+`/simulate-tool <name> <json-object>` message can exercise external-action and resume flow using a
+tool already present in the compiled grant set; it never contacts a model or writes an event directly.
 
 ## Authority and failure rules
 

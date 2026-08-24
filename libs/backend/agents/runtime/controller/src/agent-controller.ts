@@ -67,7 +67,7 @@ async function _PrunePublishedOutbox(options: AgentControllerOptions, signal: Ab
  * Poll OpenCrane until shutdown, advancing assignment and release as separate durable claims.
  *
  * Reconciliation failures remain isolated to one poll. The loop never repairs, replaces, or
- * deletes a mismatching Kubernetes object because doing so would hide authority drift.
+ * deletes a mismatching workload projection because doing so would hide authority drift.
  * @param options - Fixed authority, profile, adapter, interval, and logger dependencies.
  * @param signal - Process shutdown signal.
  */

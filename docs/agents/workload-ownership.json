@@ -98,6 +98,11 @@
       "workloadIds": ["agent-runtime"]
     },
     {
+      "path": "libs/backend/agents/runtime/controller/src/local-agent-runtime-process.ts",
+      "anchor": "kind: \"Pod\"",
+      "workloadIds": ["agent-runtime"]
+    },
+    {
       "path": "libs/backend/agents/skills/controller/src/kubernetes-skill-workload-controller-store.ts",
       "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
       "workloadIds": ["skill-authoring", "tool-runner"]

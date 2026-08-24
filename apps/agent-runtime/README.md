@@ -62,6 +62,10 @@ commands and validates returned results, `src/model_loop/` adapts the bounded mo
 candidates. The [source architecture](src/README.md) follows the complete runtime sequence and
 records the dependency, authority, retry, cancellation, and checkpoint rules in one place.
 
+`Development entrypoint: src/development_runtime.py` keeps that bootstrap and stream composition but
+selects either the unchanged LiteLLM handlers or a deterministic neutral-event strategy. Production
+container commands continue to run `src.runtime` and never import development code.
+
 The stream rejects any individual response line above 64 KiB and executes each `start_attempt`
 command as a bounded Pydantic AI model/tool loop. The loop reaches the LiteLLM proxy only through an
 attempt-scoped virtual key mounted as a group-readable Secret, performs zero implicit retries, and is

@@ -5,12 +5,12 @@ import { _ResolveAgentControllerRuntimeProfile } from "./agent-controller-profil
 import { AgentControllerReconcileOutcomes, type AgentControllerOptions, type AgentControllerRuntimeReleaseReconcileResult } from "./agent-controller.types";
 import { _AgentRuntimeAttemptKeySecretName } from "./agent-runtime-attempt-key";
 
-/** Return the Pod UID Kubernetes assigned, or throw when it is missing. */
+/** Return the runtime instance's Pod-shaped UID, or throw when it is missing. */
 function _RequirePodUid(uid: string | undefined): string
 {
 	if (!uid || uid.trim().length === 0)
 	{
-		throw new Error("Kubernetes did not return an immutable UID for the first runtime Pod");
+		throw new Error("workload store did not return an immutable UID for the first runtime instance");
 	}
 	return uid;
 }
@@ -20,7 +20,7 @@ function _RequirePodUid(uid: string | undefined): string
  *
  * The assigned Job is rebuilt from durable coordinates and released through compare-and-swap.
  * First-Pod registration then closes the bootstrap identity fence before runtime exchange.
- * @param options - Fixed authority, profiles, Kubernetes adapter, and logger.
+ * @param options - Fixed authority, profiles, workload adapter, and logger.
  * @param signal - Process shutdown propagated to authority calls.
  * @returns Idle, pending Pod creation, or the registration outcome.
  */
@@ -52,10 +52,10 @@ export async function __ReconcileNextRuntimeRelease(options: AgentControllerOpti
 		// 3. Fail early if the assignment has already expired; the adapter redoes this with its request timeout added.
 		const authorityUpperBoundEpochMilliseconds = Math.max(Date.now(), Date.parse(claim.lease.expiresAt));
 		__DeriveAgentRuntimeReleaseDeadlineSeconds(claim.workload.assignmentExpiresAt, authorityUpperBoundEpochMilliseconds, profile.activeDeadlineSeconds);
-		await options.kubernetes.__EnsureRuntimeJobReleased(job, claim.workload.workloadUid, claim.workload.assignmentExpiresAt, claim.lease.expiresAt);
+		await options.workloads.__EnsureRuntimeJobReleased(job, claim.workload.workloadUid, claim.workload.assignmentExpiresAt, claim.lease.expiresAt);
 
 		// 4. Wait until exactly one Pod matches; never pick between several candidates.
-		const pod = await options.kubernetes.__FindFirstRuntimePod(job, claim.workload.workloadUid, claim.workload.serviceAccountName);
+		const pod = await options.workloads.__FindFirstRuntimePod(job, claim.workload.workloadUid, claim.workload.serviceAccountName);
 		if (!pod)
 		{
 			return { outcome: AgentControllerReconcileOutcomes.PendingPod, eventId: claim.lease.eventId, runId: claim.workload.runId, attempt: claim.workload.attempt, workloadUid: claim.workload.workloadUid };

@@ -1,7 +1,7 @@
 import { Observable, type ConfigurationOptions, type ObservableMiddleware, type RequestContext, type ResponseContext, type V1Job } from "@kubernetes/client-node";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { AgentControllerKubernetesStore } from "./agent-controller.types";
+import type { AgentControllerWorkloadStore } from "./agent-controller.types";
 import { _AssertExactAssignedAgentRuntimeJob, _AssertExactSuspendedAgentRuntimeJob } from "./kubernetes-agent-job-adoption";
 import { _AssertReleasedAgentRuntimeAssignmentDeadline, _PlanAgentRuntimeJobRelease } from "./kubernetes-agent-job-release";
 import type { AgentControllerKubernetesStoreOptions } from "./kubernetes-agent-controller-store.types";
@@ -45,13 +45,13 @@ function _Coordinates(resource: V1Job): { readonly name: string; readonly namesp
  * over. Every request carries both the process shutdown signal and its own deadline.
  *
  * Called by: `apps/agent-controller/src/index.ts`, which passes the result as
- * `options.kubernetes` to {@link __RunAgentController}.
+ * `options.workloads` to {@link __RunAgentController}.
  * @param options - Batch and Core clients, per-request timeout, and shutdown signal.
  * @returns An adapter satisfying the Kubernetes port; each method is documented on the port.
  * @throws At construction, when `requestTimeoutMilliseconds` is outside 1-60s.
- * @see {@link AgentControllerKubernetesStore}
+ * @see {@link AgentControllerWorkloadStore}
  */
-export function __CreateKubernetesAgentControllerStore(options: AgentControllerKubernetesStoreOptions): AgentControllerKubernetesStore
+export function __CreateKubernetesAgentControllerStore(options: AgentControllerKubernetesStoreOptions): AgentControllerWorkloadStore
 {
 	if (!Number.isSafeInteger(options.requestTimeoutMilliseconds) || options.requestTimeoutMilliseconds < 1_000 || options.requestTimeoutMilliseconds > 60_000) throw new Error("agent controller Kubernetes store requires a 1-60s request timeout");
 	return {

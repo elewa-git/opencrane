@@ -39,12 +39,12 @@ export type AgentControllerRuntimeProfiles = Readonly<Record<string, AgentContro
  * Called by: {@link __ReconcileNextAgentRuntimeAttempt}, {@link __ReconcileNextRuntimeRelease},
  * and the outbox prune step in agent-controller.ts. Implemented by
  * {@link __CreateHttpAgentControllerAuthority}.
- * @see {@link AgentControllerKubernetesStore}
+ * @see {@link AgentControllerWorkloadStore}
  */
 export interface AgentControllerAuthority
 {
 	/**
-	 * Take the next run attempt that needs a Kubernetes Job, under a lease only this caller holds.
+	 * Take the next run attempt that needs a workload projection, under a lease only this caller holds.
 	 * @param signal - Process shutdown; aborting cancels the in-flight HTTP request.
 	 * @returns The claim, whose `lease.eventId` must be passed back to
 	 * {@link AgentControllerAuthority.__CommitAssignment}, or null when nothing is ready and the loop
@@ -59,7 +59,7 @@ export interface AgentControllerAuthority
 	 * Nothing may unsuspend the Job until this has been recorded, so this call is the point after
 	 * which agent code is allowed to run at all.
 	 * @param eventId - The claim's `lease.eventId`; OpenCrane uses it to reject a stale or replayed commit.
-	 * @param command - The recorded coordinates plus the UID Kubernetes issued.
+	 * @param command - The recorded coordinates plus the UID the workload store issued.
 	 * @param signal - Process shutdown; aborting cancels the in-flight HTTP request.
 	 * @returns `assigned` for the commit that took effect, or `idempotent` when this attempt was
 	 * already committed — both mean the assignment now stands, so a caller must not treat
@@ -69,7 +69,7 @@ export interface AgentControllerAuthority
 	 */
 	__CommitAssignment(eventId: string, command: AgentControllerRunAttemptAssignmentCommand, signal: AbortSignal): Promise<AgentControllerRunAttemptAssignmentResult>;
 	/**
-	 * Take the next already-assigned Job that is ready to be unsuspended, under its own lease.
+	 * Take the next already-assigned workload that is ready to be released, under its own lease.
 	 * @param signal - Process shutdown; aborting cancels the in-flight HTTP request.
 	 * @returns The claim, carrying the assignment expiry the released Job must not outlive, or null
 	 * when nothing is ready and the loop should sleep.
@@ -78,12 +78,12 @@ export interface AgentControllerAuthority
 	 */
 	__ClaimWorkloadRelease(signal: AbortSignal): Promise<AgentControllerRunWorkloadReleaseClaim | null>;
 	/**
-	 * Record the first Pod the assigned Job created, once it is confirmed to be the expected one.
+	 * Record the first Pod-shaped runtime instance once it is confirmed to be the expected one.
 	 *
 	 * This is what pins the Pod UID that the bootstrap exchange later checks, so it must happen
 	 * before the runtime is allowed to exchange its bootstrap reference for credentials.
 	 * @param eventId - The release claim's `lease.eventId`; OpenCrane uses it to reject a stale replay.
-	 * @param command - Recorded coordinates plus the Pod UID observed in the cluster.
+	 * @param command - Recorded coordinates plus the runtime instance's Pod-shaped UID.
 	 * @param signal - Process shutdown; aborting cancels the in-flight HTTP request.
 	 * @returns `registered` for the call that took effect, or `idempotent` when this Pod was already
 	 * registered — both mean the Pod now stands recorded.
@@ -103,18 +103,22 @@ export interface AgentControllerAuthority
 }
 
 /**
- * Everything the controller does to Kubernetes.
+ * Everything the controller asks its workload projection to do.
  *
  * Deliberately small: create a suspended Job, create its key Secret, release the Job, find its
  * first Pod. There is no update, no delete, and no read of a Secret, so a bug in the controller
  * cannot rewrite or remove a workload — and a Job that does not match what OpenCrane recorded
  * makes every method here throw rather than get repaired.
  *
+ * Production projects the shapes into Kubernetes. Tier 2 projects the same evidence into an
+ * authenticated local process without changing the controller's authority protocol.
+ *
  * Called by: {@link __ReconcileNextAgentRuntimeAttempt} and {@link __ReconcileNextRuntimeRelease}.
- * Implemented by {@link __CreateKubernetesAgentControllerStore}.
+ * Implemented by {@link __CreateKubernetesAgentControllerStore} and
+ * {@link __CreateLocalProcessAgentControllerStore}.
  * @see {@link AgentControllerAuthority}
  */
-export interface AgentControllerKubernetesStore
+export interface AgentControllerWorkloadStore
 {
 	/**
 	 * Create the suspended attempt Job, or accept an existing one that matches exactly.
@@ -122,7 +126,7 @@ export interface AgentControllerKubernetesStore
 	 * Never modifies what it finds. An AlreadyExists reply means a previous poll got this far before
 	 * failing, so the Job is read back and compared field by field.
 	 * @param expected - The Job this attempt should have, from {@link __BuildSuspendedAgentRuntimeJob}.
-	 * @returns The Job as Kubernetes holds it, including the UID the caller must commit.
+	 * @returns The exact Job-shaped projection, including the UID the caller must commit.
 	 * @throws When the existing Job is not suspended, or differs from `expected` in any owned field.
 	 * The caller must not repair it: a mismatch means OpenCrane and the cluster disagree.
 	 */
@@ -145,7 +149,7 @@ export interface AgentControllerKubernetesStore
 	 * @param assignmentExpiresAt - Canonical UTC instant the released Job must stop before.
 	 * @param releaseLeaseExpiresAt - Expiry of the caller's release lease, folded into the deadline so
 	 * a slow request cannot buy the Job extra running time.
-	 * @returns The released Job as Kubernetes holds it.
+	 * @returns The released Job-shaped projection.
 	 * @throws When the Job differs from `expected`, when its UID does not match, when the conditional
 	 * patch is rejected, when Kubernetes did not actually release it, or when the resulting deadline
 	 * would let it outlive `assignmentExpiresAt`.
@@ -153,7 +157,7 @@ export interface AgentControllerKubernetesStore
 	 */
 	__EnsureRuntimeJobReleased(expected: V1Job, workloadUid: string, assignmentExpiresAt: string, releaseLeaseExpiresAt: string): Promise<V1Job>;
 	/**
-	 * Return the Job's first Pod once exactly one matches, or null while Kubernetes has not created it.
+	 * Return the workload's first Pod-shaped runtime instance, or null while none exists.
 	 * @param expectedJob - The Job whose Pod is wanted; supplies the labels and namespace to match.
 	 * @param workloadUid - UID recorded at assignment; part of the label selector.
 	 * @param serviceAccountName - The ServiceAccount the Pod must be running as.
@@ -176,8 +180,8 @@ export interface AgentControllerOptions
 {
 	/** Authenticated client for the OpenCrane API that hands out claims and records assignments. */
 	readonly authority: AgentControllerAuthority;
-	/** Kubernetes adapter that creates the suspended Job and later releases it. */
-	readonly kubernetes: AgentControllerKubernetesStore;
+	/** Workload adapter that prepares the suspended attempt and later releases it. */
+	readonly workloads: AgentControllerWorkloadStore;
 	/** Profiles selected by the claimed workload-profile name. */
 	readonly profiles: AgentControllerRuntimeProfiles;
 	/** Delay after an empty poll or a handled reconciliation failure. */
@@ -208,7 +212,7 @@ export type AgentControllerReconcileResult =
  * loop polls again straight away. These two are the exceptions:
  *
  * - `Idle` — nothing was claimable, so sleeping for the poll interval costs nothing.
- * - `PendingPod` — the Job was released but Kubernetes has not created its Pod yet. There is
+	 * - `PendingPod` — the workload was released but its Pod-shaped runtime evidence does not exist. There is
  *   nothing to do until it does, so the loop sleeps; the release claim is handed out again on a
  *   later poll once its lease expires, and that pass finds the Pod.
  *

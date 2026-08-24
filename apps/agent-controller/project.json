@@ -11,6 +11,10 @@
       "outputs": ["{workspaceRoot}/dist/apps/agent-controller"],
       "options": { "command": "rm -rf dist/apps/agent-controller && esbuild apps/agent-controller/src/index.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/apps/agent-controller/index.js" }
     },
+    "dev-tier2": {
+      "executor": "nx:run-commands",
+      "options": { "command": "tsx watch src/development/index.ts", "cwd": "apps/agent-controller" }
+    },
     "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "apps/agent-controller" } },
     "test": { "executor": "nx:run-commands", "options": { "command": "vitest run && bash tests/helm-contract.sh", "cwd": "apps/agent-controller" } },
     "helm-lint": { "executor": "nx:run-commands", "options": { "command": "helm lint apps/agent-controller/helm" } },

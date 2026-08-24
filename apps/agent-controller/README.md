@@ -60,6 +60,11 @@ OpenCrane and Kubernetes adapters, runs the runtime assignment/release and suspe
 poll loops, and flushes telemetry
 on `SIGTERM`/`SIGINT`.
 
+`Development entrypoint:` `src/development/index.ts` runs through `nx run agent-controller:dev-tier2`. It
+keeps the same OpenCrane claim/commit client but replaces the Kubernetes adapter with a local process
+host for Tier 2 Agent profiles. It does not run the skill workload controller and production builds
+never import it.
+
 ## Boundary
 
 The process holds no database credentials and exposes no Service, Ingress, public route or health
@@ -96,6 +101,12 @@ outside the app root.
 - `AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON` — exactly one immutable authoring and tool-runner
   profile, each using a class-bound ServiceAccount, projected-token audience, and fixed bootstrap
   file paths and same-silo acknowledgement URL.
+
+The development entrypoint additionally reads the selected `OPENCRANE_DEVELOPMENT_PROFILE`,
+separate controller-token and runtime-launch-secret paths, repository root, and loopback OpenCrane
+internal origin. It derives the runtime-stream URL from that origin and reads A/B's model endpoint
+from `LITELLM_ENDPOINT`. `agent-local` permits a loopback proxy, `agent-remote` requires an explicit
+non-loopback HTTPS proxy, and `agent-simulated` configures no model endpoint.
 
 The image runs as an unprivileged numeric user with a read-only root filesystem. Helm provides two
 separate projected tokens: one for OpenCrane and one for the Kubernetes API. Structured logs go to

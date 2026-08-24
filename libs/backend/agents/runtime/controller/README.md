@@ -51,13 +51,18 @@ ends by the durable expiry; zero Pods means retry while multiple or foreign Pods
 ## Public surface
 
 - `__RunAgentController` — polls until process shutdown and retries failed claims without repairing
-  or replacing Kubernetes objects.
+  or replacing workload projections.
 - `__ValidateAgentControllerRuntimeProfiles` — validates deployment-supplied profiles through the
   canonical Job builder before polling starts.
 - `__CreateHttpAgentControllerAuthority` — claims and commits over the projected-token-authenticated
   internal OpenCrane API.
 - `__CreateKubernetesAgentControllerStore` — exposes exact Job adoption, create-only model-key
   Secret creation, expiry-bounded fenced Job release, and selector-bounded first-Pod listing.
+- `__CreateLocalProcessAgentControllerStore` — development-only workload host that keeps the same
+  assignment and release authority while projecting each attempt into the existing Python runtime
+  process instead of a Kubernetes Job.
+- `__CreateLocalAgentRuntimeTokenReviewer` — development-only HMAC reviewer that authenticates the
+  spawned process UID before returning the fixed runtime namespace and ServiceAccount identity.
 
 The same controller performs the bounded retention pass for successfully delivered runtime-outbox
 records. It runs once at startup, then at its configured interval. A failed pass is recorded and
@@ -73,14 +78,15 @@ package-private test seams. Zod validation of controller wire models is owned be
 
 ## Boundary
 
-The package does not read Postgres directly, create ServiceAccounts, Pods, volumes or Deployments,
+The production Kubernetes adapter does not read Postgres directly, create ServiceAccounts, Pods, volumes or Deployments,
 read/update/delete Secrets, watch Kubernetes, replace an object, mutate a Pod, or issue runtime
 commands. Its only Secret power is creating the immutable, Job-owned model-key Secret (an
 AlreadyExists response is an idempotent success, never re-read); it can lower
 `spec.activeDeadlineSeconds` and patch `spec.suspend` from true to false together only after all
 identity tests pass. The minted key is transient — written straight into the Secret, never persisted
 or logged — and the LiteLLM master key stays in the control plane. OpenCrane remains business
-authority; Kubernetes remains an execution projection.
+authority; Kubernetes is the production execution projection, while the development adapter projects
+the same authority into local processes.
 
 ## Dependency direction
 
@@ -103,6 +109,16 @@ Kubernetes create, read, patch, and list has its own hard deadline. The patch ti
 from remaining assignment authority before release, so delayed transport cannot extend execution.
 Shutdown aborts an in-flight
 request through the Kubernetes client itself, while a later retry receives a new deadline.
+
+The local process adapter is composed only by `apps/agent-controller/src/development/index.ts`. It
+writes the signed runtime token and bootstrap reference to a private per-attempt directory as `0600`
+files. Alternatives A and B also receive an attempt-scoped LiteLLM-key file; Alternative C receives
+no model endpoint or key file. The child receives an allowlisted environment containing those paths,
+never inherited provider credentials. Alternatives A and B use the unchanged LiteLLM model loop;
+Alternative C injects a deterministic neutral-event source after the same bootstrap and command
+admission flow. The development server verifies each runtime bearer against the session launch secret
+with a timing-safe HMAC comparison before recovering its Pod UID. This disposable host is not imported
+by the production controller entrypoint.
 
 ## See also
 
