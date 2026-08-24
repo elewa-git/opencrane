@@ -51,11 +51,11 @@ export async function __ReconcileNextAgentRuntimeAttempt(options: AgentControlle
 	const persistedJob = await options.workloads.__EnsureSuspendedJob(job);
 	const workloadUid = _RequireWorkloadUid(persistedJob.metadata?.uid);
 
-	// 4. Create the Job-owned key Secret before any release reconciliation can unsuspend the Job.
+	// 4. Project the attempt key under the suspended workload before release reconciliation can start it.
 	const attemptKeySecret = _BuildAgentRuntimeAttemptKeySecret(persistedJob, workloadUid, assignment.litellmKeySecretName, claim.attempt.litellmKey);
 	await options.workloads.__EnsureAttemptKeySecret(attemptKeySecret);
 
-	// 5. Commit the exact Job UID so a separate durable claim may release it.
+	// 5. Commit the exact workload UID so a separate durable claim may release it.
 	const committed = await options.authority.__CommitAssignment(claim.lease.eventId, {
 		claimedAt: claim.lease.claimedAt,
 		deliveryCount: claim.lease.deliveryCount,
@@ -68,6 +68,6 @@ export async function __ReconcileNextAgentRuntimeAttempt(options: AgentControlle
 		workloadUid,
 	}, signal);
 
-	options.log.info({ eventId: claim.lease.eventId, runId: claim.attempt.runId, attempt: claim.attempt.attempt, workloadUid, outcome: committed.outcome }, "runtime attempt assigned to suspended Job");
+	options.log.info({ eventId: claim.lease.eventId, runId: claim.attempt.runId, attempt: claim.attempt.attempt, workloadUid, outcome: committed.outcome }, "runtime attempt assigned to suspended workload");
 	return { outcome: committed.outcome, eventId: claim.lease.eventId, runId: claim.attempt.runId, attempt: claim.attempt.attempt, workloadUid };
 }

@@ -195,7 +195,7 @@ export interface AgentControllerOptions
 /**
  * What one assignment poll did.
  *
- * `Idle` means nothing was claimable and the loop may sleep. Anything else means a Job now exists
+ * `Idle` means nothing was claimable and the loop may sleep. Anything else means a workload now exists
  * and its UID is recorded: `assigned` for the commit that took effect, `idempotent` when this
  * attempt had already been committed by an earlier poll. Both are success — a caller that treats
  * `idempotent` as a failure would keep retrying work that is already done.
@@ -212,27 +212,27 @@ export type AgentControllerReconcileResult =
  * loop polls again straight away. These two are the exceptions:
  *
  * - `Idle` — nothing was claimable, so sleeping for the poll interval costs nothing.
-	 * - `PendingPod` — the workload was released but its Pod-shaped runtime evidence does not exist. There is
+ * - `PendingPod` — the workload was released but its first-instance evidence does not exist. There is
  *   nothing to do until it does, so the loop sleeps; the release claim is handed out again on a
- *   later poll once its lease expires, and that pass finds the Pod.
+ *   later poll once its lease expires, and that pass finds the runtime instance.
  *
- * Counting `PendingPod` as work would spin the loop at full speed while Kubernetes schedules the
- * Pod. Counting `Idle` as work would do the same against an empty queue.
+ * Counting `PendingPod` as work would spin the loop at full speed while the workload adapter starts
+ * the runtime instance. Counting `Idle` as work would do the same against an empty queue.
  */
 export enum AgentControllerReconcileOutcomes
 {
 	/** No durable work was claimable. */
 	Idle = "idle",
-	/** Release succeeded, but the Job's first Pod does not exist yet. Not an error: a later poll picks the claim up again. */
+	/** Release succeeded, but first-instance evidence does not exist yet. A later poll picks the claim up again. */
 	PendingPod = "pending-pod",
 }
 
 /**
  * What one release poll did.
  *
- * `Idle` means nothing was claimable. `PendingPod` means the Job was released but its Pod does not
- * exist yet, so nothing is owed until a later poll. `registered` and `idempotent` both mean the
- * first Pod is now recorded and the runtime may exchange its bootstrap reference — so a caller
+ * `Idle` means nothing was claimable. `PendingPod` means the workload was released but its first
+ * instance does not exist yet, so nothing is owed until a later poll. `registered` and `idempotent` both mean the
+ * first runtime instance is now recorded and may exchange its bootstrap reference — so a caller
  * must not read `idempotent` as a failure.
  * @see {@link AgentControllerReconcileOutcomes}
  */

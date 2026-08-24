@@ -6,7 +6,7 @@ They solve different problems and neither should be mistaken for the other.
 
 | Guardrail | Scope | Purpose |
 |---|---|---|
-| Technical run limits | One agent run | Bound model turns, total tokens and elapsed time |
+| Technical run limits | One agent run | Bound model turns, total tokens, model cost and elapsed time |
 | Spending budgets | An account or organisation | Control permitted model spend |
 
 ::: info What counts as one run?
@@ -24,6 +24,7 @@ The first revision created for a personal assistant after onboarding carries the
 |---|---:|---|
 | Model turns | 64 | A reasoning or tool-use loop that keeps asking the model for another step |
 | Total tokens | 256,000 | A run whose accumulated model input and output grows unexpectedly large |
+| Model cost | 5,000,000 micro-US-dollars (US$5) | A run whose route keeps spending despite remaining within its turn and token limits |
 | Elapsed time | 60 minutes | A stalled provider, waiting tool or other run that does not finish |
 
 The runtime is expected to end only the current run when the first ceiling is reached. That terminal
@@ -36,12 +37,12 @@ The 256,000-token value applies to one run. It is not a subscription allowance, 
 promise about monthly cost. Configure spending separately through the budget API described below.
 :::
 
-All three values belong to the immutable agent revision. OpenCrane freezes that revision when it
+All four values belong to the immutable agent revision. OpenCrane freezes that revision when it
 admits a run; a running attempt cannot raise its own ceiling. Changing a limit means creating and
 publishing a new revision so the old value remains visible in the audit history.
 
 ::: info Current enforcement boundary
-OpenCrane requires all three positive values before it admits a run and freezes them into the run
+OpenCrane requires all four positive values before it admits a run and freezes them into the run
 snapshot. Operators should qualify the runtime's terminal result for each ceiling in their target
 release before treating these limits as an end-to-end operational control. End-to-end enforcement
 and qualification are tracked in [GitHub issue #651](https://github.com/elewa-git/opencrane/issues/651).

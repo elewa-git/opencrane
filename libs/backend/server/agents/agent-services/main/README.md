@@ -86,7 +86,7 @@ user-elicitation and consent flow.
 
 Every Agent-session message starts a governed run. A broken model response, repeated tool decision,
 stalled provider, or tool that never returns could otherwise hold a worker and continue consuming
-model capacity indefinitely. The initial policy therefore records three independent technical
+model capacity indefinitely. The initial policy therefore records four independent technical
 ceilings:
 
 | Limit | Initial value | Failure it bounds |

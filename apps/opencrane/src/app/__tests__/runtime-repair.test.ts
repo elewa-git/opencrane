@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { _StartRuntimeRepair } from "../runtime-repair";
 
-describe("Tier 2 runtime terminal repair", function _Suite()
+describe("shared runtime terminal repair", function _Suite()
 {
 	afterEach(function _RestoreTimers(): void
 	{

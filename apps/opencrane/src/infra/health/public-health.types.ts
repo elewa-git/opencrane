@@ -37,7 +37,7 @@ export interface PublicHealthClock
 /**
  * Supplies the probes and cache policy for the public health report reader.
  *
- * Non-null probes represent required configured services. The two nullable probes preserve the
+ * Non-null probes represent required configured services. Nullable probes preserve the
  * difference between a disabled optional capability and a configured service that failed its check.
  * Called by: `_CreatePublicHealthReportReader` after process composition has frozen every target.
  */

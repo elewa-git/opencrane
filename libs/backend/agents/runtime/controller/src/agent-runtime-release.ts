@@ -16,10 +16,10 @@ function _RequirePodUid(uid: string | undefined): string
 }
 
 /**
- * Reconcile one durable workload release through exact Job and first-Pod evidence.
+ * Reconcile one durable workload release through exact projection and first-instance evidence.
  *
- * The assigned Job is rebuilt from durable coordinates and released through compare-and-swap.
- * First-Pod registration then closes the bootstrap identity fence before runtime exchange.
+ * The assigned workload is rebuilt from durable coordinates and released through compare-and-swap.
+ * First-instance registration then closes the bootstrap identity fence before runtime exchange.
  * @param options - Fixed authority, profiles, workload adapter, and logger.
  * @param signal - Process shutdown propagated to authority calls.
  * @returns Idle, pending Pod creation, or the registration outcome.
@@ -28,11 +28,11 @@ export async function __ReconcileNextRuntimeRelease(options: AgentControllerOpti
 {
 	return ___DoWithTrace("agent_controller.workload_release.reconcile", {}, async function _reconcileWorkloadRelease(): Promise<AgentControllerRuntimeReleaseReconcileResult>
 	{
-		// 1. Take a release claim with its own lease, so an out-of-date controller replica cannot register a Pod.
+		// 1. Take a release claim with its own lease, so an out-of-date controller replica cannot register a runtime instance.
 		const claim = await options.authority.__ClaimWorkloadRelease(signal);
 		if (!claim) return { outcome: AgentControllerReconcileOutcomes.Idle };
 
-		// 2. Rebuild the assigned Job exactly, from the coordinates OpenCrane recorded and the profile it names.
+		// 2. Rebuild the assigned workload exactly from the coordinates OpenCrane recorded and the profile it names.
 		const profile = _ResolveAgentControllerRuntimeProfile(options.profiles, claim.workload.workloadProfile);
 		if (!profile || claim.workload.namespace !== profile.namespace || profile.serverNamespace === profile.namespace || profile.serviceAccountName !== claim.workload.serviceAccountName)
 		{
@@ -54,7 +54,7 @@ export async function __ReconcileNextRuntimeRelease(options: AgentControllerOpti
 		__DeriveAgentRuntimeReleaseDeadlineSeconds(claim.workload.assignmentExpiresAt, authorityUpperBoundEpochMilliseconds, profile.activeDeadlineSeconds);
 		await options.workloads.__EnsureRuntimeJobReleased(job, claim.workload.workloadUid, claim.workload.assignmentExpiresAt, claim.lease.expiresAt);
 
-		// 4. Wait until exactly one Pod matches; never pick between several candidates.
+		// 4. Wait until exact first-instance evidence exists; never pick between several candidates.
 		const pod = await options.workloads.__FindFirstRuntimePod(job, claim.workload.workloadUid, claim.workload.serviceAccountName);
 		if (!pod)
 		{
@@ -62,7 +62,7 @@ export async function __ReconcileNextRuntimeRelease(options: AgentControllerOpti
 		}
 		const podUid = _RequirePodUid(pod.metadata?.uid);
 
-		// 5. Record this Pod in OpenCrane before the runtime is allowed to exchange its bootstrap reference.
+		// 5. Record this runtime instance before it may exchange its bootstrap reference.
 		const registered = await options.authority.__RegisterFirstPod(claim.lease.eventId, {
 			claimedAt: claim.lease.claimedAt,
 			deliveryCount: claim.lease.deliveryCount,
@@ -79,7 +79,7 @@ export async function __ReconcileNextRuntimeRelease(options: AgentControllerOpti
 			podUid,
 		}, signal);
 
-		options.log.info({ eventId: claim.lease.eventId, runId: claim.workload.runId, attempt: claim.workload.attempt, workloadUid: claim.workload.workloadUid, podUid, outcome: registered.outcome }, "runtime workload released and first Pod registered");
+		options.log.info({ eventId: claim.lease.eventId, runId: claim.workload.runId, attempt: claim.workload.attempt, workloadUid: claim.workload.workloadUid, podUid, outcome: registered.outcome }, "runtime workload released and first instance registered");
 		return { outcome: registered.outcome, eventId: claim.lease.eventId, runId: claim.workload.runId, attempt: claim.workload.attempt, workloadUid: claim.workload.workloadUid, podUid };
 	});
 }
