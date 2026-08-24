@@ -94,9 +94,12 @@ export function __McpEraProbeTransition(state: McpEraProbeStates, event: McpEraP
 /** Narrow a stored string to the terminal failure codes allowed in final evidence. */
 function _TerminalFailureCode(value: string): McpEraProbeFailureCodes | null
 {
-	if (value === McpEraProbeFailureCodes.UnsafeEndpoint) return McpEraProbeFailureCodes.UnsafeEndpoint;
-	if (value === McpEraProbeFailureCodes.InvalidResponse) return McpEraProbeFailureCodes.InvalidResponse;
-	if (value === McpEraProbeFailureCodes.RetryExhausted) return McpEraProbeFailureCodes.RetryExhausted;
+	if (value === McpEraProbeFailureCodes.UnsafeEndpoint)
+		return McpEraProbeFailureCodes.UnsafeEndpoint;
+	if (value === McpEraProbeFailureCodes.InvalidResponse)
+		return McpEraProbeFailureCodes.InvalidResponse;
+	if (value === McpEraProbeFailureCodes.RetryExhausted)
+		return McpEraProbeFailureCodes.RetryExhausted;
 	return null;
 }
 
@@ -112,7 +115,8 @@ export function __McpEraProbeObservationResult(observation: McpEraProbeObservati
 export function __McpEraProbeTerminalResult(code: McpEraProbeFailureCodes): McpEraProbeTaskResult
 {
 	const action = __McpEraProbeTransition(McpEraProbeStates.Pending, McpEraProbeEvents.TerminalFailure);
-	if (action !== McpEraProbeActions.Reject) throw new Error("MCP terminal failure transition is invalid.");
+	if (action !== McpEraProbeActions.Reject)
+		throw new Error("MCP terminal failure transition is invalid.");
 	const evidenceDigest = `sha256:${createHash("sha256").update(JSON.stringify(["mcp-era-probe-failure", code])).digest("hex")}` as const;
 	return { decision: McpEraProbeDecisions.Rejected, failureCode: code, evidenceDigest };
 }
@@ -121,12 +125,17 @@ export function __McpEraProbeTerminalResult(code: McpEraProbeFailureCodes): McpE
 export function __McpEraProbeReplayResult(target: McpEraProbeTargetRecord): McpEraProbeTaskResult | null
 {
 	const state = target.eraProbeStatus;
-	if (state === McpEraProbeStates.Pending) return null;
-	if (__McpEraProbeTransition(state, McpEraProbeEvents.Replay) !== McpEraProbeActions.ReturnStored || !target.eraProbeEvidenceDigest) throw new Error("MCP stored protocol-check result is incomplete.");
-	if (state === McpEraProbeStates.Accepted && target.eraProtocolVersion && !target.eraProbeFailureCode) return { decision: McpEraProbeDecisions.Accepted, protocolVersion: target.eraProtocolVersion, evidenceDigest: target.eraProbeEvidenceDigest as `sha256:${string}` };
-	if (state === McpEraProbeStates.Rejected && target.eraProtocolVersion && !target.eraProbeFailureCode) return { decision: McpEraProbeDecisions.Rejected, protocolVersion: target.eraProtocolVersion, evidenceDigest: target.eraProbeEvidenceDigest as `sha256:${string}` };
+	if (state === McpEraProbeStates.Pending)
+		return null;
+	if (__McpEraProbeTransition(state, McpEraProbeEvents.Replay) !== McpEraProbeActions.ReturnStored || !target.eraProbeEvidenceDigest)
+		throw new Error("MCP stored protocol-check result is incomplete.");
+	if (state === McpEraProbeStates.Accepted && target.eraProtocolVersion && !target.eraProbeFailureCode)
+		return { decision: McpEraProbeDecisions.Accepted, protocolVersion: target.eraProtocolVersion, evidenceDigest: target.eraProbeEvidenceDigest as `sha256:${string}` };
+	if (state === McpEraProbeStates.Rejected && target.eraProtocolVersion && !target.eraProbeFailureCode)
+		return { decision: McpEraProbeDecisions.Rejected, protocolVersion: target.eraProtocolVersion, evidenceDigest: target.eraProbeEvidenceDigest as `sha256:${string}` };
 	const failureCode = target.eraProbeFailureCode ? _TerminalFailureCode(target.eraProbeFailureCode) : null;
-	if (state === McpEraProbeStates.Rejected && !target.eraProtocolVersion && failureCode) return { decision: McpEraProbeDecisions.Rejected, failureCode, evidenceDigest: target.eraProbeEvidenceDigest as `sha256:${string}` };
+	if (state === McpEraProbeStates.Rejected && !target.eraProtocolVersion && failureCode)
+		return { decision: McpEraProbeDecisions.Rejected, failureCode, evidenceDigest: target.eraProbeEvidenceDigest as `sha256:${string}` };
 	throw new Error("MCP stored protocol-check result conflicts with its state.");
 }
 
@@ -134,8 +143,10 @@ export function __McpEraProbeReplayResult(target: McpEraProbeTargetRecord): McpE
 export function __McpEraProbeRequiredStates(approvalStatus: string): readonly McpEraProbeStates[] | undefined
 {
 	let event: McpEraProbeEvents;
-	if (approvalStatus === "Approved") event = McpEraProbeEvents.Approve;
-	else if (approvalStatus === "Published") event = McpEraProbeEvents.Publish;
+	if (approvalStatus === "Approved")
+		event = McpEraProbeEvents.Approve;
+	else if (approvalStatus === "Published")
+		event = McpEraProbeEvents.Publish;
 	else return undefined;
 	return [McpEraProbeStates.Accepted, McpEraProbeStates.NotRequired].filter(function _Allowed(state) { return __McpEraProbeTransition(state, event) === McpEraProbeActions.Allow; });
 }

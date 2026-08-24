@@ -25,11 +25,13 @@ import type { McpEraProbeClient, McpEraProbeDnsAddress, McpEraProbeDnsResolver, 
  */
 export function __CreateHttpsMcpEraProbeClient(options: McpEraProbeHttpsClientOptions): McpEraProbeClient
 {
-	if (options.protocolVersion.trim().length === 0 || options.protocolVersion.length > 64 || !Number.isSafeInteger(options.requestTimeoutMilliseconds) || options.requestTimeoutMilliseconds < 1_000 || options.requestTimeoutMilliseconds > 60_000 || !Number.isSafeInteger(options.maximumResponseBytes) || options.maximumResponseBytes < 1 || options.maximumResponseBytes > 1_048_576) throw new McpEraProbeConfigurationError("invalid_endpoint");
+	if (options.protocolVersion.trim().length === 0 || options.protocolVersion.length > 64 || !Number.isSafeInteger(options.requestTimeoutMilliseconds) || options.requestTimeoutMilliseconds < 1_000 || options.requestTimeoutMilliseconds > 60_000 || !Number.isSafeInteger(options.maximumResponseBytes) || options.maximumResponseBytes < 1 || options.maximumResponseBytes > 1_048_576)
+		throw new McpEraProbeConfigurationError("invalid_endpoint");
 	const resolve: McpEraProbeDnsResolver = options.resolve ?? async function _Resolve(hostname): Promise<readonly McpEraProbeDnsAddress[]>
 	{
 		const records = await lookup(hostname, { all: true, verbatim: true });
-		if (records.some(function _UnknownFamily(record) { return record.family !== 4 && record.family !== 6; })) throw new McpEraProbeConfigurationError("unsafe_address");
+		if (records.some(function _UnknownFamily(record) { return record.family !== 4 && record.family !== 6; }))
+			throw new McpEraProbeConfigurationError("unsafe_address");
 		return records.map(function _Record(record): McpEraProbeDnsAddress { return { address: record.address, family: record.family as 4 | 6 }; });
 	};
 	const request: McpEraProbeHttpsRequest = options.request ?? _McpEraProbeHttpsRequest;
@@ -45,7 +47,8 @@ export function __CreateHttpsMcpEraProbeClient(options: McpEraProbeHttpsClientOp
 					let addresses: readonly McpEraProbeDnsAddress[];
 					try { addresses = await resolve(endpoint.hostname); }
 					catch (error) { return _McpEraProbeTransportFailure(error); }
-					if (addresses.length === 0 || addresses.some(function _UnsafeAddress(address) { return !_McpEraProbeIsPublicAddress(address); })) throw new McpEraProbeConfigurationError("unsafe_address");
+					if (addresses.length === 0 || addresses.some(function _UnsafeAddress(address) { return !_McpEraProbeIsPublicAddress(address); }))
+						throw new McpEraProbeConfigurationError("unsafe_address");
 
 					let response: McpEraProbeHttpsResponse;
 					try
@@ -56,9 +59,12 @@ export function __CreateHttpsMcpEraProbeClient(options: McpEraProbeHttpsClientOp
 						});
 					}
 					catch (error) { return _McpEraProbeTransportFailure(error); }
-					if (response.status >= 300 && response.status < 400) return _McpEraProbeTransportFailure(new McpEraProbeTransportError("redirect"));
-					if (response.status < 200 || response.status >= 300) return _McpEraProbeTransportFailure(new McpEraProbeTransportError(`http_${response.status}`));
-					if (response.body.byteLength > options.maximumResponseBytes) return _McpEraProbeTransportFailure(new McpEraProbeTransportError("oversize"));
+					if (response.status >= 300 && response.status < 400)
+						return _McpEraProbeTransportFailure(new McpEraProbeTransportError("redirect"));
+					if (response.status < 200 || response.status >= 300)
+						return _McpEraProbeTransportFailure(new McpEraProbeTransportError(`http_${response.status}`));
+					if (response.body.byteLength > options.maximumResponseBytes)
+						return _McpEraProbeTransportFailure(new McpEraProbeTransportError("oversize"));
 					return _McpEraProbeDiscoveryResult(response.body, response.headers["content-type"], options.protocolVersion);
 				});
 			});

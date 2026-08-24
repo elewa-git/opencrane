@@ -63,16 +63,20 @@ function _mockPrisma(overrides: Record<string, (...args: unknown[]) => unknown> 
   const prisma = new Proxy({}, {
     get(_t, model)
     {
-      if (model === "$transaction") return async function _Transaction(callback: (transaction: PrismaClient) => Promise<unknown>) { return callback(prisma); };
+      if (model === "$transaction")
+        return async function _Transaction(callback: (transaction: PrismaClient) => Promise<unknown>) { return callback(prisma); };
       return new Proxy({}, {
         get(_t2, method)
         {
           const key = `${String(model)}.${String(method)}`;
           if (!spies[key])
           {
-            if (overrides[key]) spies[key] = vi.fn(overrides[key]);
-            else if (key === "principal.findUnique") spies[key] = vi.fn().mockResolvedValue({ id: "principal-1" });
-            else if (key === "capabilityCatalogRevision.findUnique") spies[key] = vi.fn().mockResolvedValue({ digest: "sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6", capabilities: [{ id: "mcp-server:use", actions: ["use"] }] });
+            if (overrides[key])
+              spies[key] = vi.fn(overrides[key]);
+            else if (key === "principal.findUnique")
+              spies[key] = vi.fn().mockResolvedValue({ id: "principal-1" });
+            else if (key === "capabilityCatalogRevision.findUnique")
+              spies[key] = vi.fn().mockResolvedValue({ digest: "sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6", capabilities: [{ id: "mcp-server:use", actions: ["use"] }] });
             else spies[key] = vi.fn().mockResolvedValue([]);
           }
           return spies[key];
@@ -125,7 +129,8 @@ describe("mcp-operator router", function _suite()
   /** Restore the auth env captured in `beforeEach` so cases stay isolated. */
   afterEach(function _restoreEnv()
   {
-    for (const key of _AUTH_ENV) { if (_saved[key] === undefined) { delete process.env[key]; } else { process.env[key] = _saved[key]; } }
+    for (const key of _AUTH_ENV) { if (_saved[key] === undefined)
+    { delete process.env[key]; } else { process.env[key] = _saved[key]; } }
   });
 
   describe("org-admin gate on governance endpoints", function _gate()

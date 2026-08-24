@@ -49,7 +49,8 @@ async function _RecordResult(unitOfWork: McpOperatorUnitOfWork, input: McpEraPro
 			winner = __McpEraProbeReplayResult(_TargetFromServer(write.server));
 		}
 		catch { throw new DurableTaskTerminalError("MCP era-probe stored winner is invalid."); }
-		if (!winner) throw new DurableTaskTerminalError("MCP era-probe stored winner is unavailable.");
+		if (!winner)
+			throw new DurableTaskTerminalError("MCP era-probe stored winner is unavailable.");
 		if (write.changed)
 		{
 			await transaction.mcp.appendAudit("Updated", `McpServer/${input.serverId}`, `MCP server era probe ${result.decision}`);
@@ -65,12 +66,15 @@ async function _RecordRetry(unitOfWork: McpOperatorUnitOfWork, input: McpEraProb
 	return await unitOfWork.execute(async function _WriteRetry(transaction): Promise<McpEraProbeTaskResult | null>
 	{
 		const retry = await transaction.mcp.recordEraProbeRetry(input.siloId, input.serverId, input.registrationDigest, MCP_ERA_PROBE_MAXIMUM_ATTEMPTS, exhaustedResult);
-		if (!retry) throw new DurableTaskTerminalError("MCP era-probe registration is unavailable.");
+		if (!retry)
+			throw new DurableTaskTerminalError("MCP era-probe registration is unavailable.");
 		let stored: McpEraProbeTaskResult | null;
 		try { stored = __McpEraProbeReplayResult(_TargetFromServer(retry.server)); }
 		catch { throw new DurableTaskTerminalError("MCP era-probe stored retry state is invalid."); }
-		if (retry.exhausted && !stored) throw new DurableTaskTerminalError("MCP era-probe exhausted result is unavailable.");
-		if (retry.exhausted && retry.changed) await transaction.mcp.appendAudit("Updated", `McpServer/${input.serverId}`, "MCP server era probe retry limit exhausted");
+		if (retry.exhausted && !stored)
+			throw new DurableTaskTerminalError("MCP era-probe exhausted result is unavailable.");
+		if (retry.exhausted && retry.changed)
+			await transaction.mcp.appendAudit("Updated", `McpServer/${input.serverId}`, "MCP server era probe retry limit exhausted");
 		return stored;
 	});
 }
@@ -82,7 +86,8 @@ async function _Run(context: DurableTaskContext, options: McpEraProbeWorkflowOpt
 	let completed: McpEraProbeTaskResult | null;
 	try { completed = __McpEraProbeReplayResult(target); }
 	catch { throw new DurableTaskTerminalError("MCP era-probe stored result is invalid."); }
-	if (completed) return completed;
+	if (completed)
+		return completed;
 
 	const result = await context.checkpoint({ stepName: "discover-server" }, async function _Discover(): Promise<McpEraProbeTaskResult>
 	{
@@ -92,13 +97,16 @@ async function _Run(context: DurableTaskContext, options: McpEraProbeWorkflowOpt
 		}
 		catch (error)
 		{
-			if (!(error instanceof McpEraProbeFailure)) throw error;
+			if (!(error instanceof McpEraProbeFailure))
+				throw error;
 			if (error.code === McpEraProbeFailureCodes.RetryableUnavailable)
 			{
 				const action = __McpEraProbeTransition(McpEraProbeStates.Pending, McpEraProbeEvents.RetryableFailure);
-				if (action !== McpEraProbeActions.Retry) throw new DurableTaskTerminalError("MCP era-probe retry policy is invalid.");
+				if (action !== McpEraProbeActions.Retry)
+					throw new DurableTaskTerminalError("MCP era-probe retry policy is invalid.");
 				const exhausted = await _RecordRetry(options.unitOfWork, input);
-				if (exhausted) return exhausted;
+				if (exhausted)
+					return exhausted;
 				throw new DurableTaskRetryableError("MCP server protocol check is temporarily unavailable.");
 			}
 			return __McpEraProbeTerminalResult(error.code);

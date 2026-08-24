@@ -78,7 +78,8 @@ export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8
 	return {
 		async stop(): Promise<void>
 		{
-			if (schedulerHandle !== null) clearInterval(schedulerHandle);
+			if (schedulerHandle !== null)
+				clearInterval(schedulerHandle);
 			clearInterval(externalActionHandle);
 			clearInterval(runtimeRepairHandle);
 			clearInterval(runtimeCleanupHandle);

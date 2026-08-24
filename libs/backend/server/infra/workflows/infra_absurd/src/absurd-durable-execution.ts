@@ -51,10 +51,14 @@ function _DatabasePoolSize(value: number): number
 function _RetryPolicy(policy: DurableTaskRetryPolicy | undefined): DurableTaskRetryPolicy
 {
 	const value = policy ?? { maximumAttempts: 1, backoff: { kind: DurableTaskRetryBackoffKinds.Fixed, initialDelaySeconds: 0 } };
-	if (!Number.isSafeInteger(value.maximumAttempts) || value.maximumAttempts < 1 || value.maximumAttempts > 100) throw new DurableExecutionError("retryPolicy.maximumAttempts must be between 1 and 100.");
-	if (!Number.isSafeInteger(value.backoff.initialDelaySeconds) || value.backoff.initialDelaySeconds < 0 || value.backoff.initialDelaySeconds > 86_400) throw new DurableExecutionError("retryPolicy.initialDelaySeconds must be between 0 and 86400.");
-	if (value.backoff.multiplier !== undefined && (!Number.isFinite(value.backoff.multiplier) || value.backoff.multiplier < 0)) throw new DurableExecutionError("retryPolicy.multiplier must be a finite non-negative number.");
-	if (value.backoff.maximumDelaySeconds !== undefined && (!Number.isSafeInteger(value.backoff.maximumDelaySeconds) || value.backoff.maximumDelaySeconds < 0 || value.backoff.maximumDelaySeconds > 86_400)) throw new DurableExecutionError("retryPolicy.maximumDelaySeconds must be between 0 and 86400.");
+	if (!Number.isSafeInteger(value.maximumAttempts) || value.maximumAttempts < 1 || value.maximumAttempts > 100)
+		throw new DurableExecutionError("retryPolicy.maximumAttempts must be between 1 and 100.");
+	if (!Number.isSafeInteger(value.backoff.initialDelaySeconds) || value.backoff.initialDelaySeconds < 0 || value.backoff.initialDelaySeconds > 86_400)
+		throw new DurableExecutionError("retryPolicy.initialDelaySeconds must be between 0 and 86400.");
+	if (value.backoff.multiplier !== undefined && (!Number.isFinite(value.backoff.multiplier) || value.backoff.multiplier < 0))
+		throw new DurableExecutionError("retryPolicy.multiplier must be a finite non-negative number.");
+	if (value.backoff.maximumDelaySeconds !== undefined && (!Number.isSafeInteger(value.backoff.maximumDelaySeconds) || value.backoff.maximumDelaySeconds < 0 || value.backoff.maximumDelaySeconds > 86_400))
+		throw new DurableExecutionError("retryPolicy.maximumDelaySeconds must be between 0 and 86400.");
 	return value;
 }
 
@@ -163,7 +167,8 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 		}
 		catch (error)
 		{
-			if (!(error instanceof DurableTaskTerminalError)) throw error;
+			if (!(error instanceof DurableTaskTerminalError))
+				throw error;
 			await new _AbsurdTerminalTaskFailure(this.databasePool, this.queueForTask(definition.taskName)).fail(context.taskID, error);
 			throw new FailedTask();
 		}
@@ -321,7 +326,8 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 		try { await closing; }
 		catch (error)
 		{
-			if (this.closePromise === closing) this.closePromise = undefined;
+			if (this.closePromise === closing)
+				this.closePromise = undefined;
 			throw error;
 		}
 	}

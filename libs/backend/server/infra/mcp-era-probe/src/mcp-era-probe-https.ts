@@ -54,9 +54,12 @@ export async function _McpEraProbeHttpsRequest(command: McpEraProbeHttpsRequestC
 		}, async function _Receive(response)
 		{
 			const status = response.statusCode;
-			if (status === undefined) { response.destroy(); reject(new McpEraProbeTransportError("network")); return; }
-			if (status >= 300 && status < 400) { response.destroy(); reject(new McpEraProbeTransportError("redirect")); return; }
-			if (status < 200 || status >= 300) { response.destroy(); reject(new McpEraProbeTransportError(`http_${status}`)); return; }
+			if (status === undefined)
+			{ response.destroy(); reject(new McpEraProbeTransportError("network")); return; }
+			if (status >= 300 && status < 400)
+			{ response.destroy(); reject(new McpEraProbeTransportError("redirect")); return; }
+			if (status < 200 || status >= 300)
+			{ response.destroy(); reject(new McpEraProbeTransportError(`http_${status}`)); return; }
 			try { resolve({ status, headers: _ResponseHeaders(response.headers), body: await _ReadResponse(response, command.maximumResponseBytes) }); }
 			catch (error) { reject(error); }
 		});
@@ -69,8 +72,10 @@ export async function _McpEraProbeHttpsRequest(command: McpEraProbeHttpsRequestC
 /** Normalize resolver, socket, and deadline failures to the bounded adapter vocabulary. */
 export function _McpEraProbeTransportFailure(error: unknown): never
 {
-	if (error instanceof McpEraProbeConfigurationError || error instanceof McpEraProbeTransportError || error instanceof McpEraProbeProtocolError) throw error;
-	if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) throw new McpEraProbeTransportError("timeout");
+	if (error instanceof McpEraProbeConfigurationError || error instanceof McpEraProbeTransportError || error instanceof McpEraProbeProtocolError)
+		throw error;
+	if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError"))
+		throw new McpEraProbeTransportError("timeout");
 	throw new McpEraProbeTransportError("network");
 }
 
@@ -85,5 +90,6 @@ export async function _McpEraProbeWithDeadline<Result>(milliseconds: number, ope
 		timeout.unref();
 	});
 	try { return await Promise.race([operation(controller.signal), expired]); }
-	finally { if (timeout !== undefined) clearTimeout(timeout); }
+	finally { if (timeout !== undefined)
+		clearTimeout(timeout); }
 }

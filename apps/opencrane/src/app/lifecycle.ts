@@ -33,7 +33,8 @@ async function _settleCleanup(operations: readonly Promise<unknown>[]): Promise<
 {
 	const results = await Promise.allSettled(operations);
 	const failed = results.find(function _Failed(result) { return "reason" in result; });
-	if (failed && "reason" in failed) throw failed.reason;
+	if (failed && "reason" in failed)
+		throw failed.reason;
 }
 
 /** Run one shutdown stage and keep later cleanup stages available after a failure. */
@@ -103,7 +104,8 @@ export async function _StartProcessLifecycle(publicApp: Express, internalApp: Ex
 	let shutdownStarted = false;
 	async function _shutdown(signal: string): Promise<void>
 	{
-		if (shutdownStarted) return;
+		if (shutdownStarted)
+			return;
 		shutdownStarted = true;
 		_log.info({ signal }, "shutting down control plane");
 		const hardExit = setTimeout(function _forceExit() { process.exit(1); }, 10_000);

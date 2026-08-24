@@ -35,7 +35,8 @@ export function listEntitledCatalog(unitOfWork: McpOperatorUnitOfWork, caller: M
 	return unitOfWork.execute(async function _List(transaction)
 	{
 		const [servers, capability] = await Promise.all([transaction.mcp.listPublishedServers(caller.siloId), _Capability(transaction)]);
-		if (!capability) return [];
+		if (!capability)
+			return [];
 		const decisions = await Promise.all(servers.map(async function _Decide(server)
 		{
 			return await _Allowed(transaction, caller, capability, server.id) ? _MapServer(server) : null;
@@ -99,7 +100,8 @@ export function installServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOper
 	return unitOfWork.execute(async function _Install(transaction)
 	{
 		const [server, capability] = await Promise.all([transaction.mcp.findServer(caller.siloId, serverId), _Capability(transaction)]);
-		if (!server || server.approvalStatus !== "Published" || !capability || !(await _Allowed(transaction, caller, capability, serverId))) return null;
+		if (!server || server.approvalStatus !== "Published" || !capability || !(await _Allowed(transaction, caller, capability, serverId)))
+			return null;
 		const status = server.serverType === "MultiUser" ? "SharedKey" : "NeedsCredential";
 		const installed = await transaction.mcp.upsertInstall(serverId, caller.principalId, status);
 		await transaction.mcp.appendAudit("Created", `McpServerInstall/${serverId}:${caller.principalId}`, `MCP server ${serverId} installed for ${caller.principalId}`);
@@ -124,7 +126,8 @@ export function uninstallServer(unitOfWork: McpOperatorUnitOfWork, principalId: 
 	return unitOfWork.execute(async function _Delete(transaction)
 	{
 		const removed = await transaction.mcp.deleteInstall(serverId, principalId);
-		if (removed) await transaction.mcp.appendAudit("Deleted", `McpServerInstall/${serverId}:${principalId}`, `MCP server ${serverId} uninstalled for ${principalId}`);
+		if (removed)
+			await transaction.mcp.appendAudit("Deleted", `McpServerInstall/${serverId}:${principalId}`, `MCP server ${serverId} uninstalled for ${principalId}`);
 		return removed ? "removed" : "not_found";
 	});
 }
@@ -197,7 +200,8 @@ export function rejectServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOpera
  */
 export function setServerEnabled(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, enabled: boolean): Promise<McpCatalogServer | null>
 {
-	if (enabled) return _Approval(unitOfWork, caller, serverId, "Published", "enabled", "Disabled");
+	if (enabled)
+		return _Approval(unitOfWork, caller, serverId, "Published", "enabled", "Disabled");
 	return _Approval(unitOfWork, caller, serverId, "Disabled", "disabled");
 }
 
@@ -218,7 +222,8 @@ export function getAccessPolicy(unitOfWork: McpOperatorUnitOfWork, caller: McpOp
 {
 	return unitOfWork.execute(async function _Read(transaction)
 	{
-		if (!(await transaction.mcp.findServer(caller.siloId, serverId))) return null;
+		if (!(await transaction.mcp.findServer(caller.siloId, serverId)))
+			return null;
 		const grants = await transaction.managedGrants.listManagedResourceGrants(caller.siloId, _ACCESS_MANAGER_ID, { kind: _RESOURCE_KIND, id: serverId });
 		const groupIds = grants.flatMap(grant => grant.subject.kind === AuthorizationSubjectKinds.Group ? [grant.subject.groupId] : []);
 		const principalIds = grants.flatMap(grant => grant.subject.kind === AuthorizationSubjectKinds.Principal ? [grant.subject.principalId] : []);
@@ -245,11 +250,13 @@ export function setAccessPolicy(unitOfWork: McpOperatorUnitOfWork, caller: McpOp
 {
 	return unitOfWork.execute(async function _Write(transaction)
 	{
-		if (!(await transaction.mcp.findServer(caller.siloId, serverId))) return null;
+		if (!(await transaction.mcp.findServer(caller.siloId, serverId)))
+			return null;
 		const groupIds = _Ids(body.groupIds);
 		const principalIds = _Ids(body.principalIds);
 		const [groups, principals, capability] = await Promise.all([transaction.mcp.listGroups(caller.siloId, groupIds), transaction.mcp.listPrincipals(caller.siloId, principalIds), _Capability(transaction)]);
-		if (groups.length !== groupIds.length || principals.length !== principalIds.length || !capability) return null;
+		if (groups.length !== groupIds.length || principals.length !== principalIds.length || !capability)
+			return null;
 		const resource = { kind: _RESOURCE_KIND, id: serverId } as const;
 		await transaction.managedGrants.reconcileManagedResourceGrants({
 			siloId: caller.siloId,
@@ -309,12 +316,14 @@ async function _Allowed(transaction: McpOperatorTransaction, caller: McpOperator
 	const boundaries: AuthorizationBoundary[] = [{ kind: AuthorizationBoundaryKinds.Personal, principalId: caller.principalId }];
 	for (const subject of subjects)
 	{
-		if (subject.kind === AuthorizationSubjectKinds.Group) boundaries.push({ kind: AuthorizationBoundaryKinds.Group, groupId: subject.groupId });
+		if (subject.kind === AuthorizationSubjectKinds.Group)
+			boundaries.push({ kind: AuthorizationBoundaryKinds.Group, groupId: subject.groupId });
 	}
 	for (const boundary of boundaries)
 	{
 		const decision = await __ResolvePrincipalAuthorization(transaction.authorization, { siloId: caller.siloId, principalId: caller.principalId, boundary, capability, resource: { kind: _RESOURCE_KIND, id: serverId }, nowEpochMs: Date.now() });
-		if (decision.outcome === AuthorizationDecisionOutcomes.Allow) return true;
+		if (decision.outcome === AuthorizationDecisionOutcomes.Allow)
+			return true;
 	}
 	return false;
 }
@@ -332,7 +341,8 @@ function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller,
 	{
 		const requiredApprovalStatus = sourceStatus ?? (status === "Approved" || status === "Published" ? _REQUIRED_APPROVAL[status] : undefined);
 		const server = await transaction.mcp.setApprovalStatus(caller.siloId, serverId, status, __McpEraProbeRequiredStates(status), requiredApprovalStatus);
-		if (!server) return null;
+		if (!server)
+			return null;
 		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} ${verb}`);
 		return _MapServer(server);
 	});
@@ -374,12 +384,15 @@ function _MapPrincipal(principal: McpOperatorPrincipalRecord): EntitledUser
  */
 function _CredentialSchema(value: unknown): CredentialField[]
 {
-	if (!Array.isArray(value)) return [];
+	if (!Array.isArray(value))
+		return [];
 	return value.flatMap(function _Field(entry): CredentialField[]
 	{
-		if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return [];
+		if (typeof entry !== "object" || entry === null || Array.isArray(entry))
+			return [];
 		const record = entry as Record<string, unknown>;
-		if (typeof record.key !== "string" || typeof record.label !== "string") return [];
+		if (typeof record.key !== "string" || typeof record.label !== "string")
+			return [];
 			return [{
 				key: record.key,
 				label: record.label,
@@ -399,6 +412,7 @@ function _CredentialSchema(value: unknown): CredentialField[]
  */
 function _Ids(values: readonly string[] | undefined): string[]
 {
-	if (!values) return [];
+	if (!values)
+		return [];
 	return ___SortBy([...new Set(values.map(value => value.trim()).filter(value => value.length > 0))]);
 }

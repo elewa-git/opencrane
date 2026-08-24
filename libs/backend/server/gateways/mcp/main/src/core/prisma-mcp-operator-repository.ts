@@ -28,10 +28,14 @@ function _ClaimDigest(kind: "key" | "name", value: string): string
 /** Translate Prisma's enum before a stored protocol-check state reaches domain code. */
 function _EraProbeState(value: McpEraProbeStatus): McpEraProbeStates
 {
-	if (value === "NotRequired") return McpEraProbeStates.NotRequired;
-	if (value === "Pending") return McpEraProbeStates.Pending;
-	if (value === "Accepted") return McpEraProbeStates.Accepted;
-	if (value === "Rejected") return McpEraProbeStates.Rejected;
+	if (value === "NotRequired")
+		return McpEraProbeStates.NotRequired;
+	if (value === "Pending")
+		return McpEraProbeStates.Pending;
+	if (value === "Accepted")
+		return McpEraProbeStates.Accepted;
+	if (value === "Rejected")
+		return McpEraProbeStates.Rejected;
 	throw new Error("MCP server has an unknown protocol-check state.");
 }
 
@@ -89,10 +93,13 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 	async setApprovalStatus(siloId: string, serverId: string, approvalStatus: string, requiredEraProbeStatuses?: readonly McpEraProbeStates[], requiredApprovalStatus?: string): Promise<McpOperatorServerRecord | null>
 	{
 		const where: Prisma.McpServerWhereInput = { id: serverId, siloId };
-		if (requiredEraProbeStatuses) where.eraProbeStatus = { in: [...requiredEraProbeStatuses] as McpEraProbeStatus[] };
-		if (requiredApprovalStatus) where.approvalStatus = requiredApprovalStatus as Prisma.McpServerWhereInput["approvalStatus"];
+		if (requiredEraProbeStatuses)
+			where.eraProbeStatus = { in: [...requiredEraProbeStatuses] as McpEraProbeStatus[] };
+		if (requiredApprovalStatus)
+			where.approvalStatus = requiredApprovalStatus as Prisma.McpServerWhereInput["approvalStatus"];
 		const changed = await this._transaction.mcpServer.updateMany({ where, data: { approvalStatus: approvalStatus as Prisma.McpServerUpdateInput["approvalStatus"] } });
-		if (changed.count !== 1) return null;
+		if (changed.count !== 1)
+			return null;
 		const server = await this._transaction.mcpServer.findFirst({ where: { id: serverId, siloId }, select: _SERVER_SELECT });
 		return server ? _ServerRecord(server) : null;
 	}
@@ -118,13 +125,15 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 			where: { siloId_registrationKeyDigest: { siloId: registration.siloId, registrationKeyDigest: registration.registrationKeyDigest } },
 			select: _SERVER_SELECT,
 		});
-		if (existingByKey) return { created: false, server: _ServerRecord(existingByKey) };
+		if (existingByKey)
+			return { created: false, server: _ServerRecord(existingByKey) };
 
 		const existingByName = await this._transaction.mcpServer.findUnique({
 			where: { siloId_name: { siloId: registration.siloId, name: registration.name } },
 			select: { id: true },
 		});
-		if (existingByName) return null;
+		if (existingByName)
+			return null;
 
 		const server = await this._transaction.mcpServer.create({ data: { ...registration, transport: "StreamableHttp", eraProbeStatus: McpEraProbeStates.Pending }, select: _SERVER_SELECT });
 		return { created: true, server: _ServerRecord(server) };
@@ -135,7 +144,8 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 	{
 		const stored = await this._transaction.mcpServer.findFirst({ where: { id: serverId, siloId }, select: _ERA_PROBE_TARGET_SELECT });
 		const target = stored ? _EraProbeTargetRecord(stored) : null;
-		if (!target?.registrationDigest) return null;
+		if (!target?.registrationDigest)
+			return null;
 		return { ...target, registrationDigest: target.registrationDigest };
 	}
 
@@ -150,7 +160,8 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 			data: { eraProbeStatus, eraProtocolVersion: result.protocolVersion ?? null, eraProbeEvidenceDigest: result.evidenceDigest, eraProbeFailureCode: result.failureCode ?? null, eraProbeAttempts: { increment: 1 }, eraProbedAt: new Date(), status, approvalStatus },
 		});
 		const server = await this._transaction.mcpServer.findFirst({ where: { id: serverId, siloId, registrationDigest }, select: _SERVER_SELECT });
-		if (!server) return null;
+		if (!server)
+			return null;
 		return { changed: changed.count === 1, server: _ServerRecord(server) };
 	}
 
@@ -158,7 +169,8 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 	async recordEraProbeRetry(siloId: string, serverId: string, registrationDigest: string, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult): Promise<McpEraProbeRetryResult | null>
 	{
 		const storedTarget = await this._transaction.mcpServer.findFirst({ where: { id: serverId, siloId, registrationDigest }, select: _ERA_PROBE_TARGET_SELECT });
-		if (!storedTarget) return null;
+		if (!storedTarget)
+			return null;
 		const target = _EraProbeTargetRecord(storedTarget);
 		const nextAttempt = target.eraProbeAttempts + 1;
 		const exhausted = nextAttempt >= maximumAttempts;
@@ -167,7 +179,8 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 			: { eraProbeAttempts: { increment: 1 } };
 		const changed = await this._transaction.mcpServer.updateMany({ where: { id: serverId, siloId, registrationDigest, eraProbeStatus: McpEraProbeStates.Pending, eraProbeAttempts: target.eraProbeAttempts }, data });
 		const server = await this._transaction.mcpServer.findFirst({ where: { id: serverId, siloId, registrationDigest }, select: _SERVER_SELECT });
-		if (!server) return null;
+		if (!server)
+			return null;
 		const record = _ServerRecord(server);
 		return { changed: changed.count === 1, exhausted: record.eraProbeStatus === McpEraProbeStates.Rejected && record.eraProbeFailureCode === exhaustedResult.failureCode, server: record };
 	}

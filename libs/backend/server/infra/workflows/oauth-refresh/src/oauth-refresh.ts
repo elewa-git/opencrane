@@ -9,13 +9,18 @@ import { OAuthRefreshOutcomes, OAuthRefreshTaskInputSchema, OAuthRefreshTaskName
 function _AssertTaskInput(input: OAuthRefreshTaskInput): void
 {
 	const parsed = OAuthRefreshTaskInputSchema.safeParse(input);
-	if (parsed.success) return;
+	if (parsed.success)
+		return;
 	const issue = parsed.error.issues[0];
-	if (issue?.code === "unrecognized_keys") throw new Error("OAuth refresh task input may contain only siloId, scopeKind, subjectId, connectionId, and refreshAt.");
+	if (issue?.code === "unrecognized_keys")
+		throw new Error("OAuth refresh task input may contain only siloId, scopeKind, subjectId, connectionId, and refreshAt.");
 	const field = issue?.path[0];
-	if (field === "scopeKind") throw new Error("scopeKind must identify a supported OAuth connection boundary.");
-	if (field === "refreshAt") throw new Error("refreshAt must be a UTC ISO-8601 instant.");
-	if (typeof field === "string") throw new Error(`${field} must be a non-empty string.`);
+	if (field === "scopeKind")
+		throw new Error("scopeKind must identify a supported OAuth connection boundary.");
+	if (field === "refreshAt")
+		throw new Error("refreshAt must be a UTC ISO-8601 instant.");
+	if (typeof field === "string")
+		throw new Error(`${field} must be a non-empty string.`);
 	throw new Error("OAuth refresh task input must be an object.");
 }
 

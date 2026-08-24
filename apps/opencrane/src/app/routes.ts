@@ -157,7 +157,8 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
 	{
 		const requestPrincipal = _ResolveRequestPrincipal(request);
 		const authUser = request.session?.authUser;
-		if (requestPrincipal === null || !authUser?.issuer || !authUser.sub) return null;
+		if (requestPrincipal === null || !authUser?.issuer || !authUser.sub)
+			return null;
 		return directory.resolveAuthenticatedPrincipal(requestPrincipal.siloId, authUser.issuer, authUser.sub);
 	};
 }
@@ -218,7 +219,8 @@ function _MountRouteAreas(app: Express, areas: readonly (readonly RouteMount[])[
 	{
 		for (const route of area)
 		{
-			if (route.method === "get") app.get(route.path, route.handler);
+			if (route.method === "get")
+				app.get(route.path, route.handler);
 			else app.use(route.path, route.handler);
 		}
 	}

@@ -27,7 +27,8 @@ function _Harness(): { unitOfWork: McpOperatorUnitOfWork; workflow: McpEraProbeW
 	const repository = {
 		createOrFindRemoteServer: vi.fn().mockImplementation(function _Create(registration: McpRemoteServerRegistrationRecord)
 		{
-			if (stored) return Promise.resolve({ created: false, server: stored });
+			if (stored)
+				return Promise.resolve({ created: false, server: stored });
 			stored = _Server(registration);
 			return Promise.resolve({ created: true, server: stored });
 		}),

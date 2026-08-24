@@ -13,12 +13,15 @@ import type { McpEraProbeComposition } from "./mcp-era-probe-composition.types";
 /** Translate infrastructure failures into the bounded outcomes owned by the MCP domain. */
 export function _McpEraProbeFailure(error: unknown): McpEraProbeFailure
 {
-	if (error instanceof McpEraProbeConfigurationError) return new McpEraProbeFailure(McpEraProbeFailureCodes.UnsafeEndpoint);
-	if (error instanceof McpEraProbeProtocolError) return new McpEraProbeFailure(McpEraProbeFailureCodes.InvalidResponse);
+	if (error instanceof McpEraProbeConfigurationError)
+		return new McpEraProbeFailure(McpEraProbeFailureCodes.UnsafeEndpoint);
+	if (error instanceof McpEraProbeProtocolError)
+		return new McpEraProbeFailure(McpEraProbeFailureCodes.InvalidResponse);
 	if (error instanceof McpEraProbeTransportError)
 	{
 		const status = error.code.startsWith("http_") ? Number(error.code.slice(5)) : null;
-		if (error.code === "network" || error.code === "timeout" || status === 429 || (status !== null && status >= 500)) return new McpEraProbeFailure(McpEraProbeFailureCodes.RetryableUnavailable);
+		if (error.code === "network" || error.code === "timeout" || status === 429 || (status !== null && status >= 500))
+			return new McpEraProbeFailure(McpEraProbeFailureCodes.RetryableUnavailable);
 		return new McpEraProbeFailure(McpEraProbeFailureCodes.InvalidResponse);
 	}
 	throw error;

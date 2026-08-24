@@ -25,7 +25,9 @@ vi.mock("@opencrane/backend/observability", function _Observability()
 
 vi.mock("../background-workers", function _BackgroundWorkers()
 {
-	return { _StartBackgroundWorkers: async function _StartBackgroundWorkers() { _calls.push("workers.start"); if (_workerFailures.start) throw _workerFailures.start; return { stop: async function _StopWorkers() { _calls.push("workers"); if (_workerFailures.stop) throw _workerFailures.stop; } }; } };
+	return { _StartBackgroundWorkers: async function _StartBackgroundWorkers() { _calls.push("workers.start"); if (_workerFailures.start)
+		throw _workerFailures.start; return { stop: async function _StopWorkers() { _calls.push("workers"); if (_workerFailures.stop)
+		throw _workerFailures.stop; } }; } };
 });
 
 vi.mock("../log", function _Log()
@@ -114,7 +116,8 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 
 		const term = process.listeners("SIGTERM").find(function _New(listener) { return !previousTerm.has(listener); });
 		const interrupt = process.listeners("SIGINT").find(function _New(listener) { return !previousInt.has(listener); });
-		if (term === undefined || interrupt === undefined) throw new Error("lifecycle did not register process signal handlers");
+		if (term === undefined || interrupt === undefined)
+			throw new Error("lifecycle did not register process signal handlers");
 		_registeredListeners.push({ signal: "SIGTERM", listener: term }, { signal: "SIGINT", listener: interrupt });
 		expect(_calls).toContain("socket.attach");
 		expect(_calls.indexOf("workers.start")).toBeLessThan(_calls.indexOf("socket.attach"));
@@ -142,7 +145,8 @@ describe("OpenCrane process lifecycle", function _LifecycleSuite()
 		await _StartProcessLifecycle(_App(_Server("public")), _App(_Server("internal")), prisma, {} as k8s.BatchV1Api, {} as ManagedRunAdmissionPort, {} as RunCancellationRepository, { publicPort: 8080, internalPort: 8081 } as OpenCraneProcessConfig, routes, { attach: vi.fn(), close: vi.fn() } as unknown as SelfConversationSocketServer, function _Unbind() { _calls.push("console"); }, {} as ExternalActionWorker, vi.fn(), {} as DurableWorkerRuntime);
 		const term = process.listeners("SIGTERM").find(function _New(listener) { return !previousTerm.has(listener); });
 		const interrupt = process.listeners("SIGINT").find(function _New(listener) { return !previousInt.has(listener); });
-		if (term === undefined || interrupt === undefined) throw new Error("lifecycle did not register process signal handlers");
+		if (term === undefined || interrupt === undefined)
+			throw new Error("lifecycle did not register process signal handlers");
 		_registeredListeners.push({ signal: "SIGTERM", listener: term }, { signal: "SIGINT", listener: interrupt });
 		term("SIGTERM");
 

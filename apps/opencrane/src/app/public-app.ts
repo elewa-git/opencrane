@@ -78,7 +78,8 @@ export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, r
 	app.use("/api/v1/auth", ___AuthRouter(authentication.authService));
 	app.use(authentication.authMiddleware);
 	const organizationMembers = _CreateOrganizationMembersComposition(prisma, _ReadOrganizationMembershipConfig());
-	if (organizationMembers.productAccess !== null) app.use(organizationMembers.productAccess);
+	if (organizationMembers.productAccess !== null)
+		app.use(organizationMembers.productAccess);
 
 	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
 	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, runCancellation, serverNamespace, obotCustody, artifactScannerEnabled, organizationMembers.router, mcpEraProbe);
