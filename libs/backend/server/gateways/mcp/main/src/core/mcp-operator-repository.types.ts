@@ -1,4 +1,7 @@
 import type { AuthorizationContextRepository, CapabilityCatalogRepository, ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
+import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+
+import type { McpEraProbeStates, McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
 
 /**
  * Carries the MCP catalog fields that operator flows return to API clients.
@@ -26,6 +29,83 @@ export interface McpOperatorServerRecord
 	readonly credentialSchema: unknown;
 	/** Gives the optional entitlement summary exposed in catalog responses. */
 	readonly entitlementSummary: string | null;
+	/** Gives the public HTTPS endpoint saved for the protocol-check worker. */
+	readonly endpoint: string;
+	/** Carries the request-key digest used to find a repeated remote registration, or `null` for other rows. */
+	readonly registrationKeyDigest: string | null;
+	/** Carries the digest that binds a probe task to its registration fields, or `null` for other rows. */
+	readonly registrationDigest: string | null;
+	/** Gives the checked protocol state translated from the database enum. */
+	readonly eraProbeStatus: McpEraProbeStates;
+	/** Gives the protocol revision returned by a completed check, or `null` when none was observed. */
+	readonly eraProtocolVersion: string | null;
+	/** Gives the response or failure digest saved when the check finishes. */
+	readonly eraProbeEvidenceDigest: string | null;
+	/** Gives the saved failure reason when the check ended without a usable protocol revision. */
+	readonly eraProbeFailureCode: string | null;
+	/** Gives the latest workflow-engine attempt recorded for this registration. */
+	readonly eraProbeAttempts: number;
+}
+
+/** Fields required to create or find one remote MCP registration. */
+export interface McpRemoteServerRegistrationRecord
+{
+	/** Silo derived from the authenticated request host. */
+	readonly siloId: string;
+	/** Display name that remains unique inside the silo. */
+	readonly name: string;
+	/** Description shown to administrators during review. */
+	readonly description: string;
+	/** Public HTTPS endpoint checked by the worker. */
+	readonly endpoint: string;
+	/** Digest of the client key used to find a retried registration. */
+	readonly registrationKeyDigest: string;
+	/** Digest of every registration field that must remain unchanged on retry. */
+	readonly registrationDigest: string;
+}
+
+/** Result of claiming and resolving one remote MCP registration identity. */
+export interface McpRemoteServerCreateResult
+{
+	/** True only when this transaction created the draft server. */
+	readonly created: boolean;
+	/** Draft server selected by the registration key. */
+	readonly server: McpOperatorServerRecord;
+}
+
+/** Stored target loaded before the workflow contacts a remote server. */
+export interface McpEraProbeTargetRecord
+{
+	/** HTTPS endpoint saved with the draft catalogue row. */
+	readonly endpoint: string;
+	/** Registration digest that must still match the admitted task. */
+	readonly registrationDigest: string;
+	/** Current result state used to make task replay a no-op. */
+	readonly eraProbeStatus: McpEraProbeStates;
+	/** Protocol revision already stored after a completed task. */
+	readonly eraProtocolVersion: string | null;
+	/** Discovery-response digest already stored after a completed task. */
+	readonly eraProbeEvidenceDigest: string | null;
+	/** Bounded reason stored when the endpoint or response was terminally invalid. */
+	readonly eraProbeFailureCode: string | null;
+	/** Gives the latest workflow-engine attempt already recorded for this registration. */
+	readonly eraProbeAttempts: number;
+}
+
+/** Result returned after a transaction tries to record one probe decision. */
+export interface McpEraProbeWriteResult
+{
+	/** True when this transaction changed the pending row. */
+	readonly changed: boolean;
+	/** Stored server row after the idempotent transition. */
+	readonly server: McpOperatorServerRecord;
+}
+
+/** Result of recording one temporary probe failure. */
+export interface McpEraProbeRetryResult extends McpEraProbeWriteResult
+{
+	/** True when this failure consumed the final allowed attempt and stored rejection evidence. */
+	readonly exhausted: boolean;
 }
 
 /**
@@ -36,12 +116,12 @@ export interface McpOperatorServerRecord
  */
 export interface McpOperatorInstallRecord
 {
-	/** Identifies the catalog server that this principal installed. */
-	readonly mcpServerId: string;
-	/** Carries the persisted connection state mapped into the installed-server response. */
-	readonly connectionStatus: string;
-	/** Records when the installed server was last used, when that usage has been recorded. */
-	readonly lastUsedAt: Date | null;
+  /** Identifies the catalog server that this principal installed. */
+  readonly mcpServerId: string;
+  /** Carries the persisted connection state mapped into the installed-server response. */
+  readonly connectionStatus: string;
+  /** Records when the installed server was last used, when that usage has been recorded. */
+  readonly lastUsedAt: Date | null;
 }
 
 /**
@@ -52,10 +132,10 @@ export interface McpOperatorInstallRecord
  */
 export interface McpOperatorGroupRecord
 {
-	/** Identifies the local group used in an authorization subject. */
-	readonly id: string;
-	/** Gives the group name shown to an access-policy editor. */
-	readonly name: string;
+  /** Identifies the local group used in an authorization subject. */
+  readonly id: string;
+  /** Gives the group name shown to an access-policy editor. */
+  readonly name: string;
 }
 
 /**
@@ -66,12 +146,21 @@ export interface McpOperatorGroupRecord
  */
 export interface McpOperatorPrincipalRecord
 {
-	/** Identifies the local principal used in an authorization subject. */
-	readonly id: string;
-	/** Gives the principal email when the directory has one. */
-	readonly email: string | null;
-	/** Gives the principal display name when the directory has one. */
-	readonly displayName: string | null;
+  /** Identifies the local principal used in an authorization subject. */
+  readonly id: string;
+  /** Gives the principal email when the directory has one. */
+  readonly email: string | null;
+  /** Gives the principal display name when the directory has one. */
+  readonly displayName: string | null;
+}
+
+/** Authenticated administrator recorded with a catalogue audit entry. */
+export interface McpOperatorAuditActor
+{
+	/** Silo in which the administrator acted. */
+	readonly siloId: string;
+	/** Saved principal identifier resolved from the authenticated request. */
+	readonly actorPrincipalId: string;
 }
 
 /**
@@ -139,15 +228,58 @@ export interface IMcpOperatorRepository
 	 */
 	deleteInstall(serverId: string, principalId: string): Promise<boolean>;
 	/**
-	 * Changes a server's approval state when the server belongs to the requested silo.
+	 * Changes a server's approval state when it belongs to the requested silo and protocol-check state.
 	 *
 	 * Called by: approval and enablement flows before they append their governance audit entry.
 	 * @param siloId - Keeps the update inside the authenticated caller's silo.
 	 * @param serverId - Identifies the server whose approval state should change.
 	 * @param approvalStatus - Supplies the persisted approval state to write.
+	 * @param requiredEraProbeStatuses - Restricts the change to the allowed stored protocol-check results.
+	 * @param requiredApprovalStatus - Restricts the change to the required current approval state.
 	 * @returns The updated server row, or `null` when no server with this ID belongs to the silo.
 	 */
-	setApprovalStatus(siloId: string, serverId: string, approvalStatus: string): Promise<McpOperatorServerRecord | null>;
+	setApprovalStatus(siloId: string, serverId: string, approvalStatus: string, requiredEraProbeStatuses?: readonly McpEraProbeStates[], requiredApprovalStatus?: string): Promise<McpOperatorServerRecord | null>;
+	/**
+	 * Creates a draft remote server or returns the server previously claimed by the request key.
+	 *
+	 * Called by: `registerRemoteServer` before it admits the protocol-check task in the transaction.
+	 * @param registration - Supplies the silo, server fields, and digests used to claim the request key and name.
+	 * @returns A new draft, the draft already claimed by the request key, or `null` when the name belongs to another registration.
+	 */
+	createOrFindRemoteServer(registration: McpRemoteServerRegistrationRecord): Promise<McpRemoteServerCreateResult | null>;
+	/**
+	 * Loads the server fields that a protocol-check task must compare before contacting its endpoint.
+	 *
+	 * Called by: `_LoadTarget` before the workflow replays or performs an external check.
+	 * @param siloId - Keeps the lookup inside the task's admitted silo.
+	 * @param serverId - Identifies the draft server the task was admitted for.
+	 * @returns The stored target, or `null` when the server is absent, belongs to another silo, or has no registration digest.
+	 */
+	loadEraProbeTarget(siloId: string, serverId: string): Promise<McpEraProbeTargetRecord | null>;
+	/**
+	 * Stores a pending protocol check's accepted or rejected result when its registration still matches.
+	 *
+	 * Called by: `_RecordResult` after the workflow obtains discovery evidence or a final failure.
+	 * @param siloId - Keeps the update inside the task's admitted silo.
+	 * @param serverId - Identifies the draft server whose pending check should finish.
+	 * @param registrationDigest - Prevents a task admitted for replaced fields from changing the server.
+	 * @param result - Supplies the protocol decision and the evidence saved with it.
+	 * @returns The stored server and whether this call changed it, or `null` when the registration no longer matches.
+	 */
+	recordEraProbeResult(siloId: string, serverId: string, registrationDigest: string, result: McpEraProbeTaskResult): Promise<McpEraProbeWriteResult | null>;
+	/**
+	 * Records another temporary failure and rejects the server when the stored attempt count reaches the limit.
+	 *
+	 * Called by: `_RecordRetry` after the remote check reports a failure that may clear later.
+	 * @param siloId - Keeps the update inside the task's admitted silo.
+	 * @param serverId - Identifies the draft server whose failed check is being counted.
+	 * @param registrationDigest - Prevents a task admitted for replaced fields from changing the server.
+	 * @param attempt - Gives the current workflow-engine attempt, including earlier handler failures.
+	 * @param maximumAttempts - Sets the attempt count at which the server becomes rejected.
+	 * @param exhaustedResult - Supplies the rejection evidence stored when no attempts remain.
+	 * @returns The stored server, whether this call changed it, and whether it is now rejected; or `null` when the registration no longer matches.
+	 */
+	recordEraProbeRetry(siloId: string, serverId: string, registrationDigest: string, attempt: number, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult): Promise<McpEraProbeRetryResult | null>;
 	/**
 	 * Lists groups in the requested silo, optionally restricted to the supplied group IDs.
 	 *
@@ -176,9 +308,10 @@ export interface IMcpOperatorRepository
 	 * @param action - Records the action category for the audit entry.
 	 * @param resource - Identifies the MCP resource affected by the action.
 	 * @param message - Records the human-readable audit detail.
+	 * @param actor - Identifies the authenticated administrator when this is a governance action.
 	 * @returns Resolves after the audit entry has been added to the transaction.
 	 */
-	appendAudit(action: string, resource: string, message: string): Promise<void>;
+	appendAudit(action: string, resource: string, message: string, actor?: McpOperatorAuditActor): Promise<void>;
 }
 
 /**
@@ -198,6 +331,8 @@ export interface McpOperatorTransaction
 	readonly capabilityCatalog: CapabilityCatalogRepository;
 	/** Reads and reconciles the grant set owned by the MCP access editor. */
 	readonly managedGrants: ManagedAuthorizationGrantRepository;
+	/** Opaque form of this same database transaction used for task admission. */
+	readonly workflowTransaction: IWorkflowTransaction;
 }
 
 /**
@@ -209,13 +344,13 @@ export interface McpOperatorTransaction
  */
 export interface McpOperatorUnitOfWork
 {
-	/**
-	 * Runs an MCP operation with repositories attached to the same transaction.
-	 *
-	 * Called by: every exported MCP operator flow before it reads or mutates authority data.
-	 * @param operation - Receives the transaction-scoped repositories and returns the caller's result.
-	 * @returns The operation result after all writes made by it commit.
-	 * @throws Rejects after rolling back the operation's writes when it or its transaction cannot complete.
-	 */
-	execute<Result>(operation: (transaction: McpOperatorTransaction) => Promise<Result>): Promise<Result>;
+  /**
+   * Runs an MCP operation with repositories attached to the same transaction.
+   *
+   * Called by: every exported MCP operator flow before it reads or mutates authority data.
+   * @param operation - Receives the transaction-scoped repositories and returns the caller's result.
+   * @returns The operation result after all writes made by it commit.
+   * @throws Rejects after rolling back the operation's writes when it or its transaction cannot complete.
+   */
+  execute<Result>(operation: (transaction: McpOperatorTransaction) => Promise<Result>): Promise<Result>;
 }

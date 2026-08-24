@@ -123,6 +123,19 @@ spec:
               value: {{ .Values.clustertenantManager.runAdmission.maxConcurrent | quote }}
             - name: AGENT_RUN_ADMISSION_MAX_QUEUED
               value: {{ .Values.clustertenantManager.runAdmission.maxQueued | quote }}
+            # Absurd runs saved control-plane tasks from the same silo database used by product writes.
+            - name: OPENCRANE_SILO_ID
+              value: {{ $channelSiloId | quote }}
+            - name: OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE
+              value: {{ .Values.clustertenantManager.workflows.databasePoolSize | quote }}
+            - name: OPENCRANE_WORKFLOW_WORKER_CONCURRENCY
+              value: {{ .Values.clustertenantManager.workflows.workerConcurrency | quote }}
+            - name: OPENCRANE_WORKFLOW_POLL_INTERVAL_MS
+              value: {{ .Values.clustertenantManager.workflows.pollIntervalMilliseconds | quote }}
+            - name: OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS
+              value: {{ .Values.clustertenantManager.workflows.mcpEraProbeTimeoutMilliseconds | quote }}
+            - name: OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES
+              value: {{ .Values.clustertenantManager.workflows.mcpEraProbeMaximumResponseBytes | quote }}
             - name: OPENCRANE_MEMBERSHIP_MODE
               value: {{ $membership.mode | quote }}
             - name: OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS

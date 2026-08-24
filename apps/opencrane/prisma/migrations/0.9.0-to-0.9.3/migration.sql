@@ -3415,6 +3415,8 @@ ALTER TABLE "mcp_server_installs" ALTER COLUMN "connection_status" TYPE "McpConn
 ALTER TABLE "mcp_server_installs" ALTER COLUMN "connection_status" SET DEFAULT 'needs-credential';
 DROP TYPE "McpConnectionStatus_legacy";
 
+CREATE TYPE "McpEraProbeStatus" AS ENUM ('not-required', 'pending', 'accepted', 'rejected');
+
 CREATE TEMPORARY TABLE "_iam_group_reference" (
     "reference" TEXT NOT NULL,
     "group_id" TEXT NOT NULL,
@@ -3754,6 +3756,34 @@ CREATE TRIGGER "memory_datasets_closed_lifecycle" BEFORE UPDATE OR DELETE ON "me
 ALTER TABLE "mcp_servers" ADD COLUMN "silo_id" TEXT;
 UPDATE "mcp_servers" SET "silo_id" = current_setting('opencrane.migration_silo_id');
 ALTER TABLE "mcp_servers" ALTER COLUMN "silo_id" SET NOT NULL;
+ALTER TABLE "mcp_servers" ADD COLUMN "registration_key_digest" TEXT;
+ALTER TABLE "mcp_servers" ADD COLUMN "registration_digest" TEXT;
+ALTER TABLE "mcp_servers" ADD COLUMN "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT 'not-required';
+ALTER TABLE "mcp_servers" ADD COLUMN "era_protocol_version" TEXT;
+ALTER TABLE "mcp_servers" ADD COLUMN "era_probe_evidence_digest" TEXT;
+ALTER TABLE "mcp_servers" ADD COLUMN "era_probe_failure_code" TEXT;
+ALTER TABLE "mcp_servers" ADD COLUMN "era_probe_attempts" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "mcp_servers" ADD COLUMN "era_probed_at" TIMESTAMP(3);
+
+CREATE TABLE "mcp_registration_claims" (
+    "silo_id" TEXT NOT NULL,
+    "identity_digest" TEXT NOT NULL,
+    "touched_at" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "mcp_registration_claims_pkey" PRIMARY KEY ("silo_id", "identity_digest")
+);
+ALTER TABLE "mcp_registration_claims" ADD CONSTRAINT "mcp_registration_claims_identity_check" CHECK (
+    btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
+);
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_registration_digest_check" CHECK (
+    ("registration_key_digest" IS NULL AND "registration_digest" IS NULL)
+    OR ("registration_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registration_digest" ~ '^sha256:[0-9a-f]{64}$')
+);
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_era_probe_evidence_check" CHECK (
+    ("era_probe_status" = 'not-required' AND "era_probe_attempts" = 0 AND "registration_key_digest" IS NULL AND "registration_digest" IS NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
+    OR ("era_probe_status" = 'pending' AND "era_probe_attempts" >= 0 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
+    OR ("era_probe_status" = 'accepted' AND "era_probe_attempts" >= 1 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND btrim("era_protocol_version") <> '' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NOT NULL)
+    OR ("era_probe_status" = 'rejected' AND "era_probe_attempts" >= 1 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probed_at" IS NOT NULL AND ((btrim("era_protocol_version") <> '' AND "era_probe_failure_code" IS NULL) OR ("era_protocol_version" IS NULL AND "era_probe_failure_code" IN ('unsafe_endpoint', 'invalid_response', 'retry_exhausted'))))
+);
 
 DO $$
 BEGIN
@@ -3931,6 +3961,7 @@ CREATE UNIQUE INDEX "groups_id_silo_id_key" ON "groups"("id", "silo_id");
 CREATE UNIQUE INDEX "groups_silo_id_name_key" ON "groups"("silo_id", "name");
 CREATE INDEX "group_memberships_silo_id_principal_id_idx" ON "group_memberships"("silo_id", "principal_id");
 CREATE UNIQUE INDEX "mcp_servers_silo_id_name_key" ON "mcp_servers"("silo_id", "name");
+CREATE UNIQUE INDEX "mcp_servers_silo_id_registration_key_digest_key" ON "mcp_servers"("silo_id", "registration_key_digest");
 CREATE INDEX "mcp_server_installs_principal_id_idx" ON "mcp_server_installs"("principal_id");
 CREATE UNIQUE INDEX "mcp_server_installs_mcp_server_id_principal_id_key" ON "mcp_server_installs"("mcp_server_id", "principal_id");
 CREATE INDEX "verified_fleet_membership_assertions_silo_id_subject_id_idx" ON "verified_fleet_membership_assertions"("silo_id", "subject_id");
@@ -4186,13 +4217,64 @@ DROP TYPE "GrantScope";
 DROP TYPE "GrantSubjectType";
 DROP TYPE "FleetMembershipScopeKind";
 
+CREATE FUNCTION public."fail_absurd_task_terminal"(
+    p_queue_name TEXT,
+    p_task_id UUID,
+    p_reason JSONB
+) RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_run_id UUID;
+    v_attempt INTEGER;
+BEGIN
+    IF p_queue_name IS NULL OR btrim(p_queue_name) = '' OR NOT EXISTS (
+        SELECT 1 FROM absurd.queues WHERE queue_name = p_queue_name
+    ) THEN
+        RAISE EXCEPTION 'Terminal workflow failure requires an existing Absurd queue';
+    END IF;
+    IF jsonb_typeof(p_reason) <> 'object' THEN
+        RAISE EXCEPTION 'Terminal workflow failure reason must be a JSON object';
+    END IF;
+
+    EXECUTE format(
+        'SELECT run_id, attempt
+           FROM absurd.%I
+          WHERE task_id = $1
+            AND state IN (''running'', ''sleeping'')
+          ORDER BY attempt DESC
+          LIMIT 1
+          FOR UPDATE',
+        'r_' || p_queue_name
+    )
+    INTO v_run_id, v_attempt
+    USING p_task_id;
+
+    IF v_run_id IS NULL THEN
+        RAISE EXCEPTION 'Absurd task % has no active run in queue %', p_task_id, p_queue_name;
+    END IF;
+
+    EXECUTE format(
+        'UPDATE absurd.%I
+            SET max_attempts = $2
+          WHERE task_id = $1
+            AND state NOT IN (''completed'', ''failed'', ''cancelled'')',
+        't_' || p_queue_name
+    )
+    USING p_task_id, v_attempt;
+
+    PERFORM absurd.fail_run(p_queue_name, v_run_id, p_reason, NULL);
+END;
+$$;
+
+SELECT absurd.create_queue('control-plane');
 
 INSERT INTO "opencrane_migrations"."schema_history" (
     "schema_version", "source_schema_version", "source_baseline_sha256",
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.9.3', '0.9.0', :'source_baseline_sha256',
-    'abacee3698553f110f70a630da5115e3ad6d54ddc98a7416f75d12a1560b7420',
+    '7fa60a4bb68888a69ff2c9cdf23cd85e972c9521f9a51dacd564dead15b0c949',
     :'migration_sql_sha256', '0.9.0-to-0.9.3'
 );
 

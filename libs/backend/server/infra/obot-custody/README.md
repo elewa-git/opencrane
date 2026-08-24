@@ -43,7 +43,7 @@ before transport, performs the Model Context Protocol (MCP) initialize exchange,
 validated session id, then calls the admitted tool. It accepts bounded JSON or server-sent event
 responses and returns only the validated `content` value. Invalid shapes raise a static protocol
 error; provider error bodies never leave the transport. A valid MCP `isError: true` result remains
-a typed tool failure for the durable worker to record, rather than being mistaken for success.
+a typed tool failure for the workflow worker to record, rather than being mistaken for success.
 
 **Transport discipline** (`__CreateObotSession`): a release-local `*.svc.cluster.local` HTTP origin
 only, the mounted service credential re-read per call, a per-request timeout plus process-shutdown

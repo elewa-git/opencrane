@@ -1,4 +1,4 @@
-import type { DurableExecution, DurableExecutionTransaction, DurableTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowEngine, IWorkflowTaskReceipt, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 import { z } from "zod";
 
 /**
@@ -69,13 +69,13 @@ export interface OAuthRefreshTaskAdmission
 	/** Stable key for this silo, scope, subject, and connection task. */
 	readonly taskKey: string;
 	/** Engine receipt for the admitted task. */
-	readonly receipt: DurableTaskReceipt;
+	readonly receipt: IWorkflowTaskReceipt;
 }
 
 /**
  * The safe result of refreshing or checking one OAuth connection.
  *
- * The durable engine saves this result as the task output. Every member ends this refresh task; a
+ * The workflow engine saves this result as the task output. Every member ends this refresh task; a
  * later `refreshAt` value is required to admit another task for the same connection.
  */
 export enum OAuthRefreshOutcomes
@@ -111,8 +111,8 @@ export interface OAuthRefreshConnectionPort
 /** Dependencies used to register and admit the OAuth refresh task. */
 export interface OAuthRefreshWorkflowOptions
 {
-	/** Durable execution that registers and saves the task. */
-	readonly execution: DurableExecution;
+	/** Workflow engine that registers and saves the task. */
+	readonly execution: IWorkflowEngine;
 	/** Product-owned port that refreshes the connection without exposing credentials. */
 	readonly connections: OAuthRefreshConnectionPort;
 }
@@ -126,5 +126,5 @@ export interface OAuthRefreshWorkflowOptions
 export interface OAuthRefreshWorkflow
 {
 	/** Save or return the task for one scoped OAuth connection in this database transaction. */
-	admit(transaction: DurableExecutionTransaction, input: OAuthRefreshTaskInput): Promise<OAuthRefreshTaskAdmission>;
+	admit(transaction: IWorkflowTransaction, input: OAuthRefreshTaskInput): Promise<OAuthRefreshTaskAdmission>;
 }

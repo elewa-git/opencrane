@@ -1,4 +1,4 @@
-# @opencrane/backend/server/infra/workflows/testing — durable execution tests
+# @opencrane/backend/server/infra/workflows/testing — workflow engine tests
 
 > [infra](../../README.md) › [workflows](../README.md) › testing
 
@@ -20,9 +20,9 @@ retries, future time, or production transaction validation.
 
 ## Public surface
 
-- `__FakeDurableExecution` — engine-free deterministic `DurableExecution` implementation.
-- `_DescribeDurableExecutionContract` — reusable Vitest suite for fake and real adapters.
-- Harness and fake task-snapshot types.
+- `__FakeWorkflowEngine` — deterministic `IWorkflowEngine` implementation without an engine.
+- `__TestWorkflowEngineContract` — reusable Vitest suite for fake and real workflow engines.
+- `IWorkflowHarness`, `IWorkflowHarnessFactory`, and fake task-snapshot types.
 
 ## Boundary
 

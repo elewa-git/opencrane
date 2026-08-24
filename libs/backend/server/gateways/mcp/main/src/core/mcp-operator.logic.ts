@@ -4,6 +4,7 @@ import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, Authorizati
 import { ___SortBy } from "@opencrane/util";
 import type { McpAccessPolicyCommand, McpOperatorCaller } from "./mcp-operator.logic.types";
 import type { McpOperatorInstallRecord, McpOperatorPrincipalRecord, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork } from "./mcp-operator-repository.types";
+import { __McpEraProbeRequiredStates } from "../era-probe/mcp-era-probe-state";
 
 const _CATALOG_ID = "opencrane-core";
 const _CATALOG_REVISION = 1;
@@ -13,6 +14,7 @@ const _RESOURCE_KIND = "mcp-server";
 
 const _TYPE = { SingleUser: McpServerType.SingleUser, MultiUser: McpServerType.MultiUser, RemoteOauth: McpServerType.RemoteOauth } as const;
 const _APPROVAL = { PendingReview: McpApprovalStatus.PendingReview, Approved: McpApprovalStatus.Approved, Published: McpApprovalStatus.Published, Disabled: McpApprovalStatus.Disabled } as const;
+const _REQUIRED_APPROVAL = { Approved: "PendingReview", Published: "Approved" } as const;
 const _CONNECTION = { NeedsCredential: McpConnectionStatus.NeedsCredential, SharedKey: McpConnectionStatus.SharedKey } as const;
 const _AVATAR_COLORS = ["#1F3B6E", "#2E7D32", "#6A1B9A", "#C62828", "#00838F", "#EF6C00", "#4527A0", "#283593"];
 
@@ -33,7 +35,8 @@ export function listEntitledCatalog(unitOfWork: McpOperatorUnitOfWork, caller: M
 	return unitOfWork.execute(async function _List(transaction)
 	{
 		const [servers, capability] = await Promise.all([transaction.mcp.listPublishedServers(caller.siloId), _Capability(transaction)]);
-		if (!capability) return [];
+		if (!capability)
+			return [];
 		const decisions = await Promise.all(servers.map(async function _Decide(server)
 		{
 			return await _Allowed(transaction, caller, capability, server.id) ? _MapServer(server) : null;
@@ -97,7 +100,8 @@ export function installServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOper
 	return unitOfWork.execute(async function _Install(transaction)
 	{
 		const [server, capability] = await Promise.all([transaction.mcp.findServer(caller.siloId, serverId), _Capability(transaction)]);
-		if (!server || server.approvalStatus !== "Published" || !capability || !(await _Allowed(transaction, caller, capability, serverId))) return null;
+		if (!server || server.approvalStatus !== "Published" || !capability || !(await _Allowed(transaction, caller, capability, serverId)))
+			return null;
 		const status = server.serverType === "MultiUser" ? "SharedKey" : "NeedsCredential";
 		const installed = await transaction.mcp.upsertInstall(serverId, caller.principalId, status);
 		await transaction.mcp.appendAudit("Created", `McpServerInstall/${serverId}:${caller.principalId}`, `MCP server ${serverId} installed for ${caller.principalId}`);
@@ -122,7 +126,8 @@ export function uninstallServer(unitOfWork: McpOperatorUnitOfWork, principalId: 
 	return unitOfWork.execute(async function _Delete(transaction)
 	{
 		const removed = await transaction.mcp.deleteInstall(serverId, principalId);
-		if (removed) await transaction.mcp.appendAudit("Deleted", `McpServerInstall/${serverId}:${principalId}`, `MCP server ${serverId} uninstalled for ${principalId}`);
+		if (removed)
+			await transaction.mcp.appendAudit("Deleted", `McpServerInstall/${serverId}:${principalId}`, `MCP server ${serverId} uninstalled for ${principalId}`);
 		return removed ? "removed" : "not_found";
 	});
 }
@@ -130,8 +135,9 @@ export function uninstallServer(unitOfWork: McpOperatorUnitOfWork, principalId: 
 /**
  * Sets a server's approval status to `Approved` in the authenticated silo.
  *
- * This endpoint is a status setter: it does not require the server to be in a prior approval
- * status. A missing server in the silo returns `null`; an updated server is audited and returned.
+ * The server must be waiting for review and must have accepted protocol evidence, unless it is an
+ * existing catalogue row that predates protocol checks. The update and audit entry share one
+ * database transaction.
  *
  * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/approve`.
  * @param unitOfWork - Runs the status update and audit write together.
@@ -147,8 +153,9 @@ export function approveServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOper
 /**
  * Sets a server's approval status to `Published` in the authenticated silo.
  *
- * This endpoint is a status setter: it does not require the server to be in a prior approval
- * status. A missing server in the silo returns `null`; an updated server is audited and returned.
+ * The server must already be approved and must have accepted protocol evidence, unless it is an
+ * existing catalogue row that predates protocol checks. The update and audit entry share one
+ * database transaction.
  *
  * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/publish`.
  * @param unitOfWork - Runs the status update and audit write together.
@@ -181,8 +188,8 @@ export function rejectServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOpera
 /**
  * Sets a server's approval status from an administrator's enabled choice.
  *
- * `true` writes `Published` and `false` writes `Disabled`. Like the other approval endpoints,
- * this is a status setter and does not require the server to be in a prior status.
+ * `false` disables the current server. `true` restores a disabled server to `Published` after the
+ * same saved protocol evidence check used by first publication.
  *
  * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/enabled`.
  * @param unitOfWork - Runs the status update and audit write together.
@@ -193,7 +200,8 @@ export function rejectServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOpera
  */
 export function setServerEnabled(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, enabled: boolean): Promise<McpCatalogServer | null>
 {
-	if (enabled) return _Approval(unitOfWork, caller, serverId, "Published", "enabled");
+	if (enabled)
+		return _Approval(unitOfWork, caller, serverId, "Published", "enabled", "Disabled");
 	return _Approval(unitOfWork, caller, serverId, "Disabled", "disabled");
 }
 
@@ -214,7 +222,8 @@ export function getAccessPolicy(unitOfWork: McpOperatorUnitOfWork, caller: McpOp
 {
 	return unitOfWork.execute(async function _Read(transaction)
 	{
-		if (!(await transaction.mcp.findServer(caller.siloId, serverId))) return null;
+		if (!(await transaction.mcp.findServer(caller.siloId, serverId)))
+			return null;
 		const grants = await transaction.managedGrants.listManagedResourceGrants(caller.siloId, _ACCESS_MANAGER_ID, { kind: _RESOURCE_KIND, id: serverId });
 		const groupIds = grants.flatMap(grant => grant.subject.kind === AuthorizationSubjectKinds.Group ? [grant.subject.groupId] : []);
 		const principalIds = grants.flatMap(grant => grant.subject.kind === AuthorizationSubjectKinds.Principal ? [grant.subject.principalId] : []);
@@ -241,11 +250,13 @@ export function setAccessPolicy(unitOfWork: McpOperatorUnitOfWork, caller: McpOp
 {
 	return unitOfWork.execute(async function _Write(transaction)
 	{
-		if (!(await transaction.mcp.findServer(caller.siloId, serverId))) return null;
+		if (!(await transaction.mcp.findServer(caller.siloId, serverId)))
+			return null;
 		const groupIds = _Ids(body.groupIds);
 		const principalIds = _Ids(body.principalIds);
 		const [groups, principals, capability] = await Promise.all([transaction.mcp.listGroups(caller.siloId, groupIds), transaction.mcp.listPrincipals(caller.siloId, principalIds), _Capability(transaction)]);
-		if (groups.length !== groupIds.length || principals.length !== principalIds.length || !capability) return null;
+		if (groups.length !== groupIds.length || principals.length !== principalIds.length || !capability)
+			return null;
 		const resource = { kind: _RESOURCE_KIND, id: serverId } as const;
 		await transaction.managedGrants.reconcileManagedResourceGrants({
 			siloId: caller.siloId,
@@ -257,7 +268,7 @@ export function setAccessPolicy(unitOfWork: McpOperatorUnitOfWork, caller: McpOp
 			],
 			now: new Date(),
 		});
-		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} authorization grants updated`);
+		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} authorization grants updated`, { siloId: caller.siloId, actorPrincipalId: caller.principalId });
 		return { serverId, groups: [...groups], users: principals.map(_MapPrincipal) };
 	});
 }
@@ -305,12 +316,14 @@ async function _Allowed(transaction: McpOperatorTransaction, caller: McpOperator
 	const boundaries: AuthorizationBoundary[] = [{ kind: AuthorizationBoundaryKinds.Personal, principalId: caller.principalId }];
 	for (const subject of subjects)
 	{
-		if (subject.kind === AuthorizationSubjectKinds.Group) boundaries.push({ kind: AuthorizationBoundaryKinds.Group, groupId: subject.groupId });
+		if (subject.kind === AuthorizationSubjectKinds.Group)
+			boundaries.push({ kind: AuthorizationBoundaryKinds.Group, groupId: subject.groupId });
 	}
 	for (const boundary of boundaries)
 	{
 		const decision = await __ResolvePrincipalAuthorization(transaction.authorization, { siloId: caller.siloId, principalId: caller.principalId, boundary, capability, resource: { kind: _RESOURCE_KIND, id: serverId }, nowEpochMs: Date.now() });
-		if (decision.outcome === AuthorizationDecisionOutcomes.Allow) return true;
+		if (decision.outcome === AuthorizationDecisionOutcomes.Allow)
+			return true;
 	}
 	return false;
 }
@@ -318,16 +331,19 @@ async function _Allowed(transaction: McpOperatorTransaction, caller: McpOperator
 /**
  * Writes a requested approval status and appends the matching audit entry.
  *
- * It delegates to the silo-scoped repository setter and intentionally does not inspect the server's
- * current status; the route endpoints therefore set a status rather than enforce a transition.
+ * The repository checks the required current approval and protocol states in the same update that
+ * writes the new state. A caller may override the normal approval source for a named transition,
+ * such as restoring a disabled server to `Published`.
  */
-function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, status: string, verb: string): Promise<McpCatalogServer | null>
+function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, status: string, verb: string, sourceStatus?: string): Promise<McpCatalogServer | null>
 {
 	return unitOfWork.execute(async function _Update(transaction)
 	{
-		const server = await transaction.mcp.setApprovalStatus(caller.siloId, serverId, status);
-		if (!server) return null;
-		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} ${verb}`);
+		const requiredApprovalStatus = sourceStatus ?? (status === "Approved" || status === "Published" ? _REQUIRED_APPROVAL[status] : undefined);
+		const server = await transaction.mcp.setApprovalStatus(caller.siloId, serverId, status, __McpEraProbeRequiredStates(status), requiredApprovalStatus);
+		if (!server)
+			return null;
+		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} ${verb}`, { siloId: caller.siloId, actorPrincipalId: caller.principalId });
 		return _MapServer(server);
 	});
 }
@@ -368,12 +384,15 @@ function _MapPrincipal(principal: McpOperatorPrincipalRecord): EntitledUser
  */
 function _CredentialSchema(value: unknown): CredentialField[]
 {
-	if (!Array.isArray(value)) return [];
+	if (!Array.isArray(value))
+		return [];
 	return value.flatMap(function _Field(entry): CredentialField[]
 	{
-		if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return [];
+		if (typeof entry !== "object" || entry === null || Array.isArray(entry))
+			return [];
 		const record = entry as Record<string, unknown>;
-		if (typeof record.key !== "string" || typeof record.label !== "string") return [];
+		if (typeof record.key !== "string" || typeof record.label !== "string")
+			return [];
 			return [{
 				key: record.key,
 				label: record.label,
@@ -393,6 +412,7 @@ function _CredentialSchema(value: unknown): CredentialField[]
  */
 function _Ids(values: readonly string[] | undefined): string[]
 {
-	if (!values) return [];
+	if (!values)
+		return [];
 	return ___SortBy([...new Set(values.map(value => value.trim()).filter(value => value.length > 0))]);
 }

@@ -3,7 +3,7 @@
   "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
   "projectType": "library",
   "sourceRoot": "libs/backend/server/infra/workflows/contract/src",
-  "tags": ["type:lib", "layer:infra", "scope:workflows"],
+  "tags": ["type:lib", "layer:contract", "scope:workflows"],
   "targets": {
     "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/server/infra/workflows/contract" } },
     "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/server/infra/workflows/contract" } }

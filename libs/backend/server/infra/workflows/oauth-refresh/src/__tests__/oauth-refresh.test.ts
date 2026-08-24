@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __FakeDurableExecution } from "@opencrane/backend/server/infra/workflows/testing";
-import type { DurableExecutionTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
+import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { __CreateOAuthRefreshWorkflow, __OAuthRefreshTaskKey, OAuthRefreshOutcomes, OAuthRefreshScopeKinds, OAuthRefreshTaskNames } from "../index";
 import type { OAuthRefreshConnectionPort, OAuthRefreshTaskInput } from "../index";
 
 /** Return a transaction-shaped object for an engine-free workflow test. */
-function _Transaction(): DurableExecutionTransaction
+function _Transaction(): IWorkflowTransaction
 {
 	return { client: {} };
 }
@@ -19,7 +19,7 @@ function _Input(refreshAt: string = "2026-08-23T12:00:00.000Z"): OAuthRefreshTas
 }
 
 /** Start the deterministic fake workers after one OAuth task has been admitted. */
-async function _Drain(execution: __FakeDurableExecution): Promise<void>
+async function _Drain(execution: __FakeWorkflowEngine): Promise<void>
 {
 	await execution.startWorkers({ workerName: "oauth-refresh-test" });
 }
@@ -28,7 +28,7 @@ describe("OAuth refresh workflow", function _OAuthRefreshWorkflowSuite()
 {
 	it("de-duplicates one refresh cycle, then admits the next cycle for the same connection", async function _RefreshesConnection()
 	{
-		const execution = new __FakeDurableExecution();
+		const execution = new __FakeWorkflowEngine();
 		const reconcile = vi.fn().mockResolvedValue({ outcome: OAuthRefreshOutcomes.Refreshed });
 		const workflow = __CreateOAuthRefreshWorkflow({ execution, connections: { reconcile } });
 		const first = await workflow.admit(_Transaction(), _Input());
@@ -63,7 +63,7 @@ describe("OAuth refresh workflow", function _OAuthRefreshWorkflowSuite()
 
 	it("rejects a blank task identity before a task can be admitted", async function _RejectsBlankIdentity()
 	{
-		const execution = new __FakeDurableExecution();
+		const execution = new __FakeWorkflowEngine();
 		const connections: OAuthRefreshConnectionPort = { reconcile: vi.fn().mockResolvedValue({ outcome: OAuthRefreshOutcomes.Removed }) };
 		const workflow = __CreateOAuthRefreshWorkflow({ execution, connections });
 
@@ -74,7 +74,7 @@ describe("OAuth refresh workflow", function _OAuthRefreshWorkflowSuite()
 
 	it("refuses input or output fields that could save a credential", async function _RejectsCredentialFields()
 	{
-		const execution = new __FakeDurableExecution();
+		const execution = new __FakeWorkflowEngine();
 		const workflow = __CreateOAuthRefreshWorkflow({ execution, connections: { reconcile: vi.fn().mockResolvedValue({ outcome: OAuthRefreshOutcomes.Refreshed, refreshToken: "must-not-save" }) } });
 
 		await expect(workflow.admit(_Transaction(), { ..._Input(), accessToken: "must-not-save" } as unknown as OAuthRefreshTaskInput)).rejects.toThrow("may contain only");

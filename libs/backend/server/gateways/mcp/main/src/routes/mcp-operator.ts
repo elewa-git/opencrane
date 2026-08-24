@@ -5,6 +5,10 @@ import { _RequireOrgAdmin, _ResolveRequestPrincipal } from "@opencrane/backend/s
 import { approveServer, getAccessPolicy, getDirectory, installServer, listAllServers, listEntitledCatalog, listInstalled, publishServer, rejectServer, setAccessPolicy, setServerEnabled, uninstallServer } from "../core/mcp-operator.logic";
 import type { McpOperatorCaller } from "../core/mcp-operator.logic.types";
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
+import { McpRemoteServerRegistrationValidationError, registerRemoteServer } from "../era-probe/mcp-remote-registration";
+import { ___McpRemoteServerRegistrationSchema } from "../era-probe/mcp-remote-registration.validator";
+import { McpRemoteServerRegistrationOutcomes } from "../era-probe/mcp-era-probe.types";
+import type { McpEraProbeWorkflow } from "../era-probe/mcp-era-probe.types";
 import { ___McpAccessPolicySchema, ___McpEnabledSchema, ___McpInstallSchema } from "./mcp-operator.validator";
 
 /**
@@ -18,11 +22,12 @@ import { ___McpAccessPolicySchema, ___McpEnabledSchema, ___McpInstallSchema } fr
  * - **Admin** (`/servers/*`, `/directory`) — gated by `_RequireOrgAdmin` and bound to the
  *   authenticated silo and local Principal projection.
  *
- * @param unitOfWork - Runs each MCP operation with transaction-scoped repositories.
- * @param principalDirectory - Resolves the authenticated identity to a local Principal in its silo.
+	 * @param unitOfWork - Runs each MCP operation with transaction-scoped repositories.
+	 * @param principalDirectory - Resolves the authenticated identity to a local Principal in its silo.
+	 * @param eraProbeWorkflow - Runs the saved protocol check admitted with a server registration.
  * @returns Configured Express router.
  */
-export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDirectory: AuthenticatedPrincipalDirectory): Router
+export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDirectory: AuthenticatedPrincipalDirectory, eraProbeWorkflow: McpEraProbeWorkflow): Router
 {
   const router = Router();
 
@@ -34,7 +39,8 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
   router.get("/catalog", async function _listCatalog(req, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
     res.json(await listEntitledCatalog(unitOfWork, caller));
   });
 
@@ -42,7 +48,8 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
   router.get("/installed", async function _listInstalled(req, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
     res.json(await listInstalled(unitOfWork, caller.principalId));
   });
 
@@ -50,7 +57,8 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
   router.post("/installed", async function _install(req, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
     const parsed = ___McpInstallSchema.safeParse(req.body);
     if (!parsed.success)
     {
@@ -72,7 +80,8 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
   router.delete("/installed/:serverId", async function _uninstall(req: Request<{ serverId: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
     const removed = await uninstallServer(unitOfWork, caller.principalId, req.params.serverId);
     if (removed === "not_found")
     {
@@ -91,23 +100,57 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
   router.get("/servers", _RequireOrgAdmin(), async function _listServers(req, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
     res.json(await listAllServers(unitOfWork, caller));
   });
 
-  /** Sets a server's status to approved. This endpoint does not require a prior status. Org-admin only. */
+	 /** Register a remote server and its era-probe task in one transaction. Org-admin only. */
+  router.post("/servers", _RequireOrgAdmin(), async function _registerServer(req, res)
+  {
+    const caller = await _ResolveCaller(principalDirectory, req);
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
+    const parsed = ___McpRemoteServerRegistrationSchema.safeParse(req.body);
+    if (!parsed.success)
+    {
+      res.status(400).json({ error: "Remote MCP registration is invalid.", code: "VALIDATION_ERROR" });
+      return;
+    }
+
+    try
+    {
+      const result = await registerRemoteServer(unitOfWork, eraProbeWorkflow, caller, parsed.data);
+      if (result.outcome === McpRemoteServerRegistrationOutcomes.Conflict)
+      {
+        res.status(409).json({ error: "The registration key or server name is already used by different input.", code: "MCP_REGISTRATION_CONFLICT" });
+        return;
+      }
+      res.status(201).json(result.server);
+    }
+    catch (error)
+    {
+      if (!(error instanceof McpRemoteServerRegistrationValidationError))
+        throw error;
+      res.status(400).json({ error: error.message, code: "VALIDATION_ERROR" });
+    }
+  });
+
+	 /** Approve a server after its saved protocol check succeeds. Org-admin only. */
   router.post("/servers/:id/approve", _RequireOrgAdmin(), async function _approve(req: Request<{ id: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
     _sendServerOrNotFound(res, await approveServer(unitOfWork, caller, req.params.id));
   });
 
-  /** Sets a server's status to published. This endpoint does not require a prior status. Org-admin only. */
+  /** Publish an approved server after its saved protocol check succeeds. Org-admin only. */
   router.post("/servers/:id/publish", _RequireOrgAdmin(), async function _publish(req: Request<{ id: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
     _sendServerOrNotFound(res, await publishServer(unitOfWork, caller, req.params.id));
   });
 
@@ -115,11 +158,12 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
   router.post("/servers/:id/reject", _RequireOrgAdmin(), async function _reject(req: Request<{ id: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
     _sendServerOrNotFound(res, await rejectServer(unitOfWork, caller, req.params.id));
   });
 
-  /** Sets a server to published or disabled from `enabled`; it does not require a prior status. Org-admin only. */
+  /** Disable a server or restore a disabled server to published. Org-admin only. */
   router.post("/servers/:id/enabled", _RequireOrgAdmin(), async function _setEnabled(req: Request<{ id: string }>, res)
   {
     const parsed = ___McpEnabledSchema.safeParse(req.body);
@@ -130,7 +174,8 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     }
 
     const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
     _sendServerOrNotFound(res, await setServerEnabled(unitOfWork, caller, req.params.id, parsed.data.enabled));
   });
 
@@ -138,7 +183,8 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
   router.get("/servers/:id/access", _RequireOrgAdmin(), async function _getAccess(req: Request<{ id: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
     const policy = await getAccessPolicy(unitOfWork, caller, req.params.id);
     if (!policy)
     {
@@ -153,7 +199,8 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
   router.put("/servers/:id/access", _RequireOrgAdmin(), async function _setAccess(req: Request<{ id: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
     const parsed = ___McpAccessPolicySchema.safeParse(req.body);
     if (!parsed.success)
     {
@@ -175,7 +222,8 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
   router.get("/directory", _RequireOrgAdmin(), async function _directory(req, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
+    if (!_SendUnauthorizedWhenMissing(res, caller))
+      return;
     res.json(await getDirectory(unitOfWork, caller));
   });
 
@@ -218,7 +266,8 @@ async function _ResolveCaller(principalDirectory: AuthenticatedPrincipalDirector
  */
 function _SendUnauthorizedWhenMissing(res: Response, caller: McpOperatorCaller | null): caller is McpOperatorCaller
 {
-  if (caller) return true;
+  if (caller)
+    return true;
   res.status(401).json({ error: "Authentication required.", code: "UNAUTHORIZED" });
   return false;
 }
@@ -234,7 +283,7 @@ function _sendServerOrNotFound(res: Response, server: object | null): void
   if (!server)
   {
     res.status(404).json({ error: "MCP server not found", code: "MCP_SERVER_NOT_FOUND" });
-    return;
+      return;
   }
 
   res.json(server);

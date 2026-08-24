@@ -16,10 +16,11 @@ remaining grouped with the server code that composes them.
 | [`workload-identity`](./workload-identity/README.md) | Kubernetes TokenReview and bounded workload identities. |
 | [`http`](./http/README.md) | Express transport plumbing. |
 | [`memory-gateway-client`](./memory-gateway-client/README.md) | Authenticated memory reads with fail-closed writes. |
+| [`mcp-era-probe`](./mcp-era-probe/README.md) | HTTPS-only, DNS-rebinding-resistant MCP 2026-07-28 discovery probe. |
 | [`organization-membership-gateway`](./organization-membership-gateway/README.md) | Projected-token-authenticated HTTPS transport to Fleet membership and billing. |
 | [`obot-custody`](./obot-custody/README.md) | Fail-closed Obot custody and MCP invocation ports. |
 | [`sandbox-execution`](./sandbox-execution/README.md) | Fail-closed sandboxed tool-execution port. |
-| [`workflows`](./workflows/README.md) | Engine-neutral durable control-plane tasks, guardrails, scheduling helpers, adapters, and test support. |
+| [`workflows`](./workflows/README.md) | Engine-neutral saved workflow tasks, guardrails, scheduling helpers, adapters, and test support. |
 
 ```text
  inbound request ──► http ──► auth ──► backend domain route

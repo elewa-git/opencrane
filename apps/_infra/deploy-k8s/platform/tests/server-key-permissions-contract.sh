@@ -69,6 +69,15 @@ grep -Fq '              value: "opencrane-silo-runtime"' <<<"$server_manifest"
 grep -Fq '            - name: AGENT_RUNTIME_MANAGED_NAMESPACE' <<<"$server_manifest"
 grep -Fq '              value: "opencrane-silo-managed-runtime"' <<<"$server_manifest"
 
+# The server must identify its silo and receive bounded worker and MCP-check settings before it
+# starts the Absurd worker.
+grep -Fq '            - name: OPENCRANE_SILO_ID' <<<"$server_manifest"
+grep -Fq '            - name: OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE' <<<"$server_manifest"
+grep -Fq '            - name: OPENCRANE_WORKFLOW_WORKER_CONCURRENCY' <<<"$server_manifest"
+grep -Fq '            - name: OPENCRANE_WORKFLOW_POLL_INTERVAL_MS' <<<"$server_manifest"
+grep -Fq '            - name: OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS' <<<"$server_manifest"
+grep -Fq '            - name: OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES' <<<"$server_manifest"
+
 # The memory-gateway caller credential must be an audience-bound projected token, group-readable
 # only (0440), mounted where MEMORY_GATEWAY_TOKEN_PATH points.
 grep -Fq '            - name: MEMORY_GATEWAY_URL' <<<"$server_manifest"

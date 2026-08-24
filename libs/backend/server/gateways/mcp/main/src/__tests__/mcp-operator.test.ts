@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import express from "express";
 import type { Express } from "express";
 import type { PrismaClient } from "@prisma/client";
@@ -15,6 +17,8 @@ import type { AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/
 import { AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
 import { mcpOperatorRouter } from "../routes/mcp-operator";
 import { PrismaMcpOperatorUnitOfWork } from "../core/prisma-mcp-operator-unit-of-work";
+import { McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
+import type { McpEraProbeWorkflow } from "../era-probe/mcp-era-probe.types";
 
 /**
  * Covers the MCP operator routes: the organization-admin gate, published entries filtered by
@@ -61,16 +65,20 @@ function _mockPrisma(overrides: Record<string, (...args: unknown[]) => unknown> 
   const prisma = new Proxy({}, {
     get(_t, model)
     {
-      if (model === "$transaction") return async function _Transaction(callback: (transaction: PrismaClient) => Promise<unknown>) { return callback(prisma); };
+      if (model === "$transaction")
+        return async function _Transaction(callback: (transaction: PrismaClient) => Promise<unknown>) { return callback(prisma); };
       return new Proxy({}, {
         get(_t2, method)
         {
           const key = `${String(model)}.${String(method)}`;
           if (!spies[key])
           {
-            if (overrides[key]) spies[key] = vi.fn(overrides[key]);
-            else if (key === "principal.findUnique") spies[key] = vi.fn().mockResolvedValue({ id: "principal-1" });
-            else if (key === "capabilityCatalogRevision.findUnique") spies[key] = vi.fn().mockResolvedValue({ digest: "sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6", capabilities: [{ id: "mcp-server:use", actions: ["use"] }] });
+            if (overrides[key])
+              spies[key] = vi.fn(overrides[key]);
+            else if (key === "principal.findUnique")
+              spies[key] = vi.fn().mockResolvedValue({ id: "principal-1" });
+            else if (key === "capabilityCatalogRevision.findUnique")
+              spies[key] = vi.fn().mockResolvedValue({ digest: "sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6", capabilities: [{ id: "mcp-server:use", actions: ["use"] }] });
             else spies[key] = vi.fn().mockResolvedValue([]);
           }
           return spies[key];
@@ -82,7 +90,7 @@ function _mockPrisma(overrides: Record<string, (...args: unknown[]) => unknown> 
 }
 
 /** Mount the operator router, optionally seeding a session user. */
-function _buildApp(prisma: PrismaClient, user?: _SessionUser): Express
+function _buildApp(prisma: PrismaClient, user?: _SessionUser, eraProbeWorkflow: McpEraProbeWorkflow = _EraProbeWorkflow()): Express
 {
   const app = express();
   app.use(express.json());
@@ -97,8 +105,16 @@ function _buildApp(prisma: PrismaClient, user?: _SessionUser): Express
     });
   }
   const directory: AuthenticatedPrincipalDirectory = { resolveAuthenticatedPrincipal: vi.fn().mockResolvedValue({ siloId: "silo-1", principalId: "principal-1" }) };
-  app.use("/api/v1/mcp", mcpOperatorRouter(new PrismaMcpOperatorUnitOfWork(prisma), directory));
+  app.use("/api/v1/mcp", mcpOperatorRouter(new PrismaMcpOperatorUnitOfWork(prisma), directory, eraProbeWorkflow));
   return app;
+}
+
+/** Return a task admission stub for router cases that do not exercise registration. */
+function _EraProbeWorkflow(): McpEraProbeWorkflow
+{
+  return {
+    admit: vi.fn().mockResolvedValue({ taskKey: "workflows:mcp-era-probe:test", receipt: { taskId: "task-1", taskName: "mcp-era-probe.probe", idempotencyKey: "workflows:mcp-era-probe:test" } }),
+  };
 }
 
 describe("mcp-operator router", function _suite()
@@ -115,7 +131,8 @@ describe("mcp-operator router", function _suite()
   /** Restore the auth env captured in `beforeEach` so cases stay isolated. */
   afterEach(function _restoreEnv()
   {
-    for (const key of _AUTH_ENV) { if (_saved[key] === undefined) { delete process.env[key]; } else { process.env[key] = _saved[key]; } }
+    for (const key of _AUTH_ENV) { if (_saved[key] === undefined)
+    { delete process.env[key]; } else { process.env[key] = _saved[key]; } }
   });
 
   describe("org-admin gate on governance endpoints", function _gate()
@@ -172,6 +189,52 @@ describe("mcp-operator router", function _suite()
       expect(spies["mcpServer.findMany"]).toHaveBeenCalled();
     });
 
+    it("refuses publication until an accepted server has been approved", async function _RequiresApprovalBeforePublish()
+    {
+      _enableOidc();
+      const { prisma, spies } = _mockPrisma({ "mcpServer.updateMany": function _NoApprovedSource() { return Promise.resolve({ count: 0 }); } });
+
+      const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true })).post("/api/v1/mcp/servers/srv-1/publish");
+
+      expect(response.status).toBe(404);
+      expect(spies["mcpServer.updateMany"]).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ eraProbeStatus: { in: ["Accepted", "NotRequired"] }, approvalStatus: "Approved" }) }));
+      expect(spies["auditEntry.create"]).toBeUndefined();
+    });
+
+    it("restores a disabled server when its saved protocol evidence remains accepted", async function _RestoresDisabledServer()
+    {
+      _enableOidc();
+      const server = { id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted };
+      const { prisma, spies } = _mockPrisma({
+        "mcpServer.updateMany": function _Update() { return Promise.resolve({ count: 1 }); },
+        "mcpServer.findFirst": function _Find() { return Promise.resolve(server); },
+        "auditEntry.create": function _Audit() { return Promise.resolve({}); },
+      });
+
+      const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true })).post("/api/v1/mcp/servers/srv-1/enabled").send({ enabled: true });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ id: "srv-1", approvalStatus: "published" });
+      expect(spies["mcpServer.updateMany"]).toHaveBeenCalledWith({ where: { id: "srv-1", siloId: "silo-1", eraProbeStatus: { in: ["Accepted", "NotRequired"] }, approvalStatus: "Disabled" }, data: { approvalStatus: "Published" } });
+	  expect(spies["auditEntry.create"]).toHaveBeenCalledWith({ data: expect.objectContaining({ metadata: { siloId: "silo-1", actorPrincipalId: "principal-1" } }) });
+    });
+
+	it("records the authenticated administrator with an access-policy change", async function _AuditsAccessPolicyActor()
+	{
+		_enableOidc();
+		const server = { id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted };
+		const { prisma, spies } = _mockPrisma({
+			"mcpServer.findFirst": function _Find() { return Promise.resolve(server); },
+			"authorizationGrant.findMany": function _FindGrants() { return Promise.resolve([]); },
+			"auditEntry.create": function _Audit() { return Promise.resolve({}); },
+		});
+
+		const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true })).put("/api/v1/mcp/servers/srv-1/access").send({ groupIds: [], principalIds: [] });
+
+		expect(response.status).toBe(200);
+		expect(spies["auditEntry.create"]).toHaveBeenCalledWith({ data: expect.objectContaining({ metadata: { siloId: "silo-1", actorPrincipalId: "principal-1" } }) });
+	});
+
     it("fails closed when no session is established", async function _denyUnauthenticated()
     {
       const { prisma } = _mockPrisma();
@@ -185,8 +248,8 @@ describe("mcp-operator router", function _suite()
   {
     /** Two published servers filtered by the generic authorization decision. */
     const _servers = [
-      { id: "srv-open", name: "Open", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, createdAt: new Date() },
-      { id: "srv-closed", name: "Closed", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, createdAt: new Date() },
+      { id: "srv-open", name: "Open", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired, createdAt: new Date() },
+      { id: "srv-closed", name: "Closed", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired, createdAt: new Date() },
     ];
 
     it("returns only the servers the caller is entitled to", async function _filters()
@@ -213,6 +276,56 @@ describe("mcp-operator router", function _suite()
     });
   });
 
+  describe("POST /servers — remote registration", function _Registration()
+  {
+    it("saves the draft and admits its workflow through the same database transaction", async function _RegistersAtomically()
+    {
+      _enableOidc();
+      const workflow = _EraProbeWorkflow();
+      const server = { id: "srv-new", name: "Example MCP", description: "Public tools", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "PendingReview", credentialSchema: [], entitlementSummary: null, endpoint: "https://mcp.example.test/", registrationKeyDigest: `sha256:${"a".repeat(64)}`, registrationDigest: `sha256:${"b".repeat(64)}`, eraProbeStatus: "Pending", eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
+      const { prisma, spies } = _mockPrisma({
+        "mcpRegistrationClaim.upsert": function _Claim(input: unknown) { return Promise.resolve((input as { create: unknown }).create); },
+        "mcpServer.findUnique": function _FindUnique() { return Promise.resolve(null); },
+        "mcpServer.create": function _Create(input: unknown) { return Promise.resolve({ ...server, ...(input as { data: object }).data }); },
+        "auditEntry.create": function _Audit() { return Promise.resolve({}); },
+      });
+
+      const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true }, workflow))
+        .post("/api/v1/mcp/servers")
+        .send({ idempotencyKey: "registration-1", name: "Example MCP", description: "Public tools", endpoint: "https://mcp.example.test/" });
+
+      expect(response.status).toBe(201);
+      expect(response.body).toEqual({ id: "srv-new", name: "Example MCP", endpoint: "https://mcp.example.test/", eraProbeStatus: "Pending" });
+      expect(spies["mcpRegistrationClaim.upsert"]).toHaveBeenCalledTimes(2);
+      expect(spies["mcpServer.create"]).toHaveBeenCalledTimes(1);
+	  expect(spies["auditEntry.create"]).toHaveBeenCalledWith({ data: expect.objectContaining({ metadata: { siloId: "silo-1", actorPrincipalId: "principal-1" } }) });
+      const [transaction, task] = vi.mocked(workflow.admit).mock.calls[0] as Parameters<McpEraProbeWorkflow["admit"]>;
+      expect(transaction.client).toBe(prisma);
+      expect(task).toEqual(expect.objectContaining({ siloId: "silo-1", serverId: "srv-new" }));
+    });
+
+		it("returns the current protocol state when an accepted registration is replayed", async function _ReplaysAcceptedRegistration()
+		{
+			_enableOidc();
+			const workflow = _EraProbeWorkflow();
+			const registrationDigest = `sha256:${createHash("sha256").update(JSON.stringify(["Example MCP", "Public tools", "https://mcp.example.test/"])).digest("hex")}`;
+			const server = { id: "srv-new", name: "Example MCP", description: "Public tools", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "PendingReview", credentialSchema: [], entitlementSummary: null, endpoint: "https://mcp.example.test/", registrationKeyDigest: `sha256:${"a".repeat(64)}`, registrationDigest, eraProbeStatus: "Accepted", eraProtocolVersion: "2026-07-28", eraProbeEvidenceDigest: `sha256:${"c".repeat(64)}`, eraProbeFailureCode: null, eraProbeAttempts: 1 };
+			const { prisma, spies } = _mockPrisma({
+				"mcpRegistrationClaim.upsert": function _Claim(input: unknown) { return Promise.resolve((input as { create: unknown }).create); },
+				"mcpServer.findUnique": function _FindUnique() { return Promise.resolve(server); },
+			});
+
+			const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true }, workflow))
+				.post("/api/v1/mcp/servers")
+				.send({ idempotencyKey: "registration-1", name: "Example MCP", description: "Public tools", endpoint: "https://mcp.example.test/" });
+
+			expect(response.status).toBe(201);
+			expect(response.body).toEqual({ id: "srv-new", name: "Example MCP", endpoint: "https://mcp.example.test/", eraProbeStatus: "Accepted" });
+			expect(spies["mcpServer.findUnique"]).toHaveBeenCalledTimes(1);
+			expect(workflow.admit).toHaveBeenCalledTimes(1);
+		});
+  });
+
   describe("install lifecycle", function _lifecycle()
   {
     /**
@@ -222,7 +335,7 @@ describe("mcp-operator router", function _suite()
     {
       const store: { install: Record<string, unknown> | null } = { install: null };
       const overrides: Record<string, (...args: unknown[]) => unknown> = {
-        "mcpServer.findFirst": function _serverFind() { return Promise.resolve({ id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType, approvalStatus: "Published", credentialSchema: [], entitlementSummary: null }); },
+        "mcpServer.findFirst": function _serverFind() { return Promise.resolve({ id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType, approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired }); },
         "mcpServerInstall.upsert": function _upsert(arg: unknown) {
           const create = (arg as { create: Record<string, unknown> }).create;
           store.install ??= { mcpServerId: create.mcpServerId, principalId: create.principalId, connectionStatus: create.connectionStatus ?? "NeedsCredential", lastUsedAt: null };

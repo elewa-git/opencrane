@@ -145,6 +145,8 @@ CREATE TYPE "IntegrationCustodyState" AS ENUM ('ready', 'revoked', 'expired');
 -- CreateEnum
 CREATE TYPE "McpServerTransport" AS ENUM ('streamable-http', 'sse', 'websocket');
 
+CREATE TYPE "McpEraProbeStatus" AS ENUM ('not-required', 'pending', 'accepted', 'rejected');
+
 -- CreateEnum
 CREATE TYPE "McpServerStatus" AS ENUM ('active', 'degraded', 'draft');
 
@@ -971,12 +973,29 @@ CREATE TABLE "mcp_servers" (
     "approval_status" "McpApprovalStatus" NOT NULL DEFAULT 'pending-review',
     "credential_schema" JSONB NOT NULL DEFAULT '[]',
     "entitlement_summary" TEXT,
+    "registration_key_digest" TEXT,
+    "registration_digest" TEXT,
+    "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT 'not-required',
+    "era_protocol_version" TEXT,
+    "era_probe_evidence_digest" TEXT,
+    "era_probe_failure_code" TEXT,
+    "era_probe_attempts" INTEGER NOT NULL DEFAULT 0,
+    "era_probed_at" TIMESTAMP(3),
     "source_id" TEXT,
     "last_synced_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "mcp_servers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_registration_claims" (
+    "silo_id" TEXT NOT NULL,
+    "identity_digest" TEXT NOT NULL,
+    "touched_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_registration_claims_pkey" PRIMARY KEY ("silo_id", "identity_digest")
 );
 
 -- CreateTable
@@ -2227,6 +2246,8 @@ CREATE UNIQUE INDEX "integration_custody_references_obot_custody_reference_key" 
 -- CreateIndex
 CREATE UNIQUE INDEX "mcp_servers_silo_id_name_key" ON "mcp_servers"("silo_id", "name");
 
+CREATE UNIQUE INDEX "mcp_servers_silo_id_registration_key_digest_key" ON "mcp_servers"("silo_id", "registration_key_digest");
+
 -- CreateIndex
 CREATE INDEX "mcp_servers_approval_status_idx" ON "mcp_servers"("approval_status");
 
@@ -2864,6 +2885,22 @@ ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody
 
 -- AddForeignKey
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "third_party_sources"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_registration_digest_check" CHECK (
+    ("registration_key_digest" IS NULL AND "registration_digest" IS NULL)
+    OR ("registration_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registration_digest" ~ '^sha256:[0-9a-f]{64}$')
+);
+
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_era_probe_evidence_check" CHECK (
+    ("era_probe_status" = 'not-required' AND "era_probe_attempts" = 0 AND "registration_key_digest" IS NULL AND "registration_digest" IS NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
+    OR ("era_probe_status" = 'pending' AND "era_probe_attempts" >= 0 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
+    OR ("era_probe_status" = 'accepted' AND "era_probe_attempts" >= 1 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND btrim("era_protocol_version") <> '' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NOT NULL)
+    OR ("era_probe_status" = 'rejected' AND "era_probe_attempts" >= 1 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probed_at" IS NOT NULL AND ((btrim("era_protocol_version") <> '' AND "era_probe_failure_code" IS NULL) OR ("era_protocol_version" IS NULL AND "era_probe_failure_code" IN ('unsafe_endpoint', 'invalid_response', 'retry_exhausted'))))
+);
+
+ALTER TABLE "mcp_registration_claims" ADD CONSTRAINT "mcp_registration_claims_identity_check" CHECK (
+    btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
+);
 
 -- AddForeignKey
 ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -10845,3 +10882,55 @@ begin
   end loop;
 end;
 $$;
+
+CREATE FUNCTION public."fail_absurd_task_terminal"(
+    p_queue_name TEXT,
+    p_task_id UUID,
+    p_reason JSONB
+) RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_run_id UUID;
+    v_attempt INTEGER;
+BEGIN
+    IF p_queue_name IS NULL OR btrim(p_queue_name) = '' OR NOT EXISTS (
+        SELECT 1 FROM absurd.queues WHERE queue_name = p_queue_name
+    ) THEN
+        RAISE EXCEPTION 'Terminal workflow failure requires an existing Absurd queue';
+    END IF;
+    IF jsonb_typeof(p_reason) <> 'object' THEN
+        RAISE EXCEPTION 'Terminal workflow failure reason must be a JSON object';
+    END IF;
+
+    EXECUTE format(
+        'SELECT run_id, attempt
+           FROM absurd.%I
+          WHERE task_id = $1
+            AND state IN (''running'', ''sleeping'')
+          ORDER BY attempt DESC
+          LIMIT 1
+          FOR UPDATE',
+        'r_' || p_queue_name
+    )
+    INTO v_run_id, v_attempt
+    USING p_task_id;
+
+    IF v_run_id IS NULL THEN
+        RAISE EXCEPTION 'Absurd task % has no active run in queue %', p_task_id, p_queue_name;
+    END IF;
+
+    EXECUTE format(
+        'UPDATE absurd.%I
+            SET max_attempts = $2
+          WHERE task_id = $1
+            AND state NOT IN (''completed'', ''failed'', ''cancelled'')',
+        't_' || p_queue_name
+    )
+    USING p_task_id, v_attempt;
+
+    PERFORM absurd.fail_run(p_queue_name, v_run_id, p_reason, NULL);
+END;
+$$;
+
+SELECT absurd.create_queue('control-plane');

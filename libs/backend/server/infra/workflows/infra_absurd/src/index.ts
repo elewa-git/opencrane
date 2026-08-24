@@ -1,3 +1,4 @@
-/** Absurd-backed implementation of the durable execution contract. */
-export { _CreateAbsurdDurableExecution } from "./absurd-durable-execution";
-export type { AbsurdDurableExecutionOptions } from "./absurd-durable-execution.types";
+/** Creates the server-facing workflow ports backed by Absurd. */
+export { _CreateAbsurdWorkflowEngine } from "./absurd-workflow-engine";
+/** Configuration accepted by the Absurd workflow adapter factory. */
+export type { IAbsurdWorkflowEngineOptions } from "./absurd-workflow-engine.types";

@@ -1,12 +1,12 @@
-# backend-server-infra-workflows-infra-absurd — Absurd engine adapter
+# @opencrane/backend/server/infra/workflows/infra_absurd — Absurd workflow engine adapter
 
 > [backend](../../../../README.md) › [server](../../../README.md) › [infra](../../README.md) › [workflows](../README.md) › infra_absurd
 
 ## What it owns
 
-This Phase-0 package adapts the durable-workflow port to Absurd calls. Absurd is a PostgreSQL-backed
-task engine that a later OpenCrane server slice may compose; this package owns its engine-specific
-vocabulary, a reviewed SQL snapshot, and no product workflow rules.
+This package connects the shared workflow rules to Absurd. Absurd stores background jobs in
+PostgreSQL and runs them after a server restart. This package owns the Absurd-specific calls and a
+reviewed SQL snapshot, but it does not decide what product jobs do.
 
 ```text
  domain task ──► workflows contract ──► ┌─────────────────┐
@@ -23,11 +23,20 @@ The vendored SQL is pinned byte-for-byte to Absurd 0.5.0. A mismatch between its
 
 ## Public surface
 
-- `_CreateAbsurdDurableExecution` — builds the adapter without exposing the vendor SDK.
+`_CreateAbsurdWorkflowEngine` creates the engine and worker ports used by server composition. Its
+return type exposes `IWorkflowEngine` and `IWorkflowWorkerRuntime`, not an Absurd SDK object.
 
 ## Boundary
 
-Only this package imports `absurd-sdk`. It owns no product data, recurrence, queue naming, or tracing policy; those stay above the engine adapter. Server composition gives it the same immutable queue authority as the workflow kit, so it cannot fall back to a different queue. Worker operations use the SDK, while transactional spawns use only the caller-owned Prisma transaction and the parameterised `absurd.spawn_task` function.
+Only this package imports `absurd-sdk`. It owns no product data, recurrence, queue naming, or tracing
+policy; those stay above the engine adapter. The server gives it the same approved queue list as the
+workflow guard, so it cannot choose another queue. Workers use the SDK. Starting a saved job uses the
+database transaction supplied by the product change and the parameterised `absurd.spawn_task`
+function.
+Each registered job also supplies its total attempt limit and retry delay. The adapter stores those
+limits with the Absurd task, including when the task is started inside a product database transaction.
+A retryable error lets Absurd schedule the next attempt. A terminal error is saved as failed before
+the SDK can apply that general retry policy, so work that cannot succeed unchanged stops immediately.
 
 ## Dependency direction
 
@@ -35,7 +44,10 @@ This is a `type:lib`, `layer:infra`, `scope:workflows` package. It may depend on
 
 ## Data & persistence
 
-`vendor/absurd.sql` is the Apache-2.0 Absurd 0.5.0 schema snapshot, attributed under the verbatim [upstream license](./vendor/LICENSE). Bootstrap ownership and live schema application remain outside this adapter. The bootstrap pipeline must call `absurd.create_queue` for every configured queue before application transactions can admit tasks; this adapter deliberately does not create queues on a separate connection because that would break the same-transaction spawn boundary.
+`vendor/absurd.sql` is the Apache-2.0 Absurd 0.5.0 schema snapshot, attributed under the verbatim
+[upstream license](./vendor/LICENSE). Database setup remains outside this adapter. Setup must create
+every approved queue before the application can save jobs. The adapter does not create queues on a
+separate database connection because the product change and its job must be saved together.
 
 ## See also
 
