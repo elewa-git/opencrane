@@ -17,6 +17,34 @@ export interface McpbValidationWorkloadTask
 	readonly taskKey: string;
 }
 
+/** One temporary controller lease for a pending MCP bundle validator Job. */
+export interface McpbValidationWorkloadClaim
+{
+	/** Durable workload identifier used in the later assignment command. */
+	readonly workloadId: string;
+	/** Silo that owns the validation selected for this controller pass. */
+	readonly siloId: string;
+	/** Validation used to derive the deterministic validator Job name. */
+	readonly validationId: string;
+	/** Exact timestamp the repository stored for this controller lease. */
+	readonly claimedAt: string;
+	/** Delivery generation that fences an older controller replica. */
+	readonly deliveryCount: number;
+	/** Timestamp after which another controller may take an unassigned workload. */
+	readonly expiresAt: string;
+}
+
+/** Kubernetes Job identity returned after a controller creates one suspended validator Job. */
+export interface McpbValidationWorkloadAssignment
+{
+	/** Exact controller-lease timestamp returned by {@link McpbValidationWorkloadClaim}. */
+	readonly claimedAt: string;
+	/** Exact controller delivery generation returned by {@link McpbValidationWorkloadClaim}. */
+	readonly deliveryCount: number;
+	/** Immutable Kubernetes Job UID returned by the Kubernetes API. */
+	readonly workloadUid: string;
+}
+
 /** Fields required to create or replay one MCP bundle submission. */
 export interface McpbValidationSubmissionRecord extends McpbBundleArtifactTarget
 {
@@ -103,6 +131,21 @@ export interface McpbValidationRepository
 	 * @returns The workload identifier, or `null` when a different task is already bound.
 	 */
 	ensureWorkload(siloId: string, validationId: string, task: McpbValidationWorkloadTask): Promise<string | null>;
+	/**
+	 * Claims one pending workload for a short controller lease.
+	 *
+	 * @param leaseMilliseconds - Maximum time that one controller may hold the assignment lease.
+	 * @returns The saved validation coordinates and claim fence, or `null` when no workload is ready.
+	 */
+	claimNextWorkload(leaseMilliseconds: number): Promise<McpbValidationWorkloadClaim | null>;
+	/**
+	 * Records a Kubernetes Job UID only when the controller still holds the workload lease.
+	 *
+	 * @param workloadId - Identifies the workload the controller claimed.
+	 * @param assignment - Lease fence and immutable Job UID returned by Kubernetes.
+	 * @returns Whether the assignment was saved, already saved, or lost its controller lease.
+	 */
+	commitWorkloadAssignment(workloadId: string, assignment: McpbValidationWorkloadAssignment): Promise<"assigned" | "idempotent" | "conflict">;
 	/**
 	 * Finds one validation for an authenticated administrator without exposing another silo.
 	 *
