@@ -2,7 +2,7 @@ import { AgentRevisionState, AgentServiceKind, AgentServiceState, ModelRoutingSc
 
 import type { AgentRevisionContent } from "@opencrane/models/agents";
 
-import { AgentRevisionModelSelectionMaterializationCodes, type AgentRevisionModelSelectionRepository, type MaterializeAgentRevisionModelSelectionCommand, type MaterializeAgentRevisionModelSelectionResult } from "./agent-revision-model-selection.types";
+import { AgentRevisionModelSelectionMaterializationCodes, type AgentRevisionModelSelectionRepository, type MaterializeAgentRevisionModelSelectionCommand, type MaterializeAgentRevisionModelSelectionResult } from "../agent-revision-model-selection.types";
 import { _AGENT_REVISION_INCLUDE, _AgentRevisionContentFromRow, PrismaAgentRevisionWriterRepository } from "./prisma-agent-revision-writer";
 
 /**

@@ -1,9 +1,9 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, PersonaRevisionState, type Prisma } from "@prisma/client";
 
-import { INITIAL_PERSONAL_AGENT_POLICY } from "./initial-personal-agent-policy";
-import type { InitialPersonalAgentDefaultModelResolver } from "./initial-personal-agent-publication.types";
-import { AgentRevisionPersonaSelectionMaterializationCodes } from "./agent-revision-persona-selection.types";
-import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapRepository, type PersonalAgentBootstrapResult, type ReadyPersonalAgentBootstrapResult } from "./personal-agent-bootstrap.types";
+import { INITIAL_PERSONAL_AGENT_POLICY } from "../initial-personal-agent-policy";
+import type { InitialPersonalAgentDefaultModelResolver } from "../initial-personal-agent-publication.types";
+import { AgentRevisionPersonaSelectionMaterializationCodes } from "../agent-revision-persona-selection.types";
+import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapRepository, type PersonalAgentBootstrapResult, type ReadyPersonalAgentBootstrapResult } from "../personal-agent-bootstrap.types";
 import { PrismaAgentRevisionPersonaSelectionRepository } from "./prisma-agent-revision-persona-selection";
 import { PrismaInitialPersonalAgentPublicationRepository } from "./prisma-initial-personal-agent-publication";
 
@@ -102,17 +102,21 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 	 */
 	async ensureReady(command: PersonalAgentBootstrapCommand): Promise<PersonalAgentBootstrapResult>
 	{
-		if (!_ValidCommand(command)) return _Denied(PersonalAgentBootstrapDenialReasons.InvalidCommand);
+		if (!_ValidCommand(command))
+			return _Denied(PersonalAgentBootstrapDenialReasons.InvalidCommand);
 
 		// 1. Re-read the approved persona so onboarding cannot provision from foreign or stale evidence.
 		const persona = await this._ReadApprovedPersona(command);
-		if ("status" in persona) return persona;
-		if (command.readinessKind === "completion" && persona.id !== command.onboardingPersonaRevisionId) return _Denied(PersonalAgentBootstrapDenialReasons.PersonaNotActive);
+		if ("status" in persona)
+			return persona;
+		if (command.readinessKind === "completion" && persona.id !== command.onboardingPersonaRevisionId)
+			return _Denied(PersonalAgentBootstrapDenialReasons.PersonaNotActive);
 
 		// 2. Resolve every matching runnable service before creating anything, because ambiguity must
 		// fail closed and an earlier successful retry must return its existing winner.
 		const matching = await this._ReadMatchingServices(command, persona);
-		if (matching.length > 1) return _Denied(PersonalAgentBootstrapDenialReasons.ServiceAmbiguous);
+		if (matching.length > 1)
+			return _Denied(PersonalAgentBootstrapDenialReasons.ServiceAmbiguous);
 
 		// 3. Inspect the deterministic identity independently so an unrelated row can never be adopted.
 		const deterministic = await this.transaction.agentService.findUnique({
@@ -130,14 +134,17 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
 			}
 			const activeRevision = deterministic.activeRevision;
-			if (activeRevision === null || activeRevision.personaRevisionId === null) return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
+			if (activeRevision === null || activeRevision.personaRevisionId === null)
+				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
 			return this._EnsureCurrentPersona(command, persona, { id: deterministic.id, activeRevisionId: deterministic.activeRevisionId, workloadProfile: deterministic.workloadProfile, personaRevisionId: activeRevision.personaRevisionId });
 		}
 		if (matching.length === 1)
 		{
 			const existing = matching[0];
-			if (existing === undefined) return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
-			if (existing.workloadProfile !== INITIAL_PERSONAL_AGENT_POLICY.workloadProfile) return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
+			if (existing === undefined)
+				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
+			if (existing.workloadProfile !== INITIAL_PERSONAL_AGENT_POLICY.workloadProfile)
+				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
 			return this._EnsureCurrentPersona(command, persona, existing);
 		}
 
@@ -148,7 +155,8 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 	/** Reconcile one existing service to the owner's current approved persona without replacing it. */
 	private async _EnsureCurrentPersona(command: PersonalAgentBootstrapCommand, persona: _ApprovedPersona, service: _ReadyPersonalService): Promise<PersonalAgentBootstrapResult>
 	{
-		if (service.personaRevisionId === persona.id) return _Ready(service, false, false);
+		if (service.personaRevisionId === persona.id)
+			return _Ready(service, false, false);
 		const materialized = await new PrismaAgentRevisionPersonaSelectionRepository(this.transaction).materialize({
 			siloId: command.siloId,
 			subjectId: command.subjectId,

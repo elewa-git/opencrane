@@ -4,7 +4,7 @@ import { AgentServiceKind, AgentServiceState, Prisma, type PrismaClient } from "
 
 import type { AgentService } from "@opencrane/models/agents";
 
-import type { AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types";
+import type { AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "../agent-revision-lifecycle.types";
 
 import { _mapRevision, _mapRun, _mapService, _serviceState } from "./prisma-agent-mappers";
 import { _AGENT_REVISION_INCLUDE, _AgentRevisionContentFromRow, PrismaAgentRevisionWriterRepository } from "./prisma-agent-revision-writer";
@@ -13,8 +13,10 @@ import { __CreateManagedAgentServicePrincipalRepository } from "./prisma-managed
 /** Maps a lifecycle action to its target Prisma service state. */
 function _targetServiceState(action: AgentServiceLifecycleAction): AgentServiceState
 {
-	if (action === "enable") return AgentServiceState.Active;
-	if (action === "pause") return AgentServiceState.Paused;
+	if (action === "enable")
+		return AgentServiceState.Active;
+	if (action === "pause")
+		return AgentServiceState.Paused;
 	return AgentServiceState.Retired;
 }
 
@@ -82,7 +84,8 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 		const createdAtDate = new Date(createdAt);
 		return this.prisma.$transaction(async function _create(transaction: Prisma.TransactionClient): Promise<CreateManagedAgentServiceResult>
 		{
-			if (!await _isModelDefinitionAvailable(transaction, command.content.modelDefinitionId, command.siloId)) return { outcome: "denied", reason: "model_definition_unavailable" };
+			if (!await _isModelDefinitionAvailable(transaction, command.content.modelDefinitionId, command.siloId))
+				return { outcome: "denied", reason: "model_definition_unavailable" };
 			const agentServiceId = randomUUID();
 			const principalId = await __CreateManagedAgentServicePrincipalRepository(transaction).create(command.siloId, agentServiceId, command.name, createdAtDate);
 			const serviceRow = await transaction.agentService.create({ data: { id: agentServiceId, siloId: command.siloId, kind: AgentServiceKind.Managed, name: command.name, state: AgentServiceState.Draft, workloadProfile: command.workloadProfile, principalId, createdAt: createdAtDate, updatedAt: createdAtDate } });
@@ -108,8 +111,10 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 		return this.prisma.$transaction(async function _revise(transaction: Prisma.TransactionClient): Promise<AppendAgentRevisionResult>
 		{
 			const guard = await _lockAndReadHead(transaction, command.agentServiceId, command.siloId, command.expectedParentRevisionId);
-			if (guard.outcome !== "ok") return guard.result;
-			if (!await _isModelDefinitionAvailable(transaction, command.content.modelDefinitionId, guard.siloId)) return { outcome: "denied", reason: "model_definition_unavailable" };
+			if (guard.outcome !== "ok")
+				return guard.result;
+			if (!await _isModelDefinitionAvailable(transaction, command.content.modelDefinitionId, guard.siloId))
+				return { outcome: "denied", reason: "model_definition_unavailable" };
 			const revisionRow = await new PrismaAgentRevisionWriterRepository(transaction).createDraft({
 				siloId: guard.siloId,
 				agentServiceId: command.agentServiceId,
@@ -132,12 +137,15 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 		return this.prisma.$transaction(async function _restore(transaction: Prisma.TransactionClient): Promise<AppendAgentRevisionResult>
 		{
 			const guard = await _lockAndReadHead(transaction, command.agentServiceId, command.siloId, command.expectedParentRevisionId);
-			if (guard.outcome !== "ok") return guard.result;
+			if (guard.outcome !== "ok")
+				return guard.result;
 			// Silo-scope the source lookup: a foreign-silo revision must be a 404, never a distinct 409
 			// existence oracle. The same-silo different-service mismatch is still a 409 within the silo.
 			const source = await transaction.agentRevision.findFirst({ where: { id: command.sourceRevisionId, agentService: { is: { siloId: command.siloId } } }, include: _AGENT_REVISION_INCLUDE });
-			if (source === null) return { outcome: "denied", reason: "revision_not_found" };
-			if (source.agentServiceId !== command.agentServiceId) return { outcome: "denied", reason: "revision_service_mismatch" };
+			if (source === null)
+				return { outcome: "denied", reason: "revision_not_found" };
+			if (source.agentServiceId !== command.agentServiceId)
+				return { outcome: "denied", reason: "revision_service_mismatch" };
 			const content = _AgentRevisionContentFromRow(source);
 			const revisionRow = await new PrismaAgentRevisionWriterRepository(transaction).createDraft({
 				siloId: guard.siloId,
@@ -162,9 +170,12 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 		{
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${command.agentServiceId} AND "silo_id" = ${command.siloId} FOR UPDATE`);
 			const row = await transaction.agentService.findFirst({ where: { id: command.agentServiceId, siloId: command.siloId } });
-			if (row === null) return { outcome: "denied", reason: "service_not_found" };
-			if (_serviceState(row.state) !== command.expectedState) return { outcome: "conflict", currentState: _serviceState(row.state) };
-			if (command.action === "enable" && row.activeRevisionId === null) return { outcome: "denied", reason: "service_not_runnable" };
+			if (row === null)
+				return { outcome: "denied", reason: "service_not_found" };
+			if (_serviceState(row.state) !== command.expectedState)
+				return { outcome: "conflict", currentState: _serviceState(row.state) };
+			if (command.action === "enable" && row.activeRevisionId === null)
+				return { outcome: "denied", reason: "service_not_runnable" };
 			const updated = await transaction.agentService.update({
 				where: { id: command.agentServiceId },
 				data: {
@@ -206,9 +217,12 @@ async function _lockAndReadHead(transaction: Prisma.TransactionClient, agentServ
 	await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${agentServiceId} AND "silo_id" = ${siloId} FOR UPDATE`);
 	const service = await transaction.agentService.findFirst({ where: { id: agentServiceId, siloId } });
 	// A service in another silo is indistinguishable from a missing one — no cross-silo existence oracle.
-	if (service === null) return { outcome: "blocked", result: { outcome: "denied", reason: "service_not_found" } };
-	if (_serviceState(service.state) === "retired") return { outcome: "blocked", result: { outcome: "denied", reason: "service_retired" } };
+	if (service === null)
+		return { outcome: "blocked", result: { outcome: "denied", reason: "service_not_found" } };
+	if (_serviceState(service.state) === "retired")
+		return { outcome: "blocked", result: { outcome: "denied", reason: "service_retired" } };
 	const head = await transaction.agentRevision.findFirst({ where: { agentServiceId }, orderBy: { revision: "desc" }, select: { id: true, revision: true } });
-	if (head === null || head.id !== expectedParentRevisionId) return { outcome: "blocked", result: { outcome: "conflict", currentHeadRevisionId: head?.id ?? null } };
+	if (head === null || head.id !== expectedParentRevisionId)
+		return { outcome: "blocked", result: { outcome: "conflict", currentHeadRevisionId: head?.id ?? null } };
 	return { outcome: "ok", siloId: service.siloId, head };
 }

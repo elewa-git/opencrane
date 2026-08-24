@@ -4,9 +4,9 @@ import type { AgentRevisionContent } from "@opencrane/models/agents";
 import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 
-import { INITIAL_PERSONAL_AGENT_POLICY } from "./initial-personal-agent-policy";
-import { InitialPersonalAgentDefaultModelResolutionStatuses, type InitialPersonalAgentDefaultModelResolver, type InitialPersonalAgentPublicationPersona, type InitialPersonalAgentPublicationRepository } from "./initial-personal-agent-publication.types";
-import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapResult } from "./personal-agent-bootstrap.types";
+import { INITIAL_PERSONAL_AGENT_POLICY } from "../initial-personal-agent-policy";
+import { InitialPersonalAgentDefaultModelResolutionStatuses, type InitialPersonalAgentDefaultModelResolver, type InitialPersonalAgentPublicationPersona, type InitialPersonalAgentPublicationRepository } from "../initial-personal-agent-publication.types";
+import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapResult } from "../personal-agent-bootstrap.types";
 import { PrismaAgentRevisionWriterRepository } from "./prisma-agent-revision-writer";
 
 /** Capability catalogue recorded for the onboarding-owned initial publication. */
@@ -49,8 +49,10 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 	{
 		// 1. Resolve one default model so the first revision never stores an arbitrary route.
 		const model = await this.defaultModelResolver.resolve(command.siloId);
-		if (model.status === InitialPersonalAgentDefaultModelResolutionStatuses.Unavailable) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable);
-		if (model.status === InitialPersonalAgentDefaultModelResolutionStatuses.Ambiguous) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelAmbiguous);
+		if (model.status === InitialPersonalAgentDefaultModelResolutionStatuses.Unavailable)
+			return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable);
+		if (model.status === InitialPersonalAgentDefaultModelResolutionStatuses.Ambiguous)
+			return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelAmbiguous);
 
 		// 2. Create the stable service and its first draft through the shared revision writer.
 		const service = await this.transaction.agentService.create({

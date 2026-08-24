@@ -8,14 +8,13 @@ import type { AuditDecisionRecord } from "@opencrane/backend/server/iam/audit";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 
 import { __CreateAgentServicesRouter } from "./agent-revision.router";
-import type { AgentServicePublicationRepository, AtomicAgentRevisionPublication } from "./agent-publication.types";
+import type { AgentPublicationAuditEvidencePort, AgentServicePublicationRepository, AtomicAgentRevisionPublication } from "./agent-publication.types";
 import type { ManagedRunAdmissionPort } from "./agent-revision-lifecycle.types";
 import type { ManagementCaller } from "./agent-revision.router.types";
-import { PrismaAgentServicePublicationRepository } from "./prisma-agent-publication";
-import type { AgentPublicationAuditEvidencePort } from "./prisma-agent-publication.types";
-import { PrismaAgentRevisionLifecycleRepository } from "./prisma-agent-revision-lifecycle";
-import { PrismaAgentScheduleRepository } from "./prisma-agent-schedule";
-import { PrismaBoundaryGrantUnitOfWork } from "./prisma-boundary-grant-unit-of-work";
+import { PrismaAgentServicePublicationRepository } from "./db/prisma-agent-publication";
+import { PrismaAgentRevisionLifecycleRepository } from "./db/prisma-agent-revision-lifecycle";
+import { PrismaAgentScheduleRepository } from "./db/prisma-agent-schedule";
+import { PrismaBoundaryGrantUnitOfWork } from "./db/prisma-boundary-grant-unit-of-work";
 
 /** Stable capability-catalogue reference recorded for a management publish decision. */
 const _MANAGEMENT_CATALOG_ID = "opencrane-agent-management";

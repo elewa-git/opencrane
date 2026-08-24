@@ -167,10 +167,10 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/server/agents/agent-services/main/src/prisma-agent-revision-model-selection.ts",
+        "path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-revision-model-selection.ts",
         "adapter": "PrismaAgentRevisionModelSelectionRepository",
         "contract": "AgentRevisionModelSelectionRepository",
-        "contractImportPath": "./agent-revision-model-selection.types",
+        "contractImportPath": "../agent-revision-model-selection.types",
         "constructs": [
           {
             "adapter": "PrismaAgentRevisionWriterRepository",
@@ -179,10 +179,10 @@
         ]
       },
       {
-        "path": "libs/backend/server/agents/agent-services/main/src/prisma-agent-revision-persona-selection.ts",
+        "path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-revision-persona-selection.ts",
         "adapter": "PrismaAgentRevisionPersonaSelectionRepository",
         "contract": "AgentRevisionPersonaSelectionRepository",
-        "contractImportPath": "./agent-revision-persona-selection.types",
+        "contractImportPath": "../agent-revision-persona-selection.types",
         "constructs": [
           {
             "adapter": "PrismaAgentRevisionWriterRepository",
@@ -191,24 +191,24 @@
         ]
       },
       {
-        "path": "libs/backend/server/agents/agent-services/main/src/prisma-agent-revision-writer.ts",
+        "path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-revision-writer.ts",
         "adapter": "PrismaAgentRevisionWriterRepository",
         "contract": "AgentRevisionWriterRepository",
         "contractImportPath": "./prisma-agent-revision-writer.types",
         "constructs": []
       },
       {
-        "path": "libs/backend/server/agents/agent-services/main/src/prisma-managed-agent-service-principal-repository.ts",
+        "path": "libs/backend/server/agents/agent-services/main/src/db/prisma-managed-agent-service-principal-repository.ts",
         "adapter": "PrismaManagedAgentServicePrincipalRepository",
         "contract": "ManagedAgentServicePrincipalRepository",
-        "contractImportPath": "./managed-agent-service-principal.types",
+        "contractImportPath": "../managed-agent-service-principal.types",
         "constructs": []
       },
       {
-        "path": "libs/backend/server/agents/agent-services/main/src/prisma-boundary-grant-resolver.ts",
+        "path": "libs/backend/server/agents/agent-services/main/src/db/prisma-boundary-grant-resolver.ts",
         "adapter": "PrismaBoundaryGrantRepository",
         "contract": "BoundaryGrantResolver",
-        "contractImportPath": "./boundary-attachment-authority.types",
+        "contractImportPath": "../boundary-attachment-authority.types",
         "constructs": [
           {
             "adapter": "PrismaAuthorizationGrantRepository",
@@ -217,10 +217,10 @@
         ]
       },
       {
-        "path": "libs/backend/server/agents/agent-services/main/src/prisma-initial-personal-agent-publication.ts",
+        "path": "libs/backend/server/agents/agent-services/main/src/db/prisma-initial-personal-agent-publication.ts",
         "adapter": "PrismaInitialPersonalAgentPublicationRepository",
         "contract": "InitialPersonalAgentPublicationRepository",
-        "contractImportPath": "./initial-personal-agent-publication.types",
+        "contractImportPath": "../initial-personal-agent-publication.types",
         "constructs": [
           {
             "adapter": "PrismaAgentRevisionWriterRepository",
@@ -229,10 +229,10 @@
         ]
       },
       {
-        "path": "libs/backend/server/agents/agent-services/main/src/prisma-personal-agent-bootstrap-repository.ts",
+        "path": "libs/backend/server/agents/agent-services/main/src/db/prisma-personal-agent-bootstrap-repository.ts",
         "adapter": "PrismaPersonalAgentBootstrapRepository",
         "contract": "PersonalAgentBootstrapRepository",
-        "contractImportPath": "./personal-agent-bootstrap.types",
+        "contractImportPath": "../personal-agent-bootstrap.types",
         "constructs": [
           {
             "adapter": "PrismaAgentRevisionPersonaSelectionRepository",
@@ -644,10 +644,10 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/server/agents/agent-services/main/src/prisma-boundary-grant-unit-of-work.ts",
+        "path": "libs/backend/server/agents/agent-services/main/src/db/prisma-boundary-grant-unit-of-work.ts",
         "adapter": "PrismaBoundaryGrantUnitOfWork",
         "contract": "BoundaryGrantResolver",
-        "contractImportPath": "./boundary-attachment-authority.types",
+        "contractImportPath": "../boundary-attachment-authority.types",
         "constructs": [
           {
             "adapter": "PrismaBoundaryGrantRepository",
@@ -1268,8 +1268,8 @@
       }
     ],
     "compositions": [
-      "libs/backend/server/agents/agent-services/main/src/prisma-boundary-grant.factory.ts",
-      "libs/backend/server/agents/agent-services/main/src/prisma-managed-agent-service-principal.factory.ts",
+      "libs/backend/server/agents/agent-services/main/src/db/prisma-boundary-grant.factory.ts",
+      "libs/backend/server/agents/agent-services/main/src/db/prisma-managed-agent-service-principal.factory.ts",
       "apps/opencrane/src/app/routes.ts",
       "libs/backend/server/iam/groups/main/src/routes/groups.ts",
       "apps/opencrane/src/app/external-action-composition.ts",

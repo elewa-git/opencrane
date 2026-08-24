@@ -19,8 +19,10 @@ export function _serviceState(value: string): AgentServiceState
 /** Maps a Prisma AgentService kind identifier to the target contract value. */
 export function _serviceKind(value: string): AgentServiceKind
 {
-	if (value === "Personal") return AgentServiceKinds.Personal;
-	if (value === "Managed") return AgentServiceKinds.Managed;
+	if (value === "Personal")
+		return AgentServiceKinds.Personal;
+	if (value === "Managed")
+		return AgentServiceKinds.Managed;
 	throw new Error(`unknown AgentService kind: ${value}`);
 }
 
@@ -29,7 +31,8 @@ function _boundaryAttachment(value: AgentRevisionRow["boundaryAttachments"][numb
 {
 	if (value.boundaryKind === "Group" && value.boundaryGroupId !== null && value.boundaryPrincipalId === null)
 	{
-		if (value.boundaryCoverage !== "Exact" && value.boundaryCoverage !== "Descendants") throw new Error("invalid persisted group boundary coverage");
+		if (value.boundaryCoverage !== "Exact" && value.boundaryCoverage !== "Descendants")
+			throw new Error("invalid persisted group boundary coverage");
 		const boundaryCoverage = value.boundaryCoverage === "Descendants" ? RevisionBoundaryCoverages.Descendants : RevisionBoundaryCoverages.Exact;
 		return { boundaryKind: RevisionBoundaryKinds.Group, boundaryId: value.boundaryGroupId, boundaryCoverage };
 	}
@@ -86,7 +89,8 @@ export function _runState(value: string): AgentRunState
 /** Maps a Prisma AgentRun terminal-reason identifier to the target contract value, or null. */
 export function _runTerminalReason(value: string | null): AgentRunTerminalReason | null
 {
-	if (value === null) return null;
+	if (value === null)
+		return null;
 	switch (value)
 	{
 		case "Success": return "success";

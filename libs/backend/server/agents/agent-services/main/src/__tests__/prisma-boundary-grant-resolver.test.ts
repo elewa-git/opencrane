@@ -1,7 +1,7 @@
 import { RevisionBoundaryCoverages, RevisionBoundaryKinds } from "@opencrane/models/agents";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaBoundaryGrantRepository } from "../prisma-boundary-grant-resolver";
+import { PrismaBoundaryGrantRepository } from "../db/prisma-boundary-grant-resolver";
 
 /** Builds one persisted generic grant row for resolver tests. */
 function _Grant(overrides: Record<string, unknown> = {})

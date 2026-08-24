@@ -1,6 +1,6 @@
 import { AgentScheduleOverlapPolicy as PrismaOverlapPolicy, AgentServiceKind, type PrismaClient } from "@prisma/client";
 
-import { AgentScheduleOverlapPolicies, type AgentScheduleDeletionResult, type AgentScheduleMutationResult, type AgentScheduleOverlapPolicy, type AgentScheduleRepository, type AgentServiceScheduleRecord, type CreateAgentScheduleCommand, type UpdateAgentScheduleCommand } from "./agent-schedule.types";
+import { AgentScheduleOverlapPolicies, type AgentScheduleDeletionResult, type AgentScheduleMutationResult, type AgentScheduleOverlapPolicy, type AgentScheduleRepository, type AgentServiceScheduleRecord, type CreateAgentScheduleCommand, type UpdateAgentScheduleCommand } from "../agent-schedule.types";
 
 /** Row shape read back from Postgres for one schedule. */
 interface _ScheduleRow
@@ -75,8 +75,10 @@ export class PrismaAgentScheduleRepository implements AgentScheduleRepository
 		const createdAtDate = new Date(createdAt);
 		return this.prisma.$transaction(async (transaction): Promise<AgentScheduleMutationResult> => {
 			const service = await transaction.agentService.findFirst({ where: { id: command.agentServiceId, siloId: command.siloId }, select: { kind: true } });
-			if (service === null) return { outcome: "denied", reason: "service_not_found" };
-			if (service.kind !== AgentServiceKind.Managed) return { outcome: "denied", reason: "service_not_managed" };
+			if (service === null)
+				return { outcome: "denied", reason: "service_not_found" };
+			if (service.kind !== AgentServiceKind.Managed)
+				return { outcome: "denied", reason: "service_not_managed" };
 			const row = await transaction.agentServiceSchedule.create({ data: { siloId: command.siloId, agentServiceId: command.agentServiceId, cron: command.cron, timezone: command.timezone, overlapPolicy: _toPrismaOverlap(command.overlapPolicy), enabled: command.enabled, catchupWindowSeconds: command.catchupWindowSeconds, createdAt: createdAtDate, updatedAt: createdAtDate } });
 			return { outcome: "ok", schedule: _mapSchedule(row as _ScheduleRow) };
 		});
@@ -88,7 +90,8 @@ export class PrismaAgentScheduleRepository implements AgentScheduleRepository
 		const updatedAtDate = new Date(updatedAt);
 		return this.prisma.$transaction(async (transaction): Promise<AgentScheduleMutationResult> => {
 			const existing = await transaction.agentServiceSchedule.findFirst({ where: { id: command.scheduleId, siloId: command.siloId, agentServiceId: command.agentServiceId }, select: { id: true } });
-			if (existing === null) return { outcome: "denied", reason: "schedule_not_found" };
+			if (existing === null)
+				return { outcome: "denied", reason: "schedule_not_found" };
 			const row = await transaction.agentServiceSchedule.update({ where: { id: command.scheduleId }, data: { cron: command.cron, timezone: command.timezone, overlapPolicy: _toPrismaOverlap(command.overlapPolicy), enabled: command.enabled, catchupWindowSeconds: command.catchupWindowSeconds, updatedAt: updatedAtDate } });
 			return { outcome: "ok", schedule: _mapSchedule(row as _ScheduleRow) };
 		});
@@ -99,7 +102,8 @@ export class PrismaAgentScheduleRepository implements AgentScheduleRepository
 	{
 		return this.prisma.$transaction(async (transaction): Promise<AgentScheduleDeletionResult> => {
 			const existing = await transaction.agentServiceSchedule.findFirst({ where: { id: scheduleId, siloId, agentServiceId }, select: { id: true } });
-			if (existing === null) return { outcome: "denied", reason: "schedule_not_found" };
+			if (existing === null)
+				return { outcome: "denied", reason: "schedule_not_found" };
 			await transaction.agentServiceSchedule.delete({ where: { id: scheduleId } });
 			return { outcome: "deleted" };
 		});

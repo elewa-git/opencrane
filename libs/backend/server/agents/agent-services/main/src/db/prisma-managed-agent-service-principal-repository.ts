@@ -1,7 +1,7 @@
 import { PrincipalProvenance, type Prisma } from "@prisma/client";
 
-import type { ManagedAgentServicePrincipalRepository } from "./managed-agent-service-principal.types";
-import { __ManagedAgentServicePrincipal, MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER } from "./managed-agent-service-principal";
+import type { ManagedAgentServicePrincipalRepository } from "../managed-agent-service-principal.types";
+import { __ManagedAgentServicePrincipal, MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER } from "../managed-agent-service-principal";
 
 /** Persists the internal Principal owned by one managed AgentService transaction. */
 export class PrismaManagedAgentServicePrincipalRepository implements ManagedAgentServicePrincipalRepository

@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { AgentRevisionPersonaSelectionMaterializationCodes } from "../agent-revision-persona-selection.types";
-import { PrismaAgentRevisionPersonaSelectionRepository } from "../prisma-agent-revision-persona-selection";
+import { PrismaAgentRevisionPersonaSelectionRepository } from "../db/prisma-agent-revision-persona-selection";
 
 /** Builds one complete published source revision for clone assertions. */
 function _Source(personaRevisionId = "persona-old")

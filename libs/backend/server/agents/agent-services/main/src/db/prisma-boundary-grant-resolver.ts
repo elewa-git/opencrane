@@ -5,12 +5,13 @@ import { __DecideAuthorization, AuthorizationBoundaryCoverages, AuthorizationBou
 import type { AuthorizationBoundary, AuthorizationGrant } from "@opencrane/models/authorization";
 import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
 
-import type { BoundaryGrantResolutionCommand, BoundaryGrantResolver, EffectiveBoundaryGrant } from "./boundary-attachment-authority.types";
+import type { BoundaryGrantResolutionCommand, BoundaryGrantResolver, EffectiveBoundaryGrant } from "../boundary-attachment-authority.types";
 
 /** Converts one revision attachment into the generic authorization boundary vocabulary. */
 function _Boundary(attachment: RevisionBoundaryAttachment): AuthorizationBoundary
 {
-	if (attachment.boundaryKind === RevisionBoundaryKinds.Group) return { kind: AuthorizationBoundaryKinds.Group, groupId: attachment.boundaryId };
+	if (attachment.boundaryKind === RevisionBoundaryKinds.Group)
+		return { kind: AuthorizationBoundaryKinds.Group, groupId: attachment.boundaryId };
 	return { kind: AuthorizationBoundaryKinds.Personal, principalId: attachment.boundaryId };
 }
 
@@ -58,16 +59,19 @@ export class PrismaBoundaryGrantRepository implements BoundaryGrantResolver
 	/** Resolves allow-only boundaries after generic deny, priority, validity, and hierarchy decisions. */
 	async resolveEffectiveBoundaryGrants(command: BoundaryGrantResolutionCommand): Promise<readonly EffectiveBoundaryGrant[]>
 	{
-		if (!command.siloId.trim() || !Number.isSafeInteger(command.nowEpochMs) || command.nowEpochMs < 0 || command.principalIds.length === 0) return [];
+		if (!command.siloId.trim() || !Number.isSafeInteger(command.nowEpochMs) || command.nowEpochMs < 0 || command.principalIds.length === 0)
+			return [];
 		const requestedPrincipalIds = [...new Set(command.principalIds)];
 		const principalRows = await this.prisma.principal.findMany({ where: { siloId: command.siloId, id: { in: requestedPrincipalIds } }, select: { id: true } });
 		const principalIds = [...new Set(principalRows.map(principal => principal.id))];
-		if (principalIds.length !== requestedPrincipalIds.length) return [];
+		if (principalIds.length !== requestedPrincipalIds.length)
+			return [];
 
 		const repository = new PrismaAuthorizationGrantRepository(this.prisma);
 		const subjectSets = await Promise.all(principalIds.map(principalId => repository.resolvePrincipalSubjects(command.siloId, principalId)));
 		const subjects = subjectSets.flat();
-		if (subjects.length === 0) return [];
+		if (subjects.length === 0)
+			return [];
 		const grants = await repository.listSubjectGrants(command.siloId, subjects);
 		const grantsByCoordinate = new Map<string, AuthorizationGrant[]>();
 		for (const grant of grants)
@@ -87,13 +91,17 @@ export class PrismaBoundaryGrantRepository implements BoundaryGrantResolver
 			for (const coordinateGrants of grantsByCoordinate.values())
 			{
 				const coordinate = coordinateGrants[0];
-				if (coordinate === undefined) continue;
+				if (coordinate === undefined)
+					continue;
 				const decision = __DecideAuthorization({ siloId: command.siloId, subjects, boundary, capability: coordinate.capability, resource: coordinate.resource, nowEpochMs: command.nowEpochMs }, coordinateGrants, context);
-				if (decision.outcome !== AuthorizationDecisionOutcomes.Allow) continue;
+				if (decision.outcome !== AuthorizationDecisionOutcomes.Allow)
+					continue;
 				const winningIds = new Set(decision.grantIds);
-				if (coordinateGrants.some(grant => winningIds.has(grant.grantId) && _WinningGrantCoversAttachment(grant, attachment))) { allowed = true; break; }
+				if (coordinateGrants.some(grant => winningIds.has(grant.grantId) && _WinningGrantCoversAttachment(grant, attachment)))
+				{ allowed = true; break; }
 			}
-			if (allowed) effective.push({ boundaryKind: attachment.boundaryKind, boundaryId: attachment.boundaryId, boundaryCoverage: attachment.boundaryCoverage });
+			if (allowed)
+				effective.push({ boundaryKind: attachment.boundaryKind, boundaryId: attachment.boundaryId, boundaryCoverage: attachment.boundaryCoverage });
 		}
 		return effective;
 	}

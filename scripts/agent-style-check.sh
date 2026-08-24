@@ -20,6 +20,7 @@
 #   PKG-IMPORT-EXT    package specifier wrongly carrying .js
 #   CONSOLE           raw console.* in shipped code (use @opencrane/backend/observability)
 #   INLINE-CONDITIONAL more than one ternary conditional on one physical source line
+#   IF-BODY-NEWLINE   if body starts on the same physical line as its condition
 #   CATEGORICAL-LITERAL direct string comparison on a categorical property (heuristic)
 #   TYPES-IN-IMPL     exported interface/type outside a *.types.ts file
 #   JSDOC             exported declaration with no JSDoc directly above (heuristic)
@@ -97,6 +98,15 @@ for f in ${INLINE_CHECKABLE[@]+"${INLINE_CHECKABLE[@]}"}; do
 	while IFS=: read -r ln _; do
 		_report "$f" "$ln" ERROR INLINE-CONDITIONAL "more than one ternary conditional on one line — use an exhaustive lookup, switch, or helper"
 	done < <(node scripts/inline-conditional-check.mjs "$f")
+done
+
+# IF-BODY-NEWLINE — every `if` starts its body on the next physical line, including braceless
+# `return`, `continue`, `throw`, and assignment bodies. The AST check also covers multiline
+# conditions and nested else-if statements without mistaking strings or comments for code.
+for f in ${INLINE_CHECKABLE[@]+"${INLINE_CHECKABLE[@]}"}; do
+	while IFS=: read -r ln _; do
+		_report "$f" "$ln" ERROR IF-BODY-NEWLINE "if body starts on the condition line — move the body to the following line"
+	done < <(node scripts/if-body-newline-check.mjs "$f")
 done
 
 # MISSING-README / README-SECTIONS — package docs (docs/agents/package-docs.md).

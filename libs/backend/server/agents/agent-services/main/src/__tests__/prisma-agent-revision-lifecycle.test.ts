@@ -2,7 +2,7 @@ import { AgentServiceKind, AgentServiceState, PrincipalProvenance } from "@prism
 import { describe, expect, it, vi } from "vitest";
 
 import { MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER } from "../managed-agent-service-principal";
-import { PrismaAgentRevisionLifecycleRepository } from "../prisma-agent-revision-lifecycle";
+import { PrismaAgentRevisionLifecycleRepository } from "../db/prisma-agent-revision-lifecycle";
 
 describe("PrismaAgentRevisionLifecycleRepository", function _Suite()
 {
@@ -52,7 +52,8 @@ describe("PrismaAgentRevisionLifecycleRepository", function _Suite()
 		}, "2026-08-21T12:00:00.000Z");
 
 		expect(result.outcome).toBe("created");
-		if (result.outcome !== "created") throw new Error("expected managed service creation");
+		if (result.outcome !== "created")
+			throw new Error("expected managed service creation");
 		const expectedPrincipalId = `agent-service:${result.service.id}`;
 		expect(principalCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ id: expectedPrincipalId, siloId: "silo-1", issuer: MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER, subject: result.service.id, provenance: PrincipalProvenance.Internal }) });
 		expect(serviceCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ id: result.service.id, principalId: expectedPrincipalId, kind: AgentServiceKind.Managed, state: AgentServiceState.Draft }) });
