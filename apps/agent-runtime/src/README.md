@@ -76,8 +76,8 @@ config.py · constants.py · observability.py support the components above.
 For local development, `development_runtime.py` preserves bootstrap, command admission, event
 projection, resume correlation, and candidate delivery. The `litellm` strategy uses the normal model
 driver for Alternatives A and B. The `simulated` strategy replaces only the model request with
-`development/deterministic_model.py`, which emits neutral events into the same projector. Its explicit
-The simulated profile returns deterministic text and usage events for chat messages. It does not
+`development/deterministic_model.py`, which emits neutral events into the same projector. The
+simulated profile returns deterministic text and usage events for chat messages. It does not
 propose or execute tools because Tier 2 does not start the server-owned external-action worker.
 
 ## Authority and failure rules
