@@ -10,7 +10,7 @@ const _PUBLIC_ADDRESS: McpEraProbeDnsAddress = { address: "93.184.216.34", famil
 /** Builds one valid JSON-RPC discovery response. */
 function _DiscoveryResponse(protocolVersion = "2026-07-28"): McpEraProbeHttpsResponse
 {
-	return { status: 200, headers: { "content-type": "application/json" }, body: new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", id: "opencrane-mcp-era-probe", result: { protocolVersion, serverInfo: { name: "reviewed-server" } } })) };
+	return { status: 200, headers: { "content-type": "application/json" }, body: new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", id: "opencrane-mcp-era-probe", result: { resultType: "complete", supportedVersions: [protocolVersion], capabilities: {}, ttlMs: 3_600_000, cacheScope: "public" } })) };
 }
 
 /** Builds the client with public DNS by default and a deterministic HTTPS request seam. */
@@ -33,7 +33,9 @@ describe("HTTPS MCP era probe", function _describeMcpEraProbe()
 		{
 			expect(command.resolvedAddress).toEqual(_PUBLIC_ADDRESS);
 			expect(command.headers["MCP-Protocol-Version"]).toBe("2026-07-28");
-			expect(JSON.parse(new TextDecoder().decode(command.body))).toEqual({ jsonrpc: "2.0", id: "opencrane-mcp-era-probe", method: "server/discover", params: {} });
+			expect(command.headers["Mcp-Method"]).toBe("server/discover");
+			expect(command.headers.accept).toBe("application/json, text/event-stream");
+			expect(JSON.parse(new TextDecoder().decode(command.body))).toEqual({ jsonrpc: "2.0", id: "opencrane-mcp-era-probe", method: "server/discover", params: { _meta: { protocolVersion: "2026-07-28", clientCapabilities: {} } } });
 			return _DiscoveryResponse();
 		});
 
@@ -41,6 +43,15 @@ describe("HTTPS MCP era probe", function _describeMcpEraProbe()
 
 		expect(result.protocolVersion).toBe("2026-07-28");
 		expect(result.evidenceDigest).toMatch(/^sha256:[a-f0-9]{64}$/u);
+	});
+
+	it("accepts a compliant Server-Sent Events discovery reply", async function _AcceptsSseDiscovery()
+	{
+		const response = _DiscoveryResponse();
+		const body = new TextEncoder().encode(`event: message\ndata: ${new TextDecoder().decode(response.body)}\n\n`);
+		const client = _Client(async function _Sse(): Promise<McpEraProbeHttpsResponse> { return { status: 200, headers: { "content-type": "text/event-stream" }, body }; });
+
+		await expect(client.probe({ endpoint: "https://mcp.example.com" })).resolves.toMatchObject({ protocolVersion: "2026-07-28" });
 	});
 
 	it("refuses non-HTTPS URLs, credentials, and IP-literal endpoints before DNS", async function _refusesUnsafeEndpoints()

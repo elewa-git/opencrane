@@ -52,14 +52,14 @@ export function __CreateHttpsMcpEraProbeClient(options: McpEraProbeHttpsClientOp
 					{
 						response = await ___DoWithoutTrace(function _RequestWithoutUrlTrace(): Promise<McpEraProbeHttpsResponse>
 						{
-							return request({ endpoint, resolvedAddress: addresses[0] as McpEraProbeDnsAddress, body: _McpEraProbeDiscoveryRequest(), headers: { accept: "application/json", "content-type": "application/json", "MCP-Protocol-Version": options.protocolVersion }, timeoutMilliseconds: options.requestTimeoutMilliseconds, maximumResponseBytes: options.maximumResponseBytes, signal });
+							return request({ endpoint, resolvedAddress: addresses[0] as McpEraProbeDnsAddress, body: _McpEraProbeDiscoveryRequest(options.protocolVersion), headers: { accept: "application/json, text/event-stream", "content-type": "application/json", "MCP-Protocol-Version": options.protocolVersion, "Mcp-Method": "server/discover" }, timeoutMilliseconds: options.requestTimeoutMilliseconds, maximumResponseBytes: options.maximumResponseBytes, signal });
 						});
 					}
 					catch (error) { return _McpEraProbeTransportFailure(error); }
 					if (response.status >= 300 && response.status < 400) return _McpEraProbeTransportFailure(new McpEraProbeTransportError("redirect"));
 					if (response.status < 200 || response.status >= 300) return _McpEraProbeTransportFailure(new McpEraProbeTransportError(`http_${response.status}`));
 					if (response.body.byteLength > options.maximumResponseBytes) return _McpEraProbeTransportFailure(new McpEraProbeTransportError("oversize"));
-					return _McpEraProbeDiscoveryResult(response.body);
+					return _McpEraProbeDiscoveryResult(response.body, response.headers["content-type"], options.protocolVersion);
 				});
 			});
 		},
