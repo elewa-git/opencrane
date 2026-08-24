@@ -216,7 +216,24 @@ describe("mcp-operator router", function _suite()
       expect(response.status).toBe(200);
       expect(response.body).toMatchObject({ id: "srv-1", approvalStatus: "published" });
       expect(spies["mcpServer.updateMany"]).toHaveBeenCalledWith({ where: { id: "srv-1", siloId: "silo-1", eraProbeStatus: { in: ["Accepted", "NotRequired"] }, approvalStatus: "Disabled" }, data: { approvalStatus: "Published" } });
+	  expect(spies["auditEntry.create"]).toHaveBeenCalledWith({ data: expect.objectContaining({ metadata: { siloId: "silo-1", actorPrincipalId: "principal-1" } }) });
     });
+
+	it("records the authenticated administrator with an access-policy change", async function _AuditsAccessPolicyActor()
+	{
+		_enableOidc();
+		const server = { id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted };
+		const { prisma, spies } = _mockPrisma({
+			"mcpServer.findFirst": function _Find() { return Promise.resolve(server); },
+			"authorizationGrant.findMany": function _FindGrants() { return Promise.resolve([]); },
+			"auditEntry.create": function _Audit() { return Promise.resolve({}); },
+		});
+
+		const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true })).put("/api/v1/mcp/servers/srv-1/access").send({ groupIds: [], principalIds: [] });
+
+		expect(response.status).toBe(200);
+		expect(spies["auditEntry.create"]).toHaveBeenCalledWith({ data: expect.objectContaining({ metadata: { siloId: "silo-1", actorPrincipalId: "principal-1" } }) });
+	});
 
     it("fails closed when no session is established", async function _denyUnauthenticated()
     {

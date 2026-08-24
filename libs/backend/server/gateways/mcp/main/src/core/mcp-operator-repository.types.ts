@@ -29,14 +29,21 @@ export interface McpOperatorServerRecord
 	readonly credentialSchema: unknown;
 	/** Gives the optional entitlement summary exposed in catalog responses. */
 	readonly entitlementSummary: string | null;
+	/** Gives the public HTTPS endpoint saved for the protocol-check worker. */
 	readonly endpoint: string;
+	/** Carries the request-key digest used to find a repeated remote registration, or `null` for other rows. */
 	readonly registrationKeyDigest: string | null;
+	/** Carries the digest that binds a probe task to its registration fields, or `null` for other rows. */
 	readonly registrationDigest: string | null;
 	/** Gives the checked protocol state translated from the database enum. */
 	readonly eraProbeStatus: McpEraProbeStates;
+	/** Gives the protocol revision returned by a completed check, or `null` when none was observed. */
 	readonly eraProtocolVersion: string | null;
+	/** Gives the response or failure digest saved when the check finishes. */
 	readonly eraProbeEvidenceDigest: string | null;
+	/** Gives the saved failure reason when the check ended without a usable protocol revision. */
 	readonly eraProbeFailureCode: string | null;
+	/** Gives the latest workflow-engine attempt recorded for this registration. */
 	readonly eraProbeAttempts: number;
 }
 
@@ -81,7 +88,7 @@ export interface McpEraProbeTargetRecord
 	readonly eraProbeEvidenceDigest: string | null;
 	/** Bounded reason stored when the endpoint or response was terminally invalid. */
 	readonly eraProbeFailureCode: string | null;
-	/** Number of external checks already recorded for this registration. */
+	/** Gives the latest workflow-engine attempt already recorded for this registration. */
 	readonly eraProbeAttempts: number;
 }
 
@@ -232,9 +239,46 @@ export interface IMcpOperatorRepository
 	 * @returns The updated server row, or `null` when no server with this ID belongs to the silo.
 	 */
 	setApprovalStatus(siloId: string, serverId: string, approvalStatus: string, requiredEraProbeStatuses?: readonly McpEraProbeStates[], requiredApprovalStatus?: string): Promise<McpOperatorServerRecord | null>;
+	/**
+	 * Creates a draft remote server or returns the server previously claimed by the request key.
+	 *
+	 * Called by: `registerRemoteServer` before it admits the protocol-check task in the transaction.
+	 * @param registration - Supplies the silo, server fields, and digests used to claim the request key and name.
+	 * @returns A new draft, the draft already claimed by the request key, or `null` when the name belongs to another registration.
+	 */
 	createOrFindRemoteServer(registration: McpRemoteServerRegistrationRecord): Promise<McpRemoteServerCreateResult | null>;
+	/**
+	 * Loads the server fields that a protocol-check task must compare before contacting its endpoint.
+	 *
+	 * Called by: `_LoadTarget` before the workflow replays or performs an external check.
+	 * @param siloId - Keeps the lookup inside the task's admitted silo.
+	 * @param serverId - Identifies the draft server the task was admitted for.
+	 * @returns The stored target, or `null` when the server is absent, belongs to another silo, or has no registration digest.
+	 */
 	loadEraProbeTarget(siloId: string, serverId: string): Promise<McpEraProbeTargetRecord | null>;
+	/**
+	 * Stores a pending protocol check's accepted or rejected result when its registration still matches.
+	 *
+	 * Called by: `_RecordResult` after the workflow obtains discovery evidence or a final failure.
+	 * @param siloId - Keeps the update inside the task's admitted silo.
+	 * @param serverId - Identifies the draft server whose pending check should finish.
+	 * @param registrationDigest - Prevents a task admitted for replaced fields from changing the server.
+	 * @param result - Supplies the protocol decision and the evidence saved with it.
+	 * @returns The stored server and whether this call changed it, or `null` when the registration no longer matches.
+	 */
 	recordEraProbeResult(siloId: string, serverId: string, registrationDigest: string, result: McpEraProbeTaskResult): Promise<McpEraProbeWriteResult | null>;
+	/**
+	 * Records another temporary failure and rejects the server when the stored attempt count reaches the limit.
+	 *
+	 * Called by: `_RecordRetry` after the remote check reports a failure that may clear later.
+	 * @param siloId - Keeps the update inside the task's admitted silo.
+	 * @param serverId - Identifies the draft server whose failed check is being counted.
+	 * @param registrationDigest - Prevents a task admitted for replaced fields from changing the server.
+	 * @param attempt - Gives the current workflow-engine attempt, including earlier handler failures.
+	 * @param maximumAttempts - Sets the attempt count at which the server becomes rejected.
+	 * @param exhaustedResult - Supplies the rejection evidence stored when no attempts remain.
+	 * @returns The stored server, whether this call changed it, and whether it is now rejected; or `null` when the registration no longer matches.
+	 */
 	recordEraProbeRetry(siloId: string, serverId: string, registrationDigest: string, attempt: number, maximumAttempts: number, exhaustedResult: McpEraProbeTaskResult): Promise<McpEraProbeRetryResult | null>;
 	/**
 	 * Lists groups in the requested silo, optionally restricted to the supplied group IDs.

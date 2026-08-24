@@ -1,4 +1,4 @@
-# mcp-era-probe — external MCP protocol check
+# @opencrane/backend/server/infra/mcp-era-probe — external MCP protocol check
 
 > [OpenCrane](../../../../../README.md) › [backend](../../../README.md) › [server](../../README.md) › [infra](../README.md) › mcp-era-probe
 
@@ -8,8 +8,6 @@ This library makes the one external request needed to check a reviewed MCP serve
 domain records it. It owns HTTPS, DNS review, response limits, JSON-RPC validation, and the evidence
 digest. It does not own server registration, database writes, workflow scheduling, session setup, or
 tool execution.
-
-## What it checks
 
 ```text
 MCP domain port
@@ -39,6 +37,12 @@ In this flow:
   of the validated JSON-RPC result.
 - `McpEraProbeConfigurationError`, `McpEraProbeTransportError`, and `McpEraProbeProtocolError` carry
   bounded error codes that are safe to store or log.
+
+## Boundary
+
+The MCP domain decides when an endpoint may be checked and what each checked result means. This
+adapter only performs the bounded network exchange. It never registers or approves a server, saves
+catalogue data, starts a workflow, creates an MCP session, or runs a remote tool.
 
 ## Dependency direction
 
