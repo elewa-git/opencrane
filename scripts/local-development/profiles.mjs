@@ -1,8 +1,10 @@
+/** Names the CLI-level core and Agent process compositions. */
 export const LOCAL_DEVELOPMENT_PROFILES = Object.freeze({
 	Core: "core",
 	Agent: "agent"
 });
 
+/** Maps Agent alternatives A, B, and C to their model-access boundary. */
 export const LOCAL_DEVELOPMENT_ALTERNATIVES = Object.freeze({
 	LocalLiteLLM: "A",
 	RemoteLiteLLM: "B",
@@ -68,6 +70,10 @@ function _validateRemoteEndpoint(endpoint)
 	return parsed.toString().replace(/\/$/, "");
 }
 
+/**
+ * Parses Tier 2 arguments and rejects options that do not apply to the selected profile.
+ * Agent defaults to Alternative A; Alternative B additionally requires a remote HTTPS origin and key file.
+ */
 export function parseLocalDevelopmentArguments(argumentsList)
 {
 	const parsed = {

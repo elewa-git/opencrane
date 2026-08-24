@@ -4,6 +4,10 @@ import { runLocalCommand } from "./command-runner.mjs";
 export { resetLocalDevelopmentContainers, startLocalLiteLLM, stopOwnedContainer } from "./container-resources.mjs";
 export { applyTargetBaseline, ensureLocalLiteLLMDatabase, startLocalPostgres } from "./postgres.mjs";
 
+/**
+ * Checks the host tools and repository inputs required before the coordinator mutates local state.
+ * Agent profiles also require the pinned Python dependency list used to prepare their runtime.
+ */
 export function validateLocalDevelopmentTools(configuration)
 {
 	const commands = ["docker", "npm", "npx"];

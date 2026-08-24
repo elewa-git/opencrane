@@ -6,6 +6,7 @@ const _OWNER_LABEL = "opencrane.local-development.owner=opencrane";
 const _POSTGRES_IMAGE = "postgres@sha256:e38411452a464af89e5adadb8d223bf53b898d47d6ef918b2d58c08707350449";
 const _LITELLM_IMAGE = "ghcr.io/berriai/litellm-non_root@sha256:39718a9cc9138c99ec812bcde24896411cf54502967a36b19897c539b796fdc7";
 
+/** Builds the labelled, loopback-bound PostgreSQL container command used by the coordinator. */
 export function createPostgresRunCommand(configuration, secrets)
 {
 	return {
@@ -37,6 +38,7 @@ export function createPostgresRunCommand(configuration, secrets)
 	};
 }
 
+/** Returns the local LiteLLM container command for Alternative A, or no command for the other profiles. */
 export function createLiteLLMRunCommand(configuration, secrets)
 {
 	if (configuration.alternative !== LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
@@ -79,6 +81,7 @@ export function createLiteLLMRunCommand(configuration, secrets)
 	};
 }
 
+/** Builds the shared application variables before each process receives its smaller allowlist. */
 export function createApplicationEnvironment(configuration, secrets, developmentCredentials)
 {
 	const baseEnvironment = {
@@ -106,6 +109,7 @@ export function createApplicationEnvironment(configuration, secrets, development
 	return baseEnvironment;
 }
 
+/** Builds the watched server, optional controller, and development-live UI process specifications. */
 export function createApplicationCommands(configuration, applicationEnvironment)
 {
 	const controllerEnvironment = createAgentControllerProcessEnvironment(applicationEnvironment);

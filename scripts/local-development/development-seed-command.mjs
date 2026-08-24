@@ -1,5 +1,6 @@
 import { createDevelopmentSeedProcessEnvironment } from "./process-environments.mjs";
 
+/** Builds the seed command with the private signing key admitted to that process alone. */
 export function createDevelopmentSeedCommand(applicationEnvironment)
 {
 	return {

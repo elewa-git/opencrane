@@ -2,7 +2,9 @@
  * Development-only application compositions selected before any OpenCrane process starts.
  *
  * These stable values let the coordinator, server, and controller agree on which external
- * boundaries exist. They grant no authority and production entrypoints do not import them.
+ * boundaries exist. They travel through process environments rather than persistence or public
+ * APIs, grant no authority, and production entrypoints do not import them. Configuration parsers
+ * reject unknown values before they compose an adapter.
  */
 export enum LocalDevelopmentProfileKinds
 {

@@ -82,6 +82,7 @@ async function _waitForPostgres(configuration)
 	throw new Error("The local PostgreSQL container did not become ready within 30 seconds");
 }
 
+/** Waits for the owned PostgreSQL container and stops it when readiness fails. */
 export async function waitForOwnedPostgres(configuration, waitForPostgres = _waitForPostgres, stopContainer = stopOwnedContainer)
 {
 	try
@@ -95,6 +96,7 @@ export async function waitForOwnedPostgres(configuration, waitForPostgres = _wai
 	}
 }
 
+/** Starts or reuses the labelled PostgreSQL container after its persistent password is verified. */
 export async function startLocalPostgres(configuration, secrets)
 {
 	ensureOwnedVolume(configuration.postgresVolumeName);
@@ -119,6 +121,7 @@ export async function startLocalPostgres(configuration, secrets)
 	return true;
 }
 
+/** Creates Alternative A's LiteLLM database when the shared local PostgreSQL container lacks it. */
 export function ensureLocalLiteLLMDatabase(configuration, queryPostgres = _queryPostgres, runCommand = runLocalCommand)
 {
 	const exists = queryPostgres(configuration, "SELECT 1 FROM pg_database WHERE datname = 'litellm';") === "1";
@@ -131,6 +134,10 @@ export function ensureLocalLiteLLMDatabase(configuration, queryPostgres = _query
 	runCommand("docker", _postgresArguments(configuration, "--command", "CREATE DATABASE litellm;"));
 }
 
+/**
+ * Applies the target baseline to an empty local database and records its digest.
+ * A changed or untracked schema requires `--reset` so Tier 2 never guesses a migration path.
+ */
 export function applyTargetBaseline(configuration)
 {
 	const baseline = fs.readFileSync(configuration.baselinePath);

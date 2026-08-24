@@ -24,7 +24,10 @@ function _CanImportRuntimeDependencies(pythonExecutable, runCommand)
 	}
 }
 
-/** Prepare the repository-owned Python environment before Tier 2 mutates local services. */
+/**
+ * Prepares the repository-owned Python environment before Tier 2 mutates local services.
+ * Core skips Python; Agent profiles reinstall only when the pinned requirements digest or import check differs.
+ */
 export function prepareLocalAgentRuntimeEnvironment(configuration, runCommand = runLocalCommand)
 {
 	if (configuration.profile !== LOCAL_DEVELOPMENT_PROFILES.Agent)

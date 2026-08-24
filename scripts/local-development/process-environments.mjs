@@ -1,3 +1,4 @@
+/** Returns the server allowlist without the seed private key or controller-only configuration. */
 export function createOpenCraneServerProcessEnvironment(applicationEnvironment)
 {
 	return Object.fromEntries(Object.entries(applicationEnvironment).filter(function _serverEntry([name])
@@ -15,6 +16,7 @@ export function createOpenCraneServerProcessEnvironment(applicationEnvironment)
 	}));
 }
 
+/** Returns the controller allowlist without database credentials or membership signing material. */
 export function createAgentControllerProcessEnvironment(applicationEnvironment)
 {
 	return Object.fromEntries(Object.entries(applicationEnvironment).filter(function _controllerEntry([name])
@@ -30,6 +32,7 @@ export function createAgentControllerProcessEnvironment(applicationEnvironment)
 	}));
 }
 
+/** Returns the seed allowlist containing its database URL and temporary membership keypair. */
 export function createDevelopmentSeedProcessEnvironment(applicationEnvironment)
 {
 	return Object.fromEntries(Object.entries(applicationEnvironment).filter(function _seedEntry([name])

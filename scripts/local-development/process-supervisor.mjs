@@ -6,6 +6,7 @@ const _SENSITIVE_PARENT_ENVIRONMENT_NAMES = [
 	"OPENCRANE_INITIAL_MODEL_API_KEY"
 ];
 
+/** Removes known provider and model keys inherited from the shell before adding a process allowlist. */
 export function createDevelopmentChildEnvironment(parentEnvironment, processEnvironment = {})
 {
 	const environment = { ...parentEnvironment };
@@ -21,6 +22,10 @@ export function createDevelopmentChildEnvironment(parentEnvironment, processEnvi
 	};
 }
 
+/**
+ * Runs the Tier 2 process group and terminates the remaining children when one exits.
+ * Interactive signals use the same shutdown path, with a five-second forced-stop fallback.
+ */
 export async function runDevelopmentProcesses(specifications, repositoryRoot)
 {
 	const children = specifications.map(function _start(specification)

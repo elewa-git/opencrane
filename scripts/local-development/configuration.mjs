@@ -7,6 +7,14 @@ const _DEVELOPMENT_PROFILE_BY_ALTERNATIVE = Object.freeze({
 	[LOCAL_DEVELOPMENT_ALTERNATIVES.Simulated]: "agent-simulated"
 });
 
+/**
+ * Resolves one validated CLI selection into the paths, ports, and application profile used by Tier 2.
+ * Fixed application ports keep the development host and proxy checks aligned with the server.
+ * @param {ReturnType<typeof import("./profiles.mjs").parseLocalDevelopmentArguments>} parsed - Validated command-line selection.
+ * @param {string} repositoryRoot - OpenCrane repository root.
+ * @param {NodeJS.ProcessEnv} environment - Optional host-port overrides for local dependencies.
+ * @returns {object} Coordinator configuration passed to every startup step.
+ */
 export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, environment = process.env)
 {
 	const publicPort = 8_080;

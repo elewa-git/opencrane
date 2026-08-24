@@ -4,6 +4,11 @@ import { runLocalCommand, runLocalCommandSpecification } from "./command-runner.
 const _OWNER_LABEL_KEY = "opencrane.local-development.owner";
 const _OWNER_LABEL_VALUE = "opencrane";
 
+/**
+ * Reads a container only after confirming its local-development ownership label.
+ * @returns {{ exists: boolean, running: boolean }} Whether the owned container exists and is running.
+ * @throws When the name belongs to a container outside this coordinator.
+ */
 export function inspectOwnedContainer(containerName)
 {
 	const result = runLocalCommand("docker", [
@@ -32,6 +37,7 @@ export function inspectOwnedContainer(containerName)
 	};
 }
 
+/** Creates the labelled PostgreSQL volume or accepts the existing owned volume. */
 export function ensureOwnedVolume(volumeName)
 {
 	const result = runLocalCommand("docker", [
@@ -156,6 +162,7 @@ function _removeOwnedNetwork(networkName)
 	runLocalCommand("docker", ["network", "rm", networkName]);
 }
 
+/** Removes the labelled Tier 2 containers, network, and PostgreSQL volume selected by `--reset`. */
 export function resetLocalDevelopmentContainers(configuration)
 {
 	_removeOwnedContainer(configuration.liteLLMContainerName);
@@ -164,6 +171,7 @@ export function resetLocalDevelopmentContainers(configuration)
 	_removeOwnedNetwork(configuration.localNetworkName);
 }
 
+/** Starts Alternative A's LiteLLM container on the network shared with its PostgreSQL database. */
 export async function startLocalLiteLLM(configuration, secrets)
 {
 	_removeOwnedContainer(configuration.liteLLMContainerName);
@@ -174,6 +182,7 @@ export async function startLocalLiteLLM(configuration, secrets)
 	return true;
 }
 
+/** Stops a running container after {@link inspectOwnedContainer} confirms coordinator ownership. */
 export function stopOwnedContainer(containerName)
 {
 	const state = inspectOwnedContainer(containerName);

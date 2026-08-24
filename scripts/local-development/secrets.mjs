@@ -42,6 +42,7 @@ function _readRequiredSecret(filePath, label)
 	return secret;
 }
 
+/** Creates an owner-readable local secret or validates the permissions of the existing file. */
 export function readOrCreateLocalSecret(filePath, label, prefix, randomBytes = crypto.randomBytes)
 {
 	if (fs.existsSync(filePath))
@@ -55,6 +56,10 @@ export function readOrCreateLocalSecret(filePath, label, prefix, randomBytes = c
 	return secret;
 }
 
+/**
+ * Loads the credentials required by the selected profile without reading keys used by other alternatives.
+ * Alternative B also rejects reusing the local LiteLLM or provider-key file as its remote admin key.
+ */
 export function loadLocalDevelopmentSecrets(configuration, randomBytes = crypto.randomBytes)
 {
 	const postgresPasswordPath = path.join(configuration.repositoryRoot, "keys/.local-postgres-password");
@@ -98,6 +103,10 @@ export function loadLocalDevelopmentSecrets(configuration, randomBytes = crypto.
 	};
 }
 
+/**
+ * Creates a private temporary membership keypair and, for Agent profiles, separate controller credentials.
+ * The coordinator removes the containing directory during shutdown.
+ */
 export function createDisposableDevelopmentCredentials(includeAgentCredentials = true, randomBytes = crypto.randomBytes)
 {
 	const directory = fs.mkdtempSync(path.join(os.tmpdir(), "opencrane-local-membership-"));
@@ -133,6 +142,7 @@ export function createDisposableDevelopmentCredentials(includeAgentCredentials =
 	};
 }
 
+/** Removes the temporary credential directory created for this Tier 2 session. */
 export function removeDisposableDevelopmentCredentials(credentials)
 {
 	fs.rmSync(credentials.directory, { recursive: true, force: true });

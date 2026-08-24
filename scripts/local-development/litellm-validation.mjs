@@ -1,3 +1,7 @@
+/**
+ * Confirms an authenticated LiteLLM endpoint exposes the `auto` alias expected by seeded revisions.
+ * @throws When the endpoint is unreachable, refuses the key, returns invalid JSON, or omits the alias.
+ */
 export async function validateLiteLLMModelEndpoint(endpoint, masterKey, fetchImplementation = fetch)
 {
 	let response;
@@ -39,6 +43,7 @@ export async function validateLiteLLMModelEndpoint(endpoint, masterKey, fetchImp
 	}
 }
 
+/** Waits up to 30 seconds for Alternative A's newly started LiteLLM endpoint to expose `auto`. */
 export async function waitForLiteLLMModelEndpoint(endpoint, masterKey, fetchImplementation = fetch)
 {
 	let failure;

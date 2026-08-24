@@ -14,6 +14,11 @@ function _isRunningProcess(processId)
 	}
 }
 
+/**
+ * Acquires the repository-scoped Tier 2 lock or replaces a lock whose process no longer exists.
+ * @returns {{ lockPath: string, processId: number }} Ownership evidence required for release.
+ * @throws When another live coordinator owns the lock.
+ */
 export function acquireLocalDevelopmentLock(repositoryRoot, processId = process.pid)
 {
 	const lockPath = path.join(repositoryRoot, "keys/.tier2-local-development.lock");
@@ -50,6 +55,7 @@ export function acquireLocalDevelopmentLock(repositoryRoot, processId = process.
 	throw new Error("Could not acquire the Tier 2 local-development lock");
 }
 
+/** Releases the Tier 2 lock only while its file still names this coordinator process. */
 export function releaseLocalDevelopmentLock(lock)
 {
 	let owner;

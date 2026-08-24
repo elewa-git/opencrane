@@ -32,6 +32,13 @@ function _runtimeProfile(namespace, serviceAccountName, runtimeStreamUrl, liteLL
 	};
 }
 
+/**
+ * Builds the controller environment from the profile contract shared with the server.
+ * Core returns no variables because it never starts the Agent controller.
+ * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Selected Tier 2 composition.
+ * @param {{ controllerTokenPath?: string, runtimeLaunchSecretPath?: string }} credentials - Disposable credential paths created for this session.
+ * @returns {Record<string, string>} Variables admitted to the Agent controller process.
+ */
 export function createAgentControllerEnvironment(configuration, credentials)
 {
 	if (configuration.profile !== LOCAL_DEVELOPMENT_PROFILES.Agent)
