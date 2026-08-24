@@ -496,7 +496,7 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
 | [#602](https://github.com/elewa-git/opencrane/issues/602) | Retain completed onboarding as closed/read-only workspace history |
 | [#603](https://github.com/elewa-git/opencrane/issues/603) | Build governed conversation attachments and durable agent-created outputs |
 | [#604](https://github.com/elewa-git/opencrane/issues/604) | Build reusable approvals, choices, free-text elicitation, recovery, and safe disclosure |
-| [#695](https://github.com/elewa-git/opencrane/issues/695) | The Absurd foundation, OAuth refresh workflow, and saved MCP protocol check are complete. `.mcpb` validation, Skills MCP tasks, the warm path, existing-workflow pilots, and the later agent-run migration remain open. |
+| [#695](https://github.com/elewa-git/opencrane/issues/695) | The Absurd foundation, OAuth refresh workflow, and saved MCP protocol check are complete. `.mcpb` validation is ready in the review stack. Skills MCP tasks, the warm path (with its claim protocol recorded in [ADR 0014](docs/adr/0014-claimed-warm-runtime-pool.md)), existing-workflow pilots, and the later agent-run migration remain open. |
 
 Closed issues are intentionally absent from the active list: [#128](https://github.com/elewa-git/opencrane/issues/128),
 [#129](https://github.com/elewa-git/opencrane/issues/129),
