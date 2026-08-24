@@ -3415,7 +3415,7 @@ ALTER TABLE "mcp_server_installs" ALTER COLUMN "connection_status" TYPE "McpConn
 ALTER TABLE "mcp_server_installs" ALTER COLUMN "connection_status" SET DEFAULT 'needs-credential';
 DROP TYPE "McpConnectionStatus_legacy";
 
-CREATE TYPE "McpEraProbeStatus" AS ENUM ('pending', 'accepted', 'rejected');
+CREATE TYPE "McpEraProbeStatus" AS ENUM ('not-required', 'pending', 'accepted', 'rejected');
 
 CREATE TEMPORARY TABLE "_iam_group_reference" (
     "reference" TEXT NOT NULL,
@@ -3758,7 +3758,7 @@ UPDATE "mcp_servers" SET "silo_id" = current_setting('opencrane.migration_silo_i
 ALTER TABLE "mcp_servers" ALTER COLUMN "silo_id" SET NOT NULL;
 ALTER TABLE "mcp_servers" ADD COLUMN "registration_key_digest" TEXT;
 ALTER TABLE "mcp_servers" ADD COLUMN "registration_digest" TEXT;
-ALTER TABLE "mcp_servers" ADD COLUMN "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT 'pending';
+ALTER TABLE "mcp_servers" ADD COLUMN "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT 'not-required';
 ALTER TABLE "mcp_servers" ADD COLUMN "era_protocol_version" TEXT;
 ALTER TABLE "mcp_servers" ADD COLUMN "era_probe_evidence_digest" TEXT;
 ALTER TABLE "mcp_servers" ADD COLUMN "era_probe_failure_code" TEXT;
@@ -3778,9 +3778,10 @@ ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_registration_digest_check"
     OR ("registration_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registration_digest" ~ '^sha256:[0-9a-f]{64}$')
 );
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_era_probe_evidence_check" CHECK (
-    ("era_probe_status" = 'pending' AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
-    OR ("era_probe_status" = 'accepted' AND btrim("era_protocol_version") <> '' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NOT NULL)
-    OR ("era_probe_status" = 'rejected' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probed_at" IS NOT NULL AND ((btrim("era_protocol_version") <> '' AND "era_probe_failure_code" IS NULL) OR ("era_protocol_version" IS NULL AND "era_probe_failure_code" IN ('unsafe_endpoint', 'invalid_response'))))
+    ("era_probe_status" = 'not-required' AND "registration_key_digest" IS NULL AND "registration_digest" IS NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
+    OR ("era_probe_status" = 'pending' AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
+    OR ("era_probe_status" = 'accepted' AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND btrim("era_protocol_version") <> '' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NOT NULL)
+    OR ("era_probe_status" = 'rejected' AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probed_at" IS NOT NULL AND ((btrim("era_protocol_version") <> '' AND "era_probe_failure_code" IS NULL) OR ("era_protocol_version" IS NULL AND "era_probe_failure_code" IN ('unsafe_endpoint', 'invalid_response'))))
 );
 
 DO $$
@@ -4222,7 +4223,7 @@ INSERT INTO "opencrane_migrations"."schema_history" (
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.9.3', '0.9.0', :'source_baseline_sha256',
-    'b77e2fa3cbd0cf4d8caf54ea51e0b93e6033321702b90d243baab0ecfb93c1e1',
+    '17529c66fe8564ad4da62b1e4a293980046120c7b4586ac1dd2975cb2e5a63d4',
     :'migration_sql_sha256', '0.9.0-to-0.9.3'
 );
 

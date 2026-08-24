@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { Prisma } from "@prisma/client";
+import type { McpEraProbeStatus } from "@prisma/client";
 
 import { McpEraProbeDecisions } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
@@ -56,10 +57,10 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 		return result.count > 0;
 	}
 
-	async setApprovalStatus(siloId: string, serverId: string, approvalStatus: string, requiredEraProbeStatus?: string, requiredApprovalStatus?: string): Promise<McpOperatorServerRecord | null>
+	async setApprovalStatus(siloId: string, serverId: string, approvalStatus: string, requiredEraProbeStatuses?: readonly string[], requiredApprovalStatus?: string): Promise<McpOperatorServerRecord | null>
 	{
 		const where: Prisma.McpServerWhereInput = { id: serverId, siloId };
-		if (requiredEraProbeStatus) where.eraProbeStatus = requiredEraProbeStatus as Prisma.McpServerWhereInput["eraProbeStatus"];
+		if (requiredEraProbeStatuses) where.eraProbeStatus = { in: [...requiredEraProbeStatuses] as McpEraProbeStatus[] };
 		if (requiredApprovalStatus) where.approvalStatus = requiredApprovalStatus as Prisma.McpServerWhereInput["approvalStatus"];
 		const changed = await this._transaction.mcpServer.updateMany({ where, data: { approvalStatus: approvalStatus as Prisma.McpServerUpdateInput["approvalStatus"] } });
 		if (changed.count !== 1) return null;
@@ -95,7 +96,7 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 		});
 		if (existingByName) return null;
 
-		const server = await this._transaction.mcpServer.create({ data: { ...registration, transport: "StreamableHttp" }, select: _SERVER_SELECT });
+		const server = await this._transaction.mcpServer.create({ data: { ...registration, transport: "StreamableHttp", eraProbeStatus: "Pending" }, select: _SERVER_SELECT });
 		return { created: true, server };
 	}
 

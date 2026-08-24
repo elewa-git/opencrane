@@ -5,9 +5,10 @@ enum McpServerTransport {
 }
 
 enum McpEraProbeStatus {
-  Pending  @map("pending")
-  Accepted @map("accepted")
-  Rejected @map("rejected")
+  NotRequired @map("not-required")
+  Pending     @map("pending")
+  Accepted    @map("accepted")
+  Rejected    @map("rejected")
 }
 
 enum McpServerStatus {
@@ -61,7 +62,7 @@ model McpServer {
   entitlementSummary     String?            @map("entitlement_summary")
   registrationKeyDigest  String?            @map("registration_key_digest")
   registrationDigest     String?            @map("registration_digest")
-  eraProbeStatus         McpEraProbeStatus  @default(Pending) @map("era_probe_status")
+  eraProbeStatus         McpEraProbeStatus  @default(NotRequired) @map("era_probe_status")
   eraProtocolVersion     String?            @map("era_protocol_version")
   eraProbeEvidenceDigest String?            @map("era_probe_evidence_digest")
   eraProbeFailureCode    String?            @map("era_probe_failure_code")

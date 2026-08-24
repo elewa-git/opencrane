@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __McpEraProbeRequiredState, __McpEraProbeTransition, McpEraProbeActions, McpEraProbeEvents, McpEraProbeStates } from "../era-probe/mcp-era-probe-state";
+import { __McpEraProbeRequiredStates, __McpEraProbeTransition, McpEraProbeActions, McpEraProbeEvents, McpEraProbeStates } from "../era-probe/mcp-era-probe-state";
 
 describe("MCP era-probe state table", function _StateTableSuite()
 {
@@ -18,14 +18,21 @@ describe("MCP era-probe state table", function _StateTableSuite()
 		expect(__McpEraProbeTransition(McpEraProbeStates.Rejected, McpEraProbeEvents.Replay)).toBe(McpEraProbeActions.ReturnStored);
 	});
 
-	it("permits approval and publication only after an accepted result", function _GovernanceTransitions()
+	it("permits remote approval and publication only after an accepted result", function _GovernanceTransitions()
 	{
 		expect(__McpEraProbeTransition(McpEraProbeStates.Accepted, McpEraProbeEvents.Approve)).toBe(McpEraProbeActions.Allow);
 		expect(__McpEraProbeTransition(McpEraProbeStates.Accepted, McpEraProbeEvents.Publish)).toBe(McpEraProbeActions.Allow);
 		expect(__McpEraProbeTransition(McpEraProbeStates.Pending, McpEraProbeEvents.Approve)).toBe(McpEraProbeActions.Deny);
 		expect(__McpEraProbeTransition(McpEraProbeStates.Rejected, McpEraProbeEvents.Publish)).toBe(McpEraProbeActions.Deny);
-		expect(__McpEraProbeRequiredState("Approved")).toBe(McpEraProbeStates.Accepted);
-		expect(__McpEraProbeRequiredState("Published")).toBe(McpEraProbeStates.Accepted);
-		expect(__McpEraProbeRequiredState("Disabled")).toBeUndefined();
+		expect(__McpEraProbeRequiredStates("Approved")).toEqual([McpEraProbeStates.Accepted, McpEraProbeStates.NotRequired]);
+		expect(__McpEraProbeRequiredStates("Published")).toEqual([McpEraProbeStates.Accepted, McpEraProbeStates.NotRequired]);
+		expect(__McpEraProbeRequiredStates("Disabled")).toBeUndefined();
+	});
+
+	it("keeps rows that predate remote registration outside the probe lifecycle", function _KeepsExistingRows()
+	{
+		expect(__McpEraProbeTransition(McpEraProbeStates.NotRequired, McpEraProbeEvents.Approve)).toBe(McpEraProbeActions.Allow);
+		expect(__McpEraProbeTransition(McpEraProbeStates.NotRequired, McpEraProbeEvents.Publish)).toBe(McpEraProbeActions.Allow);
+		expect(__McpEraProbeTransition(McpEraProbeStates.NotRequired, McpEraProbeEvents.Replay)).toBe(McpEraProbeActions.Invalid);
 	});
 });

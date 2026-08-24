@@ -8,6 +8,8 @@ import type { McpEraProbeObservation, McpEraProbeTaskResult } from "./mcp-era-pr
 /** Persisted states of the protocol check owned by the MCP catalogue. */
 export enum McpEraProbeStates
 {
+	/** The row predates remote registration and keeps its existing governance lifecycle. */
+	NotRequired = "NotRequired",
 	/** The worker has not stored a final result. */
 	Pending = "Pending",
 	/** The server returned the required protocol revision. */
@@ -56,6 +58,15 @@ export enum McpEraProbeActions
 
 /** One exhaustive state-by-event owner shared by replay, failure, and governance paths. */
 const _TRANSITIONS: Readonly<Record<McpEraProbeStates, Readonly<Record<McpEraProbeEvents, McpEraProbeActions>>>> = {
+	[McpEraProbeStates.NotRequired]: {
+		[McpEraProbeEvents.ObservedAcceptedVersion]: McpEraProbeActions.Invalid,
+		[McpEraProbeEvents.ObservedOtherVersion]: McpEraProbeActions.Invalid,
+		[McpEraProbeEvents.RetryableFailure]: McpEraProbeActions.Invalid,
+		[McpEraProbeEvents.TerminalFailure]: McpEraProbeActions.Invalid,
+		[McpEraProbeEvents.Replay]: McpEraProbeActions.Invalid,
+		[McpEraProbeEvents.Approve]: McpEraProbeActions.Allow,
+		[McpEraProbeEvents.Publish]: McpEraProbeActions.Allow,
+	},
 	[McpEraProbeStates.Pending]: {
 		[McpEraProbeEvents.ObservedAcceptedVersion]: McpEraProbeActions.Accept,
 		[McpEraProbeEvents.ObservedOtherVersion]: McpEraProbeActions.Reject,
@@ -129,12 +140,12 @@ export function __McpEraProbeReplayResult(target: McpEraProbeTargetRecord): McpE
 	throw new Error("MCP stored protocol-check result conflicts with its state.");
 }
 
-/** Return the accepted state required by approve or publish commands. */
-export function __McpEraProbeRequiredState(approvalStatus: string): McpEraProbeStates | undefined
+/** Return the probe states allowed to enter the requested governance state. */
+export function __McpEraProbeRequiredStates(approvalStatus: string): readonly McpEraProbeStates[] | undefined
 {
 	let event: McpEraProbeEvents;
 	if (approvalStatus === "Approved") event = McpEraProbeEvents.Approve;
 	else if (approvalStatus === "Published") event = McpEraProbeEvents.Publish;
 	else return undefined;
-	return __McpEraProbeTransition(McpEraProbeStates.Accepted, event) === McpEraProbeActions.Allow ? McpEraProbeStates.Accepted : undefined;
+	return [McpEraProbeStates.Accepted, McpEraProbeStates.NotRequired].filter(function _Allowed(state) { return __McpEraProbeTransition(state, event) === McpEraProbeActions.Allow; });
 }

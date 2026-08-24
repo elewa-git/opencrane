@@ -145,7 +145,7 @@ CREATE TYPE "IntegrationCustodyState" AS ENUM ('ready', 'revoked', 'expired');
 -- CreateEnum
 CREATE TYPE "McpServerTransport" AS ENUM ('streamable-http', 'sse', 'websocket');
 
-CREATE TYPE "McpEraProbeStatus" AS ENUM ('pending', 'accepted', 'rejected');
+CREATE TYPE "McpEraProbeStatus" AS ENUM ('not-required', 'pending', 'accepted', 'rejected');
 
 -- CreateEnum
 CREATE TYPE "McpServerStatus" AS ENUM ('active', 'degraded', 'draft');
@@ -975,7 +975,7 @@ CREATE TABLE "mcp_servers" (
     "entitlement_summary" TEXT,
     "registration_key_digest" TEXT,
     "registration_digest" TEXT,
-    "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT 'pending',
+    "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT 'not-required',
     "era_protocol_version" TEXT,
     "era_probe_evidence_digest" TEXT,
     "era_probe_failure_code" TEXT,
@@ -2891,9 +2891,10 @@ ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_registration_digest_check"
 );
 
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_era_probe_evidence_check" CHECK (
-    ("era_probe_status" = 'pending' AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
-    OR ("era_probe_status" = 'accepted' AND btrim("era_protocol_version") <> '' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NOT NULL)
-    OR ("era_probe_status" = 'rejected' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probed_at" IS NOT NULL AND ((btrim("era_protocol_version") <> '' AND "era_probe_failure_code" IS NULL) OR ("era_protocol_version" IS NULL AND "era_probe_failure_code" IN ('unsafe_endpoint', 'invalid_response'))))
+    ("era_probe_status" = 'not-required' AND "registration_key_digest" IS NULL AND "registration_digest" IS NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
+    OR ("era_probe_status" = 'pending' AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
+    OR ("era_probe_status" = 'accepted' AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND btrim("era_protocol_version") <> '' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NOT NULL)
+    OR ("era_probe_status" = 'rejected' AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probed_at" IS NOT NULL AND ((btrim("era_protocol_version") <> '' AND "era_probe_failure_code" IS NULL) OR ("era_protocol_version" IS NULL AND "era_probe_failure_code" IN ('unsafe_endpoint', 'invalid_response'))))
 );
 
 ALTER TABLE "mcp_registration_claims" ADD CONSTRAINT "mcp_registration_claims_identity_check" CHECK (

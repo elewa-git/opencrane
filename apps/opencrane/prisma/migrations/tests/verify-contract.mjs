@@ -267,6 +267,8 @@ requireContract(groupHierarchySql.includes("migration_already_applied"), "group-
 requireContract(groupHierarchySql.includes("pg_cron extension is missing after the privileged migration prerequisite"), "0.9.3 migration must require pg_cron before mutating application authority");
 requireContract(groupHierarchySql.includes("application owner lacks pg_cron schema access after the privileged migration prerequisite"), "0.9.3 migration must require application-owner cron access");
 requireContract(groupHierarchySql.includes("create schema if not exists absurd"), "0.9.3 migration must install the reviewed Absurd schema");
+requireContract(groupHierarchySql.includes('ADD COLUMN "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT \'not-required\''), "0.9.3 migration must keep existing MCP rows outside remote registration checks");
+requireContract(targetBaseline.includes('"era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT \'not-required\''), "clean schema must require remote registration to opt into protocol checks");
 requireContract(groupHierarchySql.includes("COMMIT;\nSELECT pg_advisory_unlock"), "group-hierarchy migration must commit before releasing its session lock");
 requireContract(groupHierarchySql.trimEnd().endsWith("\\endif"), "group-hierarchy migration retry branch must remain explicit");
 for (const [pattern, expected, description] of [

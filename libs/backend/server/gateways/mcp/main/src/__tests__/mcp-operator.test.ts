@@ -189,7 +189,7 @@ describe("mcp-operator router", function _suite()
       const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true })).post("/api/v1/mcp/servers/srv-1/publish");
 
       expect(response.status).toBe(404);
-      expect(spies["mcpServer.updateMany"]).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ eraProbeStatus: "Accepted", approvalStatus: "Approved" }) }));
+      expect(spies["mcpServer.updateMany"]).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ eraProbeStatus: { in: ["Accepted", "NotRequired"] }, approvalStatus: "Approved" }) }));
       expect(spies["auditEntry.create"]).toBeUndefined();
     });
 

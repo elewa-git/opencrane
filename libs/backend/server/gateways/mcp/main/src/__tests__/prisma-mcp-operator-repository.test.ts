@@ -55,6 +55,7 @@ describe("Prisma MCP registration claims", function _RegistrationClaimsSuite()
 			_ClaimDigest("name", registration.name),
 		].sort();
 		expect(events).toEqual([`claim:${expectedClaims[0]}`, `claim:${expectedClaims[1]}`, "find:key", "find:name", "create"]);
+		expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ eraProbeStatus: "Pending" }) }));
 		expect(result).toEqual({ created: true, server: _Server(registration) });
 	});
 
@@ -84,10 +85,10 @@ describe("Prisma MCP approval transitions", function _ApprovalTransitionsSuite()
 		const findFirst = vi.fn();
 		const transaction = { mcpServer: { updateMany, findFirst } } as unknown as Prisma.TransactionClient;
 
-		const result = await new PrismaMcpOperatorRepository(transaction).setApprovalStatus("silo-1", "server-1", "Published", "Accepted", "Approved");
+		const result = await new PrismaMcpOperatorRepository(transaction).setApprovalStatus("silo-1", "server-1", "Published", ["Accepted", "NotRequired"], "Approved");
 
 		expect(result).toBeNull();
-		expect(updateMany).toHaveBeenCalledWith({ where: { id: "server-1", siloId: "silo-1", eraProbeStatus: "Accepted", approvalStatus: "Approved" }, data: { approvalStatus: "Published" } });
+		expect(updateMany).toHaveBeenCalledWith({ where: { id: "server-1", siloId: "silo-1", eraProbeStatus: { in: ["Accepted", "NotRequired"] }, approvalStatus: "Approved" }, data: { approvalStatus: "Published" } });
 		expect(findFirst).not.toHaveBeenCalled();
 	});
 });
