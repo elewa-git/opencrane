@@ -12,7 +12,7 @@ export const MCP_ERA_PROTOCOL_VERSION = "2026-07-28" as const;
 /**
  * States saved in `McpServer.eraProbeStatus` for one remote-server protocol check.
  *
- * The MCP repository translates Prisma's generated enum into this domain vocabulary before core
+ * The MCP repository translates Prisma's generated enum into these domain states before core
  * code reads it. A database value that is not listed here must fail at that persistence boundary;
  * it must never reach the workflow state table.
  */

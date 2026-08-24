@@ -69,7 +69,7 @@ export async function _McpEraProbeHttpsRequest(command: McpEraProbeHttpsRequestC
 	});
 }
 
-/** Normalize resolver, socket, and deadline failures to the bounded adapter vocabulary. */
+/** Normalize resolver, socket, and deadline failures to the adapter's bounded error types. */
 export function _McpEraProbeTransportFailure(error: unknown): never
 {
 	if (error instanceof McpEraProbeConfigurationError || error instanceof McpEraProbeTransportError || error instanceof McpEraProbeProtocolError)
