@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 import { createApplicationCommands, createApplicationEnvironment, createLiteLLMRunCommand, createPostgresRunCommand } from "../local-development/commands.mjs";
 import { createLocalDevelopmentConfiguration } from "../local-development/configuration.mjs";
@@ -11,6 +12,7 @@ const _MEMBERSHIP_KEYS = {
 	publicKeyPath: "/tmp/local/public.pem",
 	runtimeLaunchSecretPath: "/tmp/local/runtime-launch.secret"
 };
+const _PROFILE_CONTRACT = JSON.parse(fs.readFileSync(new URL("../../libs/models/local-development/main/profile-contract.json", import.meta.url), "utf8"));
 
 function _configuration(argumentsList)
 {
@@ -81,9 +83,21 @@ test("agent adds its local controller and defaults to Alternative A", function _
 	assert.equal(environment.OPENCRANE_INTERNAL_URL, "http://127.0.0.1:8081");
 	assert.equal(environment.OPENCRANE_CONTROLLER_TOKEN_PATH, "/tmp/local/controller.token");
 	assert.equal(environment.OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH, "/tmp/local/runtime-launch.secret");
-	assert.equal(JSON.parse(environment.AGENT_CONTROLLER_PROFILES_JSON)["personal-default"].litellmBaseUrl, "http://litellm.local-development-server.svc.cluster.local:4000");
+	const runtimeProfiles = JSON.parse(environment.AGENT_CONTROLLER_PROFILES_JSON);
+	assert.equal(runtimeProfiles["personal-default"].litellmBaseUrl, "http://litellm.local-development-server.svc.cluster.local:4000");
+	assert.deepEqual({
+		serverNamespace: runtimeProfiles["personal-default"].serverNamespace,
+		personal: {
+			namespace: runtimeProfiles["personal-default"].namespace,
+			serviceAccountName: runtimeProfiles["personal-default"].serviceAccountName
+		},
+		managed: {
+			namespace: runtimeProfiles["managed-default"].namespace,
+			serviceAccountName: runtimeProfiles["managed-default"].serviceAccountName
+		}
+	}, _PROFILE_CONTRACT.runtimeIdentities);
 	assert.equal(commands[1].environment.LITELLM_ENDPOINT, "http://127.0.0.1:4000");
-	assert.ok(JSON.parse(environment.AGENT_CONTROLLER_PROFILES_JSON)["personal-default"]);
+	assert.equal(runtimeProfiles["managed-default"].serverNamespace, _PROFILE_CONTRACT.runtimeIdentities.serverNamespace);
 	assert.equal(commands[1].environment.LITELLM_MASTER_KEY, undefined);
 	assert.equal(commands[1].environment.OPENCRANE_INITIAL_MODEL_API_KEY, undefined);
 	const seed = createDevelopmentSeedCommand(environment);

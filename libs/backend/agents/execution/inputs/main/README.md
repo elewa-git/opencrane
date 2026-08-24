@@ -42,6 +42,11 @@ after effective-grant intersection is an assigned, same-silo, still-published, n
 whole assembly with a single precise reason; a duplicate request (same idempotency key) returns the
 previously admitted snapshot without recompiling anything.
 
+The revision budget is complete only when it carries positive model-turn, total-token,
+micro-US-dollar cost, and wall-clock limits. Admission derives the absolute deadline from trusted
+server time and freezes all four ceilings into the snapshot; a missing cost ceiling fails closed
+before dispatch rather than creating a run that cannot receive attempt credentials.
+
 Third-party tools enter the snapshot as revision-selected integration assignments, each containing
 an integration identifier and exact reviewed definitions (name, description, input schema, and
 schema digest). Missing, malformed, or digest-mismatched schemas fail admission. The assembler never receives a custody

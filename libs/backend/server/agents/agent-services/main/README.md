@@ -41,7 +41,7 @@ models, credentials, or a neighbouring scope.
 
 Invariant: a revision is only published when it belongs to the named service, is still a draft, and
 carries every executable field (a positive version, a digest, prompt and registered model definition,
-and positive turn/token/duration budgets). Every assigned integration tool must carry a non-empty,
+and positive turn/token/cost/duration budgets). Every assigned integration tool must carry a non-empty,
 unambiguous name, reviewed description, valid object input schema, and matching canonical digest:
 colons are rejected because the runtime compiles the frozen
 assignment into `integration:<integrationId>:<toolName>`. The model is a foreign-key reference to the
@@ -82,7 +82,7 @@ The initial revision uses the package-owned initial personal-Agent policy and th
 empty. Personal memory access is not silently granted during onboarding; it follows the separate
 user-elicitation and consent flow.
 
-#### Why the first revision has three run limits
+#### Why the first revision has four run limits
 
 Every Agent-session message starts a governed run. A broken model response, repeated tool decision,
 stalled provider, or tool that never returns could otherwise hold a worker and continue consuming
@@ -93,6 +93,7 @@ ceilings:
 |---|---:|---|
 | Model turns | 64 | A reasoning, retry, or tool-selection loop that keeps producing another model turn. |
 | Total model tokens | 256,000 | A run whose prompts and responses keep growing even when each individual turn succeeds. |
+| Model cost | 5,000,000 micro-US-dollars (US$5) | A run whose model route keeps spending despite remaining within its turn and token ceilings. |
 | Wall-clock duration | 3,600,000 ms (60 minutes) | Waiting providers, stalled tools, and any run that makes too little progress to hit the other limits. |
 
 The control plane requires, validates, and freezes these values into run input. They do not delete

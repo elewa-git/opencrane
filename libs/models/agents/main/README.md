@@ -21,6 +21,9 @@ It owns two kinds of thing:
 - A **canonical revision digest** (`__DigestAgentRevisionContent`) over the complete
   `AgentRevisionContent`. Every revision-writing authority hashes the same domain value it persists,
   so managed and personal revision paths cannot silently disagree about executable content.
+- An **immutable run budget** (`AgentBudget`) with positive turn, token, micro-US-dollar cost, and
+  wall-clock ceilings. All four values participate in the canonical digest, scalar diff, and
+  widening decision, so increasing a cost ceiling requires the same review as another budget expansion.
 - **Reviewed integration tool definitions**: revision authoring freezes each tool's name,
   description, object input schema, and canonical schema digest. The shared validator rejects
   missing, malformed, duplicate, or digest-mismatched definitions before publication.
@@ -39,7 +42,7 @@ persistence; a wrong answer here can only refuse a legal move, never invent one.
 ## Public surface
 
 - Lifecycle types: `AgentService`/`…State`, `AgentRevision`/`…State`, `AgentRun`/`…State`,
-  `AgentServiceKinds`, `AgentServiceStates`, `AgentRevisionContent`, `RevisionScopeAttachment`, `GrantScope`,
+  `AgentServiceKinds`, `AgentServiceStates`, `AgentRevisionContent`, `AgentBudget`, `RevisionScopeAttachment`, `GrantScope`,
   `GrantSubjectType`, `RunEvent`, `RunEventTypes`, and the agent/run `*Id` identifier aliases.
 - `RunEventTypes` is the closed durable vocabulary for streamed messages, tool lifecycle and failure,
   usage, display-safe runtime errors, terminal outcomes, and versioned governed A2UI updates.

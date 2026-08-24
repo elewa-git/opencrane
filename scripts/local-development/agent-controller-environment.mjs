@@ -13,7 +13,7 @@ function _runtimeProfile(namespace, serviceAccountName, runtimeStreamUrl, liteLL
 		imagePullPolicy: "Never",
 		runtimeStreamUrl,
 		litellmBaseUrl: liteLLMBaseUrl,
-		serverNamespace: "local-development-server",
+		serverNamespace: _RUNTIME_IDENTITIES.serverNamespace,
 		serviceAccountName,
 		projectedTokenTtlSeconds: 600,
 		scratchSize: "64Mi",

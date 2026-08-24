@@ -88,9 +88,12 @@ propose or execute tools because Tier 2 does not start the server-owned external
 - Every candidate echoes the runtime instance, command, run, attempt, and fence that admitted it.
 - The local checkpoint is encrypted, replaceable, and bound to run coordinates. Missing, corrupt,
   foreign, or stale checkpoint data is discarded; it never overrides server state.
-- Bootstrap refusal is permanent. Exceptional and clean-close transport loss reconnect with bounded
-  jitter. Non-terminal candidates are not replayed after ambiguous delivery. A terminal candidate
-  may replay unchanged after an ambiguous network loss; an explicit HTTP refusal is permanent.
+- Bootstrap replay, identity mismatch, and other authority refusals are permanent. The named
+  `409 bootstrap_unavailable` response is the sole retryable refusal because a released workload
+  may start before first-Pod registration commits. Exceptional and clean-close transport loss
+  reconnects with bounded jitter. Non-terminal candidates are not replayed after ambiguous delivery.
+  A terminal candidate may replay unchanged after an ambiguous network loss; an explicit candidate
+  refusal is permanent.
 - Secrets are read at their point of use and never included in logs, spans, candidates, checkpoints,
   command-line arguments, or environment-derived error messages.
 
