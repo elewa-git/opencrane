@@ -125,11 +125,10 @@ export function ensureLocalLiteLLMDatabase(configuration, queryPostgres = _query
 
 	if (exists)
 	{
-		return false;
+		return;
 	}
 
 	runCommand("docker", _postgresArguments(configuration, "--command", "CREATE DATABASE litellm;"));
-	return true;
 }
 
 export function applyTargetBaseline(configuration)
@@ -147,7 +146,7 @@ export function applyTargetBaseline(configuration)
 			throw new Error("The persistent local database uses a different target baseline; rerun with --reset");
 		}
 
-		return baselineSha256;
+		return;
 	}
 
 	const hasApplicationSchema = _queryPostgres(configuration, "SELECT to_regclass('public.org_memberships') IS NOT NULL;") === "t";
@@ -159,5 +158,4 @@ export function applyTargetBaseline(configuration)
 
 	_applySqlFile(configuration, configuration.baselinePath);
 	_applySqlFile(configuration, configuration.seedPath, { baseline_sha256: baselineSha256 });
-	return baselineSha256;
 }

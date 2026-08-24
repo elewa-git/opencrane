@@ -55,7 +55,7 @@ function _LocalRuntimePod(job: V1Job, workloadUid: string, podUid: string): V1Po
 function _RuntimeEnvironment(options: LocalProcessAgentControllerStoreOptions, attempt: LocalAgentRuntimeAttempt, podUid: string): Readonly<Record<string, string>>
 {
 	const environment: Record<string, string> = {
-		PATH: options.executablePath ?? process.env.PATH ?? "/usr/bin:/bin",
+		PATH: process.env.PATH ?? "/usr/bin:/bin",
 		PYTHONUNBUFFERED: "1",
 		OPENCRANE_RUNTIME_STREAM_URL: options.runtimeStreamUrl,
 		OPENCRANE_RUNTIME_TOKEN_PATH: attempt.files.tokenPath,

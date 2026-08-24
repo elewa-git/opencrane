@@ -41,16 +41,15 @@ const _OPERATIONS = {
  *
  * Called by: `scripts/local-development.mjs` after parsing and validating CLI configuration.
  * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Selected core or Agent composition.
- * @param {string} repositoryRoot - Absolute repository root used by child commands and the coordinator lock.
  * @param {Partial<typeof _OPERATIONS>} operationOverrides - Offline seams for orchestration contract tests.
  */
-export async function runLocalDevelopmentSession(configuration, repositoryRoot, operationOverrides = {})
+export async function runLocalDevelopmentSession(configuration, operationOverrides = {})
 {
 	const operations = {
 		..._OPERATIONS,
 		...operationOverrides
 	};
-	const lock = operations.acquireLocalDevelopmentLock(repositoryRoot);
+	const lock = operations.acquireLocalDevelopmentLock(configuration.repositoryRoot);
 	let secrets;
 	let developmentCredentials;
 	let postgresStarted = false;
@@ -84,7 +83,7 @@ export async function runLocalDevelopmentSession(configuration, repositoryRoot, 
 
 		const applicationEnvironment = operations.createApplicationEnvironment(configuration, secrets, developmentCredentials);
 		operations.runLocalCommandSpecification(operations.createDevelopmentSeedCommand(applicationEnvironment), {
-			cwd: repositoryRoot,
+			cwd: configuration.repositoryRoot,
 			inherit: true
 		});
 
@@ -96,7 +95,7 @@ export async function runLocalDevelopmentSession(configuration, repositoryRoot, 
 		}
 
 		const commands = operations.createApplicationCommands(configuration, applicationEnvironment);
-		await operations.runDevelopmentProcesses(commands, repositoryRoot);
+		await operations.runDevelopmentProcesses(commands, configuration.repositoryRoot);
 	}
 	finally
 	{

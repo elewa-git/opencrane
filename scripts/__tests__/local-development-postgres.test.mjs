@@ -20,13 +20,12 @@ test("Alternative A creates a separate LiteLLM database only when it is absent",
 {
 	const commands = [];
 	const configuration = { postgresContainerName: "opencrane-local-postgres" };
-	const created = ensureLocalLiteLLMDatabase(
+	ensureLocalLiteLLMDatabase(
 		configuration,
 		function _MissingDatabase() { return ""; },
 		function _Capture(command, argumentsList) { commands.push({ command, argumentsList }); }
 	);
 
-	assert.equal(created, true);
 	assert.deepEqual(commands, [{
 		command: "docker",
 		argumentsList: [
@@ -44,5 +43,5 @@ test("Alternative A creates a separate LiteLLM database only when it is absent",
 			"CREATE DATABASE litellm;"
 		]
 	}]);
-	assert.equal(ensureLocalLiteLLMDatabase(configuration, function _ExistingDatabase() { return "1"; }), false);
+	ensureLocalLiteLLMDatabase(configuration, function _ExistingDatabase() { return "1"; }, function _UnexpectedCommand() { throw new Error("database already exists"); });
 });

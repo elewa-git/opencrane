@@ -8,11 +8,6 @@ export function validateLocalDevelopmentTools(configuration)
 {
 	const commands = ["docker", "npm", "npx"];
 
-	if (configuration.profile === "agent")
-	{
-		commands.push("python3");
-	}
-
 	for (const command of commands)
 	{
 		runLocalCommand(command, ["--version"]);

@@ -29,7 +29,7 @@ export function prepareLocalAgentRuntimeEnvironment(configuration, runCommand = 
 {
 	if (configuration.profile !== LOCAL_DEVELOPMENT_PROFILES.Agent)
 	{
-		return false;
+		return;
 	}
 
 	if (!fs.existsSync(configuration.runtimePythonPath))
@@ -44,7 +44,7 @@ export function prepareLocalAgentRuntimeEnvironment(configuration, runCommand = 
 
 	if (installedDigest === requirementsDigest && _CanImportRuntimeDependencies(configuration.runtimePythonPath, runCommand))
 	{
-		return false;
+		return;
 	}
 
 	runCommand(configuration.runtimePythonPath, [
@@ -57,5 +57,4 @@ export function prepareLocalAgentRuntimeEnvironment(configuration, runCommand = 
 	], { inherit: true });
 	runCommand(configuration.runtimePythonPath, ["-B", "-c", _RUNTIME_IMPORT_CHECK]);
 	fs.writeFileSync(configuration.runtimeRequirementsStampPath, `${requirementsDigest}\n`, { mode: 0o600 });
-	return true;
 }

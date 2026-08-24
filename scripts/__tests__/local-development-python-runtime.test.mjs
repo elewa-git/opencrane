@@ -40,22 +40,21 @@ test("Agent profiles create and reuse a repository-owned runtime environment", f
 		}
 	};
 
-	assert.equal(prepareLocalAgentRuntimeEnvironment(configuration, runCommand), true);
+	prepareLocalAgentRuntimeEnvironment(configuration, runCommand);
 	assert.equal(calls.some(call => call.includes("venv")), true);
 	assert.equal(calls.some(call => call.includes("pip")), true);
 	const firstCallCount = calls.length;
-	assert.equal(prepareLocalAgentRuntimeEnvironment(configuration, runCommand), false);
+	prepareLocalAgentRuntimeEnvironment(configuration, runCommand);
 	assert.equal(calls.length, firstCallCount + 1);
 });
 
 test("core does not prepare a Python runtime", function _SkipCore()
 {
 	let called = false;
-	const prepared = prepareLocalAgentRuntimeEnvironment({ profile: "core" }, function _UnexpectedCommand()
+	prepareLocalAgentRuntimeEnvironment({ profile: "core" }, function _UnexpectedCommand()
 	{
 		called = true;
 	});
 
-	assert.equal(prepared, false);
 	assert.equal(called, false);
 });

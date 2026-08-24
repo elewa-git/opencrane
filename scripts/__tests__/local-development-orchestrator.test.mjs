@@ -33,6 +33,7 @@ function _Operations(calls, options = {})
 function _Configuration(overrides = {})
 {
 	return {
+		repositoryRoot: "/repo",
 		profile: "core",
 		alternative: undefined,
 		developmentProfile: "core",
@@ -49,7 +50,7 @@ test("core starts the database before seeding and always releases owned state", 
 	const calls = [];
 	const failure = new Error("application stopped");
 
-	await assert.rejects(runLocalDevelopmentSession(_Configuration(), "/repo", _Operations(calls, { processFailure: failure })), failure);
+	await assert.rejects(runLocalDevelopmentSession(_Configuration(), _Operations(calls, { processFailure: failure })), failure);
 	assert.deepEqual(calls, [
 		"lock",
 		"validate-tools",
@@ -73,7 +74,7 @@ test("Alternative A prepares and validates LiteLLM after the application databas
 {
 	const calls = [];
 
-	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "A", developmentProfile: "agent-local" }), "/repo", _Operations(calls));
+	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "A", developmentProfile: "agent-local" }), _Operations(calls));
 	assert.equal(calls.includes("credentials:true"), true);
 	assert.ok(calls.indexOf("runtime-python") < calls.indexOf("secrets"));
 	assert.ok(calls.indexOf("seed") < calls.indexOf("litellm-database"));
@@ -87,7 +88,7 @@ test("Alternative B validates the remote endpoint before mutating local containe
 {
 	const calls = [];
 
-	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "B", developmentProfile: "agent-remote", remoteLiteLLMEndpoint: "https://litellm.example.test", reset: true }), "/repo", _Operations(calls));
+	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "B", developmentProfile: "agent-remote", remoteLiteLLMEndpoint: "https://litellm.example.test", reset: true }), _Operations(calls));
 	assert.ok(calls.indexOf("validate-remote-litellm") < calls.indexOf("reset"));
 	assert.ok(calls.indexOf("reset") < calls.indexOf("start-postgres"));
 	assert.equal(calls.includes("start-litellm"), false);

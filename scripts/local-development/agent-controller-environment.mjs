@@ -48,7 +48,6 @@ export function createAgentControllerEnvironment(configuration, credentials)
 		"managed-default": _runtimeProfile(_RUNTIME_IDENTITIES.managed.namespace, _RUNTIME_IDENTITIES.managed.serviceAccountName, runtimeStreamUrl, liteLLMBaseUrl)
 	};
 	const environment = {
-		OPENCRANE_DEVELOPMENT_PROFILE: configuration.developmentProfile,
 		OPENCRANE_INTERNAL_URL: internalUrl,
 		OPENCRANE_CONTROLLER_TOKEN_PATH: credentials.controllerTokenPath,
 		OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH: credentials.runtimeLaunchSecretPath,

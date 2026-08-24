@@ -42,6 +42,7 @@ function _Environment(profile: LocalDevelopmentProfileKinds): NodeJS.ProcessEnv
 		OPENCRANE_INTERNAL_URL: "http://127.0.0.1:3001",
 		OPENCRANE_CONTROLLER_TOKEN_PATH: "/tmp/opencrane-controller.token",
 		OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH: "/tmp/opencrane-runtime-launch.secret",
+		OPENCRANE_LOCAL_RUNTIME_PYTHON: "/workspace/opencrane/apps/agent-runtime/.venv/bin/python",
 		OPENCRANE_REPOSITORY_ROOT: "/workspace/opencrane",
 		AGENT_CONTROLLER_PROFILES_JSON: _RuntimeProfiles()
 	};

@@ -137,7 +137,7 @@ export function _ReadDevelopmentConfig(environment: NodeJS.ProcessEnv = process.
 		controllerTokenPath,
 		runtimeLaunchSecretPath,
 		runtimeApplicationDirectory,
-		pythonExecutable: environment.OPENCRANE_LOCAL_RUNTIME_PYTHON?.trim() || "python3",
+		pythonExecutable: _Required(environment, "OPENCRANE_LOCAL_RUNTIME_PYTHON"),
 		runtimeStreamUrl,
 		litellmBaseUrl: modelConfiguration.litellmBaseUrl,
 		modelStrategy: modelConfiguration.modelStrategy,

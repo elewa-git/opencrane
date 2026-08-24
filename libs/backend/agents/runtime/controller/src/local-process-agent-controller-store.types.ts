@@ -53,8 +53,6 @@ export interface LocalProcessAgentControllerStoreOptions
 	readonly temporaryDirectoryRoot?: string;
 	/** Injected process seam used by focused tests. */
 	readonly spawnProcess?: LocalAgentRuntimeProcessSpawner;
-	/** Minimal path inherited by the child so `pythonExecutable` dependencies can resolve tools. */
-	readonly executablePath?: string;
 }
 
 /** Private projected-file paths owned by one local runtime attempt. */

@@ -39,7 +39,7 @@ async function _main()
 
 	const repositoryRoot = process.cwd();
 	const configuration = createLocalDevelopmentConfiguration(parsed, repositoryRoot);
-	await runLocalDevelopmentSession(configuration, repositoryRoot);
+	await runLocalDevelopmentSession(configuration);
 }
 
 _main().catch(function _reportFailure(error)
