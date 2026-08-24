@@ -94,7 +94,7 @@ export function registerRemoteServer(unitOfWork: McpOperatorUnitOfWork, workflow
 		{
 			await transaction.mcp.appendAudit("Created", `McpServer/${server.id}`, `Remote MCP server ${server.id} registered for protocol check`, { siloId: caller.siloId, actorPrincipalId: caller.principalId });
 		}
-		await workflow.admit(transaction.durableExecution, { siloId: caller.siloId, serverId: server.id, registrationDigest });
+		await workflow.admit(transaction.workflowTransaction, { siloId: caller.siloId, serverId: server.id, registrationDigest });
 		return { outcome: McpRemoteServerRegistrationOutcomes.Registered, server: { id: server.id, name: server.name, endpoint: server.endpoint, eraProbeStatus: server.eraProbeStatus } };
 	});
 }

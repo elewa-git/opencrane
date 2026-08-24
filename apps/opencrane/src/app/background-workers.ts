@@ -6,7 +6,7 @@ import { __CreateRuntimeWorkloadCleanupUseCase, type RunCancellationRepository }
 import { __CreateKubernetesRuntimeWorkloadCleanupStore } from "@opencrane/backend/agents/runtime/cleanup";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import { _CreateScheduleTicker, PrismaScheduleTickerUnitOfWork } from "@opencrane/backend/server/agents/scheduling";
-import type { DurableWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { OpenCraneBackgroundWorkers } from "./background-workers.types";
 import type { OpenCraneProcessConfig } from "./config.types";
@@ -30,7 +30,7 @@ const _EXTERNAL_ACTION_INTERVAL_MILLISECONDS = 1_000;
  * The returned stop handle is the lifecycle boundary: every loop must be stopped before Prisma is
  * disconnected, and none may keep the Node process alive on its own.
  */
-export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runtimeRepairRepository: RunCancellationRepository, config: OpenCraneProcessConfig, externalActions: ExternalActionWorker, workflowRuntime: DurableWorkerRuntime): Promise<OpenCraneBackgroundWorkers>
+export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runtimeRepairRepository: RunCancellationRepository, config: OpenCraneProcessConfig, externalActions: ExternalActionWorker, workflowRuntime: IWorkflowWorkerRuntime): Promise<OpenCraneBackgroundWorkers>
 {
 	// 1. Prepare optional schedule admission through the same capacity port used by run-now requests.
 	const scheduleTicker = _CreateScheduleTicker(new PrismaScheduleTickerUnitOfWork(prisma), managedRunAdmission, _log);

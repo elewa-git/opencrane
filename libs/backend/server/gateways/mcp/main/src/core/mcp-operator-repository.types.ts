@@ -1,5 +1,5 @@
 import type { AuthorizationContextRepository, CapabilityCatalogRepository, ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
-import type { DurableExecutionTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { McpEraProbeStates, McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
 
@@ -109,12 +109,12 @@ export interface McpEraProbeRetryResult extends McpEraProbeWriteResult
  */
 export interface McpOperatorInstallRecord
 {
-	/** Identifies the catalog server that this principal installed. */
-	readonly mcpServerId: string;
-	/** Carries the persisted connection state mapped into the installed-server response. */
-	readonly connectionStatus: string;
-	/** Records when the installed server was last used, when that usage has been recorded. */
-	readonly lastUsedAt: Date | null;
+  /** Identifies the catalog server that this principal installed. */
+  readonly mcpServerId: string;
+  /** Carries the persisted connection state mapped into the installed-server response. */
+  readonly connectionStatus: string;
+  /** Records when the installed server was last used, when that usage has been recorded. */
+  readonly lastUsedAt: Date | null;
 }
 
 /**
@@ -125,10 +125,10 @@ export interface McpOperatorInstallRecord
  */
 export interface McpOperatorGroupRecord
 {
-	/** Identifies the local group used in an authorization subject. */
-	readonly id: string;
-	/** Gives the group name shown to an access-policy editor. */
-	readonly name: string;
+  /** Identifies the local group used in an authorization subject. */
+  readonly id: string;
+  /** Gives the group name shown to an access-policy editor. */
+  readonly name: string;
 }
 
 /**
@@ -139,12 +139,12 @@ export interface McpOperatorGroupRecord
  */
 export interface McpOperatorPrincipalRecord
 {
-	/** Identifies the local principal used in an authorization subject. */
-	readonly id: string;
-	/** Gives the principal email when the directory has one. */
-	readonly email: string | null;
-	/** Gives the principal display name when the directory has one. */
-	readonly displayName: string | null;
+  /** Identifies the local principal used in an authorization subject. */
+  readonly id: string;
+  /** Gives the principal email when the directory has one. */
+  readonly email: string | null;
+  /** Gives the principal display name when the directory has one. */
+  readonly displayName: string | null;
 }
 
 /** Authenticated administrator recorded with a catalogue audit entry. */
@@ -288,7 +288,7 @@ export interface McpOperatorTransaction
 	/** Reads and reconciles the grant set owned by the MCP access editor. */
 	readonly managedGrants: ManagedAuthorizationGrantRepository;
 	/** Opaque form of this same database transaction used for task admission. */
-	readonly durableExecution: DurableExecutionTransaction;
+	readonly workflowTransaction: IWorkflowTransaction;
 }
 
 /**
@@ -300,13 +300,13 @@ export interface McpOperatorTransaction
  */
 export interface McpOperatorUnitOfWork
 {
-	/**
-	 * Runs an MCP operation with repositories attached to the same transaction.
-	 *
-	 * Called by: every exported MCP operator flow before it reads or mutates authority data.
-	 * @param operation - Receives the transaction-scoped repositories and returns the caller's result.
-	 * @returns The operation result after all writes made by it commit.
-	 * @throws Rejects after rolling back the operation's writes when it or its transaction cannot complete.
-	 */
-	execute<Result>(operation: (transaction: McpOperatorTransaction) => Promise<Result>): Promise<Result>;
+  /**
+   * Runs an MCP operation with repositories attached to the same transaction.
+   *
+   * Called by: every exported MCP operator flow before it reads or mutates authority data.
+   * @param operation - Receives the transaction-scoped repositories and returns the caller's result.
+   * @returns The operation result after all writes made by it commit.
+   * @throws Rejects after rolling back the operation's writes when it or its transaction cannot complete.
+   */
+  execute<Result>(operation: (transaction: McpOperatorTransaction) => Promise<Result>): Promise<Result>;
 }

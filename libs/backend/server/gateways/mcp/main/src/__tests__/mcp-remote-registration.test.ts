@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { DurableExecutionTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { IMcpOperatorRepository, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork, McpRemoteServerRegistrationRecord } from "../core/mcp-operator-repository.types";
 import { McpRemoteServerRegistrationValidationError, registerRemoteServer } from "../era-probe/mcp-remote-registration";
@@ -34,8 +34,8 @@ function _Harness(): { unitOfWork: McpOperatorUnitOfWork; workflow: McpEraProbeW
 		}),
 		appendAudit: audit,
 	} as unknown as IMcpOperatorRepository;
-	const durableExecution: DurableExecutionTransaction = { client: {} };
-	const transaction = { mcp: repository, durableExecution } as unknown as McpOperatorTransaction;
+	const workflowTransaction: IWorkflowTransaction = { client: {} };
+	const transaction = { mcp: repository, workflowTransaction } as unknown as McpOperatorTransaction;
 	const unitOfWork: McpOperatorUnitOfWork = { execute: async function _Execute<Result>(operation: (value: McpOperatorTransaction) => Promise<Result>): Promise<Result> { return await operation(transaction); } };
 	const admit = vi.fn().mockResolvedValue({ taskKey: "task-key", receipt: { taskId: "task-1", taskName: "mcp-era-probe.probe", idempotencyKey: "task-key" } });
 	return { unitOfWork, workflow: { admit }, audit, admit };

@@ -20,15 +20,15 @@ const _OWNERS = {
 	unitsOfWork: [{ path: "libs/widgets/prisma-widget-unit-of-work.ts", adapter: "PrismaWidgetUnitOfWork", contract: "WidgetUnitOfWork", contractImportPath: "./widget.types.js", constructs: [{ adapter: "PrismaWidgetRepository", importPath: "./prisma-widget-repository.js" }] }],
 	compositions: [],
 };
-/** The sole policy-owned raw database procedure used by the durable engine adapter. */
+/** The sole policy-owned raw database procedure used by the workflow engine adapter. */
 const _RAW_PROCEDURE_CALLS = [{
-	path: "libs/widgets/prisma-db-procedure-gateway.ts",
-	adapter: "PrismaDbProcedureGateway",
-	contract: "AbsurdTaskAdmissionProcedure",
-	contractImportPath: "./absurd-transaction-spawner.types",
+	path: "libs/widgets/workflow-task-admission.ts",
+	adapter: "WorkflowTaskAdmission",
+	contract: "IWorkflowTaskAdmission",
+	contractImportPath: "./workflow-task-admission.types",
 	method: "$queryRaw",
-	sqlTemplate: "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${options}::jsonb)",
-	reason: "The test models the reviewed durable-admission procedure boundary.",
+	sqlTemplate: "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)",
+	reason: "The test models the reviewed task-admission procedure boundary.",
 }];
 
 /** Reads one TypeScript fixture stored as inert text. */
@@ -130,14 +130,29 @@ test("forbids every raw Prisma method inside a policy-authorized repository", fu
 	]);
 });
 
-test("allows only the fixed typed Absurd procedure gateway call", function _AllowsRawProcedureGateway()
+test("allows only the fixed typed Absurd task-admission call", function _AllowsRawTaskAdmission()
 {
-	const source = "import { Prisma } from \"@prisma/client\";\nimport type { AbsurdTaskAdmissionProcedure } from \"./absurd-transaction-spawner.types\";\nexport class PrismaDbProcedureGateway implements AbsurdTaskAdmissionProcedure { async ___DbProcedureCall(client: Prisma.TransactionClient) { return client.$queryRaw(Prisma.sql`SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${options}::jsonb)`); } }\n";
+	const source = "import { Prisma } from \"@prisma/client\";\nimport type { IWorkflowTaskAdmission } from \"./workflow-task-admission.types\";\nexport class WorkflowTaskAdmission implements IWorkflowTaskAdmission { async admit(client: Prisma.TransactionClient) { return client.$queryRaw(Prisma.sql`SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)`); } }\n";
 	const alteredTemplate = source.replace("attempt, created", "attempt, created, ignored");
-	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-db-procedure-gateway.ts", source, ["widget"], _OWNERS, new Set(), _RAW_PROCEDURE_CALLS), []);
-	assert.equal(inspectPrismaBoundary("libs/widgets/prisma-db-procedure-gateway.ts", alteredTemplate, ["widget"], _OWNERS, new Set(), _RAW_PROCEDURE_CALLS).some(function _Raw(finding) { return finding.rule === "PRISMA-RAW-QUERY-FORBIDDEN"; }), true);
-	assert.deepEqual(validateRawProcedureDeclarations("libs/widgets/prisma-db-procedure-gateway.ts", source, _RAW_PROCEDURE_CALLS), []);
-	assert.equal(validateRawProcedureDeclarations("libs/widgets/prisma-db-procedure-gateway.ts", source.replace("client.$queryRaw", "client.$executeRaw"), _RAW_PROCEDURE_CALLS).some(function _Policy(finding) { return finding.rule === "PRISMA-POLICY-RAW-PROCEDURE"; }), true);
+	assert.deepEqual(inspectPrismaBoundary("libs/widgets/workflow-task-admission.ts", source, ["widget"], _OWNERS, new Set(), _RAW_PROCEDURE_CALLS), []);
+	assert.equal(inspectPrismaBoundary("libs/widgets/workflow-task-admission.ts", alteredTemplate, ["widget"], _OWNERS, new Set(), _RAW_PROCEDURE_CALLS).some(function _Raw(finding) { return finding.rule === "PRISMA-RAW-QUERY-FORBIDDEN"; }), true);
+	assert.deepEqual(validateRawProcedureDeclarations("libs/widgets/workflow-task-admission.ts", source, _RAW_PROCEDURE_CALLS), []);
+	assert.equal(validateRawProcedureDeclarations("libs/widgets/workflow-task-admission.ts", source.replace("client.$queryRaw", "client.$executeRaw"), _RAW_PROCEDURE_CALLS).some(function _Policy(finding) { return finding.rule === "PRISMA-POLICY-RAW-PROCEDURE"; }), true);
+});
+
+test("reads the former task-admission declaration only when a diff loads its base policy", function _AllowsLegacyRawProcedureInBase()
+{
+	const legacy = {
+		path: "libs/widgets/prisma-db-procedure-gateway.ts",
+		adapter: "PrismaDbProcedureGateway",
+		contract: "AbsurdTaskAdmissionProcedure",
+		contractImportPath: "./absurd-transaction-spawner.types",
+		method: "$queryRaw",
+		sqlTemplate: "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${options}::jsonb)",
+		reason: "The old policy proves that the diff reads the previous exact database boundary.",
+	};
+	assert.throws(function _CurrentPolicyRejectsLegacy() { validatePolicy({ version: 1, owners: _OWNERS, rawProcedureCalls: [legacy], exemptions: [] }); }, /invalid raw procedure call/u);
+	assert.doesNotThrow(function _BasePolicyAcceptsLegacy() { validatePolicy({ version: 1, owners: _OWNERS, rawProcedureCalls: [legacy], exemptions: [] }, true); });
 });
 
 test("requires transaction-scoped repository construction to match the owning policy entry", function _RejectsUndeclaredConstruction()

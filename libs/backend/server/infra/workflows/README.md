@@ -1,4 +1,4 @@
-# workflows — durable control-plane execution
+# workflows — saved control-plane work
 
 > [infra](../README.md) › workflows
 
@@ -11,15 +11,15 @@ talking to Absurd directly.
 
 | Package | What it owns |
 | --- | --- |
-| [contract](./contract/README.md) | The engine-neutral durable-task port, shared queue authority, and server-only worker lifecycle types. |
-| [kit](./kit/README.md) | Silo, task-name, payload, queue, and tracing guardrails. |
+| [contract](./contract/README.md) | The engine-neutral workflow port, shared queue authority, and server-only worker lifecycle types. |
+| [guard](./guard/README.md) | Silo, task-name, payload, queue, and tracing guardrails. |
 | [oauth-refresh](./oauth-refresh/README.md) | One saved refresh task for each connection scope and OAuth connection, without storing a credential in the task. |
 | [scheduler](./scheduler/README.md) | Finite respawn chains for product-owned recurrence. |
 | [infra_absurd](./infra_absurd/README.md) | The pinned Absurd engine adapter and its typed transaction procedure gateway. |
 | [testing](./testing/README.md) | Deterministic contract tests and an in-memory execution fake. |
 
 ```text
- product authority ──► kit ──► contract ──► infra_absurd ──► PostgreSQL
+ product authority ──► guard ──► contract ──► infra_absurd ──► PostgreSQL
                               ▲                 ▲
                     scheduler │                 │
                               │          server composition ──► worker lifecycle
@@ -36,4 +36,4 @@ product scheduling, authorisation, and database writes stay with their existing 
 ## See also
 
 - Parent: [server infrastructure](../README.md)
-- Architecture decision: [ADR 0013](../../../../../docs/adr/0013-durable-control-plane-execution.md)
+- Architecture decision: [ADR 0013](../../../../../docs/adr/0013-workflow-control-plane.md)

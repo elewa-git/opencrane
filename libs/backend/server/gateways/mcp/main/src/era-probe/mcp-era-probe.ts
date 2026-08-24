@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
-import { DurableTaskRetryableError, DurableTaskRetryBackoffKinds, DurableTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
-import type { DurableExecutionTransaction, DurableTaskContext } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskRetryableError, WorkflowTaskRetryBackoffKinds, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowTransaction, IWorkflowTaskContext } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { McpEraProbeTargetRecord, McpOperatorServerRecord, McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
 import { McpEraProbeTaskNames } from "./mcp-era-probe.types";
@@ -21,7 +21,7 @@ async function _LoadTarget(unitOfWork: McpOperatorUnitOfWork, input: McpEraProbe
 		const target = await transaction.mcp.loadEraProbeTarget(input.siloId, input.serverId);
 		if (!target || target.registrationDigest !== input.registrationDigest)
 		{
-			throw new DurableTaskTerminalError("MCP era-probe registration is unavailable.");
+			throw new WorkflowTaskTerminalError("MCP era-probe registration is unavailable.");
 		}
 		return target;
 	});
@@ -41,16 +41,16 @@ async function _RecordResult(unitOfWork: McpOperatorUnitOfWork, input: McpEraPro
 		const write = await transaction.mcp.recordEraProbeResult(input.siloId, input.serverId, input.registrationDigest, result);
 		if (!write)
 		{
-			throw new DurableTaskTerminalError("MCP era-probe registration is unavailable.");
+			throw new WorkflowTaskTerminalError("MCP era-probe registration is unavailable.");
 		}
 		let winner: McpEraProbeTaskResult | null;
 		try
 		{
 			winner = __McpEraProbeReplayResult(_TargetFromServer(write.server));
 		}
-		catch { throw new DurableTaskTerminalError("MCP era-probe stored winner is invalid."); }
+		catch { throw new WorkflowTaskTerminalError("MCP era-probe stored winner is invalid."); }
 		if (!winner)
-			throw new DurableTaskTerminalError("MCP era-probe stored winner is unavailable.");
+			throw new WorkflowTaskTerminalError("MCP era-probe stored winner is unavailable.");
 		if (write.changed)
 		{
 			await transaction.mcp.appendAudit("Updated", `McpServer/${input.serverId}`, `MCP server era probe ${result.decision}`);
@@ -67,12 +67,12 @@ async function _RecordRetry(unitOfWork: McpOperatorUnitOfWork, input: McpEraProb
 	{
 		const retry = await transaction.mcp.recordEraProbeRetry(input.siloId, input.serverId, input.registrationDigest, attempt, MCP_ERA_PROBE_MAXIMUM_ATTEMPTS, exhaustedResult);
 		if (!retry)
-			throw new DurableTaskTerminalError("MCP era-probe registration is unavailable.");
+			throw new WorkflowTaskTerminalError("MCP era-probe registration is unavailable.");
 		let stored: McpEraProbeTaskResult | null;
 		try { stored = __McpEraProbeReplayResult(_TargetFromServer(retry.server)); }
-		catch { throw new DurableTaskTerminalError("MCP era-probe stored retry state is invalid."); }
+		catch { throw new WorkflowTaskTerminalError("MCP era-probe stored retry state is invalid."); }
 		if (retry.exhausted && !stored)
-			throw new DurableTaskTerminalError("MCP era-probe exhausted result is unavailable.");
+			throw new WorkflowTaskTerminalError("MCP era-probe exhausted result is unavailable.");
 		if (retry.exhausted && retry.changed)
 			await transaction.mcp.appendAudit("Updated", `McpServer/${input.serverId}`, "MCP server era probe retry limit exhausted");
 		return stored;
@@ -80,12 +80,12 @@ async function _RecordRetry(unitOfWork: McpOperatorUnitOfWork, input: McpEraProb
 }
 
 /** Run one remote check and record its product decision through replay-safe checkpoints. */
-async function _Run(context: DurableTaskContext, options: McpEraProbeWorkflowOptions, input: McpEraProbeTaskInput): Promise<McpEraProbeTaskResult>
+async function _Run(context: IWorkflowTaskContext, options: McpEraProbeWorkflowOptions, input: McpEraProbeTaskInput): Promise<McpEraProbeTaskResult>
 {
 	const target = await _LoadTarget(options.unitOfWork, input);
 	let completed: McpEraProbeTaskResult | null;
 	try { completed = __McpEraProbeReplayResult(target); }
-	catch { throw new DurableTaskTerminalError("MCP era-probe stored result is invalid."); }
+	catch { throw new WorkflowTaskTerminalError("MCP era-probe stored result is invalid."); }
 	if (completed)
 		return completed;
 
@@ -103,11 +103,11 @@ async function _Run(context: DurableTaskContext, options: McpEraProbeWorkflowOpt
 			{
 				const action = __McpEraProbeTransition(McpEraProbeStates.Pending, McpEraProbeEvents.RetryableFailure);
 				if (action !== McpEraProbeActions.Retry)
-					throw new DurableTaskTerminalError("MCP era-probe retry policy is invalid.");
+					throw new WorkflowTaskTerminalError("MCP era-probe retry policy is invalid.");
 				const exhausted = await _RecordRetry(options.unitOfWork, input, context.attempt);
 				if (exhausted)
 					return exhausted;
-				throw new DurableTaskRetryableError("MCP server protocol check is temporarily unavailable.");
+				throw new WorkflowTaskRetryableError("MCP server protocol check is temporarily unavailable.");
 			}
 			return __McpEraProbeTerminalResult(error.code);
 		}
@@ -131,8 +131,8 @@ export function __CreateMcpEraProbeWorkflow(options: McpEraProbeWorkflowOptions)
 {
 	options.execution.register({
 		taskName: McpEraProbeTaskNames.Probe,
-		retryPolicy: { maximumAttempts: MCP_ERA_PROBE_MAXIMUM_ATTEMPTS, backoff: { kind: DurableTaskRetryBackoffKinds.Exponential, initialDelaySeconds: 30, multiplier: 2, maximumDelaySeconds: 300 } },
-		async run(context: DurableTaskContext, input: McpEraProbeTaskInput): Promise<McpEraProbeTaskResult>
+		retryPolicy: { maximumAttempts: MCP_ERA_PROBE_MAXIMUM_ATTEMPTS, backoff: { kind: WorkflowTaskRetryBackoffKinds.Exponential, initialDelaySeconds: 30, multiplier: 2, maximumDelaySeconds: 300 } },
+		async run(context: IWorkflowTaskContext, input: McpEraProbeTaskInput): Promise<McpEraProbeTaskResult>
 		{
 			__AssertMcpEraProbeTaskInput(input);
 			return await _Run(context, options, input);
@@ -140,7 +140,7 @@ export function __CreateMcpEraProbeWorkflow(options: McpEraProbeWorkflowOptions)
 	});
 
 	return {
-		async admit(transaction: DurableExecutionTransaction, input: McpEraProbeTaskInput): Promise<McpEraProbeAdmission>
+		async admit(transaction: IWorkflowTransaction, input: McpEraProbeTaskInput): Promise<McpEraProbeAdmission>
 		{
 			const taskKey = __McpEraProbeTaskKey(input);
 			const receipt = await options.execution.spawn(transaction, { taskName: McpEraProbeTaskNames.Probe, idempotencyKey: taskKey, input });

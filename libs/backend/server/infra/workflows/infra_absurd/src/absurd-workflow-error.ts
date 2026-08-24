@@ -1,12 +1,12 @@
-import { DurableExecutionError } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowError } from "@opencrane/backend/server/infra/workflows/contract";
 
 /**
- * A vendor operation failed before the durable port could return its promised value.
+ * A vendor operation failed before the workflow-engine port could return its promised value.
  *
  * The adapter retains the original failure as `cause` for structured logs while keeping vendor
  * error classes out of package consumers.
  */
-export class AbsurdWorkflowError extends DurableExecutionError
+export class AbsurdWorkflowError extends WorkflowError
 {
 	/** Engine operation that failed. */
 	readonly operation: string;

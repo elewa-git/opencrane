@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { DurableTaskRetryableError, DurableTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
-import type { DurableExecutionTransaction } from "@opencrane/backend/server/infra/workflows/contract";
-import { __FakeDurableExecution } from "@opencrane/backend/server/infra/workflows/testing";
+import { WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
 
 import type { IMcpOperatorRepository, McpEraProbeTargetRecord, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
 import { __CreateMcpEraProbeWorkflow, __McpEraProbeTaskKey } from "../era-probe/mcp-era-probe";
@@ -76,18 +76,18 @@ function _UnitOfWork(state: _EraState): McpOperatorUnitOfWork
 		}),
 		appendAudit: vi.fn().mockImplementation(function _Audit(): Promise<void> { state.auditCount += 1; return Promise.resolve(); }),
 	} as unknown as IMcpOperatorRepository;
-	const transaction = { mcp: repository, durableExecution: _Transaction() } as unknown as McpOperatorTransaction;
+	const transaction = { mcp: repository, workflowTransaction: _Transaction() } as unknown as McpOperatorTransaction;
 	return { execute: async function _Execute<Result>(operation: (value: McpOperatorTransaction) => Promise<Result>): Promise<Result> { return await operation(transaction); } };
 }
 
 /** Return an opaque database transaction for fake task admission. */
-function _Transaction(): DurableExecutionTransaction
+function _Transaction(): IWorkflowTransaction
 {
 	return { client: {} };
 }
 
 /** Start fake workers after admitting one task. */
-async function _Drain(execution: __FakeDurableExecution): Promise<void>
+async function _Drain(execution: __FakeWorkflowEngine): Promise<void>
 {
 	await execution.startWorkers({ workerName: "mcp-era-probe-test" });
 }
@@ -103,7 +103,7 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 	it("accepts the required protocol revision and moves the draft to review", async function _AcceptsRequiredEra()
 	{
 		const state = _State();
-		const execution = new __FakeDurableExecution();
+		const execution = new __FakeWorkflowEngine();
 		const probe = vi.fn().mockResolvedValue({ protocolVersion: MCP_ERA_PROTOCOL_VERSION, evidenceDigest: `sha256:${"a".repeat(64)}` });
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe: { probe } });
 		const admitted = await workflow.admit(_Transaction(), _Input());
@@ -118,7 +118,7 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 	it("rejects another protocol revision", async function _RejectsOtherEra()
 	{
 		const state = _State();
-		const execution = new __FakeDurableExecution();
+		const execution = new __FakeWorkflowEngine();
 		const probe: McpEraProbeClient = { probe: vi.fn().mockResolvedValue({ protocolVersion: "2025-11-25", evidenceDigest: `sha256:${"b".repeat(64)}` }) };
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe });
 		const admitted = await workflow.admit(_Transaction(), _Input());
@@ -131,27 +131,27 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 
 	it("fails permanently when the remote evidence is malformed", async function _RejectsMalformedEvidence()
 	{
-		const execution = new __FakeDurableExecution();
+		const execution = new __FakeWorkflowEngine();
 		const probe = { probe: vi.fn().mockResolvedValue({ protocolVersion: MCP_ERA_PROTOCOL_VERSION, evidenceDigest: "raw-response" }) } as unknown as McpEraProbeClient;
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(_State()), probe });
 		const admitted = await workflow.admit(_Transaction(), _Input());
 
 		await _Drain(execution);
 
-		expect(execution.taskSnapshot(admitted.receipt).error).toBeInstanceOf(DurableTaskTerminalError);
+		expect(execution.taskSnapshot(admitted.receipt).error).toBeInstanceOf(WorkflowTaskTerminalError);
 	});
 
 	it("asks the engine to retry a temporary transport failure", async function _RetriesTemporaryFailure()
 	{
 		const state = _State();
-		const execution = new __FakeDurableExecution();
+		const execution = new __FakeWorkflowEngine();
 		const probe = { probe: vi.fn().mockRejectedValue(new McpEraProbeFailure(McpEraProbeFailureCodes.RetryableUnavailable)) };
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe });
 		const admitted = await workflow.admit(_Transaction(), _Input());
 
 		await _Drain(execution);
 
-		expect(execution.taskSnapshot(admitted.receipt).error).toBeInstanceOf(DurableTaskRetryableError);
+		expect(execution.taskSnapshot(admitted.receipt).error).toBeInstanceOf(WorkflowTaskRetryableError);
 		expect(state.target.eraProbeStatus).toBe("Pending");
 		expect(state.target.eraProbeAttempts).toBe(1);
 		expect(state.auditCount).toBe(0);
@@ -161,7 +161,7 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 	{
 		const state = _State();
 		state.target = { ...state.target, eraProbeAttempts: 4 };
-		const execution = new __FakeDurableExecution();
+		const execution = new __FakeWorkflowEngine();
 		const probe = { probe: vi.fn().mockRejectedValue(new McpEraProbeFailure(McpEraProbeFailureCodes.RetryableUnavailable)) };
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe });
 		const admitted = await workflow.admit(_Transaction(), _Input());
@@ -176,7 +176,7 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 	it("uses the engine attempt after earlier failures happened before the remote check", async function _ExhaustsAfterEarlierHandlerFailures()
 	{
 		const state = _State();
-		const execution = new __FakeDurableExecution();
+		const execution = new __FakeWorkflowEngine();
 		const probe = { probe: vi.fn().mockRejectedValue(new McpEraProbeFailure(McpEraProbeFailureCodes.RetryableUnavailable)) };
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe });
 		const admitted = await workflow.admit(_Transaction(), _Input());
@@ -192,7 +192,7 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 	it.each([McpEraProbeFailureCodes.UnsafeEndpoint, McpEraProbeFailureCodes.InvalidResponse])("stores terminal failure %s as a rejected result", async function _StoresTerminalFailure(code)
 	{
 		const state = _State();
-		const execution = new __FakeDurableExecution();
+		const execution = new __FakeWorkflowEngine();
 		const probe = { probe: vi.fn().mockRejectedValue(new McpEraProbeFailure(code)) };
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe });
 		const admitted = await workflow.admit(_Transaction(), _Input());
@@ -208,7 +208,7 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 	{
 		const state = _State();
 		state.target = { ...state.target, eraProbeStatus: McpEraProbeStates.Accepted, eraProtocolVersion: MCP_ERA_PROTOCOL_VERSION, eraProbeEvidenceDigest: `sha256:${"c".repeat(64)}`, eraProbeFailureCode: null };
-		const execution = new __FakeDurableExecution();
+		const execution = new __FakeWorkflowEngine();
 		const probe = vi.fn();
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe: { probe } });
 		const admitted = await workflow.admit(_Transaction(), _Input());
@@ -224,7 +224,7 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 	{
 		const state = _State();
 		state.target = { ...state.target, eraProbeStatus: McpEraProbeStates.Rejected, eraProtocolVersion: null, eraProbeEvidenceDigest: `sha256:${"d".repeat(64)}`, eraProbeFailureCode: McpEraProbeFailureCodes.InvalidResponse };
-		const execution = new __FakeDurableExecution();
+		const execution = new __FakeWorkflowEngine();
 		const probe = vi.fn();
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe: { probe } });
 		const admitted = await workflow.admit(_Transaction(), _Input());
@@ -238,7 +238,7 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 
 	it("uses one opaque task key for repeated admission", async function _DeduplicatesAdmission()
 	{
-		const execution = new __FakeDurableExecution();
+		const execution = new __FakeWorkflowEngine();
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(_State()), probe: { probe: vi.fn() } });
 		const first = await workflow.admit(_Transaction(), _Input());
 		const second = await workflow.admit(_Transaction(), _Input());

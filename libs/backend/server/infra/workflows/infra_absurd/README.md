@@ -1,4 +1,4 @@
-# backend-server-infra-workflows-infra-absurd — Absurd engine adapter
+# backend-server-infra-workflows-infra-absurd — Absurd workflow engine adapter
 
 > [backend](../../../../README.md) › [server](../../../README.md) › [infra](../../README.md) › [workflows](../README.md) › infra_absurd
 
@@ -23,13 +23,14 @@ The vendored SQL is pinned byte-for-byte to Absurd 0.5.0. A mismatch between its
 
 ## Public surface
 
-- `_CreateAbsurdDurableExecution` — builds the adapter without exposing the vendor SDK.
+`_CreateAbsurdWorkflowEngine` creates the engine and worker ports used by server composition. Its
+return type exposes `IWorkflowEngine` and `IWorkflowWorkerRuntime`, not an Absurd SDK object.
 
 ## Boundary
 
 Only this package imports `absurd-sdk`. It owns no product data, recurrence, queue naming, or tracing
 policy; those stay above the engine adapter. The server gives it the same approved queue list as the
-workflow kit, so it cannot choose another queue. Workers use the SDK. Starting a saved job uses the
+workflow guard, so it cannot choose another queue. Workers use the SDK. Starting a saved job uses the
 database transaction supplied by the product change and the parameterised `absurd.spawn_task`
 function.
 Each registered job also supplies its total attempt limit and retry delay. The adapter stores those

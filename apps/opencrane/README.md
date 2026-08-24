@@ -117,7 +117,7 @@ its resources to the lifecycle owner.
 - `prisma/schema/*.prisma` defines the product's durable domain models.
 - `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database. The baseline publisher
   installs the pinned `pg_cron` prerequisite before it switches to the application owner, then this
-  file installs the pinned Absurd durable-task schema and its control-plane queue. The server runs
+  file installs the pinned Absurd workflow-task schema and its control-plane queue. The server runs
   one worker for registered workflow tasks. Its focused source verifiers prove the seeded
   persona and onboarding-bootstrap content against the reviewed files in
   `docs/design/persona-archetypes/`.

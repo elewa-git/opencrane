@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ExternalActionWorker } from "@opencrane/backend/agents/execution/protocol";
 import type { RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
-import type { DurableWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { OpenCraneProcessConfig } from "../config.types";
 
@@ -50,7 +50,7 @@ describe("OpenCrane background workers", function _BackgroundWorkerSuite()
 			{ repairNextExpiredRunAtomically: vi.fn() } as unknown as RunCancellationRepository,
 			{ schedulerEnabled: false, schedulerIntervalMilliseconds: 60_000 } as OpenCraneProcessConfig,
 			{ drain: externalDrain, runOnce: vi.fn() } as unknown as ExternalActionWorker,
-			{ close, startWorkers } as DurableWorkerRuntime,
+			{ close, startWorkers } as IWorkflowWorkerRuntime,
 		);
 
 		expect(startWorkers).toHaveBeenCalledWith({ workerName: "opencrane-control-plane" });

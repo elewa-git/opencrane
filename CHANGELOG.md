@@ -42,7 +42,7 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   first attempt through one parameterized, policy-bound database procedure call in the caller's
   existing transaction.
 
-- **Operators can now upgrade an existing database to the durable-task foundation without leaving a
+- **Operators can now upgrade an existing database to the workflow-task foundation without leaving a
   superuser credential available.** The direct migration Job prepares `pg_cron`, uses the generated
   credential solely to install that reviewed prerequisite, and then removes the credential before the
   ordinary application rollout continues.

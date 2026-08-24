@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
-import { DurableTaskStates } from "@opencrane/backend/server/infra/workflows/contract";
-import type { DurableExecution } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskStates } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { EnsureRespawnChainHeadCommand, RespawnChainSpawn, SpawnRespawnChainSuccessorCommand } from "./respawn-chain.types";
 
@@ -31,13 +31,13 @@ export function __RespawnChainTaskKey(chainKey: string, slotKey: string): string
  * Idempotently start or repair a recurrence at a scheduler-owned head slot.
  *
  * The scheduler calculates `slotKey` from its own cron and timezone rules. This helper only turns
- * that identity into a durable task admission, so it cannot silently replace product schedule
+ * that identity into a workflow task admission, so it cannot silently replace product schedule
  * semantics or add a second cron interpreter.
  *
  * Called by: product scheduling composition when it starts or repairs a recurrence.
  * @see {@link __SpawnRespawnChainSuccessor} for the completion-driven next task.
  */
-export async function __EnsureRespawnChainHead(execution: DurableExecution, command: EnsureRespawnChainHeadCommand): Promise<RespawnChainSpawn>
+export async function __EnsureRespawnChainHead(execution: IWorkflowEngine, command: EnsureRespawnChainHeadCommand): Promise<RespawnChainSpawn>
 {
 	_RequireStableKey("taskName", command.taskName);
 	const taskKey = __RespawnChainTaskKey(command.chainKey, command.slotKey);
@@ -51,15 +51,15 @@ export async function __EnsureRespawnChainHead(execution: DurableExecution, comm
  * A successor must occupy a different scheduler slot from the completed task. The different
  * deterministic key gives the engine a new task and keeps each task's checkpoint history bounded.
  *
- * Called by: product scheduling composition after the durable engine has recorded completion.
+ * Called by: product scheduling composition after the workflow engine has recorded completion.
  * @see {@link __EnsureRespawnChainHead} for initial and repaired chain admission.
  */
-export async function __SpawnRespawnChainSuccessor(execution: DurableExecution, command: SpawnRespawnChainSuccessorCommand): Promise<RespawnChainSpawn>
+export async function __SpawnRespawnChainSuccessor(execution: IWorkflowEngine, command: SpawnRespawnChainSuccessorCommand): Promise<RespawnChainSpawn>
 {
 	_RequireStableKey("taskName", command.taskName);
 	_RequireStableKey("completed.taskId", command.completed.taskId);
 	_RequireStableKey("completed.slotKey", command.completed.slotKey);
-	if (command.completed.state !== DurableTaskStates.Completed)
+	if (command.completed.state !== WorkflowTaskStates.Completed)
 	{
 		throw new Error("Only a completed task may spawn a respawn-chain successor.");
 	}

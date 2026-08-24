@@ -1,4 +1,4 @@
-import type { DurableExecution, DurableExecutionTransaction, DurableTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowEngine, IWorkflowTransaction, IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
 import type { McpEraProbeFailureCodes } from "./mcp-era-probe-failure";
@@ -103,21 +103,21 @@ export interface McpEraProbeAdmission
 	/** Stable key that makes repeated registration admission return the same task. */
 	readonly taskKey: string;
 	/** Engine-neutral receipt for the admitted task. */
-	readonly receipt: DurableTaskReceipt;
+	readonly receipt: IWorkflowTaskReceipt;
 }
 
 /** Transaction-bound admission and worker registration owned by the MCP domain. */
 export interface McpEraProbeWorkflow
 {
 	/** Admit the probe task through the transaction that creates the catalogue row. */
-	admit(transaction: DurableExecutionTransaction, input: McpEraProbeTaskInput): Promise<McpEraProbeAdmission>;
+	admit(transaction: IWorkflowTransaction, input: McpEraProbeTaskInput): Promise<McpEraProbeAdmission>;
 }
 
 /** Dependencies used to register and run the MCP era-probe task. */
 export interface McpEraProbeWorkflowOptions
 {
-	/** Engine-neutral durable execution supplied by server composition. */
-	readonly execution: DurableExecution;
+	/** Engine-neutral workflow engine supplied by server composition. */
+	readonly execution: IWorkflowEngine;
 	/** Remote discovery adapter supplied by server composition. */
 	readonly probe: McpEraProbeClient;
 	/** MCP transaction owner used to load and update catalogue rows. */

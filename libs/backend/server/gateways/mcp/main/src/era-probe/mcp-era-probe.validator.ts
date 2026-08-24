@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { DurableTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { McpEraProbeObservation, McpEraProbeTaskInput } from "./mcp-era-probe.types";
 
@@ -22,14 +22,14 @@ const _OBSERVATION_SCHEMA = z.object({
  *
  * Called by: task-key generation and the registered MCP protocol-check handler.
  * @param input - Saved input to check before it selects a catalogue row.
- * @throws {@link DurableTaskTerminalError} when the task input cannot be trusted.
+ * @throws {@link WorkflowTaskTerminalError} when the task input cannot be trusted.
  * @see {@link McpEraProbeTaskInput}
  */
 export function __AssertMcpEraProbeTaskInput(input: McpEraProbeTaskInput): void
 {
 	if (!_TASK_INPUT_SCHEMA.safeParse(input).success)
 	{
-		throw new DurableTaskTerminalError("MCP era-probe task input is invalid.");
+		throw new WorkflowTaskTerminalError("MCP era-probe task input is invalid.");
 	}
 }
 
@@ -39,7 +39,7 @@ export function __AssertMcpEraProbeTaskInput(input: McpEraProbeTaskInput): void
  * Called by: the MCP protocol-check workflow after its external adapter responds.
  * @param value - Untrusted observation returned by the external protocol adapter.
  * @returns The checked observation that may be saved as workflow evidence.
- * @throws {@link DurableTaskTerminalError} when the observation is malformed.
+ * @throws {@link WorkflowTaskTerminalError} when the observation is malformed.
  * @see {@link McpEraProbeObservation}
  */
 export function __ParseMcpEraProbeObservation(value: McpEraProbeObservation): McpEraProbeObservation
@@ -47,7 +47,7 @@ export function __ParseMcpEraProbeObservation(value: McpEraProbeObservation): Mc
 	const parsed = _OBSERVATION_SCHEMA.safeParse(value);
 	if (!parsed.success)
 	{
-		throw new DurableTaskTerminalError("MCP era-probe response is invalid.");
+		throw new WorkflowTaskTerminalError("MCP era-probe response is invalid.");
 	}
 	return parsed.data;
 }

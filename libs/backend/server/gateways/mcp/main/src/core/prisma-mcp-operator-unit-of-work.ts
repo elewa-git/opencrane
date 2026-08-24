@@ -20,7 +20,7 @@ export class PrismaMcpOperatorUnitOfWork implements McpOperatorUnitOfWork
 				authorization: new PrismaAuthorizationGrantRepository(transaction),
 				capabilityCatalog: new PrismaCapabilityCatalogRepository(transaction),
 				managedGrants: new PrismaManagedAuthorizationGrantRepository(transaction),
-				durableExecution: { client: transaction },
+				workflowTransaction: { client: transaction },
 			});
 		});
 	}

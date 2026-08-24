@@ -78,7 +78,7 @@ accepts server-owned identity evidence and delegates durable snapshot and run ru
 packages.
 
 The in-memory gates are overload protection, not product authority. Silo identity and admission
-eligibility are still re-derived and persisted by the durable execution packages. A process
+eligibility are still re-derived and persisted by the workflow packages. A process
 restart may clear waiting work but cannot admit an unauthorized run or rewrite a committed one.
 
 ## Dependency direction

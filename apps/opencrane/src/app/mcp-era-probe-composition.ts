@@ -3,8 +3,8 @@ import type { PrismaClient } from "@prisma/client";
 import { __CreateMcpEraProbeWorkflow, MCP_ERA_PROTOCOL_VERSION, McpEraProbeFailure, McpEraProbeFailureCodes, McpEraProbeTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
 import type { McpEraProbeClient } from "@opencrane/backend/server/gateways/mcp";
 import { __CreateHttpsMcpEraProbeClient, McpEraProbeConfigurationError, McpEraProbeProtocolError, McpEraProbeTransportError } from "@opencrane/backend/server/infra/mcp-era-probe";
-import { _CreateAbsurdDurableExecution } from "@opencrane/backend/server/infra/workflows/infra_absurd";
-import { __CreateWorkflowKit, __CreateWorkflowTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/kit";
+import { _CreateAbsurdWorkflowEngine } from "@opencrane/backend/server/infra/workflows/infra_absurd";
+import { __CreateWorkflowGuard, __CreateWorkflowTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/guard";
 
 import type { OpenCraneWorkflowConfig } from "./config.types";
 import { _log } from "./log";
@@ -33,7 +33,7 @@ export function _CreateMcpEraProbeComposition(prisma: PrismaClient, config: Open
 	const queueAuthority = __CreateWorkflowTaskQueueAuthority([
 		{ taskName: McpEraProbeTaskNames.Probe, queue: "control-plane" },
 	]);
-	const runtime = _CreateAbsurdDurableExecution({
+	const runtime = _CreateAbsurdWorkflowEngine({
 		databasePoolSize: config.databasePoolSize,
 		databaseUrl: config.databaseUrl,
 		log: _log,
@@ -41,7 +41,7 @@ export function _CreateMcpEraProbeComposition(prisma: PrismaClient, config: Open
 		queueAuthority,
 		workerConcurrency: config.workerConcurrency,
 	});
-	const execution = __CreateWorkflowKit({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
+	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
 	const transport = __CreateHttpsMcpEraProbeClient({ protocolVersion: MCP_ERA_PROTOCOL_VERSION, maximumResponseBytes: config.mcpEraProbeMaximumResponseBytes, requestTimeoutMilliseconds: config.mcpEraProbeTimeoutMilliseconds });
 	const probe: McpEraProbeClient = {
 		async probe(request)

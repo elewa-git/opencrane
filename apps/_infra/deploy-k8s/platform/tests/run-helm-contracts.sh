@@ -14,7 +14,7 @@ for contract in \
   database-migration-deploy-contract.sh \
   database-superuser-access-contract.sh \
   database-pg-cron-preflight-contract.sh \
-  durable-execution-qualification-contract.sh \
+  workflow-engine-qualification-contract.sh \
   server-key-permissions-contract.sh \
   server-runtime-cleanup-rbac-contract.sh \
   server-network-policy-contract.sh \

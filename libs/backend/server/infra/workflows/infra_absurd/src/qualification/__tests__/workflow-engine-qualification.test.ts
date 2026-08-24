@@ -1,0 +1,159 @@
+import type { Absurd } from "absurd-sdk";
+import type { Pool } from "pg";
+import { describe, expect, it, vi } from "vitest";
+
+import type { IWorkflowTaskDefinition, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+
+import type { AbsurdWorkflowEngine } from "../../absurd-workflow-engine";
+import type { IWorkflowEngineQualificationUnitOfWork } from "../workflow-engine-qualification-unit-of-work.types";
+import { __QualifyWorkflowEnginePickup, _WorkflowEngineQualificationPassed, _WorkflowEngineQualificationPercentile } from "../workflow-engine-qualification";
+import { _AbsurdWorkflowEngineQualificationSession } from "../workflow-engine-qualification-session";
+import type { IWorkflowEngineQualificationSession, IWorkflowTaskQualificationInput } from "../workflow-engine-qualification-session.types";
+
+const _Options = {
+	databasePoolSize: 2,
+	databaseUrl: "postgresql://example.invalid/opencrane",
+	pollIntervalMs: 50,
+	sampleCount: 10,
+	siloId: "testlynn",
+	thresholdMs: 250,
+};
+
+/** Create one controllable session for runner orchestration tests. */
+function _FakeSession(connectionCount: number | null = 3)
+{
+	let onStarted: ((input: IWorkflowTaskQualificationInput) => void) | undefined;
+	let currentTime = 0;
+	const events: string[] = [];
+	const session: IWorkflowEngineQualificationSession = {
+		async start(handler): Promise<void> { events.push("start"); onStarted = handler; },
+		async next(input)
+		{
+			events.push(`next:${input.sampleIndex}`);
+			currentTime += 100;
+			onStarted?.(input);
+			return { taskId: `task-${input.sampleIndex}`, taskName: "qualification", idempotencyKey: `${input.sampleIndex}` };
+		},
+		async connectionCount(): Promise<number | null> { events.push("observe"); return connectionCount; },
+		async close(): Promise<void> { events.push("close"); },
+	};
+	return {
+		events,
+		runtime: {
+			createSession: function _Create(): IWorkflowEngineQualificationSession { return session; },
+			now: function _Now(): number { return currentTime; },
+			async wait(): Promise<void> {},
+			async withTimeout(sample: Promise<number>): Promise<number> { return await sample; },
+		},
+		session,
+	};
+}
+
+describe("workflow engine live qualification statistics", function _Suite()
+{
+	it("uses nearest-rank percentiles over monotonic samples", function _Percentiles()
+	{
+		const samples = [8, 1, 5, 3, 2, 7, 4, 6, 10, 9];
+		expect(_WorkflowEngineQualificationPercentile(samples, 0.5)).toBe(5);
+		expect(_WorkflowEngineQualificationPercentile(samples, 0.95)).toBe(10);
+		expect(_WorkflowEngineQualificationPercentile(samples, 0.99)).toBe(10);
+	});
+
+	it("rejects an empty or invalid percentile request", function _RejectsInvalid()
+	{
+		expect(function _Empty(): number { return _WorkflowEngineQualificationPercentile([], 0.95); }).toThrow("requires samples");
+		expect(function _Rank(): number { return _WorkflowEngineQualificationPercentile([1], 2); }).toThrow("requires samples");
+	});
+
+	it("fails closed without complete connection evidence or above the connection ceiling", function _ConnectionBudget()
+	{
+		expect(_WorkflowEngineQualificationPassed(200, 250, 3, { available: false })).toBe(false);
+		expect(_WorkflowEngineQualificationPassed(200, 250, 3, { available: true, peakConnections: 4 })).toBe(false);
+		expect(_WorkflowEngineQualificationPassed(200, 250, 3, { available: true, peakConnections: 3 })).toBe(true);
+		expect(_WorkflowEngineQualificationPassed(300, 250, 3, { available: true, peakConnections: 3 })).toBe(false);
+	});
+
+	it("measures through a fake session and always closes it", async function _RunsSessionBoundary()
+	{
+		const fake = _FakeSession();
+
+		const result = await __QualifyWorkflowEnginePickup(_Options, fake.runtime);
+
+		expect(result.passed).toBe(true);
+		expect(result.latencyMs).toEqual({ p50: 100, p95: 100, p99: 100, max: 100 });
+		expect(fake.events.filter(event => event.startsWith("next:"))).toHaveLength(15);
+		expect(fake.events.at(-1)).toBe("close");
+	});
+
+	it("fails closed on unavailable observations after cleaning up", async function _UnavailableObservation()
+	{
+		const fake = _FakeSession(null);
+
+		const result = await __QualifyWorkflowEnginePickup(_Options, fake.runtime);
+
+		expect(result.passed).toBe(false);
+		expect(result.connectionEvidence).toEqual({ available: false });
+		expect(fake.events.at(-1)).toBe("close");
+	});
+
+	it("cleans up after admission and timeout failures", async function _FailureCleanup()
+	{
+		const admission = _FakeSession();
+		vi.spyOn(admission.session, "next").mockRejectedValue(new Error("next sample failed"));
+		await expect(__QualifyWorkflowEnginePickup(_Options, admission.runtime)).rejects.toThrow("next sample failed");
+		expect(admission.events.at(-1)).toBe("close");
+
+		const timeout = _FakeSession();
+		vi.spyOn(timeout.session, "next").mockImplementation(async function _NoResult(input) { return { taskId: `task-${input.sampleIndex}`, taskName: "qualification", idempotencyKey: `${input.sampleIndex}` }; });
+		timeout.runtime.withTimeout = async function _Timeout(): Promise<number> { throw new Error("pickup timed out"); };
+		await expect(__QualifyWorkflowEnginePickup(_Options, timeout.runtime)).rejects.toThrow("pickup timed out");
+		expect(timeout.events.at(-1)).toBe("close");
+	});
+});
+
+describe("workflow engine qualification session", function _SessionSuite()
+{
+	it("owns admission and ordered cleanup without a live database", async function _Lifecycle()
+	{
+		const events: string[] = [];
+		let definition: IWorkflowTaskDefinition<IWorkflowTaskQualificationInput, null> | undefined;
+		const resources = {
+			databasePool: { async query() { return { rows: [{ connection_count: "3" }] }; }, async end() { events.push("pool-end"); } } as unknown as Pool,
+				execution: {
+					register(value: IWorkflowTaskDefinition<IWorkflowTaskQualificationInput, null>) { definition = value; events.push("register"); },
+					async startWorkers() { events.push("worker-start"); return { workerId: "worker", workerName: "worker", async drain() { events.push("worker-drain"); }, async stop() {} }; },
+					async spawn(_transaction: IWorkflowTransaction, input: { input: IWorkflowTaskQualificationInput }) { events.push("spawn"); return { taskId: "task", taskName: "qualification", idempotencyKey: `${input.input.sampleIndex}` }; },
+				} as unknown as AbsurdWorkflowEngine,
+			queueOwner: { async createQueue() { events.push("queue-create"); }, async dropQueue() { events.push("queue-drop"); }, async close() { events.push("queue-close"); } } as unknown as Absurd,
+			unitOfWork: { async admit<TResult>(operation: (transaction: IWorkflowTransaction) => Promise<TResult>): Promise<TResult> { events.push("transaction"); return await operation({ client: {} }); }, async close() { events.push("uow-close"); } } satisfies IWorkflowEngineQualificationUnitOfWork,
+		};
+		const session = new _AbsurdWorkflowEngineQualificationSession({ applicationName: "d2", databasePoolSize: 2, databaseUrl: _Options.databaseUrl, pollIntervalMs: 50, queueName: "queue", runId: "run", siloId: "testlynn" }, resources);
+		const started: number[] = [];
+
+		await session.start(function _RecordStart(input): void { started.push(input.sampleIndex); });
+		await definition?.run({} as never, { sampleIndex: 1, siloId: "testlynn" });
+		await session.next({ sampleIndex: 1, siloId: "testlynn" });
+		expect(await session.connectionCount()).toBe(3);
+		await session.close();
+
+		expect(started).toEqual([1]);
+		expect(events).toEqual(["queue-create", "register", "worker-start", "transaction", "spawn", "worker-drain", "queue-drop", "queue-close", "uow-close", "pool-end"]);
+	});
+
+	it("continues releasing later resources when one cleanup step fails", async function _CleanupFailure()
+	{
+		const events: string[] = [];
+		const resources = {
+			databasePool: { async end() { events.push("pool-end"); } } as unknown as Pool,
+			execution: { register() {}, async startWorkers() { return { workerId: "worker", workerName: "worker", async drain() { events.push("worker-drain"); throw new Error("drain failed"); }, async stop() {} }; } } as unknown as AbsurdWorkflowEngine,
+			queueOwner: { async createQueue() {}, async dropQueue() { events.push("queue-drop"); }, async close() { events.push("queue-close"); } } as unknown as Absurd,
+			unitOfWork: { async admit<TResult>(_operation: (transaction: IWorkflowTransaction) => Promise<TResult>): Promise<TResult> { throw new Error("unused"); }, async close() { events.push("uow-close"); } } satisfies IWorkflowEngineQualificationUnitOfWork,
+		};
+		const session = new _AbsurdWorkflowEngineQualificationSession({ applicationName: "d2", databasePoolSize: 2, databaseUrl: _Options.databaseUrl, pollIntervalMs: 50, queueName: "queue", runId: "run", siloId: "testlynn" }, resources);
+		await session.start(function _Started(): void {});
+
+		await expect(session.close()).rejects.toThrow("could not remove its queue");
+
+		expect(events).toEqual(["worker-drain", "queue-drop", "queue-close", "uow-close", "pool-end"]);
+	});
+});

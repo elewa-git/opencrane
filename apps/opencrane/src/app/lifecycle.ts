@@ -10,7 +10,7 @@ import type { RunCancellationRepository } from "@opencrane/backend/agents/execut
 import type { ChannelTargetRouteReconciler } from "@opencrane/backend/server/agents/channel-targets";
 import type { SelfConversationSocketServer } from "@opencrane/backend/server/conversations";
 import { ___ShutdownTelemetry } from "@opencrane/backend/observability";
-import type { DurableWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _StartBackgroundWorkers } from "./background-workers";
 import type { OpenCraneBackgroundWorkers } from "./background-workers.types";
@@ -74,7 +74,7 @@ function _startHttpServers(publicApp: Express, internalApp: Express, config: Ope
  * Workload routes stay on a separate socket throughout the lifecycle; shutdown stops producers
  * before closing listeners and database state, then flushes telemetry as the final I/O boundary.
  */
-export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runCancellation: RunCancellationRepository, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, conversationSockets: SelfConversationSocketServer, unbindConsole: () => void, externalActions: ExternalActionWorker, stopObot: () => void, workflowRuntime: DurableWorkerRuntime): Promise<void>
+export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runCancellation: RunCancellationRepository, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, conversationSockets: SelfConversationSocketServer, unbindConsole: () => void, externalActions: ExternalActionWorker, stopObot: () => void, workflowRuntime: IWorkflowWorkerRuntime): Promise<void>
 {
 	// 1. Start workers only after application composition has registered every durable task.
 	let backgroundWorkers: OpenCraneBackgroundWorkers;

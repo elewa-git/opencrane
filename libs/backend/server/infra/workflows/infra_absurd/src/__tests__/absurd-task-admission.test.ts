@@ -1,8 +1,8 @@
 import type { Pool } from "pg";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DurableTaskRetryBackoffKinds } from "@opencrane/backend/server/infra/workflows/contract";
-import type { DurableExecutionTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskRetryBackoffKinds } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
 const _SDK = vi.hoisted(function _SdkHarness()
 {
@@ -23,14 +23,14 @@ vi.mock("absurd-sdk", function _MockAbsurdSdk()
 	return { Absurd, FailedTask };
 });
 
-import { AbsurdDurableExecution } from "../absurd-durable-execution";
-import { PrismaDbProcedureGateway } from "../prisma-db-procedure-gateway";
+import { AbsurdWorkflowEngine } from "../absurd-workflow-engine";
+import { WorkflowTaskAdmission } from "../workflow-task-admission";
 
 /** Build an adapter with one retrying task and no live database connection. */
-function _Execution(): AbsurdDurableExecution
+function _Execution(): AbsurdWorkflowEngine
 {
-	const execution = new AbsurdDurableExecution({ databaseUrl: "postgresql://unused", databasePoolSize: 1, databasePool: {} as Pool, queueAuthority: { queueForTask: function _Queue(): string { return "control-plane"; } } });
-	execution.register({ taskName: "test.task", retryPolicy: { maximumAttempts: 5, backoff: { kind: DurableTaskRetryBackoffKinds.Exponential, initialDelaySeconds: 30, multiplier: 2, maximumDelaySeconds: 300 } }, run: async function _Run(): Promise<void> {} });
+	const execution = new AbsurdWorkflowEngine({ databaseUrl: "postgresql://unused", databasePoolSize: 1, databasePool: {} as Pool, queueAuthority: { queueForTask: function _Queue(): string { return "control-plane"; } } });
+	execution.register({ taskName: "test.task", retryPolicy: { maximumAttempts: 5, backoff: { kind: WorkflowTaskRetryBackoffKinds.Exponential, initialDelaySeconds: 30, multiplier: 2, maximumDelaySeconds: 300 } }, run: async function _Run(): Promise<void> {} });
 	return execution;
 }
 
@@ -54,8 +54,8 @@ describe("Absurd task admission", function _TaskAdmissionSuite()
 	it("maps the same retry policy into transaction-bound admission", async function _MapsTransactionAdmission()
 	{
 		const client = {};
-		const transaction: DurableExecutionTransaction = { client };
-		const call = vi.spyOn(PrismaDbProcedureGateway.prototype, "___DbProcedureCall").mockResolvedValue({ taskId: "22222222-2222-4222-8222-222222222222", runId: "33333333-3333-4333-8333-333333333333", attempt: 1, created: true });
+		const transaction: IWorkflowTransaction = { client };
+		const call = vi.spyOn(WorkflowTaskAdmission.prototype, "admit").mockResolvedValue({ taskId: "22222222-2222-4222-8222-222222222222", runId: "33333333-3333-4333-8333-333333333333", attempt: 1, created: true });
 		const execution = _Execution();
 
 		await execution.spawn(transaction, { taskName: "test.task", idempotencyKey: "root-key", input: { value: 2 } });
