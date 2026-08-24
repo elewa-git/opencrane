@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Qualifies Absurd pickup latency through one local port-forward and the silo application credential.
+# Qualifies workflow-engine pickup latency through one local port-forward and the silo application credential.
 set -euo pipefail
 set +x
 
@@ -22,7 +22,7 @@ QUALIFICATION_PID=""
 
 _error()
 {
-  printf 'durable execution qualification: %s\n' "$1" >&2
+  printf 'workflow engine qualification: %s\n' "$1" >&2
 }
 
 _cleanup()
@@ -131,17 +131,17 @@ DATABASE_URL="$(RAW_DATABASE_URL="$RAW_DATABASE_URL" LOCAL_PORT="$LOCAL_PORT" no
 ')"
 unset RAW_DATABASE_URL
 export DATABASE_URL
-export OPENCRANE_D2_SILO_ID="$CLUSTER_TENANT"
-export OPENCRANE_D2_SAMPLE_COUNT="$SAMPLE_COUNT"
-export OPENCRANE_D2_POLL_INTERVAL_MS="$POLL_INTERVAL_MS"
-export OPENCRANE_D2_THRESHOLD_MS="$THRESHOLD_MS"
-export OPENCRANE_D2_DATABASE_POOL_SIZE="$DATABASE_POOL_SIZE"
+export OPENCRANE_WORKFLOW_ENGINE_SILO_ID="$CLUSTER_TENANT"
+export OPENCRANE_WORKFLOW_ENGINE_SAMPLE_COUNT="$SAMPLE_COUNT"
+export OPENCRANE_WORKFLOW_ENGINE_POLL_INTERVAL_MS="$POLL_INTERVAL_MS"
+export OPENCRANE_WORKFLOW_ENGINE_THRESHOLD_MS="$THRESHOLD_MS"
+export OPENCRANE_WORKFLOW_ENGINE_DATABASE_POOL_SIZE="$DATABASE_POOL_SIZE"
 
 QUALIFICATION_OUTPUT="$(mktemp)"
 QUALIFICATION_ERROR="$(mktemp)"
 (
   cd "$REPOSITORY_ROOT/libs/backend/server/infra/workflows/infra_absurd"
-  "$QUALIFICATION_RUNNER" src/qualification/qualify-durable-execution.cli.ts
+  "$QUALIFICATION_RUNNER" src/qualification/qualify-workflow-engine.cli.ts
 ) >"$QUALIFICATION_OUTPUT" 2>"$QUALIFICATION_ERROR" &
 QUALIFICATION_PID=$!
 _error "starting qualifier runner"
@@ -161,7 +161,7 @@ if [[ -n "$QUALIFICATION_PID" ]]; then
   _error "qualifier runner exceeded ${RUNNER_TIMEOUT_SECONDS}s without a result"
   exit 1
 fi
-if ! grep -Fxq "Durable execution qualification started." "$QUALIFICATION_ERROR"; then
+if ! grep -Fxq "Workflow engine qualification started." "$QUALIFICATION_ERROR"; then
   _error "qualifier runner exited before it reported startup"
   exit 1
 fi

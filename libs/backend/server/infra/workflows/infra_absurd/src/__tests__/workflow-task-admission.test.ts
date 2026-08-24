@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
 
-import { DurableExecutionError } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowError } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { AbsurdWorkflowEngine } from "../absurd-workflow-engine";
 import { AbsurdWorkflowError } from "../absurd-workflow-error";
@@ -89,7 +89,7 @@ describe("AbsurdWorkflowEngine queue authority", function _QueueAuthoritySuite()
 			{
 				if (taskName !== "refresh-token")
 				{
-					throw new DurableExecutionError("Task has no reviewed queue.");
+					throw new WorkflowError("Task has no reviewed queue.");
 				}
 				return "control-plane";
 			},

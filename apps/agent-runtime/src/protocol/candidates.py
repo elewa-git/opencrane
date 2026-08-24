@@ -215,7 +215,7 @@ def tool_call_candidate(
             "tool.failed",
             {"reason": "unknown_tool", "toolInvocationId": tool_call_id},
         )
-    # Preserve the model's invocation id across proposal, durable execution, and resume matching.
+    # Preserve the model's invocation id across proposal, saved workflow work, and resume matching.
     # Generating a replacement id here would make a saved tool result impossible to bind safely.
     return external_action_candidate(
         coordinates,

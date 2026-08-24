@@ -1,11 +1,11 @@
 import type { Logger } from "@opencrane/backend/observability";
-import type { DurableExecution, DurableTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowEngine, IWorkflowTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/contract";
 
 /**
- * Names the minimum input that lets the kit identify the silo that owns a task.
+ * Names the minimum input that lets the workflow guard identify the silo that owns a task.
  *
  * Called by: the Zod task-input parser. Product workflows add their own fields and validators;
- * this small shape keeps the shared kit independent of every product task schema.
+ * this small shape keeps the shared guard independent of every product task schema.
  */
 export interface IWorkflowSiloTaskInput
 {
@@ -28,20 +28,20 @@ export interface IWorkflowTaskPolicy
 }
 
 /**
- * Supplies the execution adapter and the fixed policy for one workflow-kit instance.
+ * Supplies the execution adapter and fixed policy for one workflow guard.
  *
- * Called by: {@link __CreateWorkflowKit}. One instance accepts only its configured `siloId`; this
+ * Called by: {@link __CreateWorkflowGuard}. One instance accepts only its configured `siloId`; this
  * prevents a correctly shaped task for another silo from reaching the selected engine adapter.
  */
-export interface IWorkflowKitOptions
+export interface IWorkflowGuardOptions
 {
-	/** Engine-neutral durable execution port that stores and dispatches the tasks. */
-	readonly execution: DurableExecution;
-	/** Silo that this kit accepts in every admitted task payload. */
+	/** Engine-neutral workflow port that saves and dispatches the tasks. */
+	readonly execution: IWorkflowEngine;
+	/** Silo that this guard accepts in every admitted task payload. */
 	readonly siloId: string;
 	/** Immutable reviewed queue authority shared with the selected engine adapter. */
-	readonly queueAuthority: DurableTaskQueueAuthority;
-	/** Structured logger used only with the kit's payload-free diagnostic fields. */
+	readonly queueAuthority: IWorkflowTaskQueueAuthority;
+	/** Structured logger used only with the guard's payload-free diagnostic fields. */
 	readonly log?: Logger;
 }
 
@@ -50,10 +50,10 @@ export interface IWorkflowKitOptions
  *
  * `Completed` means the operation ran and returned, `Replayed` means the engine returned a saved
  * checkpoint without running it again, and `Failed` means the operation or its context failed.
- * The kit writes these values to the trace and structured log so operators can distinguish a
+ * The guard writes these values to the trace and structured log so operators can distinguish a
  * replay from new work.
  *
- * Called by: the workflow kit's checkpoint wrapper.
+ * Called by: the workflow guard's checkpoint wrapper.
  */
 export enum WorkflowStepOutcomes
 {

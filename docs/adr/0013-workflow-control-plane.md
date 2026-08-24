@@ -1,4 +1,4 @@
-# ADR 0013 — Durable control-plane execution
+# ADR 0013 — Workflow control-plane operations
 
 - **Status:** Accepted
 - **Date:** 2026-08-20

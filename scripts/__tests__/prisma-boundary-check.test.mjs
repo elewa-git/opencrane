@@ -16,7 +16,7 @@ const _OWNERS = {
 	unitsOfWork: [{ path: "libs/widgets/prisma-widget-unit-of-work.ts", adapter: "PrismaWidgetUnitOfWork", contract: "WidgetUnitOfWork", contractImportPath: "./widget.types.js", constructs: [{ adapter: "PrismaWidgetRepository", importPath: "./prisma-widget-repository.js" }] }],
 	compositions: [],
 };
-/** The sole policy-owned raw database procedure used by the durable engine adapter. */
+/** The sole policy-owned raw database procedure used by the workflow engine adapter. */
 const _RAW_PROCEDURE_CALLS = [{
 	path: "libs/widgets/workflow-task-admission.ts",
 	adapter: "WorkflowTaskAdmission",

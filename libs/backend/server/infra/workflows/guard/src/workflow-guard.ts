@@ -1,35 +1,35 @@
 import { createHash } from "node:crypto";
 
 import { ___CreateLogger, ___DoWithTrace, ___GetActiveSpan, type Logger } from "@opencrane/backend/observability";
-import { DurableExecutionError, DurableTaskCompensationError, DurableTaskRetryableError, DurableTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
-import type { DurableCheckpointOperation, DurableCheckpointStep, DurableEventReceipt, DurableExecution, DurableExecutionTransaction, DurableTaskContext, DurableTaskDefinition, DurableTaskEvent, DurableTaskQueueAuthority, DurableTaskReceipt, DurableTaskSpawn } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowError, WorkflowTaskCompensationError, WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowEngine, IWorkflowTaskContext, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskQueueAuthority, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
-import { WorkflowTaskPolicyError } from "./workflow-kit.errors";
-import { WorkflowStepOutcomes } from "./workflow-kit.types";
-import type { IWorkflowKitOptions, IWorkflowTaskPolicy } from "./workflow-kit.types";
-import { _AssertPersistableWorkflowPayload, _ParseWorkflowSiloTaskInput } from "./workflow-kit.validator";
+import { WorkflowTaskPolicyError } from "./workflow-guard.errors";
+import { WorkflowStepOutcomes } from "./workflow-guard.types";
+import type { IWorkflowGuardOptions, IWorkflowTaskPolicy } from "./workflow-guard.types";
+import { _AssertPersistableWorkflowPayload, _ParseWorkflowSiloTaskInput } from "./workflow-guard.validator";
 
 /**
  * Normalizes an application failure before telemetry or engine state can retain its original text.
  *
- * Called by: `_WorkflowKit._RunCheckpoint`. A task error can include product data, so the kit keeps
+ * Called by: `WorkflowGuard._RunCheckpoint`. A task error can include product data, so the guard keeps
  * its retry or compensation category while replacing the message with a safe operator summary.
  */
-function _NormalizeStepError(error: unknown): DurableExecutionError
+function _NormalizeStepError(error: unknown): WorkflowError
 {
-	if (error instanceof DurableTaskRetryableError)
+	if (error instanceof WorkflowTaskRetryableError)
 	{
-		return new DurableTaskRetryableError("Workflow checkpoint failed and may be retried.");
+		return new WorkflowTaskRetryableError("Workflow checkpoint failed and may be retried.");
 	}
-	if (error instanceof DurableTaskCompensationError)
+	if (error instanceof WorkflowTaskCompensationError)
 	{
-		return new DurableTaskCompensationError("Workflow checkpoint failed and requires compensation.");
+		return new WorkflowTaskCompensationError("Workflow checkpoint failed and requires compensation.");
 	}
-	if (error instanceof DurableTaskTerminalError)
+	if (error instanceof WorkflowTaskTerminalError)
 	{
-		return new DurableTaskTerminalError("Workflow checkpoint failed.");
+		return new WorkflowTaskTerminalError("Workflow checkpoint failed.");
 	}
-	return new DurableTaskTerminalError("Workflow checkpoint failed.");
+	return new WorkflowTaskTerminalError("Workflow checkpoint failed.");
 }
 
 /** Require non-blank configuration text before it can select a task, silo, queue, or checkpoint. */
@@ -42,7 +42,7 @@ function _RequireNonBlankString(value: string): string
 	return value;
 }
 
-/** Hash an idempotency key before the kit uses it in telemetry. */
+/** Hash an idempotency key before the guard uses it in telemetry. */
 function _DigestTaskKey(taskKey: string): string
 {
 	return createHash("sha256").update(taskKey).digest("hex");
@@ -66,12 +66,12 @@ function _CreateTaskQueueMap(taskPolicies: readonly IWorkflowTaskPolicy[]): Read
 }
 
 /**
- * Builds the immutable queue authority shared by the workflow kit and engine adapter.
+ * Builds the immutable queue authority shared by the workflow guard and engine adapter.
  *
- * Called by: application composition before it constructs the kit and engine adapter. Sharing the
- * same authority means a task cannot pass kit policy yet be dispatched to a different queue.
+ * Called by: application composition before it constructs the guard and engine adapter. Sharing the
+ * same authority means a task cannot pass guard policy yet be dispatched to a different queue.
  */
-export function __CreateWorkflowTaskQueueAuthority(taskPolicies: readonly IWorkflowTaskPolicy[]): DurableTaskQueueAuthority
+export function __CreateWorkflowTaskQueueAuthority(taskPolicies: readonly IWorkflowTaskPolicy[]): IWorkflowTaskQueueAuthority
 {
 	const queues = _CreateTaskQueueMap(taskPolicies);
 	return Object.freeze({
@@ -88,29 +88,29 @@ export function __CreateWorkflowTaskQueueAuthority(taskPolicies: readonly IWorkf
 }
 
 /**
- * Adds silo policy, payload validation, and safe checkpoint telemetry to a durable execution port.
+ * Adds silo policy, payload validation, and safe checkpoint telemetry to a workflow engine.
  *
- * Called by: {@link __CreateWorkflowKit}. This wrapper holds no product behavior or state; it
+ * Called by: {@link __CreateWorkflowGuard}. This wrapper holds no product behavior or state; it
  * guards the common handoff from a product workflow to the selected engine adapter.
  */
-class _WorkflowKit implements DurableExecution
+class WorkflowGuard implements IWorkflowEngine
 {
-	/** Engine port whose durable state this kit protects. */
-	private readonly execution: DurableExecution;
+	/** Engine port whose saved state this guard protects. */
+	private readonly execution: IWorkflowEngine;
 	/** Silo identity that every task input must carry. */
 	private readonly siloId: string;
 	/** Reviewed queue authority shared with the engine adapter. */
-	private readonly queueAuthority: DurableTaskQueueAuthority;
+	private readonly queueAuthority: IWorkflowTaskQueueAuthority;
 	/** Structured logger that receives only fields safe for task diagnostics. */
 	private readonly log: Logger;
 
 	/** Bind one engine port to one silo and the queue authority selected by composition. */
-	constructor(options: IWorkflowKitOptions)
+	constructor(options: IWorkflowGuardOptions)
 	{
 		this.execution = options.execution;
 		this.siloId = _RequireNonBlankString(options.siloId);
 		this.queueAuthority = options.queueAuthority;
-		this.log = options.log ?? ___CreateLogger("workflows-kit");
+		this.log = options.log ?? ___CreateLogger("workflow-guard");
 	}
 
 	/**
@@ -119,29 +119,29 @@ class _WorkflowKit implements DurableExecution
 	 * Called by: workflow composition during server startup. Validation also runs on dispatch because
 	 * the engine rehydrates saved input later, outside the original TypeScript call site.
 	 */
-	register<TInput, TResult>(definition: DurableTaskDefinition<TInput, TResult>): void
+	register<TInput, TResult>(definition: IWorkflowTaskDefinition<TInput, TResult>): void
 	{
 		const policy = this._RequireTaskPolicy(definition.taskName);
-		const workflowKit = this;
+		const workflowGuard = this;
 		this.execution.register({
 			taskName: definition.taskName,
-			async run(context: DurableTaskContext, input: TInput): Promise<TResult>
+			async run(context: IWorkflowTaskContext, input: TInput): Promise<TResult>
 			{
-				workflowKit._ValidateTaskInput(input);
-				return await definition.run(new _WorkflowTaskContext(context, workflowKit, policy), input);
+				workflowGuard._ValidateTaskInput(input);
+				return await definition.run(new _WorkflowTaskContext(context, workflowGuard, policy), input);
 			},
 		});
 	}
 
 	/** Admit a silo-bound task only after its payload and queue policy both pass. */
-	async spawn<TInput>(transaction: DurableExecutionTransaction, task: DurableTaskSpawn<TInput>): Promise<DurableTaskReceipt>
+	async spawn<TInput>(transaction: IWorkflowTransaction, task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
 		this._ValidateTaskAdmission(task);
 		return await this.execution.spawn(transaction, task);
 	}
 
 	/** Deliver an event only to a reviewed task and reject credential-shaped event payload fields. */
-	async emitEvent<TPayload>(task: DurableTaskReceipt, event: DurableTaskEvent<TPayload>): Promise<DurableEventReceipt>
+	async emitEvent<TPayload>(task: IWorkflowTaskReceipt, event: IWorkflowTaskEvent<TPayload>): Promise<IWorkflowTaskEventReceipt>
 	{
 		this._RequireTaskPolicy(task.taskName);
 		_AssertPersistableWorkflowPayload(event.payload);
@@ -149,7 +149,7 @@ class _WorkflowKit implements DurableExecution
 	}
 
 	/** Cancel a reviewed task without revealing its task identifier to logs or traces. */
-	async cancel(task: DurableTaskReceipt): Promise<DurableTaskReceipt>
+	async cancel(task: IWorkflowTaskReceipt): Promise<IWorkflowTaskReceipt>
 	{
 		this._RequireTaskPolicy(task.taskName);
 		return await this.execution.cancel(task);
@@ -161,7 +161,7 @@ class _WorkflowKit implements DurableExecution
 	 * Called by: `_WorkflowTaskContext.checkpoint`. The wrapper reports whether an operation ran,
 	 * replayed, or failed without recording its input, result, or original error message.
 	 */
-	async _RunCheckpoint<TResult>(task: DurableTaskReceipt, queue: string, step: DurableCheckpointStep, operation: DurableCheckpointOperation<TResult>): Promise<TResult>
+	async _RunCheckpoint<TResult>(task: IWorkflowTaskReceipt, queue: string, step: IWorkflowCheckpointStep, operation: IWorkflowCheckpointOperation<TResult>): Promise<TResult>
 	{
 		// 1. Keep the diagnostic shape small so structured logs cannot receive task payloads.
 		const stepName = _RequireNonBlankString(step.stepName);
@@ -182,7 +182,7 @@ class _WorkflowKit implements DurableExecution
 				catch (error)
 				{
 					const normalized = _NormalizeStepError(error);
-					___GetActiveSpan()?.setAttributes({ outcome: WorkflowStepOutcomes.Failed, retryable: normalized instanceof DurableTaskRetryableError, durationMs: Math.round(performance.now() - startedAt) });
+					___GetActiveSpan()?.setAttributes({ outcome: WorkflowStepOutcomes.Failed, retryable: normalized instanceof WorkflowTaskRetryableError, durationMs: Math.round(performance.now() - startedAt) });
 					throw normalized;
 				}
 			});
@@ -194,7 +194,7 @@ class _WorkflowKit implements DurableExecution
 		{
 			// 3. Preserve the engine's retry category but remove task-provided error text before logging.
 			const normalized = _NormalizeStepError(error);
-			const retryable = normalized instanceof DurableTaskRetryableError;
+			const retryable = normalized instanceof WorkflowTaskRetryableError;
 			const durationMs = Math.round(performance.now() - startedAt);
 			if (retryable)
 			{
@@ -209,7 +209,7 @@ class _WorkflowKit implements DurableExecution
 	}
 
 	/** Log a replayed checkpoint without starting a span for an operation that did not run. */
-	_LogReplayedCheckpoint(task: DurableTaskReceipt, queue: string, step: DurableCheckpointStep, startedAt: number): void
+	_LogReplayedCheckpoint(task: IWorkflowTaskReceipt, queue: string, step: IWorkflowCheckpointStep, startedAt: number): void
 	{
 		const stepName = _RequireNonBlankString(step.stepName);
 		this.log.debug({ taskName: task.taskName, stepName, siloId: this.siloId, queue, taskKeyDigest: _DigestTaskKey(task.idempotencyKey), outcome: WorkflowStepOutcomes.Replayed, retryable: false, durationMs: Math.round(performance.now() - startedAt) }, "workflow checkpoint replayed");
@@ -240,7 +240,7 @@ class _WorkflowKit implements DurableExecution
 	}
 
 	/** Validate a task command before admission or child-task creation can persist it. */
-	_ValidateTaskAdmission<TInput>(task: DurableTaskSpawn<TInput>): void
+	_ValidateTaskAdmission<TInput>(task: IWorkflowTaskSpawn<TInput>): void
 	{
 		this._RequireTaskPolicy(task.taskName);
 		_RequireNonBlankString(task.idempotencyKey);
@@ -248,31 +248,31 @@ class _WorkflowKit implements DurableExecution
 	}
 }
 
-/** Adapt a contract task context so every checkpoint inherits the kit's policy and telemetry. */
-class _WorkflowTaskContext implements DurableTaskContext
+/** Adapts a workflow worker so every checkpoint inherits the guard's policy and telemetry. */
+class _WorkflowTaskContext implements IWorkflowTaskContext
 {
 	/** Underlying engine-neutral context supplied for the current task dispatch. */
-	private readonly context: DurableTaskContext;
-	/** Kit that validates child tasks and records checkpoint telemetry. */
-	private readonly kit: _WorkflowKit;
+	private readonly context: IWorkflowTaskContext;
+	/** Guard that validates child tasks and records checkpoint telemetry. */
+	private readonly guard: WorkflowGuard;
 	/** Reviewed queue that owns the current task. */
 	private readonly policy: IWorkflowTaskPolicy;
 	/** Receipt for the task currently running. */
-	readonly task: DurableTaskReceipt;
+	readonly task: IWorkflowTaskReceipt;
 
-	/** Bind a current task context to its kit and reviewed queue policy. */
-	constructor(context: DurableTaskContext, kit: _WorkflowKit, policy: IWorkflowTaskPolicy)
+	/** Bind a current task context to its guard and reviewed queue policy. */
+	constructor(context: IWorkflowTaskContext, guard: WorkflowGuard, policy: IWorkflowTaskPolicy)
 	{
 		this.context = context;
-		this.kit = kit;
+		this.guard = guard;
 		this.policy = policy;
 		this.task = context.task;
 	}
 
 	/** Delegate one checkpoint through the payload-safe trace and structured-log wrapper. */
-	async checkpoint<TResult>(step: DurableCheckpointStep, operation: DurableCheckpointOperation<TResult>): Promise<TResult>
+	async checkpoint<TResult>(step: IWorkflowCheckpointStep, operation: IWorkflowCheckpointOperation<TResult>): Promise<TResult>
 	{
-		const kit = this.kit;
+		const guard = this.guard;
 		const task = this.task;
 		const queue = this.policy.queue;
 		let executed = false;
@@ -280,17 +280,17 @@ class _WorkflowTaskContext implements DurableTaskContext
 		const result = await this.context.checkpoint(step, async function _TraceOperation(): Promise<TResult>
 		{
 			executed = true;
-			return await kit._RunCheckpoint(task, queue, step, operation);
+			return await guard._RunCheckpoint(task, queue, step, operation);
 		});
 		if (!executed)
 		{
-			kit._LogReplayedCheckpoint(task, queue, step, startedAt);
+			guard._LogReplayedCheckpoint(task, queue, step, startedAt);
 		}
 		return result;
 	}
 
-	/** Receive an event after rejecting any credential-shaped fields from its durable payload. */
-	async waitForEvent<TPayload>(eventName: string): Promise<DurableTaskEvent<TPayload>>
+	/** Receives an event after rejecting any credential-shaped fields from its saved payload. */
+	async waitForEvent<TPayload>(eventName: string): Promise<IWorkflowTaskEvent<TPayload>>
 	{
 		const event = await this.context.waitForEvent<TPayload>(eventName);
 		_AssertPersistableWorkflowPayload(event.payload);
@@ -298,20 +298,20 @@ class _WorkflowTaskContext implements DurableTaskContext
 	}
 
 	/** Admit a child task only after it passes the same owning-silo and queue policy. */
-	async spawnChild<TInput>(task: DurableTaskSpawn<TInput>): Promise<DurableTaskReceipt>
+	async spawnChild<TInput>(task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
-		this.kit._ValidateTaskAdmission(task);
+		this.guard._ValidateTaskAdmission(task);
 		return await this.context.spawnChild(task);
 	}
 
 	/** Await a child result through the engine-neutral context. */
-	async awaitChild<TResult>(task: DurableTaskReceipt): Promise<TResult>
+	async awaitChild<TResult>(task: IWorkflowTaskReceipt): Promise<TResult>
 	{
-		this.kit._RequireTaskPolicy(task.taskName);
+		this.guard._RequireTaskPolicy(task.taskName);
 		return await this.context.awaitChild<TResult>(task);
 	}
 
-	/** Suspend through the durable engine instead of keeping a timer in this process. */
+	/** Suspends through the workflow engine instead of keeping a timer in this process. */
 	async sleepUntil(instant: Date): Promise<void>
 	{
 		await this.context.sleepUntil(instant);
@@ -324,7 +324,7 @@ class _WorkflowTaskContext implements DurableTaskContext
  * Called by: server composition. The returned contract deliberately exposes only registration,
  * task admission, event delivery, and cancellation; engine workers remain a composition concern.
  */
-export function __CreateWorkflowKit(options: IWorkflowKitOptions): DurableExecution
+export function __CreateWorkflowGuard(options: IWorkflowGuardOptions): IWorkflowEngine
 {
-	return new _WorkflowKit(options);
+	return new WorkflowGuard(options);
 }

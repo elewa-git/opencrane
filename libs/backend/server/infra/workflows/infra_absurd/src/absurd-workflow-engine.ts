@@ -1,8 +1,8 @@
 import { Absurd, type TaskContext } from "absurd-sdk";
 import { Pool } from "pg";
 
-import { DurableExecutionError, DurableTaskNotRegisteredError } from "@opencrane/backend/server/infra/workflows/contract";
-import type { DurableEventReceipt, DurableExecution, DurableExecutionTransaction, DurableTaskDefinition, DurableTaskEvent, DurableTaskReceipt, DurableTaskSpawn, DurableWorkerRuntime, DurableWorkers, DurableWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowError, WorkflowTaskNotRegisteredError } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowEngine, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowTransaction, IWorkflowWorkerRuntime, IWorkflowWorkers, IWorkflowWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _TaskScopedIdempotencyKey, WorkflowTaskAdmission } from "./workflow-task-admission";
 import type { IAbsurdWorkflowEngineOptions } from "./absurd-workflow-engine.types";
@@ -32,7 +32,7 @@ function _RequiredString(name: string, value: string): string
 {
 	if (value.trim().length === 0)
 	{
-		throw new DurableExecutionError(`${name} must be a non-empty string.`);
+		throw new WorkflowError(`${name} must be a non-empty string.`);
 	}
 	return value;
 }
@@ -42,7 +42,7 @@ function _DatabasePoolSize(value: number): number
 {
 	if (!Number.isSafeInteger(value) || value < 1)
 	{
-		throw new DurableExecutionError("databasePoolSize must be a positive integer.");
+		throw new WorkflowError("databasePoolSize must be a positive integer.");
 	}
 	return value;
 }
@@ -52,7 +52,7 @@ function _TaskEnvelope(value: unknown): ITaskEnvelope
 {
 	if (typeof value !== "object" || value === null || !("idempotencyKey" in value) || !("input" in value) || !("inputUndefined" in value) || typeof value.idempotencyKey !== "string" || typeof value.inputUndefined !== "boolean")
 	{
-		throw new DurableExecutionError("Absurd task payload is not a durable task envelope.");
+		throw new WorkflowError("Absurd task payload is not a workflow task envelope.");
 	}
 	return { idempotencyKey: value.idempotencyKey, input: value.input, inputUndefined: value.inputUndefined };
 }
@@ -64,33 +64,33 @@ function _EnvelopeForTask(idempotencyKey: string, input: unknown): ITaskEnvelope
 }
 
 /**
- * Implements the Absurd-backed workflow engine behind OpenCrane's durable-execution ports.
+ * Implements the Absurd-backed workflow engine behind OpenCrane's workflow-engine ports.
  *
- * Domain code receives {@link DurableExecution}, not this vendor implementation, so an engine
+ * Domain code receives {@link IWorkflowEngine}, not this vendor implementation, so an engine
  * change stays in this package. For top-level work, {@link spawn} calls the reviewed PostgreSQL
  * procedure inside the caller's transaction: the product write and task admission therefore share
  * one commit decision. Work that a running task creates uses the SDK directly because it has no
  * surrounding product transaction to join.
  *
  * The engine owns task registration, queue-scoped SDK clients, and worker groups. It does not
- * choose queues: composition supplies the same reviewed authority that the workflow kit uses.
+ * choose queues: composition supplies the same reviewed authority that the workflow guard uses.
  * Call {@link close} during process shutdown; it drains workers before releasing an engine-owned
  * database pool.
  *
- * Called by: {@link _CreateDurableExecutionQualificationSession} for the live qualification run.
- * @see ../../../../../../../docs/adr/0013-durable-control-plane-execution.md — records the engine boundary and transaction decision.
+ * Called by: {@link _CreateWorkflowEngineQualificationSession} for the live qualification run.
+ * @see ../../../../../../../docs/adr/0013-workflow-control-plane.md — records the engine boundary and transaction decision.
  * @see https://github.com/earendil-works/absurd/tree/0.5.0 — the engine revision implemented here.
  */
-export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRuntime
+export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRuntime
 {
 	/** Stores one SDK client per reviewed queue after a registered task first needs it. */
 	private readonly engines = new Map<string, Absurd>();
 	/** Stores registered definitions so every admission and task context uses the same contract. */
-	private readonly definitions = new Map<string, DurableTaskDefinition<unknown, unknown>>();
+	private readonly definitions = new Map<string, IWorkflowTaskDefinition<unknown, unknown>>();
 	/** Stores SDK workers that must drain before a process releases this engine's resources. */
 	private readonly workerGroups = new Map<string, readonly IWorker[]>();
 	/** Stores lifecycle handles so a repeated start for one name returns the existing group. */
-	private readonly workers = new Map<string, DurableWorkers>();
+	private readonly workers = new Map<string, IWorkflowWorkers>();
 	/** Stores database, queue, and worker settings selected by application composition. */
 	private readonly options: IAbsurdWorkflowEngineOptions;
 	/** Shares one bounded database pool across every queue in this process. */
@@ -117,7 +117,7 @@ export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRunt
 	 * Resolves a task through the queue authority shared with workflow composition.
 	 *
 	 * The authority rejects an unreviewed task instead of allowing this adapter to choose a fallback
-	 * queue, which preserves the queue policy that the workflow kit already validated.
+	 * queue, which preserves the queue policy that the workflow guard already validated.
 	 */
 	queueForTask(taskName: string): string
 	{
@@ -145,19 +145,20 @@ export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRunt
 	 * of persisting work that no handler owns. The stored definition also becomes the source for the
 	 * replay-safe context that {@link runTask} passes to each handler.
 	 */
-	register<TInput, TResult>(definition: DurableTaskDefinition<TInput, TResult>): void
+	register<TInput, TResult>(definition: IWorkflowTaskDefinition<TInput, TResult>): void
 	{
 		const taskName = _RequiredString("definition.taskName", definition.taskName);
 		// 1. Refuse a duplicate before either registry can disagree about its handler.
 		if (this.definitions.has(taskName))
 		{
-			throw new DurableExecutionError(`Durable task ${taskName} is already registered.`);
+			throw new WorkflowError(`Workflow task ${taskName} is already registered.`);
 		}
 		// 2. Retain the definition that admissions and worker contexts will share.
-		const stored = definition as unknown as DurableTaskDefinition<unknown, unknown>;
+		const stored = definition as unknown as IWorkflowTaskDefinition<unknown, unknown>;
 		this.definitions.set(taskName, stored);
 		// 3. Bind the vendor handler to the same reviewed queue before any task can be admitted.
-		this.engineForQueue(this.queueForTask(taskName)).registerTask({ name: taskName, queue: this.queueForTask(taskName) }, async (params: unknown, context: TaskContext) => await this.runTask(stored, context, params));
+		const engine = this;
+		this.engineForQueue(this.queueForTask(taskName)).registerTask({ name: taskName, queue: this.queueForTask(taskName) }, async function _RunTask(params: unknown, context: TaskContext): Promise<unknown> { return await engine.runTask(stored, context, params); });
 	}
 
 	/**
@@ -166,12 +167,12 @@ export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRunt
 	 * The envelope keeps `undefined` distinct from JSON `null`, so replay uses the input contract
 	 * that the caller admitted instead of silently changing an absent value into `null`.
 	 */
-	private async runTask(definition: DurableTaskDefinition<unknown, unknown>, context: TaskContext, params: unknown): Promise<unknown>
+	private async runTask(definition: IWorkflowTaskDefinition<unknown, unknown>, context: TaskContext, params: unknown): Promise<unknown>
 	{
 		// 1. Reject malformed persisted data before it reaches domain code.
 		const envelope = _TaskEnvelope(params);
 		// 2. Rebuild the engine-neutral receipt that the handler may safely retain.
-		const task: DurableTaskReceipt = { taskId: context.taskID, taskName: definition.taskName, idempotencyKey: envelope.idempotencyKey };
+		const task: IWorkflowTaskReceipt = { taskId: context.taskID, taskName: definition.taskName, idempotencyKey: envelope.idempotencyKey };
 		// 3. Give the handler a context that routes child work and events through this engine.
 		return await definition.run(new _AbsurdTaskContext(context, task, this), envelope.inputUndefined ? undefined : envelope.input);
 	}
@@ -183,13 +184,13 @@ export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRunt
 	 * cannot leave a committed product change without the work it requires.
 	 * @see WorkflowTaskAdmission — owns the fixed, parameterized procedure call.
 	 */
-	async spawn<TInput>(transaction: DurableExecutionTransaction, task: DurableTaskSpawn<TInput>): Promise<DurableTaskReceipt>
+	async spawn<TInput>(transaction: IWorkflowTransaction, task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
 		// 1. Verify the task has a handler before persisting an unserviceable receipt.
 		const definition = this.definitions.get(task.taskName);
 		if (definition === undefined)
 		{
-			throw new DurableTaskNotRegisteredError(task.taskName);
+			throw new WorkflowTaskNotRegisteredError(task.taskName);
 		}
 		// 2. Use the caller's transaction so the product write and receipt commit together.
 		return await this.spawnWithTransaction(transaction.client, task);
@@ -201,12 +202,12 @@ export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRunt
 	 * A running task has no caller-owned product transaction to join. The task-scoped idempotency
 	 * key prevents two task definitions on one queue from treating the same domain key as a match.
 	 */
-	async spawnFromTask<TInput>(task: DurableTaskSpawn<TInput>): Promise<DurableTaskReceipt>
+	async spawnFromTask<TInput>(task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
 		// 1. Reject a missing handler before asking the SDK to persist child work.
 		if (!this.definitions.has(task.taskName))
 		{
-			throw new DurableTaskNotRegisteredError(task.taskName);
+			throw new WorkflowTaskNotRegisteredError(task.taskName);
 		}
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
@@ -224,7 +225,7 @@ export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRunt
 	}
 
 	/** Calls the fixed, parameterized Absurd procedure on the caller's existing transaction. */
-	private async spawnWithTransaction<TInput>(transactionClient: unknown, task: DurableTaskSpawn<TInput>): Promise<DurableTaskReceipt>
+	private async spawnWithTransaction<TInput>(transactionClient: unknown, task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
@@ -238,7 +239,7 @@ export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRunt
 	 * The event name includes the task identifier, so two tasks waiting for the same application
 	 * event name cannot receive each other's payload.
 	 */
-	async emitEvent<TPayload>(task: DurableTaskReceipt, event: DurableTaskEvent<TPayload>): Promise<DurableEventReceipt>
+	async emitEvent<TPayload>(task: IWorkflowTaskReceipt, event: IWorkflowTaskEvent<TPayload>): Promise<IWorkflowTaskEventReceipt>
 	{
 		const eventName = _RequiredString("event.eventName", event.eventName);
 		try
@@ -253,7 +254,7 @@ export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRunt
 	}
 
 	/** Cancels an incomplete task through the reviewed queue that owns its task definition. */
-	async cancel(task: DurableTaskReceipt): Promise<DurableTaskReceipt>
+	async cancel(task: IWorkflowTaskReceipt): Promise<IWorkflowTaskReceipt>
 	{
 		try
 		{
@@ -273,7 +274,7 @@ export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRunt
 	 * starting a duplicate group. Each queue gets its own SDK worker because Absurd scopes worker
 	 * polling and task dispatch to a queue.
 	 */
-	async startWorkers(worker: DurableWorkerStart): Promise<DurableWorkers>
+	async startWorkers(worker: IWorkflowWorkerStart): Promise<IWorkflowWorkers>
 	{
 		const workerName = _RequiredString("worker.workerName", worker.workerName);
 		// 1. Reuse the existing group so repeated server start calls do not double dispatch work.
@@ -290,7 +291,7 @@ export class AbsurdWorkflowEngine implements DurableExecution, DurableWorkerRunt
 			// 3. Retain both SDK workers and the engine-neutral shutdown handle.
 			this.workerGroups.set(workerName, workers);
 			const execution = this;
-			const lifecycle: DurableWorkers = {
+			const lifecycle: IWorkflowWorkers = {
 				workerId: workerName,
 				workerName,
 				async drain(): Promise<void> { await execution.drainWorkers(workerName); },

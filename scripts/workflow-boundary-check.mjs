@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 /** Resolve the repository root from this checker's location. */
 const _ROOT = fileURLToPath(new URL("../", import.meta.url));
-/** Restrict the durable-engine SDK to the adapter that owns its semantics. */
+/** Restrict the workflow-engine SDK to the adapter that owns its semantics. */
 const _ABSURD_ADAPTER_PREFIX = "libs/backend/server/infra/workflows/infra_absurd/";
 /** Reject imports that would turn infrastructure into product authority. */
 const _DOMAIN_IMPORT = /^@opencrane\/backend\/(?:agents(?:\/|$)|server\/(?:iam|gateways)(?:\/|$))/u;
@@ -45,8 +45,8 @@ function _FindViolations(root, path, source)
 	return violations;
 }
 
-/** Check that durable engine and product-authority imports remain on their permitted sides. */
-export function _CheckDurableBoundary(root = _ROOT)
+/** Check that workflow-engine and product-authority imports remain on their permitted sides. */
+export function _CheckWorkflowBoundary(root = _ROOT)
 {
 	const workflowRoot = join(root, "libs/backend/server/infra/workflows");
 	const violations = [];
@@ -59,8 +59,8 @@ export function _CheckDurableBoundary(root = _ROOT)
 
 if (process.argv[1] === fileURLToPath(import.meta.url))
 {
-	const violations = _CheckDurableBoundary();
-	for (const violation of violations) console.error(`durable-boundary: ${violation}`);
+	const violations = _CheckWorkflowBoundary();
+	for (const violation of violations) console.error(`workflow-boundary: ${violation}`);
 	if (violations.length > 0) process.exitCode = 1;
-	else console.log("durable-boundary: PASS");
+	else console.log("workflow-boundary: PASS");
 }

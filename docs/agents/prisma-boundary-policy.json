@@ -637,10 +637,10 @@
     ],
     "unitsOfWork": [
       {
-        "path": "libs/backend/server/infra/workflows/infra_absurd/src/qualification/prisma-durable-qualification-unit-of-work.ts",
-        "adapter": "PrismaDurableQualificationUnitOfWork",
-        "contract": "DurableQualificationUnitOfWork",
-        "contractImportPath": "./durable-qualification-unit-of-work.types",
+        "path": "libs/backend/server/infra/workflows/infra_absurd/src/qualification/prisma-workflow-engine-qualification-unit-of-work.ts",
+        "adapter": "PrismaWorkflowEngineQualificationUnitOfWork",
+        "contract": "IWorkflowEngineQualificationUnitOfWork",
+        "contractImportPath": "./workflow-engine-qualification-unit-of-work.types",
         "constructs": []
       },
       {

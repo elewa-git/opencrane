@@ -1,16 +1,16 @@
 import { Absurd } from "absurd-sdk";
 import { Pool } from "pg";
 
-import type { DurableTaskReceipt, DurableWorkers } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowTaskReceipt, IWorkflowWorkers } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { AbsurdWorkflowEngine } from "../absurd-workflow-engine";
-import type { DurableQualificationUnitOfWork } from "./durable-qualification-unit-of-work.types";
-import type { IQualificationTaskInput, IQualificationWorkflowSession, IQualificationWorkflowSessionOptions } from "./durable-execution-qualification-session.types";
-import { PrismaDurableQualificationUnitOfWork } from "./prisma-durable-qualification-unit-of-work";
+import type { IWorkflowEngineQualificationUnitOfWork } from "./workflow-engine-qualification-unit-of-work.types";
+import type { IWorkflowEngineQualificationSession, IWorkflowEngineQualificationSessionOptions, IWorkflowTaskQualificationInput } from "./workflow-engine-qualification-session.types";
+import { PrismaWorkflowEngineQualificationUnitOfWork } from "./prisma-workflow-engine-qualification-unit-of-work";
 
-const _TaskName = "opencrane.durable-execution.pickup-qualification";
+const _TaskName = "opencrane.workflow-engine.pickup-qualification";
 
-interface IQualificationWorkflowResources
+interface IWorkflowEngineQualificationResources
 {
 	/** Provides the SDK pool and application-role connection observations. */
 	readonly databasePool: Pool;
@@ -19,7 +19,7 @@ interface IQualificationWorkflowResources
 	/** Creates and drops the temporary queue. */
 	readonly queueOwner: Absurd;
 	/** Commits the receipt transaction for every measured task. */
-	readonly unitOfWork: DurableQualificationUnitOfWork;
+	readonly unitOfWork: IWorkflowEngineQualificationUnitOfWork;
 }
 
 /** Add one non-secret connection identity without changing the credential or endpoint. */
@@ -38,17 +38,17 @@ function _QualifiedDatabaseUrl(databaseUrl: string, applicationName: string): st
  * releasing later resources after an earlier cleanup failure, which prevents a failed qualification
  * from leaving its temporary queue or connections behind.
  *
- * Called by: {@link _CreateDurableExecutionQualificationSession} and the lifecycle contract test.
- * @implements IQualificationWorkflowSession
+ * Called by: {@link _CreateWorkflowEngineQualificationSession} and the lifecycle contract test.
+ * @implements IWorkflowEngineQualificationSession
  */
-export class _AbsurdQualificationWorkflowSession implements IQualificationWorkflowSession
+export class _AbsurdWorkflowEngineQualificationSession implements IWorkflowEngineQualificationSession
 {
 	/** Stores the identities and limits selected for this live run. */
-	private readonly options: IQualificationWorkflowSessionOptions;
+	private readonly options: IWorkflowEngineQualificationSessionOptions;
 	/** Stores resources that {@link close} releases in ownership order. */
-	private readonly resources: IQualificationWorkflowResources;
+	private readonly resources: IWorkflowEngineQualificationResources;
 	/** Retains the worker lifecycle after {@link start} succeeds. */
-	private workers: DurableWorkers | undefined;
+	private workers: IWorkflowWorkers | undefined;
 	/** Records whether partial startup created a queue that cleanup must drop. */
 	private queueCreated = false;
 
@@ -58,7 +58,7 @@ export class _AbsurdQualificationWorkflowSession implements IQualificationWorkfl
 	 * @param options Unique queue, silo, and connection identities for this run.
 	 * @param resources Engine, queue, transaction, and pool owners released by {@link close}.
 	 */
-	constructor(options: IQualificationWorkflowSessionOptions, resources: IQualificationWorkflowResources)
+	constructor(options: IWorkflowEngineQualificationSessionOptions, resources: IWorkflowEngineQualificationResources)
 	{
 		this.options = options;
 		this.resources = resources;
@@ -68,14 +68,14 @@ export class _AbsurdQualificationWorkflowSession implements IQualificationWorkfl
 	 * Creates the temporary queue, registers its task, and starts one worker group.
 	 *
 	 * @throws When queue creation, task registration, or worker startup fails.
-	 * @see IQualificationWorkflowSession.start
+	 * @see IWorkflowEngineQualificationSession.start
 	 */
-	async start(onStarted: (input: IQualificationTaskInput) => void): Promise<void>
+	async start(onStarted: (input: IWorkflowTaskQualificationInput) => void): Promise<void>
 	{
 		await this.resources.queueOwner.createQueue(this.options.queueName);
 		this.queueCreated = true;
 		const siloId = this.options.siloId;
-		this.resources.execution.register<IQualificationTaskInput, null>({
+		this.resources.execution.register<IWorkflowTaskQualificationInput, null>({
 			taskName: _TaskName,
 			async run(_context, input): Promise<null>
 			{
@@ -91,14 +91,17 @@ export class _AbsurdQualificationWorkflowSession implements IQualificationWorkfl
 	 * Submits the next task through the UnitOfWork transaction that commits its receipt.
 	 *
 	 * @throws When the transaction, engine admission, or receipt validation fails.
-	 * @see IQualificationWorkflowSession.next
+	 * @see IWorkflowEngineQualificationSession.next
 	 */
-	async next(input: IQualificationTaskInput): Promise<DurableTaskReceipt>
+	async next(input: IWorkflowTaskQualificationInput): Promise<IWorkflowTaskReceipt>
 	{
-		let receipt: DurableTaskReceipt | undefined;
-		await this.resources.unitOfWork.admit(async transaction =>
+		let receipt: IWorkflowTaskReceipt | undefined;
+		const execution = this.resources.execution;
+		const runId = this.options.runId;
+		await this.resources.unitOfWork.admit(async function _Admit(transaction)
 		{
-			receipt = await this.resources.execution.spawn(transaction, { taskName: _TaskName, idempotencyKey: `${this.options.runId}:${input.sampleIndex}`, input });
+			const task = { taskName: _TaskName, idempotencyKey: `${runId}:${input.sampleIndex}`, input };
+			receipt = await execution.spawn(transaction, task);
 		});
 		if (receipt === undefined) throw new Error("Qualification admission returned no receipt.");
 		return receipt;
@@ -108,7 +111,7 @@ export class _AbsurdQualificationWorkflowSession implements IQualificationWorkfl
 	 * Counts connections tagged by this application role without exposing database diagnostics.
 	 *
 	 * @returns A safe count, or `null` when application-role observation is unavailable.
-	 * @see IQualificationWorkflowSession.connectionCount
+	 * @see IWorkflowEngineQualificationSession.connectionCount
 	 */
 	async connectionCount(): Promise<number | null>
 	{
@@ -132,7 +135,7 @@ export class _AbsurdQualificationWorkflowSession implements IQualificationWorkfl
 	 *
 	 * Every later cleanup still runs after an earlier failure; any failure rejects the whole gate.
 	 * @throws When any worker, queue, client, or pool cannot be released.
-	 * @see IQualificationWorkflowSession.close
+	 * @see IWorkflowEngineQualificationSession.close
 	 */
 	async close(): Promise<void>
 	{
@@ -142,16 +145,16 @@ export class _AbsurdQualificationWorkflowSession implements IQualificationWorkfl
 		await this.resources.queueOwner.close().catch(function _Remember(error) { failures.push(error); });
 		await this.resources.unitOfWork.close().catch(function _Remember(error) { failures.push(error); });
 		await this.resources.databasePool.end().catch(function _Remember(error) { failures.push(error); });
-		if (failures.length > 0) throw new Error("Durable execution qualification could not remove its queue or release its connections.");
+		if (failures.length > 0) throw new Error("Workflow engine qualification could not remove its queue or release its connections.");
 	}
 }
 
 /**
  * Builds the live Absurd, queue, Prisma, and shared-pool resources for one Gate D2 session.
  *
- * Called by: {@link __QualifyDurableExecutionPickup} through its production runtime.
+ * Called by: {@link __QualifyWorkflowEnginePickup} through its production runtime.
  */
-export function _CreateDurableExecutionQualificationSession(options: IQualificationWorkflowSessionOptions): IQualificationWorkflowSession
+export function _CreateWorkflowEngineQualificationSession(options: IWorkflowEngineQualificationSessionOptions): IWorkflowEngineQualificationSession
 {
 	const databaseUrl = _QualifiedDatabaseUrl(options.databaseUrl, options.applicationName);
 	const prismaDatabaseUrl = new URL(databaseUrl);
@@ -159,10 +162,10 @@ export function _CreateDurableExecutionQualificationSession(options: IQualificat
 	const databasePool = new Pool({ connectionString: databaseUrl, max: options.databasePoolSize });
 	const queueAuthority = Object.freeze({ queueForTask(taskName: string): string { if (taskName !== _TaskName) throw new Error("Qualification task is not admitted."); return options.queueName; } });
 	const execution = new AbsurdWorkflowEngine({ databaseUrl, databasePool, databasePoolSize: options.databasePoolSize, queueAuthority, workerConcurrency: 1, pollIntervalMs: options.pollIntervalMs });
-	return new _AbsurdQualificationWorkflowSession(options, {
+	return new _AbsurdWorkflowEngineQualificationSession(options, {
 		databasePool,
 		execution,
 		queueOwner: new Absurd({ db: databasePool, queueName: options.queueName }),
-		unitOfWork: new PrismaDurableQualificationUnitOfWork(prismaDatabaseUrl.toString()),
+		unitOfWork: new PrismaWorkflowEngineQualificationUnitOfWork(prismaDatabaseUrl.toString()),
 	});
 }

@@ -48,7 +48,7 @@ function _RequireTransactionClient(client: unknown): Prisma.TransactionClient
 {
 	if (typeof client !== "object" || client === null || typeof Reflect.get(client, "$queryRaw") !== "function" || typeof Reflect.get(client, "$transaction") === "function")
 	{
-		throw new Error("Durable task spawn requires a caller-owned Prisma TransactionClient.");
+		throw new Error("Workflow task spawn requires a caller-owned Prisma TransactionClient.");
 	}
 	return client as Prisma.TransactionClient;
 }
@@ -83,7 +83,7 @@ function _AdmissionReceipt(rows: readonly IAdmissionResultRow[]): IWorkflowTaskA
  * OpenCrane production call to `absurd.spawn_task`.
  *
  * Called by: {@link AbsurdWorkflowEngine.spawn}.
- * @see ../../../../../../../docs/adr/0013-durable-control-plane-execution.md — records why task admission shares the product transaction.
+ * @see ../../../../../../../docs/adr/0013-workflow-control-plane.md — records why task admission shares the product transaction.
  */
 export class WorkflowTaskAdmission implements IWorkflowTaskAdmission
 {
@@ -132,7 +132,7 @@ export class WorkflowTaskAdmission implements IWorkflowTaskAdmission
 		}
 		if (input === undefined)
 		{
-			throw new Error("Durable task input must be JSON-serializable.");
+		throw new Error("Workflow task input must be JSON-serializable.");
 		}
 		// 3. Scope the key and call the one policy-approved procedure with bound parameters.
 		const admissionOptions = JSON.stringify({ idempotency_key: _TaskScopedIdempotencyKey(taskName, idempotencyKey) });

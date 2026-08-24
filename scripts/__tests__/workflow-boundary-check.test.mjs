@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 
-import { _CheckDurableBoundary } from "../durable-boundary-check.mjs";
+import { _CheckWorkflowBoundary } from "../workflow-boundary-check.mjs";
 
 /** Repository root used to prove every review pipeline runs this check. */
 const _ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -13,7 +13,7 @@ const _ROOT = fileURLToPath(new URL("../../", import.meta.url));
 /** Create one disposable repository-shaped directory for a boundary test. */
 function _Fixture()
 {
-	const root = mkdtempSync(join(tmpdir(), "opencrane-durable-boundary-"));
+	const root = mkdtempSync(join(tmpdir(), "opencrane-workflow-boundary-"));
 	const workflows = join(root, "libs/backend/server/infra/workflows");
 	mkdirSync(join(workflows, "infra_absurd"), { recursive: true });
 	mkdirSync(join(workflows, "kit"), { recursive: true });
@@ -32,7 +32,7 @@ test("allows absurd-sdk only in the Absurd adapter", function _AllowsAdapterImpo
 	try
 	{
 		writeFileSync(join(fixture.workflows, "infra_absurd", "adapter.ts"), "import { Absurd } from \"absurd-sdk\";\nvoid Absurd;\n");
-		assert.deepEqual(_CheckDurableBoundary(fixture.root), []);
+		assert.deepEqual(_CheckWorkflowBoundary(fixture.root), []);
 	}
 	finally
 	{
@@ -46,7 +46,7 @@ test("rejects engine imports outside the adapter and domain imports inside workf
 	try
 	{
 		writeFileSync(join(fixture.workflows, "kit", "engine.ts"), "import { Absurd } from \"absurd-sdk\";\nimport { _Anything } from \"@opencrane/backend/agents/example\";\nvoid Absurd;\nvoid _Anything;\n");
-		const violations = _CheckDurableBoundary(fixture.root);
+		const violations = _CheckWorkflowBoundary(fixture.root);
 		assert.equal(violations.length, 2);
 		assert.match(violations[0], /absurd-sdk/u);
 		assert.match(violations[1], /domain package/u);
@@ -57,12 +57,12 @@ test("rejects engine imports outside the adapter and domain imports inside workf
 	}
 });
 
-test("keeps pull-request and nightly CI on the durable boundary check", function _VerifiesPipeline()
+test("keeps pull-request and nightly CI on the workflow boundary check", function _VerifiesPipeline()
 {
 	for (const path of [".github/workflows/docker.yml", ".github/workflows/nightly.yml"])
 	{
 		const source = readFileSync(join(_ROOT, path), "utf8");
-		assert.match(source, /check:durable-boundary/u, path);
-		assert.match(source, /test:durable-boundary/u, path);
+		assert.match(source, /check:workflow-boundary/u, path);
+		assert.match(source, /test:workflow-boundary/u, path);
 	}
 });

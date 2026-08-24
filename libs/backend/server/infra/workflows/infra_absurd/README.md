@@ -4,7 +4,7 @@
 
 ## What it owns
 
-This package adapts the durable-workflow port to the Absurd workflow engine. Absurd is a
+This package adapts the workflow-engine port to the Absurd workflow engine. Absurd is a
 PostgreSQL-backed task engine; the live qualification session composes it here, while product code
 uses the engine-neutral contract. This package owns engine-specific vocabulary and a reviewed SQL
 snapshot, but no product workflow rules.
@@ -26,11 +26,11 @@ The vendored SQL is pinned byte-for-byte to Absurd 0.5.0. A mismatch between its
 
 This package has no package-level public API. It deliberately omits a `src/index.ts` barrel: the
 live qualification session constructs `AbsurdWorkflowEngine` inside this package, while product code
-depends on the engine-neutral `DurableExecution` contract.
+depends on the engine-neutral `IWorkflowEngine` contract.
 
 ## Boundary
 
-Only this package imports `absurd-sdk`. It owns no product data, recurrence, queue naming, or tracing policy; those stay above the engine adapter. Server composition gives it the same immutable queue authority as the workflow kit, so it cannot fall back to a different queue. Worker operations use the SDK, while transactional spawns use only the caller-owned Prisma transaction and the parameterised `absurd.spawn_task` function.
+Only this package imports `absurd-sdk`. It owns no product data, recurrence, queue naming, or tracing policy; those stay above the engine adapter. Server composition gives it the same immutable queue authority as the workflow guard, so it cannot fall back to a different queue. Worker operations use the SDK, while transactional spawns use only the caller-owned Prisma transaction and the parameterised `absurd.spawn_task` function.
 
 ## Dependency direction
 

@@ -1,4 +1,4 @@
-import type { DurableExecution, DurableExecutionTransaction, DurableWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowEngine, IWorkflowTransaction, IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
 /**
  * Supplies fresh workflow-engine wiring for each reusable contract test.
@@ -9,9 +9,9 @@ import type { DurableExecution, DurableExecutionTransaction, DurableWorkerRuntim
 export interface IWorkflowHarness
 {
 	/** Provides the task port and server-owned worker runtime under test. */
-	readonly execution: DurableExecution & DurableWorkerRuntime;
+	readonly execution: IWorkflowEngine & IWorkflowWorkerRuntime;
 	/** Provides the caller-owned transaction passed to every task admission. */
-	readonly transaction: DurableExecutionTransaction;
+	readonly transaction: IWorkflowTransaction;
 	/** Releases adapter resources after a test case when that adapter owns resources. */
 	readonly dispose?: () => Promise<void>;
 }

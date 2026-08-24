@@ -205,8 +205,8 @@
       "@opencrane/backend/server/infra/workflows/contract": [
         "./libs/backend/server/infra/workflows/contract/src/index.ts"
       ],
-      "@opencrane/backend/server/infra/workflows/kit": [
-        "./libs/backend/server/infra/workflows/kit/src/index.ts"
+      "@opencrane/backend/server/infra/workflows/guard": [
+        "./libs/backend/server/infra/workflows/guard/src/index.ts"
       ],
       "@opencrane/backend/server/infra/workflows/oauth-refresh": [
         "./libs/backend/server/infra/workflows/oauth-refresh/src/index.ts"

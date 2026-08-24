@@ -1,19 +1,19 @@
-import { DurableTaskCancelledError, DurableTaskNotRegisteredError, DurableTaskStates } from "@opencrane/backend/server/infra/workflows/contract";
-import type { DurableCheckpointOperation, DurableCheckpointStep, DurableEventReceipt, DurableExecution, DurableExecutionTransaction, DurableTaskContext, DurableTaskDefinition, DurableTaskEvent, DurableTaskReceipt, DurableTaskSpawn, DurableWorkerRuntime, DurableWorkers, DurableWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskCancelledError, WorkflowTaskNotRegisteredError, WorkflowTaskStates } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowTaskEventReceipt, IWorkflowEngine, IWorkflowTransaction, IWorkflowTaskContext, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowWorkerRuntime, IWorkflowWorkers, IWorkflowWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
 
-import type { FakeDurableTaskSnapshot } from "./fake-durable-execution.types";
+import type { FakeWorkflowTaskSnapshot } from "./fake-workflow-engine.types";
 
 /** In-memory execution adapter for deterministic contract and domain tests without an engine. */
-export class __FakeDurableExecution implements DurableExecution, DurableWorkerRuntime
+export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRuntime
 {
 	/** Registered task handlers keyed by their stable task name. */
-	private readonly definitions = new Map<string, DurableTaskDefinition<unknown, unknown>>();
+	private readonly definitions = new Map<string, IWorkflowTaskDefinition<unknown, unknown>>();
 	/** Admitted task records keyed by their generated task identifier. */
 	private readonly tasks = new Map<string, _FakeTaskRecord>();
 	/** Reuses one receipt for each task-name and idempotency-key pair. */
-	private readonly receiptsByKey = new Map<string, DurableTaskReceipt>();
+	private readonly receiptsByKey = new Map<string, IWorkflowTaskReceipt>();
 	/** Stores events that arrived before their receiving task waited for them. */
-	private readonly eventsByTask = new Map<string, DurableTaskEvent<unknown>[]>();
+	private readonly eventsByTask = new Map<string, IWorkflowTaskEvent<unknown>[]>();
 	/** Resolves a task's current event wait when an event is emitted. */
 	private readonly eventWaiters = new Map<string, _EventWaiter>();
 	/** Allocates deterministic task identifiers in admission order. */
@@ -22,18 +22,18 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 	private nextWorkerNumber = 1;
 
 	/** Register one handler, rejecting a different handler that tries to reuse its name. */
-	register<TInput, TResult>(definition: DurableTaskDefinition<TInput, TResult>): void
+	register<TInput, TResult>(definition: IWorkflowTaskDefinition<TInput, TResult>): void
 	{
 		const existing = this.definitions.get(definition.taskName);
-		if (existing !== undefined && existing.run !== definition.run) throw new Error(`A different durable task is already registered for ${definition.taskName}`);
-		this.definitions.set(definition.taskName, definition as DurableTaskDefinition<unknown, unknown>);
+		if (existing !== undefined && existing.run !== definition.run) throw new Error(`A different workflow task is already registered for ${definition.taskName}`);
+		this.definitions.set(definition.taskName, definition as IWorkflowTaskDefinition<unknown, unknown>);
 	}
 
 	/** Admit a pending task and retain the caller's transaction only at this port boundary. */
-	async spawn<TInput>(_transaction: DurableExecutionTransaction, task: DurableTaskSpawn<TInput>): Promise<DurableTaskReceipt>
+	async spawn<TInput>(_transaction: IWorkflowTransaction, task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
 		const definition = this.definitions.get(task.taskName);
-		if (definition === undefined) throw new DurableTaskNotRegisteredError(task.taskName);
+		if (definition === undefined) throw new WorkflowTaskNotRegisteredError(task.taskName);
 
 		const receiptKey = _ReceiptKey(task.taskName, task.idempotencyKey);
 		const existing = this.receiptsByKey.get(receiptKey);
@@ -42,12 +42,12 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 		const receipt = { taskId: `fake-task-${this.nextTaskNumber}`, taskName: task.taskName, idempotencyKey: task.idempotencyKey };
 		this.nextTaskNumber += 1;
 		this.receiptsByKey.set(receiptKey, receipt);
-		this.tasks.set(receipt.taskId, { receipt, definition, input: task.input, state: DurableTaskStates.Pending, result: undefined, error: undefined });
+		this.tasks.set(receipt.taskId, { receipt, definition, input: task.input, state: WorkflowTaskStates.Pending, result: undefined, error: undefined });
 		return receipt;
 	}
 
 	/** Deliver an event now or queue it until its task asks for the matching event name. */
-	async emitEvent<TPayload>(task: DurableTaskReceipt, event: DurableTaskEvent<TPayload>): Promise<DurableEventReceipt>
+	async emitEvent<TPayload>(task: IWorkflowTaskReceipt, event: IWorkflowTaskEvent<TPayload>): Promise<IWorkflowTaskEventReceipt>
 	{
 		const record = this._TaskFor(task);
 		this._AssertNotCancelled(record);
@@ -66,24 +66,24 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 	}
 
 	/** Cancel an incomplete task and reject any event wait that would otherwise keep it alive. */
-	async cancel(task: DurableTaskReceipt): Promise<DurableTaskReceipt>
+	async cancel(task: IWorkflowTaskReceipt): Promise<IWorkflowTaskReceipt>
 	{
 		const record = this._TaskFor(task);
-		if (record.state === DurableTaskStates.Completed || record.state === DurableTaskStates.Failed) return record.receipt;
-		record.state = DurableTaskStates.Cancelled;
+		if (record.state === WorkflowTaskStates.Completed || record.state === WorkflowTaskStates.Failed) return record.receipt;
+		record.state = WorkflowTaskStates.Cancelled;
 		const waiter = this.eventWaiters.get(task.taskId);
 		if (waiter !== undefined)
 		{
 			this.eventWaiters.delete(task.taskId);
-			waiter.reject(new DurableTaskCancelledError(task.taskId));
+			waiter.reject(new WorkflowTaskCancelledError(task.taskId));
 		}
 		return record.receipt;
 	}
 
 	/** Run every pending task in deterministic admission order and report the started worker group. */
-	async startWorkers(worker: DurableWorkerStart): Promise<DurableWorkers>
+	async startWorkers(worker: IWorkflowWorkerStart): Promise<IWorkflowWorkers>
 	{
-		const workers = new _FakeDurableWorkers(`fake-worker-${this.nextWorkerNumber}`, worker.workerName, this);
+		const workers = new _FakeWorkflowWorkers(`fake-worker-${this.nextWorkerNumber}`, worker.workerName, this);
 		this.nextWorkerNumber += 1;
 		await workers.drain();
 		return workers;
@@ -97,24 +97,24 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 	{
 		for (const record of this.tasks.values())
 		{
-			if (record.state === DurableTaskStates.Pending) await this._RunTask(record);
+			if (record.state === WorkflowTaskStates.Pending) await this._RunTask(record);
 		}
 	}
 
 	/** Return one immutable projection of the current in-memory task state. */
-	taskSnapshot(task: DurableTaskReceipt): FakeDurableTaskSnapshot
+	taskSnapshot(task: IWorkflowTaskReceipt): FakeWorkflowTaskSnapshot
 	{
 		const record = this._TaskFor(task);
 		return { receipt: record.receipt, state: record.state, result: record.result, error: record.error };
 	}
 
 	/** Run one pending child task before returning its result to the parent task. */
-	async _AwaitChild<TResult>(task: DurableTaskReceipt): Promise<TResult>
+	async _AwaitChild<TResult>(task: IWorkflowTaskReceipt): Promise<TResult>
 	{
 		const record = this._TaskFor(task);
-		if (record.state === DurableTaskStates.Pending) await this._RunTask(record);
-		if (record.state === DurableTaskStates.Cancelled) throw new DurableTaskCancelledError(task.taskId);
-		if (record.state === DurableTaskStates.Failed) throw record.error;
+		if (record.state === WorkflowTaskStates.Pending) await this._RunTask(record);
+		if (record.state === WorkflowTaskStates.Cancelled) throw new WorkflowTaskCancelledError(task.taskId);
+		if (record.state === WorkflowTaskStates.Failed) throw record.error;
 		return record.result as TResult;
 	}
 
@@ -122,35 +122,35 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 	async _RunTask(record: _FakeTaskRecord): Promise<void>
 	{
 		this._AssertNotCancelled(record);
-		record.state = DurableTaskStates.Running;
+		record.state = WorkflowTaskStates.Running;
 		try
 		{
 			record.result = await record.definition.run(this._ContextFor(record), record.input);
 			this._AssertNotCancelled(record);
-			record.state = DurableTaskStates.Completed;
+			record.state = WorkflowTaskStates.Completed;
 		}
 		catch (error: unknown)
 		{
 			if (!this._IsCancelled(record))
 			{
 				record.error = error;
-				record.state = DurableTaskStates.Failed;
+				record.state = WorkflowTaskStates.Failed;
 			}
 		}
 	}
 
 	/** Build the engine-neutral task context that delegates every operation to this fake. */
-	_ContextFor(record: _FakeTaskRecord): DurableTaskContext
+	_ContextFor(record: _FakeTaskRecord): IWorkflowTaskContext
 	{
 		const self = this;
 		return {
 			task: record.receipt,
-			async checkpoint<TResult>(_step: DurableCheckpointStep, operation: DurableCheckpointOperation<TResult>): Promise<TResult>
+			async checkpoint<TResult>(_step: IWorkflowCheckpointStep, operation: IWorkflowCheckpointOperation<TResult>): Promise<TResult>
 			{
 				self._AssertNotCancelled(record);
 				return operation();
 			},
-			async waitForEvent<TPayload>(eventName: string): Promise<DurableTaskEvent<TPayload>>
+			async waitForEvent<TPayload>(eventName: string): Promise<IWorkflowTaskEvent<TPayload>>
 			{
 				self._AssertNotCancelled(record);
 				const queuedEvents = self.eventsByTask.get(record.receipt.taskId) ?? [];
@@ -159,70 +159,70 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 				{
 					const event = queuedEvents.splice(eventIndex, 1)[0];
 					self.eventsByTask.set(record.receipt.taskId, queuedEvents);
-					return event as DurableTaskEvent<TPayload>;
+					return event as IWorkflowTaskEvent<TPayload>;
 				}
-				return new Promise<DurableTaskEvent<TPayload>>(function _wait(resolve, reject)
+				return new Promise<IWorkflowTaskEvent<TPayload>>(function _wait(resolve, reject)
 				{
 					self.eventWaiters.set(record.receipt.taskId, { eventName, resolve: _ResolveEvent, reject });
 
 					/** Resolve this generic wait with the engine-neutral stored event. */
-					function _ResolveEvent(event: DurableTaskEvent<unknown>): void
+					function _ResolveEvent(event: IWorkflowTaskEvent<unknown>): void
 					{
-						resolve(event as DurableTaskEvent<TPayload>);
+						resolve(event as IWorkflowTaskEvent<TPayload>);
 					}
 				});
 			},
-			async spawnChild<TInput>(task: DurableTaskSpawn<TInput>): Promise<DurableTaskReceipt>
+			async spawnChild<TInput>(task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 			{
 				return self.spawn({ client: undefined }, task);
 			},
-			async awaitChild<TResult>(task: DurableTaskReceipt): Promise<TResult>
+			async awaitChild<TResult>(task: IWorkflowTaskReceipt): Promise<TResult>
 			{
 				return self._AwaitChild<TResult>(task);
 			},
 			async sleepUntil(instant: Date): Promise<void>
 			{
 				self._AssertNotCancelled(record);
-				if (instant.getTime() > Date.now()) throw new Error("The fake durable execution cannot advance time");
+				if (instant.getTime() > Date.now()) throw new Error("The fake workflow engine cannot advance time");
 			},
 		};
 	}
 
 	/** Return the tracked record after confirming the supplied receipt refers to that exact task. */
-	_TaskFor(task: DurableTaskReceipt): _FakeTaskRecord
+	_TaskFor(task: IWorkflowTaskReceipt): _FakeTaskRecord
 	{
 		const record = this.tasks.get(task.taskId);
-		if (record === undefined || record.receipt.taskName !== task.taskName || record.receipt.idempotencyKey !== task.idempotencyKey) throw new Error(`Unknown durable task ${task.taskId}`);
+		if (record === undefined || record.receipt.taskName !== task.taskName || record.receipt.idempotencyKey !== task.idempotencyKey) throw new Error(`Unknown workflow task ${task.taskId}`);
 		return record;
 	}
 
 	/** Throw before a cancelled task can perform another fake engine operation. */
 	_AssertNotCancelled(record: _FakeTaskRecord): void
 	{
-		if (record.state === DurableTaskStates.Cancelled) throw new DurableTaskCancelledError(record.receipt.taskId);
+		if (record.state === WorkflowTaskStates.Cancelled) throw new WorkflowTaskCancelledError(record.receipt.taskId);
 	}
 
 	/** Read cancellation through one helper because an async handler may change this record. */
 	_IsCancelled(record: _FakeTaskRecord): boolean
 	{
-		return record.state === DurableTaskStates.Cancelled;
+		return record.state === WorkflowTaskStates.Cancelled;
 	}
 }
 
 /** Worker lifecycle that drains this fake's deterministic pending-task queue. */
-class _FakeDurableWorkers implements DurableWorkers
+class _FakeWorkflowWorkers implements IWorkflowWorkers
 {
 	/** Engine-free identifier for this worker group. */
 	readonly workerId: string;
 	/** Process-local name supplied when this worker group started. */
 	readonly workerName: string;
 	/** Fake execution whose pending tasks this worker group drains. */
-	private readonly execution: __FakeDurableExecution;
+	private readonly execution: __FakeWorkflowEngine;
 	/** Records that this worker group was stopped after its final drain. */
 	private stopped = false;
 
 	/** Bind a lifecycle handle to one fake execution instance. */
-	constructor(workerId: string, workerName: string, execution: __FakeDurableExecution)
+	constructor(workerId: string, workerName: string, execution: __FakeWorkflowEngine)
 	{
 		this.workerId = workerId;
 		this.workerName = workerName;
@@ -247,13 +247,13 @@ class _FakeDurableWorkers implements DurableWorkers
 interface _FakeTaskRecord
 {
 	/** Stable task reference. */
-	receipt: DurableTaskReceipt;
+	receipt: IWorkflowTaskReceipt;
 	/** Registered handler selected by the task receipt. */
-	definition: DurableTaskDefinition<unknown, unknown>;
+	definition: IWorkflowTaskDefinition<unknown, unknown>;
 	/** Input captured at task admission. */
 	input: unknown;
 	/** Current engine-like lifecycle state. */
-	state: DurableTaskStates;
+	state: WorkflowTaskStates;
 	/** Handler result after a completed task. */
 	result: unknown;
 	/** Handler failure after a failed task. */
@@ -266,7 +266,7 @@ interface _EventWaiter
 	/** Event name that resolves this waiter. */
 	eventName: string;
 	/** Resolve the wait with a matching event. */
-	resolve: (event: DurableTaskEvent<unknown>) => void;
+	resolve: (event: IWorkflowTaskEvent<unknown>) => void;
 	/** Reject the wait when cancellation interrupts the task. */
 	reject: (error: unknown) => void;
 }

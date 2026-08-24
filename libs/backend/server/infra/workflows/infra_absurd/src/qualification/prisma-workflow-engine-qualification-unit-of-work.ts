@@ -1,11 +1,11 @@
 import { PrismaClient } from "@prisma/client";
 
-import type { DurableExecutionTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
-import type { DurableQualificationUnitOfWork } from "./durable-qualification-unit-of-work.types";
+import type { IWorkflowEngineQualificationUnitOfWork } from "./workflow-engine-qualification-unit-of-work.types";
 
 /** Own the live qualifier's Prisma client and its transaction-bound admission calls. */
-export class PrismaDurableQualificationUnitOfWork implements DurableQualificationUnitOfWork
+export class PrismaWorkflowEngineQualificationUnitOfWork implements IWorkflowEngineQualificationUnitOfWork
 {
 	/** Qualification-only client tagged and bounded by the supplied database URL. */
 	private readonly prisma: PrismaClient;
@@ -17,7 +17,7 @@ export class PrismaDurableQualificationUnitOfWork implements DurableQualificatio
 	}
 
 	/** Run one operation within the exact transaction that commits its task admission. */
-	async admit<TResult>(operation: (transaction: DurableExecutionTransaction) => Promise<TResult>): Promise<TResult>
+	async admit<TResult>(operation: (transaction: IWorkflowTransaction) => Promise<TResult>): Promise<TResult>
 	{
 		return await this.prisma.$transaction(async function _Admit(transaction)
 		{

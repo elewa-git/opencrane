@@ -20,7 +20,7 @@ retries, future time, or production transaction validation.
 
 ## Public surface
 
-- `__FakeDurableExecution` — deterministic `DurableExecution` implementation without an engine.
+- `__FakeWorkflowEngine` — deterministic `IWorkflowEngine` implementation without an engine.
 - `__TestWorkflowEngineContract` — reusable Vitest suite for fake and real workflow engines.
 - `IWorkflowHarness`, `IWorkflowHarnessFactory`, and fake task-snapshot types.
 

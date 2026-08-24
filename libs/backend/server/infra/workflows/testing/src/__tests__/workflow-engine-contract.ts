@@ -1,4 +1,4 @@
-import type { DurableTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { IWorkflowHarness, IWorkflowHarnessFactory } from "./workflow-engine-contract.types";
@@ -6,7 +6,7 @@ import type { IWorkflowHarness, IWorkflowHarnessFactory } from "./workflow-engin
 /**
  * Runs the shared workflow-engine contract suite against a fresh test harness for each case.
  *
- * Called by: `fake-durable-execution.test.ts`. Other engine adapter tests can call this helper
+ * Called by: `fake-workflow-engine.test.ts`. Other engine adapter tests can call this helper
  * through the testing barrel, which checks behavior through the engine-neutral workflow contract.
  */
 export function __TestWorkflowEngineContract(name: string, createHarness: IWorkflowHarnessFactory): void
@@ -85,7 +85,7 @@ export function __TestWorkflowEngineContract(name: string, createHarness: IWorkf
 }
 
 /** Build a typed task definition without adding a test helper to the production workflow contract. */
-function _Task<TInput, TResult>(taskName: string, run: DurableTaskDefinition<TInput, TResult>["run"]): DurableTaskDefinition<TInput, TResult>
+function _Task<TInput, TResult>(taskName: string, run: IWorkflowTaskDefinition<TInput, TResult>["run"]): IWorkflowTaskDefinition<TInput, TResult>
 {
 	return { taskName, run };
 }

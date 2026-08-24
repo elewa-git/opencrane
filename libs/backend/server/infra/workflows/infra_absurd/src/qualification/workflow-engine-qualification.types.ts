@@ -2,7 +2,7 @@
  * Controls one bounded Gate D2 pickup-latency run against a deploy-verified silo.
  * The live wrapper supplies these values after it has selected the release and PgBouncer endpoint.
  */
-export interface DurableExecutionQualificationOptions
+export interface IWorkflowEngineQualificationOptions
 {
 	/** Application database URL routed through the silo PgBouncer pool. */
 	readonly databaseUrl: string;
@@ -22,7 +22,7 @@ export interface DurableExecutionQualificationOptions
  * Reports whether every sample produced application-role connection evidence.
  * An unavailable observation fails Gate D2 instead of turning missing evidence into a zero count.
  */
-export type DurableExecutionConnectionEvidence = Readonly<{
+export type WorkflowEngineConnectionEvidence = Readonly<{
 	/** Every expected connection observation completed. */
 	available: true;
 	/** Highest application-role connection count observed during the run. */
@@ -36,7 +36,7 @@ export type DurableExecutionConnectionEvidence = Readonly<{
  * Contains the credential-free evidence emitted by the live Gate D2 runner.
  * `passed` stays false unless both pickup latency and every connection-budget observation pass.
  */
-export interface DurableExecutionQualificationResult
+export interface IWorkflowEngineQualificationResult
 {
 	/** Whether p95 latency and complete connection evidence remained within their ceilings. */
 	readonly passed: boolean;
@@ -66,5 +66,5 @@ export interface DurableExecutionQualificationResult
 		max: number;
 	}>;
 	/** Application-role connection observations used by the gate. */
-	readonly connectionEvidence: DurableExecutionConnectionEvidence;
+	readonly connectionEvidence: WorkflowEngineConnectionEvidence;
 }

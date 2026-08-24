@@ -1,10 +1,10 @@
 import { z } from "zod";
 
-import { WorkflowPayloadValidationError } from "./workflow-kit.errors";
-import type { IWorkflowSiloTaskInput } from "./workflow-kit.types";
+import { WorkflowPayloadValidationError } from "./workflow-guard.errors";
+import type { IWorkflowSiloTaskInput } from "./workflow-guard.types";
 
 /**
- * Matches the one field that lets the kit bind generic task input to its owning silo.
+ * Matches the one field that lets the workflow guard bind generic task input to its owning silo.
  *
  * The schema checks the stable top-level contract. `_AssertPersistableWorkflowPayload` then checks every
  * retained field, because a passthrough schema intentionally leaves product task fields open.
@@ -20,7 +20,7 @@ const _WorkflowSiloTaskInputSchema: z.ZodType<IWorkflowSiloTaskInput> = z.object
 /**
  * Parse one generic task input before the workflow engine can replay it into application code.
  *
- * Called by: `_WorkflowKit` for task admission and engine dispatch. `unknown` is intentional at
+ * Called by: `WorkflowGuard` for task admission and engine dispatch. `unknown` is intentional at
  * this boundary: generic task input is type-safe in memory but becomes untrusted after storage.
  */
 export function _ParseWorkflowSiloTaskInput(input: unknown): IWorkflowSiloTaskInput

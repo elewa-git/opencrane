@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { DurableExecution, DurableExecutionTransaction, DurableTaskContext } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowTaskContext, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { OAuthRefreshOutcomes, OAuthRefreshTaskInputSchema, OAuthRefreshTaskNames, type OAuthRefreshConnectionPort, type OAuthRefreshResult, type OAuthRefreshTaskAdmission, type OAuthRefreshTaskInput, type OAuthRefreshWorkflow, type OAuthRefreshWorkflowOptions } from "./oauth-refresh.types";
 
@@ -49,7 +49,7 @@ export function __OAuthRefreshTaskKey(input: OAuthRefreshTaskInput): string
 }
 
 /** Run the connection-owned refresh through a replay-safe checkpoint. */
-async function _RunRefresh(context: DurableTaskContext, connections: OAuthRefreshConnectionPort, input: OAuthRefreshTaskInput): Promise<OAuthRefreshResult>
+async function _RunRefresh(context: IWorkflowTaskContext, connections: OAuthRefreshConnectionPort, input: OAuthRefreshTaskInput): Promise<OAuthRefreshResult>
 {
 	return await context.checkpoint({ stepName: "refresh-connection" }, async function _RefreshConnection(): Promise<OAuthRefreshResult>
 	{
@@ -72,7 +72,7 @@ export function __CreateOAuthRefreshWorkflow(options: OAuthRefreshWorkflowOption
 	const connections = options.connections;
 	execution.register({
 		taskName: OAuthRefreshTaskNames.Reconcile,
-		async run(context: DurableTaskContext, input: OAuthRefreshTaskInput): Promise<OAuthRefreshResult>
+		async run(context: IWorkflowTaskContext, input: OAuthRefreshTaskInput): Promise<OAuthRefreshResult>
 		{
 			_AssertTaskInput(input);
 			return await _RunRefresh(context, connections, input);
@@ -80,7 +80,7 @@ export function __CreateOAuthRefreshWorkflow(options: OAuthRefreshWorkflowOption
 	});
 
 	return {
-		async admit(transaction: DurableExecutionTransaction, input: OAuthRefreshTaskInput): Promise<OAuthRefreshTaskAdmission>
+		async admit(transaction: IWorkflowTransaction, input: OAuthRefreshTaskInput): Promise<OAuthRefreshTaskAdmission>
 		{
 			const taskKey = __OAuthRefreshTaskKey(input);
 			const receipt = await execution.spawn(transaction, { taskName: OAuthRefreshTaskNames.Reconcile, idempotencyKey: taskKey, input });

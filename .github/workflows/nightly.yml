@@ -127,8 +127,8 @@ jobs:
           npm run --if-present test:database-migrations
           npm run --if-present check:prisma-boundaries -- --diff "${{ steps.fresh.outputs.base }}"
           npm run --if-present test:prisma-boundaries
-          npm run --if-present check:durable-boundary
-          npm run --if-present test:durable-boundary
+          npm run --if-present check:workflow-boundary
+          npm run --if-present test:workflow-boundary
           npm run --if-present lint:boundaries
 
       - name: Build, test, and lint every project

@@ -1,12 +1,12 @@
-# @opencrane/backend/server/infra/workflows/kit — durable workflow guardrails
+# @opencrane/backend/server/infra/workflows/guard — workflow guardrails
 
-> [backend](../../../../README.md) › [server](../../../README.md) › [infra](../../README.md) › [workflows](../README.md) › kit
+> [backend](../../../../README.md) › [server](../../../README.md) › [infra](../../README.md) › [workflows](../README.md) › guard
 
 ## What it owns
 
-This library is the application-facing guardrail around durable control-plane work. A workflow is a
-piece of work that must survive a server restart, such as waiting for approval or continuing a
-multi-step change. Before a domain admits a task, the kit checks that its input belongs to the
+This library is the application-facing guard around control-plane workflows. A workflow is saved
+work that can continue after a server restart, such as waiting for approval or completing a
+multi-step change. Before a domain admits a task, the guard checks that its input belongs to the
 configured silo — the isolated organisation boundary — and that its task name uses a reviewed queue.
 
 ```
@@ -14,29 +14,29 @@ configured silo — the isolated organisation boundary — and that its task nam
                          │
                          ▼
  ┌─────────────────────────────────────────┐
- │ workflows/kit  ◄── HERE                  │  policy check + payload validation
+ │ workflows/guard  ◄── HERE                │  policy check + payload validation
  └─────────────────────────────────────────┘
                          │  safe task + shared queue authority
                          ▼
- workflows/contract ──► durable engine adapter
+ workflows/contract ──► workflow engine adapter
 ```
 
 **In this flow:** [workflows/contract](../contract/README.md) *(the engine-neutral task port)* ·
-`workflows/infra_absurd` *(the current PostgreSQL-backed engine adapter)*
+`workflows/infra_absurd` *(the current PostgreSQL-backed workflow engine adapter)*
 
-The kit parses generic task input with Zod at the engine boundary, then rejects cross-silo input,
-non-JSON values, and fields that look like credentials before they can become durable database
+The guard parses generic task input with Zod at the engine boundary, then rejects cross-silo input,
+non-JSON values, and fields that look like credentials before they can become saved database
 payloads. Its checkpoint wrapper traces only task name, step name, silo, queue, a hashed task key,
-and outcome metadata. The Phase 0 contract does not expose a truthful engine retry-attempt number,
-so the kit deliberately does not invent one.
+and outcome metadata. The workflow contract does not expose a truthful engine retry-attempt number,
+so the guard deliberately does not invent one.
 
 ## Public surface
 
-- `__CreateWorkflowKit` — apply one silo's policy and shared queue authority to a durable engine.
+- `__CreateWorkflowGuard` — apply one silo's policy and shared queue authority to a workflow engine.
 - `__CreateWorkflowTaskQueueAuthority` — build the immutable reviewed task-to-queue authority that
-  both the kit and engine adapter receive.
+  both the guard and engine adapter receive.
 - `WorkflowPayloadValidationError`, `WorkflowTaskPolicyError` — fail-closed policy outcomes.
-- `IWorkflowKitOptions`, `IWorkflowTaskPolicy`, and
+- `IWorkflowGuardOptions`, `IWorkflowTaskPolicy`, and
   `WorkflowStepOutcomes` — the policy and integration types.
 
 ## Boundary

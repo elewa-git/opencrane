@@ -6,7 +6,7 @@
 
 This library helps a product run the same workflow repeatedly without keeping one task alive
 forever. The product scheduler decides when the next run is due; this library gives each run its own
-durable task and asks the execution service to start it. When a run completes successfully, it creates
+workflow task and asks the workflow engine to start it. When a run completes successfully, it creates
 the next run. Repeating that request after a restart or retry reuses the same key, so it does not
 create a duplicate; a failed or cancelled chain is restarted by the product scheduler.
 
@@ -17,17 +17,17 @@ create a duplicate; a failed or cancelled chain is restarted by the product sche
  ┌──────────────────────────────────────────┐
  │ workflows/scheduler  ◄── HERE             │  ensure head / completed task → successor
  └──────────────────────────────────────────┘
-                                  │  transaction-bound durable task spawn
+                                  │  transaction-bound workflow task spawn
                                   ▼
- workflows/contract  ──► durable engine task (one bounded checkpoint history)
+ workflows/contract  ──► workflow engine task (one bounded checkpoint history)
 ```
 
-**In this flow:** `workflows/contract` *(the transaction-bound durable-execution port)* · the
+**In this flow:** `workflows/contract` *(the transaction-bound workflow-engine port)* · the
 product scheduler *(owns cron, timezone, and the next slot)*
 
 The invariant is that a successor has a different deterministic slot key and is admitted only with
 completion evidence from its predecessor. Repeating an ensure or successor call is safe because the
-durable engine receives the same idempotency key. A terminated chain is repaired by ensuring its
+workflow engine receives the same idempotency key. A terminated chain is repaired by ensuring its
 next scheduler-owned head slot; this library does not guess a time, retain a sleeping task, or
 interpret product scheduling rules.
 
@@ -42,7 +42,7 @@ interpret product scheduling rules.
 ## Boundary
 
 The product scheduler owns cron expressions, IANA timezones, catch-up, overlap policy, and choosing
-the next slot. The durable-execution contract owns task persistence and transaction-bound spawning.
+the next slot. The workflow-engine contract owns task persistence and transaction-bound spawning.
 This library connects those two seams; it has no schedule API, worker loop, timer, database model,
 or task handler of its own.
 
