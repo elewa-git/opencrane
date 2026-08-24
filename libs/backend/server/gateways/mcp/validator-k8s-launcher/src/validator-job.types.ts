@@ -1,9 +1,22 @@
 import type { V1ResourceRequirements } from "@kubernetes/client-node";
 
-/** Kubernetes image pull behaviour allowed for the immutable validator image. */
+/**
+ * Kubernetes image pull behaviour allowed for the immutable validator image.
+ *
+ * Called by: {@link McpbValidatorJobProfile}. The controller uses this setting only after the
+ * profile's digest-pinned image has passed the builder's checks; it never selects an image.
+ */
 export type McpbValidatorImagePullPolicy = "Always" | "IfNotPresent" | "Never";
 
-/** Deployment-owned settings that bound every one-shot MCP bundle validator Job. */
+/**
+ * Deployment-owned settings that bound every one-shot MCP bundle validator Job.
+ *
+ * Called by: `__BuildMcpbValidatorJob` in `validator-job.ts`. The controller receives this complete
+ * object from trusted deployment configuration, not from a bundle submitter or a worker. An invalid
+ * setting makes the builder throw before a Kubernetes Job exists.
+ *
+ * @see McpbValidatorJobAssignment
+ */
 export interface McpbValidatorJobProfile
 {
 	/** Immutable image that contains the validator program. */
@@ -34,7 +47,15 @@ export interface McpbValidatorJobProfile
 	readonly resources: V1ResourceRequirements;
 }
 
-/** Controller-owned coordinates for one database-admitted validator Job. */
+/**
+ * Controller-owned coordinates for one database-admitted validator Job.
+ *
+ * Called by: `__BuildMcpbValidatorJob` in `validator-job.ts`. A future MCPB controller creates this
+ * only after the database has admitted the validation; it must not contain a bundle URL, bytes,
+ * command, or secret. An invalid coordinate makes the builder throw before Kubernetes sees it.
+ *
+ * @see McpbValidatorJobProfile
+ */
 export interface McpbValidatorJobAssignment
 {
 	/** Opaque durable validation identifier; it is hashed before it becomes a Kubernetes name. */

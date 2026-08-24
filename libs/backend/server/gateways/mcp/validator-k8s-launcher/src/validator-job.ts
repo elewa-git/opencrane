@@ -96,14 +96,36 @@ function _AssertAssignment(assignment: McpbValidatorJobAssignment, profile: Mcpb
 	}
 }
 
-/** Build a deterministic opaque Kubernetes Job name without exposing the validation identifier. */
+/**
+ * Build a deterministic opaque Kubernetes Job name without exposing the validation identifier.
+ *
+ * Called by: `__BuildMcpbValidatorJob` and the future MCPB controller. It hashes the silo and
+ * validation identifiers, so Kubernetes resource names and selectors do not reveal the durable
+ * validation record.
+ *
+ * @param assignment - Database-admitted coordinates for the one validator Job.
+ * @returns A DNS-safe name that stays stable for the same validation in the same silo.
+ */
 export function __McpbValidatorJobName(assignment: McpbValidatorJobAssignment): string
 {
 	const digest = createHash("sha256").update(`${assignment.siloId}\u0000${assignment.validationId}`).digest("hex").slice(0, 24);
 	return `mcpb-validate-${digest}`;
 }
 
-/** Build the suspended, one-shot, restricted Job that a future controller may submit after durable assignment. */
+/**
+ * Build the suspended, one-shot, restricted Job a future controller may submit after durable assignment.
+ *
+ * Called by: the future MCPB-specific controller in `apps/agent-controller`. The returned Job has no
+ * bundle bytes, artifact address, command, database connection, or long-lived credential. The
+ * controller must save Kubernetes' returned UID against the same durable assignment before it
+ * removes `suspend`.
+ *
+ * @param assignment - Database-admitted opaque identifiers and the deployment-owned namespace.
+ * @param profile - Trusted deployment limits for this worker class.
+ * @returns A suspended Kubernetes Job with the exact validator identity, token audience, and limits.
+ * @throws Error when either input could widen the worker's identity, route, resources, namespace, or reference.
+ * @see __McpbValidatorJobName
+ */
 export function __BuildMcpbValidatorJob(assignment: McpbValidatorJobAssignment, profile: McpbValidatorJobProfile): V1Job
 {
 	// 1. Check fixed deployment policy before Kubernetes sees a manifest that could widen this worker's authority.
