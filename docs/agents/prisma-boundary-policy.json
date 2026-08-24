@@ -616,7 +616,7 @@
       {
         "path": "libs/backend/server/gateways/mcp/main/src/core/prisma-mcp-operator-repository.ts",
         "adapter": "PrismaMcpOperatorRepository",
-        "contract": "McpOperatorRepository",
+        "contract": "IMcpOperatorRepository",
         "contractImportPath": "./mcp-operator-repository.types",
         "constructs": []
       },

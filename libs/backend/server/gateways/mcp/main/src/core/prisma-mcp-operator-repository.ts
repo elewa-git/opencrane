@@ -1,11 +1,11 @@
 import type { Prisma } from "@prisma/client";
 
-import type { McpOperatorInstallRecord, McpOperatorPrincipalRecord, McpOperatorRepository, McpOperatorServerRecord } from "./mcp-operator-repository.types";
+import type { IMcpOperatorRepository, McpOperatorInstallRecord, McpOperatorPrincipalRecord, McpOperatorServerRecord } from "./mcp-operator-repository.types";
 
 const _SERVER_SELECT = { id: true, name: true, description: true, publisher: true, glyph: true, serverType: true, approvalStatus: true, credentialSchema: true, entitlementSummary: true } as const satisfies Prisma.McpServerSelect;
 
 /** Transaction-scoped Prisma adapter for MCP product authority. */
-export class PrismaMcpOperatorRepository implements McpOperatorRepository
+export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 {
 	private readonly _transaction: Prisma.TransactionClient;
 
