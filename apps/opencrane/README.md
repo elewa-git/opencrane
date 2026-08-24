@@ -60,7 +60,7 @@ The route registry is deliberately a catalogue rather than a second application 
 | Public `:8080` | Personal workspace | guided onboarding, assets, persona, approvals, runs, configuration, conversations |
 | Public `:8080` | Gateways | MCP, model routing, providers, bring-your-own-key, model registry |
 | Public `:8080` | Knowledge and reporting | retrieval sources, budgets, token usage |
-| Internal `:8081` | Controller | run-attempt and skill-workload dispatch |
+| Internal `:8081` | Controller | run-attempt, skill-workload, and MCP bundle-inspection dispatch |
 | Internal `:8081` | Runtime | one-use bootstrap, command stream, candidate ingest, skill-authoring exchange |
 | Internal `:8081` | Workers and replay | artifact preprocessing and controller-selected conversation replay |
 
@@ -92,8 +92,10 @@ its resources to the lifecycle owner.
 - `src/app/internal-app.ts` builds the workload-facing API on its separate socket.
 - `src/app/routes.ts` contains named per-area route lists and app-owned transport composition. The
   sharing authority is mounted behind the shared per-IP limiter before identity or database work.
-- `src/app/runtime-composition.ts` binds controller, skill-workload, runtime, and optional-worker
-  authorities by caller plane without choosing transport paths.
+- `src/app/runtime-composition.ts` binds controller, skill-workload, MCP bundle-inspection, runtime,
+  and optional-worker authorities by caller plane without choosing transport paths. The
+  bundle-inspection controller can claim saved package-inspection work and attach the Kubernetes Job
+  that will handle it; it cannot run a bundle through this API.
 - `src/app/mcp-workflow-composition.ts` creates one Absurd worker for both remote MCP protocol
   checks and saved MCP bundle checks. A workflow is saved work that may continue later; here it
   checks a registered server or signed bundle without keeping the administrator's request open.
