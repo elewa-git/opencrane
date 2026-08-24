@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { GroupMembershipAuthorities } from "@opencrane/contracts";
 
-import { createGroup, ExternalGroupMembershipMutationError, getGroup, updateGroup } from "../core/groups.logic";
+import { ExternalGroupMembershipMutationError, PrismaGroupUnitOfWork } from "../core/groups.logic";
 
 /** Build a transaction-backed Prisma stub for group logic. */
 function _MockPrisma(): {
@@ -35,17 +35,19 @@ describe("group hierarchy persistence", function _GroupHierarchyPersistence()
 	it("creates a local group in the trusted silo with its parent", async function _CreateWithParent()
 	{
 		const { prisma, groupCreate, groupFindFirst } = _MockPrisma();
+		const groups = new PrismaGroupUnitOfWork(prisma);
 		groupFindFirst.mockResolvedValue({ id: "company" });
-		await createGroup(prisma, "silo-1", { name: "Engineering", membershipAuthority: GroupMembershipAuthorities.Local, parentId: "company" });
+		await groups.create("silo-1", { name: "Engineering", membershipAuthority: GroupMembershipAuthorities.Local, parentId: "company" });
 		expect(groupCreate).toHaveBeenCalledWith({ data: { siloId: "silo-1", name: "Engineering", membershipAuthority: "Local", parentId: "company" } });
 	});
 
 	it("replaces normalized direct memberships for a local group", async function _ReplaceLocalMemberships()
 	{
 		const { prisma, groupFindFirst, membershipDeleteMany, membershipCreateMany } = _MockPrisma();
+		const groups = new PrismaGroupUnitOfWork(prisma);
 		groupFindFirst.mockResolvedValue({ id: "child", name: "Engineering", parentId: null, membershipAuthority: "Local" });
 		(prisma.principal.count as ReturnType<typeof vi.fn>).mockResolvedValue(2);
-		await updateGroup(prisma, "silo-1", "child", { members: ["principal-b", "principal-a", "principal-a"] });
+		await groups.update("silo-1", "child", { members: ["principal-b", "principal-a", "principal-a"] });
 		expect(membershipDeleteMany).toHaveBeenCalledWith({ where: { siloId: "silo-1", groupId: "child" } });
 		expect(membershipCreateMany).toHaveBeenCalledWith({ data: [{ siloId: "silo-1", groupId: "child", principalId: "principal-a" }, { siloId: "silo-1", groupId: "child", principalId: "principal-b" }] });
 	});
@@ -53,14 +55,16 @@ describe("group hierarchy persistence", function _GroupHierarchyPersistence()
 	it("rejects direct membership writes for externally managed groups", async function _RejectExternalMembershipWrite()
 	{
 		const { prisma, groupFindFirst } = _MockPrisma();
+		const groups = new PrismaGroupUnitOfWork(prisma);
 		groupFindFirst.mockResolvedValue({ id: "child", name: "Engineering", parentId: null, membershipAuthority: "External" });
-		await expect(updateGroup(prisma, "silo-1", "child", { members: [] })).rejects.toBeInstanceOf(ExternalGroupMembershipMutationError);
+		await expect(groups.update("silo-1", "child", { members: [] })).rejects.toBeInstanceOf(ExternalGroupMembershipMutationError);
 	});
 
 	it("returns normalized memberships without inherited parent membership", async function _ReadDirectMembership()
 	{
 		const { prisma, groupFindFirst } = _MockPrisma();
+		const groups = new PrismaGroupUnitOfWork(prisma);
 		groupFindFirst.mockResolvedValue({ id: "child", siloId: "silo-1", name: "Engineering", membershipAuthority: "External", description: null, memberships: [{ principalId: "principal-a" }], parentId: "company" });
-		await expect(getGroup(prisma, "silo-1", "child")).resolves.toEqual({ id: "child", siloId: "silo-1", name: "Engineering", membershipAuthority: GroupMembershipAuthorities.External, parentId: "company", description: undefined, members: ["principal-a"], memberCount: 1 });
+		await expect(groups.get("silo-1", "child")).resolves.toEqual({ id: "child", siloId: "silo-1", name: "Engineering", membershipAuthority: GroupMembershipAuthorities.External, parentId: "company", description: undefined, members: ["principal-a"], memberCount: 1 });
 	});
 });
