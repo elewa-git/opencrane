@@ -97,6 +97,26 @@ if (decision.outcome !== AuthorizationDecisionOutcomes.Allow)
 }
 ```
 
+## Named Work Steps
+
+Do not combine construction, a large input object, and a method call in one expression. When a
+database unit of work or service receives several values, name the input and the work object before
+calling its method. The reader can then inspect the command and the operation separately.
+
+```typescript
+// WRONG — the command and the database operation are both hidden inside one expression.
+await new PrismaGroupClaimProjectionUnitOfWork(prisma).reconcile({ siloId, issuer, subject, groups, log });
+
+// CORRECT — each meaningful step has a stable name.
+const cmd = { siloId, issuer, subject, groups, log };
+const task = new PrismaGroupClaimProjectionUnitOfWork(prisma);
+await task.reconcile(cmd);
+```
+
+Keep a short expression when its constructed value is self-explanatory and needs no review on its
+own. This rule applies when extracting the values or the object makes a business operation easier to
+read; it is not a general ban on fluent APIs.
+
 ## Self-Review Before Finishing
 
 After writing or editing any TypeScript file, run `scripts/agent-style-check.sh` — it checks
