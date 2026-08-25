@@ -1,6 +1,7 @@
 export { __FinalizeArtifactRevision } from "./artifact-finalization";
 export { __ClaimArtifactPreprocessJob, __CompleteArtifactPreprocessJob, __FailArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease } from "./artifact-preprocessing";
 export { __CreateArtifactPreprocessorRouter } from "./artifact-preprocessing.router";
+export { __CreateArtifactPreprocessControllerRouter } from "./artifact-preprocess-controller.router";
 export { __AdmitArtifactPreprocessWorkflow, __ArtifactPreprocessWorkflowTaskKey } from "./artifact-preprocess-workflow-admission";
 export { ArtifactPreprocessWorkflowAdmissionError } from "./artifact-preprocess-workflow-admission.types";
 export { __CreateArtifactScannerRouter } from "./artifact-scanning.router";
@@ -15,6 +16,7 @@ export { _CreatePersonalArtifactCatalogueRouter } from "./prisma-personal-artifa
 export { _PersonalArtifactsOpenapiPaths } from "./openapi";
 export type { ArtifactAuthorityRepository, ArtifactStorePromotionReceipt, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand, FinalizeArtifactRevisionResult, PersonalArtifactCatalogueRepository, PersonalArtifactEntry } from "./artifact-finalization.types";
 export type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputBroker, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ArtifactPreprocessSourceBroker, ArtifactPreprocessSourceLeaseIssuer, ArtifactPreprocessSourceRead, ArtifactPreprocessorRouterDependencies, ArtifactPreprocessorTokenReviewer, ReviewedArtifactPreprocessorIdentity } from "./artifact-preprocessing.types";
+export type { ArtifactPreprocessControllerIdentity, ArtifactPreprocessControllerRouterDependencies, ArtifactPreprocessControllerRouterLogger, ArtifactPreprocessControllerTokenReviewer } from "./artifact-preprocess-controller.router.types";
 export type { ArtifactPreprocessWorkflowAdmission, ArtifactPreprocessWorkflowAdmissionTransaction, ArtifactPreprocessWorkflowRecord } from "./artifact-preprocess-workflow-admission.types";
 export type { ArtifactScanRepository, ArtifactScannerRouterDependencies, ArtifactScannerTokenReviewer, ArtifactScanSourceBroker, ArtifactScanSourceRead, ConversationAssetScanLifecycleRepository, ReviewedArtifactScannerIdentity } from "./artifact-scanning.types";
 export type { ArtifactReadLeaseRepository, ArtifactReadLeaseSigner, IssueArtifactReadLeaseCommand, IssueArtifactReadLeaseResult, PublishedArtifactReadTarget } from "./artifact-read-lease.types";

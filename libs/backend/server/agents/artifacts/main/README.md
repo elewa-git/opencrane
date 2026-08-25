@@ -94,6 +94,9 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
 - `_CreateArtifactPreprocessAuthority` and `__CreateArtifactPreprocessorRouter` — durable job
   fencing and the TokenReview-protected broker-only worker protocol. Each lifecycle transition has
   its own private transaction; no transaction crosses TokenReview, byte brokering, or promotion.
+- `__CreateArtifactPreprocessControllerRouter` — validates the separate agent-controller identity,
+  task receipt, Job binding, and first-Pod binding before delegating to the task-bound authority.
+  It is not mounted until that authority replaces the current polling lifecycle.
 - `PrismaArtifactScanUnitOfWork` and `__CreateArtifactScannerRouter` — quarantine publication,
   bounded retries, and the TokenReview-protected scanner protocol. App composition supplies a
   conversation-lifecycle repository factory; the unit of work binds it and the scan repository to
