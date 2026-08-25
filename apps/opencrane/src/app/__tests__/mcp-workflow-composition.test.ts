@@ -1,12 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import { McpEraProbeFailureCodes } from "@opencrane/backend/server/gateways/mcp";
 import { McpEraProbeConfigurationError, McpEraProbeProtocolError, McpEraProbeTransportError } from "@opencrane/backend/server/infra/mcp-era-probe";
 
-import { _McpEraProbeFailure } from "../mcp-workflow-composition";
+import { __DeclareSkillAuthoringValidation, _McpEraProbeFailure } from "../mcp-workflow-composition";
 
 describe("MCP workflow application translation", function _McpWorkflowTranslationSuite()
 {
+	it("declares the remote skill validation task before a server transaction can admit it", function _DeclaresRemoteSkillValidation()
+	{
+		const declare = vi.fn();
+		__DeclareSkillAuthoringValidation({ declare });
+		expect(declare).toHaveBeenCalledWith(SkillAuthoringValidationTaskDeclaration);
+	});
+
 	it.each([
 		new McpEraProbeTransportError("network"),
 		new McpEraProbeTransportError("timeout"),

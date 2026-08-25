@@ -4,20 +4,20 @@
 
 ## What it owns
 
-This package is the outbound reconciliation step between the durable skill-work authority and
-Kubernetes. A **reconciler** repeatedly makes an external system match a durable desired state. It
-claims one authorised workload, builds a hardened but still-suspended Job from its fixed class
-profile, and commits the Kubernetes-issued Job UID plus the Job's stable opaque reference back to
-OpenCrane.
+This package contains the outbound Kubernetes work for skill jobs. The current pilot is a
+**reconciler**: it repeatedly makes Kubernetes match a saved workload claim. It also exports a
+remote workflow handler that later composition will use to create and observe a Job for a saved task.
+The product schema, routes, and deployable controller registration for that handler are not wired in
+this approved ports-only slice.
 
 ```
- Postgres workload claim ──► controller ◄── HERE ──► suspended Job
-          │                         │                   │
-          └──── database fence ◄────┴──── immutable UID ┘
+ legacy workload claim ──► controller ◄── HERE ──► suspended Job
+                               ▲                   │
+ saved remote validation task ─┘──── immutable UID ┘
 ```
 
-**In this flow:** [execution authority](../execution/main/README.md) ·
-[Job builder](../k8s-launcher/README.md).
+**In this flow:** the retained [execution authority](../execution/main/README.md), the new shared
+[workflow task contract](../workflows/contract/README.md), and the [Job builder](../k8s-launcher/README.md).
 
 The Job stays suspended until a separate, database-fenced release claim authorises one conditional
 unsuspend. The controller then records the exact first Job-owned Pod before the worker bootstrap can
@@ -36,22 +36,27 @@ Python code running.
   `@opencrane/contracts`.
 - `__CreateKubernetesSkillWorkloadControllerStore` — supplies skill-owned labels and trace names to
   the shared exact governed Job store.
+- `__CreateSkillAuthoringValidationHandler` — returns the uncomposed remote Python validation
+  handler that records Job and Pod IDs before it accepts the server's persisted completion event.
 
 ## Boundary
 
 This package accepts ports for OpenCrane and Kubernetes; it does not use Prisma, issue a capability,
-read artifact bytes, duplicate controller wire validators, or run a worker. It releases only an exact UID-bound Job under a short durable
-release claim, then binds one Kubernetes-issued Pod UID. A later worker protocol must exchange the
-non-secret Job reference through a separately authenticated boundary before any code can run.
+read artifact bytes, duplicate controller wire validators, or run a worker. The retained polling
+pilot releases only an exact UID-bound Job under a short durable release claim. When a later
+composition registers it, the remote handler records a Job ID before release and a Pod ID before it
+accepts a server-persisted completion. A later worker protocol must exchange the non-secret Job
+reference through a separately authenticated boundary before any code can run.
 
 ## Dependency direction
 
 Tagged `scope:skills-controller` and `layer:infra`, it may depend on the pure skill Job builder, the
-shared exact governed Job controller, and shared contracts. The deployable agent-controller app
-composes its HTTP and Kubernetes adapters.
+shared exact governed Job controller, engine-neutral workflow contract, dependency-light skill task
+contract, and shared contracts. It does not import the backend workflow-admission implementation.
+The deployable agent-controller app composes its HTTP and Kubernetes adapters.
 
 ## See also
 
 - Parent group: [skills](../README.md)
 - Durable authority: [execution](../execution/main/README.md)
-- Manifest policy: [k8s launcher](../k8s-launcher/README.md)
+- Task facts: [workflow contract](../workflows/contract/README.md)

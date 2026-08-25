@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/execution";
+import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import { SkillWorkloadKinds } from "@opencrane/backend/agents/skills/k8s-launcher";
 import type { IWorkflowTaskEvent } from "@opencrane/backend/server/infra/workflows/contract";
 
