@@ -116,6 +116,7 @@ describe("Control Plane", () =>
     vi.stubEnv("POD_NAMESPACE", "opencrane-silo");
     vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo-runtime");
     vi.stubEnv("AGENT_RUNTIME_MANAGED_NAMESPACE", "opencrane-silo-managed-runtime");
+		vi.stubEnv("SKILL_AUTHORING_NAMESPACE", "opencrane-skill-authoring");
     vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.opencrane-silo.svc.cluster.local:8080");
     vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
 		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");

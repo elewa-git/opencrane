@@ -193,6 +193,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentControllerRunDispatch },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillWorkloadDispatch },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.mcpbValidationController },
+		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillAuthoringValidationController },
 	];
 	const internalRuntimeRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillWorkloadBootstrap },

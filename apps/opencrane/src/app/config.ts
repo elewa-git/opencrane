@@ -253,6 +253,7 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			memoryGatewayUrl: _readRequired("MEMORY_GATEWAY_URL"),
 			outboxPruneBatchSize: _readBoundedInteger("AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE", 100, 1, 1_000),
 			personalRuntimeNamespace: process.env.AGENT_RUNTIME_PERSONAL_NAMESPACE?.trim(),
+			skillAuthoringNamespace: _readRequired("SKILL_AUTHORING_NAMESPACE"),
 			publishedOutboxRetentionMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS", 604_800, 3_600, 7_776_000),
 			serverNamespace: process.env.POD_NAMESPACE?.trim() || "default",
 		},

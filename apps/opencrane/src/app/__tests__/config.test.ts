@@ -26,6 +26,7 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.default.svc.cluster.local:8080");
 		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
 		vi.stubEnv("OPENCRANE_SILO_ID", "silo-test");
+		vi.stubEnv("SKILL_AUTHORING_NAMESPACE", "opencrane-skill-authoring");
 	});
 
 	afterEach(function _restoreEnvironment()
@@ -51,7 +52,7 @@ describe("opencrane process config", function _ProcessConfigSuite()
 			authWatchNamespace: "workspace-seeds",
 			internalPort: 9081,
 			publicPort: 9080,
-			runtime: {
+				runtime: {
 				artifactScannerEnabled: true,
 				artifactScannerClaimLeaseMilliseconds: 240_000,
 				artifactScannerNamespace: "artifact-scanner",
@@ -60,6 +61,7 @@ describe("opencrane process config", function _ProcessConfigSuite()
 				memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
 				memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
 				personalRuntimeNamespace: "personal-runs",
+				skillAuthoringNamespace: "opencrane-skill-authoring",
 			},
 			schedulerEnabled: true,
 			schedulerIntervalMilliseconds: 2500,
@@ -206,6 +208,13 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.default.svc.cluster.local:8080");
 		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "");
 		expect(function _readWithoutTokenPath() { _ReadProcessConfig(); }).toThrow(/MEMORY_GATEWAY_TOKEN_PATH is required/);
+	});
+
+	it("fails boot when the deployed authoring namespace is missing", function _RejectMissingAuthoringNamespace()
+	{
+		vi.stubEnv("SKILL_AUTHORING_NAMESPACE", "");
+
+		expect(function _ReadWithoutAuthoringNamespace() { _ReadProcessConfig(); }).toThrow(/SKILL_AUTHORING_NAMESPACE is required/);
 	});
 
 	it("rejects a relative memory-gateway token path and an out-of-bounds timeout", function _RejectInvalidMemoryGatewaySettings()

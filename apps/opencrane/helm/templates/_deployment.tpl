@@ -177,6 +177,9 @@ spec:
               value: {{ include "opencrane.agentController.runtimeNamespace" . | quote }}
             - name: AGENT_RUNTIME_MANAGED_NAMESPACE
               value: {{ $managedRuntimeNamespace | quote }}
+            # The server rechecks this Helm-owned namespace before it records an authoring Job bootstrap.
+            - name: SKILL_AUTHORING_NAMESPACE
+              value: {{ (index .Values "opencrane-skill-authoring").skillAuthoring.namespace | quote }}
             # The preprocessing router TokenReviews only this Helm-owned worker namespace.
             - name: ARTIFACT_PREPROCESSOR_ENABLED
               value: {{ .Values.artifactPreprocessor.enabled | quote }}

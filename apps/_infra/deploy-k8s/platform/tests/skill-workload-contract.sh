@@ -25,6 +25,10 @@ grep -Fq 'namespace: tool-contract' <<<"$rendered"
 grep -Fq 'count/jobs.batch: "6"' <<<"$rendered"
 grep -Fq 'name: mcpb-contract' <<<"$rendered"
 
+server_deployment="$(awk 'BEGIN { RS="---" } /kind: Deployment/ && /name: opencrane-silo-opencrane-server/ { print }' <<<"$rendered")"
+grep -Fq 'name: SKILL_AUTHORING_NAMESPACE' <<<"$server_deployment"
+grep -Fq 'value: "authoring-contract"' <<<"$server_deployment"
+
 if helm template opencrane-silo "$CHART_DIR" --set-string opencrane-skill-authoring.skillAuthoring.namespace=shared-skills --set-string opencrane-tool-runner.toolRunner.namespace=shared-skills >/dev/null 2>&1; then
   echo "expected identical governed-skill namespaces to be rejected" >&2
   exit 1

@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { _IssueAttemptLiteLlmKey } from "@opencrane/backend/server/gateways/model-routing";
 import { __CreateMcpbValidationControllerAuthority, __CreateMcpbValidationControllerRouter, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
+import { __CreateSkillAuthoringValidationControllerRouter, PrismaSkillAuthoringValidationControllerUnitOfWork } from "@opencrane/backend/server/agents/skills";
 import { _RegisterInternalAgentRuntimeStream } from "@opencrane/backend/server/infra/agent-runtime-stream";
 import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AttemptModelKeyMintRequest, type MintedAttemptModelKey } from "@opencrane/backend/agents/execution/runs";
 import { PrismaSkillWorkloadUnitOfWork, _CreateSkillWorkloadExecutionAuthority, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
@@ -41,7 +42,7 @@ async function _IssueAttemptModelKey(request: AttemptModelKeyMintRequest): Promi
 }
 
 /**
- * Bind the two controller-only dispatch routers to one reviewed controller identity.
+ * Bind controller-only dispatch and validation routers to one reviewed controller identity.
  *
  * Both routers run in the trusted server namespace. Keeping their repositories together makes the
  * shared claim lease explicit without giving either controller endpoint runtime-stream authority.
@@ -54,6 +55,7 @@ async function _IssueAttemptModelKey(request: AttemptModelKeyMintRequest): Promi
  */
 function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, skillWorkloadAuthority: ReturnType<typeof _CreateSkillWorkloadExecutionAuthority>): ControllerRuntimeComposition
 {
+	const authoringNamespace = _ValidateIsolatedWorkloadNamespace(config.skillAuthoringNamespace, namespaces.serverNamespace);
 	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, {
 		personalRuntimeNamespace: namespaces.personalRuntimeNamespace,
 		managedRuntimeNamespace: namespaces.managedRuntimeNamespace,
@@ -69,7 +71,7 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
 			repository: runDispatchRepository,
 			logger: _log,
 		}),
-		 skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({
+		skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({
 			tokenReviewer,
 			namespace: namespaces.serverNamespace,
 			authority: skillWorkloadAuthority,
@@ -78,6 +80,13 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
 		mcpbValidationController: __CreateMcpbValidationControllerRouter({
 			tokenReviewer,
 			authority: __CreateMcpbValidationControllerAuthority(new PrismaMcpOperatorUnitOfWork(prisma), config.claimLeaseMilliseconds),
+			logger: _log,
+		}),
+		skillAuthoringValidationController: __CreateSkillAuthoringValidationControllerRouter({
+			tokenReviewer,
+			namespace: namespaces.serverNamespace,
+			authoringNamespace,
+			authority: new PrismaSkillAuthoringValidationControllerUnitOfWork(prisma),
 			logger: _log,
 		}),
 	};

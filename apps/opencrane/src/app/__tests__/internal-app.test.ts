@@ -38,6 +38,7 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
 		outboxPruneBatchSize: 100,
 		personalRuntimeNamespace: "personal-runtime",
+		skillAuthoringNamespace: "opencrane-skill-authoring",
 		publishedOutboxRetentionMilliseconds: 86_400_000,
 		serverNamespace: "opencrane-server",
 	};

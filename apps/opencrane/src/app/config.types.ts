@@ -57,6 +57,8 @@ export interface InternalRuntimeConfig
 	readonly outboxPruneBatchSize: number;
 	/** Namespace reserved for personal-agent runtime Jobs. */
 	readonly personalRuntimeNamespace: string | undefined;
+	/** Namespace fixed by the Helm-owned Python skill authoring profile. */
+	readonly skillAuthoringNamespace: string;
 	/** Retention period for delivered runtime outbox rows. */
 	readonly publishedOutboxRetentionMilliseconds: number;
 	/** Namespace containing the OpenCrane server and agent controller. */

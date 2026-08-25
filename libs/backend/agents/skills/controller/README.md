@@ -7,8 +7,8 @@
 This package contains the outbound Kubernetes work for skill jobs. The current pilot is a
 **reconciler**: it repeatedly makes Kubernetes match a saved workload claim. It also exports a
 remote workflow handler that later composition will use to create and observe a Job for a saved task.
-The product schema, routes, and deployable controller registration for that handler are not wired in
-this approved ports-only slice.
+The server now mounts the private controller lifecycle API, while product admission and deployable
+handler registration remain pending.
 
 ```
  legacy workload claim ──► controller ◄── HERE ──► suspended Job

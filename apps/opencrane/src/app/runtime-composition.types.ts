@@ -21,6 +21,8 @@ export interface InternalRuntimeComposition
 	readonly skillWorkloadDispatch: Router;
 	/** Controller-only router that claims MCP bundle validation work and records its Kubernetes Job. */
 	readonly mcpbValidationController: Router;
+	/** Controller-only router that issues and records one durable skill authoring validation. */
+	readonly skillAuthoringValidationController: Router;
 	/** Runtime router for one-use workload bootstrap claims. */
 	readonly skillWorkloadBootstrap: Router;
 	/** Runtime router for reading fenced skill-authoring input. */
@@ -57,7 +59,7 @@ export interface InternalRuntimeComposition
 /** The subset of routers built by the controller-only composition step. */
 export type ControllerRuntimeComposition = Pick<
 	InternalRuntimeComposition,
-	"agentControllerRunDispatch" | "skillWorkloadDispatch" | "mcpbValidationController"
+	"agentControllerRunDispatch" | "skillWorkloadDispatch" | "mcpbValidationController" | "skillAuthoringValidationController"
 >;
 
 /** The subset of routers built by the isolated skill-workload composition step. */

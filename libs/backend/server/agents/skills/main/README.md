@@ -51,15 +51,19 @@ returns unavailable rather than a partially widened result.
   provide the database transaction that also admits that task.
 - `PrismaSkillAuthoringValidationControllerUnitOfWork` — server-side claim, Job/Pod binding, and
   terminal-completion authority for that saved task. It uses short database transactions and only
-  accepts the one authoring profile; an HTTP route will expose it to the controller in the next
-  wiring slice.
+  accepts the one authoring profile.
+- `__CreateSkillAuthoringValidationControllerRouter` — the controller-only internal API for that
+  authority. It checks the controller's Kubernetes identity before it issues a claim, records a
+  Job or Pod identity, loads completion evidence, or applies the saved completion. It never lets
+  the controller choose a skill, execution profile, or terminal result.
 
 ## Boundary
 
-The application mounts the exported catalogue router and supplies the Prisma-backed catalogue
-repository. Neither validation authority is a browser API or can run a Job: together they save the
-facts that let the controller and worker paths act safely. This package does not author, test, scan,
-sign, publish, revoke, download, or execute skills, and it does not store bytes.
+The application mounts the exported catalogue router and the private controller router, and supplies
+the Prisma-backed catalogue repository. The validation routes are not browser APIs and cannot run a
+Job: they save and check the facts that let the controller and worker paths act safely. This package
+does not author, test, scan, sign, publish, revoke, download, or execute skills, and it does not
+store bytes.
 
 The catalogue deliberately excludes artifact content addresses, bundle bytes, manifests,
 requirements, test and scan evidence, signatures, signer keys, reviewer identities, and all
@@ -78,8 +82,7 @@ The `Skill`, `SkillRevision`, legacy controller-polled `SkillWorkload`, and new
 `SkillAuthoringValidation` records belong to the broader skill capability in
 `apps/opencrane/prisma/schema/skills.prisma`. The validation record holds the task receipt, one-use
 bootstrap identity, worker completion inbox, and durable wake-up event. The repository owns only
-creation/reuse and receipt binding; the controller and worker authority will own later lifecycle
-transitions.
+creation/reuse and receipt binding; the controller authority owns later lifecycle transitions.
 
 ## See also
 

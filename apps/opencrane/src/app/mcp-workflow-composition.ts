@@ -50,8 +50,8 @@ export function __DeclareSkillAuthoringValidation(execution: Pick<IWorkflowEngin
  *
  * The server declares the skill-authoring task on its queue without adding a local handler. That
  * lets a product transaction admit the task while the controller remains responsible for executing
- * the Kubernetes-mutating definition. This ports-only slice does not yet wire a product schema,
- * repository adapter, route, or deployable controller registration.
+ * the Kubernetes-mutating definition. The private controller lifecycle API is mounted, but the
+ * product admission adapter and deployable controller-handler registration are still pending.
  *
  * @see SkillAuthoringValidationTaskDeclaration — defines the declaration the controller shares.
  */

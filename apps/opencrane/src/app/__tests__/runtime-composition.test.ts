@@ -53,6 +53,7 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
 		outboxPruneBatchSize: 100,
 		personalRuntimeNamespace: "personal-runtime",
+		skillAuthoringNamespace: "opencrane-skill-authoring",
 		publishedOutboxRetentionMilliseconds: 86_400_000,
 		serverNamespace: "opencrane-server",
 	};
@@ -71,6 +72,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 
 		expect(composition.agentControllerRunDispatch).toEqual(expect.any(Function));
 		expect(composition.skillWorkloadDispatch).toEqual(expect.any(Function));
+		expect(composition.skillAuthoringValidationController).toEqual(expect.any(Function));
 		expect(composition.skillWorkloadBootstrap).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringInput).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringCompletion).toEqual(expect.any(Function));
