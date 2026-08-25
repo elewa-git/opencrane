@@ -166,6 +166,9 @@ package imports it.
   requests use fast local-path storage; storage-sensitive changes, manual k3d qualification, and
   every `develop` push also prove pinned expandable storage. Neither tier substitutes for
   backup/recovery or production qualification.
+- `npm run dev:tier3` runs that smoke with full storage qualification and `KEEP_CLUSTER=1`, then
+  exposes its real ingress through a loopback browser proxy. The cluster remains available for
+  kubectl diagnosis until the developer deletes the named `opencrane-develop-smoke` cluster.
 
 ## Sub-docs (the deep detail)
 

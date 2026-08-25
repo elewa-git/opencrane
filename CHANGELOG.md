@@ -66,6 +66,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   or credential-free deterministic model output while Cognee, memory, Obot, artifacts, channels,
   and Kubernetes remain explicitly disabled.
 
+- **Infrastructure developers can now retain and inspect a complete local Kubernetes silo after
+  qualification.** `npm run dev:tier3` runs the same full-storage k3d smoke that protects `develop`,
+  leaves the qualified cluster available for kubectl diagnosis, and exposes the real ingress through
+  a Codespaces-compatible loopback proxy. The repository devcontainer supplies Docker-in-Docker and
+  the CI-aligned Node, Helm, k3d, and kubectl toolchain, with dependency installation available to
+  Codespaces prebuilds.
+
 - **Users and operators can now see the availability of every user-visible service through
   unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,
   models, memory, files, channels, and integrations as `available`, `unavailable`, or `disabled`

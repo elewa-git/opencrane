@@ -1,5 +1,9 @@
 # CI and deployment
 
+For the three contributor loops that lead into this pipeline, see
+[`docs/local-development.md`](local-development.md). Tier 3 reuses the current-silo smoke described
+below and keeps its disposable k3d cluster available for diagnosis.
+
 This is the reference for how a change travels from a pull request to a running cluster: the CI
 pipeline and its gates, the caching that keeps it fast, the deploy engine, the warnings that save
 hours, and the release-version and migration process. The contributor-facing summary lives on the

@@ -46,6 +46,11 @@ the pinned expandable hostpath CSI driver and exercise expansion. Set `KEEP_CLUS
 diagnosis. Backup/restore and production storage, DNS, and transport remain separate live
 qualifications.
 
+`npm run dev:tier3` is the contributor entrypoint around this smoke. It selects full storage by
+default, retains the cluster, and starts a loopback proxy that sends the smoke host through the real
+ingress while Codespaces keeps its browser-facing forwarded host. Use `--storage-mode fast` only
+when storage expansion is outside the change, or `--smoke-only` when browser access is unnecessary.
+
 Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads
 belong in sibling `apps/_infra/<service>` projects.
