@@ -4,7 +4,11 @@ export const LOCAL_DEVELOPMENT_PROFILES = Object.freeze({
 	Agent: "agent"
 });
 
-/** Maps each Agent model-access boundary to its descriptive CLI value. */
+/**
+ * Defines the CLI values that select a local proxy, an explicit remote proxy, or deterministic
+ * simulation. The parser rejects every other value before the coordinator chooses credentials or
+ * starts processes.
+ */
 export const LOCAL_DEVELOPMENT_ALTERNATIVES = Object.freeze({
 	LocalLiteLLM: "local-llm",
 	RemoteLiteLLM: "remote-llm",
@@ -72,7 +76,13 @@ function _validateRemoteEndpoint(endpoint)
 
 /**
  * Parses Tier 2 arguments and rejects options that do not apply to the selected profile.
- * Agent defaults to local-llm; remote-llm additionally requires a remote HTTPS origin and key file.
+ * Agent defaults to `local-llm`; `remote-llm` requires an HTTPS origin and key-file path before the
+ * coordinator can start, while core refuses every Agent alternative.
+ *
+ * Called by: `scripts/local-development.mjs` before configuration or process orchestration.
+ * @param {string[]} argumentsList - Command-line arguments after the local-development script name.
+ * @returns The validated profile, alternative, remote settings, and coordinator flags.
+ * @throws When an option is unknown, incomplete, or incompatible with the selected profile.
  */
 export function parseLocalDevelopmentArguments(argumentsList)
 {
