@@ -234,7 +234,7 @@ export default [
             },
             { sourceTag: "scope:app", onlyDependOnLibsWithTags: ["*"] },
             { sourceTag: "scope:agents", onlyDependOnLibsWithTags: ["scope:agents", "scope:conversations", "scope:shared"] },
-			{ sourceTag: "scope:artifacts", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:artifacts-workflow-contract", "scope:auth", "scope:shared"] },
+			{ sourceTag: "scope:artifacts", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:artifacts-workflow-contract", "scope:auth", "scope:shared", "scope:workflows"] },
             { sourceTag: "type:app", notDependOnLibsWithTags: ["type:app"] },
 			{ sourceTag: "type:lib", notDependOnLibsWithTags: ["type:app"] },
 			{ sourceTag: "frontend-role:feature", onlyDependOnLibsWithTags: ["frontend-role:elements", "frontend-role:state"] },
