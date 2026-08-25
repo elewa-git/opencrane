@@ -6,7 +6,7 @@ import { aiBudgetRouter, tokenUsageRouter } from "@opencrane/backend/server/repo
 import { auditRouter } from "@opencrane/backend/server/iam/audit";
 import { groupsRouter } from "@opencrane/backend/server/iam/groups";
 import { _IssueAttemptLiteLlmKey, modelRoutingDefaultsRouter } from "@opencrane/backend/server/gateways/model-routing";
-import { mcpOperatorRouter } from "@opencrane/backend/server/gateways/mcp";
+import { _CreateMcpCallerResolver, mcpOperatorRouter, mcpTaskRouter } from "@opencrane/backend/server/gateways/mcp";
 import { _CreateIntegrationCustodyRouter } from "@opencrane/backend/server/gateways/integrations";
 import type { ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
@@ -82,8 +82,11 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfElicitationRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },
 	];
+	const mcpPrincipalDirectory = new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma);
+	const resolveMcpCaller = _CreateMcpCallerResolver(mcpPrincipalDirectory);
 	const gatewayRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(mcpWorkflows.unitOfWork, new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma), mcpWorkflows.eraProbeWorkflow, mcpWorkflows.mcpbValidationWorkflow, mcpWorkflows.mcpbArtifacts) },
+		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(mcpWorkflows.unitOfWork, mcpPrincipalDirectory, mcpWorkflows.eraProbeWorkflow, mcpWorkflows.mcpbValidationWorkflow, mcpWorkflows.mcpbArtifacts) },
+		{ method: "use", path: "/api/v1/mcp", handler: mcpTaskRouter(mcpWorkflows.unitOfWork, mcpWorkflows.mcpTaskWorkflow, resolveMcpCaller) },
 		{ method: "use", path: "/api/v1/integrations", handler: _CreateIntegrationCustodyRouter(prisma, obotCustody, _log) },
 		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma) },
 		{ method: "use", path: "/api/v1/providers/credentials", handler: providerCredentialsRouter(prisma) },

@@ -234,6 +234,56 @@ export const _McpOpenapiPaths = {
     },
   },
 
+  "/mcp/tasks": {
+    post: {
+      operationId: "submitMcpTask",
+      summary: "Save an asynchronous MCP tool call and start its workflow",
+      tags: ["MCP Operator"],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { $ref: "#/components/schemas/McpTaskSubmission" } } },
+      },
+      responses: {
+        201: created("Task and background workflow saved.", { $ref: "#/components/schemas/McpTask" }),
+        400: badRequest("MCP task fields are invalid."),
+        409: { description: "Task key conflicts with a different call.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
+  },
+
+  "/mcp/tasks/{id}": {
+    get: {
+      operationId: "getMcpTask",
+      summary: "Read a saved MCP task owned by the calling user",
+      tags: ["MCP Operator"],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", minLength: 1, maxLength: 256, pattern: "\\S" } }],
+      responses: {
+        200: ok("Saved task progress.", { $ref: "#/components/schemas/McpTask" }),
+        400: badRequest("MCP task identifier is invalid."),
+        404: notFound("MCP task not found."),
+      },
+    },
+  },
+
+  "/mcp/tasks/{id}/input": {
+    post: {
+      operationId: "submitMcpTaskInput",
+      summary: "Save requested input and wake an MCP task workflow",
+      tags: ["MCP Operator"],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", minLength: 1, maxLength: 256, pattern: "\\S" } }],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { $ref: "#/components/schemas/McpTaskInputResponse" } } },
+      },
+      responses: {
+        200: ok("Task input accepted.", { $ref: "#/components/schemas/McpTask" }),
+        400: badRequest("MCP task identifier or input fields are invalid."),
+        404: notFound("MCP task not found."),
+        409: { description: "Input conflicts with the saved task request or response.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
+  },
+
   "/mcp/directory": {
     get: {
       operationId: "getMcpDirectory",

@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { ___DigestCanonicalJson } from "@opencrane/util";
+import type { JsonValue } from "@opencrane/util";
 
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
 import { McpTaskInputSubmissionOutcomes } from "./mcp-task.types";
@@ -7,7 +8,7 @@ import type { McpTaskCaller, McpTaskInputResponse, McpTaskInputSubmissionResult,
 /** Return a SHA-256 digest without retaining a client key or tool argument value. */
 function _Digest(value: unknown): string
 {
-	return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
+	return ___DigestCanonicalJson(value as JsonValue);
 }
 
 /** Reject a task command before it reaches product storage or workflow admission. */
@@ -32,7 +33,7 @@ export async function submitMcpTask(unitOfWork: McpOperatorUnitOfWork, workflow:
 {
 	_AssertSubmission(command);
 	const requestKeyDigest = _Digest([caller.siloId, caller.principalId, command.idempotencyKey]);
-	const callDigest = _Digest([caller.siloId, caller.principalId, command.toolName, command.arguments, command.inputRequest]);
+	const callDigest = _Digest([caller.siloId, caller.principalId, command.toolName, command.arguments, { requestId: command.inputRequest.requestId, message: command.inputRequest.message }]);
 	return await unitOfWork.execute(async function _Submit(transaction): Promise<McpTaskRecord | null>
 	{
 		const stored = await transaction.mcpTasks.createOrFind({ siloId: caller.siloId, principalId: caller.principalId, requestKeyDigest, callDigest, toolName: command.toolName, inputRequest: command.inputRequest });

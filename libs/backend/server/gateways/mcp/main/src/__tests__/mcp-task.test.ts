@@ -56,6 +56,18 @@ describe("MCP task lifecycle", function _DescribeMcpTaskLifecycle()
 		expect(ensureWorkflow).toHaveBeenCalledWith("silo-1", "mcp-task-1", expect.objectContaining({ taskId: "absurd-task-1", taskName: McpTaskTaskNames.Call }));
 	});
 
+	it("uses the same call digest when JSON object keys arrive in a different order", async function _ItCanonicalizesCallArguments()
+	{
+		const createOrFind = vi.fn().mockResolvedValue({ created: true, task: _Task({ workflowTask: null }) });
+		const unitOfWork = _UnitOfWork({ createOrFind, ensureWorkflow: vi.fn().mockResolvedValue(_Task()) });
+		const workflow = { admit: vi.fn().mockResolvedValue({ receipt: _Task().workflowTask, taskKey: _Task().workflowTask!.idempotencyKey }), deliverInput: vi.fn() };
+
+		await submitMcpTask(unitOfWork, workflow, { siloId: "silo-1", principalId: "principal-1" }, { idempotencyKey: "call-1", toolName: "collect-details", arguments: { first: "one", second: "two" }, inputRequest: { requestId: "details", message: "What details should this task use?" } });
+		await submitMcpTask(unitOfWork, workflow, { siloId: "silo-1", principalId: "principal-1" }, { idempotencyKey: "call-1", toolName: "collect-details", arguments: { second: "two", first: "one" }, inputRequest: { requestId: "details", message: "What details should this task use?" } });
+
+		expect(createOrFind.mock.calls[0]![0].callDigest).toBe(createOrFind.mock.calls[1]![0].callDigest);
+	});
+
 	it("keeps a task private to its authenticated principal", async function _ItKeepsTaskPrivate()
 	{
 		const find = vi.fn().mockResolvedValue(null);
