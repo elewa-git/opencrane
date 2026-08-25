@@ -44,6 +44,9 @@
 {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.skillWorkloadProfiles.toolRunner.image.digest) }}
 {{- fail "agentController.enabled=true requires an immutable sha256 tool-runner worker image digest" }}
 {{- end }}
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.mcpbValidatorProfile.image.digest) }}
+{{- fail "agentController.enabled=true requires an immutable sha256 MCP bundle validator image digest" }}
+{{- end }}
 {{- $controllerName := "agent-controller" -}}
 {{- $runtimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
 {{- $runtimeNamespaceLabel := include "opencrane.agentController.runtimeNamespaceLabelValue" . -}}
@@ -77,12 +80,16 @@
 {{- $toolRunnerImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.toolRunner.image.repository .Values.agentController.skillWorkloadProfiles.toolRunner.image.digest -}}
 {{- $authoringNamespace := (index .Values "opencrane-skill-authoring").skillAuthoring.namespace -}}
 {{- $toolRunnerNamespace := (index .Values "opencrane-tool-runner").toolRunner.namespace -}}
-{{- if or (eq $authoringNamespace .Release.Namespace) (eq $toolRunnerNamespace .Release.Namespace) (eq $authoringNamespace $toolRunnerNamespace) }}
-{{- fail "governed skill workload namespaces must be distinct from the server and from each other" }}
+{{- $mcpbValidatorNamespace := (index .Values "opencrane-mcpb-validator").mcpbValidator.namespace -}}
+{{- $mcpbValidatorImage := printf "%s@%s" .Values.agentController.mcpbValidatorProfile.image.repository .Values.agentController.mcpbValidatorProfile.image.digest -}}
+{{- $mcpbValidatorBootstrapUrl := printf "http://%s-opencrane-server.%s.svc.cluster.local:%v/api/internal/mcpb-validator" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
+{{- if or (eq $authoringNamespace .Release.Namespace) (eq $toolRunnerNamespace .Release.Namespace) (eq $mcpbValidatorNamespace .Release.Namespace) (eq $authoringNamespace $toolRunnerNamespace) (eq $authoringNamespace $mcpbValidatorNamespace) (eq $toolRunnerNamespace $mcpbValidatorNamespace) }}
+{{- fail "governed worker namespaces must be distinct from the server and from each other" }}
 {{- end }}
 {{- $controllerImage := printf "%s@%s" .Values.agentController.image.repository .Values.agentController.image.digest -}}
 {{- $controllerUsername := printf "system:serviceaccount:%s:%s" .Release.Namespace $controllerName -}}
 {{- $skillAdmissionName := printf "%s-skill-workloads" (include "opencrane.agentController.admissionName" .) -}}
+{{- $mcpbAdmissionName := printf "%s-mcpb-validator" (include "opencrane.agentController.admissionName" .) -}}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -251,6 +258,30 @@ roleRef:
 ---
 {{- end }}
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $controllerName }}-mcpb-validator
+  namespace: {{ $mcpbValidatorNamespace }}
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $controllerName }}-mcpb-validator
+  namespace: {{ $mcpbValidatorNamespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $controllerName }}
+    namespace: {{ $.Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $controllerName }}-mcpb-validator
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -306,6 +337,8 @@ spec:
               value: {{ dict .Values.agentController.runtimeProfile.name $personalProfileEnv $managedRuntimeProfileName $managedProfileEnv | toJson | quote }}
             - name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON
               value: {{ dict "authoring" (dict "kind" "authoring" "image" $authoringImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.authoring.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $authoringNamespace "serviceAccountName" "skill-authoring-default" "capabilityTokenAudience" "opencrane-skill-authoring" "bootstrapUrl" $skillBootstrapUrl "capabilityTokenPath" "/var/run/opencrane/tokens/capability.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.skillWorkloadProfiles.authoring.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.authoring.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.authoring.resources) "tool-runner" (dict "kind" "tool-runner" "image" $toolRunnerImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.toolRunner.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $toolRunnerNamespace "serviceAccountName" "tool-runner-default" "capabilityTokenAudience" "opencrane-tool-runner" "bootstrapUrl" $skillBootstrapUrl "capabilityTokenPath" "/var/run/opencrane/tokens/capability.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.skillWorkloadProfiles.toolRunner.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.toolRunner.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.toolRunner.resources) | toJson | quote }}
+            - name: AGENT_CONTROLLER_MCPB_VALIDATOR_PROFILE_JSON
+              value: {{ dict "image" $mcpbValidatorImage "imagePullPolicy" .Values.agentController.mcpbValidatorProfile.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $mcpbValidatorNamespace "serviceAccountName" "mcpb-validator-default" "tokenAudience" "opencrane-mcpb-validator" "bootstrapUrl" $mcpbValidatorBootstrapUrl "tokenPath" "/var/run/opencrane/tokens/validator.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.mcpbValidatorProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.mcpbValidatorProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.mcpbValidatorProfile.resources | toJson | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "agent-controller") | nindent 12 }}
           volumeMounts:
             - name: opencrane-token
@@ -653,6 +686,126 @@ spec:
         - key: app.kubernetes.io/component
           operator: In
           values: ["skill-authoring", "tool-runner"]
+---
+# The controller's create permission in the validator namespace is safe only because this policy
+# accepts the one fixed suspended Job shape produced by the MCP bundle Job builder.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $mcpbAdmissionName }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    matchPolicy: Exact
+    resourceRules:
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["jobs"]
+        scope: "Namespaced"
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: {{ $mcpbValidatorNamespace | quote }}
+  validations:
+    - expression: >-
+        request.userInfo.username == {{ $controllerUsername | toJson }}
+      message: only this release's controller ServiceAccount may create MCP bundle validator Jobs
+    - expression: >-
+        request.operation == 'CREATE' && object.metadata.namespace == {{ $mcpbValidatorNamespace | toJson }} &&
+        object.metadata.name.matches('^mcpb-validate-[a-f0-9]{24}$') &&
+        object.metadata.labels.size() == 3 &&
+        object.metadata.labels['app.kubernetes.io/name'] == 'opencrane-mcpb-validator' &&
+        object.metadata.labels['app.kubernetes.io/component'] == 'mcpb-validator' &&
+        object.metadata.labels['opencrane.ai/mcpb-validator'] == object.metadata.name &&
+        object.metadata.annotations.size() == 1 &&
+        object.metadata.annotations['opencrane.ai/mcpb-bootstrap-reference'].matches('^mcpb-validator-v1_[a-f0-9]{64}$') &&
+        (!has(object.metadata.ownerReferences) || object.metadata.ownerReferences.size() == 0) &&
+        (!has(object.metadata.finalizers) || object.metadata.finalizers.size() == 0) &&
+        (!has(object.metadata.generateName) || object.metadata.generateName == '') &&
+        object.spec.suspend == true && object.spec.parallelism == 1 && object.spec.completions == 1 &&
+        object.spec.backoffLimit == 0 && object.spec.ttlSecondsAfterFinished == 0 &&
+        object.spec.activeDeadlineSeconds == {{ .Values.agentController.mcpbValidatorProfile.activeDeadlineSeconds }} &&
+        object.spec.template.spec.serviceAccountName == 'mcpb-validator-default' &&
+        object.spec.template.spec.automountServiceAccountToken == false &&
+        object.spec.template.spec.enableServiceLinks == false && object.spec.template.spec.restartPolicy == 'Never' &&
+        object.spec.template.spec.terminationGracePeriodSeconds == 0 &&
+        object.spec.template.spec.securityContext.runAsNonRoot == true &&
+        object.spec.template.spec.securityContext.runAsUser == 65532 &&
+        object.spec.template.spec.securityContext.runAsGroup == 65532 &&
+        object.spec.template.spec.securityContext.fsGroup == 65532 &&
+        object.spec.template.spec.securityContext.seccompProfile.type == 'RuntimeDefault' &&
+        object.spec.template.spec.containers.size() == 1 && object.spec.template.spec.containers[0].name == 'mcpb-validator' &&
+        (!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.size() == 0) &&
+        (!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0) &&
+        object.spec.template.spec.containers[0].image == {{ $mcpbValidatorImage | toJson }} &&
+        object.spec.template.spec.containers[0].imagePullPolicy == {{ .Values.agentController.mcpbValidatorProfile.image.pullPolicy | toJson }} &&
+        object.spec.template.spec.containers[0].resources.requests.cpu == {{ .Values.agentController.mcpbValidatorProfile.resources.requests.cpu | toString | toJson }} &&
+        object.spec.template.spec.containers[0].resources.requests.memory == {{ .Values.agentController.mcpbValidatorProfile.resources.requests.memory | toString | toJson }} &&
+        object.spec.template.spec.containers[0].resources.limits.cpu == {{ .Values.agentController.mcpbValidatorProfile.resources.limits.cpu | toString | toJson }} &&
+        object.spec.template.spec.containers[0].resources.limits.memory == {{ .Values.agentController.mcpbValidatorProfile.resources.limits.memory | toString | toJson }} &&
+        object.spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation == false &&
+        object.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem == true &&
+        object.spec.template.spec.containers[0].securityContext.capabilities.drop == ['ALL'] &&
+        (!has(object.spec.template.spec.containers[0].securityContext.capabilities.add) || object.spec.template.spec.containers[0].securityContext.capabilities.add.size() == 0) &&
+        (!has(object.spec.template.spec.containers[0].command) || object.spec.template.spec.containers[0].command.size() == 0) &&
+        (!has(object.spec.template.spec.containers[0].args) || object.spec.template.spec.containers[0].args.size() == 0) &&
+        !has(object.spec.template.spec.containers[0].lifecycle) &&
+        !has(object.spec.template.spec.containers[0].livenessProbe) &&
+        !has(object.spec.template.spec.containers[0].readinessProbe) &&
+        !has(object.spec.template.spec.containers[0].startupProbe) &&
+        !has(object.spec.template.spec.containers[0].envFrom) &&
+        object.spec.template.spec.containers[0].env.size() == 3 &&
+        object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_MCPB_BOOTSTRAP_URL' &&
+        object.spec.template.spec.containers[0].env[0].value == {{ $mcpbValidatorBootstrapUrl | toJson }} &&
+        object.spec.template.spec.containers[0].env[1].name == 'OPENCRANE_MCPB_TOKEN_PATH' &&
+        object.spec.template.spec.containers[0].env[1].value == '/var/run/opencrane/tokens/validator.token' &&
+        object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_MCPB_BOOTSTRAP_REFERENCE_PATH' &&
+        object.spec.template.spec.containers[0].env[2].value == '/var/run/opencrane/bootstrap/reference' &&
+        object.spec.template.spec.containers[0].volumeMounts.size() == 3 &&
+        object.spec.template.spec.containers[0].volumeMounts[0].name == 'validator-token' &&
+        object.spec.template.spec.containers[0].volumeMounts[0].mountPath == '/var/run/opencrane/tokens' &&
+        object.spec.template.spec.containers[0].volumeMounts[0].readOnly == true &&
+        object.spec.template.spec.containers[0].volumeMounts[1].name == 'bootstrap-reference' &&
+        object.spec.template.spec.containers[0].volumeMounts[1].mountPath == '/var/run/opencrane/bootstrap' &&
+        object.spec.template.spec.containers[0].volumeMounts[1].readOnly == true &&
+        object.spec.template.spec.containers[0].volumeMounts[2].name == 'scratch' &&
+        object.spec.template.spec.containers[0].volumeMounts[2].mountPath == '/tmp' &&
+        object.spec.template.spec.volumes.size() == 3 &&
+        object.spec.template.spec.volumes[0].name == 'validator-token' &&
+        object.spec.template.spec.volumes[0].projected.defaultMode == 288 &&
+        object.spec.template.spec.volumes[0].projected.sources.size() == 1 &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.path == 'validator.token' &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-mcpb-validator' &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.expirationSeconds == 600 &&
+        object.spec.template.spec.volumes[1].name == 'bootstrap-reference' &&
+        object.spec.template.spec.volumes[1].downwardAPI.defaultMode == 288 &&
+        object.spec.template.spec.volumes[1].downwardAPI.items.size() == 1 &&
+        object.spec.template.spec.volumes[1].downwardAPI.items[0].path == 'reference' &&
+        object.spec.template.spec.volumes[1].downwardAPI.items[0].fieldRef.fieldPath == "metadata.annotations['opencrane.ai/mcpb-bootstrap-reference']" &&
+        object.spec.template.spec.volumes[2].name == 'scratch' &&
+        quantity(object.spec.template.spec.volumes[2].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.mcpbValidatorProfile.scratchSize | toJson }})) == 0 &&
+        object.spec.template.metadata.labels.size() == 2 &&
+        object.spec.template.metadata.labels['app.kubernetes.io/component'] == 'mcpb-validator' &&
+        object.spec.template.metadata.labels['opencrane.ai/mcpb-validator'] == object.metadata.name &&
+        object.spec.template.metadata.annotations == object.metadata.annotations &&
+        (!has(object.spec.template.metadata.ownerReferences) || object.spec.template.metadata.ownerReferences.size() == 0) &&
+        (!has(object.spec.template.metadata.finalizers) || object.spec.template.metadata.finalizers.size() == 0) &&
+        (!has(object.spec.template.metadata.name) || object.spec.template.metadata.name == '') &&
+        (!has(object.spec.template.metadata.generateName) || object.spec.template.metadata.generateName == '') &&
+        (!has(object.spec.template.metadata.namespace) || object.spec.template.metadata.namespace == '')
+      message: MCP bundle validator Job must remain the exact suspended worker shape
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $mcpbAdmissionName }}
+spec:
+  policyName: {{ $mcpbAdmissionName }}
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: {{ $mcpbValidatorNamespace | quote }}
 ---
 # The policy is cluster-scoped only because Kubernetes admission policies are cluster-scoped. Its
 # namespace selector binds it to one exact profile namespace; no controller RBAC covers a namespace

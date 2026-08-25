@@ -3,7 +3,8 @@ import type { V1ResourceRequirements } from "@kubernetes/client-node";
 /**
  * Name a Kubernetes image-pull behaviour that the validator profile may supply.
  *
- * Used by: {@link McpbValidatorJobProfile}. Production has no caller yet. The builder accepts these
+ * Used by: {@link McpbValidatorJobProfile}. The agent controller passes this value through its
+ * validated profile. The builder accepts these
  * values only with a digest-pinned image; it never selects an image.
  */
 export type McpbValidatorImagePullPolicy = "Always" | "IfNotPresent" | "Never";
@@ -11,8 +12,8 @@ export type McpbValidatorImagePullPolicy = "Always" | "IfNotPresent" | "Never";
 /**
  * Describe the limits that the builder requires for every one-shot MCP bundle validator Job.
  *
- * Used by: `__BuildMcpbValidatorJob` in `validator-job.ts`. Production has no caller yet. The
- * builder throws before it returns a Job when a setting changes the worker identity, route,
+ * Used by: `__BuildMcpbValidatorJob` in `validator-job.ts`, called by the MCP bundle controller.
+ * The builder throws before it returns a Job when a setting changes the worker identity, route,
  * resource bounds, scratch size, or lifetime.
  *
  * @see McpbValidatorJobAssignment
@@ -50,8 +51,8 @@ export interface McpbValidatorJobProfile
 /**
  * Carry the opaque coordinates that the builder places in one validator Job.
  *
- * Used by: `__BuildMcpbValidatorJob` in `validator-job.ts`. Production has no caller yet. The
- * builder hashes the silo and validation identifiers for the Job name and rejects a reference or
+ * Used by: `__BuildMcpbValidatorJob` in `validator-job.ts`, called by the MCP bundle controller.
+ * The builder hashes the silo and validation identifiers for the Job name and rejects a reference or
  * namespace that does not match its profile before it returns a Job.
  *
  * @see McpbValidatorJobProfile

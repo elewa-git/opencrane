@@ -86,12 +86,13 @@ function _RemoveGeneratedJobSelectors(job: Record<string, unknown>): void
 	{
 		throw new Error("refusing to adopt a Job with incomplete Kubernetes ownership selectors");
 	}
-	const expected = { "batch.kubernetes.io/controller-uid": uid, "batch.kubernetes.io/job-name": name, "controller-uid": uid, "job-name": name };
-	if (!isDeepStrictEqual(matchLabels, expected))
+	const expectedLabels = { "batch.kubernetes.io/controller-uid": uid, "batch.kubernetes.io/job-name": name, "controller-uid": uid, "job-name": name };
+	const expectedSelector = { "batch.kubernetes.io/controller-uid": uid };
+	if (!isDeepStrictEqual(matchLabels, expectedSelector))
 	{
 		throw new Error("refusing to adopt a Job with unexpected Kubernetes ownership selectors");
 	}
-	for (const [key, value] of Object.entries(expected))
+	for (const [key, value] of Object.entries(expectedLabels))
 	{
 		if (labels[key] !== value)
 		{

@@ -15,13 +15,14 @@ RUNTIME_NAMESPACE="$(mktemp)"
 RUNTIME_QUOTA="$(mktemp)"
 MANAGED_RUNTIME_QUOTA="$(mktemp)"
 ADMISSION="$(mktemp)"
+MCPB_ADMISSION="$(mktemp)"
 SKILL_URL_OVERRIDE="$(mktemp)"
 SERVER_POLICY="$(mktemp)"
 CONTROLLER_POLICY="$(mktemp)"
 RUNTIME_DENY="$(mktemp)"
 RUNTIME_EGRESS="$(mktemp)"
 prepare_current_chart_sources
-trap 'cleanup_current_chart_sources; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$CLEANUP_ROLE" "$CLEANUP_BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$MANAGED_RUNTIME_QUOTA" "$ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+trap 'cleanup_current_chart_sources; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$CLEANUP_ROLE" "$CLEANUP_BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$MANAGED_RUNTIME_QUOTA" "$ADMISSION" "$MCPB_ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
 CHART_ROOT="$(current_chart_sources_dir)"
 
 render_enabled() {
@@ -34,6 +35,7 @@ render_enabled() {
     --set-string managedAgentRuntimePlane.managedAgentRuntime.serviceAccountName=managed-agent-runtime-default \
     --set-string agentController.skillWorkloadProfiles.authoring.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
     --set-string agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
+    --set-string agentController.mcpbValidatorProfile.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
     --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
     --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
     --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
@@ -54,6 +56,7 @@ awk 'BEGIN { RS="---" } $0 ~ /\nkind: Namespace\n/ && $0 ~ /\n  name: oc-opencra
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ResourceQuota\n/ && $0 ~ /\n  name: oc-opencrane-agent-runtime\n/ { print $0 }' "$MANIFEST" > "$RUNTIME_QUOTA"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ResourceQuota\n/ && $0 ~ /\n  name: managed-agent-runtime\n/ && $0 ~ /\n  namespace: oc-opencrane-managed-runtime\n/ { print $0 }' "$MANIFEST" > "$MANAGED_RUNTIME_QUOTA"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ValidatingAdmissionPolicy\n/ { print $0 }' "$MANIFEST" > "$ADMISSION"
+awk 'BEGIN { RS="---" } $0 ~ /\nkind: ValidatingAdmissionPolicy\n/ && $0 ~ /mcpb-validator/ { print $0 }' "$MANIFEST" > "$MCPB_ADMISSION"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: NetworkPolicy\n/ && $0 ~ /\n  name: oc-opencrane-opencrane-server\n/ { print $0 }' "$MANIFEST" > "$SERVER_POLICY"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: NetworkPolicy\n/ && $0 ~ /\n  name: oc-opencrane-agent-controller\n/ { print $0 }' "$MANIFEST" > "$CONTROLLER_POLICY"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: NetworkPolicy\n/ && $0 ~ /\n  name: oc-opencrane-agent-runtime-default-deny\n/ { print $0 }' "$MANIFEST" > "$RUNTIME_DENY"
@@ -131,6 +134,22 @@ if grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -E '
   echo "skill workload Roles exceed fenced Job release and Pod discovery authority" >&2
   exit 1
 fi
+# MCP bundle validation has a separate namespace, create/get-only controller Role, and an admission
+# policy that permits only the fixed suspended validator Job profile.
+grep -A14 -F 'name: agent-controller-mcpb-validator' "$MANIFEST" | grep -F 'namespace: opencrane-mcpb-validation' >/dev/null
+grep -A14 -F 'name: agent-controller-mcpb-validator' "$MANIFEST" | grep -F 'verbs: ["get", "create"]' >/dev/null
+if grep -A14 -F 'name: agent-controller-mcpb-validator' "$MANIFEST" | grep -E '"(delete|update|patch|watch|list)"' >/dev/null; then
+  echo "MCP bundle validator controller Role exceeds get/create" >&2
+  exit 1
+fi
+grep -Fq 'MCP bundle validator Job must remain the exact suspended worker shape' "$ADMISSION"
+grep -Fq "mcpb-validator-default" "$ADMISSION"
+test -s "$MCPB_ADMISSION"
+grep -Fq 'operations: ["CREATE"]' "$MCPB_ADMISSION"
+grep -Fq "object.spec.template.spec.securityContext.runAsUser == 65532" "$MCPB_ADMISSION"
+grep -Fq "!has(object.spec.template.spec.containers[0].command)" "$MCPB_ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].volumeMounts[1].mountPath == '/var/run/opencrane/bootstrap'" "$MCPB_ADMISSION"
+grep -Fq "object.spec.template.spec.volumes[1].downwardAPI.items[0].fieldRef.fieldPath == \"metadata.annotations['opencrane.ai/mcpb-bootstrap-reference']\"" "$MCPB_ADMISSION"
 
 # The controller receives both profile-owned namespaces in one immutable map; it never gets a
 # process-wide runtime namespace that could let one profile borrow another's RoleBinding.

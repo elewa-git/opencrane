@@ -25,6 +25,11 @@ Service; it does not inherit the controller's configurable runtime endpoint. The
 acknowledge that reference, and the server TokenReviews the exact first worker Pod before consuming
 it once.
 
+The controller also creates one suspended MCP bundle validator Job for each durable validation request.
+An MCP bundle is a packaged MCP server. The Job gets only an opaque bootstrap reference and a short-lived
+token; it has no database or Kubernetes credentials. This slice only creates or adopts that fixed Job.
+It does not start the Job or allow a bundle to run.
+
 Keeping this work in a separate, narrowly privileged process prevents the API server and the runtime
 itself from becoming general Kubernetes workload launchers. OpenCrane decides *what* may run; this app
 only projects that decision into the restricted runtime namespace named by the selected profile's RoleBinding.
@@ -56,8 +61,8 @@ multiple Pods, and OpenCrane registers the first Pod before bootstrap exchange c
 ## Public surface
 
 `Entrypoint:` `src/index.ts` loads telemetry first, validates configuration, creates the narrow
-OpenCrane and Kubernetes adapters, runs the runtime assignment/release and suspended-skill-assignment
-poll loops, and flushes telemetry
+OpenCrane and Kubernetes adapters, runs the runtime assignment/release, suspended-skill-assignment,
+and suspended-MCP-bundle-validator poll loops, and flushes telemetry
 on `SIGTERM`/`SIGINT`.
 
 ## Boundary
@@ -70,7 +75,9 @@ read/update/delete Secrets, mutate Pods, or get, replace, delete, or watch any P
 virtual key rides the claim response and is written straight into the Secret; the controller never
 holds the LiteLLM master key. Its ServiceAccount and Deployment remain in the server namespace, so
 compromising a runtime Pod does not place it beside the controller identity. The projected bootstrap
-reference is an opaque lookup key, not a credential, and the controller never logs it.
+reference is an opaque lookup key, not a credential, and the controller never logs it. It has one
+separate Role in the MCP bundle validator namespace that can only create and get validator Jobs; the
+matching admission policy accepts one exact suspended worker shape.
 
 ## Dependency direction
 
@@ -96,6 +103,10 @@ outside the app root.
 - `AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON` — exactly one immutable authoring and tool-runner
   profile, each using a class-bound ServiceAccount, projected-token audience, and fixed bootstrap
   file paths and same-silo acknowledgement URL.
+- `AGENT_CONTROLLER_MCPB_VALIDATOR_PROFILE_JSON` — the one immutable profile for suspended MCP bundle
+  validator Jobs: namespace, image digest, ServiceAccount, token audience, fixed bootstrap URL and
+  file paths, resource limits, and deadline. It cannot supply a command, bundle location, or database
+  credential.
 
 The image runs as an unprivileged numeric user with a read-only root filesystem. Helm provides two
 separate projected tokens: one for OpenCrane and one for the Kubernetes API. Structured logs go to

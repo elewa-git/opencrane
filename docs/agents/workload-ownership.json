@@ -13,6 +13,7 @@
     "agent-runtime",
     "skill-authoring",
     "tool-runner",
+    "mcpb-validator",
     "cognee",
     "litellm",
     "obot-gateway-controller",
@@ -59,7 +60,8 @@
         "agentController.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "agentController.runtimeProfile.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "agentController.skillWorkloadProfiles.authoring.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        "agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "agentController.mcpbValidatorProfile.image.digest=sha256:9999999999999999999999999999999999999999999999999999999999999999"
       ],
       "expectedRenderedPodClasses": [
         "Deployment/opencrane-opencrane-server",
@@ -101,6 +103,16 @@
       "path": "libs/backend/agents/skills/controller/src/kubernetes-skill-workload-controller-store.ts",
       "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
       "workloadIds": ["skill-authoring", "tool-runner"]
+    },
+    {
+      "path": "libs/backend/server/gateways/mcp/validator-k8s-launcher/src/validator-job.ts",
+      "anchor": "kind: \"Job\"",
+      "workloadIds": ["mcpb-validator"]
+    },
+    {
+      "path": "libs/backend/agents/mcpb/controller/src/kubernetes-mcpb-validation-controller-store.ts",
+      "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
+      "workloadIds": ["mcpb-validator"]
     }
   ],
   "nonProducingRuntimeMatches": [
@@ -224,6 +236,13 @@
       "image": "ghcr.io/elewa-git/opencrane-tool-runner@sha256:<release-digest>",
       "owner": "apps/tool-runner",
       "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/tool-runner-workload-job.ts", "anchor": "kind: \"Job\"" }
+    },
+    {
+      "id": "mcpb-validator",
+      "podClass": "Job/mcpb-validator",
+      "image": "ghcr.io/elewa-git/opencrane-mcpb-validator@sha256:<release-digest>",
+      "owner": "apps/mcpb-validator",
+      "source": { "type": "file", "path": "libs/backend/server/gateways/mcp/validator-k8s-launcher/src/validator-job.ts", "anchor": "kind: \"Job\"" }
     },
     {
       "id": "cognee",

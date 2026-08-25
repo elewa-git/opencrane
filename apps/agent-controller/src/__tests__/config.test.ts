@@ -47,10 +47,16 @@ function _SkillProfilesJson(): string
 	});
 }
 
+/** Return the Helm-equivalent fixed MCP bundle validator profile. */
+function _McpbValidatorProfileJson(): string
+{
+	return JSON.stringify({ image: `ghcr.io/elewa-git/opencrane-mcpb-validator@sha256:${"c".repeat(64)}`, imagePullPolicy: "IfNotPresent", serverNamespace: "silo-a", namespace: "opencrane-mcpb-validation", serviceAccountName: "mcpb-validator-default", tokenAudience: "opencrane-mcpb-validator", bootstrapUrl: "http://opencrane-server.silo-a.svc.cluster.local:8081/api/internal/mcpb-validator", tokenPath: "/var/run/opencrane/tokens/validator.token", bootstrapReferencePath: "/var/run/opencrane/bootstrap/reference", scratchSize: "128Mi", activeDeadlineSeconds: 300, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "250m", memory: "256Mi" }, limits: { cpu: "1", memory: "1Gi" } } });
+}
+
 /** Return the minimal complete process environment. */
 function _Environment(): NodeJS.ProcessEnv
 {
-	return { OPENCRANE_INTERNAL_URL: "http://opencrane-server.silo-a.svc.cluster.local:3001", OPENCRANE_CONTROLLER_TOKEN_PATH: "/var/run/opencrane/tokens/opencrane.token", AGENT_CONTROLLER_POLL_INTERVAL_MS: "1000", AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: _SkillProfilesJson() };
+	return { OPENCRANE_INTERNAL_URL: "http://opencrane-server.silo-a.svc.cluster.local:3001", OPENCRANE_CONTROLLER_TOKEN_PATH: "/var/run/opencrane/tokens/opencrane.token", AGENT_CONTROLLER_POLL_INTERVAL_MS: "1000", AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: _SkillProfilesJson(), AGENT_CONTROLLER_MCPB_VALIDATOR_PROFILE_JSON: _McpbValidatorProfileJson() };
 }
 
 describe("agent-controller process config", function _Suite()
@@ -67,6 +73,7 @@ describe("agent-controller process config", function _Suite()
 		expect(config.outboxPruneIntervalMilliseconds).toBe(3_600_000);
 		expect(config.profiles["personal-default"]?.serviceAccountName).toBe("agent-runtime-default");
 		expect(config.skillWorkloadProfiles.authoring.serviceAccountName).toBe("skill-authoring-default");
+		expect(config.mcpbValidatorProfile.serviceAccountName).toBe("mcpb-validator-default");
 	});
 
 	it("rejects a collapsed namespace or moving image tag", function _RejectsUnsafeConfig()
