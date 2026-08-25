@@ -8,7 +8,7 @@ import { OpenCranePreset } from "@opencrane/core";
 import { provideOpenCraneA2ui } from "@opencrane/elements/a2ui";
 import { toSanitizedMarkdownHtml } from "@opencrane/state/conversation/render";
 import { PLATFORM_SURFACE } from "@opencrane/state/core";
-import { provideWebPlatform, provideWebPreferenceStore } from "@opencrane/platform";
+import { provideWebPlatform } from "@opencrane/platform";
 
 import { APP_ROUTES } from "./app.routes";
 import { OPENCRANE_UI_GATEWAY_PROVIDERS } from "./gateway-profile.providers";
@@ -42,7 +42,6 @@ export const appConfig: ApplicationConfig =
 		provideAnimationsAsync(),
 		providePrimeNG({ theme: { preset: OpenCranePreset } }),
 		provideWebPlatform(),
-		provideWebPreferenceStore(),
 		...OPENCRANE_UI_GATEWAY_PROVIDERS,
 		// A2UI renders agent output but does not select a data source, so both profiles share this setup.
 		...provideOpenCraneA2ui(toSanitizedMarkdownHtml),

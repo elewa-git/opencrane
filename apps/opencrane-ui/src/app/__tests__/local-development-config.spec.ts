@@ -15,20 +15,24 @@ describe("OpenCrane UI local-development commands", function _Suite()
 {
 	it("maps every explicit archetype configuration through the local build", function _ArchetypeConfigurations()
 	{
+		const development = openCraneUiProject.targets.build.configurations.development;
+
 		for (const [configuration, archetype] of Object.entries(_ARCHETYPE_CONFIGURATIONS))
 		{
 			const serveBrowser = openCraneUiProject.targets["serve-browser"].configurations[configuration as keyof typeof _ARCHETYPE_CONFIGURATIONS];
 			const serve = openCraneUiProject.targets.serve.configurations[configuration as keyof typeof _ARCHETYPE_CONFIGURATIONS];
+			const build = openCraneUiProject.targets.build.configurations[configuration as keyof typeof _ARCHETYPE_CONFIGURATIONS];
 
 			expect(serveBrowser.buildTarget).toBe(`opencrane-ui:build:${configuration}`);
-			expect(openCraneUiProject.targets.build.configurations[configuration as keyof typeof _ARCHETYPE_CONFIGURATIONS].define).toEqual({
+			expect({ ...build, define: undefined }).toEqual({ ...development, define: undefined });
+			expect(build.define).toEqual({
 				OPENCRANE_LOCAL_DEVELOPMENT_ARCHETYPE: `"${archetype}"`
 			});
 			expect(serve.args).toBe(`--uiConfiguration=${configuration}`);
 		}
 	});
 
-	it("bundles the routed UI, interactive Storybook, and live Playwright pass", function _CompositeServe()
+	it("bundles the routed UI, interactive Storybook, and static Playwright visual pass", function _CompositeServe()
 	{
 		const commands = openCraneUiProject.targets.serve.options.commands.map(command => command.command);
 

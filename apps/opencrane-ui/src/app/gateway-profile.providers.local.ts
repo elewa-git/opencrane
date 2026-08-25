@@ -1,7 +1,7 @@
 import type { Provider } from "@angular/core";
 
 import type { PersonaFirstChatArchetypes } from "@opencrane/models/user-onboarding";
-import { PLATFORM_PREFERENCE_STORE, type PlatformPreferenceStore } from "@opencrane/platform";
+import { PLATFORM_PREFERENCE_STORE, provideWebPreferenceStore, type PlatformPreferenceStore } from "@opencrane/platform";
 import { __ResolveLocalDevelopmentArchetype, LOCAL_DEVELOPMENT_ARCHETYPE, provideLocalDevelopmentGateways } from "@opencrane/state/local-development";
 
 /**
@@ -10,6 +10,7 @@ import { __ResolveLocalDevelopmentArchetype, LOCAL_DEVELOPMENT_ARCHETYPE, provid
  * Called by: `appConfig` after Angular replaces the live profile entry point at build time.
  */
 export const OPENCRANE_UI_GATEWAY_PROVIDERS: Provider[] = [
+	provideWebPreferenceStore(),
 	...provideLocalDevelopmentGateways(),
 	{
 		provide: LOCAL_DEVELOPMENT_ARCHETYPE,

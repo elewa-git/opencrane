@@ -8,9 +8,7 @@ import type { LocalDevelopmentArchetypePreferenceStore } from "./local-developme
 export const LOCAL_DEVELOPMENT_ARCHETYPE_PREFERENCE_KEY = "opencrane.local-development.archetype";
 
 /** Supplies the resolved Tier 1 archetype to the shared local state lifecycle. */
-export const LOCAL_DEVELOPMENT_ARCHETYPE = new InjectionToken<PersonaFirstChatArchetypes>("LOCAL_DEVELOPMENT_ARCHETYPE", {
-	factory: function _DefaultArchetype(): PersonaFirstChatArchetypes { return PersonaFirstChatArchetypes.Commander; }
-});
+export const LOCAL_DEVELOPMENT_ARCHETYPE = new InjectionToken<PersonaFirstChatArchetypes>("LOCAL_DEVELOPMENT_ARCHETYPE");
 
 /**
  * Resolve an explicit command selection before a saved browser preference and the Commander default.
