@@ -112,6 +112,17 @@ describe("skill authoring validation workflow handler", function _DescribeSkillA
 		expect(kubernetes.findFirstPod).toHaveBeenCalledTimes(2);
 	});
 
+	it("stops before Job release when the server rejects the workload claim fence", async function _StopsOnWorkloadConflict()
+	{
+		const { options, authority, kubernetes } = _Options();
+		authority.bindWorkload.mockResolvedValue("conflict");
+		const { context } = _Context({ validationId: "validation-1", completionDigest: `sha256:${"b".repeat(64)}` });
+
+		await expect(__CreateSkillAuthoringValidationHandler(options).run(context as never, { siloId: "silo-1", validationId: "validation-1" })).rejects.toThrow(/workload claim no longer matches/);
+
+		expect(kubernetes.releaseJob).not.toHaveBeenCalled();
+	});
+
 	it("rejects a completion event for another validation before it can reach the server terminal writer", async function _RejectsWrongCompletion()
 	{
 		const { options, authority } = _Options();
