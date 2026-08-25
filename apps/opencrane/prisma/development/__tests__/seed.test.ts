@@ -4,11 +4,11 @@ import type { SignedFleetMembershipRevision } from "@opencrane/models/authorizat
 
 import { _RunLocalDevelopmentSeed } from "../seed";
 
-/** Builds stable signed evidence without reading a workstation key. */
-function _Membership(): SignedFleetMembershipRevision
+/** Builds signed evidence for the revision selected by the replaying seed. */
+function _Membership(revision: number): SignedFleetMembershipRevision
 {
 	return {
-		revision: 1,
+		revision,
 		issuerId: "local-development-issuer",
 		issuerKeyId: "local-development-key",
 		siloId: "local-development",
@@ -19,20 +19,32 @@ function _Membership(): SignedFleetMembershipRevision
 			siloId: "local-development",
 			subjectId: "local-development-user"
 		}],
-		payloadDigest: "sha256:seed-membership",
-		signature: "seed-signature"
+		payloadDigest: `sha256:seed-membership-${revision}`,
+		signature: `seed-signature-${revision}`
 	};
 }
 
 describe("Tier 2 database seed", function _Suite()
 {
-	it("replays every identity, membership, and model write inside one transaction", async function _SeedsAtomically(): Promise<void>
+	it("appends fresh immutable membership evidence when mutable local state is replayed", async function _SeedsAtomically(): Promise<void>
 	{
+		let latestRevision: number | null = null;
+		const revisionCreate = vi.fn(async function _CreateRevision(input: { data: { id: string; revision: number } }): Promise<void>
+		{
+			latestRevision = input.data.revision;
+		});
+		const assertionCreate = vi.fn();
 		const transaction = {
 			principal: { upsert: vi.fn() },
 			orgMembership: { upsert: vi.fn() },
-			verifiedFleetMembershipRevision: { upsert: vi.fn() },
-			verifiedFleetMembershipAssertion: { upsert: vi.fn() },
+			verifiedFleetMembershipRevision: {
+				findFirst: vi.fn(async function _LatestRevision(): Promise<{ revision: number } | null>
+				{
+					return !latestRevision ? null : { revision: latestRevision };
+				}),
+				create: revisionCreate
+			},
+			verifiedFleetMembershipAssertion: { create: assertionCreate },
 			modelDefinition: { upsert: vi.fn() },
 			modelRoutingDefault: { upsert: vi.fn() }
 		};
@@ -42,7 +54,7 @@ describe("Tier 2 database seed", function _Suite()
 		};
 		const dependencies = {
 			assertLocalDatabase: vi.fn(),
-			createMembership: _Membership,
+			createMembership: vi.fn(_Membership),
 			createPrisma() { return prisma as never; }
 		};
 
@@ -52,9 +64,24 @@ describe("Tier 2 database seed", function _Suite()
 		expect(prisma.$transaction).toHaveBeenCalledTimes(2);
 		expect(prisma.$disconnect).toHaveBeenCalledTimes(2);
 
-		for (const delegate of Object.values(transaction))
-		{
-			expect(delegate.upsert).toHaveBeenCalledTimes(2);
-		}
+		expect(transaction.principal.upsert).toHaveBeenCalledTimes(2);
+		expect(transaction.orgMembership.upsert).toHaveBeenCalledTimes(2);
+		expect(transaction.modelDefinition.upsert).toHaveBeenCalledTimes(2);
+		expect(transaction.modelRoutingDefault.upsert).toHaveBeenCalledTimes(2);
+		expect(dependencies.createMembership.mock.calls).toEqual([[1], [2]]);
+		expect(revisionCreate.mock.calls.map(([input]) => input.data.id)).toEqual([
+			"local-development-membership-revision-1",
+			"local-development-membership-revision-2"
+		]);
+		expect(assertionCreate.mock.calls.map(([input]) => input.data)).toMatchObject([
+			{
+				id: "local-development-membership-assertion-row-1",
+				revisionId: "local-development-membership-revision-1"
+			},
+			{
+				id: "local-development-membership-assertion-row-2",
+				revisionId: "local-development-membership-revision-2"
+			}
+		]);
 	});
 });

@@ -10,11 +10,11 @@ import type { SignedFleetMembershipRevision } from "@opencrane/models/authorizat
 
 import type { LocalDevelopmentSeedDatabase, LocalDevelopmentSeedDependencies } from "./seed.types";
 
-/** Stable row identifier lets the development seed be safely replayed after a watched-server reload. */
-const _REVISION_ID = "local-development-membership-revision";
+/** Prefix keeps every appended local membership revision identifiable without reusing a row id. */
+const _REVISION_ID_PREFIX = "local-development-membership-revision";
 
-/** Stable row identifier lets the single personal assertion be updated without creating duplicates. */
-const _ASSERTION_ROW_ID = "local-development-membership-assertion-row";
+/** Prefix keeps each immutable local assertion paired with its owning revision. */
+const _ASSERTION_ROW_ID_PREFIX = "local-development-membership-assertion-row";
 
 /** Stable model row selected by onboarding in core and every Agent alternative. */
 const _MODEL_DEFINITION_ID = "local-development-model-auto";
@@ -24,6 +24,21 @@ const _MODEL_ROUTING_DEFAULT_ID = "local-development-model-routing-default";
 
 /** One week is long enough for a development session while the 24-hour staleness fence still applies. */
 const _MEMBERSHIP_LIFETIME_MILLISECONDS = 7 * 24 * 60 * 60 * 1_000;
+
+/** PostgreSQL and Prisma store membership revisions as signed 32-bit integers. */
+const _MAXIMUM_MEMBERSHIP_REVISION = 2_147_483_647;
+
+/** Builds the immutable database identifier for a local membership revision. */
+function _MembershipRevisionId(revision: number): string
+{
+	return `${_REVISION_ID_PREFIX}-${revision}`;
+}
+
+/** Builds the immutable database identifier for an assertion revision. */
+function _MembershipAssertionRowId(revision: number): string
+{
+	return `${_ASSERTION_ROW_ID_PREFIX}-${revision}`;
+}
 
 /** Read one required absolute key path supplied by the Tier 2 coordinator. */
 function _ReadKeyPath(name: string): string
@@ -56,11 +71,11 @@ function _AssertLocalDatabase(): void
 	}
 }
 
-/** Build and sign the exact personal-scope membership payload stored for local run admission. */
-function _CreateSignedMembership(privateKeyPem: string, issuedAtEpochMs: number): SignedFleetMembershipRevision
+/** Builds and signs the personal-scope membership payload stored for local run admission. */
+function _CreateSignedMembership(privateKeyPem: string, issuedAtEpochMs: number, revision: number): SignedFleetMembershipRevision
 {
 	const payload: Omit<SignedFleetMembershipRevision, "payloadDigest" | "signature"> = {
-		revision: 1,
+		revision,
 		issuerId: LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID,
 		issuerKeyId: LOCAL_DEVELOPMENT_MEMBERSHIP_KEY_ID,
 		siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
@@ -102,9 +117,9 @@ function _ReadMembershipPrivateKey(): string
 /** Default seed dependencies validate loopback state and create signed local membership evidence. */
 const _SEED_DEPENDENCIES: LocalDevelopmentSeedDependencies = {
 	assertLocalDatabase: _AssertLocalDatabase,
-	createMembership(): SignedFleetMembershipRevision
+	createMembership(revision: number): SignedFleetMembershipRevision
 	{
-		return _CreateSignedMembership(_ReadMembershipPrivateKey(), Date.now());
+		return _CreateSignedMembership(_ReadMembershipPrivateKey(), Date.now(), revision);
 	},
 	createPrisma(): LocalDevelopmentSeedDatabase
 	{
@@ -113,25 +128,26 @@ const _SEED_DEPENDENCIES: LocalDevelopmentSeedDependencies = {
 };
 
 /**
- * Reconciles the fixed local identity, signed membership evidence, and default model route in one
- * transaction. Stable row identifiers and upserts let watched-server restarts replay the seed
- * without duplicating authority rows.
+ * Reconciles the fixed local identity and default model route, then appends new signed membership
+ * evidence in one transaction. Each Tier 2 session may use a new disposable signing key, so replay
+ * retains prior evidence and allocates a strictly increasing revision instead of updating immutable
+ * authority rows.
  *
  * Called by: the `db:seed-tier2` package script through the Tier 2 coordinator.
- * @param dependencies - Loopback guard, signed membership factory, and database seam.
- * @returns After the transaction completes and the seed connection is closed.
- * @throws When the database is not local, membership evidence is invalid, or any atomic write fails.
+ * @param dependencies - Loopback guard, signed membership factory, and database operations.
+ * @returns A promise that resolves after the transaction completes and the seed connection closes.
+ * @throws When the database is not local, the revision limit is reached, membership evidence is
+ * invalid, or the transaction fails.
  */
 export async function _RunLocalDevelopmentSeed(dependencies: LocalDevelopmentSeedDependencies = _SEED_DEPENDENCIES): Promise<void>
 {
-	// 1. Refuse remote state and validate the disposable signing keypair before opening Prisma.
+	// 1. Refuse remote state before opening Prisma.
 	dependencies.assertLocalDatabase();
-	const membership = dependencies.createMembership();
 	const prisma = dependencies.createPrisma();
 
 	try
 	{
-		// 2. Store the browser membership and signed run-admission assertion in one transaction.
+		// 2. Reconcile mutable browser state and append a new signed revision in one transaction.
 		await prisma.$transaction(async function _Seed(transaction): Promise<void>
 		{
 			await transaction.principal.upsert({
@@ -179,16 +195,28 @@ export async function _RunLocalDevelopmentSeed(dependencies: LocalDevelopmentSee
 					status: OrgMemberStatus.Active,
 				},
 			});
-			await transaction.verifiedFleetMembershipRevision.upsert({
+
+			const latestMembership = await transaction.verifiedFleetMembershipRevision.findFirst({
 				where: {
-					issuerId_siloId_revision: {
-						issuerId: membership.issuerId,
-						siloId: membership.siloId,
-						revision: membership.revision,
-					},
+					issuerId: LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID,
+					siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId
 				},
-				create: {
-					id: _REVISION_ID,
+				orderBy: { revision: "desc" },
+				select: { revision: true }
+			});
+			const nextRevision = (latestMembership?.revision ?? 0) + 1;
+
+			if (nextRevision > _MAXIMUM_MEMBERSHIP_REVISION)
+			{
+				throw new Error("Tier 2 membership revision limit reached; rerun with --reset");
+			}
+
+			const membership = dependencies.createMembership(nextRevision);
+			const revisionId = _MembershipRevisionId(membership.revision);
+
+			await transaction.verifiedFleetMembershipRevision.create({
+				data: {
+					id: revisionId,
 					revision: membership.revision,
 					issuerId: membership.issuerId,
 					issuerKeyId: membership.issuerKeyId,
@@ -197,33 +225,16 @@ export async function _RunLocalDevelopmentSeed(dependencies: LocalDevelopmentSee
 					expiresAt: new Date(membership.expiresAtEpochMs),
 					payloadDigest: membership.payloadDigest,
 					signature: membership.signature,
-				},
-				update: {
-					issuerKeyId: membership.issuerKeyId,
-					issuedAt: new Date(membership.issuedAtEpochMs),
-					expiresAt: new Date(membership.expiresAtEpochMs),
-					payloadDigest: membership.payloadDigest,
-					signature: membership.signature,
-				},
+				}
 			});
-			await transaction.verifiedFleetMembershipAssertion.upsert({
-				where: {
-					revisionId_assertionId: {
-						revisionId: _REVISION_ID,
-						assertionId: LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID,
-					},
-				},
-				create: {
-					id: _ASSERTION_ROW_ID,
-					revisionId: _REVISION_ID,
+			await transaction.verifiedFleetMembershipAssertion.create({
+				data: {
+					id: _MembershipAssertionRowId(membership.revision),
+					revisionId,
 					assertionId: LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID,
 					siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
 					subjectId: LOCAL_DEVELOPMENT_IDENTITY.subjectId
-				},
-				update: {
-					siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
-					subjectId: LOCAL_DEVELOPMENT_IDENTITY.subjectId
-				},
+				}
 			});
 			await transaction.modelDefinition.upsert({
 				where: { id: _MODEL_DEFINITION_ID },
