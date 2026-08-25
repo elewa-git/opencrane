@@ -130,7 +130,8 @@ export function __BuildMcpbValidatorJob(assignment: McpbValidatorJobAssignment, 
 	_AssertAssignment(assignment, profile);
 
 	const name = __McpbValidatorJobName(assignment);
-	const annotations = { "opencrane.ai/silo-id": assignment.siloId, "opencrane.ai/mcpb-validation": assignment.validationId, "opencrane.ai/mcpb-bootstrap-reference": assignment.bootstrapReference };
+	// Keep the opaque bootstrap reference in annotations because the downward API volume reads it there; omit durable silo and validation IDs from Job metadata.
+	const annotations = { "opencrane.ai/mcpb-bootstrap-reference": assignment.bootstrapReference };
 
 	return {
 		apiVersion: "batch/v1",

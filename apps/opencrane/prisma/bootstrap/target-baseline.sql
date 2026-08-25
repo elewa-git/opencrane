@@ -150,6 +150,9 @@ CREATE TYPE "McpEraProbeStatus" AS ENUM ('not-required', 'pending', 'accepted', 
 CREATE TYPE "McpbValidationState" AS ENUM ('pending', 'verified', 'rejected');
 
 -- CreateEnum
+CREATE TYPE "McpbValidationWorkloadState" AS ENUM ('pending', 'claimed', 'assigned');
+
+-- CreateEnum
 CREATE TYPE "McpServerStatus" AS ENUM ('active', 'degraded', 'draft');
 
 -- CreateEnum
@@ -1034,6 +1037,26 @@ CREATE TABLE "mcpb_validations" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "mcpb_validations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "mcpb_validation_workloads" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "validation_id" TEXT NOT NULL,
+    "task_id" TEXT NOT NULL,
+    "task_name" TEXT NOT NULL,
+    "task_key" TEXT NOT NULL,
+    "state" "McpbValidationWorkloadState" NOT NULL DEFAULT 'pending',
+    "claimed_at" TIMESTAMP(3),
+    "claim_expires_at" TIMESTAMP(3),
+    "delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "workload_uid" TEXT,
+    "worker_pod_uid" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcpb_validation_workloads_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2294,6 +2317,27 @@ CREATE UNIQUE INDEX "mcpb_validations_silo_id_submission_key_digest_key" ON "mcp
 CREATE INDEX "mcpb_validations_silo_id_state_created_at_idx" ON "mcpb_validations"("silo_id", "state", "created_at");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "mcpb_validation_workloads_validation_id_key" ON "mcpb_validation_workloads"("validation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcpb_validation_workloads_task_id_key" ON "mcpb_validation_workloads"("task_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcpb_validation_workloads_workload_uid_key" ON "mcpb_validation_workloads"("workload_uid");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcpb_validation_workloads_worker_pod_uid_key" ON "mcpb_validation_workloads"("worker_pod_uid");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcpb_validation_workloads_silo_id_task_key_key" ON "mcpb_validation_workloads"("silo_id", "task_key");
+
+-- CreateIndex
+CREATE INDEX "mcpb_validation_workloads_silo_id_state_created_at_idx" ON "mcpb_validation_workloads"("silo_id", "state", "created_at");
+
+-- CreateIndex
+CREATE INDEX "mcpb_validation_workloads_state_claim_expires_at_idx" ON "mcpb_validation_workloads"("state", "claim_expires_at");
+
+-- CreateIndex
 CREATE INDEX "mcp_server_installs_principal_id_idx" ON "mcp_server_installs"("principal_id");
 
 -- CreateIndex
@@ -2961,11 +3005,20 @@ ALTER TABLE "mcpb_validations" ADD CONSTRAINT "mcpb_validations_result_check" CH
     OR ("state" = 'rejected' AND "manifest_name" IS NULL AND "bundle_version" IS NULL AND "manifest_digest" IS NULL AND "publisher" IS NULL AND "signer_fingerprint" IS NULL AND "failure_code" IN ('artifact_mismatch', 'bundle_too_large', 'invalid_archive', 'invalid_manifest', 'invalid_signature', 'unsupported_manifest_version') AND "completed_at" IS NOT NULL)
 );
 
+ALTER TABLE "mcpb_validation_workloads" ADD CONSTRAINT "mcpb_validation_workloads_identity_check" CHECK (
+    btrim("silo_id") <> '' AND btrim("validation_id") <> '' AND btrim("task_id") <> '' AND
+    "task_name" = 'mcpb-validation.verify' AND "task_key" ~ '^workflows:mcpb-validation:[0-9a-f]{64}$' AND
+    "delivery_count" >= 0
+);
+
 -- AddForeignKey
 ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_principal_id_fkey" FOREIGN KEY ("principal_id") REFERENCES "principals"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "mcpb_validation_workloads" ADD CONSTRAINT "mcpb_validation_workloads_validation_id_fkey" FOREIGN KEY ("validation_id") REFERENCES "mcpb_validations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "verified_fleet_membership_assertions" ADD CONSTRAINT "verified_fleet_membership_assertions_revision_id_silo_id_fkey" FOREIGN KEY ("revision_id", "silo_id") REFERENCES "verified_fleet_membership_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -24,6 +24,8 @@ describe("MCP bundle validator Job", function _McpbValidatorJobSuite()
 		expect(job.spec?.template.spec?.containers[0]?.securityContext).toMatchObject({ allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } });
 		expect(JSON.stringify(job)).not.toContain("artifactRevisionId");
 		expect(JSON.stringify(job)).not.toContain("contentAddress");
+		expect(JSON.stringify(job)).not.toContain(_Assignment().siloId);
+		expect(JSON.stringify(job)).not.toContain(_Assignment().validationId);
 		expect(job.spec?.template.spec?.containers[0]?.env).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "OPENCRANE_MCPB_BOOTSTRAP_REFERENCE", value: expect.any(String) })]));
 		expect(job.spec?.template.spec?.volumes).toEqual(expect.arrayContaining([expect.objectContaining({ name: "validator-token", projected: expect.anything() }), expect.objectContaining({ name: "bootstrap-reference", downwardAPI: expect.anything() })]));
 	});

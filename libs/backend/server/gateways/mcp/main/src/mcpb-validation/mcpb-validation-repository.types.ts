@@ -1,5 +1,22 @@
 import type { McpbBundleArtifactTarget, McpbValidationStates, McpbVerificationFailureCodes, McpbVerificationResult } from "./mcpb-validation.types";
 
+/**
+ * Identifies the workflow task admitted for an MCP bundle validation.
+ *
+ * The repository saves these facts with the validation in the admission transaction. A retry may
+ * reuse that workload record only when every task fact still matches.
+ * @see McpbValidationRepository.ensureWorkload
+ */
+export interface McpbValidationWorkloadTask
+{
+	/** Lets a retry reject a workload record for a different admitted task. */
+	readonly taskId: string;
+	/** Lets a retry reject a task that names a different registered handler. */
+	readonly taskName: string;
+	/** Lets a retry reject a task with a different workflow idempotency key. */
+	readonly taskKey: string;
+}
+
 /** Fields required to create or replay one MCP bundle submission. */
 export interface McpbValidationSubmissionRecord extends McpbBundleArtifactTarget
 {
@@ -74,6 +91,18 @@ export interface McpbValidationRepository
 	 * @returns A new or existing validation; `null` means the key belongs to different input.
 	 */
 	createOrFind(submission: McpbValidationSubmissionRecord): Promise<McpbValidationCreateResult | null>;
+	/**
+	 * Saves or reuses the workload record for a task admitted with this validation.
+	 *
+	 * Submission retries admit the workflow task again, so an existing record is reusable only when
+	 * its silo and every task fact still match. `null` tells the caller that a different task is
+	 * already bound to the validation and the transaction must fail.
+	 * @param siloId - Keeps the saved workload inside its owning silo.
+	 * @param validationId - Binds the workload to one immutable validation.
+	 * @param task - Identifies the admitted workflow task that owns the validation decision.
+	 * @returns The workload identifier, or `null` when a different task is already bound.
+	 */
+	ensureWorkload(siloId: string, validationId: string, task: McpbValidationWorkloadTask): Promise<string | null>;
 	/**
 	 * Finds one validation for an authenticated administrator without exposing another silo.
 	 *
