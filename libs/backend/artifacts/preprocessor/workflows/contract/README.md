@@ -24,6 +24,9 @@ server owns PDF and output data. The controller owns starting the one isolated w
 - `ArtifactPreprocessTaskDeclaration` supplies the task name and retry policy.
 - `ArtifactPreprocessTaskInput` carries the silo and saved preprocessing job identifiers.
 - `ArtifactPreprocessTaskNames` names the supported PDF conversion task.
+- `ArtifactPreprocessControllerAuthority` and its record/bind types describe the private controller
+  exchange. The server issues and persists the claim and bindings; the controller supplies fenced
+  Job and Pod identities for the server to record.
 
 ## Boundary
 
