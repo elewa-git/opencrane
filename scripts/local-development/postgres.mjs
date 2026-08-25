@@ -138,15 +138,21 @@ export function ensureLocalLiteLLMDatabase(configuration, queryPostgres = _query
  * Applies the target baseline to an empty local database and records its digest.
  * A changed or untracked schema requires `--reset` so Tier 2 never guesses a migration path.
  */
-export function applyTargetBaseline(configuration)
+export function applyTargetBaseline(configuration, operationOverrides = {})
 {
-	const baseline = fs.readFileSync(configuration.baselinePath);
+	const operations = {
+		applySqlFile: _applySqlFile,
+		queryPostgres: _queryPostgres,
+		readFile: fs.readFileSync,
+		...operationOverrides
+	};
+	const baseline = operations.readFile(configuration.baselinePath);
 	const baselineSha256 = crypto.createHash("sha256").update(baseline).digest("hex");
-	const hasLocalState = _queryPostgres(configuration, "SELECT to_regclass('public.opencrane_local_development_state') IS NOT NULL;") === "t";
+	const hasLocalState = operations.queryPostgres(configuration, "SELECT to_regclass('public.opencrane_local_development_state') IS NOT NULL;") === "t";
 
 	if (hasLocalState)
 	{
-		const appliedDigest = _queryPostgres(configuration, "SELECT target_baseline_sha256 FROM opencrane_local_development_state WHERE id = 'baseline';");
+		const appliedDigest = operations.queryPostgres(configuration, "SELECT target_baseline_sha256 FROM opencrane_local_development_state WHERE id = 'baseline';");
 
 		if (appliedDigest !== baselineSha256)
 		{
@@ -156,13 +162,13 @@ export function applyTargetBaseline(configuration)
 		return;
 	}
 
-	const hasApplicationSchema = _queryPostgres(configuration, "SELECT to_regclass('public.org_memberships') IS NOT NULL;") === "t";
+	const hasApplicationSchema = operations.queryPostgres(configuration, "SELECT to_regclass('public.org_memberships') IS NOT NULL;") === "t";
 
 	if (hasApplicationSchema)
 	{
 		throw new Error("The local database has an untracked application schema; rerun with --reset");
 	}
 
-	_applySqlFile(configuration, configuration.baselinePath);
-	_applySqlFile(configuration, configuration.seedPath, { baseline_sha256: baselineSha256 });
+	operations.applySqlFile(configuration, configuration.baselinePath);
+	operations.applySqlFile(configuration, configuration.seedPath, { baseline_sha256: baselineSha256 });
 }

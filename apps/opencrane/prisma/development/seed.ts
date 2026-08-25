@@ -1,11 +1,14 @@
 import { createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 import { ModelRoutingScope, OrgMemberStatus, OrgRole, PrincipalProvenance, PrismaClient } from "@prisma/client";
 
 import { __DigestFleetMembershipSignedPayload } from "@opencrane/backend/server/iam/membership";
 import { LOCAL_DEVELOPMENT_IDENTITY, LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_KEY_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER } from "@opencrane/models/local-development";
 import type { SignedFleetMembershipRevision } from "@opencrane/models/authorization";
+
+import type { LocalDevelopmentSeedDatabase, LocalDevelopmentSeedDependencies } from "./seed.types";
 
 /** Stable row identifier lets the development seed be safely replayed after a watched-server reload. */
 const _REVISION_ID = "local-development-membership-revision";
@@ -96,14 +99,26 @@ function _ReadMembershipPrivateKey(): string
 	return privateKeyPem;
 }
 
-/** Upsert the fixed local member and its signed personal-scope admission evidence. */
-async function _Main(): Promise<void>
+/** Default seed dependencies validate loopback state and create signed local membership evidence. */
+const _SEED_DEPENDENCIES: LocalDevelopmentSeedDependencies = {
+	assertLocalDatabase: _AssertLocalDatabase,
+	createMembership(): SignedFleetMembershipRevision
+	{
+		return _CreateSignedMembership(_ReadMembershipPrivateKey(), Date.now());
+	},
+	createPrisma(): LocalDevelopmentSeedDatabase
+	{
+		return new PrismaClient() as unknown as LocalDevelopmentSeedDatabase;
+	}
+};
+
+/** Upserts the fixed local member, admission evidence, and model route in one transaction. */
+export async function _RunLocalDevelopmentSeed(dependencies: LocalDevelopmentSeedDependencies = _SEED_DEPENDENCIES): Promise<void>
 {
 	// 1. Refuse remote state and validate the disposable signing keypair before opening Prisma.
-	_AssertLocalDatabase();
-	const privateKey = _ReadMembershipPrivateKey();
-	const membership = _CreateSignedMembership(privateKey, Date.now());
-	const prisma = new PrismaClient();
+	dependencies.assertLocalDatabase();
+	const membership = dependencies.createMembership();
+	const prisma = dependencies.createPrisma();
 
 	try
 	{
@@ -237,4 +252,5 @@ async function _Main(): Promise<void>
 	}
 }
 
-void _Main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+	void _RunLocalDevelopmentSeed();
