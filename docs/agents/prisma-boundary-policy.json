@@ -453,6 +453,13 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/server/agents/skills/main/src/skill-authoring-validation-controller-authority.ts",
+        "adapter": "PrismaSkillAuthoringValidationControllerRepository",
+        "contract": "SkillAuthoringValidationControllerAuthority",
+        "contractImportPath": "@opencrane/backend/agents/skills/workflows/contract",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/agents/memory/main/src/prisma-memory-catalog-repository.ts",
         "adapter": "PrismaMemoryCatalogRepository",
         "contract": "MemoryCatalogRepository",
@@ -862,6 +869,18 @@
           {
             "adapter": "PrismaSkillAuthoringInputRepository",
             "importPath": "./prisma-skill-authoring-input-repository"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/agents/skills/main/src/prisma-skill-authoring-validation-controller-unit-of-work.ts",
+        "adapter": "PrismaSkillAuthoringValidationControllerUnitOfWork",
+        "contract": "SkillAuthoringValidationControllerAuthority",
+        "contractImportPath": "@opencrane/backend/agents/skills/workflows/contract",
+        "constructs": [
+          {
+            "adapter": "PrismaSkillAuthoringValidationControllerRepository",
+            "importPath": "./skill-authoring-validation-controller-authority"
           }
         ]
       },

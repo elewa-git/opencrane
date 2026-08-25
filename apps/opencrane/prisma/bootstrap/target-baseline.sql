@@ -6036,6 +6036,21 @@ BEGIN
     IF OLD."first_pod_uid" IS NOT NULL AND NEW."first_pod_uid" IS DISTINCT FROM OLD."first_pod_uid" THEN
         RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim first Pod identity is immutable';
     END IF;
+    IF NEW."claimed_at" IS NOT DISTINCT FROM OLD."claimed_at" AND NEW."expires_at" IS NOT DISTINCT FROM OLD."expires_at"
+        AND NEW."delivery_count" = OLD."delivery_count" AND NEW."workload_uid" IS NOT DISTINCT FROM OLD."workload_uid"
+        AND NEW."first_pod_uid" IS NOT DISTINCT FROM OLD."first_pod_uid"
+        AND (OLD."claimed_at" IS NULL OR (OLD."first_pod_uid" IS NULL AND transition_time >= OLD."expires_at")) THEN
+        IF OLD."workload_uid" IS NULL AND validation_state <> 'pending' THEN
+            RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim initial lease requires a pending validation';
+        END IF;
+        IF OLD."workload_uid" IS NOT NULL AND validation_state <> 'running' THEN
+            RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim renewed lease requires a running validation';
+        END IF;
+        NEW."claimed_at" := transition_time;
+        NEW."expires_at" := transition_time + interval '5 minutes';
+        NEW."delivery_count" := OLD."delivery_count" + 1;
+        RETURN NEW;
+    END IF;
     IF OLD."workload_uid" IS NULL AND NEW."workload_uid" IS NOT NULL THEN
         IF validation_state <> 'pending' OR validation_task_id IS NULL OR OLD."claimed_at" IS NULL OR OLD."expires_at" IS NULL
             OR transition_time >= OLD."expires_at" OR NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at"
@@ -6070,7 +6085,7 @@ BEGIN
     IF TG_OP = 'INSERT' AND (NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL) THEN
         RAISE EXCEPTION 'SkillAuthoringValidationBootstrap must begin unconsumed';
     END IF;
-    IF NEW."reference_hash" !~ '^sha256:[a-f0-9]{64}$' OR NEW."expires_at" <= NEW."created_at"
+    IF NEW."reference_hash" !~ '^sha256:[a-f0-9]{64}$'
         OR (NEW."consumed_at" IS NULL) <> (NEW."consumed_by_pod_uid" IS NULL)
         OR NEW."namespace" !~ '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$' OR length(NEW."namespace") > 63
         OR NEW."service_account" <> 'skill-authoring-default' THEN
@@ -6082,6 +6097,18 @@ BEGIN
      WHERE validation."id" = NEW."validation_id" FOR UPDATE OF validation, claim;
     IF validation_state IS DISTINCT FROM 'running' THEN
         RAISE EXCEPTION 'SkillAuthoringValidationBootstrap requires its running validation claim';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        NEW."expires_at" := transition_time + interval '5 minutes';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."consumed_at" IS NULL AND validation_pod_uid IS NULL
+        AND NEW."validation_id" IS NOT DISTINCT FROM OLD."validation_id" AND NEW."reference_hash" IS NOT DISTINCT FROM OLD."reference_hash"
+        AND NEW."namespace" IS NOT DISTINCT FROM OLD."namespace" AND NEW."service_account" IS NOT DISTINCT FROM OLD."service_account"
+        AND NEW."expires_at" IS NOT DISTINCT FROM OLD."expires_at" THEN
+        IF transition_time >= OLD."expires_at" THEN
+            NEW."expires_at" := transition_time + interval '5 minutes';
+        END IF;
+        RETURN NEW;
     END IF;
     IF TG_OP = 'UPDATE' AND (NEW."validation_id" IS DISTINCT FROM OLD."validation_id" OR NEW."reference_hash" IS DISTINCT FROM OLD."reference_hash"
         OR NEW."namespace" IS DISTINCT FROM OLD."namespace"

@@ -49,13 +49,17 @@ returns unavailable rather than a partially widened result.
   skill validation. It rechecks the selected silo, revision, and active published artifact, then
   creates or reuses the validation record and binds the exact Absurd task receipt. Its caller must
   provide the database transaction that also admits that task.
+- `PrismaSkillAuthoringValidationControllerUnitOfWork` — server-side claim, Job/Pod binding, and
+  terminal-completion authority for that saved task. It uses short database transactions and only
+  accepts the one authoring profile; an HTTP route will expose it to the controller in the next
+  wiring slice.
 
 ## Boundary
 
 The application mounts the exported catalogue router and supplies the Prisma-backed catalogue
-repository. The validation repository is not a browser API and cannot run a Job: it only saves the
-facts that let the later controller and worker paths act safely. This package does not author, test,
-scan, sign, publish, revoke, download, or execute skills, and it does not store bytes.
+repository. Neither validation authority is a browser API or can run a Job: together they save the
+facts that let the controller and worker paths act safely. This package does not author, test, scan,
+sign, publish, revoke, download, or execute skills, and it does not store bytes.
 
 The catalogue deliberately excludes artifact content addresses, bundle bytes, manifests,
 requirements, test and scan evidence, signatures, signer keys, reviewer identities, and all
