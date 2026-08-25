@@ -1,0 +1,11 @@
+{
+  "name": "backend-artifacts-preprocessor-workflows-contract",
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/artifacts/preprocessor/workflows/contract/src",
+  "tags": ["type:lib", "layer:contract", "scope:artifacts-workflow-contract"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/artifacts/preprocessor/workflows/contract" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/artifacts/preprocessor/workflows/contract" } }
+  }
+}
