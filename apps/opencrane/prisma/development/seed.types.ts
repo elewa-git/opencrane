@@ -1,14 +1,14 @@
 import type { SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 
 /** Minimal Prisma delegate used by the replay-safe local seed. */
-export interface LocalDevelopmentSeedUpsertDelegate
+interface LocalDevelopmentSeedUpsertDelegate
 {
 	/** Creates the stable row or updates the existing row selected by its unique key. */
 	upsert(input: unknown): Promise<unknown>;
 }
 
 /** Transaction-scoped delegates that own every local identity and model seed write. */
-export interface LocalDevelopmentSeedTransaction
+interface LocalDevelopmentSeedTransaction
 {
 	readonly principal: LocalDevelopmentSeedUpsertDelegate;
 	readonly orgMembership: LocalDevelopmentSeedUpsertDelegate;
