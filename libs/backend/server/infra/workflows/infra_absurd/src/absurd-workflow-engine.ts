@@ -272,7 +272,7 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	 */
 	async spawn<TInput>(transaction: IWorkflowTransaction, task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
-		// 1. Verify the task has a handler before persisting an unserviceable receipt.
+		// 1. Verify the task has a reviewed declaration; its handler may run in another process.
 		const declaration = this.declarations.get(task.taskName);
 		if (declaration === undefined)
 		{

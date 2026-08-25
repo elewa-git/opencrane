@@ -6,7 +6,7 @@ import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workf
 
 const _SDK = vi.hoisted(function _SdkHarness()
 {
-	return { spawn: vi.fn() };
+	return { spawn: vi.fn(), registerTask: vi.fn() };
 });
 
 vi.mock("absurd-sdk", function _MockAbsurdSdk()
@@ -14,7 +14,10 @@ vi.mock("absurd-sdk", function _MockAbsurdSdk()
 	class FailedTask extends Error {}
 	class Absurd
 	{
-		registerTask(): void {}
+		registerTask(...args: unknown[]): void
+		{
+			_SDK.registerTask(...args);
+		}
 		spawn(...args: unknown[]): Promise<{ taskID: string }>
 		{
 			return _SDK.spawn(...args) as Promise<{ taskID: string }>;
@@ -34,11 +37,20 @@ function _Execution(): AbsurdWorkflowEngine
 	return execution;
 }
 
+/** Build an engine that may admit a task whose controller registers the handler elsewhere. */
+function _RemoteExecution(): AbsurdWorkflowEngine
+{
+	const execution = new AbsurdWorkflowEngine({ databaseUrl: "postgresql://unused", databasePoolSize: 1, databasePool: {} as Pool, queueAuthority: { queueForTask: function _Queue(): string { return "control-plane"; } } });
+	execution.declare({ taskName: "remote.task", retryPolicy: { maximumAttempts: 3, backoff: { kind: WorkflowTaskRetryBackoffKinds.Fixed, initialDelaySeconds: 30 } } });
+	return execution;
+}
+
 describe("Absurd task admission", function _TaskAdmissionSuite()
 {
 	beforeEach(function _Reset(): void
 	{
 		_SDK.spawn.mockReset();
+		_SDK.registerTask.mockReset();
 	});
 
 	it("maps retry policy for a task spawned by another task", async function _MapsChildAdmission()
@@ -61,5 +73,18 @@ describe("Absurd task admission", function _TaskAdmissionSuite()
 		await execution.spawn(transaction, { taskName: "test.task", idempotencyKey: "root-key", input: { value: 2 } });
 
 		expect(call).toHaveBeenCalledWith(client, { taskName: "test.task", idempotencyKey: "root-key", input: { idempotencyKey: "root-key", input: { value: 2 }, inputUndefined: false }, maximumAttempts: 5, retryStrategy: { kind: "exponential", baseSeconds: 30, factor: 2, maxSeconds: 300 } });
+	});
+
+	it("admits a declared remote task without registering a local handler", async function _AdmitsRemoteTask()
+	{
+		const client = {};
+		const transaction: IWorkflowTransaction = { client };
+		const call = vi.spyOn(WorkflowTaskAdmission.prototype, "admit").mockResolvedValue({ taskId: "44444444-4444-4444-8444-444444444444", runId: "55555555-5555-4555-8555-555555555555", attempt: 1, created: true });
+		const execution = _RemoteExecution();
+
+		await expect(execution.spawn(transaction, { taskName: "remote.task", idempotencyKey: "remote-key", input: { validationId: "validation-1" } })).resolves.toEqual({ taskId: "44444444-4444-4444-8444-444444444444", taskName: "remote.task", idempotencyKey: "remote-key" });
+
+		expect(_SDK.registerTask).not.toHaveBeenCalled();
+		expect(call).toHaveBeenCalledWith(client, { taskName: "remote.task", idempotencyKey: "remote-key", input: { idempotencyKey: "remote-key", input: { validationId: "validation-1" }, inputUndefined: false }, maximumAttempts: 3, retryStrategy: { kind: "fixed", baseSeconds: 30, factor: undefined, maxSeconds: undefined } });
 	});
 });
