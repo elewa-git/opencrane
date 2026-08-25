@@ -73,6 +73,9 @@
       "@opencrane/backend/server/gateways/mcp": [
         "./libs/backend/server/gateways/mcp/main/src/index.ts"
       ],
+      "@opencrane/backend/server/gateways/mcp/validator-k8s-launcher": [
+        "./libs/backend/server/gateways/mcp/validator-k8s-launcher/src/index.ts"
+      ],
       "@opencrane/backend/server/iam/identity": [
         "./libs/backend/server/iam/identity/main/src/index.ts"
       ],

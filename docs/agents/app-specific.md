@@ -45,6 +45,7 @@ app's source.
 | [`libs/backend/channel-proxy`](../../libs/backend/channel-proxy/main/README.md) | Reusable inbound-channel trust-boundary logic. |
 | [`libs/backend/conversations/projection`](../../libs/backend/conversations/projection/main/README.md) | Transport-neutral redaction, AG-UI mapping, cursoring, and live streaming for every conversation mode. |
 | [`libs/backend/server`](../../libs/backend/server/README.md) | API capabilities grouped by agents, IAM, gateways, knowledge, reporting, and organisation scope. |
+| [`libs/backend/server/gateways/mcp/validator-k8s-launcher`](../../libs/backend/server/gateways/mcp/validator-k8s-launcher/README.md) | Restricted Kubernetes Job builder for MCP bundle validation. |
 | [`libs/backend/server/iam/organization-members`](../../libs/backend/server/iam/organization-members/main/README.md) | Settings member directory and standalone invitation authority, or fail-closed delegation of the whole capability to Fleet billing. |
 | [`libs/backend/server/agents/onboarding`](../../libs/backend/server/agents/onboarding/main/README.md) | Durable, session-owner-bound onboarding route state and exact persona/bootstrap references. |
 | [`libs/backend/server/conversations`](../../libs/backend/server/conversations/main/README.md) | Mode-correct conversation authority, participant visibility, canonical timeline, authorised stream readers, and HTTP routes. |
