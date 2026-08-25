@@ -3,6 +3,7 @@ import type { Server } from "node:http";
 import type { Express } from "express";
 
 import type { RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
+import type { SelfConversationSocketServer } from "@opencrane/backend/server/conversations";
 import { ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
 import { _log } from "../app/log";
@@ -25,12 +26,13 @@ function _CloseServer(server: Server): Promise<void>
 }
 
 /** Start the Tier 2 public API and optional Agent API on loopback, then bind their shutdown sequence. */
-export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Express | null, prisma: DevelopmentPrismaClient, runtimeRepairRepository: RunCancellationRepository, publicPort: number, internalPort: number, unbindConsole: () => void): void
+export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Express | null, conversationSockets: SelfConversationSocketServer, prisma: DevelopmentPrismaClient, runtimeRepairRepository: RunCancellationRepository, publicPort: number, internalPort: number, unbindConsole: () => void): void
 {
 	const publicServer = publicApp.listen(publicPort, "127.0.0.1", function _Listening(): void
 	{
 		_log.info({ port: publicPort }, "Tier 2 OpenCrane API listening on loopback");
 	});
+	conversationSockets.attach(publicServer);
 	const internalServer = internalApp?.listen(internalPort, "127.0.0.1", function _InternalListening(): void
 	{
 		_log.info({ port: internalPort }, "Tier 2 OpenCrane Agent API listening on loopback");
@@ -58,6 +60,7 @@ export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Expr
 			// 1. Fence long-lived request work before the listener and durable store are drained.
 			_BeginProcessShutdown();
 			runtimeRepair.stop();
+			conversationSockets.close();
 			await _CloseServer(publicServer);
 
 			if (internalServer)

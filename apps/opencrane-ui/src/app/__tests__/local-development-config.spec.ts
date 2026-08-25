@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import uiElementsProject from "../../../../../libs/frontend/elements/ui/project.json";
 import openCraneUiProject from "../../../project.json";
+import liveProxy from "../../../proxy.dev-live.conf.json";
 
 /** Explicit local serve configurations and the archetypes they inject. */
 const _ARCHETYPE_CONFIGURATIONS = {
@@ -58,5 +59,6 @@ describe("OpenCrane UI local-development commands", function _Suite()
 			}
 		]);
 		expect(openCraneUiProject.targets["serve-browser"].configurations["development-live"].proxyConfig).toBe("apps/opencrane-ui/proxy.dev-live.conf.json");
+		expect(liveProxy["/api/v1"].ws).toBe(true);
 	});
 });
