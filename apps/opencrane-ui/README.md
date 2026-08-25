@@ -89,16 +89,30 @@ Build-time and container config (there is no server-side env here — it is a st
 
 ## Local frontend workflow
 
-`npm run serve:opencrane-ui` starts the Tier 1 profile. It provides an authenticated local user and
-stateful in-memory implementations for persona onboarding, first chat, normal conversations, AG-UI
-run progress, files, approvals, and child Agent threads. It needs no API, PostgreSQL, Docker,
-LiteLLM, Cognee, memory gateway, or Kubernetes cluster. Unsupported administration, settings, and
-invitation URLs redirect to onboarding. Any accidentally retained Angular or native OpenCrane API
-adapter is stopped by a local tripwire.
+`npm run serve:opencrane-ui` starts the Tier 1 routed profile, interactive Storybook, and the
+Storybook Playwright visual suite together. It provides an authenticated local user and stateful
+in-memory implementations for persona onboarding, first chat, normal conversations, AG-UI run
+progress, files, approvals, and child Agent threads. It needs no API, PostgreSQL, Docker, LiteLLM,
+Cognee, memory gateway, or Kubernetes cluster. Unsupported administration, settings, and invitation
+URLs redirect to onboarding. Any accidentally retained Angular or native OpenCrane API adapter is
+stopped by a local tripwire.
+
+The first plain serve defaults to the reviewed Commander/Guardian path. Use one explicit command to
+change the archetype:
+
+```bash
+npx nx serve opencrane-ui --configuration=development-catalyst
+```
+
+The supported suffixes are `commander`, `catalyst`, `anchor`, and `analyst`. Loading an explicit
+configuration saves that choice in browser local storage for the current origin, so later plain serves
+reuse it. Clear the site's local storage to return to the Commander fallback. Mock workflow progress
+still resets on reload; only the archetype preference persists.
 
 Use `?mockScenario=slow`, `retry`, `reconnecting`, `failed-run`, or `access-changed` to exercise a
-deterministic non-happy path. `happy-path` is the default. Component-level variants remain in
-Storybook through `npm run storybook:ui`.
+deterministic non-happy path. `happy-path` is the default. Component-level variants remain
+independently available through `npm run storybook:ui` when the routed UI and Playwright pass are not
+needed.
 
 `npx nx serve opencrane-ui --configuration=development-live` is the explicit live-backend path. It
 uses the live gateway/route entry points and `proxy.dev-live.conf.json`; plain serve has no backend
