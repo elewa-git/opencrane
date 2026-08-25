@@ -106,8 +106,9 @@ npx nx serve opencrane-ui --configuration=development-catalyst
 
 The supported suffixes are `commander`, `catalyst`, `anchor`, and `analyst`. Loading an explicit
 configuration saves that choice in browser local storage for the current origin, so later plain serves
-reuse it. Clear the site's local storage to return to the Commander fallback. Mock workflow progress
-still resets on reload; only the archetype preference persists.
+reuse it. To return to Commander, stop the explicit configuration, run the plain serve, and clear the
+site's local storage. Reloading an explicit configuration saves its archetype again. Mock workflow
+progress still resets on reload; only the archetype preference persists.
 
 Use `?mockScenario=slow`, `retry`, `reconnecting`, `failed-run`, or `access-changed` to exercise a
 deterministic non-happy path. `happy-path` is the default. Component-level variants remain

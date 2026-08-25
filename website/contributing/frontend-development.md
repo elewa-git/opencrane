@@ -55,8 +55,10 @@ The supported configurations are `development-commander`, `development-catalyst`
 in browser local storage for that scheme, hostname, and port. Later plain serves reuse the saved
 choice; they do not overwrite it with Commander.
 
-Clear the site's local storage, or select a different explicit configuration, to reset the choice.
-Clearing only the downloaded HTTP cache may leave local storage intact. This preference survives a
+To return to Commander, stop the explicit configuration, run the plain serve, and clear the site's
+local storage. Reloading an explicit configuration saves its archetype again. Select another explicit
+configuration to replace the choice. Clearing only the downloaded HTTP cache may leave local storage
+intact. This preference survives a
 reload, but the mock interview and conversations do not.
 
 ## Select a deterministic scenario

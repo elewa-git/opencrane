@@ -39,8 +39,8 @@ one disposable state owner keeps cross-route projections coherent.
 
 - `provideLocalDevelopmentGateways()` binds the authenticated session, persona survey, first chat,
   workspace, event stream, conversation assets, elicitation, and Agent-thread ports.
-- `LOCAL_DEVELOPMENT_ARCHETYPE` and the archetype fixture helpers keep every local projection on one
-  reviewed Commander, Catalyst, Anchor, or Analyst path.
+- `LOCAL_DEVELOPMENT_ARCHETYPE` keeps every local projection on one reviewed Commander, Catalyst,
+  Anchor, or Analyst path.
 - `__ResolveLocalDevelopmentArchetype()` applies an explicit command selection, then a browser-saved
   preference, then the Commander fallback.
 - `mockScenario=happy-path|slow|retry|reconnecting|failed-run|access-changed` selects one
@@ -57,9 +57,11 @@ the preference:
 - `--configuration=development-anchor`
 - `--configuration=development-analyst`
 
-Subsequent plain serves keep that selection. Clearing the site's local storage resets the preference;
-clearing only downloaded HTTP cache files may not. A different scheme, hostname, or port has separate
-browser storage. Mock onboarding and chat progress remain disposable and reset when the page reloads.
+Subsequent plain serves keep that selection. To return to Commander, stop the explicit configuration,
+run the plain serve, and clear the site's local storage. Reloading an explicit archetype configuration
+would save that archetype again. Clearing only downloaded HTTP cache files may not remove local
+storage. A different scheme, hostname, or port has separate browser storage. Mock onboarding and chat
+progress remain disposable and reset when the page reloads.
 
 ## Dependency direction
 
