@@ -22,13 +22,15 @@ export class PrismaToolInvocationRunRecoveryAuthority implements ToolInvocationR
 	/** Moves the run into RecoveryRequired, using the transaction the caller already holds. */
 	enterRecoveryRequiredInTransaction(transaction: unknown, command: ToolInvocationRunRecoveryCommand): Promise<ToolInvocationRunRecoveryEnterResult>
 	{
-		return new PrismaToolInvocationRunRecoveryUnitOfWork(transaction as Prisma.TransactionClient).enterRecoveryRequired(command);
+		const unitOfWork = new PrismaToolInvocationRunRecoveryUnitOfWork(transaction as Prisma.TransactionClient);
+		return unitOfWork.enterRecoveryRequired(command);
 	}
 
 	/** Resume Running only when authorization has proved no invocation still requires recovery. */
 	resumeRunningInTransaction(transaction: unknown, command: ToolInvocationRunRecoveryCommand): Promise<boolean>
 	{
-		return new PrismaToolInvocationRunRecoveryUnitOfWork(transaction as Prisma.TransactionClient).resumeRunning(command);
+		const unitOfWork = new PrismaToolInvocationRunRecoveryUnitOfWork(transaction as Prisma.TransactionClient);
+		return unitOfWork.resumeRunning(command);
 	}
 }
 

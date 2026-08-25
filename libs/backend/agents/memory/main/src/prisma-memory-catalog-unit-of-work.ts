@@ -88,7 +88,8 @@ export class PrismaMemoryCatalogUnitOfWork implements MemoryCatalogUnitOfWork
 	{
 		return this.prisma.$transaction(async function _ResolveCommittedCollision(transaction)
 		{
-			return new PrismaMemoryCatalogCollisionRepository(transaction).resolveUniqueCollision(command);
+			const repository = new PrismaMemoryCatalogCollisionRepository(transaction);
+			return repository.resolveUniqueCollision(command);
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 }

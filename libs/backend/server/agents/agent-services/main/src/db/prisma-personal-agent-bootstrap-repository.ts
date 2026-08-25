@@ -149,7 +149,8 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 		}
 
 		// 4. Delegate initial publication after bootstrap has proved that no service exists.
-		return new PrismaInitialPersonalAgentPublicationRepository(this.transaction, this.defaultModelResolver).publish(command, persona);
+		const publicationRepository = new PrismaInitialPersonalAgentPublicationRepository(this.transaction, this.defaultModelResolver);
+		return publicationRepository.publish(command, persona);
 	}
 
 	/** Reconcile one existing service to the owner's current approved persona without replacing it. */
@@ -157,7 +158,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 	{
 		if (service.personaRevisionId === persona.id)
 			return _Ready(service, false, false);
-		const materialized = await new PrismaAgentRevisionPersonaSelectionRepository(this.transaction).materialize({
+		const cmd = {
 			siloId: command.siloId,
 			subjectId: command.subjectId,
 			agentServiceId: service.id,
@@ -166,7 +167,9 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 			authoredBy: command.subjectId,
 			materializedAt: command.provisionedAt,
 			changeMessage: "Selected the current approved persona during onboarding readiness repair.",
-		});
+		};
+		const task = new PrismaAgentRevisionPersonaSelectionRepository(this.transaction);
+		const materialized = await task.materialize(cmd);
 		if (materialized.status !== AgentRevisionPersonaSelectionMaterializationCodes.Materialized && materialized.status !== AgentRevisionPersonaSelectionMaterializationCodes.AlreadyCurrent)
 		{
 			return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);

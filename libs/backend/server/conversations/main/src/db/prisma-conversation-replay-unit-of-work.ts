@@ -40,7 +40,8 @@ export class PrismaConversationReplayUnitOfWork implements ConversationReplayUni
 	{
 		return this.prisma.$transaction(async function _ReadReplaySnapshot(transaction)
 		{
-			return new PrismaConversationReplayRepository(transaction).readAuthorized(command);
+			const repository = new PrismaConversationReplayRepository(transaction);
+			return repository.readAuthorized(command);
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
 	}
 }

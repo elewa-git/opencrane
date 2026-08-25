@@ -44,7 +44,8 @@ export class PrismaAgentThreadParentDeliveryUnitOfWork implements AgentThreadPar
 			{
 				return await unit.prisma.$transaction(async function _Deliver(transaction): Promise<DeliverAgentThreadParentResult>
 				{
-					return new PrismaAgentThreadParentDeliveryRepository(transaction).deliver(identity, command);
+					const repository = new PrismaAgentThreadParentDeliveryRepository(transaction);
+					return repository.deliver(identity, command);
 				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 			}
 			catch (err)

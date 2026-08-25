@@ -89,7 +89,7 @@ export class PrismaAgentRevisionModelSelectionRepository implements AgentRevisio
 			..._AgentRevisionContentFromRow(source),
 			modelDefinitionId,
 		};
-		const draft = await new PrismaAgentRevisionWriterRepository(this.transaction).createDraft({
+		const cmd = {
 			siloId: command.siloId,
 			agentServiceId: command.agentServiceId,
 			revision: source.revision + 1,
@@ -99,7 +99,9 @@ export class PrismaAgentRevisionModelSelectionRepository implements AgentRevisio
 			changeMessage: command.changeMessage,
 			authoredBy: command.authoredBy,
 			createdAt: command.materializedAt,
-		});
+		};
+		const task = new PrismaAgentRevisionWriterRepository(this.transaction);
+		const draft = await task.createDraft(cmd);
 
 		// 6. Mark the draft published, then point the service at it — both still inside the caller's
 		// transaction and uncommitted. If the caller's own check later fails, both writes roll back

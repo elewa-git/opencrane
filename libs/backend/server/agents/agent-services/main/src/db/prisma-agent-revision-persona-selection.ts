@@ -87,7 +87,7 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 
 		// 5. Copy all executable content and replace only the persona revision reference.
 		const content: AgentRevisionContent = { ..._AgentRevisionContentFromRow(source), personaRevisionId: command.targetPersonaRevisionId };
-		const draft = await new PrismaAgentRevisionWriterRepository(this.transaction).createDraft({
+		const cmd = {
 			siloId: command.siloId,
 			agentServiceId: command.agentServiceId,
 			revision: source.revision + 1,
@@ -97,7 +97,9 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 			changeMessage: command.changeMessage,
 			authoredBy: command.authoredBy,
 			createdAt: command.materializedAt,
-		});
+		};
+		const task = new PrismaAgentRevisionWriterRepository(this.transaction);
+		const draft = await task.createDraft(cmd);
 
 		// 6. Publish the revision and repoint the service while the caller owns the transaction.
 		await this.transaction.agentRevision.update({ where: { id: draft.id }, data: { state: AgentRevisionState.Published, publishedAt: command.materializedAt } });

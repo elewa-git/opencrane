@@ -19,8 +19,8 @@ export class PrismaAuthenticatedPrincipalDirectoryUnitOfWork implements Authenti
   {
     return this.prisma.$transaction(async function _resolve(transaction: Prisma.TransactionClient)
     {
-      return new PrismaAuthenticatedPrincipalDirectoryRepository(transaction)
-        .resolveAuthenticatedPrincipal(siloId, issuer, subject);
+      const repository = new PrismaAuthenticatedPrincipalDirectoryRepository(transaction);
+      return repository.resolveAuthenticatedPrincipal(siloId, issuer, subject);
     });
   }
 }
