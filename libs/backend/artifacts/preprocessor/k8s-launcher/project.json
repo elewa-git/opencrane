@@ -1,0 +1,11 @@
+{
+  "name": "backend-artifacts-preprocessor-k8s-launcher",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/artifacts/preprocessor/k8s-launcher/src",
+  "tags": ["type:lib", "layer:backend", "scope:artifact-preprocessor-launcher"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/artifacts/preprocessor/k8s-launcher" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/artifacts/preprocessor/k8s-launcher" } }
+  }
+}

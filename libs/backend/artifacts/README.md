@@ -16,6 +16,7 @@ promotion, and two implement broker-only preprocessing and malware-scanning prot
 | [`authorization`](./authorization/main/README.md) | Artifact write-lease and receipt authority. |
 | [`filesystem`](./filesystem/main/README.md) | On-disk content-addressed store. |
 | [`preprocessor`](./preprocessor/main/README.md) | PDF extraction and broker-only remote worker protocol. |
+| [`preprocessor Job builder`](./preprocessor/k8s-launcher/README.md) | Hardened one-shot Job shape for a controller-started PDF worker. |
 | [`preprocessor workflow contract`](./preprocessor/workflows/contract/README.md) | Shared saved-task name, retry policy, and identifier-only input for one PDF conversion. |
 | [`scanner`](./scanner/main/README.md) | Fenced malware scanning with no storage or publication authority. |
 | [`store`](./store/main/README.md) | Artifact promotion protocol and validation guards. |
