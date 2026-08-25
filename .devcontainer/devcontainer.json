@@ -1,0 +1,31 @@
+{
+	"$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.base.schema.json",
+	"name": "OpenCrane Tier 3",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"context": ".."
+	},
+	"features": {
+		"ghcr.io/devcontainers/features/docker-in-docker:4.1.0": {
+			"version": "latest",
+			"moby": true,
+			"dockerDashComposeVersion": "v2"
+		}
+	},
+	"hostRequirements": {
+		"cpus": 8,
+		"memory": "32gb",
+		"storage": "64gb"
+	},
+	"forwardPorts": [4200],
+	"portsAttributes": {
+		"4200": {
+			"label": "OpenCrane Tier 3",
+			"onAutoForward": "notify",
+			"protocol": "http"
+		}
+	},
+	"onCreateCommand": "npm ci",
+	"postCreateCommand": "bash .devcontainer/verify-tools.sh",
+	"remoteUser": "node"
+}
