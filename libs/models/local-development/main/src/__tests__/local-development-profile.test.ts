@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import profileContract from "../../profile-contract.json";
-import { __IsLocalDevelopmentProfileKind, LOCAL_DEVELOPMENT_IDENTITY, LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_KEY_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER, LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES, LocalAgentRuntimeModelStrategies, LocalDevelopmentProfileKinds } from "../index";
+import { __ParseLocalDevelopmentProfileKind, LOCAL_DEVELOPMENT_IDENTITY, LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_KEY_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER, LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES, LocalAgentRuntimeModelStrategies, LocalDevelopmentProfileKinds } from "../index";
 
 describe("local development profile vocabulary", function _Suite()
 {
@@ -9,8 +9,8 @@ describe("local development profile vocabulary", function _Suite()
 	{
 		expect(Object.values(LocalDevelopmentProfileKinds)).toEqual(profileContract.profiles);
 		expect(Object.values(LocalAgentRuntimeModelStrategies)).toEqual(profileContract.modelStrategies);
-		expect(profileContract.profiles.every(__IsLocalDevelopmentProfileKind)).toBe(true);
-		expect(__IsLocalDevelopmentProfileKind("production")).toBe(false);
+		expect(profileContract.profiles.map(__ParseLocalDevelopmentProfileKind)).toEqual(profileContract.profiles);
+		expect(__ParseLocalDevelopmentProfileKind("production")).toBeNull();
 		expect(LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES).toEqual(profileContract.runtimeIdentities);
 	});
 

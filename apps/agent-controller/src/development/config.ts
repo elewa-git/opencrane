@@ -2,7 +2,7 @@ import { isAbsolute, resolve } from "node:path";
 
 import { __ValidateAgentControllerRuntimeProfiles } from "@opencrane/backend/agents/runtime/controller";
 import { LocalAgentRuntimeModelStrategies } from "@opencrane/models/local-development";
-import { __IsLocalDevelopmentProfileKind, LocalDevelopmentProfileKinds } from "@opencrane/models/local-development";
+import { __ParseLocalDevelopmentProfileKind, LocalDevelopmentProfileKinds } from "@opencrane/models/local-development";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { LocalAgentControllerModelConfiguration, LocalAgentControllerProcessConfig } from "./config.types";
@@ -57,10 +57,11 @@ function _Origin(value: string, name: string): URL
 function _Profile(environment: NodeJS.ProcessEnv): Exclude<LocalDevelopmentProfileKinds, LocalDevelopmentProfileKinds.Core>
 {
 	const value = _Required(environment, "OPENCRANE_DEVELOPMENT_PROFILE");
+	const profile = __ParseLocalDevelopmentProfileKind(value);
 
-	if (__IsLocalDevelopmentProfileKind(value) && value !== LocalDevelopmentProfileKinds.Core)
+	if (profile && profile !== LocalDevelopmentProfileKinds.Core)
 	{
-		return value;
+		return profile;
 	}
 
 	throw new Error("the local Agent controller requires agent-local, agent-remote, or agent-simulated");
