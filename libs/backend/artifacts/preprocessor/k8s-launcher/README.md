@@ -1,6 +1,6 @@
 # @opencrane/backend/artifacts/preprocessor/k8s-launcher — PDF worker Job builder
 
-> [backend](../../../../../README.md) › [artifacts](../../../../README.md) › preprocessor › k8s-launcher
+> [backend](../../../README.md) › [artifacts](../../README.md) › [preprocessor](../README.md) › k8s-launcher
 
 ## What it owns
 
@@ -19,6 +19,8 @@ agent controller is the only process that may submit the Job it produces.
                     ▼
  agent controller ──► one isolated Kubernetes Job
 ```
+
+**In this flow:** [controller](../controller/README.md).
 
 The Job is suspended when created. The controller records its Kubernetes UID before releasing it.
 The worker receives an audience-bound token and an opaque bootstrap reference in separate read-only
@@ -40,5 +42,5 @@ PDF bytes or accepting output.
 
 ## See also
 
-- Parent: [artifacts](../../../README.md)
+- Parent: [artifact preprocessing](../README.md)
 - Worker process: [preprocessor](../main/README.md)

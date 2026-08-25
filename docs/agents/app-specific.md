@@ -42,6 +42,7 @@ app's source.
 | `libs/backend/agents/runtime/*` | Kubernetes Job projection, controller orchestration, and executor-neutral workload claim contracts. |
 | `libs/backend/agents/skills/*` | Governed skill authoring, workflow admission, and execution workloads. |
 | `libs/backend/artifacts/*` | Artifact authorization, storage, preprocessing, and fenced malware scanning. |
+| [`libs/backend/artifacts/preprocessor`](../../libs/backend/artifacts/preprocessor/README.md) | PDF workflow controller, one-shot Job policy, and broker-only worker. |
 | [`libs/backend/channel-proxy`](../../libs/backend/channel-proxy/main/README.md) | Reusable inbound-channel trust-boundary logic. |
 | [`libs/backend/conversations/projection`](../../libs/backend/conversations/projection/main/README.md) | Transport-neutral redaction, AG-UI mapping, cursoring, and live streaming for every conversation mode. |
 | [`libs/backend/server`](../../libs/backend/server/README.md) | API capabilities grouped by agents, IAM, gateways, knowledge, reporting, and organisation scope. |
