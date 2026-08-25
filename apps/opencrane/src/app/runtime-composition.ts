@@ -26,10 +26,14 @@ import { _log } from "./log";
 import type { ControllerRuntimeComposition, InternalRuntimeComposition, OptionalRuntimeComposition, RuntimeProtocolComposition, SkillAuthoringValidationRuntimeComposition } from "./runtime-composition.types";
 
 /** Fails closed when an isolated composition test does not supply the process workflow engine. */
-const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEvent"> = {
+const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEvent" | "spawn"> = {
 	async emitEvent(): Promise<never>
 	{
 		throw new Error("workflow event execution is unavailable");
+	},
+	async spawn(): Promise<never>
+	{
+		throw new Error("workflow task admission is unavailable");
 	},
 };
 
@@ -182,7 +186,7 @@ function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: Interna
  * @param serverNamespace - Namespace containing the trusted server identity.
  * @returns Optional artifact-preprocessor and conversation-replay routers.
  */
-function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, serverNamespace: string): OptionalRuntimeComposition
+function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, serverNamespace: string, workflowExecution: Pick<IWorkflowEngine, "spawn">): OptionalRuntimeComposition
 {
 	const artifactPreprocessorNamespace = config.artifactPreprocessorEnabled
 		? _ValidateIsolatedWorkloadNamespace(config.artifactPreprocessorNamespace, serverNamespace)
@@ -219,7 +223,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 		artifactScanner: artifactScannerNamespace === null
 			? null
 			: __CreateArtifactScannerRouter({
-				authority: new PrismaArtifactScanUnitOfWork(prisma, config.artifactScannerClaimLeaseMilliseconds, function _ConversationAssets(transaction) { return new PrismaConversationAssetOutputRepository(transaction); }),
+				authority: new PrismaArtifactScanUnitOfWork(prisma, config.artifactScannerClaimLeaseMilliseconds, function _ConversationAssets(transaction) { return new PrismaConversationAssetOutputRepository(transaction); }, workflowExecution),
 				tokenReviewer: _CreateArtifactScannerTokenReviewer(authApi, artifactScannerNamespace),
 				sourceBroker: _CreateArtifactScanSourceBroker(),
 				expectedNamespace: artifactScannerNamespace,
@@ -245,9 +249,11 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
  * @param prisma - The main product database client.
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen startup configuration shared with the internal body parser and workers.
+ * @param workflowExecution - Process engine that emits authoring events and saves scanner-created
+ *   PDF task admissions in their publishing transaction.
  * @returns Routers composed from controller, authoring validation, runtime, and optional-worker plane authorities.
  */
-export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflowExecution: Pick<IWorkflowEngine, "emitEvent"> = _UnavailableWorkflowExecution): InternalRuntimeComposition
+export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflowExecution: Pick<IWorkflowEngine, "emitEvent" | "spawn"> = _UnavailableWorkflowExecution): InternalRuntimeComposition
 {
 	// 1. Validate all identity planes before constructing a router, so malformed coordinates fail
 	// startup rather than leaving a partially mounted internal API.
@@ -264,6 +270,6 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 		..._CreateControllerRuntimeComposition(prisma, config, namespaces, controllerTokenReviewer),
 		..._CreateSkillAuthoringValidationRuntimeComposition(prisma, skillWorkloadTokenReviewer, workflowExecution),
 		..._CreateRuntimeProtocolComposition(prisma, config, namespaces, runtimeTokenReviewer),
-		..._CreateOptionalRuntimeComposition(prisma, authApi, config, namespaces.serverNamespace),
+		..._CreateOptionalRuntimeComposition(prisma, authApi, config, namespaces.serverNamespace, workflowExecution),
 	};
 }

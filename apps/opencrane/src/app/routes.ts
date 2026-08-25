@@ -39,11 +39,15 @@ import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-u
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
-/** Rejects an event only when a test composes internal routes without the process workflow engine. */
-const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEvent"> = {
+/** Fails closed when a test composes internal routes without the process workflow engine. */
+const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEvent" | "spawn"> = {
 	async emitEvent(): Promise<never>
 	{
 		throw new Error("workflow event execution is unavailable");
+	},
+	async spawn(): Promise<never>
+	{
+		throw new Error("workflow task admission is unavailable");
 	},
 };
 
@@ -194,8 +198,9 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
  * @param prisma - The main product database client.
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
+ * @param workflowExecution - Process engine forwarded to `_CreateInternalRuntimeComposition`.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflowExecution: Pick<IWorkflowEngine, "emitEvent"> = _UnavailableWorkflowExecution): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflowExecution: Pick<IWorkflowEngine, "emitEvent" | "spawn"> = _UnavailableWorkflowExecution): void
 {
 	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, workflowExecution);
 	const internalControllerRoutes: readonly RouteMount[] = [

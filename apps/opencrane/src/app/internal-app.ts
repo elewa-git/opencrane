@@ -11,11 +11,15 @@ import { _RegisterInternalRoutes } from "./routes";
 import { _CreateHttpRequestLogger } from "./telemetry";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
-/** Fails closed when an isolated app test does not need workflow event delivery. */
-const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEvent"> = {
+/** Fails closed when an isolated app test does not supply the process workflow engine. */
+const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEvent" | "spawn"> = {
 	async emitEvent(): Promise<never>
 	{
 		throw new Error("workflow event execution is unavailable");
+	},
+	async spawn(): Promise<never>
+	{
+		throw new Error("workflow task admission is unavailable");
 	},
 };
 
@@ -24,8 +28,10 @@ const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEvent"> = {
  *
  * It shares the public listener's signed-session middleware only so channel-proxy can delegate the
  * browser cookie. Every resolver request independently TokenReviews the proxy workload identity.
+ *
+ * @param workflowExecution - Process engine forwarded to `_RegisterInternalRoutes`.
  */
-export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], workflowExecution: Pick<IWorkflowEngine, "emitEvent"> = _UnavailableWorkflowExecution): Express
+export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], workflowExecution: Pick<IWorkflowEngine, "emitEvent" | "spawn"> = _UnavailableWorkflowExecution): Express
 {
 	const app = express();
 

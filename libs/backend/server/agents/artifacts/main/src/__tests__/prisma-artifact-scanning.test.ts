@@ -22,6 +22,17 @@ function _Transaction()
 	};
 }
 
+/** Builds an engine double that gives each admitted task a matching receipt. */
+function _Workflow()
+{
+	return {
+		spawn: vi.fn(async function _Spawn(_transaction: unknown, input: { readonly taskName: string; readonly idempotencyKey: string })
+		{
+			return { taskId: "task-1", taskName: input.taskName, idempotencyKey: input.idempotencyKey };
+		}),
+	};
+}
+
 /** Build one claimed job and its quarantined immutable revision. */
 function _ClaimedJob(overrides: Record<string, unknown> = {})
 {
@@ -46,7 +57,7 @@ describe("PrismaArtifactScanRepository", function _Suite()
 		const transaction = _Transaction();
 		transaction.artifactScanJob.findFirst.mockResolvedValue({ ..._ClaimedJob({ state: ArtifactScanJobState.Pending, attempt: 0 }), artifactRevision: _ClaimedJob().artifactRevision });
 		transaction.artifactScanJob.updateMany.mockResolvedValue({ count: 1 });
-		const repository = new PrismaArtifactScanRepository(transaction as never, 240_000, lifecycle);
+		const repository = new PrismaArtifactScanRepository(transaction as never, 240_000, lifecycle, _Workflow());
 
 		const result = await repository.claim();
 
@@ -59,7 +70,7 @@ describe("PrismaArtifactScanRepository", function _Suite()
 	{
 		const transaction = _Transaction();
 		transaction.artifactScanJob.findUnique.mockResolvedValue(_ClaimedJob({ claimExpiresAt: _NOW }));
-		const repository = new PrismaArtifactScanRepository(transaction as never, 300_000, lifecycle);
+		const repository = new PrismaArtifactScanRepository(transaction as never, 300_000, lifecycle, _Workflow());
 
 		await expect(repository.fail({ jobId: "job-1", attempt: 2, claimFence: "fence-2", failureCode: "scanner_failed" })).resolves.toBe("stale");
 		expect(transaction.artifactScanJob.update).not.toHaveBeenCalled();
@@ -72,7 +83,7 @@ describe("PrismaArtifactScanRepository", function _Suite()
 	{
 		const transaction = _Transaction();
 		transaction.artifactScanJob.findUnique.mockResolvedValue(_ClaimedJob({ attempt, claimFence: `fence-${attempt}` }));
-		const repository = new PrismaArtifactScanRepository(transaction as never, 300_000, lifecycle);
+		const repository = new PrismaArtifactScanRepository(transaction as never, 300_000, lifecycle, _Workflow());
 
 		await expect(repository.fail({ jobId: "job-1", attempt, claimFence: `fence-${attempt}`, failureCode: "scanner_failed" })).resolves.toBe("failed");
 		expect(transaction.artifactScanJob.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: expectedState }) }));
@@ -83,7 +94,7 @@ describe("PrismaArtifactScanRepository", function _Suite()
 	{
 		const transaction = _Transaction();
 		transaction.artifactScanJob.findUnique.mockResolvedValue(_ClaimedJob());
-		const repository = new PrismaArtifactScanRepository(transaction as never, 300_000, lifecycle);
+		const repository = new PrismaArtifactScanRepository(transaction as never, 300_000, lifecycle, _Workflow());
 
 		await expect(repository.complete({ jobId: "job-1", attempt: 2, claimFence: "fence-2", verdict: ArtifactScannerVerdict.Clean, scannerVersion: "clamav-pinned" })).resolves.toBe("completed");
 		expect(transaction.artifactRevision.update).toHaveBeenCalledWith({ where: { id: "revision-1" }, data: { state: ArtifactRevisionState.Published } });
@@ -91,11 +102,26 @@ describe("PrismaArtifactScanRepository", function _Suite()
 		expect(lifecycle.report).toHaveBeenCalledWith({ revisionId: "revision-1", state: "ready", failureCode: null });
 	});
 
+	it("saves one PDF preprocessing task in the clean-scan transaction", async function _AdmitsPdfPreprocessing()
+	{
+		const transaction = _Transaction();
+		const workflow = _Workflow();
+		const claimed = _ClaimedJob();
+		transaction.artifactScanJob.findUnique.mockResolvedValue({ ...claimed, artifactRevision: { ...claimed.artifactRevision, mediaType: "application/pdf" } });
+		const repository = new PrismaArtifactScanRepository(transaction as never, 300_000, lifecycle, workflow);
+
+		await expect(repository.complete({ jobId: "job-1", attempt: 2, claimFence: "fence-2", verdict: ArtifactScannerVerdict.Clean, scannerVersion: "clamav-pinned" })).resolves.toBe("completed");
+
+		expect(transaction.artifactPreprocessJob.create).toHaveBeenCalledWith({ data: expect.objectContaining({ sourceRevisionId: "revision-1", pipelineVersion: "pdf-to-text/v1" }) });
+		expect(workflow.spawn).toHaveBeenCalledWith({ client: transaction }, expect.objectContaining({ taskName: "artifacts.preprocess.pdf-to-text/v1", input: expect.objectContaining({ siloId: "silo-1" }) }));
+		expect(transaction.artifactOutboxEvent.create).toHaveBeenCalledOnce();
+	});
+
 	it("rejects unsafe bytes without publishing an artifact pointer", async function _RejectsUnsafe()
 	{
 		const transaction = _Transaction();
 		transaction.artifactScanJob.findUnique.mockResolvedValue(_ClaimedJob());
-		const repository = new PrismaArtifactScanRepository(transaction as never, 300_000, lifecycle);
+		const repository = new PrismaArtifactScanRepository(transaction as never, 300_000, lifecycle, _Workflow());
 
 		await expect(repository.complete({ jobId: "job-1", attempt: 2, claimFence: "fence-2", verdict: ArtifactScannerVerdict.Rejected, scannerVersion: "clamav-pinned" })).resolves.toBe("completed");
 		expect(transaction.artifactRevision.update).toHaveBeenCalledWith({ where: { id: "revision-1" }, data: { state: ArtifactRevisionState.Rejected } });
