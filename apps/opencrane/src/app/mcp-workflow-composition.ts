@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
 import { _CreateArtifactCatalogueRepository } from "@opencrane/backend/server/agents/artifacts";
+import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/execution";
 import { __CreateMcpbBundleVerifier, __CreateMcpbValidationWorkflow, __CreateMcpEraProbeWorkflow, __CreateMcpTaskWorkflow, MCP_ERA_PROTOCOL_VERSION, McpEraProbeFailure, McpEraProbeFailureCodes, McpEraProbeTaskNames, McpbValidationTaskNames, McpTaskTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
 import type { McpEraProbeClient, McpbBundleArtifactResolver } from "@opencrane/backend/server/gateways/mcp";
 import { __CreateHttpsMcpEraProbeClient, McpEraProbeConfigurationError, McpEraProbeProtocolError, McpEraProbeTransportError } from "@opencrane/backend/server/infra/mcp-era-probe";
@@ -32,7 +33,11 @@ export function _McpEraProbeFailure(error: unknown): McpEraProbeFailure
 /**
  * Creates the guarded Absurd engine that the server's durable domain workflows share.
  *
- * The internal workload composition uses this engine instead of creating another worker runtime.
+ * The server declares the skill-authoring task on its queue without adding a local handler. That
+ * lets a product transaction admit the task while the controller remains responsible for executing
+ * the Kubernetes-mutating definition.
+ *
+ * @see SkillAuthoringValidationTaskDeclaration — defines the declaration the controller shares.
  */
 export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: OpenCraneWorkflowConfig): McpWorkflowComposition
 {
@@ -41,9 +46,11 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 		{ taskName: McpbValidationTaskNames.Verify, queue: "control-plane" },
 		{ taskName: McpbValidationTaskNames.Inspect, queue: "mcpb-inspection" },
 		{ taskName: McpTaskTaskNames.Call, queue: "control-plane" },
+		{ taskName: SkillAuthoringValidationTaskDeclaration.taskName, queue: "skill-authoring" },
 	]);
 	const runtime = _CreateAbsurdWorkflowEngine({ databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
+	execution.declare(SkillAuthoringValidationTaskDeclaration);
 	const transport = __CreateHttpsMcpEraProbeClient({ protocolVersion: MCP_ERA_PROTOCOL_VERSION, maximumResponseBytes: config.mcpEraProbeMaximumResponseBytes, requestTimeoutMilliseconds: config.mcpEraProbeTimeoutMilliseconds });
 	const probe: McpEraProbeClient = {
 		async probe(request)

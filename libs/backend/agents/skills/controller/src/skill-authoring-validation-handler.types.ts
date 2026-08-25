@@ -1,116 +1,145 @@
 import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
+import type { SkillAuthoringValidationTaskInput } from "@opencrane/backend/agents/skills/execution";
 import type { SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
-import type { IWorkflowTaskContext, IWorkflowTaskDefinition, IWorkflowTaskReceipt, IWorkflowTaskRetryPolicy } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowTaskContext, IWorkflowTaskDefinition, IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
-/** Names the remote durable task that validates one Draft Python skill revision. */
-export enum SkillAuthoringValidationTaskNames
-{
-	/** Runs the isolated authoring Job and records its final review evidence. */
-	Validate = "skills.authoring.validate/v1",
-}
-
-/** Identifies one server-admitted authoring validation without carrying artifact bytes or credentials. */
-export interface SkillAuthoringValidationTaskInput
-{
-	/** Silo that owns both the saved validation and the workflow task. */
-	readonly siloId: string;
-	/** Stable product record that binds the task to one Draft Python skill revision. */
-	readonly validationId: string;
-}
-
-/** Describes the saved validation facts the controller needs before it can create a Kubernetes Job. */
+/**
+ * Carries the server-owned facts the controller needs to build an authoring Job.
+ *
+ * The authority returns this record only after it checks the task receipt and silo, which prevents
+ * a stale task from acting on a different validation.
+ */
 export interface SkillAuthoringValidationControllerRecord
 {
-	/** Stable product record selected by the server when it admitted this task. */
+	/** Names the validation selected by the server when it admitted this task. */
 	readonly validationId: string;
-	/** Silo that owns the Draft skill revision and the isolated Job. */
+	/** Names the silo that owns both the Draft skill revision and its isolated Job. */
 	readonly siloId: string;
-	/** Stable id used for the opaque Kubernetes Job name. */
+	/** Supplies the stable value used in the opaque Kubernetes Job name. */
 	readonly jobId: string;
 }
 
-/** Carries the exact Job coordinates that the server binds to the saved validation. */
+/**
+ * Carries the Job facts that the server persists before the controller releases the Job.
+ *
+ * Binding the Kubernetes UID and bootstrap reference first prevents a worker from using an
+ * unrecorded Job identity.
+ */
 export interface SkillAuthoringValidationJobRecordCommand
 {
-	/** Kubernetes-issued immutable UID for the Job the controller created or adopted. */
+	/** Identifies the Job that Kubernetes created or the controller adopted. */
 	readonly jobUid: string;
-	/** Hashed opaque reference that the worker must exchange before reading its input. */
+	/** Supplies the opaque reference the worker must exchange before it can read its input. */
 	readonly bootstrapReference: string;
-	/** Namespace selected by the deployment-owned authoring Job profile. */
+	/** Names the namespace selected by the deployment-owned authoring Job profile. */
 	readonly namespace: string;
 }
 
-/** Carries the first Job-owned Pod that may use the saved bootstrap reference. */
+/**
+ * Carries the first Pod Kubernetes created for the recorded Job.
+ *
+ * The server records this Pod before worker completion can be accepted, so the bootstrap reference
+ * is tied to a Job-owned worker.
+ */
 export interface SkillAuthoringValidationPodRecordCommand
 {
-	/** Kubernetes-issued immutable UID for the Job already bound to this validation. */
+	/** Identifies the Job already bound to this validation. */
 	readonly jobUid: string;
-	/** Kubernetes-issued immutable UID for the only worker Pod the Job created. */
+	/** Identifies the first worker Pod created for that Job. */
 	readonly podUid: string;
 }
 
-/** Identifies a persisted completion received from the isolated authoring worker. */
+/**
+ * Identifies a completion the server saved before it wakes the workflow task.
+ *
+ * The handler reloads this inbox entry rather than trusting the event payload, then asks the server
+ * to make the terminal write for the validation.
+ */
 export interface SkillAuthoringValidationCompletion
 {
-	/** Validation record that owns this completion inbox entry. */
+	/** Names the validation that owns this completion inbox entry. */
 	readonly validationId: string;
-	/** Digest of the bounded receipt stored by the server before it wakes the task. */
+	/** Identifies the receipt the server saved before it published the private wake-up event. */
 	readonly completionDigest: string;
 }
 
-/** Result returned once the workflow handler becomes the sole terminal writer. */
+/**
+ * Reports the completion that the handler loaded and asked the server to apply.
+ *
+ * Returning this result means the persisted completion reached the server-owned terminal write;
+ * the caller can use its digest to identify the completion inbox entry.
+ */
 export interface SkillAuthoringValidationTaskResult
 {
-	/** Validation record that the handler completed or failed. */
+	/** Names the validation whose completion the handler applied. */
 	readonly validationId: string;
-	/** Receipt digest that identifies the inbox entry the handler applied. */
+	/** Identifies the completion inbox entry the handler applied. */
 	readonly completionDigest: string;
 }
 
-/** Provides the server-owned product reads and writes that the remote controller task may use. */
+/**
+ * Defines the server-owned reads and writes that the remote controller task may request.
+ *
+ * The controller uses this port for product rows, bootstrap state, the completion inbox, and the
+ * terminal write. It supplies Kubernetes facts for the server to persist; it does not own product
+ * records itself.
+ */
 export interface SkillAuthoringValidationControllerAuthority
 {
-	/** Load a validation only when its task receipt and silo still match the saved product record. */
+	/** Loads the validation when its task receipt and silo still match the saved product record. */
 	load(validationId: string, task: IWorkflowTaskReceipt): Promise<SkillAuthoringValidationControllerRecord | null>;
-	/** Bind the immutable Kubernetes Job UID and worker bootstrap reference to one validation. */
+	/** Records the Job identity and bootstrap reference before the controller releases the Job. */
 	recordJob(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationJobRecordCommand): Promise<"recorded" | "idempotent">;
-	/** Bind the one Job-owned Pod whose projected token may consume the bootstrap reference. */
+	/** Records the first Job-owned Pod before the worker can complete this validation. */
 	recordPod(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationPodRecordCommand): Promise<"recorded" | "idempotent">;
-	/** Re-read the persisted completion inbox after the task receives its private wake-up event. */
+	/** Reloads the persisted completion inbox entry after the task receives its private wake-up event. */
 	loadCompletion(validationId: string, completionDigest: string, task: IWorkflowTaskReceipt): Promise<SkillAuthoringValidationCompletion | null>;
-	/** Apply the saved completion as the sole writer of skill-review evidence and terminal state. */
+	/** Applies the saved completion as the terminal writer of skill-review evidence and state. */
 	complete(validationId: string, completion: SkillAuthoringValidationCompletion, task: IWorkflowTaskReceipt): Promise<"completed" | "idempotent">;
 }
 
-/** Limits the Kubernetes actions that the durable authoring task may ask the agent controller to perform. */
+/**
+ * Defines the Kubernetes actions the authoring task may ask the controller to perform.
+ *
+ * This narrow port makes the controller the Job mutator: it creates or adopts a suspended Job,
+ * releases it after the server records its UID, and identifies the first Pod it owns.
+ */
 export interface SkillAuthoringValidationKubernetesStore
 {
-	/** Create one suspended authoring Job, or adopt the matching Job after a restart. */
+	/** Creates the suspended authoring Job or adopts the matching Job after a controller restart. */
 	ensureSuspendedJob(expected: V1Job): Promise<V1Job>;
-	/** Unsuspend the assigned Job after the server has recorded its immutable UID and bootstrap reference. */
+	/** Releases the assigned Job after the server has recorded its UID and bootstrap reference. */
 	releaseJob(expected: V1Job, jobUid: string): Promise<V1Job>;
-	/** Return the only Pod owned by the Job, or null while Kubernetes has not created it. */
+	/** Returns the first Pod owned by the Job, or null while Kubernetes has not created one. */
 	findFirstPod(expected: V1Job, jobUid: string, serviceAccountName: string): Promise<V1Pod | null>;
 }
 
-/** Configures the controller-hosted handler for the single Python authoring validation pilot. */
+/**
+ * Configures the controller-hosted task for a Python authoring validation.
+ *
+ * The options keep server authority separate from Kubernetes mutation and pass the deployment-owned
+ * profile into the task definition.
+ */
 export interface SkillAuthoringValidationHandlerOptions
 {
-	/** Server authority that owns the validation row, bootstrap, inbox, outbox, and terminal write. */
+	/** Supplies the server authority that owns the validation row, bootstrap, inbox, outbox, and terminal write. */
 	readonly authority: SkillAuthoringValidationControllerAuthority;
-	/** Kubernetes adapter supplied by the agent controller, the sole Job mutator. */
+	/** Supplies the controller Kubernetes adapter, which mutates authoring Jobs. */
 	readonly kubernetes: SkillAuthoringValidationKubernetesStore;
-	/** Immutable deployment profile for the one supported Python authoring Job class. */
+	/** Supplies the deployment-owned profile for the supported Python authoring Job class. */
 	readonly profile: SkillWorkloadJobProfile;
-	/** Delay before checking again for the Job's first Pod. */
+	/** Sets the delay before the task checks again for the Job's first Pod. */
 	readonly podWaitMilliseconds: number;
-	/** Retry policy registered with the workflow engine for transient controller or Kubernetes failures. */
-	readonly retryPolicy: IWorkflowTaskRetryPolicy;
 }
 
-/** Builds the registered workflow definition that runs one Python authoring validation. */
+/**
+ * Builds the workflow definition that runs one Python authoring validation.
+ *
+ * The returned definition lets the controller register the shared declaration while keeping the
+ * server responsible for transactional admission.
+ */
 export type CreateSkillAuthoringValidationHandler = (options: SkillAuthoringValidationHandlerOptions) => IWorkflowTaskDefinition<SkillAuthoringValidationTaskInput, SkillAuthoringValidationTaskResult>;
 
-/** Narrows the workflow context used by the handler's private event wait. */
+/** Narrows the workflow context to the checkpoint, delay, task identity, and private-event operations this handler uses. */
 export type SkillAuthoringValidationTaskContext = Pick<IWorkflowTaskContext, "checkpoint" | "sleepUntil" | "task" | "waitForEvent">;

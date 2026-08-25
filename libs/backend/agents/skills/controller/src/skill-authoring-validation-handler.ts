@@ -1,17 +1,18 @@
 import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
+import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/execution";
+import type { SkillAuthoringValidationTaskInput } from "@opencrane/backend/agents/skills/execution";
 import { __BuildGovernedSkillWorkloadJob, SkillWorkloadKinds } from "@opencrane/backend/agents/skills/k8s-launcher";
 import { __CreateSkillWorkloadBootstrapReference } from "@opencrane/contracts";
 import { WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTaskDefinition, IWorkflowTaskEvent } from "@opencrane/backend/server/infra/workflows/contract";
 
-import { SkillAuthoringValidationTaskNames } from "./skill-authoring-validation-handler.types";
-import type { SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationHandlerOptions, SkillAuthoringValidationTaskContext, SkillAuthoringValidationTaskInput, SkillAuthoringValidationTaskResult } from "./skill-authoring-validation-handler.types";
+import type { SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationHandlerOptions, SkillAuthoringValidationTaskContext, SkillAuthoringValidationTaskResult } from "./skill-authoring-validation-handler.types";
 
-/** Name of the private event that wakes a task after the server persists a worker completion. */
+/** Names the private event the server publishes after it persists a worker completion in its inbox. */
 const _COMPLETION_EVENT = "skill-authoring-completed";
 
-/** Require the immutable Kubernetes UID assigned to one suspended authoring Job. */
+/** Require the immutable Kubernetes UID that the server must record before the authoring Job is released. */
 function _JobUid(job: V1Job): string
 {
 	const uid = job.metadata?.uid?.trim();
@@ -22,7 +23,7 @@ function _JobUid(job: V1Job): string
 	return uid;
 }
 
-/** Require the immutable Kubernetes UID assigned to the first Job-owned authoring Pod. */
+/** Require the immutable Kubernetes UID of the first Job-owned Pod before the server records it. */
 function _PodUid(pod: V1Pod): string
 {
 	const uid = pod.metadata?.uid?.trim();
@@ -33,7 +34,11 @@ function _PodUid(pod: V1Pod): string
 	return uid;
 }
 
-/** Read the persisted completion identity from the private event without accepting a different validation. */
+/**
+ * Reads a completion identity from the private event and rejects one for another validation.
+ *
+ * The handler must reject that event before it calls the server terminal writer.
+ */
 function _Completion(event: IWorkflowTaskEvent<unknown>, validationId: string): SkillAuthoringValidationCompletion
 {
 	const value = event.payload;
@@ -50,7 +55,12 @@ function _Completion(event: IWorkflowTaskEvent<unknown>, validationId: string): 
 	return { validationId, completionDigest };
 }
 
-/** Build the authoring Job that carries no artifact bytes, task input, or credentials. */
+/**
+ * Builds the authoring Job without artifact bytes, task input, or credentials.
+ *
+ * The server retains those values and the worker must use the bootstrap reference after the server
+ * has recorded the Job and first Pod identities.
+ */
 async function _Job(record: SkillAuthoringValidationControllerRecord, profile: SkillAuthoringValidationHandlerOptions["profile"]): Promise<{ readonly job: V1Job; readonly bootstrapReference: string }>
 {
 	if (profile.kind !== SkillWorkloadKinds.Authoring)
@@ -62,7 +72,13 @@ async function _Job(record: SkillAuthoringValidationControllerRecord, profile: S
 	return { job, bootstrapReference };
 }
 
-/** Sleep once before the task checks again for the first Pod its released Job created. The bound matches the predecessor controller's configured poll range, so this replacement cannot busy-loop Kubernetes or wait longer than the old recovery delay. */
+/**
+ * Sleeps once before the task checks again for the first Pod its released Job created.
+ *
+ * The bound carries forward the former controller's supported poll range, so a missing Pod cannot
+ * busy-loop Kubernetes or wait longer than that range permits.
+ * @see __RunSkillWorkloadController — validates the matching 100–60,000 ms poll range.
+ */
 async function _WaitForPod(context: SkillAuthoringValidationTaskContext, milliseconds: number): Promise<void>
 {
 	if (!Number.isSafeInteger(milliseconds) || milliseconds < 100 || milliseconds > 60_000)
@@ -72,12 +88,22 @@ async function _WaitForPod(context: SkillAuthoringValidationTaskContext, millise
 	await context.sleepUntil(new Date(Date.now() + milliseconds));
 }
 
-/** Register the remote task that creates, releases, observes, and completes one Python authoring Job. */
+/**
+ * Registers the remote task that creates, releases, observes, and completes one Python authoring Job.
+ *
+ * It uses the declaration the server already admitted, records the Job UID before release, and
+ * records the first Pod before it accepts a server-persisted completion. The server remains the
+ * terminal writer, so the controller never writes product state directly.
+ *
+ * @param options - Supplies the server authority, Kubernetes adapter, deployment profile, and Pod delay.
+ * @returns A replay-safe workflow definition for one admitted validation.
+ * @throws {WorkflowTaskTerminalError} When the saved validation, selected profile, completion event, or completion inbox cannot be used.
+ * @see SkillAuthoringValidationTaskDeclaration — supplies the task name and retry policy shared with the server.
+ */
 export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringValidationHandlerOptions): IWorkflowTaskDefinition<SkillAuthoringValidationTaskInput, SkillAuthoringValidationTaskResult>
 {
 	return {
-		taskName: SkillAuthoringValidationTaskNames.Validate,
-		retryPolicy: options.retryPolicy,
+		...SkillAuthoringValidationTaskDeclaration,
 		async run(context, input): Promise<SkillAuthoringValidationTaskResult>
 		{
 			// 1. Reload the server-owned row, so a stale task cannot create a Job for another validation or silo.

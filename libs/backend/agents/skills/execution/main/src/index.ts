@@ -8,3 +8,5 @@ export { __CreateSkillWorkloadDispatchRouter } from "./skill-workload-dispatch.r
 export type { SkillWorkloadDispatchRouterDependencies } from "./skill-workload-dispatch.types";
 export { PrismaSkillWorkloadUnitOfWork } from "./prisma-skill-workload-unit-of-work";
 export { _CreateSkillWorkloadExecutionAuthority } from "./skill-workload-authority";
+export { SkillAuthoringValidationTaskDeclaration, SkillAuthoringValidationTaskNames } from "./skill-authoring-validation.types";
+export type { SkillAuthoringValidationTaskInput } from "./skill-authoring-validation.types";
