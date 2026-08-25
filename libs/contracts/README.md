@@ -125,6 +125,11 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   governed-skill controller and the server authority. It creates the opaque Job reference, stores
   only its SHA-256 hash, and rejects any other wire shape; it is not a user credential or a general
   hashing API.
+- `__CreateArtifactPreprocessBootstrapReference`,
+  `__HashArtifactPreprocessBootstrapReference`, and
+  `__IsArtifactPreprocessBootstrapReference` — the shared opaque reference for a one-shot PDF
+  preprocessing Job. It lets the server store a hash rather than a usable worker value, while the
+  worker still has to prove its Kubernetes identity before it can receive brokered bytes.
 - `ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE`,
   `ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME`, `ArtifactPreprocessorJobClaim`, and the
   claim/failure commands — the narrow broker protocol for the isolated PDF converter. These DTOs

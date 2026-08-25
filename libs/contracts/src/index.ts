@@ -12,6 +12,7 @@ export * from "./conversation-elicitation.types";
 export * from "./conversation-elicitation.validator";
 export type * from "@opencrane/models/artifacts";
 export * from "./artifact-preprocessor.types";
+export * from "./artifact-preprocess-bootstrap-reference";
 export * from "./artifact-scanner.types";
 export type * from "@opencrane/models/authorization";
 export * from "./cluster-tenant.types";

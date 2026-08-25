@@ -62,6 +62,6 @@ export interface ArtifactPreprocessorJobAssignment
 	readonly siloId: string;
 	/** Namespace chosen by the controller and required to match the profile. */
 	readonly namespace: string;
-	/** Opaque server-issued reference that the worker trades for task-bound broker access. */
+	/** Opaque reference that the server matches by hash after it verifies the worker identity. */
 	readonly bootstrapReference: string;
 }
