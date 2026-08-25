@@ -12,6 +12,8 @@ export enum RuntimeWorkloadClaimClasses
 	McpExecutor = "mcp-executor",
 	/** The claim validates a saved Draft Python skill, so its controller must use the skill-validation projection. */
 	SkillAuthoringValidation = "skill-authoring-validation",
+	/** The claim converts one published PDF, so its controller must use the PDF-preprocessor projection. */
+	ArtifactPreprocess = "artifact-preprocess",
 }
 
 /** Restricts a claim's workload class to the members that its issuing authority supports. */

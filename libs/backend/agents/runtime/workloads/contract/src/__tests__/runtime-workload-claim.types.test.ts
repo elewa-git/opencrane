@@ -29,4 +29,9 @@ describe("runtime workload claim contract", function _DescribeRuntimeWorkloadCla
 		expect(claim.workloadClass).toBe(RuntimeWorkloadClaimClasses.McpExecutor);
 		expect(binding.firstPodUid).toBeUndefined();
 	});
+
+	it("names PDF preprocessing as a distinct executor class", function _ArtifactPreprocess()
+	{
+		expect(RuntimeWorkloadClaimClasses.ArtifactPreprocess).toBe("artifact-preprocess");
+	});
 });
