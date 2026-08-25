@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
 import { _CreateArtifactCatalogueRepository } from "@opencrane/backend/server/agents/artifacts";
+import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import { __CreateMcpbBundleVerifier, __CreateMcpbValidationWorkflow, __CreateMcpEraProbeWorkflow, __CreateMcpTaskWorkflow, MCP_ERA_PROTOCOL_VERSION, McpEraProbeFailure, McpEraProbeFailureCodes, McpEraProbeTaskNames, McpbValidationTaskNames, McpTaskTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
 import type { McpEraProbeClient, McpbBundleArtifactResolver } from "@opencrane/backend/server/gateways/mcp";
@@ -46,6 +47,23 @@ export function __DeclareSkillAuthoringValidation(execution: Pick<IWorkflowEngin
 }
 
 /**
+ * Declares the remote PDF conversion task before a publication transaction may save it.
+ *
+ * The declaration makes the task name available before a future publication transaction may save
+ * its receipt. The server installs no handler; the controller owns the remote handler that creates
+ * and releases the isolated Job.
+ *
+ * Called by: `_CreateMcpWorkflowComposition`.
+ * @param execution - Supplies the guarded engine that owns declared task names.
+ * @returns Nothing after registering the shared task declaration.
+ * @see ArtifactPreprocessTaskDeclaration — fixes the task name and retry policy shared with the controller.
+ */
+export function __DeclareArtifactPreprocessTask(execution: Pick<IWorkflowEngine, "declare">): void
+{
+	execution.declare(ArtifactPreprocessTaskDeclaration);
+}
+
+/**
  * Creates the guarded Absurd engine that the server's durable domain workflows share.
  *
  * The server declares the skill-authoring task on its queue without adding a local handler. That
@@ -63,10 +81,12 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 		{ taskName: McpbValidationTaskNames.Inspect, queue: "mcpb-inspection" },
 		{ taskName: McpTaskTaskNames.Call, queue: "control-plane" },
 		{ taskName: SkillAuthoringValidationTaskDeclaration.taskName, queue: "skill-authoring" },
+		{ taskName: ArtifactPreprocessTaskDeclaration.taskName, queue: "artifact-preprocessing" },
 	]);
 	const runtime = _CreateAbsurdWorkflowEngine({ databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
 	__DeclareSkillAuthoringValidation(execution);
+	__DeclareArtifactPreprocessTask(execution);
 	const transport = __CreateHttpsMcpEraProbeClient({ protocolVersion: MCP_ERA_PROTOCOL_VERSION, maximumResponseBytes: config.mcpEraProbeMaximumResponseBytes, requestTimeoutMilliseconds: config.mcpEraProbeTimeoutMilliseconds });
 	const probe: McpEraProbeClient = {
 		async probe(request)
