@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 
 import { __ParseArtifactPreprocessPodBindRequest, __ParseArtifactPreprocessTaskReceipt, __ParseArtifactPreprocessWorkloadBindRequest } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { ArtifactPreprocessCompletion } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
 import type { ArtifactPreprocessControllerIdentity, ArtifactPreprocessControllerRouterDependencies } from "./artifact-preprocess-controller.router.types";
@@ -111,6 +112,69 @@ export function __CreateArtifactPreprocessControllerRouter(dependencies: Artifac
 		}
 	});
 
+	router.post("/artifact-preprocess-jobs/:preprocessJobId/completion/load", async function _LoadCompletion(request: Request, response: Response): Promise<void>
+	{
+		try
+		{
+			// 1. Authenticate before reading completion evidence, which belongs to the server-owned inbox.
+			if (!await _IsController(request, dependencies))
+			{
+				_RespondProblem(response, 401, "controller_identity_denied");
+				return;
+			}
+			// 2. Return only the completion that the admitted task and event digest identify together.
+			const preprocessJobId = _PreprocessJobId(request);
+			const completionDigest = _CompletionDigest(request.body);
+			const task = completionDigest === null ? null : __ParseArtifactPreprocessTaskReceipt((request.body as Record<string, unknown>)["task"]);
+			if (preprocessJobId === null || completionDigest === null || task === null)
+			{
+				_RespondProblem(response, 400, "invalid_completion_load");
+				return;
+			}
+			const completion = await dependencies.authority.loadCompletion(preprocessJobId, completionDigest, task);
+			if (completion === null)
+			{
+				_RespondProblem(response, 409, "stale_or_unavailable_completion");
+				return;
+			}
+			response.status(200).json(completion);
+		}
+		catch (err)
+		{
+			_LogFailure(dependencies, err, "agent_controller.artifact_preprocess.completion_load");
+			_RespondProblem(response, 503, "artifact_preprocess_unavailable");
+		}
+	});
+
+	router.post("/artifact-preprocess-jobs/:preprocessJobId/completion/complete", async function _Complete(request: Request, response: Response): Promise<void>
+	{
+		try
+		{
+			// 1. Authenticate before reading completion evidence so another workload cannot replay a task receipt.
+			if (!await _IsController(request, dependencies))
+			{
+				_RespondProblem(response, 401, "controller_identity_denied");
+				return;
+			}
+			// 2. Apply only evidence that names the same PDF job as the requested route.
+			const preprocessJobId = _PreprocessJobId(request);
+			const completion = _Completion(request.body);
+			const task = completion === null ? null : __ParseArtifactPreprocessTaskReceipt((request.body as Record<string, unknown>)["task"]);
+			if (preprocessJobId === null || completion === null || task === null || completion.preprocessJobId !== preprocessJobId)
+			{
+				_RespondProblem(response, 400, "invalid_completion");
+				return;
+			}
+			const outcome = await dependencies.authority.complete(preprocessJobId, completion, task);
+			_RespondCompletionOutcome(response, outcome, preprocessJobId);
+		}
+		catch (err)
+		{
+			_LogFailure(dependencies, err, "agent_controller.artifact_preprocess.completion_complete");
+			_RespondProblem(response, 503, "artifact_preprocess_unavailable");
+		}
+	});
+
 	return router;
 }
 
@@ -119,6 +183,36 @@ function _PreprocessJobId(request: Request): string | null
 {
 	const value = request.params["preprocessJobId"];
 	return typeof value === "string" && value.length > 0 && value.length <= 128 ? value : null;
+}
+
+/** Reads the completion digest from a strict controller load request. */
+function _CompletionDigest(value: unknown): string | null
+{
+	if (value === null || typeof value !== "object" || Array.isArray(value))
+	{
+		return null;
+	}
+	const body = value as Record<string, unknown>;
+	return Object.keys(body).length === 2 && typeof body["completionDigest"] === "string" && /^sha256:[a-f0-9]{64}$/u.test(body["completionDigest"]) ? body["completionDigest"] : null;
+}
+
+/** Reads the completion identity from a strict controller terminal-write request. */
+function _Completion(value: unknown): ArtifactPreprocessCompletion | null
+{
+	if (value === null || typeof value !== "object" || Array.isArray(value))
+	{
+		return null;
+	}
+	const body = value as Record<string, unknown>;
+	const completion = body["completion"];
+	if (Object.keys(body).length !== 2 || completion === null || typeof completion !== "object" || Array.isArray(completion))
+	{
+		return null;
+	}
+	const record = completion as Record<string, unknown>;
+	return Object.keys(record).length === 2 && typeof record["preprocessJobId"] === "string" && record["preprocessJobId"].length > 0 && typeof record["completionDigest"] === "string" && /^sha256:[a-f0-9]{64}$/u.test(record["completionDigest"])
+		? { preprocessJobId: record["preprocessJobId"], completionDigest: record["completionDigest"] }
+		: null;
 }
 
 /** Reviews the projected bearer token and checks every controller identity field the server owns. */
@@ -161,6 +255,17 @@ function _RespondOutcome(response: Response, outcome: "bound" | "idempotent" | "
 		return;
 	}
 	response.status(200).json({ outcome, preprocessJobId });
+}
+
+/** Writes a completion outcome using the controller client's terminal result vocabulary. */
+function _RespondCompletionOutcome(response: Response, outcome: "completed" | "idempotent" | "conflict", preprocessJobId: string): void
+{
+	if (outcome === "conflict")
+	{
+		_RespondProblem(response, 409, "stale_or_conflicting_preprocess_job");
+		return;
+	}
+	response.status(200).json({ outcome: outcome === "completed" ? "bound" : "idempotent", preprocessJobId });
 }
 
 /** Records a safe operation name and error without logging a bearer token or request body. */

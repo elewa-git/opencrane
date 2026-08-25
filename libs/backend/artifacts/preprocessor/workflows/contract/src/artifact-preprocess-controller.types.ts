@@ -36,6 +36,20 @@ export interface ArtifactPreprocessPodBindCommand
 }
 
 /**
+ * Identifies the server-owned completion evidence that wakes a controller task.
+ *
+ * The event carries this small identity, then the controller reloads the matching inbox entry
+ * before it asks the authority to make the PDF job terminal.
+ */
+export interface ArtifactPreprocessCompletion
+{
+	/** Names the preprocessing job that owns the saved completion. */
+	readonly preprocessJobId: string;
+	/** Names the digest that identifies the server-owned completion inbox entry. */
+	readonly completionDigest: string;
+}
+
+/**
  * Defines the server authority that issues and persists PDF-controller bindings.
  *
  * The controller supplies a fenced Job or Pod identity, but the server owns the saved claim and
@@ -70,4 +84,30 @@ export interface ArtifactPreprocessControllerAuthority
 	 * @returns Whether the server bound this identity, had already bound it, or rejected it.
 	 */
 	bindFirstPod(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessPodBindCommand): Promise<"bound" | "idempotent" | "conflict">;
+	/**
+	 * Loads completion evidence after the controller receives its wake-up event.
+	 *
+	 * Called by: `__CreateArtifactPreprocessHandler` and `__CreateArtifactPreprocessControllerRouter`.
+	 * A `null` result tells the handler that the matching inbox entry is no longer available, so it
+	 * must not complete the PDF job.
+	 *
+	 * @param preprocessJobId - Saved PDF preprocessing job requested by the controller task.
+	 * @param completionDigest - Digest carried by the controller's completion event.
+	 * @param task - Receipt that identifies the admitted controller task.
+	 * @returns The matching completion evidence, or `null` when the server cannot supply it.
+	 */
+	loadCompletion(preprocessJobId: string, completionDigest: string, task: IWorkflowTaskReceipt): Promise<ArtifactPreprocessCompletion | null>;
+	/**
+	 * Applies completion evidence the controller loaded from this authority.
+	 *
+	 * Called by: `__CreateArtifactPreprocessHandler` and `__CreateArtifactPreprocessControllerRouter`.
+	 * `completed` makes this call the terminal writer, `idempotent` means it was already applied,
+	 * and `conflict` makes the handler stop.
+	 *
+	 * @param preprocessJobId - Saved PDF preprocessing job requested by the controller task.
+	 * @param completion - Completion evidence returned by {@link loadCompletion}.
+	 * @param task - Receipt that identifies the admitted controller task.
+	 * @returns Whether the completion was applied, had already been applied, or conflicts.
+	 */
+	complete(preprocessJobId: string, completion: ArtifactPreprocessCompletion, task: IWorkflowTaskReceipt): Promise<"completed" | "idempotent" | "conflict">;
 }

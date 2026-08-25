@@ -44,6 +44,10 @@ function _Context()
 		{
 			sleeps.push(instant);
 		},
+		async waitForEvent<TPayload>()
+		{
+			return { eventName: "artifact-preprocess-completed", payload: { preprocessJobId: "preprocess-1", completionDigest: `sha256:${"c".repeat(64)}` } as TPayload };
+		},
 	};
 	return { context, checkpoints, sleeps };
 }
@@ -57,6 +61,8 @@ function _Options(overrides: Partial<ArtifactPreprocessHandlerOptions> = {})
 		claimForTask: vi.fn().mockResolvedValue({ preprocessJobId: "preprocess-1", siloId: "silo-1", claim: { claimId: "claim-1", siloId: "silo-1", workloadClass: RuntimeWorkloadClaimClasses.ArtifactPreprocess, profileName: "pdf-preprocessor", idempotencyKey: "artifact-preprocess:preprocess-1", executionReference: "preprocess-1", claimedAt: new Date(Date.now()).toISOString(), deliveryCount: 1, expiresAt: new Date(Date.now() + 300_000).toISOString() } }),
 		bindWorkload: vi.fn().mockResolvedValue("bound"),
 		bindFirstPod: vi.fn().mockResolvedValue("bound"),
+		loadCompletion: vi.fn().mockResolvedValue({ preprocessJobId: "preprocess-1", completionDigest: `sha256:${"c".repeat(64)}` }),
+		complete: vi.fn().mockResolvedValue("completed"),
 	};
 	const kubernetes = {
 		ensureSuspendedJob: vi.fn().mockResolvedValue(job),
@@ -86,8 +92,8 @@ describe("artifact preprocessing workflow handler", function _DescribeArtifactPr
 
 		const result = await __CreateArtifactPreprocessHandler(options).run(context as never, { siloId: "silo-1", preprocessJobId: "preprocess-1" });
 
-		expect(result).toEqual({ preprocessJobId: "preprocess-1" });
-		expect(checkpoints).toEqual(["claim-preprocess", "ensure-suspended-job", "bind-workload", "release-job", "bind-first-pod"]);
+		expect(result).toEqual({ preprocessJobId: "preprocess-1", completionDigest: `sha256:${"c".repeat(64)}` });
+		expect(checkpoints).toEqual(["claim-preprocess", "ensure-suspended-job", "bind-workload", "release-job", "bind-first-pod", "load-completion-inbox", "complete-preprocess"]);
 		expect(authority.bindWorkload).toHaveBeenCalledWith("preprocess-1", context.task, expect.objectContaining({ bootstrapReference: expect.any(String), namespace: "opencrane-artifact-preprocessor", binding: expect.objectContaining({ claimId: "claim-1", workloadUid: "job-uid-1" }) }));
 		expect(authority.bindFirstPod).toHaveBeenCalledWith("preprocess-1", context.task, { binding: expect.objectContaining({ claimId: "claim-1", workloadUid: "job-uid-1", firstPodUid: "pod-uid-1" }) });
 		expect(kubernetes.releaseJob).toHaveBeenCalledWith(expect.any(Object), "job-uid-1", expect.any(String));

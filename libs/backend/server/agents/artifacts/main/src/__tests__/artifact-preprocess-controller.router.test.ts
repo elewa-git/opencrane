@@ -29,7 +29,7 @@ function _Binding()
 /** Builds an internal Express app with a configurable artifact controller authority. */
 function _App(overrides: Partial<ArtifactPreprocessControllerRouterDependencies> = {})
 {
-	const authority: ArtifactPreprocessControllerAuthority = { claimForTask: vi.fn().mockResolvedValue(_Record()), bindWorkload: vi.fn().mockResolvedValue("bound"), bindFirstPod: vi.fn().mockResolvedValue("bound") };
+	const authority: ArtifactPreprocessControllerAuthority = { claimForTask: vi.fn().mockResolvedValue(_Record()), bindWorkload: vi.fn().mockResolvedValue("bound"), bindFirstPod: vi.fn().mockResolvedValue("bound"), loadCompletion: vi.fn(), complete: vi.fn() };
 	const dependencies: ArtifactPreprocessControllerRouterDependencies = {
 		namespace: "opencrane",
 		workerNamespace: "opencrane-artifact-preprocessor",
@@ -94,7 +94,7 @@ describe("agent-controller artifact preprocessing router", function _DescribeArt
 	{
 		const failure = new Error("database unavailable");
 		const logger = { error: vi.fn() };
-		const authority: ArtifactPreprocessControllerAuthority = { claimForTask: vi.fn().mockRejectedValue(failure), bindWorkload: vi.fn(), bindFirstPod: vi.fn() };
+		const authority: ArtifactPreprocessControllerAuthority = { claimForTask: vi.fn().mockRejectedValue(failure), bindWorkload: vi.fn(), bindFirstPod: vi.fn(), loadCompletion: vi.fn(), complete: vi.fn() };
 		const { app } = _App({ authority, logger });
 		const response = await request(app).post("/artifact-preprocess-jobs/preprocess-1/claim").set("authorization", "Bearer secret-projected-token").send(_Task());
 

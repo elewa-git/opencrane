@@ -7,9 +7,29 @@ import type { ArtifactPreprocessControllerRecord, ArtifactPreprocessTaskInput } 
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
-import type { IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowTaskDefinition, IWorkflowTaskEvent } from "@opencrane/backend/server/infra/workflows/contract";
 
-import type { ArtifactPreprocessHandlerOptions, ArtifactPreprocessTaskContext, ArtifactPreprocessTaskResult } from "./artifact-preprocess-handler.types";
+import type { ArtifactPreprocessCompletion, ArtifactPreprocessHandlerOptions, ArtifactPreprocessTaskContext, ArtifactPreprocessTaskResult } from "./artifact-preprocess-handler.types";
+
+/** Names the event the server publishes after it persists a PDF worker completion. */
+const _COMPLETION_EVENT = "artifact-preprocess-completed";
+
+/** Reads a completion identity from the private event and rejects another preprocessing job's event. */
+function _Completion(event: IWorkflowTaskEvent<unknown>, preprocessJobId: string): ArtifactPreprocessCompletion
+{
+	const value = event.payload;
+	if (typeof value !== "object" || value === null || Array.isArray(value))
+	{
+		throw new WorkflowTaskTerminalError("PDF preprocessing completion event does not match its job.");
+	}
+	const payload = value as Readonly<Record<string, unknown>>;
+	const completionDigest = payload["completionDigest"];
+	if (payload["preprocessJobId"] !== preprocessJobId || typeof completionDigest !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(completionDigest))
+	{
+		throw new WorkflowTaskTerminalError("PDF preprocessing completion event does not match its job.");
+	}
+	return { preprocessJobId, completionDigest };
+}
 
 /** Requires the immutable UID Kubernetes assigned to a Job before it may be released. */
 function _JobUid(job: V1Job): string
@@ -88,13 +108,13 @@ async function _RetryExternal<TResult>(operation: () => Promise<TResult>): Promi
 }
 
 /**
- * Builds the unregistered controller task that binds one one-shot PDF preprocessing Job.
+ * Builds the unregistered controller task that binds one one-shot PDF preprocessing Job and applies its completion.
  *
  * No production composition registers this definition in the current tree. The tests exercise the
  * binding sequence without launching the existing polling worker as a one-shot Job.
  *
  * @param options - Server authority, narrow Kubernetes port, deployment profile, and Pod delay.
- * @returns The shared task definition that prepares and binds one PDF preprocessing Job.
+ * @returns The shared task definition that binds one PDF preprocessing Job and applies its completion.
  * @see ArtifactPreprocessTaskDeclaration — owns the task name and retry policy.
  */
 export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHandlerOptions): IWorkflowTaskDefinition<ArtifactPreprocessTaskInput, ArtifactPreprocessTaskResult>
@@ -168,7 +188,33 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 				if (outcome === "conflict")
 					throw new WorkflowTaskTerminalError("PDF preprocessing Pod claim no longer matches.");
 			});
-			return { preprocessJobId: record.preprocessJobId };
+			// 5. Wait for persisted worker evidence, then make this controller task the terminal writer.
+			const event = await context.waitForEvent<unknown>(_COMPLETION_EVENT);
+			const requestedCompletion = _Completion(event, record.preprocessJobId);
+			const completion = await context.checkpoint({ stepName: "load-completion-inbox" }, async function _LoadCompletion(): Promise<ArtifactPreprocessCompletion>
+			{
+				const loaded = await _RetryExternal(async function _LoadCompletionFromServer()
+				{
+					return await options.authority.loadCompletion(record.preprocessJobId, requestedCompletion.completionDigest, context.task);
+				});
+				if (loaded === null)
+				{
+					throw new WorkflowTaskTerminalError("PDF preprocessing completion inbox is unavailable.");
+				}
+				return loaded;
+			});
+			await context.checkpoint({ stepName: "complete-preprocess" }, async function _CompletePreprocess(): Promise<void>
+			{
+				const outcome = await _RetryExternal(async function _CompleteOnServer()
+				{
+					return await options.authority.complete(record.preprocessJobId, completion, context.task);
+				});
+				if (outcome === "conflict")
+				{
+					throw new WorkflowTaskTerminalError("PDF preprocessing completion no longer matches.");
+				}
+			});
+			return { preprocessJobId: record.preprocessJobId, completionDigest: completion.completionDigest };
 		},
 	};
 }
