@@ -39,6 +39,15 @@ export interface AtomicAgentRevisionPublication
 	readonly publishedAt: string;
 }
 
+/** Names the durable publication transaction outcomes. */
+export enum AtomicAgentRevisionPublicationStatuses
+{
+	/** The transaction published the revision and updated the active service pointer. */
+	Published = "published",
+	/** Another publication changed the expected service or revision state first. */
+	Conflict = "conflict",
+}
+
 /**
  * Outcome of the database step that publishes a revision and repoints the service at it.
  *
@@ -54,8 +63,8 @@ export interface AtomicAgentRevisionPublication
  * winner's revision has not made the change unnecessary.
  */
 export type AtomicAgentRevisionPublicationResult =
-	| { readonly status: "published"; readonly service: AgentService; readonly revision: AgentRevision }
-	| { readonly status: "conflict"; readonly currentActiveRevisionId: AgentRevisionId | null };
+	| { readonly status: `${AtomicAgentRevisionPublicationStatuses.Published}`; readonly service: AgentService; readonly revision: AgentRevision }
+	| { readonly status: `${AtomicAgentRevisionPublicationStatuses.Conflict}`; readonly currentActiveRevisionId: AgentRevisionId | null };
 
 /**
  * Reads and publishes agent-service revisions.

@@ -3,7 +3,7 @@ import { AgentRevisionState, AgentServiceState, Prisma, type PrismaClient } from
 import type { AgentRevision, AgentService } from "@opencrane/models/agents";
 
 import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
-import type { AgentPublicationAuditEvidencePort, AgentServicePublicationRepository, AtomicAgentRevisionPublication, AtomicAgentRevisionPublicationResult } from "../agent-publication.types";
+import { AtomicAgentRevisionPublicationStatuses, type AgentPublicationAuditEvidencePort, type AgentServicePublicationRepository, type AtomicAgentRevisionPublication, type AtomicAgentRevisionPublicationResult } from "../agent-publication.types";
 import { _mapRevision, _mapService, _serviceState } from "./prisma-agent-mappers";
 
 /**
@@ -61,7 +61,7 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 			const revisionRow = await transaction.agentRevision.findUnique({ where: { id: publication.agentRevisionId }, include: { skillAssignments: true, integrationAssignments: true, boundaryAttachments: true } });
 			if (serviceRow === null || revisionRow === null || _serviceState(serviceRow.state) !== publication.expectedServiceState || serviceRow.activeRevisionId !== publication.expectedActiveRevisionId || revisionRow.agentServiceId !== publication.agentServiceId || revisionRow.state !== AgentRevisionState.Draft)
 			{
-				return { status: "conflict", currentActiveRevisionId: serviceRow?.activeRevisionId ?? null } as const;
+				return { status: AtomicAgentRevisionPublicationStatuses.Conflict, currentActiveRevisionId: serviceRow?.activeRevisionId ?? null } as const;
 			}
 
 			// 2. Change both lifecycle coordinates inside the same transaction so neither can escape alone.
@@ -72,7 +72,7 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 			const service = _mapService(serviceRow);
 			const revision = _mapRevision(revisionRow);
 			await __AppendAuditDecision(transaction, auditEvidence.build(publication, service, revision));
-			return { status: "published", service: _mapService(activeRow), revision: _mapRevision(publishedRow) } as const;
+			return { status: AtomicAgentRevisionPublicationStatuses.Published, service: _mapService(activeRow), revision: _mapRevision(publishedRow) } as const;
 		});
 	}
 }

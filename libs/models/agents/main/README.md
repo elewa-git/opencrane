@@ -42,7 +42,7 @@ persistence; a wrong answer here can only refuse a legal move, never invent one.
 ## Public surface
 
 - Lifecycle types: `AgentService`/`…State`, `AgentRevision`/`…State`, `AgentRun`/`…State`,
-  `AgentServiceKinds`, `AgentServiceStates`, `AgentRevisionContent`, `AgentBudget`,
+  `AgentServiceKinds`, `AgentServiceStates`, `AgentRevisionStates`, `AgentRevisionContent`, `AgentBudget`,
   `RevisionBoundaryAttachment`, `RevisionBoundaryKinds`, `RevisionBoundaryCoverages`, `RunEvent`,
   `RunEventTypes`, and the
   agent/run `*Id` identifier aliases.

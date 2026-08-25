@@ -1,6 +1,6 @@
-import { __AreReviewedIntegrationToolDefinitionsValid, __DigestAgentRevisionContent, type AgentRevision } from "@opencrane/models/agents";
+import { AgentRevisionStates, AgentServiceStates, __AreReviewedIntegrationToolDefinitionsValid, __DigestAgentRevisionContent, type AgentRevision } from "@opencrane/models/agents";
 
-import type { AgentServicePublicationRepository, PublishAgentRevisionCommand, PublishAgentRevisionFailureReason, PublishAgentRevisionResult } from "./agent-publication.types";
+import { AtomicAgentRevisionPublicationStatuses, type AgentServicePublicationRepository, type PublishAgentRevisionCommand, type PublishAgentRevisionFailureReason, type PublishAgentRevisionResult } from "./agent-publication.types";
 
 /** Returns whether a string carries a non-empty value after trimming. */
 function _isPresent(value: string): boolean
@@ -58,7 +58,7 @@ export async function __PublishAgentRevision(repository: AgentServicePublication
 	{
 		return _deny("service_not_found");
 	}
-	if (service.state === "retired")
+	if (service.state === AgentServiceStates.Retired)
 	{
 		return _deny("service_retired");
 	}
@@ -73,7 +73,7 @@ export async function __PublishAgentRevision(repository: AgentServicePublication
 	{
 		return _deny("revision_service_mismatch");
 	}
-	if (revision.state !== "draft" || revision.publishedAt !== null)
+	if (revision.state !== AgentRevisionStates.Draft || revision.publishedAt !== null)
 	{
 		return _deny("revision_not_draft");
 	}
@@ -90,7 +90,7 @@ export async function __PublishAgentRevision(repository: AgentServicePublication
 		expectedActiveRevisionId: command.expectedActiveRevisionId,
 		publishedAt: command.publishedAt,
 	});
-	if (publication.status === "conflict")
+	if (publication.status === AtomicAgentRevisionPublicationStatuses.Conflict)
 	{
 		return { outcome: "denied", reason: "publication_conflict", currentActiveRevisionId: publication.currentActiveRevisionId };
 	}

@@ -3,8 +3,21 @@ import type { CanonicalJsonSha256Digest, JsonValue } from "@opencrane/util";
 import type { AgentRevisionId, AgentServiceId, PersonaRevisionId, UserId } from "./identifiers.types";
 import type { RevisionBoundaryAttachment } from "./boundary-attachment.types";
 
-/** Where a revision sits in review. Only `published` may execute; `draft`, `rejected`, and `retired` must never be selected for a run. */
-export type AgentRevisionState = "draft" | "published" | "rejected" | "retired";
+/** Where a revision sits in review. Only `published` may execute. */
+export enum AgentRevisionStates
+{
+	/** The revision remains pending and cannot execute. */
+	Draft = "draft",
+	/** The revision is immutable, reviewed, and eligible to execute while active. */
+	Published = "published",
+	/** Review refused the revision and it cannot execute. */
+	Rejected = "rejected",
+	/** The revision has ended permanently and cannot execute. */
+	Retired = "retired",
+}
+
+/** Keeps persisted revision states compatible with their serialized enum values. */
+export type AgentRevisionState = `${AgentRevisionStates}`;
 
 /** Immutable reference to a skill revision assigned to an agent revision. */
 export interface SkillRevisionReference
