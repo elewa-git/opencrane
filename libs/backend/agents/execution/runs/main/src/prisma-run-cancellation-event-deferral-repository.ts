@@ -39,6 +39,7 @@ export class PrismaRunCancellationEventDeferralUnitOfWork implements RunCancella
 	/** Release one exact cleanup-event claim. */
 	defer(command: RunCancellationEventDeferralCommand): Promise<boolean>
 	{
-		return new PrismaRunCancellationEventDeferralRepository(this.transaction).defer(command);
+		const repository = new PrismaRunCancellationEventDeferralRepository(this.transaction);
+		return repository.defer(command);
 	}
 }

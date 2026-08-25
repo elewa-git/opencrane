@@ -162,9 +162,10 @@ if (decision.outcome !== AuthorizationDecisionOutcomes.Allow)
 
 ## Named Work Steps
 
-Do not combine construction, a large input object, and a method call in one expression. When a
-database unit of work or service receives several values, name the input and the work object before
-calling its method. The reader can then inspect the command and the operation separately.
+Do not call a method directly on a newly constructed production application object. When code
+creates a repository, unit of work, gateway, authority, client, or other application class, name the
+object before calling its method. Name a multi-field input as well. The reader can then inspect the
+command and the operation separately.
 
 ```typescript
 // WRONG — the command and the database operation are both hidden inside one expression.
@@ -176,9 +177,9 @@ const task = new PrismaGroupClaimProjectionUnitOfWork(prisma);
 await task.reconcile(cmd);
 ```
 
-Keep a short expression when its constructed value is self-explanatory and needs no review on its
-own. This rule applies when extracting the values or the object makes a business operation easier to
-read; it is not a general ban on fluent APIs.
+This rule does not apply to test setup or standard value conversions such as
+`new Date(value).toISOString()`. It is not a general ban on fluent APIs; it protects application
+operations whose constructed dependencies and method call need separate review.
 
 ## Self-Review Before Finishing
 

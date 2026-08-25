@@ -19,6 +19,8 @@ import { mcpOperatorRouter } from "../routes/mcp-operator";
 import { PrismaMcpOperatorUnitOfWork } from "../core/prisma-mcp-operator-unit-of-work";
 import { McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeWorkflow } from "../era-probe/mcp-era-probe.types";
+import type { McpbBundleArtifactResolver } from "../mcpb-validation/mcpb-validation-submission.types";
+import type { McpbValidationWorkflow } from "../mcpb-validation/mcpb-validation.types";
 
 /**
  * Covers the MCP operator routes: the organization-admin gate, published entries filtered by
@@ -105,7 +107,7 @@ function _buildApp(prisma: PrismaClient, user?: _SessionUser, eraProbeWorkflow: 
     });
   }
   const directory: AuthenticatedPrincipalDirectory = { resolveAuthenticatedPrincipal: vi.fn().mockResolvedValue({ siloId: "silo-1", principalId: "principal-1" }) };
-  app.use("/api/v1/mcp", mcpOperatorRouter(new PrismaMcpOperatorUnitOfWork(prisma), directory, eraProbeWorkflow));
+  app.use("/api/v1/mcp", mcpOperatorRouter(new PrismaMcpOperatorUnitOfWork(prisma), directory, eraProbeWorkflow, _McpbWorkflow(), _McpbArtifacts()));
   return app;
 }
 
@@ -115,6 +117,18 @@ function _EraProbeWorkflow(): McpEraProbeWorkflow
   return {
     admit: vi.fn().mockResolvedValue({ taskKey: "workflows:mcp-era-probe:test", receipt: { taskId: "task-1", taskName: "mcp-era-probe.probe", idempotencyKey: "workflows:mcp-era-probe:test" } }),
   };
+}
+
+/** Return bundle task admission for router cases that do not exercise MCPB submission. */
+function _McpbWorkflow(): McpbValidationWorkflow
+{
+	return { admit: vi.fn().mockResolvedValue({ taskKey: "workflows:mcpb-validation:test", receipt: { taskId: "task-2", taskName: "mcpb-validation.verify", idempotencyKey: "workflows:mcpb-validation:test" } }) };
+}
+
+/** Return no artifact for router cases that do not exercise MCPB submission. */
+function _McpbArtifacts(): McpbBundleArtifactResolver
+{
+	return { resolve: vi.fn().mockResolvedValue(null) };
 }
 
 describe("mcp-operator router", function _suite()

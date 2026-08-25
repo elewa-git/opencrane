@@ -200,6 +200,40 @@ export const _McpOpenapiPaths = {
     },
   },
 
+  "/mcp/bundle-validations": {
+    post: {
+      operationId: "submitMcpbValidation",
+      summary: "Save an MCP bundle validation job. Org-admin only",
+      tags: ["MCP Operator"],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { $ref: "#/components/schemas/McpbValidationSubmission" } } },
+      },
+      responses: {
+        201: created("Bundle validation and background job saved.", { $ref: "#/components/schemas/McpbValidation" }),
+        400: badRequest("Bundle validation fields are invalid."),
+        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        404: notFound("MCP bundle artifact revision not found."),
+        409: { description: "Submission key conflicts with another immutable bundle input.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
+  },
+
+  "/mcp/bundle-validations/{id}": {
+    get: {
+      operationId: "getMcpbValidation",
+      summary: "Read one saved MCP bundle validation. Org-admin only",
+      tags: ["MCP Operator"],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: {
+        200: ok("Saved bundle validation.", { $ref: "#/components/schemas/McpbValidation" }),
+        400: badRequest("Bundle validation identifier is invalid."),
+        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        404: notFound("MCP bundle validation not found."),
+      },
+    },
+  },
+
   "/mcp/directory": {
     get: {
       operationId: "getMcpDirectory",

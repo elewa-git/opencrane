@@ -59,7 +59,8 @@ class PrismaDeferredToolApprovalOpenRepository implements DeferredToolApprovalOp
  */
 export async function __OpenDeferredToolApproval(prisma: PrismaClient, command: OpenDeferredToolApprovalCommand, logger: Logger): Promise<boolean>
 {
-	return new PrismaDeferredToolApprovalOpenUnitOfWork(prisma, logger).open(command);
+	const unitOfWork = new PrismaDeferredToolApprovalOpenUnitOfWork(prisma, logger);
+	return unitOfWork.open(command);
 }
 
 /** Opens one approval, and cleans up when the open transaction throws without telling us whether it committed. */

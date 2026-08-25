@@ -20,7 +20,8 @@ export class PrismaBoundaryGrantUnitOfWork implements BoundaryGrantResolver
 	{
 		return this.prisma.$transaction(async function _Resolve(transaction)
 		{
-			return new PrismaBoundaryGrantRepository(transaction).resolveEffectiveBoundaryGrants(command);
+			const repository = new PrismaBoundaryGrantRepository(transaction);
+			return repository.resolveEffectiveBoundaryGrants(command);
 		}, { isolationLevel: "RepeatableRead" });
 	}
 }

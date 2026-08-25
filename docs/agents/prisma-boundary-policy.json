@@ -621,6 +621,13 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/server/gateways/mcp/main/src/mcpb-validation/prisma-mcpb-validation-repository.ts",
+        "adapter": "PrismaMcpbValidationRepository",
+        "contract": "McpbValidationRepository",
+        "contractImportPath": "./mcpb-validation-repository.types",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/server/iam/groups/main/src/core/groups.logic.ts",
         "adapter": "PrismaGroupRepository",
         "contract": "GroupRepository",
@@ -1253,6 +1260,10 @@
             "importPath": "./prisma-mcp-operator-repository"
           },
           {
+            "adapter": "PrismaMcpbValidationRepository",
+            "importPath": "../mcpb-validation/prisma-mcpb-validation-repository"
+          },
+          {
             "adapter": "PrismaAuthorizationGrantRepository",
             "importPath": "@opencrane/backend/server/iam/authorization"
           },
@@ -1273,7 +1284,7 @@
       "apps/opencrane/src/app/routes.ts",
       "libs/backend/server/iam/groups/main/src/routes/groups.ts",
       "apps/opencrane/src/app/external-action-composition.ts",
-	  "apps/opencrane/src/app/mcp-era-probe-composition.ts",
+	  "apps/opencrane/src/app/mcp-workflow-composition.ts",
       "apps/opencrane/src/app/runtime-composition.ts",
       "apps/opencrane/src/app/channel-target-composition.ts",
       "apps/opencrane/src/app/lifecycle.ts",

@@ -160,6 +160,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mcp/bundle-validations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save an MCP bundle validation job. Org-admin only */
+        post: operations["submitMcpbValidation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/bundle-validations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one saved MCP bundle validation. Org-admin only */
+        get: operations["getMcpbValidation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/mcp/directory": {
         parameters: {
             query?: never;
@@ -1613,6 +1647,50 @@ export interface components {
             /** @description All local groups eligible to receive an MCP authorization grant. */
             groups: components["schemas"]["EntitledGroup"][];
         };
+        /** @description An organisation-admin request to verify one exact published MCP bundle. The idempotency key makes a retried request return the same saved validation. */
+        McpbValidationSubmission: {
+            /** @description Caller-chosen key that safely retries this submission. */
+            idempotencyKey: string;
+            /** @description Published artifact identifier in the caller's silo. */
+            artifactId: string;
+            /** @description Exact immutable published revision to verify. */
+            artifactRevisionId: string;
+        };
+        /** @description Saved status of one MCP bundle validation. A background workflow verifies the signed package and its manifest after this record is created. */
+        McpbValidation: {
+            /** @description Stable validation identifier. */
+            id: string;
+            /** @description Published artifact identifier selected at submission. */
+            artifactId: string;
+            /** @description Immutable artifact revision selected at submission. */
+            artifactRevisionId: string;
+            /** @description Saved compressed bundle size in bytes. */
+            byteLength: number;
+            /** @description Media type saved with the artifact revision. */
+            mediaType: string;
+            /** @description Digest that binds the background job to its immutable input. */
+            submissionDigest: string;
+            /**
+             * @description Current validation result.
+             * @enum {string}
+             */
+            state: "Pending" | "Verified" | "Rejected";
+            /** @description Verified bundle name, or null until verification succeeds. */
+            manifestName?: string | null;
+            /** @description Verified bundle version, or null until verification succeeds. */
+            bundleVersion?: string | null;
+            /** @description Digest of the verified root manifest, or null until verification succeeds. */
+            manifestDigest?: string | null;
+            /** @description Trusted signing certificate publisher, or null until verification succeeds. */
+            publisher?: string | null;
+            /** @description Trusted signing certificate fingerprint, or null until verification succeeds. */
+            signerFingerprint?: string | null;
+            /**
+             * @description Bounded rejection reason, or null while pending or verified.
+             * @enum {string|null}
+             */
+            failureCode?: "artifact_mismatch" | "bundle_too_large" | "invalid_archive" | "invalid_manifest" | "invalid_signature" | "unsupported_manifest_version" | null;
+        };
         /** @description A direct file, chat, or dataset share. Each recipient relation is backed by an explicit authorization grant. */
         ResourceShare: {
             /** @description Stable share identifier used to manage recipients. */
@@ -2522,6 +2600,115 @@ export interface operations {
                 };
             };
             /** @description MCP server not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    submitMcpbValidation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpbValidationSubmission"];
+            };
+        };
+        responses: {
+            /** @description Bundle validation and background job saved. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpbValidation"];
+                };
+            };
+            /** @description Bundle validation fields are invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Caller is not an organisation admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description MCP bundle artifact revision not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Submission key conflicts with another immutable bundle input. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMcpbValidation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved bundle validation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpbValidation"];
+                };
+            };
+            /** @description Bundle validation identifier is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Caller is not an organisation admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description MCP bundle validation not found. */
             404: {
                 headers: {
                     [name: string]: unknown;

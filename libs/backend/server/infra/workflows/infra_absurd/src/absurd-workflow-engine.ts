@@ -280,7 +280,10 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 			// 2. Preserve an absent input and scope the key before it reaches the shared queue.
 			const envelope = _EnvelopeForTask(idempotencyKey, task.input);
 			const retry = _AbsurdRetryPolicy(definition.retryPolicy);
-			const spawned = await this.engineForQueue(this.queueForTask(taskName)).spawn(taskName, envelope, { queue: this.queueForTask(taskName), idempotencyKey: _TaskScopedIdempotencyKey(taskName, idempotencyKey), maxAttempts: retry.maximumAttempts, retryStrategy: retry.retryStrategy });
+			const queue = this.queueForTask(taskName);
+			const cmd = { queue, idempotencyKey: _TaskScopedIdempotencyKey(taskName, idempotencyKey), maxAttempts: retry.maximumAttempts, retryStrategy: retry.retryStrategy };
+			const engine = this.engineForQueue(queue);
+			const spawned = await engine.spawn(taskName, envelope, cmd);
 			return { taskId: spawned.taskID, taskName, idempotencyKey };
 		}
 		catch (error)
@@ -295,7 +298,9 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
 		const retry = _AbsurdRetryPolicy(definition.retryPolicy);
-		const receipt = await new WorkflowTaskAdmission(this.queueForTask(taskName)).admit(transactionClient, { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input), ...retry });
+		const cmd = { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input), ...retry };
+		const taskAdmission = new WorkflowTaskAdmission(this.queueForTask(taskName));
+		const receipt = await taskAdmission.admit(transactionClient, cmd);
 		return { taskId: receipt.taskId, taskName, idempotencyKey };
 	}
 
