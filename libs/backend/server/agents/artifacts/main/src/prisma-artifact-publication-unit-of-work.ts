@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { PrismaArtifactAuthorityRepository } from "./prisma-artifact-authority";
 import { _ArtifactPublicationConflictError, type ArtifactPublicationTransaction, type ArtifactPublicationUnitOfWork, type ArtifactPublicationWork } from "./artifact-unit-of-work.types";
@@ -24,11 +25,14 @@ export class PrismaArtifactPublicationUnitOfWork implements ArtifactPublicationU
 {
 	/** The product database client. Held privately so no repository or use case above this class can open its own transaction. */
 	private readonly prisma: PrismaClient;
+	/** Declared engine used only by a transaction-scoped publication repository. */
+	private readonly workflow: Pick<IWorkflowEngine, "spawn">;
 
 	/** Creates the transaction boundary for artifact publication. */
-	constructor(prisma: PrismaClient)
+	constructor(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">)
 	{
 		this.prisma = prisma;
+		this.workflow = workflow;
 	}
 
 	/**
@@ -42,13 +46,14 @@ export class PrismaArtifactPublicationUnitOfWork implements ArtifactPublicationU
 	 */
 	async run<Result>(work: ArtifactPublicationWork<Result>): Promise<Result>
 	{
+		const workflow = this.workflow;
 		for (let attempt = 1; attempt <= _PUBLICATION_ATTEMPT_LIMIT; attempt += 1)
 		{
 			try
 			{
 				return await this.prisma.$transaction(async function _Run(transaction): Promise<Result>
 				{
-					const authority = new PrismaArtifactAuthorityRepository(transaction);
+					const authority = new PrismaArtifactAuthorityRepository(transaction, workflow);
 					const repositories: ArtifactPublicationTransaction = { revisions: authority, uploadLeases: authority };
 					return work(repositories);
 				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

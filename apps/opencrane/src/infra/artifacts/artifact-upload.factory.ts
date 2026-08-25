@@ -6,6 +6,7 @@ import type { PrismaClient } from "@prisma/client";
 import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
 import { _CreateArtifactCatalogueRepository, _CreateArtifactPreprocessAuthority, _CreateArtifactUploadAuthority, __CompleteArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease, __IssueArtifactReadLease, __UploadArtifact, IssueArtifactReadLeaseOutcomes, type ArtifactPreprocessOutputBroker, type ArtifactUploadResult, type PublishedArtifactReadTarget, type VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
 import type { SkillAuthoringValidationArtifactReader } from "@opencrane/backend/server/agents/skills";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { PrismaConversationAssetOutputUnitOfWork, PrismaConversationAssetUnitOfWork, type ConversationAssetContentBroker, type ConversationAssetReadTarget } from "@opencrane/backend/server/conversation-assets";
 import { ___ParseAndValidateJson } from "@opencrane/util";
@@ -15,12 +16,12 @@ import { _CreateArtifactReadLeaseSigner } from "./artifact-read-lease-signer.fac
 import { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./artifact-service-read-port.factory";
 
 /** Build the path this app uses to take a proof-authorized command through to the private artifact service. */
-export function _CreateArtifactUploadGateway(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): { upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult> }
+export function _CreateArtifactUploadGateway(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">, environment: NodeJS.ProcessEnv = process.env): { upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult> }
 {
 	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
 	const leasePrivateKey = _ReadArtifactMountedPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH");
 	const receiptPublicKey = _ReadArtifactMountedPem(environment.ARTIFACT_RECEIPT_PUBLIC_KEY_PATH, "ARTIFACT_RECEIPT_PUBLIC_KEY_PATH");
-	const repository = _CreateArtifactUploadAuthority(prisma);
+	const repository = _CreateArtifactUploadAuthority(prisma, workflow);
 	return {
 		upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult>
 		{

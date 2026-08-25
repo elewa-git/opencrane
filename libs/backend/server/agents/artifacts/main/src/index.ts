@@ -1,7 +1,7 @@
 export { __FinalizeArtifactRevision } from "./artifact-finalization";
 export { __ClaimArtifactPreprocessJob, __CompleteArtifactPreprocessJob, __FailArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease } from "./artifact-preprocessing";
 export { __CreateArtifactPreprocessorRouter } from "./artifact-preprocessing.router";
-export { __AdmitArtifactPreprocessWorkflow } from "./artifact-preprocess-workflow-admission";
+export { __AdmitArtifactPreprocessWorkflow, __ArtifactPreprocessWorkflowTaskKey } from "./artifact-preprocess-workflow-admission";
 export { ArtifactPreprocessWorkflowAdmissionError } from "./artifact-preprocess-workflow-admission.types";
 export { __CreateArtifactScannerRouter } from "./artifact-scanning.router";
 export { ConversationAssetScanLifecycleStates } from "./artifact-scanning.types";

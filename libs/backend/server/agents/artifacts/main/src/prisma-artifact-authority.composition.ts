@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _ArtifactPreprocessAuthority } from "./artifact-preprocess-authority";
 import { _ArtifactUploadAuthority } from "./artifact-authority";
@@ -18,12 +19,13 @@ import { PrismaArtifactPublicationUnitOfWork } from "./prisma-artifact-publicati
  * apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts.
  *
  * @param prisma - The product database client.
+ * @param workflow - Declared engine that saves PDF conversion tasks with publication.
  * @returns An object serving as both the lease repository and the finalization repository,
  *   which reports an exhausted database collision as a `conflict` status rather than throwing.
  */
-export function _CreateArtifactUploadAuthority(prisma: PrismaClient): _ArtifactUploadAuthority
+export function _CreateArtifactUploadAuthority(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">): _ArtifactUploadAuthority
 {
-	return new _ArtifactUploadAuthority(new PrismaArtifactPublicationUnitOfWork(prisma));
+	return new _ArtifactUploadAuthority(new PrismaArtifactPublicationUnitOfWork(prisma, workflow));
 }
 
 /**

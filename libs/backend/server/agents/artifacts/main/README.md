@@ -44,10 +44,12 @@ relations before minting a short-lived lease from catalogue-owned facts:
                          five-minute-maximum signed read lease
 ```
 
-Published PDFs also create one durable preprocessing job in the same transaction. A dedicated
-worker receives only a fenced attempt and the source length. OpenCrane brokers the PDF to it,
-accepts the bounded text response, and keeps every storage lease and promotion receipt inside the
-trusted server process:
+Published PDFs create a preprocessing job and save a **workflow task** in the same database
+transaction. The task records conversion work for the controller handler that will be added later.
+Saving both records together means a published PDF never exists without its matching conversion
+task. The current worker receives only a fenced attempt and the source length. OpenCrane brokers
+the PDF to it, accepts the bounded text response, and keeps every storage lease and promotion
+receipt inside the trusted server process:
 
 ```
  published PDF ──► durable fenced job ──► broker PDF bytes ──► isolated converter
@@ -103,6 +105,9 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
 - `__ClaimArtifactPreprocessJob`, `__IssueArtifactPreprocessOutputLease`,
   `__CompleteArtifactPreprocessJob`, and `__FailArtifactPreprocessJob` — server-owned preprocessing
   lifecycle operations; output leases remain internal projections rather than worker DTOs.
+- `__AdmitArtifactPreprocessWorkflow` and `__ArtifactPreprocessWorkflowTaskKey` — save the declared
+  PDF conversion task through the caller's existing database transaction. The key is based on the
+  silo and published source revision, so a retried transaction requests the same task.
 - `__CreatePersonalArtifactCatalogueRouter` — serves `GET /api/v1/me/assets`, a bounded list of
   non-deleted asset metadata owned by the signed-in caller in the trusted host silo.
 - `_CreatePersonalArtifactCatalogueRouter` — the ready-to-mount Prisma composition that maps the
@@ -123,10 +128,10 @@ with what the byte store actually promoted.
 
 The upload authority deliberately has two transactions: the first reserves the exact single-use
 lease, then the app calls the byte store with no database transaction open, and the second consumes
-the verified receipt, publishes the revision, creates any PDF work, and writes the outbox event.
-Preprocessing follows the same rule one fenced transition at a time. This avoids long-held locks
-around network work while retaining the established lock order, receipt idempotency, and outbox
-ordering.
+the verified receipt, publishes the revision, saves any PDF workflow task, and writes the outbox
+event. Preprocessing follows the same rule one fenced transition at a time. This avoids long-held
+locks around network work while retaining the established lock order, receipt idempotency, and
+outbox ordering.
 
 Read-lease issuance is internal and has no router. It does not decide which workload may name an
 artifact; the caller must already have passed its workload-specific admission authority. The issuer

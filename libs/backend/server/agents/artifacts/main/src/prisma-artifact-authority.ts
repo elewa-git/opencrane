@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 
 import { ArtifactState, ArtifactUploadLeaseState, type Prisma } from "@prisma/client";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
+import { __AdmitArtifactPreprocessWorkflow, __ArtifactPreprocessWorkflowTaskKey } from "./artifact-preprocess-workflow-admission";
 import type { ArtifactAuthorityRepository, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand } from "./artifact-finalization.types";
 import type { ArtifactUploadLeaseRepository, VerifiedArtifactUploadCommand } from "./artifact-upload.types";
 
@@ -24,11 +26,14 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 {
 	/** The already-open transaction to run every query against. This class cannot start or commit one. */
 	private readonly transaction: Prisma.TransactionClient;
+	/** Declared engine that saves a PDF conversion task through this same transaction. */
+	private readonly workflow: Pick<IWorkflowEngine, "spawn">;
 
 	/** Creates the repository for one already-open artifact publication transaction. */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, workflow: Pick<IWorkflowEngine, "spawn">)
 	{
 		this.transaction = transaction;
+		this.workflow = workflow;
 	}
 
 	/**
@@ -83,7 +88,7 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 		const existingOutbox = await this.transaction.artifactOutboxEvent.findUnique({ where: { idempotencyKey: command.idempotencyKey } });
 		if (existingOutbox !== null && existingOutbox.artifactId === command.artifactId && existingOutbox.revisionId === command.artifactRevisionId) return { status: "idempotent" };
 
-		const artifact = await this.transaction.artifact.findFirst({ where: { id: command.artifactId, state: ArtifactState.Active } });
+		const artifact = await this.transaction.artifact.findFirst({ where: { id: command.artifactId, state: ArtifactState.Active }, select: { id: true, siloId: true } });
 		if (artifact === null) return { status: "artifact_not_found" };
 		const lease = await this.transaction.artifactUploadLease.findUnique({ where: { id: command.promotion.leaseId } });
 		const now = await this._databaseNow();
@@ -96,8 +101,15 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 		await this.transaction.artifactRevision.create({ data: { id: command.artifactRevisionId, artifactId: command.artifactId, revision: command.revision, contentAddress: command.promotion.contentAddress, byteLength: BigInt(command.promotion.byteLength), mediaType: command.promotion.mediaType, provenance: command.provenance as Prisma.InputJsonValue, createdBy: command.createdBy } });
 		await this.transaction.artifact.update({ where: { id: command.artifactId }, data: { currentRevisionId: command.artifactRevisionId } });
 
-		// 3. Queue the PDF-to-text job before the outbox event, so the conversion is already scheduled the moment anything outside sees the revision.
-		if (command.promotion.mediaType === "application/pdf") await this.transaction.artifactPreprocessJob.create({ data: { sourceRevisionId: command.artifactRevisionId, pipelineVersion: _PDF_TO_TEXT_PIPELINE_VERSION } });
+		// 3. Save the PDF-to-text record and its remote task before the outbox event, so the same commit
+		// either publishes the source together with its conversion task or publishes neither.
+		if (command.promotion.mediaType === "application/pdf")
+		{
+			const preprocessJobId = randomUUID();
+			const preprocess = { preprocessJobId, siloId: artifact.siloId, sourceRevisionId: command.artifactRevisionId };
+			await this.transaction.artifactPreprocessJob.create({ data: { id: preprocessJobId, sourceRevisionId: command.artifactRevisionId, pipelineVersion: _PDF_TO_TEXT_PIPELINE_VERSION } });
+			await __AdmitArtifactPreprocessWorkflow({ workflowTransaction: { client: this.transaction } }, this.workflow, { ...preprocess, taskKey: __ArtifactPreprocessWorkflowTaskKey(preprocess) });
+		}
 
 		// 4. Write the outbox event and mark the lease Finalized in the same commit, so a retry cannot publish twice or spend the receipt twice.
 		await this.transaction.artifactOutboxEvent.create({ data: { artifactId: command.artifactId, revisionId: command.artifactRevisionId, kind: "RevisionPublished", idempotencyKey: command.idempotencyKey, payload: { contentAddress: command.promotion.contentAddress, byteLength: command.promotion.byteLength, mediaType: command.promotion.mediaType } } });
