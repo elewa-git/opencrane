@@ -6,7 +6,7 @@ import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/
 
 import type { McpOperatorTransaction, McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
 import type { McpbValidationRecord } from "../mcpb-validation/mcpb-validation-repository.types";
-import { __CreateMcpbValidationWorkflow, __McpbValidationTaskKey } from "../mcpb-validation/mcpb-validation";
+import { __CreateMcpbValidationWorkflow, __McpbValidationInspectionTaskKey, __McpbValidationTaskKey } from "../mcpb-validation/mcpb-validation";
 import { McpbValidationStates, McpbVerificationFailureCodes } from "../mcpb-validation/mcpb-validation.types";
 import type { McpbValidationTaskInput, McpbVerificationResult } from "../mcpb-validation/mcpb-validation.types";
 
@@ -85,6 +85,7 @@ describe("MCP bundle validation workflow", function _McpbValidationSuite()
 		expect(execution.taskSnapshot(admitted.receipt)).toMatchObject({ state: WorkflowTaskStates.Completed, result });
 		expect(state.validation).toMatchObject({ state: McpbValidationStates.Verified, manifestName: "example-server", publisher: "Example Publisher" });
 		expect(state.auditCount).toBe(1);
+		expect(verifier.verify).toHaveBeenCalledWith(expect.objectContaining({ validationId: "validation-private", artifactRevisionId: "revision-private" }));
 	});
 
 	it("stores one bounded rejection reason", async function _StoresRejectedResult()
@@ -130,10 +131,14 @@ describe("MCP bundle validation workflow", function _McpbValidationSuite()
 	it("uses the same opaque key for repeated admission", function _UsesStableOpaqueTaskKey()
 	{
 		const taskKey = __McpbValidationTaskKey(_Input());
+		const inspectionTaskKey = __McpbValidationInspectionTaskKey(_Input());
 
 		expect(taskKey).toBe(__McpbValidationTaskKey(_Input()));
+		expect(inspectionTaskKey).toBe(__McpbValidationInspectionTaskKey(_Input()));
+		expect(inspectionTaskKey).not.toBe(taskKey);
 		expect(taskKey).not.toContain(_Input().siloId);
 		expect(taskKey).not.toContain(_Input().validationId);
 		expect(taskKey).not.toContain(_Input().artifactRevisionId);
+		expect(inspectionTaskKey).not.toContain(_Input().validationId);
 	});
 });

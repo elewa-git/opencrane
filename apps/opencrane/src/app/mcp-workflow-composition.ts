@@ -35,6 +35,7 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 	const queueAuthority = __CreateWorkflowTaskQueueAuthority([
 		{ taskName: McpEraProbeTaskNames.Probe, queue: "control-plane" },
 		{ taskName: McpbValidationTaskNames.Verify, queue: "control-plane" },
+		{ taskName: McpbValidationTaskNames.Inspect, queue: "mcpb-inspection" },
 	]);
 	const runtime = _CreateAbsurdWorkflowEngine({ databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });

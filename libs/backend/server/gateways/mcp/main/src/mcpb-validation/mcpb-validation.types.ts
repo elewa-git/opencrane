@@ -52,8 +52,10 @@ export enum McpbValidationStates
 /** Stable task names registered for MCP bundle work. */
 export enum McpbValidationTaskNames
 {
-	/** Reads one saved bundle and stores its manifest and signature decision. */
+	/** Coordinates the saved package inspection and stores its final product decision. */
 	Verify = "mcpb-validation.verify",
+	/** Reads one exact bundle revision and checks its signature and archive layout. */
+	Inspect = "mcpb-validation.inspect",
 }
 
 /** Immutable artifact facts saved before a bundle verification job starts. */

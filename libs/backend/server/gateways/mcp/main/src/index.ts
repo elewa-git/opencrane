@@ -14,7 +14,7 @@ export { __CreateMcpbBundleVerifier } from "./mcpb-validation/mcpb-bundle-verifi
 export { getMcpbValidation, submitMcpbValidation } from "./mcpb-validation/mcpb-validation-submission";
 export { McpbValidationSubmissionOutcomes } from "./mcpb-validation/mcpb-validation-submission.types";
 export type { McpbBundleArtifactResolver, McpbValidationSubmissionCommand, McpbValidationSubmissionResult } from "./mcpb-validation/mcpb-validation-submission.types";
-export { __CreateMcpbValidationWorkflow, __McpbValidationTaskKey } from "./mcpb-validation/mcpb-validation";
+export { __CreateMcpbValidationWorkflow, __McpbValidationInspectionTaskKey, __McpbValidationTaskKey } from "./mcpb-validation/mcpb-validation";
 export { MCPB_MANIFEST_VERSION, MCPB_MAXIMUM_BUNDLE_BYTES, McpbValidationStates, McpbValidationTaskNames, McpbVerificationFailureCodes } from "./mcpb-validation/mcpb-validation.types";
 export type { McpbBundleArtifactReader, McpbBundleArtifactTarget, McpbBundleVerifier, McpbValidationAdmission, McpbValidationTaskInput, McpbValidationWorkflow, McpbValidationWorkflowOptions, McpbVerificationResult, McpbVerifiedManifest } from "./mcpb-validation/mcpb-validation.types";
 export * from "./routes/mcp-operator";
