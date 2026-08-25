@@ -1,6 +1,6 @@
 import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
-import type { SkillAuthoringValidationTaskInput } from "@opencrane/backend/agents/skills/execution";
+import type { SkillAuthoringValidationTaskInput } from "@opencrane/backend/agents/skills/workflows/contract";
 import type { SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
 import type { IWorkflowTaskContext, IWorkflowTaskDefinition, IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 

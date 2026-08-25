@@ -7,6 +7,7 @@
 | [controller](./controller/README.md) | The outbound reconciliation that turns a fenced workload claim into an exact still-suspended Job. |
 | [execution](./execution/main/README.md) | One short-lived Postgres unit of work for claim, assignment, release, bootstrap, and authoring-worker fences. |
 | [k8s-launcher](./k8s-launcher/README.md) | Pure, policy-validating Kubernetes Job shapes for isolated skill authoring and tool execution. |
+| [workflows](./workflows/README.md) | The shared task contract and transaction-bound admission for durable skill validation. |
 | [worker](./worker/README.md) | The fail-closed Python acknowledgement client for the governed worker-image build. |
 
 The server-side skills package provides browser-safe catalogue discovery; this area contains the
@@ -14,10 +15,13 @@ runtime support that turns already-authorized work into isolated workloads. It n
 bytes, talks to a registry, or grants Kubernetes API access to a worker.
 
 ```
- governed SkillRevision ──► execution fence ──► controller ──► k8s-launcher
-                                                    │
-                                                    └──► suspended authoring / tool Job ──► worker acknowledgement
+ planned SkillRevision ──► workflows ──► remote task ──► controller ──► k8s-launcher
+                                                               │
+                                                               └──► suspended authoring / tool Job ──► worker acknowledgement
 ```
+
+The workflow packages are ports-only today: the product schema, routes, and deployable controller
+registration that make this diagram live remain later slices.
 
 ## See also
 

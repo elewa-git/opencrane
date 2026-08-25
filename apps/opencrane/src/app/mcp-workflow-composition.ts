@@ -1,12 +1,13 @@
 import type { PrismaClient } from "@prisma/client";
 
 import { _CreateArtifactCatalogueRepository } from "@opencrane/backend/server/agents/artifacts";
-import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/execution";
+import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import { __CreateMcpbBundleVerifier, __CreateMcpbValidationWorkflow, __CreateMcpEraProbeWorkflow, __CreateMcpTaskWorkflow, MCP_ERA_PROTOCOL_VERSION, McpEraProbeFailure, McpEraProbeFailureCodes, McpEraProbeTaskNames, McpbValidationTaskNames, McpTaskTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
 import type { McpEraProbeClient, McpbBundleArtifactResolver } from "@opencrane/backend/server/gateways/mcp";
 import { __CreateHttpsMcpEraProbeClient, McpEraProbeConfigurationError, McpEraProbeProtocolError, McpEraProbeTransportError } from "@opencrane/backend/server/infra/mcp-era-probe";
 import { _CreateAbsurdWorkflowEngine } from "@opencrane/backend/server/infra/workflows/infra_absurd";
 import { __CreateWorkflowGuard, __CreateWorkflowTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/guard";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _CreatePublishedArtifactReader } from "../infra/artifacts/artifact-upload.factory";
 import type { OpenCraneWorkflowConfig } from "./config.types";
@@ -31,11 +32,26 @@ export function _McpEraProbeFailure(error: unknown): McpEraProbeFailure
 }
 
 /**
+ * Declares the remote skill task before an application transaction may save its receipt.
+ *
+ * Declaration permits transaction-bound admission but installs no server handler. Called by:
+ * {@link _CreateMcpWorkflowComposition}; a later product adapter supplies the validation schema,
+ * repository, and route that invoke admission.
+ *
+ * @param execution - Supplies the guarded engine that owns declared task names.
+ */
+export function __DeclareSkillAuthoringValidation(execution: Pick<IWorkflowEngine, "declare">): void
+{
+	execution.declare(SkillAuthoringValidationTaskDeclaration);
+}
+
+/**
  * Creates the guarded Absurd engine that the server's durable domain workflows share.
  *
  * The server declares the skill-authoring task on its queue without adding a local handler. That
  * lets a product transaction admit the task while the controller remains responsible for executing
- * the Kubernetes-mutating definition.
+ * the Kubernetes-mutating definition. This ports-only slice does not yet wire a product schema,
+ * repository adapter, route, or deployable controller registration.
  *
  * @see SkillAuthoringValidationTaskDeclaration — defines the declaration the controller shares.
  */
@@ -50,7 +66,7 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 	]);
 	const runtime = _CreateAbsurdWorkflowEngine({ databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
-	execution.declare(SkillAuthoringValidationTaskDeclaration);
+	__DeclareSkillAuthoringValidation(execution);
 	const transport = __CreateHttpsMcpEraProbeClient({ protocolVersion: MCP_ERA_PROTOCOL_VERSION, maximumResponseBytes: config.mcpEraProbeMaximumResponseBytes, requestTimeoutMilliseconds: config.mcpEraProbeTimeoutMilliseconds });
 	const probe: McpEraProbeClient = {
 		async probe(request)

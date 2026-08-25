@@ -190,6 +190,12 @@
       "@opencrane/backend/agents/skills/controller": [
         "./libs/backend/agents/skills/controller/src/index.ts"
       ],
+      "@opencrane/backend/agents/skills/workflows": [
+        "./libs/backend/agents/skills/workflows/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/skills/workflows/contract": [
+        "./libs/backend/agents/skills/workflows/contract/src/index.ts"
+      ],
       "@opencrane/backend/agents/mcpb/controller": [
         "./libs/backend/agents/mcpb/controller/src/index.ts"
       ],

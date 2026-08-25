@@ -40,7 +40,7 @@ app's source.
 | `libs/backend/agents/execution/*` | Immutable run inputs, run lifecycle, and runtime protocol admission. |
 | [`libs/backend/agents/execution/elicitation`](../../libs/backend/agents/execution/elicitation/main/README.md) | Recoverable participant input, exact response authority, and purpose-specific completion. |
 | `libs/backend/agents/runtime/*` | Kubernetes Job projection and controller orchestration. |
-| `libs/backend/agents/skills/*` | Governed skill authoring and execution workloads. |
+| `libs/backend/agents/skills/*` | Governed skill authoring, workflow admission, and execution workloads. |
 | `libs/backend/artifacts/*` | Artifact authorization, storage, preprocessing, and fenced malware scanning. |
 | [`libs/backend/channel-proxy`](../../libs/backend/channel-proxy/main/README.md) | Reusable inbound-channel trust-boundary logic. |
 | [`libs/backend/conversations/projection`](../../libs/backend/conversations/projection/main/README.md) | Transport-neutral redaction, AG-UI mapping, cursoring, and live streaming for every conversation mode. |

@@ -50,9 +50,13 @@ the history already shipped in 0.9.3.
   Prisma Migrate ──► dedicated migration Job ──► 0.10.0 schema
   only record of database changes      │
                                       ▼
-  OCI Image Layout ZIP admission ──► remote v2 era-probe workflow
+  OCI Image Layout ZIP admission ──► imported immutable image digest
   MCP 2026-07-28 only                 │
                                       ▼
+  MCP RuntimeWorkloadClaim ──► MCP executor and class-specific pool profile
+
+  remote v2 MCP server ──► keep its era-probe workflow
+
   retire MCPB routes, schema, and workers
 ```
 
@@ -61,8 +65,11 @@ record of database changes, and the dedicated migration Job is the one-time Kube
 runs those changes before the new release starts. An OCI (Open Container Initiative) Image Layout
 ZIP replaces MCPB, the old MCP bundle format. The new admission accepts only Model Context Protocol
 (MCP) version `2026-07-28` and keeps the remote v2 [era-probe workflow](../../mcp-era-probe/README.md)
-that checks a remote MCP server before it is accepted. The cutover removes the MCPB routes,
-database schema, and workers instead of keeping an old path beside the replacement.
+that checks a remote MCP server before it is accepted. OCI admission and import are separate from
+runtime execution: import produces an immutable image digest, then the MCP-specific executor uses a
+`RuntimeWorkloadClaim` with its own pool profile. The existing generic agent warm Pod has a fixed
+image and must not run an uploaded OCI image. The cutover removes the MCPB routes, database schema,
+and workers instead of keeping an old path beside the replacement.
 
 ## Public surface
 
