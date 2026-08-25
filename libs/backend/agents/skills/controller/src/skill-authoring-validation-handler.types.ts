@@ -2,10 +2,11 @@ import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
 import type { SkillAuthoringValidationTaskInput } from "@opencrane/backend/agents/skills/workflows/contract";
 import type { SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
+import type { RuntimeWorkloadBinding, RuntimeWorkloadClaim } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { IWorkflowTaskContext, IWorkflowTaskDefinition, IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
 /**
- * Carries the server-owned facts the controller needs to build an authoring Job.
+ * Carries the issued claim and server-owned facts the controller needs to build an authoring Job.
  *
  * The authority returns this record only after it checks the task receipt and silo, which prevents
  * a stale task from acting on a different validation.
@@ -18,6 +19,8 @@ export interface SkillAuthoringValidationControllerRecord
 	readonly siloId: string;
 	/** Supplies the stable value used in the opaque Kubernetes Job name. */
 	readonly jobId: string;
+	/** Carries the current delivery that alone may bind the validation's Job. */
+	readonly claim: RuntimeWorkloadClaim;
 }
 
 /**
@@ -26,10 +29,10 @@ export interface SkillAuthoringValidationControllerRecord
  * Binding the Kubernetes UID and bootstrap reference first prevents a worker from using an
  * unrecorded Job identity.
  */
-export interface SkillAuthoringValidationJobRecordCommand
+export interface SkillAuthoringValidationWorkloadBindCommand
 {
-	/** Identifies the Job that Kubernetes created or the controller adopted. */
-	readonly jobUid: string;
+	/** Carries the exact claim delivery and external Job identity to bind. */
+	readonly binding: RuntimeWorkloadBinding;
 	/** Supplies the opaque reference the worker must exchange before it can read its input. */
 	readonly bootstrapReference: string;
 	/** Names the namespace selected by the deployment-owned authoring Job profile. */
@@ -42,12 +45,10 @@ export interface SkillAuthoringValidationJobRecordCommand
  * The server records this Pod before worker completion can be accepted, so the bootstrap reference
  * is tied to a Job-owned worker.
  */
-export interface SkillAuthoringValidationPodRecordCommand
+export interface SkillAuthoringValidationPodBindCommand
 {
-	/** Identifies the Job already bound to this validation. */
-	readonly jobUid: string;
-	/** Identifies the first worker Pod created for that Job. */
-	readonly podUid: string;
+	/** Carries the exact bound Job and first worker Pod identity. */
+	readonly binding: RuntimeWorkloadBinding;
 }
 
 /**
@@ -87,15 +88,40 @@ export interface SkillAuthoringValidationTaskResult
  */
 export interface SkillAuthoringValidationControllerAuthority
 {
-	/** Loads the validation when its task receipt and silo still match the saved product record. */
-	load(validationId: string, task: IWorkflowTaskReceipt): Promise<SkillAuthoringValidationControllerRecord | null>;
-	/** Records the Job identity and bootstrap reference before the controller releases the Job. */
-	recordJob(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationJobRecordCommand): Promise<"recorded" | "idempotent">;
-	/** Records the first Job-owned Pod before the worker can complete this validation. */
-	recordPod(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationPodRecordCommand): Promise<"recorded" | "idempotent">;
-	/** Reloads the persisted completion inbox entry after the task receives its private wake-up event. */
+	/**
+	 * Issues or reloads the claim that permits this task to bind a Job.
+	 *
+	 * @returns The matching validation and current claim, or `null` when the task receipt or silo no
+	 * longer matches and the handler must stop.
+	 */
+	claimForTask(validationId: string, task: IWorkflowTaskReceipt): Promise<SkillAuthoringValidationControllerRecord | null>;
+	/**
+	 * Binds a Job and its bootstrap reference before the handler releases that Job.
+	 *
+	 * @returns `bound` after the server saves this claim delivery, or `idempotent` when a replay
+	 * supplies the same binding. Either result lets the handler continue to release the Job.
+	 */
+	bindWorkload(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationWorkloadBindCommand): Promise<"bound" | "idempotent">;
+	/**
+	 * Binds the first Job-owned Pod to the claim delivery before a worker completion is accepted.
+	 *
+	 * @returns `bound` after the server saves the Pod identity, or `idempotent` when a replay repeats
+	 * that identity. Either result lets the handler wait for the persisted completion.
+	 */
+	bindFirstPod(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationPodBindCommand): Promise<"bound" | "idempotent">;
+	/**
+	 * Reloads the completion that the server saved before it published the private wake-up event.
+	 *
+	 * @returns The matching inbox entry, or `null` when the event cannot be used and the handler must
+	 * stop rather than write a terminal state.
+	 */
 	loadCompletion(validationId: string, completionDigest: string, task: IWorkflowTaskReceipt): Promise<SkillAuthoringValidationCompletion | null>;
-	/** Applies the saved completion as the terminal writer of skill-review evidence and state. */
+	/**
+	 * Applies the saved completion as the validation's terminal writer.
+	 *
+	 * @returns `completed` after the terminal state is written, or `idempotent` when a replay finds
+	 * the same completed validation. Neither result gives the controller direct product-state access.
+	 */
 	complete(validationId: string, completion: SkillAuthoringValidationCompletion, task: IWorkflowTaskReceipt): Promise<"completed" | "idempotent">;
 }
 

@@ -58,9 +58,9 @@ function _Options(overrides: Partial<SkillAuthoringValidationHandlerOptions> = {
 	const job = { metadata: { uid: "job-uid-1" } };
 	const pod = { metadata: { uid: "pod-uid-1" } };
 	const authority = {
-		load: vi.fn().mockResolvedValue({ validationId: "validation-1", siloId: "silo-1", jobId: "job-1" }),
-		recordJob: vi.fn().mockResolvedValue("recorded"),
-		recordPod: vi.fn().mockResolvedValue("recorded"),
+		claimForTask: vi.fn().mockResolvedValue({ validationId: "validation-1", siloId: "silo-1", jobId: "job-1", claim: { claimId: "claim-1", siloId: "silo-1", workloadClass: "skill-authoring-validation", profileName: "authoring", idempotencyKey: "validation-workload-key", executionReference: "validation-1", claimedAt: "2026-08-25T10:00:00.000Z", deliveryCount: 1, expiresAt: "2026-08-25T10:05:00.000Z" } }),
+		bindWorkload: vi.fn().mockResolvedValue("bound"),
+		bindFirstPod: vi.fn().mockResolvedValue("bound"),
 		loadCompletion: vi.fn().mockResolvedValue({ validationId: "validation-1", completionDigest: `sha256:${"b".repeat(64)}` }),
 		complete: vi.fn().mockResolvedValue("completed"),
 	};
@@ -84,7 +84,7 @@ function _Options(overrides: Partial<SkillAuthoringValidationHandlerOptions> = {
 
 describe("skill authoring validation workflow handler", function _DescribeSkillAuthoringValidationHandler()
 {
-	it("records the Job and first Pod before waiting for a persisted completion inbox event", async function _RunsValidation()
+	it("binds the Job and first Pod to one claim before waiting for a persisted completion inbox event", async function _RunsValidation()
 	{
 		const { options, authority, kubernetes } = _Options();
 		const { context, checkpoints } = _Context({ validationId: "validation-1", completionDigest: `sha256:${"b".repeat(64)}` });
@@ -93,9 +93,9 @@ describe("skill authoring validation workflow handler", function _DescribeSkillA
 		const result = await __CreateSkillAuthoringValidationHandler(options).run(context as never, { siloId: "silo-1", validationId: "validation-1" });
 
 		expect(result).toEqual({ validationId: "validation-1", completionDigest: `sha256:${"b".repeat(64)}` });
-		expect(checkpoints).toEqual(["load-validation", "ensure-suspended-job", "record-job", "release-job", "find-first-pod", "record-first-pod", "load-completion-inbox", "complete-validation"]);
-		expect(authority.recordJob).toHaveBeenCalledWith("validation-1", context.task, expect.objectContaining({ jobUid: "job-uid-1", namespace: "opencrane-skill-authoring" }));
-		expect(authority.recordPod).toHaveBeenCalledWith("validation-1", context.task, { jobUid: "job-uid-1", podUid: "pod-uid-1" });
+		expect(checkpoints).toEqual(["claim-validation", "ensure-suspended-job", "bind-workload", "release-job", "find-first-pod", "bind-first-pod", "load-completion-inbox", "complete-validation"]);
+		expect(authority.bindWorkload).toHaveBeenCalledWith("validation-1", context.task, expect.objectContaining({ bootstrapReference: expect.any(String), namespace: "opencrane-skill-authoring", binding: expect.objectContaining({ claimId: "claim-1", workloadUid: "job-uid-1" }) }));
+		expect(authority.bindFirstPod).toHaveBeenCalledWith("validation-1", context.task, { binding: expect.objectContaining({ claimId: "claim-1", workloadUid: "job-uid-1", firstPodUid: "pod-uid-1" }) });
 		expect(authority.complete).toHaveBeenCalledWith("validation-1", { validationId: "validation-1", completionDigest: `sha256:${"b".repeat(64)}` }, context.task);
 		expect(kubernetes.releaseJob).toHaveBeenCalledTimes(1);
 	});

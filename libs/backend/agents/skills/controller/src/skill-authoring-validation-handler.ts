@@ -3,6 +3,8 @@ import type { V1Job, V1Pod } from "@kubernetes/client-node";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import type { SkillAuthoringValidationTaskInput } from "@opencrane/backend/agents/skills/workflows/contract";
 import { __BuildGovernedSkillWorkloadJob, SkillWorkloadKinds } from "@opencrane/backend/agents/skills/k8s-launcher";
+import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
+import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { __CreateSkillWorkloadBootstrapReference } from "@opencrane/contracts";
 import { WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTaskDefinition, IWorkflowTaskEvent } from "@opencrane/backend/server/infra/workflows/contract";
@@ -91,8 +93,8 @@ async function _WaitForPod(context: SkillAuthoringValidationTaskContext, millise
 /**
  * Registers the remote task that creates, releases, observes, and completes one Python authoring Job.
  *
- * It uses the declaration the server already admitted, records the Job UID before release, and
- * records the first Pod before it accepts a server-persisted completion. The server remains the
+ * It uses the declaration the server already admitted, claims and binds the Job UID before release,
+ * then binds the first Pod before it accepts a server-persisted completion. The server remains the
  * terminal writer, so the controller never writes product state directly.
  *
  * @param options - Supplies the server authority, Kubernetes adapter, deployment profile, and Pod delay.
@@ -106,11 +108,11 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 		...SkillAuthoringValidationTaskDeclaration,
 		async run(context, input): Promise<SkillAuthoringValidationTaskResult>
 		{
-			// 1. Reload the server-owned row, so a stale task cannot create a Job for another validation or silo.
-			const record = await context.checkpoint({ stepName: "load-validation" }, async function _LoadValidation(): Promise<SkillAuthoringValidationControllerRecord>
+			// 1. Ask the server for the current claim, so a stale task cannot create a Job for another validation or silo.
+			const record = await context.checkpoint({ stepName: "claim-validation" }, async function _ClaimValidation(): Promise<SkillAuthoringValidationControllerRecord>
 			{
-				const loaded = await options.authority.load(input.validationId, context.task);
-				if (loaded === null || loaded.siloId !== input.siloId)
+				const loaded = await options.authority.claimForTask(input.validationId, context.task);
+				if (loaded === null || loaded.siloId !== input.siloId || loaded.claim.workloadClass !== RuntimeWorkloadClaimClasses.SkillAuthoringValidation || loaded.claim.profileName !== "authoring")
 				{
 					throw new WorkflowTaskTerminalError("Skill authoring validation is no longer available.");
 				}
@@ -124,9 +126,16 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 				return await options.kubernetes.ensureSuspendedJob(prepared.job);
 			});
 			const jobUid = _JobUid(assigned);
-			await context.checkpoint({ stepName: "record-job" }, async function _RecordJob(): Promise<void>
+			const workloadBinding: RuntimeWorkloadBinding = {
+				claimId: record.claim.claimId,
+				claimedAt: record.claim.claimedAt,
+				deliveryCount: record.claim.deliveryCount,
+				profileName: record.claim.profileName,
+				workloadUid: jobUid,
+			};
+			await context.checkpoint({ stepName: "bind-workload" }, async function _BindWorkload(): Promise<void>
 			{
-				await options.authority.recordJob(record.validationId, context.task, { jobUid, bootstrapReference: prepared.bootstrapReference, namespace: options.profile.namespace });
+				await options.authority.bindWorkload(record.validationId, context.task, { binding: workloadBinding, bootstrapReference: prepared.bootstrapReference, namespace: options.profile.namespace });
 			});
 
 			// 3. Release only the UID the server recorded, then wait until Kubernetes exposes its sole worker Pod.
@@ -146,9 +155,9 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 					await _WaitForPod(context, options.podWaitMilliseconds);
 				}
 			}
-			await context.checkpoint({ stepName: "record-first-pod" }, async function _RecordFirstPod(): Promise<void>
+			await context.checkpoint({ stepName: "bind-first-pod" }, async function _BindFirstPod(): Promise<void>
 			{
-				await options.authority.recordPod(record.validationId, context.task, { jobUid, podUid: _PodUid(pod) });
+				await options.authority.bindFirstPod(record.validationId, context.task, { binding: { ...workloadBinding, firstPodUid: _PodUid(pod) } });
 			});
 
 			// 4. Wait for the server-published inbox event, then make the workflow handler the sole terminal writer.

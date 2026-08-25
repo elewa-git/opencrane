@@ -446,6 +446,13 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/server/agents/skills/main/src/prisma-skill-authoring-validation-repository.ts",
+        "adapter": "PrismaSkillAuthoringValidationRepository",
+        "contract": "SkillAuthoringValidationRepository",
+        "contractImportPath": "@opencrane/backend/agents/skills/workflows",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/agents/memory/main/src/prisma-memory-catalog-repository.ts",
         "adapter": "PrismaMemoryCatalogRepository",
         "contract": "MemoryCatalogRepository",

@@ -31,6 +31,46 @@ enum SkillWorkloadState {
   Cancelled @map("cancelled")
 }
 
+/// Stores the lifecycle state that the validation trigger uses to decide which evidence must exist.
+///
+/// These values are persisted in `skill_authoring_validations`; PostgreSQL rejects an unknown value
+/// and the trigger rejects an unsupported transition. Renaming or adding a value therefore needs a
+/// database migration and matching controller, worker, and terminal-write support.
+enum SkillAuthoringValidationState {
+  /// The immutable validation facts are saved, but no worker has started. It may receive its task receipt, claim, or cancellation.
+  Pending   @map("pending")
+  /// A saved task and bound workload identify the worker whose completion may now be accepted.
+  Running   @map("running")
+  /// A saved successful completion ended the validation. This terminal state cannot change.
+  Succeeded @map("succeeded")
+  /// A saved failed completion and failure code ended the validation. This terminal state cannot change.
+  Failed    @map("failed")
+  /// The admitted validation stopped without failure evidence. This terminal state cannot change.
+  Cancelled @map("cancelled")
+}
+
+/// Stores the worker outcome that the validation trigger matches to a terminal validation state.
+///
+/// The value is persisted in `skill_authoring_validation_completion_inbox`, where an unknown value
+/// is rejected by PostgreSQL. Adding a value needs a database migration and a corresponding terminal
+/// state rule.
+enum SkillAuthoringValidationCompletionOutcome {
+  /// The worker supplied the completion evidence required to finish the validation successfully.
+  Succeeded @map("succeeded")
+  /// The worker supplied failure evidence that may finish the validation as failed.
+  Failed    @map("failed")
+}
+
+/// Selects the controller projection allowed to bind this validation's workload claim.
+///
+/// The value is stored in `skill_authoring_validation_workload_claims`. Its trigger accepts this
+/// single class with the `authoring` profile, so another class needs a migration and controller
+/// implementation before it can be issued.
+enum SkillAuthoringValidationWorkloadClass {
+  /// The controller may bind this claim to the isolated authoring-validation Job profile.
+  SkillAuthoringValidation @map("skill_authoring_validation")
+}
+
 model Skill {
   id                String          @id @default(cuid())
   siloId            String          @map("silo_id")
@@ -51,28 +91,29 @@ model Skill {
 }
 
 model SkillRevision {
-  id                     String             @id @default(cuid())
-  skillId                String             @map("skill_id")
+  id                     String                     @id @default(cuid())
+  skillId                String                     @map("skill_id")
   revision               Int
-  state                  SkillRevisionState @default(Draft)
-  artifactId             String             @map("artifact_id")
-  artifactRevisionId     String             @map("artifact_revision_id")
-  artifactContentAddress String             @map("artifact_content_address")
+  state                  SkillRevisionState         @default(Draft)
+  artifactId             String                     @map("artifact_id")
+  artifactRevisionId     String                     @map("artifact_revision_id")
+  artifactContentAddress String                     @map("artifact_content_address")
   manifest               Json
   requirements           Json
-  testReport             Json?              @map("test_report")
-  scanResult             Json?              @map("scan_result")
-  trustClass             SkillTrustClass    @map("trust_class")
+  testReport             Json?                      @map("test_report")
+  scanResult             Json?                      @map("scan_result")
+  trustClass             SkillTrustClass            @map("trust_class")
   signature              String?
-  signerKeyId            String?            @map("signer_key_id")
-  authoredBy             String             @map("authored_by")
-  reviewedBy             String?            @map("reviewed_by")
-  createdAt              DateTime           @default(now()) @map("created_at")
-  publishedAt            DateTime?          @map("published_at")
-  revokedAt              DateTime?          @map("revoked_at")
-  skill                  Skill              @relation("SkillRevisions", fields: [skillId], references: [id], onDelete: Restrict)
-  currentFor             Skill[]            @relation("CurrentSkillRevision")
+  signerKeyId            String?                    @map("signer_key_id")
+  authoredBy             String                     @map("authored_by")
+  reviewedBy             String?                    @map("reviewed_by")
+  createdAt              DateTime                   @default(now()) @map("created_at")
+  publishedAt            DateTime?                  @map("published_at")
+  revokedAt              DateTime?                  @map("revoked_at")
+  skill                  Skill                      @relation("SkillRevisions", fields: [skillId], references: [id], onDelete: Restrict)
+  currentFor             Skill[]                    @relation("CurrentSkillRevision")
   workloads              SkillWorkload[]
+  authoringValidations   SkillAuthoringValidation[]
 
   @@unique([skillId, revision])
   @@unique([skillId, id])
@@ -82,7 +123,117 @@ model SkillRevision {
   @@map("skill_revisions")
 }
 
-/// One canonical future Job request, never a Kubernetes queue or worker-owned receipt.
+/// Stores the immutable skill coordinates and task receipt for one Draft Python validation.
+///
+/// Retried admission reuses the unique skill-revision and artifact coordinates instead of changing
+/// a validation's target. The database trigger permits later state changes only when the required
+/// task, claim, bootstrap, and completion evidence has been saved.
+model SkillAuthoringValidation {
+  id                     String                                   @id @default(cuid())
+  siloId                 String                                   @map("silo_id")
+  skillRevisionId        String                                   @map("skill_revision_id")
+  artifactRevisionId     String                                   @map("artifact_revision_id")
+  artifactContentAddress String                                   @map("artifact_content_address")
+  taskId                 String?                                  @unique @map("task_id")
+  taskName               String?                                  @map("task_name")
+  taskKey                String                                   @unique @map("task_key")
+  state                  SkillAuthoringValidationState            @default(Pending)
+  createdAt              DateTime                                 @default(now()) @map("created_at")
+  startedAt              DateTime?                                @map("started_at")
+  completedAt            DateTime?                                @map("completed_at")
+  failureCode            String?                                  @map("failure_code")
+  skillRevision          SkillRevision                            @relation(fields: [skillRevisionId], references: [id], onDelete: Restrict)
+  workloadClaim          SkillAuthoringValidationWorkloadClaim?
+  bootstrap              SkillAuthoringValidationBootstrap?
+  completionInbox        SkillAuthoringValidationCompletionInbox?
+
+  @@unique([skillRevisionId, artifactRevisionId, artifactContentAddress])
+  @@index([siloId, state, createdAt])
+  @@map("skill_authoring_validations")
+}
+
+/// Stores the controller delivery that may bind one authoring-validation workload.
+///
+/// `claimedAt` and `deliveryCount` fence an older controller delivery, while the workload and Pod
+/// UIDs record what the current delivery observed. The trigger keeps one claim per validation and
+/// requires the supported class, profile, and lease facts before it accepts a binding.
+model SkillAuthoringValidationWorkloadClaim {
+  id                 String                                @id @default(cuid())
+  validationId       String                                @unique @map("validation_id")
+  workloadClass      SkillAuthoringValidationWorkloadClass @map("workload_class")
+  profileName        String                                @map("profile_name")
+  idempotencyKey     String                                @unique @map("idempotency_key")
+  executionReference String                                @map("execution_reference")
+  claimedAt          DateTime?                             @map("claimed_at")
+  deliveryCount      Int                                   @default(0) @map("delivery_count")
+  expiresAt          DateTime?                             @map("expires_at")
+  workloadUid        String?                               @unique @map("workload_uid")
+  firstPodUid        String?                               @unique @map("first_pod_uid")
+  createdAt          DateTime                              @default(now()) @map("created_at")
+  validation         SkillAuthoringValidation              @relation(fields: [validationId], references: [id], onDelete: Restrict)
+
+  @@index([claimedAt, expiresAt])
+  @@map("skill_authoring_validation_workload_claims")
+}
+
+/// Stores the hashed one-use bootstrap reference after the controller binds a workload.
+///
+/// The reference itself is not stored. Consumption records the Pod that used it, letting the trigger
+/// reject a bootstrap use that is not tied to the validation's bound worker identity.
+model SkillAuthoringValidationBootstrap {
+  id               String                   @id @default(cuid())
+  validationId     String                   @unique @map("validation_id")
+  referenceHash    String                   @unique @map("reference_hash")
+  namespace        String                   @map("namespace")
+  serviceAccount   String                   @map("service_account")
+  expiresAt        DateTime                 @map("expires_at")
+  consumedAt       DateTime?                @map("consumed_at")
+  consumedByPodUid String?                  @map("consumed_by_pod_uid")
+  createdAt        DateTime                 @default(now()) @map("created_at")
+  validation       SkillAuthoringValidation @relation(fields: [validationId], references: [id], onDelete: Restrict)
+
+  @@index([expiresAt])
+  @@map("skill_authoring_validation_bootstraps")
+}
+
+/// Saves the one worker completion that can supply terminal validation evidence.
+///
+/// The server records this inbox row before it publishes a wake-up event. The validation trigger
+/// requires its outcome and, for failure, its code before it accepts a terminal state.
+model SkillAuthoringValidationCompletionInbox {
+  id               String                                       @id @default(cuid())
+  validationId     String                                       @unique @map("validation_id")
+  completionDigest String                                       @map("completion_digest")
+  outcome          SkillAuthoringValidationCompletionOutcome
+  testReport       Json?                                        @map("test_report")
+  scanResult       Json?                                        @map("scan_result")
+  failureCode      String?                                      @map("failure_code")
+  receivedAt       DateTime                                     @default(now()) @map("received_at")
+  validation       SkillAuthoringValidation                     @relation(fields: [validationId], references: [id], onDelete: Restrict)
+  outbox           SkillAuthoringValidationWorkflowEventOutbox?
+
+  @@map("skill_authoring_validation_completion_inbox")
+}
+
+/// Stores the wake-up event for a saved completion until a publisher marks it sent.
+///
+/// One outbox row per completion lets the completion and notification commit together without making
+/// the remote task depend on a successful publish in that same transaction.
+model SkillAuthoringValidationWorkflowEventOutbox {
+  id                  String                                  @id @default(cuid())
+  completionInboxId   String                                  @unique @map("completion_inbox_id")
+  eventName           String                                  @map("event_name")
+  payload             Json                                    @map("payload")
+  publishedAt         DateTime?                               @map("published_at")
+  publicationAttempts Int                                     @default(0) @map("publication_attempts")
+  createdAt           DateTime                                @default(now()) @map("created_at")
+  completionInbox     SkillAuthoringValidationCompletionInbox @relation(fields: [completionInboxId], references: [id], onDelete: Restrict)
+
+  @@index([publishedAt, createdAt])
+  @@map("skill_authoring_validation_workflow_event_outbox")
+}
+
+/// Existing controller-polled Job record, retained until the durable validation flow replaces it completely.
 model SkillWorkload {
   id                   String                  @id @default(cuid())
   siloId               String                  @map("silo_id")
