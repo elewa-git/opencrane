@@ -20,6 +20,14 @@ export interface AgentControllerProcessConfig
 	readonly outboxPruneIntervalMilliseconds: number;
 	/** Hard timeout independently applied to each OpenCrane or Kubernetes call. */
 	readonly requestTimeoutMilliseconds: number;
+	/** PostgreSQL URL the controller-only Absurd worker uses to claim admitted tasks. */
+	readonly workflowDatabaseUrl: string;
+	/** Maximum database connections reserved by the controller-only Absurd worker. */
+	readonly workflowDatabasePoolSize: number;
+	/** Maximum remote durable task handlers the controller may run at once. */
+	readonly workflowWorkerConcurrency: number;
+	/** Silo whose tasks this controller's durable worker may execute. */
+	readonly workflowSiloId: string;
 	/** Immutable runtime profiles, keyed by the profile name the control plane assigns. */
 	readonly profiles: AgentControllerRuntimeProfiles;
 	/** Immutable profiles for the only governed skill Job classes. */

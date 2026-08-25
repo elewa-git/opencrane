@@ -20,8 +20,8 @@ bytes, talks to a registry, or grants Kubernetes API access to a worker.
                                                                └──► suspended authoring / tool Job ──► worker acknowledgement
 ```
 
-The workflow packages are ports-only today: the product schema, routes, and deployable controller
-registration that make this diagram live remain later slices.
+The controller registration is live: the agent-controller runs the saved validation task with
+Absurd. Product code still needs an adapter before a browser action can admit a validation task.
 
 ## See also
 

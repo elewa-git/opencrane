@@ -94,6 +94,8 @@ export interface SkillWorkloadControllerHttpAuthorityOptions
 	readonly tokenPath: string;
 	/** Hard timeout for one HTTP exchange. */
 	readonly requestTimeoutMilliseconds: number;
+	/** Optional process signal that cancels in-flight internal API calls during controller shutdown. */
+	readonly shutdownSignal?: AbortSignal;
 	/** Optional replacement for `fetch`, used by tests. */
 	readonly fetch?: SkillWorkloadControllerFetch;
 	/** Optional replacement for the token reader, used by tests. */

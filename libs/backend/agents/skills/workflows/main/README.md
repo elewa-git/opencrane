@@ -9,8 +9,8 @@ workflow is a saved task that can continue after a process restart. When a later
 uses this rule, the server will save that task inside the same database transaction as the product
 change, while a separate controller process will run its handler.
 
-This is an approved ports-only initial slice. The product schema, repository adapter, route, and
-deployable controller registration are not wired yet, so no validation currently reaches this flow.
+The agent-controller now registers the handler that runs an admitted task. A product-facing adapter
+and browser route are still not wired, so no browser action currently reaches this flow.
 
 ```
  product change + validation record
@@ -24,8 +24,8 @@ deployable controller registration are not wired yet, so no validation currently
  server declaration ──► controller handler ──► isolated authoring Job
 ```
 
-**In the planned flow:** [workflow contract](../../../../server/infra/workflows/contract/README.md)
-defines the engine-neutral task port · [controller](../../controller/README.md) later runs the
+**In this flow:** [workflow contract](../../../../server/infra/workflows/contract/README.md)
+defines the engine-neutral task port · [controller](../../controller/README.md) runs the
 Kubernetes Job handler · [k8s-launcher](../../k8s-launcher/README.md) builds the restricted Job.
 
 The package accepts only immutable IDs and content addresses. It never carries artifact bytes,
@@ -44,9 +44,9 @@ before any task is saved.
 
 ## Boundary
 
-The OpenCrane server composition declares this task but does not run it. A later agent-controller
-composition will register the handler and be the process that may create the Kubernetes Job. This
-package does not parse OCI (Open Container Initiative) ZIP files or admit MCP (Model Context
+The OpenCrane server composition declares this task but does not run it. The agent-controller
+registers the handler and is the process that may create the Kubernetes Job. This package does not
+parse OCI (Open Container Initiative) ZIP files or admit MCP (Model Context
 Protocol) bundles; the OCI import path hands runtime work an already immutable image digest through
 its shared seam.
 

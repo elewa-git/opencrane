@@ -83,6 +83,7 @@
 {{- $mcpbValidatorNamespace := (index .Values "opencrane-mcpb-validator").mcpbValidator.namespace -}}
 {{- $mcpbValidatorImage := printf "%s@%s" .Values.agentController.mcpbValidatorProfile.image.repository .Values.agentController.mcpbValidatorProfile.image.digest -}}
 {{- $mcpbValidatorBootstrapUrl := printf "http://%s-opencrane-server.%s.svc.cluster.local:%v/api/internal/mcpb-validator" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
+{{- $workflowSiloId := .Values.channelProxy.siloId | default .Values.clustertenantManager.firstUser.clusterTenant | default .Release.Name -}}
 {{- if or (eq $authoringNamespace .Release.Namespace) (eq $toolRunnerNamespace .Release.Namespace) (eq $mcpbValidatorNamespace .Release.Namespace) (eq $authoringNamespace $toolRunnerNamespace) (eq $authoringNamespace $mcpbValidatorNamespace) (eq $toolRunnerNamespace $mcpbValidatorNamespace) }}
 {{- fail "governed worker namespaces must be distinct from the server and from each other" }}
 {{- end }}
@@ -327,6 +328,13 @@ spec:
               value: {{ $openCraneInternalUrl | quote }}
             - name: OPENCRANE_CONTROLLER_TOKEN_PATH
               value: /var/run/opencrane/tokens/opencrane.token
+            {{- include "opencrane.clustertenantManagerDatabaseEnv" . | nindent 12 }}
+            - name: OPENCRANE_SILO_ID
+              value: {{ $workflowSiloId | quote }}
+            - name: AGENT_CONTROLLER_WORKFLOW_DATABASE_POOL_SIZE
+              value: {{ .Values.clustertenantManager.workflows.databasePoolSize | quote }}
+            - name: AGENT_CONTROLLER_WORKFLOW_WORKER_CONCURRENCY
+              value: {{ .Values.clustertenantManager.workflows.workerConcurrency | quote }}
             - name: AGENT_CONTROLLER_POLL_INTERVAL_MS
               value: {{ .Values.agentController.pollIntervalMs | quote }}
             - name: AGENT_CONTROLLER_OUTBOX_PRUNE_INTERVAL_MS
@@ -410,6 +418,12 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
+    # The durable worker uses the same CNPG-managed connection endpoint as server task admission.
+    # This port-only rule matches the server contract because GKE can apply egress before the pooler
+    # Service is translated to a Pod. The pooler still admits only its listed application consumers.
+    - ports:
+        - protocol: TCP
+          port: 5432
     - to:
         - namespaceSelector:
             matchLabels:

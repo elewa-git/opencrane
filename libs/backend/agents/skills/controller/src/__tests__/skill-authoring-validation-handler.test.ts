@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import { SkillWorkloadKinds } from "@opencrane/backend/agents/skills/k8s-launcher";
-import type { IWorkflowTaskEvent } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskRetryableError, type IWorkflowTaskEvent } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { __CreateSkillAuthoringValidationHandler } from "../skill-authoring-validation-handler";
 import type { SkillAuthoringValidationHandlerOptions, SkillAuthoringValidationTaskContext } from "../skill-authoring-validation-handler.types";
@@ -93,11 +93,11 @@ describe("skill authoring validation workflow handler", function _DescribeSkillA
 		const result = await __CreateSkillAuthoringValidationHandler(options).run(context as never, { siloId: "silo-1", validationId: "validation-1" });
 
 		expect(result).toEqual({ validationId: "validation-1", completionDigest: `sha256:${"b".repeat(64)}` });
-		expect(checkpoints).toEqual(["claim-validation", "ensure-suspended-job", "bind-workload", "release-job", "find-first-pod", "bind-first-pod", "load-completion-inbox", "complete-validation"]);
+		expect(checkpoints).toEqual(["claim-validation", "ensure-suspended-job", "bind-workload", "release-job", "bind-first-pod", "load-completion-inbox", "complete-validation"]);
 		expect(authority.bindWorkload).toHaveBeenCalledWith("validation-1", context.task, expect.objectContaining({ bootstrapReference: expect.any(String), namespace: "opencrane-skill-authoring", binding: expect.objectContaining({ claimId: "claim-1", workloadUid: "job-uid-1" }) }));
 		expect(authority.bindFirstPod).toHaveBeenCalledWith("validation-1", context.task, { binding: expect.objectContaining({ claimId: "claim-1", workloadUid: "job-uid-1", firstPodUid: "pod-uid-1" }) });
 		expect(authority.complete).toHaveBeenCalledWith("validation-1", { validationId: "validation-1", completionDigest: `sha256:${"b".repeat(64)}` }, context.task);
-		expect(kubernetes.releaseJob).toHaveBeenCalledTimes(1);
+		expect(kubernetes.releaseJob).toHaveBeenCalledWith(expect.any(Object), "job-uid-1", "2026-08-25T10:05:00.000Z");
 	});
 
 	it("uses durable sleep instead of a controller poll loop while Kubernetes has not exposed the first Pod", async function _SleepsForPod()
@@ -121,6 +121,15 @@ describe("skill authoring validation workflow handler", function _DescribeSkillA
 		await expect(__CreateSkillAuthoringValidationHandler(options).run(context as never, { siloId: "silo-1", validationId: "validation-1" })).rejects.toThrow(/workload claim no longer matches/);
 
 		expect(kubernetes.releaseJob).not.toHaveBeenCalled();
+	});
+
+	it("uses the declaration retry policy when the controller cannot reach the server", async function _RetriesUnavailableServer()
+	{
+		const { options, authority } = _Options();
+		authority.claimForTask.mockRejectedValue(new Error("temporary network failure"));
+		const { context } = _Context({ validationId: "validation-1", completionDigest: `sha256:${"b".repeat(64)}` });
+
+		await expect(__CreateSkillAuthoringValidationHandler(options).run(context as never, { siloId: "silo-1", validationId: "validation-1" })).rejects.toBeInstanceOf(WorkflowTaskRetryableError);
 	});
 
 	it("rejects a completion event for another validation before it can reach the server terminal writer", async function _RejectsWrongCompletion()

@@ -56,7 +56,7 @@ function _McpbValidatorProfileJson(): string
 /** Return the minimal complete process environment. */
 function _Environment(): NodeJS.ProcessEnv
 {
-	return { OPENCRANE_INTERNAL_URL: "http://opencrane-server.silo-a.svc.cluster.local:3001", OPENCRANE_CONTROLLER_TOKEN_PATH: "/var/run/opencrane/tokens/opencrane.token", AGENT_CONTROLLER_POLL_INTERVAL_MS: "1000", AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: _SkillProfilesJson(), AGENT_CONTROLLER_MCPB_VALIDATOR_PROFILE_JSON: _McpbValidatorProfileJson() };
+	return { OPENCRANE_INTERNAL_URL: "http://opencrane-server.silo-a.svc.cluster.local:3001", OPENCRANE_CONTROLLER_TOKEN_PATH: "/var/run/opencrane/tokens/opencrane.token", DATABASE_URL: "postgresql://opencrane:test@localhost:5432/opencrane", OPENCRANE_SILO_ID: "silo-a", AGENT_CONTROLLER_POLL_INTERVAL_MS: "1000", AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: _SkillProfilesJson(), AGENT_CONTROLLER_MCPB_VALIDATOR_PROFILE_JSON: _McpbValidatorProfileJson() };
 }
 
 describe("agent-controller process config", function _Suite()
@@ -74,6 +74,8 @@ describe("agent-controller process config", function _Suite()
 		expect(config.profiles["personal-default"]?.serviceAccountName).toBe("agent-runtime-default");
 		expect(config.skillWorkloadProfiles.authoring.serviceAccountName).toBe("skill-authoring-default");
 		expect(config.mcpbValidatorProfile.serviceAccountName).toBe("mcpb-validator-default");
+		expect(config.workflowSiloId).toBe("silo-a");
+		expect(config.workflowDatabasePoolSize).toBe(2);
 	});
 
 	it("rejects a collapsed namespace or moving image tag", function _RejectsUnsafeConfig()

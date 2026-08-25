@@ -16,10 +16,10 @@ process needs to import the other process's implementation.
                          validation id + silo id only
 ```
 
-**In the planned flow:** [workflow admission](../main/README.md) saves the task in a database
-transaction and [controller](../../../controller/README.md) later runs its handler. This slice
-installs the shared declaration but does not yet wire a product schema, repository adapter, route,
-or deployable controller registration.
+**In this flow:** [workflow admission](../main/README.md) saves the task in a database transaction
+and [controller](../../../controller/README.md) runs its handler. The shared declaration and
+controller registration are wired; a product-facing adapter and browser route still need to call
+the admission rule.
 
 The input never contains artifact bytes, credentials, a Kubernetes Job, or a selected queue. The
 server composition owns queue choice, while the controller owns the handler implementation.

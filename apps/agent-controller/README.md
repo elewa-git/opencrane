@@ -19,6 +19,13 @@ Secrets or choose a worker identity in either skill namespace. A separate fail-c
 policy permits only the pinned, class-specific worker shape, so the controller cannot use its Job
 permission to create arbitrary work.
 
+For authoring validation, the same process also runs an Absurd worker. A workflow is a saved task
+that can pause and continue after a restart. When a product adapter admits a validation, the
+OpenCrane server saves that task in the same database transaction as the validation record; this
+controller reloads only its ID, creates the restricted Job, and asks the server to record the
+outcome. The handler registration is live, but a product-facing admission path is still pending.
+It never decides whether a validation may be admitted or writes the product's final result directly.
+
 Each released skill Job receives an audience-bound projected token and opaque bootstrap reference
 through separate read-only files. Helm fixes the acknowledgement URL to the same-silo OpenCrane
 Service; it does not inherit the controller's configurable runtime endpoint. The worker can only
@@ -61,14 +68,16 @@ multiple Pods, and OpenCrane registers the first Pod before bootstrap exchange c
 ## Public surface
 
 `Entrypoint:` `src/index.ts` loads telemetry first, validates configuration, creates the narrow
-OpenCrane and Kubernetes adapters, runs the runtime assignment/release, suspended-skill-assignment,
-and suspended-MCP-bundle-validator poll loops, and flushes telemetry
+OpenCrane and Kubernetes adapters, starts the durable skill-validation worker, runs the runtime
+assignment/release, suspended-skill-assignment, and suspended-MCP-bundle-validator poll loops, and
+flushes telemetry
 on `SIGTERM`/`SIGINT`.
 
 ## Boundary
 
-The process holds no database credentials and exposes no Service, Ingress, public route or health
-listener. Its Kubernetes roles exist only in the dedicated personal and managed runtime namespaces and grant
+The process receives the same silo database URL as task admission only to run already-admitted
+workflow tasks; it exposes no Service, Ingress, public route or health listener. Its Kubernetes
+roles exist only in the dedicated personal and managed runtime namespaces and grant
 `get/create/patch` for Jobs, `list` for Pods, and `create` (only) for Secrets — the per-attempt
 LiteLLM key Secret, owned by its Job so it is garbage-collected with it. It cannot create policy,
 read/update/delete Secrets, mutate Pods, or get, replace, delete, or watch any Pod. The minted
@@ -89,6 +98,12 @@ outside the app root.
 
 - `OPENCRANE_INTERNAL_URL` — same-silo internal OpenCrane origin; Helm derives it from the release.
 - `OPENCRANE_CONTROLLER_TOKEN_PATH` — rotating `opencrane-agent-controller` audience token file.
+- `DATABASE_URL` — same-silo database connection used only by the durable validation worker.
+- `OPENCRANE_SILO_ID` — the silo whose saved validation tasks this controller may execute.
+- `AGENT_CONTROLLER_WORKFLOW_DATABASE_POOL_SIZE` — 1–20 database connections for the worker;
+  Helm uses the shared workflow setting.
+- `AGENT_CONTROLLER_WORKFLOW_WORKER_CONCURRENCY` — 1–20 validation handlers in parallel; Helm
+  uses the shared workflow setting.
 - `AGENT_CONTROLLER_POLL_INTERVAL_MS` — 100–60,000 ms delay after idle or failure; default 1,000 ms.
 - `AGENT_CONTROLLER_OUTBOX_PRUNE_INTERVAL_MS` — 60 seconds–24 hours between bounded removal of
   successfully delivered runtime handshakes; default one hour. Failed commands remain durable evidence.

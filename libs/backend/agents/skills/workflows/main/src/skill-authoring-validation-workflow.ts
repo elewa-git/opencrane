@@ -35,8 +35,8 @@ function _Receipt(record: SkillAuthoringValidationRecord, receipt: IWorkflowTask
  * active artifact. The workflow task is then saved through that same transaction before the receipt
  * is bound to the validation; any rejection throws so the caller can roll back both product changes.
  *
- * This is a ports-only admission rule in the current slice. The product schema, repository adapter,
- * route, and deployable controller registration will call it in later slices.
+ * The agent-controller already registers the remote task handler. The product schema, repository
+ * adapter, and route that call this admission rule remain later work.
  *
  * @param transaction - Caller-owned transaction with a repository already scoped to that transaction.
  * @param workflow - Server-declared engine that saves the remote task without hosting its handler.

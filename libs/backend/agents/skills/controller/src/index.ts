@@ -1,5 +1,6 @@
 export { __ReconcileNextSkillWorkload, __ReconcileNextSkillWorkloadRelease, __RunSkillWorkloadController, __ValidateSkillWorkloadControllerProfiles } from "./skill-workload-controller";
 export { __CreateHttpSkillWorkloadControllerAuthority } from "./http-skill-workload-authority";
+export { __CreateHttpSkillAuthoringValidationControllerAuthority } from "./http-skill-authoring-validation-authority";
 export { __CreateKubernetesSkillWorkloadControllerStore } from "./kubernetes-skill-workload-controller-store";
 export { __CreateSkillAuthoringValidationHandler } from "./skill-authoring-validation-handler";
 export type { SkillWorkloadControllerAuthority, SkillWorkloadControllerBatchApi, SkillWorkloadControllerCoreApi, SkillWorkloadControllerFetch, SkillWorkloadControllerHttpAuthorityOptions, SkillWorkloadControllerKubernetesStore, SkillWorkloadControllerKubernetesStoreOptions, SkillWorkloadControllerOptions, SkillWorkloadControllerProfiles, SkillWorkloadControllerReconcileResult, SkillWorkloadControllerReleaseReconcileResult, SkillWorkloadControllerTokenReader } from "./skill-workload-controller.types";

@@ -6,9 +6,8 @@
 
 This package contains the outbound Kubernetes work for skill jobs. The current pilot is a
 **reconciler**: it repeatedly makes Kubernetes match a saved workload claim. It also exports a
-remote workflow handler that later composition will use to create and observe a Job for a saved task.
-The server now mounts the private controller lifecycle API, while product admission and deployable
-handler registration remain pending.
+remote workflow handler that the agent-controller registers to create and observe a Job for a saved
+task. The server mounts a private lifecycle API; product admission remains a separate adapter.
 
 ```
  legacy workload claim ──► controller ◄── HERE ──► suspended Job
@@ -34,16 +33,18 @@ Python code running.
 - `__CreateHttpSkillWorkloadControllerAuthority` — bounds and decodes internal responses, then
   delegates every wire shape and echo invariant to the model-adjacent Zod validators in
   `@opencrane/contracts`.
-- `__CreateSkillAuthoringValidationHandler` — returns the uncomposed remote Python validation
-  handler that records Job and Pod IDs before it accepts the server's persisted completion event.
+- `__CreateHttpSkillAuthoringValidationControllerAuthority` — calls the private server API with the
+  controller's rotating token and rejects replies for another validation.
+- `__CreateSkillAuthoringValidationHandler` — returns the remote Python validation handler that
+  records Job and Pod IDs before it accepts the server's persisted completion event.
 
 ## Boundary
 
 This package accepts ports for OpenCrane and Kubernetes; it does not use Prisma, issue a capability,
 read artifact bytes, duplicate controller wire validators, or run a worker. The retained polling
-pilot releases only an exact UID-bound Job under a short durable release claim. When a later
-composition registers it, the remote handler records a Job ID before release and a Pod ID before it
-accepts a server-persisted completion. A later worker protocol must exchange the non-secret Job
+pilot releases only an exact UID-bound Job under a short durable release claim. The remote handler
+records a Job ID before release and a Pod ID before it accepts a server-persisted completion. A
+later worker protocol must exchange the non-secret Job
 reference through a separately authenticated boundary before any code can run.
 
 ## Dependency direction

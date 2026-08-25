@@ -31,8 +31,8 @@ export interface SkillAuthoringValidationKubernetesStore
 {
 	/** Creates the suspended authoring Job or adopts the matching Job after a controller restart. */
 	ensureSuspendedJob(expected: V1Job): Promise<V1Job>;
-	/** Releases the assigned Job after the server has recorded its UID and bootstrap reference. */
-	releaseJob(expected: V1Job, jobUid: string): Promise<V1Job>;
+	/** Releases the assigned Job after the server has recorded its UID and bootstrap reference, bounded by the claim lease. */
+	releaseJob(expected: V1Job, jobUid: string, claimExpiresAt: string): Promise<V1Job>;
 	/** Returns the first Pod owned by the Job, or null while Kubernetes has not created one. */
 	findFirstPod(expected: V1Job, jobUid: string, serviceAccountName: string): Promise<V1Pod | null>;
 }

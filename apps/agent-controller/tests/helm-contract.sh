@@ -21,8 +21,9 @@ SERVER_POLICY="$(mktemp)"
 CONTROLLER_POLICY="$(mktemp)"
 RUNTIME_DENY="$(mktemp)"
 RUNTIME_EGRESS="$(mktemp)"
+WORKFLOW_DATABASE="$(mktemp)"
 prepare_current_chart_sources
-trap 'cleanup_current_chart_sources; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$CLEANUP_ROLE" "$CLEANUP_BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$MANAGED_RUNTIME_QUOTA" "$ADMISSION" "$MCPB_ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+trap 'cleanup_current_chart_sources; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$CLEANUP_ROLE" "$CLEANUP_BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$MANAGED_RUNTIME_QUOTA" "$ADMISSION" "$MCPB_ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS" "$WORKFLOW_DATABASE"' EXIT
 CHART_ROOT="$(current_chart_sources_dir)"
 
 render_enabled() {
@@ -47,6 +48,7 @@ render_enabled() {
 render_enabled > "$MANIFEST"
 render_enabled --set agentController.enabled=false > "$DISABLED"
 render_enabled --set-string agentController.openCraneInternalUrl=http://override.example:8081 > "$SKILL_URL_OVERRIDE"
+render_enabled --set-string clustertenantManager.database.url=postgresql://opencrane:test@database:5432/opencrane > "$WORKFLOW_DATABASE"
 
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: Role\n/ && $0 ~ /\n  name: agent-controller\n/ { print $0 }' "$MANIFEST" > "$ROLE"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: RoleBinding\n/ && $0 ~ /\n  name: agent-controller\n/ { print $0 }' "$MANIFEST" > "$BINDING"
@@ -158,11 +160,20 @@ grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"name
 grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"identityProfile\":\"managed\"' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"serviceAccountName\":\"managed-agent-runtime-default\"' >/dev/null
 grep -B8 -A8 -F 'name: oc-opencrane-agent-controller' "$MANIFEST" | grep -F 'namespace: server-ns' >/dev/null
+# The controller worker reads the same silo database as server admission, while Helm—not a second
+# controller setting—owns the connection source and fixed durable worker bounds.
+grep -A3 -F 'name: DATABASE_URL' "$WORKFLOW_DATABASE" | grep -F 'postgresql://opencrane:test@database:5432/opencrane' >/dev/null
+grep -A1 -F 'name: OPENCRANE_SILO_ID' "$WORKFLOW_DATABASE" | grep -F 'value: "oc"' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_WORKFLOW_DATABASE_POOL_SIZE' "$WORKFLOW_DATABASE" | grep -F 'value: "2"' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_WORKFLOW_WORKER_CONCURRENCY' "$WORKFLOW_DATABASE" | grep -F 'value: "2"' >/dev/null
 
 # Helm, not the controller, owns the namespace-wide network boundary.
 test -s "$CONTROLLER_POLICY"
 grep -Fq 'policyTypes: ["Ingress", "Egress"]' "$CONTROLLER_POLICY"
 grep -Fq 'ingress: []' "$CONTROLLER_POLICY"
+# The controller's durable worker reaches only PostgreSQL's service port; it has no direct database
+# Pod selector because the CNI can enforce this policy before Service translation.
+grep -Fq 'port: 5432' "$CONTROLLER_POLICY"
 test -s "$RUNTIME_DENY"
 grep -Fq 'policyTypes: ["Ingress", "Egress"]' "$RUNTIME_DENY"
 grep -Fq 'ingress: []' "$RUNTIME_DENY"

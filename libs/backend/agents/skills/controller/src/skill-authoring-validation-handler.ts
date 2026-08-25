@@ -6,7 +6,7 @@ import { __BuildGovernedSkillWorkloadJob, SkillWorkloadKinds } from "@opencrane/
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { __CreateSkillWorkloadBootstrapReference } from "@opencrane/contracts";
-import { WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTaskDefinition, IWorkflowTaskEvent } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationHandlerOptions, SkillAuthoringValidationTaskContext, SkillAuthoringValidationTaskResult } from "./skill-authoring-validation-handler.types";
@@ -90,6 +90,23 @@ async function _WaitForPod(context: SkillAuthoringValidationTaskContext, millise
 	await context.sleepUntil(new Date(Date.now() + milliseconds));
 }
 
+/** Converts an unavailable server or Kubernetes exchange into the task's declared retry policy. */
+async function _RetryExternal<TResult>(operation: () => Promise<TResult>): Promise<TResult>
+{
+	try
+	{
+		return await operation();
+	}
+	catch (error)
+	{
+		if (error instanceof WorkflowTaskTerminalError || error instanceof WorkflowTaskRetryableError)
+		{
+			throw error;
+		}
+		throw new WorkflowTaskRetryableError("Skill authoring validation dependency is temporarily unavailable.");
+	}
+}
+
 /**
  * Registers the remote task that creates, releases, observes, and completes one Python authoring Job.
  *
@@ -111,7 +128,7 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 			// 1. Ask the server for the current claim, so a stale task cannot create a Job for another validation or silo.
 			const record = await context.checkpoint({ stepName: "claim-validation" }, async function _ClaimValidation(): Promise<SkillAuthoringValidationControllerRecord>
 			{
-				const loaded = await options.authority.claimForTask(input.validationId, context.task);
+				const loaded = await _RetryExternal(async function _ClaimForTask(): Promise<SkillAuthoringValidationControllerRecord | null> { return await options.authority.claimForTask(input.validationId, context.task); });
 				if (loaded === null || loaded.siloId !== input.siloId || loaded.claim.workloadClass !== RuntimeWorkloadClaimClasses.SkillAuthoringValidation || loaded.claim.profileName !== "authoring")
 				{
 					throw new WorkflowTaskTerminalError("Skill authoring validation is no longer available.");
@@ -123,7 +140,7 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 			const prepared = await _Job(record, options.profile);
 			const assigned = await context.checkpoint({ stepName: "ensure-suspended-job" }, async function _EnsureSuspendedJob(): Promise<V1Job>
 			{
-				return await options.kubernetes.ensureSuspendedJob(prepared.job);
+				return await _RetryExternal(async function _EnsureJob(): Promise<V1Job> { return await options.kubernetes.ensureSuspendedJob(prepared.job); });
 			});
 			const jobUid = _JobUid(assigned);
 			const workloadBinding: RuntimeWorkloadBinding = {
@@ -135,7 +152,7 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 			};
 			await context.checkpoint({ stepName: "bind-workload" }, async function _BindWorkload(): Promise<void>
 			{
-				const outcome = await options.authority.bindWorkload(record.validationId, context.task, { binding: workloadBinding, bootstrapReference: prepared.bootstrapReference, namespace: options.profile.namespace });
+				const outcome = await _RetryExternal(async function _BindValidationWorkload(): Promise<"bound" | "idempotent" | "conflict"> { return await options.authority.bindWorkload(record.validationId, context.task, { binding: workloadBinding, bootstrapReference: prepared.bootstrapReference, namespace: options.profile.namespace }); });
 				if (outcome === "conflict")
 				{
 					throw new WorkflowTaskTerminalError("Skill authoring validation workload claim no longer matches.");
@@ -145,15 +162,13 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 			// 3. Release only the UID the server recorded, then wait until Kubernetes exposes its sole worker Pod.
 			await context.checkpoint({ stepName: "release-job" }, async function _ReleaseJob(): Promise<void>
 			{
-				await options.kubernetes.releaseJob(prepared.job, jobUid);
+				await _RetryExternal(async function _ReleaseValidationJob(): Promise<V1Job> { return await options.kubernetes.releaseJob(prepared.job, jobUid, record.claim.expiresAt); });
 			});
 			let pod: V1Pod | null = null;
 			while (pod === null)
 			{
-				pod = await context.checkpoint({ stepName: "find-first-pod" }, async function _FindFirstPod(): Promise<V1Pod | null>
-				{
-					return await options.kubernetes.findFirstPod(prepared.job, jobUid, options.profile.serviceAccountName);
-				});
+				// 4. Read this transient Kubernetes state directly: checkpointing a missing Pod would replay `null` forever after a restart.
+				pod = await _RetryExternal(async function _FindValidationPod(): Promise<V1Pod | null> { return await options.kubernetes.findFirstPod(prepared.job, jobUid, options.profile.serviceAccountName); });
 				if (pod === null)
 				{
 					await _WaitForPod(context, options.podWaitMilliseconds);
@@ -161,19 +176,19 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 			}
 			await context.checkpoint({ stepName: "bind-first-pod" }, async function _BindFirstPod(): Promise<void>
 			{
-				const outcome = await options.authority.bindFirstPod(record.validationId, context.task, { binding: { ...workloadBinding, firstPodUid: _PodUid(pod) } });
+				const outcome = await _RetryExternal(async function _BindValidationPod(): Promise<"bound" | "idempotent" | "conflict"> { return await options.authority.bindFirstPod(record.validationId, context.task, { binding: { ...workloadBinding, firstPodUid: _PodUid(pod) } }); });
 				if (outcome === "conflict")
 				{
 					throw new WorkflowTaskTerminalError("Skill authoring validation Pod claim no longer matches.");
 				}
 			});
 
-			// 4. Wait for the server-published inbox event, then make the workflow handler the sole terminal writer.
+			// 5. Wait for the server-published inbox event, then make the workflow handler the sole terminal writer.
 			const event = await context.waitForEvent<unknown>(_COMPLETION_EVENT);
 			const requestedCompletion = _Completion(event, record.validationId);
 			const completion = await context.checkpoint({ stepName: "load-completion-inbox" }, async function _LoadCompletion(): Promise<SkillAuthoringValidationCompletion>
 			{
-				const loaded = await options.authority.loadCompletion(record.validationId, requestedCompletion.completionDigest, context.task);
+				const loaded = await _RetryExternal(async function _LoadValidationCompletion(): Promise<SkillAuthoringValidationCompletion | null> { return await options.authority.loadCompletion(record.validationId, requestedCompletion.completionDigest, context.task); });
 				if (loaded === null)
 				{
 					throw new WorkflowTaskTerminalError("Skill authoring completion inbox is unavailable.");
@@ -182,7 +197,7 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 			});
 			await context.checkpoint({ stepName: "complete-validation" }, async function _CompleteValidation(): Promise<void>
 			{
-				const outcome = await options.authority.complete(record.validationId, completion, context.task);
+				const outcome = await _RetryExternal(async function _CompleteValidationOnServer(): Promise<"completed" | "idempotent" | "conflict"> { return await options.authority.complete(record.validationId, completion, context.task); });
 				if (outcome === "conflict")
 				{
 					throw new WorkflowTaskTerminalError("Skill authoring validation completion no longer matches.");
