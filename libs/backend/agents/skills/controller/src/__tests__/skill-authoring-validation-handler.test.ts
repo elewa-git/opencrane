@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/execution";
 import { SkillWorkloadKinds } from "@opencrane/backend/agents/skills/k8s-launcher";
-import { WorkflowTaskRetryBackoffKinds } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTaskEvent } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { __CreateSkillAuthoringValidationHandler } from "../skill-authoring-validation-handler";
@@ -75,7 +75,6 @@ function _Options(overrides: Partial<SkillAuthoringValidationHandlerOptions> = {
 			kubernetes,
 			profile: _Profile(),
 			podWaitMilliseconds: 100,
-			retryPolicy: { maximumAttempts: 3, backoff: { kind: WorkflowTaskRetryBackoffKinds.Fixed, initialDelaySeconds: 1 } },
 			...overrides,
 		} satisfies SkillAuthoringValidationHandlerOptions,
 		authority,
@@ -89,6 +88,7 @@ describe("skill authoring validation workflow handler", function _DescribeSkillA
 	{
 		const { options, authority, kubernetes } = _Options();
 		const { context, checkpoints } = _Context({ validationId: "validation-1", completionDigest: `sha256:${"b".repeat(64)}` });
+		expect(__CreateSkillAuthoringValidationHandler(options)).toMatchObject(SkillAuthoringValidationTaskDeclaration);
 
 		const result = await __CreateSkillAuthoringValidationHandler(options).run(context as never, { siloId: "silo-1", validationId: "validation-1" });
 

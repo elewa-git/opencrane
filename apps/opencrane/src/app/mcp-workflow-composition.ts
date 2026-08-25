@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import type { PrismaClient } from "@prisma/client";
 
 import { _CreateArtifactCatalogueRepository } from "@opencrane/backend/server/agents/artifacts";
+import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/execution";
 import { __CreateOciImageLayoutImporter, __CreateOciImageLayoutVerifier, __CreateOciImageValidationWorkflow, __CreateMcpEraProbeWorkflow, MCP_ERA_PROTOCOL_VERSION, McpEraProbeFailure, McpEraProbeFailureCodes, McpEraProbeTaskNames, OciImageValidationTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
 import type { McpEraProbeClient, OciImageLayoutArtifactResolver } from "@opencrane/backend/server/gateways/mcp";
 import { __CreateHttpsMcpEraProbeClient, McpEraProbeConfigurationError, McpEraProbeProtocolError, McpEraProbeTransportError } from "@opencrane/backend/server/infra/mcp-era-probe";
@@ -33,18 +34,24 @@ export function _McpEraProbeFailure(error: unknown): McpEraProbeFailure
 }
 
 /**
- * Composes one saved-work engine for remote MCP checks and OCI image admission.
- * Both jobs use the product's database transaction boundary, while the registry adapter receives
- * credentials from its mounted file for each external request.
+ * Create the guarded Absurd engine shared by remote MCP, OCI admission, and skill validation work.
+ *
+ * The server declares the skill-authoring task on its queue without adding a local handler. That
+ * lets a product transaction admit the task while the controller remains responsible for executing
+ * the Kubernetes-mutating definition.
+ *
+ * @see SkillAuthoringValidationTaskDeclaration — defines the declaration the controller shares.
  */
 export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: OpenCraneWorkflowConfig): McpWorkflowComposition
 {
 	const queueAuthority = __CreateWorkflowTaskQueueAuthority([
 		{ taskName: McpEraProbeTaskNames.Probe, queue: "control-plane" },
 		{ taskName: OciImageValidationTaskNames.Import, queue: "control-plane" },
+		{ taskName: SkillAuthoringValidationTaskDeclaration.taskName, queue: "skill-authoring" },
 	]);
 	const runtime = _CreateAbsurdWorkflowEngine({ databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
+	execution.declare(SkillAuthoringValidationTaskDeclaration);
 	const transport = __CreateHttpsMcpEraProbeClient({ protocolVersion: MCP_ERA_PROTOCOL_VERSION, maximumResponseBytes: config.mcpEraProbeMaximumResponseBytes, requestTimeoutMilliseconds: config.mcpEraProbeTimeoutMilliseconds });
 	const probe: McpEraProbeClient = {
 		async probe(request)

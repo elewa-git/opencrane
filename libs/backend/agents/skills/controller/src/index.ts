@@ -2,6 +2,5 @@ export { __ReconcileNextSkillWorkload, __ReconcileNextSkillWorkloadRelease, __Ru
 export { __CreateHttpSkillWorkloadControllerAuthority } from "./http-skill-workload-authority";
 export { __CreateKubernetesSkillWorkloadControllerStore } from "./kubernetes-skill-workload-controller-store.adapter";
 export { __CreateSkillAuthoringValidationHandler } from "./skill-authoring-validation-handler";
-export { SkillAuthoringValidationTaskNames } from "./skill-authoring-validation-handler.types";
 export type { SkillWorkloadControllerAuthority, SkillWorkloadControllerFetch, SkillWorkloadControllerHttpAuthorityOptions, SkillWorkloadControllerOptions, SkillWorkloadControllerProfiles, SkillWorkloadControllerReconcileResult, SkillWorkloadControllerReleaseReconcileResult, SkillWorkloadControllerTokenReader } from "./skill-workload-controller.types";
 export type { CreateSkillAuthoringValidationHandler, SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerAuthority, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationHandlerOptions, SkillAuthoringValidationJobRecordCommand, SkillAuthoringValidationKubernetesStore, SkillAuthoringValidationPodRecordCommand, SkillAuthoringValidationTaskContext, SkillAuthoringValidationTaskInput, SkillAuthoringValidationTaskResult } from "./skill-authoring-validation-handler.types";
