@@ -96,4 +96,13 @@ describe("artifact preprocessing controller HTTP authority", function _DescribeA
 		const conflict = _Authority(new Response(null, { status: 409 }));
 		await expect(conflict.authority.bindFirstPod("preprocess-1", _Task(), { binding: { ...command.binding, firstPodUid: "pod-uid-1" } })).resolves.toBe("conflict");
 	});
+
+	it("rejects completion evidence whose digest does not match the event the task received", async function _RejectsMismatchedCompletionDigest()
+	{
+		const requestedDigest = `sha256:${"a".repeat(64)}`;
+		const returnedDigest = `sha256:${"b".repeat(64)}`;
+		const { authority } = _Authority(new Response(JSON.stringify({ preprocessJobId: "preprocess-1", completionDigest: returnedDigest }), { status: 200, headers: { "content-type": "application/json" } }));
+
+		await expect(authority.loadCompletion("preprocess-1", requestedDigest, _Task())).rejects.toThrow(/completion response selected another job/);
+	});
 });

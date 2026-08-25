@@ -1,6 +1,6 @@
 import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
-import type { ArtifactPreprocessControllerAuthority, ArtifactPreprocessTaskInput } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessTaskInput } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { ArtifactPreprocessorJobProfile } from "@opencrane/backend/artifacts/preprocessor/k8s-launcher";
 import type { IWorkflowTaskContext, IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -58,21 +58,27 @@ export interface ArtifactPreprocessHandlerOptions
 }
 
 /**
- * Reports the PDF preprocessing job whose Job and first Pod the server accepted as bound.
+ * Reports the PDF preprocessing job whose server-owned completion the controller applied.
  *
- * This does not report PDF conversion or output publication; the worker performs those later.
+ * This does not contain PDF conversion output. The digest identifies the completion inbox entry
+ * the controller reloaded before it made the job terminal.
  */
 export interface ArtifactPreprocessTaskResult
 {
-	/** Saved preprocessing job that owns the bound external workload. */
+	/** Names the PDF preprocessing job the controller completed. */
 	readonly preprocessJobId: string;
+	/** Identifies the server-owned completion the controller applied. */
+	readonly completionDigest: string;
 }
 
-/** Narrows the workflow operations the controller handler needs for durable steps and Pod waits. */
-export type ArtifactPreprocessTaskContext = Pick<IWorkflowTaskContext, "checkpoint" | "sleepUntil" | "task">;
+/** Narrows the workflow operations the controller handler needs for durable steps, Pod waits, and completion events. */
+export type ArtifactPreprocessTaskContext = Pick<IWorkflowTaskContext, "checkpoint" | "sleepUntil" | "task" | "waitForEvent">;
+
+/** Re-exports the completion identity shared by the controller task result and authority calls. */
+export type { ArtifactPreprocessCompletion };
 
 /**
- * Builds the controller task definition that binds one PDF preprocessing Job.
+ * Builds the controller task definition that binds one PDF preprocessing Job and applies its completion.
  *
  * Application composition may register the returned definition only after it provides the server
  * authority and Kubernetes adapter described by {@link ArtifactPreprocessHandlerOptions}.

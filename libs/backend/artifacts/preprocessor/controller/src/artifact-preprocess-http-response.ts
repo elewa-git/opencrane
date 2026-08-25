@@ -1,5 +1,5 @@
 import { RuntimeWorkloadClaimClasses, type RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
-import type { ArtifactPreprocessControllerRecord } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerRecord } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { z, type ZodType } from "zod";
 
 /** Check the canonical UTC timestamp carried by one database-issued workload claim. */
@@ -64,6 +64,28 @@ export function _ParseArtifactPreprocessBindOutcome(value: unknown, preprocessJo
 		throw new Error("OpenCrane artifact preprocessing binding response did not match its request");
 	}
 	return result.outcome;
+}
+
+/**
+ * Validates completion evidence against the job and digest the controller requested.
+ *
+ * Called by: `__CreateHttpArtifactPreprocessControllerAuthority`. A mismatch throws before the
+ * workflow handler can apply completion evidence for another controller event.
+ *
+ * @param value - Untrusted JSON response body.
+ * @param preprocessJobId - Job identity in the authority request URL.
+ * @param completionDigest - Digest selected by the controller's completion event.
+ * @returns Completion evidence that matches both requested identities.
+ * @throws Error when the response is malformed or selects another job or digest.
+ */
+export function _ParseArtifactPreprocessCompletion(value: unknown, preprocessJobId: string, completionDigest: string): ArtifactPreprocessCompletion
+{
+	const completion = z.object({ preprocessJobId: z.string().min(1).max(128), completionDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u) }).strict().parse(value);
+	if (completion.preprocessJobId !== preprocessJobId || completion.completionDigest !== completionDigest)
+	{
+		throw new Error("OpenCrane artifact preprocessing completion response selected another job");
+	}
+	return completion;
 }
 
 /** Validates the fenced binding shape for controller HTTP boundaries. */
