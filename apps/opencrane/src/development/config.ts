@@ -70,7 +70,17 @@ function _AssertDevelopmentBoundary(): void
 	}
 }
 
-/** Read and validate the complete Tier 2 server configuration before composing any adapter. */
+/**
+ * Reads the Tier 2 server configuration before any adapter is composed.
+ *
+ * The parser requires the development entrypoint, a non-production process, and loopback PostgreSQL.
+ * Core omits Agent credential paths, while every Agent profile requires separate absolute controller
+ * and runtime-secret paths.
+ *
+ * Called by: `_Main` in `development/index.ts` before opening Prisma or an HTTP listener.
+ * @returns The frozen profile, identity, credential paths, and loopback listener ports.
+ * @throws When the process crosses the development boundary or required profile inputs are absent.
+ */
 export function _ReadDevelopmentConfig()
 {
 	// 1. Establish the development-only process and database fence before accepting configuration.

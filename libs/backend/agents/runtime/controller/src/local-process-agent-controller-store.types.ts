@@ -15,7 +15,7 @@ export interface LocalAgentRuntimeProcessSpawner
 	 * Starts the existing agent-runtime development entrypoint with an allowlisted environment.
 	 * @param executable - Python executable resolved by the developer's shell.
 	 * @param arguments_ - Module arguments that select the development entrypoint.
-	 * @param options - Working directory and credential-free environment for the child.
+	 * @param options - Working directory and allowlisted credential paths for the child.
 	 * @returns The process handle used for shutdown and deadline enforcement.
 	 */
 	(executable: string, arguments_: readonly string[], options: LocalAgentRuntimeSpawnOptions): ChildProcess;

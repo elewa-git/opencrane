@@ -25,7 +25,23 @@ function _CloseServer(server: Server): Promise<void>
 	});
 }
 
-/** Start the Tier 2 public API and optional Agent API on loopback, then bind their shutdown sequence. */
+/**
+ * Starts the Tier 2 listeners on loopback and owns their coordinated shutdown.
+ *
+ * The conversation WebSocket server attaches to the public HTTP server so the live UI uses the same
+ * listener and authentication composition for HTTP and socket traffic. Shutdown fences new work,
+ * closes sockets and listeners, then releases PostgreSQL before telemetry flushes.
+ *
+ * Called by: `_Main` in `development/index.ts` after public and optional Agent apps are composed.
+ * @param publicApp - Live browser API composition.
+ * @param internalApp - Agent protocol composition, or null for core.
+ * @param conversationSockets - Live conversation socket server attached to the public listener.
+ * @param prisma - Database client disconnected during shutdown.
+ * @param runtimeRepairRepository - Repository used by the development runtime repair loop.
+ * @param publicPort - Loopback port for UI HTTP and WebSocket traffic.
+ * @param internalPort - Loopback port for Agent controller and runtime traffic.
+ * @param unbindConsole - Restores console bindings after telemetry shutdown.
+ */
 export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Express | null, conversationSockets: SelfConversationSocketServer, prisma: DevelopmentPrismaClient, runtimeRepairRepository: RunCancellationRepository, publicPort: number, internalPort: number, unbindConsole: () => void): void
 {
 	const publicServer = publicApp.listen(publicPort, "127.0.0.1", function _Listening(): void

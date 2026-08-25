@@ -16,7 +16,15 @@ const _TOOLCHAIN_ENVIRONMENT_NAMES = [
 	"TMPDIR"
 ];
 
-/** Builds a child environment from reviewed toolchain variables and an explicit process contract. */
+/**
+ * Builds a child environment from reviewed toolchain variables and an explicit process contract.
+ * Parent credentials are omitted unless the selected profile adds a value deliberately.
+ *
+ * Called by: the command runner and process supervisor before spawning any Tier 2 child.
+ * @param {NodeJS.ProcessEnv} parentEnvironment - Developer shell environment to filter.
+ * @param {Record<string, string>} processEnvironment - Variables owned by the selected child.
+ * @returns A fresh environment containing the toolchain allowlist and child-specific values.
+ */
 export function createToolchainProcessEnvironment(parentEnvironment, processEnvironment = {})
 {
 	const toolchainEnvironment = Object.fromEntries(_TOOLCHAIN_ENVIRONMENT_NAMES.flatMap(function _AllowedName(name)
@@ -31,7 +39,12 @@ export function createToolchainProcessEnvironment(parentEnvironment, processEnvi
 	};
 }
 
-/** Returns the server allowlist without the seed private key or controller-only configuration. */
+/**
+ * Returns the server allowlist without the seed private key or controller-only configuration.
+ * Called by: `createApplicationCommands` before starting the watched OpenCrane server.
+ * @param {Record<string, string>} applicationEnvironment - Coordinator-owned shared variables.
+ * @returns Variables admitted to the server process.
+ */
 export function createOpenCraneServerProcessEnvironment(applicationEnvironment)
 {
 	return Object.fromEntries(Object.entries(applicationEnvironment).filter(function _serverEntry([name])
@@ -49,7 +62,12 @@ export function createOpenCraneServerProcessEnvironment(applicationEnvironment)
 	}));
 }
 
-/** Returns the controller allowlist without database credentials or membership signing material. */
+/**
+ * Returns the controller allowlist without database credentials or membership signing material.
+ * Called by: `createApplicationCommands` before starting the Agent controller.
+ * @param {Record<string, string>} applicationEnvironment - Coordinator-owned shared variables.
+ * @returns Variables admitted to the controller process.
+ */
 export function createAgentControllerProcessEnvironment(applicationEnvironment)
 {
 	return Object.fromEntries(Object.entries(applicationEnvironment).filter(function _controllerEntry([name])
@@ -65,7 +83,12 @@ export function createAgentControllerProcessEnvironment(applicationEnvironment)
 	}));
 }
 
-/** Returns the seed allowlist containing its database URL and temporary membership keypair. */
+/**
+ * Returns the seed allowlist containing its database URL and temporary membership keypair.
+ * Called by: `createDevelopmentSeedCommand` for the replay-safe seed subprocess.
+ * @param {Record<string, string>} applicationEnvironment - Coordinator-owned shared variables.
+ * @returns Variables admitted to the database seed process.
+ */
 export function createDevelopmentSeedProcessEnvironment(applicationEnvironment)
 {
 	return Object.fromEntries(Object.entries(applicationEnvironment).filter(function _seedEntry([name])

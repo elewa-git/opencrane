@@ -51,7 +51,7 @@ function _LocalRuntimePod(job: V1Job, workloadUid: string, podUid: string): V1Po
 	};
 }
 
-/** Build the credential-free environment passed to the existing Python runtime. */
+/** Builds the runtime allowlist with private credential paths instead of credential contents. */
 function _RuntimeEnvironment(options: LocalProcessAgentControllerStoreOptions, attempt: LocalAgentRuntimeAttempt, podUid: string): Readonly<Record<string, string>>
 {
 	const environment: Record<string, string> = {

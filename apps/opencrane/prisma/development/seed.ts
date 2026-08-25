@@ -112,7 +112,16 @@ const _SEED_DEPENDENCIES: LocalDevelopmentSeedDependencies = {
 	}
 };
 
-/** Upserts the fixed local member, admission evidence, and model route in one transaction. */
+/**
+ * Reconciles the fixed local identity, signed membership evidence, and default model route in one
+ * transaction. Stable row identifiers and upserts let watched-server restarts replay the seed
+ * without duplicating authority rows.
+ *
+ * Called by: the `db:seed-tier2` package script through the Tier 2 coordinator.
+ * @param dependencies - Loopback guard, signed membership factory, and database seam.
+ * @returns After the transaction completes and the seed connection is closed.
+ * @throws When the database is not local, membership evidence is invalid, or any atomic write fails.
+ */
 export async function _RunLocalDevelopmentSeed(dependencies: LocalDevelopmentSeedDependencies = _SEED_DEPENDENCIES): Promise<void>
 {
 	// 1. Refuse remote state and validate the disposable signing keypair before opening Prisma.

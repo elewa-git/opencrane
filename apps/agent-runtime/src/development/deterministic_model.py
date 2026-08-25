@@ -32,7 +32,19 @@ def deterministic_event_source(
     cancel_event: threading.Event,
     steering_buffer: list[str],
 ) -> Iterator[dict[str, object]]:
-    """Yield one repeatable text response and usage event without a model request."""
+    """Yield repeatable start events after normal command admission.
+
+    Called by the development runtime's simulated start handler. Cancellation produces no events;
+    otherwise the accepted message becomes a neutral text delta followed by zero usage counters.
+
+    Args:
+        compiled_input: Admitted run input whose latest text message is displayed.
+        cancel_event: Attempt cancellation signal checked before producing output.
+        steering_buffer: Unused start-time steering accepted for handler compatibility.
+
+    Yields:
+        Plain model events consumed by the existing attempt executor.
+    """
     del steering_buffer
     if cancel_event.is_set():
         return
@@ -50,6 +62,15 @@ def deterministic_resume_event_source(
 
     The caller has already matched and consumed pending result identities. This adapter serialises
     those accepted values for display; it never executes a tool or reconstructs a missing result.
+
+    Args:
+        compiled_input: Unused admitted input retained for handler compatibility.
+        model_results: Server-authorised resume results already matched to pending requests.
+        cancel_event: Attempt cancellation signal checked before producing output.
+        steering_buffer: Accepted steering text appended to the deterministic response.
+
+    Yields:
+        Plain model events consumed by the existing resume executor.
     """
     del compiled_input
     if cancel_event.is_set():

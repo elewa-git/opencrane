@@ -39,7 +39,23 @@ def development_open_stream(
     runtime_instance_id: str,
     pod_uid: str,
 ) -> int:
-    """Open the normal authority stream with handlers selected before command dispatch."""
+    """Open the authority stream with handlers selected before command dispatch.
+
+    Called by ``run_forever`` in this development entrypoint. LiteLLM keeps the production handlers;
+    simulated mode injects deterministic start and resume sources after normal stream admission.
+
+    Args:
+        control_plane_url: Loopback OpenCrane runtime-stream origin.
+        token: Per-attempt bearer read from its private credential file.
+        runtime_instance_id: Runtime instance coordinate used by the stream protocol.
+        pod_uid: Local process identity bound by development token review.
+
+    Returns:
+        The exit status returned by the normal stream client.
+
+    Raises:
+        RuntimeError: When the coordinator supplied an unsupported model strategy.
+    """
     strategy = environment("OPENCRANE_RUNTIME_MODEL_STRATEGY")
     if strategy == _LITELLM_STRATEGY:
         return open_stream(control_plane_url, token, runtime_instance_id, pod_uid)
