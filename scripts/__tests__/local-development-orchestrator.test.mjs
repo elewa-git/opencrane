@@ -16,6 +16,7 @@ function _Operations(calls, options = {})
 		loadLocalDevelopmentSecrets() { calls.push("secrets"); return { liteLLMMasterKey: "master-key" }; },
 		prepareLocalAgentRuntimeEnvironment() { calls.push("runtime-python"); },
 		releaseLocalDevelopmentLock() { calls.push("unlock"); },
+		removeOwnedContainer(name) { calls.push(`remove:${name}`); },
 		removeDisposableDevelopmentCredentials() { calls.push("remove-credentials"); },
 		resetLocalDevelopmentContainers() { calls.push("reset"); },
 		async runDevelopmentProcesses() { calls.push("processes"); if (options.processFailure) throw options.processFailure; },
@@ -81,7 +82,7 @@ test("Alternative A prepares and validates LiteLLM after the application databas
 	assert.ok(calls.indexOf("litellm-database") < calls.indexOf("start-litellm"));
 	assert.ok(calls.indexOf("start-litellm") < calls.indexOf("wait-litellm"));
 	assert.ok(calls.indexOf("wait-litellm") < calls.indexOf("processes"));
-	assert.deepEqual(calls.slice(-4), ["stop:opencrane-local-litellm", "stop:opencrane-local-postgres", "remove-credentials", "unlock"]);
+	assert.deepEqual(calls.slice(-4), ["remove:opencrane-local-litellm", "stop:opencrane-local-postgres", "remove-credentials", "unlock"]);
 });
 
 test("Alternative B validates the remote endpoint before mutating local containers", async function _RemoteValidationOrder()

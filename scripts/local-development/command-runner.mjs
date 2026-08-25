@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
 
+import { createToolchainProcessEnvironment } from "./process-environments.mjs";
+
 /**
  * Runs one setup command synchronously so later Tier 2 steps cannot start before it succeeds.
  * @param {string} command - Executable name or path.
@@ -12,10 +14,7 @@ export function runLocalCommand(command, argumentsList, options = {})
 {
 	const result = spawnSync(command, argumentsList, {
 		cwd: options.cwd,
-		env: {
-			...process.env,
-			...options.environment
-		},
+		env: createToolchainProcessEnvironment(process.env, options.environment),
 		encoding: "utf8",
 		input: options.input,
 		stdio: options.inherit ? "inherit" : "pipe"

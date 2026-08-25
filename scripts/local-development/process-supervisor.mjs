@@ -1,25 +1,11 @@
 import { spawn } from "node:child_process";
 
-const _SENSITIVE_PARENT_ENVIRONMENT_NAMES = [
-	"LITELLM_MASTER_KEY",
-	"OPENAI_API_KEY",
-	"OPENCRANE_INITIAL_MODEL_API_KEY"
-];
+import { createToolchainProcessEnvironment } from "./process-environments.mjs";
 
-/** Removes known provider and model keys inherited from the shell before adding a process allowlist. */
+/** Keeps only reviewed toolchain variables before adding a process-specific allowlist. */
 export function createDevelopmentChildEnvironment(parentEnvironment, processEnvironment = {})
 {
-	const environment = { ...parentEnvironment };
-
-	for (const name of _SENSITIVE_PARENT_ENVIRONMENT_NAMES)
-	{
-		delete environment[name];
-	}
-
-	return {
-		...environment,
-		...processEnvironment
-	};
+	return createToolchainProcessEnvironment(parentEnvironment, processEnvironment);
 }
 
 /**

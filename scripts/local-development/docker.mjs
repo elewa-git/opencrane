@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { runLocalCommand } from "./command-runner.mjs";
 
-export { resetLocalDevelopmentContainers, startLocalLiteLLM, stopOwnedContainer } from "./container-resources.mjs";
+export { removeOwnedContainer, resetLocalDevelopmentContainers, startLocalLiteLLM, stopOwnedContainer } from "./container-resources.mjs";
 export { applyTargetBaseline, ensureLocalLiteLLMDatabase, startLocalPostgres } from "./postgres.mjs";
 
 /**

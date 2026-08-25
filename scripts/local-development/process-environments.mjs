@@ -1,3 +1,36 @@
+/** Parent variables required to find tools and preserve terminal behavior without forwarding credentials. */
+const _TOOLCHAIN_ENVIRONMENT_NAMES = [
+	"COLORTERM",
+	"DOCKER_CERT_PATH",
+	"DOCKER_CONTEXT",
+	"DOCKER_HOST",
+	"DOCKER_TLS_VERIFY",
+	"FORCE_COLOR",
+	"HOME",
+	"LANG",
+	"LC_ALL",
+	"NO_COLOR",
+	"PATH",
+	"SHELL",
+	"TERM",
+	"TMPDIR"
+];
+
+/** Builds a child environment from reviewed toolchain variables and an explicit process contract. */
+export function createToolchainProcessEnvironment(parentEnvironment, processEnvironment = {})
+{
+	const toolchainEnvironment = Object.fromEntries(_TOOLCHAIN_ENVIRONMENT_NAMES.flatMap(function _AllowedName(name)
+	{
+		const value = parentEnvironment[name];
+		return typeof value === "string" ? [[name, value]] : [];
+	}));
+
+	return {
+		...toolchainEnvironment,
+		...processEnvironment
+	};
+}
+
 /** Returns the server allowlist without the seed private key or controller-only configuration. */
 export function createOpenCraneServerProcessEnvironment(applicationEnvironment)
 {

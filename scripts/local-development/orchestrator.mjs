@@ -1,5 +1,5 @@
 import { createApplicationCommands, createApplicationEnvironment } from "./commands.mjs";
-import { applyTargetBaseline, ensureLocalLiteLLMDatabase, resetLocalDevelopmentContainers, startLocalLiteLLM, startLocalPostgres, stopOwnedContainer, validateLocalDevelopmentTools } from "./docker.mjs";
+import { applyTargetBaseline, ensureLocalLiteLLMDatabase, removeOwnedContainer, resetLocalDevelopmentContainers, startLocalLiteLLM, startLocalPostgres, stopOwnedContainer, validateLocalDevelopmentTools } from "./docker.mjs";
 import { createDevelopmentSeedCommand } from "./development-seed-command.mjs";
 import { validateLiteLLMModelEndpoint, waitForLiteLLMModelEndpoint } from "./litellm-validation.mjs";
 import { acquireLocalDevelopmentLock, releaseLocalDevelopmentLock } from "./lock.mjs";
@@ -20,6 +20,7 @@ const _OPERATIONS = {
 	loadLocalDevelopmentSecrets,
 	prepareLocalAgentRuntimeEnvironment,
 	releaseLocalDevelopmentLock,
+	removeOwnedContainer,
 	removeDisposableDevelopmentCredentials,
 	resetLocalDevelopmentContainers,
 	runDevelopmentProcesses,
@@ -103,7 +104,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		{
 			if (liteLLMStarted)
 			{
-				operations.stopOwnedContainer(configuration.liteLLMContainerName);
+				operations.removeOwnedContainer(configuration.liteLLMContainerName);
 			}
 
 			if (postgresStarted)

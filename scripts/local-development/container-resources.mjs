@@ -106,7 +106,7 @@ function _connectOwnedContainerToNetwork(containerName, networkName)
 	}
 }
 
-function _removeOwnedContainer(containerName)
+export function removeOwnedContainer(containerName)
 {
 	const state = inspectOwnedContainer(containerName);
 
@@ -165,8 +165,8 @@ function _removeOwnedNetwork(networkName)
 /** Removes the labelled Tier 2 containers, network, and PostgreSQL volume selected by `--reset`. */
 export function resetLocalDevelopmentContainers(configuration)
 {
-	_removeOwnedContainer(configuration.liteLLMContainerName);
-	_removeOwnedContainer(configuration.postgresContainerName);
+	removeOwnedContainer(configuration.liteLLMContainerName);
+	removeOwnedContainer(configuration.postgresContainerName);
 	_removeOwnedVolume(configuration.postgresVolumeName);
 	_removeOwnedNetwork(configuration.localNetworkName);
 }
@@ -174,7 +174,7 @@ export function resetLocalDevelopmentContainers(configuration)
 /** Starts Alternative A's LiteLLM container on the network shared with its PostgreSQL database. */
 export async function startLocalLiteLLM(configuration, secrets)
 {
-	_removeOwnedContainer(configuration.liteLLMContainerName);
+	removeOwnedContainer(configuration.liteLLMContainerName);
 	_ensureOwnedNetwork(configuration.localNetworkName);
 	_connectOwnedContainerToNetwork(configuration.postgresContainerName, configuration.localNetworkName);
 	const specification = createLiteLLMRunCommand(configuration, secrets);
