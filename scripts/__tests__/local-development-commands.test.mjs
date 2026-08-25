@@ -137,7 +137,7 @@ test("Alternative B uses only its explicit remote endpoint and admin key", funct
 		"--profile",
 		"agent",
 		"--alternative",
-		"B",
+		"remote-llm",
 		"--remote-litellm-endpoint",
 		"https://litellm.example.test",
 		"--remote-litellm-master-key-file",
@@ -156,7 +156,7 @@ test("Alternative B uses only its explicit remote endpoint and admin key", funct
 
 test("Alternative C provides no LiteLLM or provider credential variables", function _simulatedEnvironment()
 {
-	const configuration = _configuration(["--profile", "agent", "--alternative", "C"]);
+	const configuration = _configuration(["--profile", "agent", "--alternative", "simulated-llm"]);
 	const environment = createApplicationEnvironment(configuration, { postgresPassword: "postgres-secret" }, _MEMBERSHIP_KEYS);
 
 	assert.equal(createLiteLLMRunCommand(configuration, {}), undefined);

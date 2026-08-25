@@ -8,16 +8,16 @@ const _HELP = `OpenCrane Tier 2 local development
 
 Usage:
   npm run dev:tier2
-  npm run dev:tier2 -- --profile agent [--alternative A|B|C]
+  npm run dev:tier2 -- --profile agent [--alternative local-llm|remote-llm|simulated-llm]
 
 Profiles:
   core   PostgreSQL, the watched server, and the live-gateway UI (default)
-  agent  Adds the local agent controller; Alternative A is the default
+  agent  Adds the local agent controller; local-llm is the default
 
 Agent alternatives:
-  A  Local LiteLLM with keys/.openai-key
-  B  Remote HTTPS LiteLLM with explicit endpoint and admin-key file
-  C  Simulated model mode without LiteLLM or provider credentials
+  local-llm      Local LiteLLM with keys/.openai-key
+  remote-llm     Remote HTTPS LiteLLM with explicit endpoint and admin-key file
+  simulated-llm  Simulated model mode without LiteLLM or provider credentials
 
 Alternative B:
   --remote-litellm-endpoint https://litellm.example.test

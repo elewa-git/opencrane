@@ -115,7 +115,7 @@ Cognee, the memory gateway, and Kubernetes disabled.
 
 ## Add local Agent chat
 
-Select the Agent profile to add the local controller and runtime. Alternative A is the default:
+Select the Agent profile to add the local controller and runtime. Alternative A (`local-llm`) is the default:
 
 ```bash
 npm run dev:tier2 -- --profile agent
@@ -131,9 +131,9 @@ bootstrap, authenticated runtime stream, candidate validation, and PostgreSQL pe
 
 | Alternative | Command suffix | Model access and credentials |
 | --- | --- | --- |
-| A — local LiteLLM | `--alternative A` | Starts the pinned local LiteLLM container. Reads the provider key from `keys/.openai-key`, creates a separate owner-only local master-key file, and stores attempt-scoped virtual keys in a separate `litellm` database within the Tier 2 PostgreSQL container. |
-| B — remote LiteLLM | `--alternative B --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path` | Uses the explicit HTTPS proxy and owner-only admin-key file. It never falls back to Alternative A's local master key or provider key. |
-| C — simulated model | `--alternative C` | Uses deterministic model events after normal run admission. It starts no LiteLLM process and reads no model or provider credential. |
+| A — local LiteLLM | `--alternative local-llm` | Starts the pinned local LiteLLM container and the local Agent runner. Reads the provider key from `keys/.openai-key`, creates a separate owner-only local master-key file, and stores attempt-scoped virtual keys in a separate `litellm` database within the Tier 2 PostgreSQL container. |
+| B — remote LiteLLM | `--alternative remote-llm --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path` | Connects the local Agent runner to an explicit shared HTTPS LiteLLM proxy using an owner-only admin-key file. It never falls back to Alternative A's local master key or provider key. |
+| C — simulated model | `--alternative simulated-llm` | Runs the local Agent runner with deterministic model events after normal run admission. It starts no LiteLLM process and reads no model or provider credential. |
 
 The runtime receives an attempt-scoped LiteLLM key in A/B, never the provider key or LiteLLM
 master key. The controller and each runtime attempt also use separate private bearer files; the

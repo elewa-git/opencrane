@@ -50,7 +50,7 @@ test("Alternative B never falls back to the local generated master key", functio
 		"--profile",
 		"agent",
 		"--alternative",
-		"B",
+		"remote-llm",
 		"--remote-litellm-endpoint",
 		"https://litellm.example.test",
 		"--remote-litellm-master-key-file",
@@ -84,7 +84,7 @@ test("Alternative B rejects the provider key as its remote admin key", function 
 		"--profile",
 		"agent",
 		"--alternative",
-		"B",
+		"remote-llm",
 		"--remote-litellm-endpoint",
 		"https://litellm.example.test",
 		"--remote-litellm-master-key-file",
@@ -105,7 +105,7 @@ test("Alternative C does not read or generate provider and LiteLLM credentials",
 		"--profile",
 		"agent",
 		"--alternative",
-		"C"
+		"simulated-llm"
 	]), repositoryRoot, {});
 	const secrets = loadLocalDevelopmentSecrets(configuration, function _fixedBytes() { return Buffer.alloc(32, 5); });
 

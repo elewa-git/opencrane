@@ -4,11 +4,11 @@ export const LOCAL_DEVELOPMENT_PROFILES = Object.freeze({
 	Agent: "agent"
 });
 
-/** Maps Agent alternatives A, B, and C to their model-access boundary. */
+/** Maps each Agent model-access boundary to its descriptive CLI value. */
 export const LOCAL_DEVELOPMENT_ALTERNATIVES = Object.freeze({
-	LocalLiteLLM: "A",
-	RemoteLiteLLM: "B",
-	Simulated: "C"
+	LocalLiteLLM: "local-llm",
+	RemoteLiteLLM: "remote-llm",
+	Simulated: "simulated-llm"
 });
 
 function _readOptionValue(argumentsList, index, option)
@@ -35,7 +35,7 @@ function _assertKnownAlternative(alternative)
 {
 	if (!Object.values(LOCAL_DEVELOPMENT_ALTERNATIVES).includes(alternative))
 	{
-		throw new Error("--alternative must be exactly A, B, or C");
+		throw new Error("--alternative must be exactly local-llm, remote-llm, or simulated-llm");
 	}
 }
 
@@ -72,7 +72,7 @@ function _validateRemoteEndpoint(endpoint)
 
 /**
  * Parses Tier 2 arguments and rejects options that do not apply to the selected profile.
- * Agent defaults to Alternative A; Alternative B additionally requires a remote HTTPS origin and key file.
+ * Agent defaults to local-llm; remote-llm additionally requires a remote HTTPS origin and key file.
  */
 export function parseLocalDevelopmentArguments(argumentsList)
 {

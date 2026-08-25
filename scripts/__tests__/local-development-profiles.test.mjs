@@ -25,38 +25,38 @@ test("agent defaults to Alternative A", function _defaultAgentAlternative()
 	const parsed = parseLocalDevelopmentArguments(["--profile", "agent"]);
 	const configuration = createLocalDevelopmentConfiguration(parsed, "/repo", {});
 
-	assert.equal(configuration.alternative, "A");
+	assert.equal(configuration.alternative, "local-llm");
 	assert.equal(configuration.developmentProfile, "agent-local");
 });
 
-test("agent accepts exact Alternatives A, B, and C", function _exactAlternatives()
+test("agent accepts exact descriptive alternatives", function _exactAlternatives()
 {
-	const local = parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "A"]);
+	const local = parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "local-llm"]);
 	const remote = parseLocalDevelopmentArguments([
 		"--profile",
 		"agent",
 		"--alternative",
-		"B",
+		"remote-llm",
 		"--remote-litellm-endpoint",
 		"https://litellm.example.test/",
 		"--remote-litellm-master-key-file",
 		"/secure/remote.key"
 	]);
-	const simulated = parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "C"]);
+	const simulated = parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "simulated-llm"]);
 
-	assert.equal(local.alternative, "A");
+	assert.equal(local.alternative, "local-llm");
 	assert.equal(remote.remoteLiteLLMEndpoint, "https://litellm.example.test");
-	assert.equal(simulated.alternative, "C");
-	assert.throws(function _lowercaseAlternative() { parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "a"]); }, /exactly A, B, or C/);
+	assert.equal(simulated.alternative, "simulated-llm");
+	assert.throws(function _opaqueAlternative() { parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "A"]); }, /exactly local-llm, remote-llm, or simulated-llm/);
 });
 
 test("coordinator outputs remain aligned with the cross-process profile contract", function _profileContract()
 {
 	const configurations = [
 		createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments([]), "/repo", {}),
-		createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "A"]), "/repo", {}),
-		createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "B", "--remote-litellm-endpoint", "https://litellm.example.test", "--remote-litellm-master-key-file", "/secure/remote.key"]), "/repo", {}),
-		createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "C"]), "/repo", {})
+		createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "local-llm"]), "/repo", {}),
+		createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "remote-llm", "--remote-litellm-endpoint", "https://litellm.example.test", "--remote-litellm-master-key-file", "/secure/remote.key"]), "/repo", {}),
+		createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "simulated-llm"]), "/repo", {})
 	];
 
 	assert.deepEqual(configurations.map(configuration => configuration.developmentProfile), _PROFILE_CONTRACT.profiles);
@@ -66,7 +66,7 @@ test("Alternative B fails closed without an explicit HTTPS endpoint and key file
 {
 	assert.throws(function _missingRemoteSettings()
 	{
-		parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "B"]);
+		parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "remote-llm"]);
 	}, /requires both/);
 	assert.throws(function _insecureEndpoint()
 	{
@@ -74,7 +74,7 @@ test("Alternative B fails closed without an explicit HTTPS endpoint and key file
 			"--profile",
 			"agent",
 			"--alternative",
-			"B",
+			"remote-llm",
 			"--remote-litellm-endpoint",
 			"http://litellm.example.test",
 			"--remote-litellm-master-key-file",
@@ -87,7 +87,7 @@ test("Alternative B fails closed without an explicit HTTPS endpoint and key file
 			"--profile",
 			"agent",
 			"--alternative",
-			"B",
+			"remote-llm",
 			"--remote-litellm-endpoint",
 			"https://127.0.0.1",
 			"--remote-litellm-master-key-file",
@@ -100,7 +100,7 @@ test("core and non-remote alternatives reject remote model options", function _r
 {
 	assert.throws(function _coreAlternative()
 	{
-		parseLocalDevelopmentArguments(["--profile", "core", "--alternative", "A"]);
+		parseLocalDevelopmentArguments(["--profile", "core", "--alternative", "local-llm"]);
 	}, /only to --profile agent/);
 	assert.throws(function _localRemoteEndpoint()
 	{
@@ -108,7 +108,7 @@ test("core and non-remote alternatives reject remote model options", function _r
 			"--profile",
 			"agent",
 			"--alternative",
-			"A",
+			"local-llm",
 			"--remote-litellm-endpoint",
 			"https://litellm.example.test"
 		]);

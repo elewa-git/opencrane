@@ -75,7 +75,7 @@ test("Alternative A prepares and validates LiteLLM after the application databas
 {
 	const calls = [];
 
-	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "A", developmentProfile: "agent-local" }), _Operations(calls));
+	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "local-llm", developmentProfile: "agent-local" }), _Operations(calls));
 	assert.equal(calls.includes("credentials:true"), true);
 	assert.ok(calls.indexOf("runtime-python") < calls.indexOf("secrets"));
 	assert.ok(calls.indexOf("seed") < calls.indexOf("litellm-database"));
@@ -89,7 +89,7 @@ test("Alternative B validates the remote endpoint before mutating local containe
 {
 	const calls = [];
 
-	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "B", developmentProfile: "agent-remote", remoteLiteLLMEndpoint: "https://litellm.example.test", reset: true }), _Operations(calls));
+	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "remote-llm", developmentProfile: "agent-remote", remoteLiteLLMEndpoint: "https://litellm.example.test", reset: true }), _Operations(calls));
 	assert.ok(calls.indexOf("validate-remote-litellm") < calls.indexOf("reset"));
 	assert.ok(calls.indexOf("reset") < calls.indexOf("start-postgres"));
 	assert.equal(calls.includes("start-litellm"), false);

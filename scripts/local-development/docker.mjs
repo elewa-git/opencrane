@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { runLocalCommand } from "./command-runner.mjs";
+import { LOCAL_DEVELOPMENT_ALTERNATIVES } from "./profiles.mjs";
 
 export { removeOwnedContainer, resetLocalDevelopmentContainers, startLocalLiteLLM, stopOwnedContainer } from "./container-resources.mjs";
 export { applyTargetBaseline, ensureLocalLiteLLMDatabase, startLocalPostgres } from "./postgres.mjs";
@@ -19,7 +20,7 @@ export function validateLocalDevelopmentTools(configuration)
 
 	const requiredFiles = [configuration.baselinePath, configuration.seedPath];
 
-	if (configuration.alternative === "A")
+	if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
 	{
 		requiredFiles.push(configuration.liteLLMConfigPath);
 	}
