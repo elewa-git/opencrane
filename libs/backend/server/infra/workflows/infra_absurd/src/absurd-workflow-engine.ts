@@ -128,10 +128,11 @@ function _EnvelopeForTask(idempotencyKey: string, input: unknown): ITaskEnvelope
  * one commit decision. Work that a running task creates uses the SDK directly because it has no
  * surrounding product transaction to join.
  *
- * The engine owns task registration, queue-scoped SDK clients, and worker groups. It does not
- * choose queues: composition supplies the same reviewed authority that the workflow guard uses.
- * Call {@link close} during process shutdown; it drains workers before releasing an engine-owned
- * database pool.
+ * The engine owns admission declarations, local task registration, queue-scoped SDK clients, and
+ * worker groups. A declaration permits transactional top-level admission even when a remote
+ * controller owns the handler; a child task still needs a local handler. It does not choose queues:
+ * composition supplies the same reviewed authority that the workflow guard uses. Call {@link close}
+ * during process shutdown; it drains workers before releasing an engine-owned database pool.
  *
  * Called by: {@link _CreateWorkflowEngineQualificationSession} for the live qualification run.
  * @see ../../../../../../../docs/adr/0013-workflow-control-plane.md — records the engine boundary and transaction decision.
@@ -201,9 +202,9 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	/**
 	 * Registers a contract task on its reviewed Absurd queue.
 	 *
-	 * Registration precedes every admission, so the engine can reject an unknown task name instead
-	 * of persisting work that no handler owns. The stored definition also becomes the source for the
-	 * replay-safe context that {@link runTask} passes to each handler.
+	 * Registration also creates its admission declaration, then binds the local SDK handler. Use
+	 * {@link declare} instead when a remote controller owns that handler. The stored definition becomes
+	 * the source for the replay-safe context that {@link runTask} passes to each local handler.
 	 */
 	register<TInput, TResult>(definition: IWorkflowTaskDefinition<TInput, TResult>): void
 	{
@@ -223,7 +224,17 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		this.engineForQueue(this.queueForTask(taskName)).registerTask({ name: taskName, queue: this.queueForTask(taskName), defaultMaxAttempts: retryPolicy.maximumAttempts }, async function _RunTask(params: unknown, context: TaskContext): Promise<unknown> { return await engine.runTask(stored, context, params); });
 	}
 
-	/** Declare one reviewed task for transactional admission without creating an SDK handler or worker. */
+	/**
+	 * Declares one reviewed task for transactional top-level admission without creating a local handler.
+	 *
+	 * Use this when a remote controller registers the handler: the server can admit work in its product
+	 * transaction, but {@link spawnFromTask} still rejects the task because child work needs a local
+	 * SDK handler. A conflicting retry policy fails rather than changing what an existing declaration
+	 * permits.
+	 *
+	 * @param declaration - Task name and retry policy allowed to enter transactional admission.
+	 * @throws WorkflowError when the declaration conflicts with an existing task or queue policy.
+	 */
 	declare(declaration: IWorkflowTaskDeclaration): void
 	{
 		const taskName = _RequiredString("declaration.taskName", declaration.taskName);
@@ -268,6 +279,8 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	 *
 	 * The PostgreSQL procedure records the task before that transaction commits. A process crash
 	 * cannot leave a committed product change without the work it requires.
+	 * A reviewed declaration is enough here because a remote controller may register the handler.
+	 * @see declare — admits remote-controller work without installing a local handler.
 	 * @see WorkflowTaskAdmission — owns the fixed, parameterized procedure call.
 	 */
 	async spawn<TInput>(transaction: IWorkflowTransaction, task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
@@ -287,6 +300,8 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	 *
 	 * A running task has no caller-owned product transaction to join. The task-scoped idempotency
 	 * key prevents two task definitions on one queue from treating the same domain key as a match.
+	 * Unlike {@link spawn}, this operation requires a local registered handler because the SDK persists
+	 * and dispatches the child work from this process.
 	 */
 	async spawnFromTask<TInput>(task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
