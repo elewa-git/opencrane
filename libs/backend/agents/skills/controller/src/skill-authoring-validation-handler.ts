@@ -135,7 +135,11 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 			};
 			await context.checkpoint({ stepName: "bind-workload" }, async function _BindWorkload(): Promise<void>
 			{
-				await options.authority.bindWorkload(record.validationId, context.task, { binding: workloadBinding, bootstrapReference: prepared.bootstrapReference, namespace: options.profile.namespace });
+				const outcome = await options.authority.bindWorkload(record.validationId, context.task, { binding: workloadBinding, bootstrapReference: prepared.bootstrapReference, namespace: options.profile.namespace });
+				if (outcome === "conflict")
+				{
+					throw new WorkflowTaskTerminalError("Skill authoring validation workload claim no longer matches.");
+				}
 			});
 
 			// 3. Release only the UID the server recorded, then wait until Kubernetes exposes its sole worker Pod.
@@ -157,7 +161,11 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 			}
 			await context.checkpoint({ stepName: "bind-first-pod" }, async function _BindFirstPod(): Promise<void>
 			{
-				await options.authority.bindFirstPod(record.validationId, context.task, { binding: { ...workloadBinding, firstPodUid: _PodUid(pod) } });
+				const outcome = await options.authority.bindFirstPod(record.validationId, context.task, { binding: { ...workloadBinding, firstPodUid: _PodUid(pod) } });
+				if (outcome === "conflict")
+				{
+					throw new WorkflowTaskTerminalError("Skill authoring validation Pod claim no longer matches.");
+				}
 			});
 
 			// 4. Wait for the server-published inbox event, then make the workflow handler the sole terminal writer.
@@ -174,7 +182,11 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 			});
 			await context.checkpoint({ stepName: "complete-validation" }, async function _CompleteValidation(): Promise<void>
 			{
-				await options.authority.complete(record.validationId, completion, context.task);
+				const outcome = await options.authority.complete(record.validationId, completion, context.task);
+				if (outcome === "conflict")
+				{
+					throw new WorkflowTaskTerminalError("Skill authoring validation completion no longer matches.");
+				}
 			});
 			return { validationId: record.validationId, completionDigest: completion.completionDigest };
 		},
