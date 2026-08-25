@@ -17,18 +17,10 @@ export interface InternalRuntimeComposition
 {
 	/** Controller-only router for claiming and committing run attempts. */
 	readonly agentControllerRunDispatch: Router;
-	/** Controller-only router for governed skill workload dispatch. */
-	readonly skillWorkloadDispatch: Router;
 	/** Controller-only router that claims MCP bundle validation work and records its Kubernetes Job. */
 	readonly mcpbValidationController: Router;
 	/** Controller-only router that issues and records one durable skill authoring validation. */
 	readonly skillAuthoringValidationController: Router;
-	/** Runtime router for one-use workload bootstrap claims. */
-	readonly skillWorkloadBootstrap: Router;
-	/** Runtime router for reading fenced skill-authoring input. */
-	readonly skillAuthoringInput: Router;
-	/** Runtime router for committing fenced skill-authoring completion. */
-	readonly skillAuthoringCompletion: Router;
 	/** Runtime router that serves the durable validation record to its exact authoring Pod. */
 	readonly skillAuthoringValidationWorker: Router;
 	/** Optional preprocessor router, present only when the restricted worker plane is enabled. */
@@ -61,13 +53,13 @@ export interface InternalRuntimeComposition
 /** The subset of routers built by the controller-only composition step. */
 export type ControllerRuntimeComposition = Pick<
 	InternalRuntimeComposition,
-	"agentControllerRunDispatch" | "skillWorkloadDispatch" | "mcpbValidationController" | "skillAuthoringValidationController"
+	"agentControllerRunDispatch" | "mcpbValidationController" | "skillAuthoringValidationController"
 >;
 
-/** The subset of routers built by the isolated skill-workload composition step. */
-export type SkillWorkloadRuntimeComposition = Pick<
+/** The subset of routers built by the authoring-validation composition step. */
+export type SkillAuthoringValidationRuntimeComposition = Pick<
 	InternalRuntimeComposition,
-	"skillWorkloadBootstrap" | "skillAuthoringInput" | "skillAuthoringCompletion" | "skillAuthoringValidationWorker"
+	"skillAuthoringValidationWorker"
 >;
 
 /** The subset of routers built by the runtime-protocol composition step. */

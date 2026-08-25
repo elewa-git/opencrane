@@ -1,10 +1,10 @@
 import type { AgentControllerRuntimeProfiles } from "@opencrane/backend/agents/runtime/controller";
-import type { SkillWorkloadControllerProfiles } from "@opencrane/backend/agents/skills/controller";
+import type { SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
 import type { McpbValidationControllerOptions } from "@opencrane/backend/agents/mcpb/controller";
 
 /**
  * Carries controller settings after startup validates the process environment.
- * The entrypoint passes these profiles to the agent, skill-workload, and MCPB controllers, so all
+ * The entrypoint passes these profiles to the agent, authoring-validation, and MCPB controllers, so all
  * profiles are validated before any controller starts.
  * @see _ReadConfig
  */
@@ -30,8 +30,8 @@ export interface AgentControllerProcessConfig
 	readonly workflowSiloId: string;
 	/** Immutable runtime profiles, keyed by the profile name the control plane assigns. */
 	readonly profiles: AgentControllerRuntimeProfiles;
-	/** Immutable profiles for the only governed skill Job classes. */
-	readonly skillWorkloadProfiles: SkillWorkloadControllerProfiles;
+	/** Immutable profile for the authoring validation Job class. */
+	readonly skillAuthoringValidationProfile: SkillWorkloadJobProfile;
 	/** Keeps the agent controller on the MCPB controller public API instead of its validator Job launcher. */
 	readonly mcpbValidatorProfile: McpbValidationControllerOptions["profile"];
 }

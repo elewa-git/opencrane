@@ -108,7 +108,7 @@ export interface SkillAuthoringValidationWorkerLogger
  *
  * Separating token review, database authority, artifact reads, and event delivery keeps the HTTP
  * router from selecting an artifact or writing completion state itself. Called by:
- * `_CreateSkillWorkloadRuntimeComposition`.
+ * `_CreateSkillAuthoringValidationRuntimeComposition`.
  */
 export interface SkillAuthoringValidationWorkerRouterDependencies
 {

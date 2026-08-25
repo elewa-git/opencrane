@@ -5,7 +5,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
 import { _CreateArtifactCatalogueRepository, _CreateArtifactPreprocessAuthority, _CreateArtifactUploadAuthority, __CompleteArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease, __IssueArtifactReadLease, __UploadArtifact, IssueArtifactReadLeaseOutcomes, type ArtifactPreprocessOutputBroker, type ArtifactUploadResult, type PublishedArtifactReadTarget, type VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
-import type { SkillAuthoringArtifactReader } from "@opencrane/backend/agents/skills/execution";
+import type { SkillAuthoringValidationArtifactReader } from "@opencrane/backend/server/agents/skills";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { PrismaConversationAssetOutputUnitOfWork, PrismaConversationAssetUnitOfWork, type ConversationAssetContentBroker, type ConversationAssetReadTarget } from "@opencrane/backend/server/conversation-assets";
 import { ___ParseAndValidateJson } from "@opencrane/util";
@@ -154,7 +154,7 @@ export function _CreatePublishedArtifactReader(prisma: PrismaClient, environment
 }
 
 /** Keep the skill worker's named port while reusing the single published-artifact reader. */
-export function _CreateSkillAuthoringArtifactReader(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): SkillAuthoringArtifactReader
+export function _CreateSkillAuthoringArtifactReader(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): SkillAuthoringValidationArtifactReader
 {
 	return _CreatePublishedArtifactReader(prisma, environment);
 }

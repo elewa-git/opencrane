@@ -238,6 +238,7 @@ grep -Fq "object.spec.template.spec.volumes[1].name == 'bootstrap-reference'" "$
 grep -Fq "object.spec.template.spec.volumes[1].downwardAPI.items[0].fieldRef.fieldPath == \"metadata.annotations['opencrane.ai/capability-reference']\"" "$ADMISSION"
 grep -Fq "object.spec.template.spec.volumes[2].name == 'scratch'" "$ADMISSION"
 grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://oc-opencrane-opencrane-server.server-ns.svc.cluster.local:8081/api/internal/agent-runtime' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_AUTHORING_VALIDATION_PROFILE_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://oc-opencrane-opencrane-server.server-ns.svc.cluster.local:8081/api/internal/agent-runtime' >/dev/null
 if grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://override.example:8081' >/dev/null; then
   echo "governed worker bootstrap must not inherit the mutable runtime endpoint override" >&2
   exit 1

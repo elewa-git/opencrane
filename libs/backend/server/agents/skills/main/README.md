@@ -78,7 +78,7 @@ domains directly.
 
 ## Data & persistence
 
-The `Skill`, `SkillRevision`, legacy controller-polled `SkillWorkload`, and new
+The `Skill`, `SkillRevision`, retained legacy `SkillWorkload`, and new
 `SkillAuthoringValidation` records belong to the broader skill capability in
 `apps/opencrane/prisma/schema/skills.prisma`. The validation record holds the task receipt, one-use
 bootstrap identity, worker completion inbox, and durable wake-up event. The repository owns only

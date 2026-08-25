@@ -71,11 +71,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig());
 
 		expect(composition.agentControllerRunDispatch).toEqual(expect.any(Function));
-		expect(composition.skillWorkloadDispatch).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringValidationController).toEqual(expect.any(Function));
-		expect(composition.skillWorkloadBootstrap).toEqual(expect.any(Function));
-		expect(composition.skillAuthoringInput).toEqual(expect.any(Function));
-		expect(composition.skillAuthoringCompletion).toEqual(expect.any(Function));
 		expect(composition.runtimeBootstrap).toEqual(expect.any(Function));
 		expect(composition.runtimeStream).toEqual(expect.any(Function));
 		expect(composition.conversationAssetOutputs).toEqual(expect.any(Function));

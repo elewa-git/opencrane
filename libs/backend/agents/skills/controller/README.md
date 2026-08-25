@@ -1,38 +1,31 @@
-# @opencrane/backend/agents/skills/controller — governed skill Job reconciliation
+# @opencrane/backend/agents/skills/controller — durable authoring validation
 
 > [backend](../../../../README.md) › [agents](../../../README.md) › [skills](../README.md) › controller
 
 ## What it owns
 
-This package contains the outbound Kubernetes work for skill jobs. The current pilot is a
-**reconciler**: it repeatedly makes Kubernetes match a saved workload claim. It also exports a
-remote workflow handler that the agent-controller registers to create and observe a Job for a saved
-task. The server mounts a private lifecycle API; product admission remains a separate adapter.
+This package contains the controller-side parts of one skill authoring validation workflow. A
+workflow is a saved task that can pause and continue after a restart. The controller receives an
+already-admitted task, creates a restricted Python Job, records its Job and Pod IDs through the
+private server API, and waits for the server to save the worker result.
 
 ```
- legacy workload claim ──► controller ◄── HERE ──► suspended Job
-                               ▲                   │
- saved remote validation task ─┘──── immutable UID ┘
+saved validation task ──► controller handler ──► suspended authoring Job
+                                  │                        │
+                                  └── saved Job and Pod IDs ┘
 ```
 
-**In this flow:** the retained [execution authority](../execution/main/README.md), the new shared
-[workflow task contract](../workflows/contract/README.md), and the [Job builder](../k8s-launcher/README.md).
+**In this flow:** the [skill workflow contract](../workflows/contract/README.md), the
+[authoring Job builder](../k8s-launcher/README.md), and the server's
+[skill validation authority](../../../../server/agents/skills/main/README.md).
 
-The Job stays suspended until a separate, database-fenced release claim authorises one conditional
-unsuspend. The controller then records the exact first Job-owned Pod before the worker bootstrap can
-be used. A crash can therefore leave an inert Job to exact-adopt later, but cannot leave unrecorded
-Python code running.
+The Job remains suspended until the server records its immutable Kubernetes UID. The controller
+then releases that exact Job and records its only Pod before the worker can use its bootstrap
+reference. This lets a restarted controller safely adopt the same Job without starting another one.
 
 ## Public surface
 
-- `__ReconcileNextSkillWorkload` — handles at most one fenced claim and suspended Job assignment.
-- `__ReconcileNextSkillWorkloadRelease` — conditionally releases one assigned Job and registers its
-  exact first worker Pod.
-- `__RunSkillWorkloadController` — polls until process shutdown while isolating one failed claim.
-- `__ValidateSkillWorkloadControllerProfiles` — validates the two deployment-owned job-class profiles.
-- `__CreateHttpSkillWorkloadControllerAuthority` — bounds and decodes internal responses, then
-  delegates every wire shape and echo invariant to the model-adjacent Zod validators in
-  `@opencrane/contracts`.
+- `__ValidateSkillAuthoringValidationJobProfile` — validates the one Helm-owned authoring Job profile.
 - `__CreateHttpSkillAuthoringValidationControllerAuthority` — calls the private server API with the
   controller's rotating token and rejects replies for another validation.
 - `__CreateSkillAuthoringValidationHandler` — returns the remote Python validation handler that
@@ -40,12 +33,9 @@ Python code running.
 
 ## Boundary
 
-This package accepts ports for OpenCrane and Kubernetes; it does not use Prisma, issue a capability,
-read artifact bytes, duplicate controller wire validators, or run a worker. The retained polling
-pilot releases only an exact UID-bound Job under a short durable release claim. The remote handler
-records a Job ID before release and a Pod ID before it accepts a server-persisted completion. A
-later worker protocol must exchange the non-secret Job
-reference through a separately authenticated boundary before any code can run.
+This package accepts server and Kubernetes ports. It does not use Prisma, read artifact bytes,
+create product records, or run Python itself. The server remains responsible for admitting the task
+inside its database transaction and for writing the final validation result.
 
 ## Dependency direction
 
@@ -57,5 +47,4 @@ and Kubernetes adapters.
 ## See also
 
 - Parent group: [skills](../README.md)
-- Durable authority: [execution](../execution/main/README.md)
 - Task facts: [workflow contract](../workflows/contract/README.md)

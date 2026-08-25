@@ -2,7 +2,7 @@ import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import type { SkillAuthoringValidationTaskInput } from "@opencrane/backend/agents/skills/workflows/contract";
-import { __BuildGovernedSkillWorkloadJob, SkillWorkloadKinds } from "@opencrane/backend/agents/skills/k8s-launcher";
+import { __BuildGovernedSkillWorkloadJob, SkillWorkloadKinds, type SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { __CreateSkillWorkloadBootstrapReference } from "@opencrane/contracts";
@@ -13,6 +13,50 @@ import type { SkillAuthoringValidationCompletion, SkillAuthoringValidationContro
 
 /** Names the private event the server publishes after it persists a worker completion in its inbox. */
 const _COMPLETION_EVENT = "skill-authoring-completed";
+
+/** Return whether one value is a plain record with no inherited configuration. */
+function _IsRecord(value: unknown): value is Readonly<Record<string, unknown>>
+{
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Return whether a configuration record has exactly the expected fields. */
+function _HasOnlyKeys(value: Readonly<Record<string, unknown>>, expected: readonly string[]): boolean
+{
+	return Object.keys(value).length === expected.length && expected.every(function _HasKey(key): boolean { return Object.prototype.hasOwnProperty.call(value, key); });
+}
+
+/** Read fixed CPU and memory quantities without passing any other resource type to Kubernetes. */
+function _ResourceMap(value: unknown): Readonly<Record<"cpu" | "memory", string>> | null
+{
+	if (!_IsRecord(value) || !_HasOnlyKeys(value, ["cpu", "memory"]) || typeof value["cpu"] !== "string" || typeof value["memory"] !== "string")
+	{
+		return null;
+	}
+	return { cpu: value["cpu"], memory: value["memory"] };
+}
+
+/** Validate the one authoring profile that the durable task may use. */
+export function __ValidateSkillAuthoringValidationJobProfile(value: unknown): SkillWorkloadJobProfile
+{
+	if (!_IsRecord(value) || !_HasOnlyKeys(value, ["kind", "image", "imagePullPolicy", "serverNamespace", "namespace", "serviceAccountName", "capabilityTokenAudience", "bootstrapUrl", "capabilityTokenPath", "bootstrapReferencePath", "scratchSize", "activeDeadlineSeconds", "ttlSecondsAfterFinished", "resources"]) || value["kind"] !== SkillWorkloadKinds.Authoring)
+	{
+		throw new Error("skill authoring validation profile must be one complete authoring object");
+	}
+	if (typeof value["image"] !== "string" || (value["imagePullPolicy"] !== "Always" && value["imagePullPolicy"] !== "IfNotPresent" && value["imagePullPolicy"] !== "Never") || typeof value["serverNamespace"] !== "string" || typeof value["namespace"] !== "string" || typeof value["serviceAccountName"] !== "string" || typeof value["capabilityTokenAudience"] !== "string" || typeof value["bootstrapUrl"] !== "string" || typeof value["capabilityTokenPath"] !== "string" || typeof value["bootstrapReferencePath"] !== "string" || typeof value["scratchSize"] !== "string" || typeof value["activeDeadlineSeconds"] !== "number" || typeof value["ttlSecondsAfterFinished"] !== "number" || !_IsRecord(value["resources"]) || !_HasOnlyKeys(value["resources"], ["requests", "limits"]))
+	{
+		throw new Error("skill authoring validation profile must contain complete bounded values");
+	}
+	const requests = _ResourceMap(value["resources"]["requests"]);
+	const limits = _ResourceMap(value["resources"]["limits"]);
+	if (requests === null || limits === null)
+	{
+		throw new Error("skill authoring validation profile requires CPU and memory requests and limits");
+	}
+	const profile: SkillWorkloadJobProfile = { kind: SkillWorkloadKinds.Authoring, image: value["image"], imagePullPolicy: value["imagePullPolicy"], serverNamespace: value["serverNamespace"], namespace: value["namespace"], serviceAccountName: value["serviceAccountName"], capabilityTokenAudience: value["capabilityTokenAudience"], bootstrapUrl: value["bootstrapUrl"], capabilityTokenPath: value["capabilityTokenPath"], bootstrapReferencePath: value["bootstrapReferencePath"], scratchSize: value["scratchSize"], activeDeadlineSeconds: value["activeDeadlineSeconds"], ttlSecondsAfterFinished: value["ttlSecondsAfterFinished"], resources: { requests, limits } };
+	__BuildGovernedSkillWorkloadJob({ jobId: "profile-validation", siloId: "profile-validation", namespace: profile.namespace, capabilityReference: `skill-bootstrap-v1_${"0".repeat(64)}` }, profile);
+	return profile;
+}
 
 /** Require the immutable Kubernetes UID that the server must record before the authoring Job is released. */
 function _JobUid(job: V1Job): string
@@ -77,9 +121,7 @@ async function _Job(record: SkillAuthoringValidationControllerRecord, profile: S
 /**
  * Sleeps once before the task checks again for the first Pod its released Job created.
  *
- * The bound carries forward the former controller's supported poll range, so a missing Pod cannot
- * busy-loop Kubernetes or wait longer than that range permits.
- * @see __RunSkillWorkloadController — validates the matching 100–60,000 ms poll range.
+ * The fixed bound keeps a missing Pod from busy-looping Kubernetes or waiting too long.
  */
 async function _WaitForPod(context: SkillAuthoringValidationTaskContext, milliseconds: number): Promise<void>
 {

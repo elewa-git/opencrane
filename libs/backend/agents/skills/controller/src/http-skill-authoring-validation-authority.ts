@@ -7,14 +7,14 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { _ParseSkillAuthoringValidationBindOutcome, _ParseSkillAuthoringValidationCompletion, _ParseSkillAuthoringValidationCompletionOutcome, _ParseSkillAuthoringValidationControllerRecord } from "./skill-authoring-validation-http-response";
-import type { SkillWorkloadControllerFetch, SkillWorkloadControllerHttpAuthorityOptions, SkillWorkloadControllerTokenReader } from "./skill-workload-controller.types";
+import type { SkillAuthoringValidationControllerFetch, SkillAuthoringValidationControllerHttpAuthorityOptions, SkillAuthoringValidationControllerTokenReader } from "./controller-http.types";
 
 /** Limits one controller-only API response before this adapter parses it. */
 const _MAX_RESPONSE_BYTES = 16 * 1024;
 
 
 /** Reads a rotating projected token without retaining it in process state. */
-function _CreateTokenReader(path: string): SkillWorkloadControllerTokenReader
+function _CreateTokenReader(path: string): SkillAuthoringValidationControllerTokenReader
 {
 	return async function _ReadToken(): Promise<string>
 	{
@@ -118,14 +118,14 @@ function _ValidationId(value: string): string
  * @param options - Supplies the same-silo server origin, projected-token path, timeout, and test seams.
  * @returns The authority through which the handler claims, binds, loads, and completes a validation.
  */
-export function __CreateHttpSkillAuthoringValidationControllerAuthority(options: SkillWorkloadControllerHttpAuthorityOptions): SkillAuthoringValidationControllerAuthority
+export function __CreateHttpSkillAuthoringValidationControllerAuthority(options: SkillAuthoringValidationControllerHttpAuthorityOptions): SkillAuthoringValidationControllerAuthority
 {
 	const baseUrl = _BaseUrl(options.openCraneInternalUrl);
 	if (!isAbsolute(options.tokenPath) || !Number.isSafeInteger(options.requestTimeoutMilliseconds) || options.requestTimeoutMilliseconds < 1_000 || options.requestTimeoutMilliseconds > 60_000)
 	{
 		throw new Error("skill authoring validation HTTP authority requires an absolute token path and 1-60s timeout");
 	}
-	const fetchRequest: SkillWorkloadControllerFetch = options.fetch ?? fetch;
+	const fetchRequest: SkillAuthoringValidationControllerFetch = options.fetch ?? fetch;
 	const readToken = options.readToken ?? _CreateTokenReader(options.tokenPath);
 
 	async function _Request(path: string, method: "POST" | "PUT", body: unknown): Promise<Response>

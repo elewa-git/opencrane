@@ -187,9 +187,6 @@
       "@opencrane/backend/agents/skills/k8s-launcher": [
         "./libs/backend/agents/skills/k8s-launcher/src/index.ts"
       ],
-      "@opencrane/backend/agents/skills/execution": [
-        "./libs/backend/agents/skills/execution/main/src/index.ts"
-      ],
       "@opencrane/backend/agents/skills/controller": [
         "./libs/backend/agents/skills/controller/src/index.ts"
       ],

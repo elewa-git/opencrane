@@ -6,7 +6,6 @@ import { __CreateMcpbValidationControllerAuthority, __CreateMcpbValidationContro
 import { __CreateSkillAuthoringValidationControllerRouter, __CreateSkillAuthoringValidationWorkerRouter, PrismaSkillAuthoringValidationControllerUnitOfWork, PrismaSkillAuthoringValidationWorkerUnitOfWork } from "@opencrane/backend/server/agents/skills";
 import { _RegisterInternalAgentRuntimeStream } from "@opencrane/backend/server/infra/agent-runtime-stream";
 import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AttemptModelKeyMintRequest, type MintedAttemptModelKey } from "@opencrane/backend/agents/execution/runs";
-import { PrismaSkillWorkloadUnitOfWork, _CreateSkillWorkloadExecutionAuthority, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
 import { __CreateProductionRuntimeDispatchAuthority } from "@opencrane/backend/agents/execution/protocol";
 import { PrismaRuntimeBootstrapExchange, __CreateRuntimeBootstrapRouter } from "@opencrane/backend/server/iam/authorization";
 import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS } from "@opencrane/backend/conversations/projection";
@@ -24,7 +23,7 @@ import { _CreateChannelTargetResolver } from "./channel-target-composition";
 import type { InternalRuntimeConfig } from "./config.types";
 import { _ProcessShutdownSignal } from "./process-shutdown";
 import { _log } from "./log";
-import type { ControllerRuntimeComposition, InternalRuntimeComposition, OptionalRuntimeComposition, RuntimeProtocolComposition, SkillWorkloadRuntimeComposition } from "./runtime-composition.types";
+import type { ControllerRuntimeComposition, InternalRuntimeComposition, OptionalRuntimeComposition, RuntimeProtocolComposition, SkillAuthoringValidationRuntimeComposition } from "./runtime-composition.types";
 
 /** Fails closed when an isolated composition test does not supply the process workflow engine. */
 const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEvent"> = {
@@ -62,7 +61,7 @@ async function _IssueAttemptModelKey(request: AttemptModelKeyMintRequest): Promi
  * @param tokenReviewer - Reviewer fixed to the sole agent-controller ServiceAccount.
  * @returns Controller dispatch routers with no runtime or worker routes.
  */
-function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, skillWorkloadAuthority: ReturnType<typeof _CreateSkillWorkloadExecutionAuthority>): ControllerRuntimeComposition
+function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>): ControllerRuntimeComposition
 {
 	const authoringNamespace = _ValidateIsolatedWorkloadNamespace(config.skillAuthoringNamespace, namespaces.serverNamespace);
 	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, {
@@ -78,12 +77,6 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
 			tokenReviewer,
 			namespace: namespaces.serverNamespace,
 			repository: runDispatchRepository,
-			logger: _log,
-		}),
-		skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({
-			tokenReviewer,
-			namespace: namespaces.serverNamespace,
-			authority: skillWorkloadAuthority,
 			logger: _log,
 		}),
 		mcpbValidationController: __CreateMcpbValidationControllerRouter({
@@ -102,35 +95,19 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
 }
 
 /**
- * Bind the isolated skill workload exchange to its generic, durable-bootstrap reviewer.
+ * Bind the isolated authoring validation worker to its durable-bootstrap reviewer.
  *
  * The reviewer validates a projected identity but leaves workload selection to the repositories,
  * so the server does not turn a controller claim into a broader worker credential.
  *
  * @param prisma - The main product database client.
- * @param tokenReviewer - Reviewer that exposes only a validated skill workload identity.
+ * @param tokenReviewer - Reviewer that exposes only a validated authoring worker identity.
  * @returns Skill bootstrap, input, and completion routers.
  */
-function _CreateSkillWorkloadRuntimeComposition(prisma: PrismaClient, tokenReviewer: ReturnType<typeof _CreateSkillWorkloadTokenReviewer>, skillWorkloadAuthority: ReturnType<typeof _CreateSkillWorkloadExecutionAuthority>, workflowExecution: Pick<IWorkflowEngine, "emitEvent">): SkillWorkloadRuntimeComposition
+function _CreateSkillAuthoringValidationRuntimeComposition(prisma: PrismaClient, tokenReviewer: ReturnType<typeof _CreateSkillWorkloadTokenReviewer>, workflowExecution: Pick<IWorkflowEngine, "emitEvent">): SkillAuthoringValidationRuntimeComposition
 {
 	const validationAuthority = new PrismaSkillAuthoringValidationWorkerUnitOfWork(prisma);
 	return {
-		skillWorkloadBootstrap: __CreateSkillWorkloadBootstrapRouter({
-			tokenReviewer,
-			authority: skillWorkloadAuthority,
-			logger: _log,
-		}),
-		skillAuthoringInput: __CreateSkillAuthoringInputRouter({
-			tokenReviewer,
-			authority: skillWorkloadAuthority,
-			artifactReader: _CreateSkillAuthoringArtifactReader(prisma),
-			logger: _log,
-		}),
-		skillAuthoringCompletion: __CreateSkillAuthoringCompletionRouter({
-			tokenReviewer,
-			authority: skillWorkloadAuthority,
-			logger: _log,
-		}),
 		skillAuthoringValidationWorker: __CreateSkillAuthoringValidationWorkerRouter({
 			tokenReviewer,
 			authority: validationAuthority,
@@ -268,7 +245,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
  * @param prisma - The main product database client.
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen startup configuration shared with the internal body parser and workers.
- * @returns Routers composed from controller, skill-workload, runtime, and optional-worker plane authorities.
+ * @returns Routers composed from controller, authoring validation, runtime, and optional-worker plane authorities.
  */
 export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflowExecution: Pick<IWorkflowEngine, "emitEvent"> = _UnavailableWorkflowExecution): InternalRuntimeComposition
 {
@@ -277,17 +254,15 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	const namespaces = _ValidateRuntimeIdentityNamespaces(config);
 
 	// 2. Create reviewers once and pass each only to its matching caller plane; neighbouring routes
-	// cannot silently reinterpret a controller, skill workload, or runtime identity.
+	// cannot silently reinterpret a controller, authoring worker, or runtime identity.
 	const controllerTokenReviewer = _CreateAgentControllerTokenReviewer(authApi, namespaces.serverNamespace);
 	const skillWorkloadTokenReviewer = _CreateSkillWorkloadTokenReviewer(authApi);
 	const runtimeTokenReviewer = _CreateRuntimeTokenReviewer(authApi, namespaces);
-	const skillWorkloadUnitOfWork = new PrismaSkillWorkloadUnitOfWork(prisma, config.claimLeaseMilliseconds);
-	const skillWorkloadAuthority = _CreateSkillWorkloadExecutionAuthority(skillWorkloadUnitOfWork);
 
 	// 3. Compose only named routers; `routes.ts` remains the single readable map of internal paths.
 	return {
-		..._CreateControllerRuntimeComposition(prisma, config, namespaces, controllerTokenReviewer, skillWorkloadAuthority),
-		..._CreateSkillWorkloadRuntimeComposition(prisma, skillWorkloadTokenReviewer, skillWorkloadAuthority, workflowExecution),
+		..._CreateControllerRuntimeComposition(prisma, config, namespaces, controllerTokenReviewer),
+		..._CreateSkillAuthoringValidationRuntimeComposition(prisma, skillWorkloadTokenReviewer, workflowExecution),
 		..._CreateRuntimeProtocolComposition(prisma, config, namespaces, runtimeTokenReviewer),
 		..._CreateOptionalRuntimeComposition(prisma, authApi, config, namespaces.serverNamespace),
 	};

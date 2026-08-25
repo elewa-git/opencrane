@@ -24,7 +24,7 @@ identity for the next transport or backend authority.
 
 **In this flow:** [agent-runtime-stream](../agent-runtime-stream/README.md) ·
 [execution runs](../../../agents/execution/runs/main/README.md) ·
-[skill execution](../../../agents/skills/execution/main/README.md)
+[skill validation](../../../server/agents/skills/main/README.md)
 
 It owns five adapters: the fixed agent-controller identity, the fixed artifact-preprocessor identity,
 the deployment-fixed channel-proxy identity, skill workers whose exact coordinates are checked by

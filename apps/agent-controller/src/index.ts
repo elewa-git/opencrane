@@ -3,7 +3,7 @@ import "./instrument";
 import * as k8s from "@kubernetes/client-node";
 
 import { __CreateHttpAgentControllerAuthority, __CreateKubernetesAgentControllerStore, __RunAgentController } from "@opencrane/backend/agents/runtime/controller";
-import { __CreateHttpSkillAuthoringValidationControllerAuthority, __CreateHttpSkillWorkloadControllerAuthority, __CreateKubernetesSkillWorkloadControllerStore, __CreateSkillAuthoringValidationHandler, __RunSkillWorkloadController, type SkillAuthoringValidationKubernetesStore, type SkillWorkloadControllerKubernetesStore } from "@opencrane/backend/agents/skills/controller";
+import { __CreateHttpSkillAuthoringValidationControllerAuthority, __CreateKubernetesSkillWorkloadControllerStore, __CreateSkillAuthoringValidationHandler, type SkillAuthoringValidationKubernetesStore, type SkillWorkloadControllerKubernetesStore } from "@opencrane/backend/agents/skills/controller";
 import { __CreateHttpMcpbValidationControllerAuthority, __CreateKubernetesMcpbValidationControllerStore, __RunMcpbValidationController } from "@opencrane/backend/agents/mcpb/controller";
 import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/backend/observability";
 import { _CreateAbsurdWorkflowEngine } from "@opencrane/backend/server/infra/workflows/infra_absurd";
@@ -46,7 +46,6 @@ async function _Main(): Promise<void>
 		const kubeConfig = new k8s.KubeConfig();
 		kubeConfig.loadFromCluster();
 		const authority = __CreateHttpAgentControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds });
-		const skillWorkloadAuthority = __CreateHttpSkillWorkloadControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds });
 		const skillAuthoringValidationAuthority = __CreateHttpSkillAuthoringValidationControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
 		const mcpbValidationAuthority = __CreateHttpMcpbValidationControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds });
 		const kubernetes = __CreateKubernetesAgentControllerStore({ batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
@@ -55,7 +54,7 @@ async function _Main(): Promise<void>
 		const queueAuthority = __CreateWorkflowTaskQueueAuthority([{ taskName: SkillAuthoringValidationTaskDeclaration.taskName, queue: "skill-authoring" }]);
 		const workflowRuntime = _CreateAbsurdWorkflowEngine({ databaseUrl: config.workflowDatabaseUrl, databasePoolSize: config.workflowDatabasePoolSize, log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workflowWorkerConcurrency });
 		const workflowExecution = __CreateWorkflowGuard({ execution: workflowRuntime, log, queueAuthority, siloId: config.workflowSiloId });
-		workflowExecution.register(__CreateSkillAuthoringValidationHandler({ authority: skillAuthoringValidationAuthority, kubernetes: _CreateSkillAuthoringValidationKubernetesStore(skillKubernetes), profile: config.skillWorkloadProfiles.authoring, podWaitMilliseconds: config.pollIntervalMilliseconds }));
+		workflowExecution.register(__CreateSkillAuthoringValidationHandler({ authority: skillAuthoringValidationAuthority, kubernetes: _CreateSkillAuthoringValidationKubernetesStore(skillKubernetes), profile: config.skillAuthoringValidationProfile, podWaitMilliseconds: config.pollIntervalMilliseconds }));
 
 		// 3. Convert both Kubernetes termination signals into one abortable poll loop.
 		function _Shutdown(signal: string): void
@@ -68,12 +67,11 @@ async function _Main(): Promise<void>
 		process.once("SIGINT", function _sigint() { _Shutdown("SIGINT"); });
 		try
 		{
-			// 3. Start the remote durable worker before the legacy loops, so admitted validation tasks do not wait for a restart.
+			// 3. Start the remote durable worker before the remaining controller loops, so admitted validation tasks do not wait for a restart.
 			await workflowRuntime.startWorkers({ workerName: "agent-controller-skill-authoring" });
 			log.info({ profiles: Object.entries(config.profiles).map(function _profile([name, profile]) { return { name, namespace: profile.namespace }; }), workflowSiloId: config.workflowSiloId }, "agent controller started");
 			await Promise.all([
 				__RunAgentController({ authority, kubernetes, profiles: config.profiles, pollIntervalMilliseconds: config.pollIntervalMilliseconds, outboxPruneIntervalMilliseconds: config.outboxPruneIntervalMilliseconds, log }, shutdown.signal),
-				__RunSkillWorkloadController({ authority: skillWorkloadAuthority, kubernetes: skillKubernetes, profiles: config.skillWorkloadProfiles, pollIntervalMilliseconds: config.pollIntervalMilliseconds, log }, shutdown.signal),
 				__RunMcpbValidationController({ authority: mcpbValidationAuthority, kubernetes: mcpbKubernetes, profile: config.mcpbValidatorProfile, pollIntervalMilliseconds: config.pollIntervalMilliseconds, log }, shutdown.signal),
 			]);
 		}

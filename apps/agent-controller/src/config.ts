@@ -1,7 +1,7 @@
 import { isAbsolute } from "node:path";
 
 import { __ValidateAgentControllerRuntimeProfiles } from "@opencrane/backend/agents/runtime/controller";
-import { __ValidateSkillWorkloadControllerProfiles } from "@opencrane/backend/agents/skills/controller";
+import { __ValidateSkillAuthoringValidationJobProfile } from "@opencrane/backend/agents/skills/controller";
 import { __ValidateMcpbValidationControllerProfile } from "@opencrane/backend/agents/mcpb/controller";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
@@ -39,7 +39,7 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Agent
 
 	// 2. Validate every immutable profile and its dedicated runtime namespace at startup.
 	const profiles = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_PROFILES_JSON"), "AGENT_CONTROLLER_PROFILES_JSON", __ValidateAgentControllerRuntimeProfiles);
-	const skillWorkloadProfiles = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON"), "AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON", __ValidateSkillWorkloadControllerProfiles);
+	const skillAuthoringValidationProfile = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_SKILL_AUTHORING_VALIDATION_PROFILE_JSON"), "AGENT_CONTROLLER_SKILL_AUTHORING_VALIDATION_PROFILE_JSON", __ValidateSkillAuthoringValidationJobProfile);
 	const mcpbValidatorProfile = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_MCPB_VALIDATOR_PROFILE_JSON"), "AGENT_CONTROLLER_MCPB_VALIDATOR_PROFILE_JSON", __ValidateMcpbValidationControllerProfile);
 	return {
 		openCraneInternalUrl: _Required(environment, "OPENCRANE_INTERNAL_URL"),
@@ -52,7 +52,7 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Agent
 		outboxPruneIntervalMilliseconds: _Integer(environment, "AGENT_CONTROLLER_OUTBOX_PRUNE_INTERVAL_MS", 3_600_000, 60_000, 86_400_000),
 		requestTimeoutMilliseconds: _Integer(environment, "AGENT_CONTROLLER_REQUEST_TIMEOUT_MS", 10_000, 1_000, 60_000),
 		profiles,
-		skillWorkloadProfiles,
+		skillAuthoringValidationProfile,
 		mcpbValidatorProfile,
 	};
 }

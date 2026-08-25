@@ -26,8 +26,6 @@ export * from "./personal-configuration.types";
 export * from "./public-health.types";
 export * from "./skill-workload-bootstrap-reference";
 export * from "./run-input-snapshot.types";
-export type * from "./agent-controller-skill-workload.types";
-export * from "./agent-controller-skill-workload.validator";
 export type * from "./agent-controller-mcpb-validation.types";
 export * from "./agent-controller-mcpb-validation.validator";
 export * from "./mcpb-validator-bootstrap-reference";

@@ -17,7 +17,7 @@ const _MAX_ARCHIVE_BYTES = 16 * 1024 * 1024;
  * Every route reviews the projected authoring-Pod token before it reads or changes validation state.
  * A denied identity receives 401, unavailable or stale saved state receives 409 or 404, and the
  * route stores completion evidence before it emits the event that wakes the remote task. Called by:
- * `_CreateSkillWorkloadRuntimeComposition`.
+ * `_CreateSkillAuthoringValidationRuntimeComposition`.
  *
  * @param dependencies - Supplies token review, server authority, artifact streaming, event delivery, and logging.
  * @returns A router mounted below `/api/internal/agent-runtime`.

@@ -9,8 +9,7 @@ const _SKILL_WORKLOAD_BOOTSTRAP_PREFIX = "skill-bootstrap-v1_";
  * reversed into the workload id. Store it with
  * {@link __HashSkillWorkloadBootstrapReference}, never in plain form.
  *
- * Called by: `libs/backend/agents/skills/execution/main/src/prisma-skill-workload-assignment-repository.ts`,
- * `libs/backend/agents/skills/controller/src/skill-workload-controller.ts`.
+ * Called by: `__CreateSkillAuthoringValidationHandler` in the skills controller.
  * @param workloadId - Skill workload id; must match `[a-zA-Z0-9_-]{1,128}`.
  * @returns The prefixed reference, safe to mount into the Job.
  * @throws Error when `workloadId` contains any other character, so an unsafe id can never reach a capability reference.
@@ -27,8 +26,7 @@ export async function __CreateSkillWorkloadBootstrapReference(workloadId: string
  * Postgres holds only this hash. A worker presents the plain reference; the server hashes what it
  * receives and matches on the result, so a database read never yields a usable reference.
  *
- * Called by: `libs/backend/agents/skills/execution/main/src/skill-workload-bootstrap.router.ts`,
- * `libs/backend/agents/skills/execution/main/src/prisma-skill-workload-assignment-repository.ts`.
+ * Called by: the authoring validation worker router and its database authority.
  * @param reference - The plain bootstrap reference presented by a worker.
  * @returns Lowercase `sha256:<hex>` digest, the form stored in the database.
  */
@@ -43,7 +41,7 @@ export async function __HashSkillWorkloadBootstrapReference(reference: string): 
  * A shape check only — it proves nothing about whether the reference was issued or is still
  * valid. Call it to reject malformed input early, then match the hash to authorize.
  *
- * Called by: `libs/backend/agents/skills/execution/main/src/skill-workload-bootstrap.router.ts`.
+ * Called by: the authoring validation worker router.
  * @param value - Untrusted value from a request.
  * @returns True only for the prefix followed by 64 lowercase hex characters.
  */
