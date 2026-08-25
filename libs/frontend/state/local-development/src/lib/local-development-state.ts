@@ -23,10 +23,8 @@ import { LocalDevelopmentScenarioKinds } from "./local-development-scenario.type
 @Injectable()
 export class LocalDevelopmentState
 {
-	/** Selected primary archetype shared by every local projection. */
-	public readonly archetype = inject(LOCAL_DEVELOPMENT_ARCHETYPE);
 	/** Reviewed fixture selected once for this application lifecycle. */
-	public readonly fixture = __LocalDevelopmentArchetypeFixture(this.archetype);
+	public readonly fixture = __LocalDevelopmentArchetypeFixture(inject(LOCAL_DEVELOPMENT_ARCHETYPE));
 	/** Allowlisted behaviour selected when the application started. */
 	public readonly scenario = inject(LOCAL_DEVELOPMENT_SCENARIO);
 	/** Persona lifecycle shared with the onboarding gateways. */
@@ -43,6 +41,8 @@ export class LocalDevelopmentState
 	public readonly agentThreads = new Map<string, AgentThreadSnapshot>();
 	/** Approval request displayed through the participant-input port. */
 	public elicitation: ConversationElicitation = __CreateLocalElicitation();
+	/** Admitted participant-message commands keyed by their retry coordinate. */
+	public readonly admittedMessageCommands = new Map<string, string>();
 	/** Mutation keys already failed once in the retry scenario. */
 	private readonly _failedOnce = new Set<string>();
 	/** Increasing counter used to prevent duplicate local identifiers. */

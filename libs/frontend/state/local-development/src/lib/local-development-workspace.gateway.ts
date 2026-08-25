@@ -151,6 +151,19 @@ export class LocalDevelopmentConversationWorkspaceGateway implements Conversatio
 	/** Appends participant input and a realistic fixture response for an Agent session. */
 	public async send(command: SubmitConversationMessageCommand): Promise<void>
 	{
+		const commandSignature = _MessageCommandSignature(command);
+		const admittedSignature = this._state.admittedMessageCommands.get(command.idempotencyKey);
+
+		if (admittedSignature === commandSignature)
+		{
+			return;
+		}
+
+		if (admittedSignature)
+		{
+			throw new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Unavailable, "This message key already belongs to different participant input.");
+		}
+
 		await this._state.delay();
 		this._state.failOnce("conversation-send");
 		const current = this._state.conversations.get(command.conversationId);
@@ -211,6 +224,7 @@ export class LocalDevelopmentConversationWorkspaceGateway implements Conversatio
 			messages,
 			updatedAt: "2026-08-21T10:01:01.000Z"
 		});
+		this._state.admittedMessageCommands.set(command.idempotencyKey, commandSignature);
 	}
 
 	/** Changes the local participant's archive projection. */
@@ -294,4 +308,13 @@ export class LocalDevelopmentConversationWorkspaceGateway implements Conversatio
 		this._state.runs.set(command.runId, retried);
 		return retried;
 	}
+}
+
+/** Produce a stable value signature for exact participant-message retries. */
+function _MessageCommandSignature(command: SubmitConversationMessageCommand): string
+{
+	return JSON.stringify([
+		command.conversationId,
+		command.blocks.map(block => [block.id, block.kind, block.value])
+	]);
 }
