@@ -91,7 +91,7 @@ async function _RetryExternal<TResult>(operation: () => Promise<TResult>): Promi
  * Builds the unregistered controller task that binds one one-shot PDF preprocessing Job.
  *
  * No production composition registers this definition in the current tree. The tests exercise the
- * binding sequence without launching the existing polling worker as a one-shot Job.
+ * binding sequence without launching the current polling worker as a one-shot Job.
  *
  * @param options - Server authority, narrow Kubernetes port, deployment profile, and Pod delay.
  * @returns The shared task definition that prepares and binds one PDF preprocessing Job.
