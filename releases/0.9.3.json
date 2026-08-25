@@ -21,10 +21,10 @@
     },
     "agent-controller": {
       "root": "apps/agent-controller",
-      "adaptedVersion": "0.9.2",
-      "packageVersion": "0.9.2",
-      "chartVersion": "0.9.2",
-      "chartAppVersion": "0.9.2"
+      "adaptedVersion": "0.9.3",
+      "packageVersion": "0.9.3",
+      "chartVersion": "0.9.3",
+      "chartAppVersion": "0.9.3"
     },
     "agent-runtime": {
       "root": "apps/agent-runtime",
@@ -72,9 +72,9 @@
     },
     "litellm": {
       "root": "apps/_infra/litellm",
-      "adaptedVersion": "0.8.0",
-      "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
+      "adaptedVersion": "0.9.3",
+      "chartVersion": "0.9.3",
+      "chartAppVersion": "0.9.3"
     },
     "managed-agent-runtime": {
       "root": "apps/managed-agent-runtime",
