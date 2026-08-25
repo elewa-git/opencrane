@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { V1Job } from "@kubernetes/client-node";
+import { __IsArtifactPreprocessBootstrapReference } from "@opencrane/contracts";
 
 import type { ArtifactPreprocessorJobAssignment, ArtifactPreprocessorJobProfile } from "./artifact-preprocessor-job.types";
 
@@ -86,7 +87,7 @@ function _AssertProfile(profile: ArtifactPreprocessorJobProfile): void
 /** Reject a caller-selected namespace or a readable bootstrap reference before Kubernetes sees it. */
 function _AssertAssignment(assignment: ArtifactPreprocessorJobAssignment, profile: ArtifactPreprocessorJobProfile): void
 {
-	if (![assignment.preprocessJobId, assignment.siloId, assignment.namespace, assignment.bootstrapReference].every(function _Valid(value): boolean { return _Bounded(value); }) || assignment.namespace !== profile.namespace || !/^artifact-preprocess-bootstrap-v1_[a-f0-9]{64}$/.test(assignment.bootstrapReference))
+	if (![assignment.preprocessJobId, assignment.siloId, assignment.namespace, assignment.bootstrapReference].every(function _Valid(value): boolean { return _Bounded(value); }) || assignment.namespace !== profile.namespace || !__IsArtifactPreprocessBootstrapReference(assignment.bootstrapReference))
 	{
 		throw new Error("artifact preprocessing Job assignment requires bounded coordinates, the deployment-owned namespace, and an opaque bootstrap reference");
 	}
