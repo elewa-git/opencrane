@@ -263,6 +263,15 @@ CREATE TYPE "SkillWorkloadKind" AS ENUM ('authoring', 'tool_runner');
 -- CreateEnum
 CREATE TYPE "SkillWorkloadState" AS ENUM ('pending', 'assigned', 'succeeded', 'failed', 'cancelled');
 
+-- CreateEnum
+CREATE TYPE "SkillAuthoringValidationCompletionOutcome" AS ENUM ('succeeded', 'failed');
+
+-- CreateEnum
+CREATE TYPE "SkillAuthoringValidationWorkloadClass" AS ENUM ('skill_authoring_validation');
+
+-- CreateEnum
+CREATE TYPE "SkillAuthoringValidationState" AS ENUM ('pending', 'running', 'succeeded', 'failed', 'cancelled');
+
 -- CreateTable
 CREATE TABLE "agent_services" (
     "id" TEXT NOT NULL,
@@ -1737,6 +1746,85 @@ CREATE TABLE "skill_revisions" (
 );
 
 -- CreateTable
+CREATE TABLE "skill_authoring_validations" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "skill_revision_id" TEXT NOT NULL,
+    "artifact_revision_id" TEXT NOT NULL,
+    "artifact_content_address" TEXT NOT NULL,
+    "task_id" TEXT,
+    "task_name" TEXT,
+    "task_key" TEXT NOT NULL,
+    "state" "SkillAuthoringValidationState" NOT NULL DEFAULT 'pending',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "started_at" TIMESTAMP(3),
+    "completed_at" TIMESTAMP(3),
+    "failure_code" TEXT,
+
+    CONSTRAINT "skill_authoring_validations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "skill_authoring_validation_workload_claims" (
+    "id" TEXT NOT NULL,
+    "validation_id" TEXT NOT NULL,
+    "workload_class" "SkillAuthoringValidationWorkloadClass" NOT NULL,
+    "profile_name" TEXT NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "execution_reference" TEXT NOT NULL,
+    "claimed_at" TIMESTAMP(3),
+    "delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "expires_at" TIMESTAMP(3),
+    "workload_uid" TEXT,
+    "first_pod_uid" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "skill_authoring_validation_workload_claims_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "skill_authoring_validation_bootstraps" (
+    "id" TEXT NOT NULL,
+    "validation_id" TEXT NOT NULL,
+    "reference_hash" TEXT NOT NULL,
+    "namespace" TEXT NOT NULL,
+    "service_account" TEXT NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "consumed_at" TIMESTAMP(3),
+    "consumed_by_pod_uid" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "skill_authoring_validation_bootstraps_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "skill_authoring_validation_completion_inbox" (
+    "id" TEXT NOT NULL,
+    "validation_id" TEXT NOT NULL,
+    "completion_digest" TEXT NOT NULL,
+    "outcome" "SkillAuthoringValidationCompletionOutcome" NOT NULL,
+    "test_report" JSONB,
+    "scan_result" JSONB,
+    "failure_code" TEXT,
+    "received_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "skill_authoring_validation_completion_inbox_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "skill_authoring_validation_workflow_event_outbox" (
+    "id" TEXT NOT NULL,
+    "completion_inbox_id" TEXT NOT NULL,
+    "event_name" TEXT NOT NULL,
+    "payload" JSONB NOT NULL,
+    "published_at" TIMESTAMP(3),
+    "publication_attempts" INTEGER NOT NULL DEFAULT 0,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "skill_authoring_validation_workflow_event_outbox_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "skill_workloads" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -2565,6 +2653,51 @@ CREATE UNIQUE INDEX "skill_revisions_id_artifact_revision_id_artifact_content_ad
 CREATE UNIQUE INDEX "skill_workloads_tool_invocation_id_key" ON "skill_workloads"("tool_invocation_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "skill_authoring_validations_task_id_key" ON "skill_authoring_validations"("task_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_authoring_validations_task_key_key" ON "skill_authoring_validations"("task_key");
+
+-- CreateIndex
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_authoring_validations_skill_revision_id_artifact_revision_id_artifact_content_address_key" ON "skill_authoring_validations"("skill_revision_id", "artifact_revision_id", "artifact_content_address");
+
+-- CreateIndex
+CREATE INDEX "skill_authoring_validations_silo_id_state_created_at_idx" ON "skill_authoring_validations"("silo_id", "state", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_authoring_validation_workload_claims_validation_id_key" ON "skill_authoring_validation_workload_claims"("validation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_authoring_validation_workload_claims_idempotency_key_key" ON "skill_authoring_validation_workload_claims"("idempotency_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_authoring_validation_workload_claims_workload_uid_key" ON "skill_authoring_validation_workload_claims"("workload_uid");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_authoring_validation_workload_claims_first_pod_uid_key" ON "skill_authoring_validation_workload_claims"("first_pod_uid");
+
+-- CreateIndex
+CREATE INDEX "skill_authoring_validation_workload_claims_claimed_at_expires_at_idx" ON "skill_authoring_validation_workload_claims"("claimed_at", "expires_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_authoring_validation_bootstraps_validation_id_key" ON "skill_authoring_validation_bootstraps"("validation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_authoring_validation_bootstraps_reference_hash_key" ON "skill_authoring_validation_bootstraps"("reference_hash");
+
+-- CreateIndex
+CREATE INDEX "skill_authoring_validation_bootstraps_expires_at_idx" ON "skill_authoring_validation_bootstraps"("expires_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_authoring_validation_completion_inbox_validation_id_key" ON "skill_authoring_validation_completion_inbox"("validation_id");
+
+CREATE UNIQUE INDEX "skill_authoring_validation_workflow_event_outbox_completion_inbox_id_key" ON "skill_authoring_validation_workflow_event_outbox"("completion_inbox_id");
+
+-- CreateIndex
+CREATE INDEX "skill_authoring_validation_workflow_event_outbox_published_at_created_at_idx" ON "skill_authoring_validation_workflow_event_outbox"("published_at", "created_at");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "skill_workloads_workload_uid_key" ON "skill_workloads"("workload_uid");
 
 -- CreateIndex
@@ -3102,6 +3235,21 @@ ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_skill_id_fkey" FOR
 
 -- AddForeignKey
 ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_skill_revision_id_fkey" FOREIGN KEY ("skill_revision_id") REFERENCES "skill_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_authoring_validations" ADD CONSTRAINT "skill_authoring_validations_skill_revision_id_fkey" FOREIGN KEY ("skill_revision_id") REFERENCES "skill_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_authoring_validation_workload_claims" ADD CONSTRAINT "skill_authoring_validation_workload_claims_validation_id_fkey" FOREIGN KEY ("validation_id") REFERENCES "skill_authoring_validations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_authoring_validation_bootstraps" ADD CONSTRAINT "skill_authoring_validation_bootstraps_validation_id_fkey" FOREIGN KEY ("validation_id") REFERENCES "skill_authoring_validations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_authoring_validation_completion_inbox" ADD CONSTRAINT "skill_authoring_validation_completion_inbox_validation_id_fkey" FOREIGN KEY ("validation_id") REFERENCES "skill_authoring_validations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_authoring_validation_workflow_event_outbox" ADD CONSTRAINT "skill_authoring_validation_workflow_event_outbox_completion_inbox_id_fkey" FOREIGN KEY ("completion_inbox_id") REFERENCES "skill_authoring_validation_completion_inbox"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -5752,6 +5900,250 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+CREATE FUNCTION "enforce_skill_authoring_validation"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE revision_silo_id TEXT; revision_state "SkillRevisionState"; revision_trust "SkillTrustClass";
+        revision_artifact_revision_id TEXT; revision_address TEXT; artifact_revision_state "ArtifactRevisionState"; artifact_state "ArtifactState";
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillAuthoringValidation rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'pending' OR NEW."task_id" IS NOT NULL OR NEW."task_name" IS NOT NULL OR NEW."started_at" IS NOT NULL
+            OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL THEN
+            RAISE EXCEPTION 'SkillAuthoringValidation must begin pending without task, running, or completion facts';
+        END IF;
+        SELECT skill."silo_id", revision."state", revision."trust_class", revision."artifact_revision_id", revision."artifact_content_address", artifact_revision."state", artifact."state"
+          INTO revision_silo_id, revision_state, revision_trust, revision_artifact_revision_id, revision_address, artifact_revision_state, artifact_state
+          FROM "skill_revisions" revision
+          JOIN "skills" skill ON skill."id" = revision."skill_id"
+          JOIN "artifact_revisions" artifact_revision ON artifact_revision."id" = revision."artifact_revision_id" AND artifact_revision."content_address" = revision."artifact_content_address"
+          JOIN "artifacts" artifact ON artifact."id" = artifact_revision."artifact_id"
+         WHERE revision."id" = NEW."skill_revision_id"
+         FOR UPDATE OF revision, skill, artifact_revision, artifact;
+        IF revision_silo_id IS DISTINCT FROM NEW."silo_id" OR revision_state IS DISTINCT FROM 'draft'
+            OR revision_trust IS DISTINCT FROM 'sandboxed_python' OR revision_artifact_revision_id IS DISTINCT FROM NEW."artifact_revision_id"
+            OR revision_address IS DISTINCT FROM NEW."artifact_content_address" OR artifact_revision_state IS DISTINCT FROM 'published'
+            OR artifact_state IS DISTINCT FROM 'active' THEN
+            RAISE EXCEPTION 'SkillAuthoringValidation requires same-silo Draft Python revision with its active pinned artifact';
+        END IF;
+    END IF;
+    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."skill_revision_id" IS DISTINCT FROM OLD."skill_revision_id"
+        OR NEW."artifact_revision_id" IS DISTINCT FROM OLD."artifact_revision_id" OR NEW."artifact_content_address" IS DISTINCT FROM OLD."artifact_content_address"
+        OR NEW."task_key" IS DISTINCT FROM OLD."task_key") THEN
+        RAISE EXCEPTION 'SkillAuthoringValidation immutable admission facts cannot change';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."task_id" IS NOT NULL AND (NEW."task_id" IS DISTINCT FROM OLD."task_id" OR NEW."task_name" IS DISTINCT FROM OLD."task_name") THEN
+        RAISE EXCEPTION 'SkillAuthoringValidation task receipt is immutable';
+    END IF;
+    IF (NEW."task_id" IS NULL) <> (NEW."task_name" IS NULL) OR NEW."task_key" !~ '^workflows:skill-authoring-validation:[a-f0-9]{64}$' THEN
+        RAISE EXCEPTION 'SkillAuthoringValidation requires paired task receipt and task key';
+    END IF;
+    IF NEW."task_name" IS NOT NULL AND NEW."task_name" <> 'skills.authoring.validate/v1' THEN
+        RAISE EXCEPTION 'SkillAuthoringValidation task receipt must name the reviewed task';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" NOT IN ('pending', 'running', 'cancelled') THEN
+        RAISE EXCEPTION 'SkillAuthoringValidation has an invalid transition from pending';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'running' AND NEW."state" NOT IN ('running', 'succeeded', 'failed', 'cancelled') THEN
+        RAISE EXCEPTION 'SkillAuthoringValidation has an invalid transition from running';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'pending' THEN
+        IF NEW."started_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL THEN
+            RAISE EXCEPTION 'pending SkillAuthoringValidation may only bind its task receipt';
+        END IF;
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'running' THEN
+        IF OLD."task_id" IS NULL OR NEW."task_id" IS DISTINCT FROM OLD."task_id" OR NEW."task_name" IS DISTINCT FROM OLD."task_name"
+            OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL
+            OR NOT EXISTS (
+                SELECT 1 FROM "skill_authoring_validation_workload_claims" claim
+                 WHERE claim."validation_id" = NEW."id" AND claim."workload_uid" IS NOT NULL
+            ) THEN
+            RAISE EXCEPTION 'SkillAuthoringValidation may run only after its saved task and bound workload claim';
+        END IF;
+        NEW."started_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'running' AND NEW."state" = 'running' THEN
+        IF NEW."task_id" IS DISTINCT FROM OLD."task_id" OR NEW."task_name" IS DISTINCT FROM OLD."task_name"
+            OR NEW."started_at" IS DISTINCT FROM OLD."started_at"
+            OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL THEN
+            RAISE EXCEPTION 'running SkillAuthoringValidation preserves its task and start time';
+        END IF;
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'running' AND NEW."state" IN ('succeeded', 'failed') THEN
+        IF NEW."started_at" IS DISTINCT FROM OLD."started_at" OR NOT EXISTS (
+            SELECT 1 FROM "skill_authoring_validation_workload_claims" claim
+             WHERE claim."validation_id" = NEW."id" AND claim."workload_uid" IS NOT NULL AND claim."first_pod_uid" IS NOT NULL
+        ) THEN
+            RAISE EXCEPTION 'terminal SkillAuthoringValidation preserves its claimed worker identity';
+        END IF;
+        IF NEW."state" = 'succeeded' AND (NEW."failure_code" IS NOT NULL OR NOT EXISTS (
+            SELECT 1 FROM "skill_authoring_validation_completion_inbox" inbox
+             WHERE inbox."validation_id" = NEW."id" AND inbox."outcome" = 'succeeded'
+        )) THEN
+            RAISE EXCEPTION 'successful SkillAuthoringValidation requires its saved successful completion';
+        END IF;
+        IF NEW."state" = 'failed' AND (NEW."failure_code" IS NULL OR NOT EXISTS (
+            SELECT 1 FROM "skill_authoring_validation_completion_inbox" inbox
+             WHERE inbox."validation_id" = NEW."id" AND inbox."outcome" = 'failed' AND inbox."failure_code" = NEW."failure_code"
+        )) THEN
+            RAISE EXCEPTION 'failed SkillAuthoringValidation requires its saved failure completion';
+        END IF;
+        NEW."completed_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" IN ('pending', 'running') AND NEW."state" = 'cancelled' THEN
+        IF NEW."task_id" IS NULL OR NEW."failure_code" IS NOT NULL THEN
+            RAISE EXCEPTION 'cancelled SkillAuthoringValidation preserves its admitted identity without failure evidence';
+        END IF;
+        NEW."completed_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" IN ('succeeded', 'failed', 'cancelled') AND (NEW."state" IS DISTINCT FROM OLD."state" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code") THEN
+        RAISE EXCEPTION 'terminal SkillAuthoringValidation state is immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_skill_authoring_validation_workload_claim"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE validation_state "SkillAuthoringValidationState"; validation_task_id TEXT;
+        transition_time TIMESTAMP(3) := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim rows cannot be deleted'; END IF;
+    SELECT "state", "task_id" INTO validation_state, validation_task_id
+      FROM "skill_authoring_validations" WHERE "id" = NEW."validation_id" FOR UPDATE;
+    IF NOT FOUND OR NEW."workload_class" <> 'skill_authoring_validation' OR NEW."profile_name" <> 'authoring'
+        OR NEW."idempotency_key" !~ '^workflows:skill-authoring-validation-workload:[a-f0-9]{64}$'
+        OR btrim(NEW."execution_reference") = '' OR length(NEW."execution_reference") > 200 THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim requires its fixed authoring executor identity';
+    END IF;
+    IF (NEW."claimed_at" IS NULL) <> (NEW."expires_at" IS NULL) OR NEW."delivery_count" < 0 THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim requires paired lease facts and a non-negative delivery count';
+    END IF;
+    IF NEW."workload_uid" IS NOT NULL AND btrim(NEW."workload_uid") = '' THEN RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim workload identity cannot be blank'; END IF;
+    IF NEW."first_pod_uid" IS NOT NULL AND (NEW."workload_uid" IS NULL OR btrim(NEW."first_pod_uid") = '') THEN RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim Pod identity requires its workload'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF validation_state <> 'pending' OR validation_task_id IS NULL OR NEW."claimed_at" IS NOT NULL OR NEW."delivery_count" <> 0
+            OR NEW."workload_uid" IS NOT NULL OR NEW."first_pod_uid" IS NOT NULL THEN
+            RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim must begin unclaimed after task admission';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."validation_id" IS DISTINCT FROM OLD."validation_id" OR NEW."workload_class" IS DISTINCT FROM OLD."workload_class"
+        OR NEW."profile_name" IS DISTINCT FROM OLD."profile_name" OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
+        OR NEW."execution_reference" IS DISTINCT FROM OLD."execution_reference" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim identity is immutable';
+    END IF;
+    IF OLD."workload_uid" IS NOT NULL AND NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim workload identity is immutable';
+    END IF;
+    IF OLD."first_pod_uid" IS NOT NULL AND NEW."first_pod_uid" IS DISTINCT FROM OLD."first_pod_uid" THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim first Pod identity is immutable';
+    END IF;
+    IF OLD."workload_uid" IS NULL AND NEW."workload_uid" IS NOT NULL THEN
+        IF validation_state <> 'pending' OR validation_task_id IS NULL OR OLD."claimed_at" IS NULL OR OLD."expires_at" IS NULL
+            OR transition_time >= OLD."expires_at" OR NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at"
+            OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."delivery_count" <> OLD."delivery_count" THEN
+            RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim workload binding requires its current pending lease';
+        END IF;
+    ELSIF OLD."first_pod_uid" IS NULL AND NEW."first_pod_uid" IS NOT NULL THEN
+        IF validation_state <> 'running' OR OLD."workload_uid" IS NULL OR transition_time >= OLD."expires_at"
+            OR NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at"
+            OR NEW."delivery_count" <> OLD."delivery_count" THEN
+            RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim Pod binding requires its current running lease';
+        END IF;
+    ELSIF NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at"
+        OR NEW."delivery_count" IS DISTINCT FROM OLD."delivery_count" THEN
+        IF NEW."first_pod_uid" IS NOT NULL OR NEW."claimed_at" IS NULL OR NEW."expires_at" IS NULL OR NEW."expires_at" <= NEW."claimed_at"
+            OR NEW."delivery_count" <> OLD."delivery_count" + 1
+            OR (OLD."expires_at" IS NOT NULL AND transition_time < OLD."expires_at")
+            OR (OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" <= OLD."claimed_at")
+            OR (OLD."workload_uid" IS NULL AND validation_state <> 'pending')
+            OR (OLD."workload_uid" IS NOT NULL AND validation_state <> 'running') THEN
+            RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim lease generation must advance after expiry';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_skill_authoring_validation_bootstrap"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE validation_pod_uid TEXT; validation_state "SkillAuthoringValidationState";
+        transition_time TIMESTAMP(3) := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillAuthoringValidationBootstrap rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' AND (NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL) THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationBootstrap must begin unconsumed';
+    END IF;
+    IF NEW."reference_hash" !~ '^sha256:[a-f0-9]{64}$' OR NEW."expires_at" <= NEW."created_at"
+        OR (NEW."consumed_at" IS NULL) <> (NEW."consumed_by_pod_uid" IS NULL)
+        OR NEW."namespace" !~ '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$' OR length(NEW."namespace") > 63
+        OR NEW."service_account" <> 'skill-authoring-default' THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationBootstrap has invalid one-use worker identity';
+    END IF;
+    SELECT claim."first_pod_uid", validation."state" INTO validation_pod_uid, validation_state
+      FROM "skill_authoring_validations" validation
+      JOIN "skill_authoring_validation_workload_claims" claim ON claim."validation_id" = validation."id"
+     WHERE validation."id" = NEW."validation_id" FOR UPDATE OF validation, claim;
+    IF validation_state IS DISTINCT FROM 'running' THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationBootstrap requires its running validation claim';
+    END IF;
+    IF TG_OP = 'UPDATE' AND (NEW."validation_id" IS DISTINCT FROM OLD."validation_id" OR NEW."reference_hash" IS DISTINCT FROM OLD."reference_hash"
+        OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
+        OR NEW."service_account" IS DISTINCT FROM OLD."service_account" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationBootstrap identity is immutable';
+    END IF;
+    IF TG_OP = 'UPDATE' AND (OLD."consumed_at" IS NOT NULL OR NEW."consumed_at" IS NULL OR NEW."consumed_by_pod_uid" IS NULL
+        OR validation_pod_uid IS DISTINCT FROM NEW."consumed_by_pod_uid" OR transition_time >= OLD."expires_at") THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationBootstrap may be consumed once by its registered Pod before expiry';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."consumed_at" IS NULL AND NEW."consumed_at" IS NOT NULL THEN
+        NEW."consumed_at" := transition_time;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_skill_authoring_validation_completion"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE validation_state "SkillAuthoringValidationState"; validation_pod_uid TEXT;
+BEGIN
+    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'SkillAuthoringValidationCompletionInbox rows are immutable'; END IF;
+    SELECT validation."state", claim."first_pod_uid" INTO validation_state, validation_pod_uid
+      FROM "skill_authoring_validations" validation
+      JOIN "skill_authoring_validation_workload_claims" claim ON claim."validation_id" = validation."id"
+     WHERE validation."id" = NEW."validation_id" FOR UPDATE OF validation, claim;
+    IF validation_state IS DISTINCT FROM 'running' OR validation_pod_uid IS NULL OR NEW."completion_digest" !~ '^sha256:[a-f0-9]{64}$'
+        OR NOT EXISTS (
+            SELECT 1 FROM "skill_authoring_validation_bootstraps" bootstrap
+             WHERE bootstrap."validation_id" = NEW."validation_id" AND bootstrap."consumed_at" IS NOT NULL
+               AND bootstrap."consumed_by_pod_uid" = validation_pod_uid
+        ) THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationCompletionInbox requires a running validation and digest';
+    END IF;
+    IF NEW."outcome" = 'succeeded' AND (NEW."failure_code" IS NOT NULL OR jsonb_typeof(NEW."test_report") <> 'object' OR jsonb_typeof(NEW."scan_result") <> 'object') THEN
+        RAISE EXCEPTION 'successful SkillAuthoringValidationCompletionInbox requires reports only';
+    END IF;
+    IF NEW."outcome" = 'failed' AND (NEW."test_report" IS NOT NULL OR NEW."scan_result" IS NOT NULL OR NEW."failure_code" !~ '^[a-z][a-z0-9_]{0,63}$') THEN
+        RAISE EXCEPTION 'failed SkillAuthoringValidationCompletionInbox requires a bounded failure code only';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_skill_authoring_validation_event_outbox"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE inbox_validation_id TEXT; inbox_completion_digest TEXT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillAuthoringValidationWorkflowEventOutbox rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' AND (NEW."event_name" <> 'skill-authoring-completed' OR NEW."published_at" IS NOT NULL OR NEW."publication_attempts" <> 0) THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationWorkflowEventOutbox must begin as an unpublished completion event';
+    END IF;
+    IF TG_OP = 'UPDATE' AND (NEW."completion_inbox_id" IS DISTINCT FROM OLD."completion_inbox_id" OR NEW."event_name" IS DISTINCT FROM OLD."event_name" OR NEW."payload" IS DISTINCT FROM OLD."payload" OR NEW."publication_attempts" < OLD."publication_attempts") THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationWorkflowEventOutbox immutable event facts cannot change';
+    END IF;
+    SELECT "validation_id", "completion_digest" INTO inbox_validation_id, inbox_completion_digest
+      FROM "skill_authoring_validation_completion_inbox" WHERE "id" = NEW."completion_inbox_id" FOR KEY SHARE;
+    IF jsonb_typeof(NEW."payload") <> 'object' OR (SELECT count(*) FROM jsonb_object_keys(NEW."payload")) <> 2
+        OR NEW."payload"->>'validationId' IS DISTINCT FROM inbox_validation_id
+        OR NEW."payload"->>'completionDigest' IS DISTINCT FROM inbox_completion_digest THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationWorkflowEventOutbox payload must name its saved completion';
+    END IF;
+    RETURN NEW;
+END;
+$$;
 CREATE FUNCTION "enforce_tool_result_delivery_identity"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE public_tool_invocation_id TEXT;
 BEGIN
@@ -6846,6 +7238,11 @@ CREATE TRIGGER "artifact_revision_parents_immutable" BEFORE UPDATE OR DELETE ON 
 CREATE TRIGGER "artifact_revision_parents_same_silo" BEFORE INSERT ON "artifact_revision_parents"
     FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_parent_silo"();
 CREATE TRIGGER "skill_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_revision_lifecycle"();
+CREATE TRIGGER "skill_authoring_validations_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_authoring_validations" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_authoring_validation"();
+CREATE TRIGGER "skill_authoring_validation_workload_claims_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_authoring_validation_workload_claims" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_authoring_validation_workload_claim"();
+CREATE TRIGGER "skill_authoring_validation_bootstraps_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_authoring_validation_bootstraps" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_authoring_validation_bootstrap"();
+CREATE TRIGGER "skill_authoring_validation_completion_inbox_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_authoring_validation_completion_inbox" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_authoring_validation_completion"();
+CREATE TRIGGER "skill_authoring_validation_event_outbox_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_authoring_validation_workflow_event_outbox" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_authoring_validation_event_outbox"();
 CREATE TRIGGER "skill_workloads_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workloads" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_authority"();
 CREATE TRIGGER "skill_workload_bootstraps_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workload_bootstraps" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_bootstrap"();
 CREATE TRIGGER "cancel_ineligible_skill_workloads_on_revision" AFTER UPDATE OF "state" ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "cancel_ineligible_skill_workloads"();
