@@ -96,21 +96,27 @@ function _parseBoundaryAttachments(raw: unknown): AgentRevisionContent["boundary
 export function _ParseAgentRevisionContent(raw: unknown): AgentRevisionContent | null
 {
 	// 1. Bound the top-level JSON object before inspecting any executable field.
-	if (raw === null || typeof raw !== "object") return null;
+	if (raw === null || typeof raw !== "object")
+		return null;
 	const body = raw as Record<string, unknown>;
 	const budget = body.budget as Record<string, unknown> | undefined;
 
 	// 2. Require the prompt-compiler version this build ships, plus a model id and all four budget numbers.
-	if (body.promptPolicyVersion !== PROMPT_COMPILER_VERSION || !_isNonEmptyString(body.modelDefinitionId) || budget === undefined || typeof budget !== "object") return null;
-	if (typeof budget.maxTurns !== "number" || typeof budget.maxTokens !== "number" || typeof budget.maxCostUsdMicros !== "number" || typeof budget.maxDurationMs !== "number") return null;
+	if (body.promptPolicyVersion !== PROMPT_COMPILER_VERSION || !_isNonEmptyString(body.modelDefinitionId) || budget === undefined || typeof budget !== "object")
+		return null;
+
+	if (typeof budget.maxTurns !== "number" || typeof budget.maxTokens !== "number" || typeof budget.maxCostUsdMicros !== "number" || typeof budget.maxDurationMs !== "number")
+		return null;
 	const personaRevisionId = body.personaRevisionId === undefined || body.personaRevisionId === null ? null : body.personaRevisionId;
-	if (personaRevisionId !== null && !_isNonEmptyString(personaRevisionId)) return null;
+	if (personaRevisionId !== null && !_isNonEmptyString(personaRevisionId))
+		return null;
 
 	// 3. Parse the nested arrays. One malformed entry rejects the whole body — never a partial list.
 	const skills = _parseSkills(body.skills);
 	const integrationAssignments = _parseIntegrations(body.integrationAssignments);
 	const boundaryAttachments = _parseBoundaryAttachments(body.boundaryAttachments);
-	if (skills === null || integrationAssignments === null || boundaryAttachments === null) return null;
+	if (skills === null || integrationAssignments === null || boundaryAttachments === null)
+		return null;
 
 	// 4. Rebuild the value field by field, so nothing extra from the request body is carried through.
 	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxCostUsdMicros: budget.maxCostUsdMicros, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, boundaryAttachments };

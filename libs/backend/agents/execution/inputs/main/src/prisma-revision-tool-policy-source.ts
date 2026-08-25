@@ -144,11 +144,14 @@ function _IsModelAvailable(model: { readonly scope: ModelRoutingScope; readonly 
 /** Turns the stored JSON budget into the snapshot's budget fields, never filling in a default. */
 function _ParseBudget(value: JsonValue, admittedAtEpochMs: number): BudgetPolicyInput["budgetPolicy"] | null
 {
-	if (value === null || typeof value !== "object" || Array.isArray(value) || !Number.isSafeInteger(admittedAtEpochMs)) return null;
+	if (value === null || typeof value !== "object" || Array.isArray(value) || !Number.isSafeInteger(admittedAtEpochMs))
+		return null;
 	const budget = value as Readonly<Record<string, unknown>>;
-	if (!_IsPositiveSafeInteger(budget.maxTurns) || !_IsPositiveSafeInteger(budget.maxTokens) || !_IsPositiveSafeInteger(budget.maxCostUsdMicros) || !_IsPositiveSafeInteger(budget.maxDurationMs)) return null;
+	if (!_IsPositiveSafeInteger(budget.maxTurns) || !_IsPositiveSafeInteger(budget.maxTokens) || !_IsPositiveSafeInteger(budget.maxCostUsdMicros) || !_IsPositiveSafeInteger(budget.maxDurationMs))
+		return null;
 	const deadline = admittedAtEpochMs + budget.maxDurationMs;
-	if (!Number.isSafeInteger(deadline)) return null;
+	if (!Number.isSafeInteger(deadline))
+		return null;
 	return { maxModelTurns: budget.maxTurns, maxTotalTokens: budget.maxTokens, maxCostUsdMicros: budget.maxCostUsdMicros, wallClockDeadlineEpochMs: deadline };
 }
 
