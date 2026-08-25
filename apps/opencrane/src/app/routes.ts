@@ -37,6 +37,15 @@ import type { ResourceSharesRouteOptions, RouteMount } from "./routes.types";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition";
 import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+
+/** Rejects an event only when a test composes internal routes without the process workflow engine. */
+const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEvent"> = {
+	async emitEvent(): Promise<never>
+	{
+		throw new Error("workflow event execution is unavailable");
+	},
+};
 
 /**
  * Register the authenticated product API from functional route lists.
@@ -186,9 +195,9 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflowExecution: Pick<IWorkflowEngine, "emitEvent"> = _UnavailableWorkflowExecution): void
 {
-	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config);
+	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, workflowExecution);
 	const internalControllerRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentControllerRunDispatch },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillWorkloadDispatch },
@@ -199,6 +208,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillWorkloadBootstrap },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringInput },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringCompletion },
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringValidationWorker },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeBootstrap },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeStream },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.conversationAssetOutputs },

@@ -55,24 +55,24 @@ class _InputResponse(Protocol):
         """Read at most the requested response bytes."""
 
 
-def _input_url(base_url: str, workload_id: str) -> str:
+def _input_url(base_url: str, validation_id: str) -> str:
     """Derive the sole authoring input URL after validating the deployment-owned internal base URL."""
-    if not bootstrap._workload_id(workload_id):
-        raise RuntimeError("authoring workload identifier is invalid")
+    if not bootstrap._validation_id(validation_id):
+        raise RuntimeError("authoring validation identifier is invalid")
     bootstrap._acknowledgement_url(base_url)
-    return f"{base_url}/skill-authoring-workloads/{workload_id}/input"
+    return f"{base_url}/skill-authoring-validations/{validation_id}/input"
 
 
 def _completion_url(base_url: str) -> str:
     """Derive the sole terminal authoring completion URL after validating the deployment-owned internal base URL."""
     bootstrap._acknowledgement_url(base_url)
-    return f"{base_url}/skill-authoring-workloads:complete"
+    return f"{base_url}/skill-authoring-validations:complete"
 
 
-def download_bundle(base_url: str, workload_id: str, token_path: str, destination: Path, open_request: Callable[[Request, float], _InputResponse] = bootstrap._open) -> Path:
+def download_bundle(base_url: str, validation_id: str, token_path: str, destination: Path, open_request: Callable[[Request, float], _InputResponse] = bootstrap._open) -> Path:
     """Download one server-brokered bundle, verify its fixed digest and length, then atomically retain it."""
     token = bootstrap._read_single_line(token_path, "capability token")
-    request = Request(_input_url(base_url, workload_id), headers={"Authorization": f"Bearer {token}", "Accept": "application/gzip"}, method="GET")
+    request = Request(_input_url(base_url, validation_id), headers={"Authorization": f"Bearer {token}", "Accept": "application/gzip"}, method="GET")
     temporary = destination.with_name(f".{destination.name}.{secrets.token_hex(16)}.part")
     try:
         response = open_request(request, 10.0)
@@ -178,9 +178,9 @@ def validate_bundle(destination: Path, execute: Callable[[Sequence[str], Path, i
     return _report(True, "format, type, and test checks passed", test_checks), _report(True, "dependency policy, secret scan, and offline malware scan passed", 3)
 
 
-def complete_workload(base_url: str, workload_id: str, token_path: str, command: dict[str, object], open_request: Callable[[Request, float], _InputResponse] = bootstrap._open) -> None:
+def complete_workload(base_url: str, validation_id: str, token_path: str, command: dict[str, object], open_request: Callable[[Request, float], _InputResponse] = bootstrap._open) -> None:
     """Send one exact bounded terminal outcome using a freshly read projected token and reject every ambiguous response."""
-    if not bootstrap._workload_id(workload_id) or not _completion_command(command, workload_id):
+    if not bootstrap._validation_id(validation_id) or not _completion_command(command, validation_id):
         raise RuntimeError("authoring completion command is invalid")
     token = bootstrap._read_single_line(token_path, "capability token")
     request = Request(_completion_url(base_url), data=json.dumps(command, separators=(",", ":")).encode("utf-8"), headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Accept": "application/json"}, method="POST")
@@ -201,10 +201,10 @@ def complete_workload(base_url: str, workload_id: str, token_path: str, command:
         raise RuntimeError("authoring completion was rejected")
 
 
-def run_authoring_workload(base_url: str, workload_id: str, token_path: str, download: Callable[[str, str, str, Path], Path] = download_bundle, extract: Callable[[Path, Path], Path] = extract_bundle, validate: Callable[[Path], tuple[dict[str, object], dict[str, object]]] = validate_bundle, complete: Callable[[str, str, str, dict[str, object]], None] = complete_workload) -> int:
+def run_authoring_workload(base_url: str, validation_id: str, token_path: str, download: Callable[[str, str, str, Path], Path] = download_bundle, extract: Callable[[Path, Path], Path] = extract_bundle, validate: Callable[[Path], tuple[dict[str, object], dict[str, object]]] = validate_bundle, complete: Callable[[str, str, str, dict[str, object]], None] = complete_workload) -> int:
     """Perform one bootstrap-bound validation and send exactly one bounded terminal outcome.
 
-    The server selected ``workload_id`` during bootstrap. This worker only obtains its immutable
+    The server selected ``validation_id`` during bootstrap. This worker only obtains its immutable
     archive through that server-owned route, runs image-owned checks, and cleans its ephemeral
     workspace regardless of outcome. A technical failure is intentionally collapsed to one stable
     code because raw candidate output and local paths do not cross the worker boundary.
@@ -213,14 +213,14 @@ def run_authoring_workload(base_url: str, workload_id: str, token_path: str, dow
     try:
         try:
             work_directory = Path(tempfile.mkdtemp(prefix=_WORK_DIRECTORY_PREFIX, dir="/tmp"))
-            archive = download(base_url, workload_id, token_path, work_directory / "bundle.tar.gz")
+            archive = download(base_url, validation_id, token_path, work_directory / "bundle.tar.gz")
             extracted = extract(archive, work_directory / "bundle")
             test_report, scan_result = validate(extracted)
         except (OSError, RuntimeError):
-            return _complete_failed_workload(base_url, workload_id, token_path, complete)
+            return _complete_failed_workload(base_url, validation_id, token_path, complete)
         if test_report.get("passed") is not True or scan_result.get("passed") is not True:
-            return _complete_failed_workload(base_url, workload_id, token_path, complete)
-        if _deliver_terminal(base_url, workload_id, token_path, {"workloadId": workload_id, "outcome": "succeeded", "testReport": test_report, "scanResult": scan_result}, complete):
+            return _complete_failed_workload(base_url, validation_id, token_path, complete)
+        if _deliver_terminal(base_url, validation_id, token_path, {"validationId": validation_id, "outcome": "succeeded", "testReport": test_report, "scanResult": scan_result}, complete):
             return 0
         _write_event("completion_uncertain")
         return 1
@@ -229,18 +229,18 @@ def run_authoring_workload(base_url: str, workload_id: str, token_path: str, dow
             _cleanup_work_directory(work_directory)
 
 
-def _complete_failed_workload(base_url: str, workload_id: str, token_path: str, complete: Callable[[str, str, str, dict[str, object]], None]) -> int:
+def _complete_failed_workload(base_url: str, validation_id: str, token_path: str, complete: Callable[[str, str, str, dict[str, object]], None]) -> int:
     """Submit the one technical failure without masking an authority outage as a successful Job."""
-    if not _deliver_terminal(base_url, workload_id, token_path, {"workloadId": workload_id, "outcome": "failed", "failureCode": _VALIDATION_FAILURE_CODE}, complete):
+    if not _deliver_terminal(base_url, validation_id, token_path, {"validationId": validation_id, "outcome": "failed", "failureCode": _VALIDATION_FAILURE_CODE}, complete):
         _write_event("failure_completion_unavailable")
     return 1
 
 
-def _deliver_terminal(base_url: str, workload_id: str, token_path: str, command: dict[str, object], complete: Callable[[str, str, str, dict[str, object]], None]) -> bool:
+def _deliver_terminal(base_url: str, validation_id: str, token_path: str, command: dict[str, object], complete: Callable[[str, str, str, dict[str, object]], None]) -> bool:
     """Retry one exact terminal command a small fixed number of times without changing its outcome."""
     for _ in range(_TERMINAL_DELIVERY_ATTEMPTS):
         try:
-            complete(base_url, workload_id, token_path, command)
+            complete(base_url, validation_id, token_path, command)
             return True
         except (OSError, RuntimeError):
             pass
@@ -315,15 +315,15 @@ def _contains_dependency_declaration(value: object) -> bool:
     return False
 
 
-def _completion_command(command: dict[str, object], workload_id: str) -> bool:
+def _completion_command(command: dict[str, object], validation_id: str) -> bool:
     """Keep completion payloads within the server-owned two-outcome contract and never forward raw validator output."""
-    if command.get("workloadId") != workload_id:
+    if command.get("validationId") != validation_id:
         return False
     if command.get("outcome") == "failed":
         failure_code = command.get("failureCode")
-        return set(command) == {"workloadId", "outcome", "failureCode"} and isinstance(failure_code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", failure_code) is not None
+        return set(command) == {"validationId", "outcome", "failureCode"} and isinstance(failure_code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", failure_code) is not None
     if command.get("outcome") == "succeeded":
-        return set(command) == {"workloadId", "outcome", "testReport", "scanResult"} and _completion_report(command.get("testReport")) and _completion_report(command.get("scanResult"))
+        return set(command) == {"validationId", "outcome", "testReport", "scanResult"} and _completion_report(command.get("testReport")) and _completion_report(command.get("scanResult"))
     return False
 
 
@@ -372,8 +372,8 @@ def main() -> int:
         base_url = bootstrap._required_environment("OPENCRANE_SKILL_BOOTSTRAP_URL")
         token_path = bootstrap._required_environment("OPENCRANE_SKILL_TOKEN_PATH")
         reference_path = bootstrap._required_environment("OPENCRANE_SKILL_BOOTSTRAP_REFERENCE_PATH")
-        workload_id = bootstrap.acknowledge(base_url, token_path, reference_path)
-        return run_authoring_workload(base_url, workload_id, token_path)
+        validation_id = bootstrap.acknowledge(base_url, token_path, reference_path)
+        return run_authoring_workload(base_url, validation_id, token_path)
     except RuntimeError as error:
         print(json.dumps({"component": "skill-authoring-worker", "event": "validation_unavailable", "reason": str(error)}, sort_keys=True), file=sys.stderr, flush=True)
         return 1

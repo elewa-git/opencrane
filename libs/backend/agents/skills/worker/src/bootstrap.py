@@ -57,7 +57,7 @@ def _acknowledgement_url(base_url: str) -> str:
         raise RuntimeError("bootstrap endpoint is invalid") from error
     if parsed.scheme != "http" or not parsed.hostname or not parsed.hostname.endswith(".svc.cluster.local") or port is None or not 1 <= port <= 65535 or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path != _EXPECTED_BASE_PATH:
         raise RuntimeError("bootstrap endpoint is invalid")
-    return f"{base_url}/skill-workloads:bootstrap"
+    return f"{base_url}/skill-authoring-validations:bootstrap"
 
 
 def _open(request: Request, timeout: float) -> _Response:
@@ -66,7 +66,7 @@ def _open(request: Request, timeout: float) -> _Response:
 
 
 def acknowledge(base_url: str, token_path: str, reference_path: str, open_request: Callable[[Request, float], _Response] = _open) -> str:
-    """Consume one opaque bootstrap reference and return only its server-bound workload coordinate."""
+    """Consume one opaque bootstrap reference and return only its server-bound validation coordinate."""
     token = _read_single_line(token_path, "capability token")
     reference = _read_single_line(reference_path, "bootstrap reference")
     if len(reference) != 83 or not reference.startswith("skill-bootstrap-v1_") or any(character not in "0123456789abcdef" for character in reference.removeprefix("skill-bootstrap-v1_")):
@@ -85,13 +85,13 @@ def acknowledge(base_url: str, token_path: str, reference_path: str, open_reques
             error.close()
     except (OSError, URLError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise RuntimeError("bootstrap acknowledgement is unavailable") from error
-    if response.status != 200 or not isinstance(payload, dict) or set(payload) != {"acknowledged", "workloadId"} or payload.get("acknowledged") is not True or not _workload_id(payload.get("workloadId")):
+    if response.status != 200 or not isinstance(payload, dict) or set(payload) != {"acknowledged", "validationId"} or payload.get("acknowledged") is not True or not _validation_id(payload.get("validationId")):
         raise RuntimeError("bootstrap acknowledgement was rejected")
-    return payload["workloadId"]
+    return payload["validationId"]
 
 
-def _workload_id(value: object) -> bool:
-    """Accept the bounded opaque coordinate required by the later class-specific completion report."""
+def _validation_id(value: object) -> bool:
+    """Accept the bounded opaque coordinate required by the later validation input and completion calls."""
     return isinstance(value, str) and 0 < len(value) <= 256 and not any(character in value for character in "\x00\n\r")
 
 

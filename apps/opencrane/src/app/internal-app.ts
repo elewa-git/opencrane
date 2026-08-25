@@ -9,6 +9,15 @@ import type { InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
 import { _RegisterInternalRoutes } from "./routes";
 import { _CreateHttpRequestLogger } from "./telemetry";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+
+/** Fails closed when an isolated app test does not need workflow event delivery. */
+const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEvent"> = {
+	async emitEvent(): Promise<never>
+	{
+		throw new Error("workflow event execution is unavailable");
+	},
+};
 
 /**
  * Build the workload-facing Express application.
@@ -16,7 +25,7 @@ import { _CreateHttpRequestLogger } from "./telemetry";
  * It shares the public listener's signed-session middleware only so channel-proxy can delegate the
  * browser cookie. Every resolver request independently TokenReviews the proxy workload identity.
  */
-export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[]): Express
+export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], workflowExecution: Pick<IWorkflowEngine, "emitEvent"> = _UnavailableWorkflowExecution): Express
 {
 	const app = express();
 
@@ -33,7 +42,7 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 	app.use(_CreateHttpRequestLogger(_log));
 
 	// 3. Mount only workload-facing routes and terminate failures through the structured handler.
-	_RegisterInternalRoutes(app, prisma, authApi, config);
+	_RegisterInternalRoutes(app, prisma, authApi, config, workflowExecution);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

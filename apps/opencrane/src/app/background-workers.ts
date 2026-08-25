@@ -7,6 +7,8 @@ import { __CreateKubernetesRuntimeWorkloadCleanupStore } from "@opencrane/backen
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import { _CreateScheduleTicker, PrismaScheduleTickerUnitOfWork } from "@opencrane/backend/server/agents/scheduling";
 import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import { PrismaSkillAuthoringValidationWorkerUnitOfWork } from "@opencrane/backend/server/agents/skills";
 
 import type { OpenCraneBackgroundWorkers } from "./background-workers.types";
 import type { OpenCraneProcessConfig } from "./config.types";
@@ -24,13 +26,24 @@ const _RUNTIME_CLEANUP_REQUEST_TIMEOUT_MILLISECONDS = 5_000;
 /** Delay between bounded durable external-action passes. */
 const _EXTERNAL_ACTION_INTERVAL_MILLISECONDS = 1_000;
 
+/** Delays each durable authoring-completion event recovery pass. */
+const _SKILL_VALIDATION_OUTBOX_INTERVAL_MILLISECONDS = 1_000;
+
+/** Rejects a publish only in isolated lifecycle tests that do not compose an engine. */
+const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEvent"> = {
+	async emitEvent(): Promise<never>
+	{
+		throw new Error("workflow event execution is unavailable");
+	},
+};
+
 /**
  * Start all bounded workers that intentionally share the control-plane database and identity.
  *
  * The returned stop handle is the lifecycle boundary: every loop must be stopped before Prisma is
  * disconnected, and none may keep the Node process alive on its own.
  */
-export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runtimeRepairRepository: RunCancellationRepository, config: OpenCraneProcessConfig, externalActions: ExternalActionWorker, workflowRuntime: IWorkflowWorkerRuntime): Promise<OpenCraneBackgroundWorkers>
+export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runtimeRepairRepository: RunCancellationRepository, config: OpenCraneProcessConfig, externalActions: ExternalActionWorker, workflowRuntime: IWorkflowWorkerRuntime, workflowExecution: Pick<IWorkflowEngine, "emitEvent"> = _UnavailableWorkflowExecution): Promise<OpenCraneBackgroundWorkers>
 {
 	// 1. Prepare optional schedule admission through the same capacity port used by run-now requests.
 	const scheduleTicker = _CreateScheduleTicker(new PrismaScheduleTickerUnitOfWork(prisma), managedRunAdmission, _log);
@@ -75,16 +88,37 @@ export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8
 	const externalActionHandle = setInterval(function _externalAction() { void externalActions.runOnce().catch(function _onError(error: unknown) { _log.error({ err: error }, "external action worker pass failed"); }); }, _EXTERNAL_ACTION_INTERVAL_MILLISECONDS);
 	externalActionHandle.unref();
 
+	// 7. Deliver completions after a Pod exits too: database persistence is the source of truth, not a worker retry.
+	const validationOutbox = new PrismaSkillAuthoringValidationWorkerUnitOfWork(prisma);
+	const validationOutboxHandle = setInterval(function _PublishSkillValidationOutbox()
+	{
+		void _PublishSkillValidationEvent(validationOutbox, workflowExecution).catch(function _onError(error: unknown) { _log.error({ err: error }, "skill authoring validation completion publication failed"); });
+	}, _SKILL_VALIDATION_OUTBOX_INTERVAL_MILLISECONDS);
+	validationOutboxHandle.unref();
+
 	return {
 		async stop(): Promise<void>
 		{
 			if (schedulerHandle !== null)
 				clearInterval(schedulerHandle);
 			clearInterval(externalActionHandle);
+			clearInterval(validationOutboxHandle);
 			clearInterval(runtimeRepairHandle);
 			clearInterval(runtimeCleanupHandle);
 			runtimeCleanupShutdown.abort();
 			await Promise.all([runtimeCleanup.drain(), externalActions.drain(), workflowRuntime.close()]);
 		},
 	};
+}
+
+/** Publishes at most one persisted authoring completion and marks it sent only after Absurd accepts it. */
+async function _PublishSkillValidationEvent(outbox: PrismaSkillAuthoringValidationWorkerUnitOfWork, execution: Pick<IWorkflowEngine, "emitEvent">): Promise<void>
+{
+	const event = await outbox.nextUnpublished();
+	if (event === null)
+	{
+		return;
+	}
+	await execution.emitEvent(event.task, event.event);
+	await outbox.markEventPublished(event);
 }

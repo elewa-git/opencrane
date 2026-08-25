@@ -83,7 +83,7 @@ class AuthoringWorkerTests(unittest.TestCase):
 
             destination = _AUTHORING.download_bundle("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", self._token(directory), directory / "bundle.tar.gz", open_request)
             self.assertEqual(destination.read_bytes(), b"candidate")
-            self.assertEqual(captured["url"], "http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime/skill-authoring-workloads/workload-1/input")
+            self.assertEqual(captured["url"], "http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime/skill-authoring-validations/workload-1/input")
             self.assertEqual(captured["authorization"], "Bearer projected-token")
             self.assertEqual(captured["timeout"], 10.0)
 
@@ -208,21 +208,21 @@ class AuthoringWorkerTests(unittest.TestCase):
                 captured["timeout"] = timeout
                 return _CompletionResponse()
 
-            command = {"workloadId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scans passed", "checksRun": 3}}
+            command = {"validationId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scans passed", "checksRun": 3}}
             _AUTHORING.complete_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", self._token(directory), command, open_request)
-            self.assertEqual(captured["url"], "http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime/skill-authoring-workloads:complete")
+            self.assertEqual(captured["url"], "http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime/skill-authoring-validations:complete")
             self.assertEqual(captured["authorization"], "Bearer projected-token")
-            self.assertEqual(captured["body"], b'{"workloadId":"workload-1","outcome":"succeeded","testReport":{"passed":true,"summary":"checks passed","checksRun":3},"scanResult":{"passed":true,"summary":"scans passed","checksRun":3}}')
+            self.assertEqual(captured["body"], b'{"validationId":"workload-1","outcome":"succeeded","testReport":{"passed":true,"summary":"checks passed","checksRun":3},"scanResult":{"passed":true,"summary":"scans passed","checksRun":3}}')
             self.assertEqual(captured["timeout"], 10.0)
 
     def test_refuses_unbounded_completion_evidence_or_a_noncanonical_authority_reply(self) -> None:
         """The worker neither sends raw validator output nor turns an ambiguous terminal reply into success."""
         with tempfile.TemporaryDirectory() as raw:
             directory = pathlib.Path(raw)
-            command = {"workloadId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed\nraw output", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scans passed", "checksRun": 3}}
+            command = {"validationId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed\nraw output", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scans passed", "checksRun": 3}}
             with self.assertRaisesRegex(RuntimeError, "command is invalid"):
                 _AUTHORING.complete_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", self._token(directory), command)
-            failed = {"workloadId": "workload-1", "outcome": "failed", "failureCode": "validator_unavailable"}
+            failed = {"validationId": "workload-1", "outcome": "failed", "failureCode": "validator_unavailable"}
             with self.assertRaisesRegex(RuntimeError, "completion was rejected"):
                 _AUTHORING.complete_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", self._token(directory), failed, lambda request, timeout: _CompletionResponse(b'{"completed":false}'))
 
@@ -230,10 +230,10 @@ class AuthoringWorkerTests(unittest.TestCase):
         """The completion exchange keeps both incoming authority data and outgoing evidence within their exact bounds."""
         with tempfile.TemporaryDirectory() as raw:
             directory = pathlib.Path(raw)
-            succeeded = {"workloadId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scans passed", "checksRun": 3}}
+            succeeded = {"validationId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scans passed", "checksRun": 3}}
             with self.assertRaisesRegex(RuntimeError, "response exceeded"):
                 _AUTHORING.complete_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", self._token(directory), succeeded, lambda request, timeout: _CompletionResponse(b"x" * 4097))
-            invalid = {"workloadId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": True}, "scanResult": {"passed": True, "summary": "scans passed", "checksRun": 3}}
+            invalid = {"validationId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": True}, "scanResult": {"passed": True, "summary": "scans passed", "checksRun": 3}}
             with self.assertRaisesRegex(RuntimeError, "command is invalid"):
                 _AUTHORING.complete_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", self._token(directory), invalid)
 
@@ -261,7 +261,7 @@ class AuthoringWorkerTests(unittest.TestCase):
         result = _AUTHORING.run_authoring_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", download, extract, validate, complete)
         self.assertEqual(result, 0)
         self.assertEqual(captured["download"], ("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token"))
-        self.assertEqual(captured["completion"], ("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", {"workloadId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scan passed", "checksRun": 3}}))
+        self.assertEqual(captured["completion"], ("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", {"validationId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scan passed", "checksRun": 3}}))
         self.assertFalse(captured["workspace"].exists())
 
     def test_replaces_every_validator_failure_with_one_stable_terminal_code(self) -> None:
@@ -276,7 +276,7 @@ class AuthoringWorkerTests(unittest.TestCase):
 
         result = _AUTHORING.run_authoring_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", unavailable, _AUTHORING.extract_bundle, _AUTHORING.validate_bundle, complete)
         self.assertEqual(result, 1)
-        self.assertEqual(completions, [{"workloadId": "workload-1", "outcome": "failed", "failureCode": "offline_validation_failed"}])
+        self.assertEqual(completions, [{"validationId": "workload-1", "outcome": "failed", "failureCode": "offline_validation_failed"}])
 
     def test_main_bootstraps_before_it_can_run_the_authoring_lifecycle(self) -> None:
         """The image entrypoint cannot choose a workload or start validation before server acknowledgement."""
@@ -295,7 +295,7 @@ class AuthoringWorkerTests(unittest.TestCase):
         with mock.patch.object(_AUTHORING.tempfile, "mkdtemp", side_effect=OSError("disk unavailable")):
             result = _AUTHORING.run_authoring_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", complete=complete)
         self.assertEqual(result, 1)
-        self.assertEqual(completions, [{"workloadId": "workload-1", "outcome": "failed", "failureCode": "offline_validation_failed"}])
+        self.assertEqual(completions, [{"validationId": "workload-1", "outcome": "failed", "failureCode": "offline_validation_failed"}])
 
     def test_does_not_replace_an_uncertain_success_with_a_contradictory_failure(self) -> None:
         """A dropped acknowledgement after durable success can fail the Job but must not change its outcome."""
@@ -319,7 +319,7 @@ class AuthoringWorkerTests(unittest.TestCase):
         with mock.patch.object(_AUTHORING, "_write_event") as write_event:
             result = _AUTHORING.run_authoring_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", download, extract, validate, uncertain_complete)
         self.assertEqual(result, 1)
-        self.assertEqual(completions, [{"workloadId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scan passed", "checksRun": 3}}] * 3)
+        self.assertEqual(completions, [{"validationId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scan passed", "checksRun": 3}}] * 3)
         write_event.assert_called_once_with("completion_uncertain")
 
     def test_erases_a_candidate_tree_even_when_its_checks_remove_owner_directory_access(self) -> None:
@@ -361,7 +361,7 @@ class AuthoringWorkerTests(unittest.TestCase):
 
         result = _AUTHORING.run_authoring_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", unavailable, _AUTHORING.extract_bundle, _AUTHORING.validate_bundle, eventually_complete)
         self.assertEqual(result, 1)
-        self.assertEqual(completions, [{"workloadId": "workload-1", "outcome": "failed", "failureCode": "offline_validation_failed"}] * 2)
+        self.assertEqual(completions, [{"validationId": "workload-1", "outcome": "failed", "failureCode": "offline_validation_failed"}] * 2)
 
 
 if __name__ == "__main__":

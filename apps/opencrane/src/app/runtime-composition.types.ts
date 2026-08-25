@@ -29,6 +29,8 @@ export interface InternalRuntimeComposition
 	readonly skillAuthoringInput: Router;
 	/** Runtime router for committing fenced skill-authoring completion. */
 	readonly skillAuthoringCompletion: Router;
+	/** Runtime router that serves the durable validation record to its exact authoring Pod. */
+	readonly skillAuthoringValidationWorker: Router;
 	/** Optional preprocessor router, present only when the restricted worker plane is enabled. */
 	readonly artifactPreprocessor: Router | null;
 	/** Optional malware-scanner router, present only when its isolated worker plane is enabled. */
@@ -65,7 +67,7 @@ export type ControllerRuntimeComposition = Pick<
 /** The subset of routers built by the isolated skill-workload composition step. */
 export type SkillWorkloadRuntimeComposition = Pick<
 	InternalRuntimeComposition,
-	"skillWorkloadBootstrap" | "skillAuthoringInput" | "skillAuthoringCompletion"
+	"skillWorkloadBootstrap" | "skillAuthoringInput" | "skillAuthoringCompletion" | "skillAuthoringValidationWorker"
 >;
 
 /** The subset of routers built by the runtime-protocol composition step. */
