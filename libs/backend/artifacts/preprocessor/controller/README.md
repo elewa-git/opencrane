@@ -24,6 +24,10 @@ release sequence without starting the existing polling worker as a one-shot Job.
 ## Public surface
 
 - `__CreateArtifactPreprocessHandler` — creates the controller task definition.
+- `__CreateHttpArtifactPreprocessControllerAuthority` — calls the private server claim and binding
+  API with the controller's rotating token.
+- `ArtifactPreprocessControllerHttpAuthorityOptions` and its fetch/token types configure that
+  authenticated server adapter and its isolated test seams.
 - `ArtifactPreprocessHandlerOptions`, `ArtifactPreprocessKubernetesStore`, and related types define
   the server authority, Kubernetes operations, and task result the handler needs.
 
