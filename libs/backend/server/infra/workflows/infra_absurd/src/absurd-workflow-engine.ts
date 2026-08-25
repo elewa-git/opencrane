@@ -2,8 +2,8 @@ import { Absurd, FailedTask, type TaskContext } from "absurd-sdk";
 import pg, { type Pool as PgPool } from "pg";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { WorkflowError, WorkflowTaskNotRegisteredError, WorkflowTaskRetryBackoffKinds, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
-import type { IWorkflowEngine, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskReceipt, IWorkflowTaskRetryPolicy, IWorkflowTaskSpawn, IWorkflowTransaction, IWorkflowWorkerRuntime, IWorkflowWorkers, IWorkflowWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowError, WorkflowTaskNotDeclaredError, WorkflowTaskNotRegisteredError, WorkflowTaskRetryBackoffKinds, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowEngine, IWorkflowTaskDeclaration, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskReceipt, IWorkflowTaskRetryPolicy, IWorkflowTaskSpawn, IWorkflowTransaction, IWorkflowWorkerRuntime, IWorkflowWorkers, IWorkflowWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _TaskScopedIdempotencyKey, WorkflowTaskAdmission } from "./workflow-task-admission";
 import type { IAbsurdWorkflowEngineOptions } from "./absurd-workflow-engine.types";
@@ -74,6 +74,12 @@ function _RetryPolicy(policy: IWorkflowTaskRetryPolicy | undefined): IWorkflowTa
 	return value;
 }
 
+/** Compare normalized retry policies by their reviewed values instead of JSON property order. */
+function _SameRetryPolicy(left: IWorkflowTaskRetryPolicy, right: IWorkflowTaskRetryPolicy): boolean
+{
+	return left.maximumAttempts === right.maximumAttempts && left.backoff.kind === right.backoff.kind && left.backoff.initialDelaySeconds === right.backoff.initialDelaySeconds && left.backoff.multiplier === right.backoff.multiplier && left.backoff.maximumDelaySeconds === right.backoff.maximumDelaySeconds;
+}
+
 /** Converts the shared retry policy to the field names used by Absurd admission. */
 function _AbsurdRetryPolicy(policy: IWorkflowTaskRetryPolicy | undefined): Pick<IWorkflowTaskAdmissionRequest, "maximumAttempts" | "retryStrategy">
 {
@@ -137,6 +143,8 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	private readonly engines = new Map<string, Absurd>();
 	/** Stores registered definitions so every admission and task context uses the same contract. */
 	private readonly definitions = new Map<string, IWorkflowTaskDefinition<unknown, unknown>>();
+	/** Stores admission-only declarations that deliberately have no local worker handler. */
+	private readonly declarations = new Map<string, IWorkflowTaskDeclaration>();
 	/** Stores SDK workers that must drain before a process releases this engine's resources. */
 	private readonly workerGroups = new Map<string, readonly IWorker[]>();
 	/** Stores lifecycle handles so a repeated start for one name returns the existing group. */
@@ -200,6 +208,7 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	register<TInput, TResult>(definition: IWorkflowTaskDefinition<TInput, TResult>): void
 	{
 		const taskName = _RequiredString("definition.taskName", definition.taskName);
+		this.declare(definition);
 		// 1. Refuse a duplicate before either registry can disagree about its handler.
 		if (this.definitions.has(taskName))
 		{
@@ -212,6 +221,20 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		// 3. Bind the vendor handler to the same reviewed queue before any task can be admitted.
 		const engine = this;
 		this.engineForQueue(this.queueForTask(taskName)).registerTask({ name: taskName, queue: this.queueForTask(taskName), defaultMaxAttempts: retryPolicy.maximumAttempts }, async function _RunTask(params: unknown, context: TaskContext): Promise<unknown> { return await engine.runTask(stored, context, params); });
+	}
+
+	/** Declare one reviewed task for transactional admission without creating an SDK handler or worker. */
+	declare(declaration: IWorkflowTaskDeclaration): void
+	{
+		const taskName = _RequiredString("declaration.taskName", declaration.taskName);
+		const existing = this.declarations.get(taskName);
+		const retryPolicy = _RetryPolicy(declaration.retryPolicy);
+		if (existing !== undefined && !_SameRetryPolicy(_RetryPolicy(existing.retryPolicy), retryPolicy))
+		{
+			throw new WorkflowError(`Workflow task ${taskName} has a different declaration.`);
+		}
+		this.queueForTask(taskName);
+		this.declarations.set(taskName, { taskName, retryPolicy });
 	}
 
 	/**
@@ -250,13 +273,13 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	async spawn<TInput>(transaction: IWorkflowTransaction, task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
 		// 1. Verify the task has a handler before persisting an unserviceable receipt.
-		const definition = this.definitions.get(task.taskName);
-		if (definition === undefined)
+		const declaration = this.declarations.get(task.taskName);
+		if (declaration === undefined)
 		{
-			throw new WorkflowTaskNotRegisteredError(task.taskName);
+			throw new WorkflowTaskNotDeclaredError(task.taskName);
 		}
 		// 2. Use the caller's transaction so the product write and receipt commit together.
-		return await this.spawnWithTransaction(transaction.client, task, definition);
+		return await this.spawnWithTransaction(transaction.client, task, declaration);
 	}
 
 	/**
@@ -290,11 +313,11 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	}
 
 	/** Calls the fixed, parameterized Absurd procedure on the caller's existing transaction. */
-	private async spawnWithTransaction<TInput>(transactionClient: unknown, task: IWorkflowTaskSpawn<TInput>, definition: IWorkflowTaskDefinition<unknown, unknown>): Promise<IWorkflowTaskReceipt>
+	private async spawnWithTransaction<TInput>(transactionClient: unknown, task: IWorkflowTaskSpawn<TInput>, declaration: IWorkflowTaskDeclaration): Promise<IWorkflowTaskReceipt>
 	{
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
-		const retry = _AbsurdRetryPolicy(definition.retryPolicy);
+		const retry = _AbsurdRetryPolicy(declaration.retryPolicy);
 		const receipt = await new WorkflowTaskAdmission(this.queueForTask(taskName)).admit(transactionClient, { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input), ...retry });
 		return { taskId: receipt.taskId, taskName, idempotencyKey };
 	}
