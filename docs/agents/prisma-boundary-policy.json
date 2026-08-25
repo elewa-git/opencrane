@@ -628,6 +628,13 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/server/gateways/mcp/main/src/mcp-tasks/prisma-mcp-task-repository.ts",
+        "adapter": "PrismaMcpTaskRepository",
+        "contract": "McpTaskRepository",
+        "contractImportPath": "./mcp-task-repository.types",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/server/iam/groups/main/src/core/groups.logic.ts",
         "adapter": "PrismaGroupRepository",
         "contract": "GroupRepository",
@@ -1262,6 +1269,10 @@
           {
             "adapter": "PrismaMcpbValidationRepository",
             "importPath": "../mcpb-validation/prisma-mcpb-validation-repository"
+          },
+          {
+            "adapter": "PrismaMcpTaskRepository",
+            "importPath": "../mcp-tasks/prisma-mcp-task-repository"
           },
           {
             "adapter": "PrismaAuthorizationGrantRepository",

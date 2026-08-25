@@ -5,5 +5,5 @@
   "owner": "apps/opencrane",
   "privilegedExtension": "pg_cron",
   "sourceTargetBaselineSha256": "5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f",
-  "targetBaselineSha256": "779ed5d6c5cdddedb690a1496908beaed14cba66d47b6b2ae331bb85d79bb046"
+  "targetBaselineSha256": "cc19d4fc620e7d6906467913169cfc2b771481dadd73a484f6d201e2f3f5d05a"
 }

@@ -153,6 +153,9 @@ CREATE TYPE "McpbValidationState" AS ENUM ('pending', 'verified', 'rejected');
 CREATE TYPE "McpbValidationWorkloadState" AS ENUM ('pending', 'claimed', 'assigned');
 
 -- CreateEnum
+CREATE TYPE "McpTaskState" AS ENUM ('working', 'input_required', 'completed', 'cancelled', 'failed');
+
+-- CreateEnum
 CREATE TYPE "McpServerStatus" AS ENUM ('active', 'degraded', 'draft');
 
 -- CreateEnum
@@ -1057,6 +1060,37 @@ CREATE TABLE "mcpb_validation_workloads" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "mcpb_validation_workloads_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_task_claims" (
+    "silo_id" TEXT NOT NULL,
+    "identity_digest" TEXT NOT NULL,
+    "touched_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_task_claims_pkey" PRIMARY KEY ("silo_id", "identity_digest")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_tasks" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "request_key_digest" TEXT NOT NULL,
+    "call_digest" TEXT NOT NULL,
+    "tool_name" TEXT NOT NULL,
+    "task_id" TEXT,
+    "task_name" TEXT,
+    "task_key" TEXT,
+    "state" "McpTaskState" NOT NULL DEFAULT 'working',
+    "input_request" JSONB,
+    "input_response" JSONB,
+    "result" TEXT,
+    "failure_code" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_tasks_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2338,6 +2372,18 @@ CREATE INDEX "mcpb_validation_workloads_silo_id_state_created_at_idx" ON "mcpb_v
 CREATE INDEX "mcpb_validation_workloads_state_claim_expires_at_idx" ON "mcpb_validation_workloads"("state", "claim_expires_at");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "mcp_tasks_task_id_key" ON "mcp_tasks"("task_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_tasks_silo_id_request_key_digest_key" ON "mcp_tasks"("silo_id", "request_key_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_tasks_silo_id_task_key_key" ON "mcp_tasks"("silo_id", "task_key");
+
+-- CreateIndex
+CREATE INDEX "mcp_tasks_silo_id_principal_id_state_created_at_idx" ON "mcp_tasks"("silo_id", "principal_id", "state", "created_at");
+
+-- CreateIndex
 CREATE INDEX "mcp_server_installs_principal_id_idx" ON "mcp_server_installs"("principal_id");
 
 -- CreateIndex
@@ -3009,6 +3055,24 @@ ALTER TABLE "mcpb_validation_workloads" ADD CONSTRAINT "mcpb_validation_workload
     btrim("silo_id") <> '' AND btrim("validation_id") <> '' AND btrim("task_id") <> '' AND
     "task_name" = 'mcpb-validation.verify' AND "task_key" ~ '^workflows:mcpb-validation:[0-9a-f]{64}$' AND
     "delivery_count" >= 0
+);
+
+ALTER TABLE "mcp_task_claims" ADD CONSTRAINT "mcp_task_claims_identity_check" CHECK (
+    btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
+);
+
+ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_identity_check" CHECK (
+    btrim("silo_id") <> '' AND btrim("principal_id") <> '' AND btrim("tool_name") <> '' AND
+    "request_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "call_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+    "input_request" IS NOT NULL
+);
+
+ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_state_check" CHECK (
+    ("state" = 'working' AND "result" IS NULL AND "failure_code" IS NULL)
+    OR ("state" = 'input_required' AND "result" IS NULL AND "failure_code" IS NULL)
+    OR ("state" = 'completed' AND "input_response" IS NOT NULL AND btrim("result") <> '' AND "failure_code" IS NULL)
+    OR ("state" = 'cancelled' AND "result" IS NULL)
+    OR ("state" = 'failed' AND "result" IS NULL AND btrim("failure_code") <> '')
 );
 
 CREATE FUNCTION "enforce_mcpb_validation_workload_assignment"() RETURNS trigger LANGUAGE plpgsql AS $$
