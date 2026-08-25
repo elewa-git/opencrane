@@ -1,7 +1,10 @@
+import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import uiElementsProject from "../../../../../libs/frontend/elements/ui/project.json";
 import openCraneUiProject from "../../../project.json";
+
+/** Reads UI Elements targets as test data without creating a source dependency on that library. */
+const _UI_ELEMENTS_PROJECT = JSON.parse(fs.readFileSync(new URL("../../../../../libs/frontend/elements/ui/project.json", import.meta.url), "utf8"));
 
 /** Explicit local serve configurations and the archetypes they inject. */
 const _ARCHETYPE_CONFIGURATIONS = {
@@ -41,9 +44,9 @@ describe("OpenCrane UI local-development commands", function _Suite()
 			"nx run frontend-elements-ui:storybook",
 			"nx run frontend-elements-ui:test-storybook-visual-workbench"
 		]);
-		expect(uiElementsProject.targets["static-storybook-workbench"].options.port).toBe(4401);
-		expect(uiElementsProject.targets["test-storybook-visual-workbench"].dependsOn).toEqual(["static-storybook-workbench"]);
-		expect(uiElementsProject.targets["test-storybook-visual-workbench"].options.env).toEqual({ OPENCRANE_STORYBOOK_BASE_URL: "http://127.0.0.1:4401" });
+		expect(_UI_ELEMENTS_PROJECT.targets["static-storybook-workbench"].options.port).toBe(4401);
+		expect(_UI_ELEMENTS_PROJECT.targets["test-storybook-visual-workbench"].dependsOn).toEqual(["static-storybook-workbench"]);
+		expect(_UI_ELEMENTS_PROJECT.targets["test-storybook-visual-workbench"].options.env).toEqual({ OPENCRANE_STORYBOOK_BASE_URL: "http://127.0.0.1:4401" });
 	});
 
 	it("keeps development-live on the single real-backend browser server", function _LiveServe()
