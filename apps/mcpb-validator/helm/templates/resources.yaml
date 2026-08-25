@@ -1,0 +1,62 @@
+{{- $v := .Values.mcpbValidator -}}
+{{- if or (gt (len $v.namespace) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $v.namespace)) (eq $v.namespace .Release.Namespace) -}}
+{{- fail "mcpbValidator.namespace must be a valid namespace distinct from the server" -}}
+{{- end -}}
+{{- if ne $v.serviceAccountName "mcpb-validator-default" -}}
+{{- fail "mcpbValidator.serviceAccountName must be the exact mcpb-validator-default identity" -}}
+{{- end -}}
+{{- if not (regexMatch "^([1-9]|10)$" (toString $v.quota.pods)) -}}
+{{- fail "mcpbValidator.quota.pods must be between 1 and 10" -}}
+{{- end -}}
+{{- if not (regexMatch "^([1-9]|10)$" (toString $v.quota.jobs)) -}}
+{{- fail "mcpbValidator.quota.jobs must be between 1 and 10" -}}
+{{- end -}}
+{{- if not (regexMatch "^([1-9][0-9]?[0-9]?m|1|2)$" (toString $v.quota.cpu)) -}}
+{{- fail "mcpbValidator.quota.cpu must be positive and no greater than 2 cores" -}}
+{{- end -}}
+{{- if not (regexMatch "^([1-9][0-9]?[0-9]?Mi|1Gi|2Gi)$" (toString $v.quota.memory)) -}}
+{{- fail "mcpbValidator.quota.memory must be positive and no greater than 2Gi" -}}
+{{- end -}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $v.namespace }}
+  labels:
+    app.kubernetes.io/part-of: opencrane
+    app.kubernetes.io/component: mcpb-validator
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $v.serviceAccountName }}
+  namespace: {{ $v.namespace }}
+  labels:
+    app.kubernetes.io/part-of: opencrane
+    app.kubernetes.io/component: mcpb-validator
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: mcpb-validator-jobs
+  namespace: {{ $v.namespace }}
+spec:
+  hard:
+    pods: {{ $v.quota.pods | quote }}
+    count/jobs.batch: {{ $v.quota.jobs | quote }}
+    requests.cpu: {{ $v.quota.cpu | quote }}
+    requests.memory: {{ $v.quota.memory | quote }}
+    limits.cpu: {{ $v.quota.cpu | quote }}
+    limits.memory: {{ $v.quota.memory | quote }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcpb-validator-default-deny
+  namespace: {{ $v.namespace }}
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+  ingress: []
+  egress: []

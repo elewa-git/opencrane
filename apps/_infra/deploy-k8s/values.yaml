@@ -209,6 +209,17 @@ opencrane-tool-runner:
       cpu: "2"
       memory: 2Gi
 
+# -- Empty isolated plane reserved for the future MCP bundle validation worker.
+opencrane-mcpb-validator:
+  mcpbValidator:
+    namespace: opencrane-mcpb-validation
+    serviceAccountName: mcpb-validator-default
+    quota:
+      pods: "10"
+      jobs: "10"
+      cpu: "2"
+      memory: 2Gi
+
 # -- Canonical artifact-byte boundary. It owns only content-addressed bytes on an expandable,
 # release-local PVC; OpenCrane remains the catalog and authorization authority.
 artifactService:

@@ -121,6 +121,7 @@
     { "path": "apps/agent-controller/vitest.config.ts", "owner": "apps/agent-controller", "classification": "test-config" },
 
     { "path": "apps/skill-authoring/src/authoring_worker.py", "owner": "apps/skill-authoring", "classification": "process-entrypoint" },
+    { "path": "apps/mcpb-validator/src/mcpb_validator.py", "owner": "apps/mcpb-validator", "classification": "process-entrypoint" },
 
     { "path": "apps/agent-runtime/src/attempts/elicitation_results.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/attempts/execution.py", "owner": "apps/agent-runtime", "classification": "process-composition" },

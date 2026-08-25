@@ -14,7 +14,8 @@ rendered="$(helm template opencrane-silo "$CHART_DIR" \
   --set-string opencrane-skill-authoring.skillAuthoring.namespace=authoring-contract \
   --set-string opencrane-skill-authoring.skillAuthoring.quota.pods=7 \
   --set-string opencrane-tool-runner.toolRunner.namespace=tool-contract \
-  --set-string opencrane-tool-runner.toolRunner.quota.jobs=6)"
+  --set-string opencrane-tool-runner.toolRunner.quota.jobs=6 \
+  --set-string opencrane-mcpb-validator.mcpbValidator.namespace=mcpb-contract)"
 
 grep -Fq 'name: authoring-contract' <<<"$rendered"
 grep -Fq 'namespace: authoring-contract' <<<"$rendered"
@@ -22,9 +23,15 @@ grep -Fq 'pods: "7"' <<<"$rendered"
 grep -Fq 'name: tool-contract' <<<"$rendered"
 grep -Fq 'namespace: tool-contract' <<<"$rendered"
 grep -Fq 'count/jobs.batch: "6"' <<<"$rendered"
+grep -Fq 'name: mcpb-contract' <<<"$rendered"
 
 if helm template opencrane-silo "$CHART_DIR" --set-string opencrane-skill-authoring.skillAuthoring.namespace=shared-skills --set-string opencrane-tool-runner.toolRunner.namespace=shared-skills >/dev/null 2>&1; then
   echo "expected identical governed-skill namespaces to be rejected" >&2
+  exit 1
+fi
+
+if helm template opencrane-silo "$CHART_DIR" --set-string opencrane-mcpb-validator.mcpbValidator.namespace=tool-contract --set-string opencrane-tool-runner.toolRunner.namespace=tool-contract >/dev/null 2>&1; then
+  echo "expected MCP bundle validator namespace collision to be rejected" >&2
   exit 1
 fi
 

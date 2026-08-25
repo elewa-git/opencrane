@@ -24,6 +24,7 @@ testing on its own, it belongs in a library, not here.
 | [`agent-controller`](./agent-controller/README.md) | Sole Kubernetes mutator for personal-runtime attempt resources. |
 | [`skill-authoring`](./skill-authoring/README.md) | Chart-only isolated candidate-skill Job plane with no standing worker. |
 | [`tool-runner`](./tool-runner/README.md) | Chart-only isolated tenant-tool Job plane with no standing worker. |
+| [`mcpb-validator`](./mcpb-validator/README.md) | Isolated MCP bundle worker foundation with no standing worker. |
 | [`postgres`](./postgres/README.md) | The durable PostgreSQL deployable. |
 
 Vendored third-party infrastructure (Cognee, LiteLLM, Obot, and the Kubernetes release
@@ -35,7 +36,7 @@ service map.
         │                                  channel-proxy (edge)
         ├── memory-gateway · artifact-service · artifact-preprocessor · artifact-scanner
         ├── agent-controller · agent-runtime · managed-agent-runtime
-        ├── skill-authoring · tool-runner
+        ├── skill-authoring · tool-runner · mcpb-validator
         └── postgres (durable DB)
    apps/_infra/ ── vendored infra + release composer
 ```

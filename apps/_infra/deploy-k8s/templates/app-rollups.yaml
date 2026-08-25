@@ -1,7 +1,11 @@
 {{- $skillAuthoring := index .Values "opencrane-skill-authoring" -}}
 {{- $toolRunner := index .Values "opencrane-tool-runner" -}}
+{{- $mcpbValidator := index .Values "opencrane-mcpb-validator" -}}
 {{- if eq $skillAuthoring.skillAuthoring.namespace $toolRunner.toolRunner.namespace -}}
 {{- fail "skill-authoring and tool-runner namespaces must remain distinct" -}}
+{{- end -}}
+{{- if or (eq $mcpbValidator.mcpbValidator.namespace $skillAuthoring.skillAuthoring.namespace) (eq $mcpbValidator.mcpbValidator.namespace $toolRunner.toolRunner.namespace) -}}
+{{- fail "mcpb-validator namespace must remain distinct from governed-skill namespaces" -}}
 {{- end -}}
 {{- if .Values.agentController.enabled -}}
 {{- $managedEgress := .Values.managedAgentRuntimePlane.managedAgentRuntime.egress -}}

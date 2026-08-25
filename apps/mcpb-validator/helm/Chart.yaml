@@ -1,0 +1,6 @@
+apiVersion: v2
+name: opencrane-mcpb-validator
+description: Deployment-only chart for the isolated MCP bundle validation worker plane.
+type: application
+version: 0.9.3
+appVersion: "0.9.3"

@@ -1,0 +1,15 @@
+{
+  "name": "mcpb-validator",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "metadata": { "release": { "adaptedVersion": "0.9.3" } },
+  "sourceRoot": "apps/mcpb-validator",
+  "tags": ["type:app", "layer:entrypoint", "scope:mcpb-validator"],
+  "targets": {
+    "build": { "executor": "nx:run-commands", "options": { "command": "python3 -B -m py_compile apps/mcpb-validator/src/mcpb_validator.py", "cwd": "." } },
+    "lint": { "executor": "nx:run-commands", "options": { "command": "helm template mcpb-validator helm >/dev/null", "cwd": "apps/mcpb-validator" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "python3 -B -m unittest discover -s apps/mcpb-validator/__tests__ && bash apps/mcpb-validator/tests/helm-contract.sh && bash apps/mcpb-validator/tests/image-contract.sh", "cwd": "." } },
+    "container": { "executor": "nx:run-commands", "metadata": { "release": { "image": "opencrane-mcpb-validator", "dockerfile": "apps/mcpb-validator/deploy/Dockerfile" } }, "options": { "command": "docker build -f apps/mcpb-validator/deploy/Dockerfile ." } },
+    "image-smoke": { "executor": "nx:run-commands", "options": { "command": "bash apps/mcpb-validator/tests/image-smoke.sh", "cwd": "." } }
+  }
+}
