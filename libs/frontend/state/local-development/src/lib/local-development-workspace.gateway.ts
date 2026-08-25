@@ -310,7 +310,7 @@ export class LocalDevelopmentConversationWorkspaceGateway implements Conversatio
 	}
 }
 
-/** Produce a stable value signature for exact participant-message retries. */
+/** Serializes the conversation identifier and ordered block id, kind, and value fields for retry comparison. */
 function _MessageCommandSignature(command: SubmitConversationMessageCommand): string
 {
 	return JSON.stringify([

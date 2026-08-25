@@ -41,7 +41,10 @@ export class LocalDevelopmentState
 	public readonly agentThreads = new Map<string, AgentThreadSnapshot>();
 	/** Approval request displayed through the participant-input port. */
 	public elicitation: ConversationElicitation = __CreateLocalElicitation();
-	/** Admitted participant-message commands keyed by their retry coordinate. */
+	/**
+	 * Maps each admitted `idempotencyKey` to the conversation-and-block signature accepted for it. The
+	 * workspace gateway ignores a retry with the same signature and rejects the key if its input changes.
+	 */
 	public readonly admittedMessageCommands = new Map<string, string>();
 	/** Mutation keys already failed once in the retry scenario. */
 	private readonly _failedOnce = new Set<string>();
