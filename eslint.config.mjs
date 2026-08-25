@@ -181,7 +181,7 @@ export default [
             { sourceTag: "scope:agent-runtime", onlyDependOnLibsWithTags: ["scope:agent-runtime", "scope:agents", "scope:authorization", "scope:execution-protocol", "scope:sandbox-execution", "scope:memory-gateway-client", "scope:shared"] },
 			{ sourceTag: "scope:skills", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:auth", "scope:cluster-tenants", "scope:grants", "scope:shared", "scope:skills", "scope:skills-workflow-contract", "scope:workflows"] },
 			{ sourceTag: "scope:skills-workflow-contract", onlyDependOnLibsWithTags: ["scope:skills-workflow-contract", "scope:workflows"] },
-			{ sourceTag: "scope:artifacts-workflow-contract", onlyDependOnLibsWithTags: ["scope:artifacts-workflow-contract", "scope:workflows"] },
+			{ sourceTag: "scope:artifacts-workflow-contract", onlyDependOnLibsWithTags: ["scope:artifacts-workflow-contract", "scope:runtime-workloads", "scope:shared", "scope:workflows"] },
 			{ sourceTag: "scope:spend", onlyDependOnLibsWithTags: ["scope:shared", "scope:spend"] },
 			{ sourceTag: "scope:conversation-elicitation", onlyDependOnLibsWithTags: ["scope:conversation-elicitation", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:agent-threads", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-elicitation", "scope:conversations", "scope:shared", "scope:web"] },
