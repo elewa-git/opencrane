@@ -12,7 +12,7 @@ export interface AgentControllerProcessConfig
 {
 	/** Internal OpenCrane origin used for claim and assignment calls. */
 	readonly openCraneInternalUrl: string;
-	/** Same-silo Kubernetes Service name permitted to receive the projected controller token. */
+	/** Names the Service that must match the internal URL before the Skills controller reads its projected token. */
 	readonly openCraneServerServiceName: string;
 	/** Absolute path of the rotating OpenCrane-audience projected token. */
 	readonly controllerTokenPath: string;

@@ -4,14 +4,19 @@ export type SkillAuthoringValidationControllerFetch = (input: string | URL | Req
 /** Reads the current projected controller token from its rotating file. */
 export type SkillAuthoringValidationControllerTokenReader = () => Promise<string>;
 
-/** Settings for the controller's authenticated server API calls. */
+/**
+ * Supplies the controller's authenticated calls to the same-silo server API.
+ *
+ * The adapter checks the configured origin against the Service and namespace before it reads a
+ * projected token, so environment configuration cannot redirect that token to another endpoint.
+ */
 export interface SkillAuthoringValidationControllerHttpAuthorityOptions
 {
-	/** Internal OpenCrane origin with no path, query, or credentials. */
+	/** Sets the internal origin whose hostname must match the configured Service and namespace. */
 	readonly openCraneInternalUrl: string;
-	/** Kubernetes Service name that owns the same-silo OpenCrane controller API. */
+	/** Names the Service used to construct the sole hostname permitted to receive the token. */
 	readonly serverServiceName: string;
-	/** Kubernetes namespace that owns the same-silo OpenCrane controller API. */
+	/** Names the Service namespace used to construct the sole hostname permitted to receive the token. */
 	readonly serverNamespace: string;
 	/** Absolute path of the rotating projected controller token. */
 	readonly tokenPath: string;

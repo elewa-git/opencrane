@@ -121,10 +121,12 @@ function _ValidationId(value: string): string
  * Creates the internal HTTP authority that the controller-hosted Absurd handler uses for
  * server-owned validation state.
  *
- * It reads the controller's rotating token for every request and rejects a successful response that
- * names another validation before the handler can create or release a Job. A 409 becomes the
- * authority's stale or conflict outcome, so the handler stops using the affected delivery. Called
- * by: the agent-controller entrypoint when it registers the validation handler.
+ * It checks that `openCraneInternalUrl` names the configured same-silo Service before it can read
+ * the controller's rotating token, so a changed environment value cannot send that token elsewhere.
+ * It then rejects a successful response that names another validation before the handler can create
+ * or release a Job. A 409 becomes the authority's stale or conflict outcome, so the handler stops
+ * using the affected delivery. Called by: the agent-controller entrypoint when it registers the
+ * validation handler.
  *
  * @param options - Supplies the same-silo server origin, projected-token path, timeout, and test seams.
  * @returns The authority through which the handler claims, binds, loads, and completes a validation.
