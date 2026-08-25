@@ -94,9 +94,9 @@ its resources to the lifecycle owner.
   sharing authority is mounted behind the shared per-IP limiter before identity or database work.
 - `src/app/runtime-composition.ts` binds controller, skill-workload, runtime, and optional-worker
   authorities by caller plane without choosing transport paths.
-- `src/app/mcp-era-probe-composition.ts` creates one Absurd worker and registers the remote MCP
-  protocol check. A workflow is saved work that may continue later; here it checks a registered
-  server without keeping the administrator's request open.
+- `src/app/mcp-workflow-composition.ts` creates one Absurd worker for both remote MCP protocol
+  checks and saved MCP bundle checks. A workflow is saved work that may continue later; here it
+  checks a registered server or signed bundle without keeping the administrator's request open.
 - `src/app/persona-approval-composition.ts` adapts agent-service persona selection to the persona
   approval port on one Serializable transaction. It maps agent outcomes but owns no persona or
   AgentRevision persistence.

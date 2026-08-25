@@ -36,7 +36,7 @@ import { _CreatePersonaAgentRevisionSelectionFactory } from "./persona-approval-
 import type { ResourceSharesRouteOptions, RouteMount } from "./routes.types";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition";
 import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
-import type { McpEraProbeComposition } from "./mcp-era-probe-composition.types";
+import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 
 /**
  * Register the authenticated product API from functional route lists.
@@ -53,10 +53,10 @@ import type { McpEraProbeComposition } from "./mcp-era-probe-composition.types";
  * @param obotCustody - Composed Obot custody authority (fail-closed adapter when Obot is off).
  * @param artifactScannerEnabled - Whether upload admission has a live scanner consumer.
  * @param organizationMembersRouter - Startup-selected standalone or Fleet member authority.
- * @param mcpEraProbe - Transaction-bound remote MCP registration and protocol-check workflow.
+ * @param mcpWorkflows - Shared transaction and worker authority for saved MCP jobs.
  * @returns The configured public listener.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpEraProbe: McpEraProbeComposition): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition): Express
 {
 	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner);
 	const identityAndAccessRoutes: readonly RouteMount[] = [
@@ -83,7 +83,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },
 	];
 	const gatewayRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(mcpEraProbe.unitOfWork, new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma), mcpEraProbe.workflow) },
+		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(mcpWorkflows.unitOfWork, new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma), mcpWorkflows.eraProbeWorkflow, mcpWorkflows.mcpbValidationWorkflow, mcpWorkflows.mcpbArtifacts) },
 		{ method: "use", path: "/api/v1/integrations", handler: _CreateIntegrationCustodyRouter(prisma, obotCustody, _log) },
 		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma) },
 		{ method: "use", path: "/api/v1/providers/credentials", handler: providerCredentialsRouter(prisma) },

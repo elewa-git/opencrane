@@ -29,3 +29,7 @@ The deployment migration Job supplies this SQL file's manifest-bound digest, the
 issuer. It records 0.9.3 only after the whole cutover commits. If it fails, repair the database
 forward; deployment does not create a backup, inspect the source schema, pause writes, or restore a
 previous release. Those safeguards are deferred to issue #699.
+
+The same 0.9.3 transition also adds MCP bundle validation records. Each record pins one immutable
+artifact revision and stores only its manifest and trusted-signature decision. Absurd keeps the job
+attempts and checkpoints in its own tables; these MCP rows hold the result shown to administrators.

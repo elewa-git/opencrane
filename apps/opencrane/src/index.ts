@@ -14,7 +14,7 @@ import { _ReadProcessConfig } from "./app/config";
 import { _ReconcileChannelTargetRoutes, _StartChannelTargetRouteReconciler } from "./app/channel-target-composition";
 import { _CreateExternalActionWorker } from "./app/external-action-composition";
 import { _CreateInternalApp } from "./app/internal-app";
-import { _CreateMcpEraProbeComposition } from "./app/mcp-era-probe-composition";
+import { _CreateMcpWorkflowComposition } from "./app/mcp-workflow-composition";
 import { _BootstrapInitialModel } from "./app/initial-model-bootstrap";
 import { _CreateKubernetesClients } from "./app/kubernetes-clients";
 import { _StartProcessLifecycle } from "./app/lifecycle";
@@ -58,7 +58,7 @@ async function _Main(): Promise<void>
 	const obot = _CreateObotAdapters(config.obot);
 	const externalActions = _CreateExternalActionWorker(prisma, obot.invocation, _log);
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
-	const workflows = _CreateMcpEraProbeComposition(prisma, config.workflows);
+	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows);
 
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);

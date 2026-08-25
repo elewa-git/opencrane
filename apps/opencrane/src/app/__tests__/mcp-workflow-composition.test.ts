@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import { McpEraProbeFailureCodes } from "@opencrane/backend/server/gateways/mcp";
 import { McpEraProbeConfigurationError, McpEraProbeProtocolError, McpEraProbeTransportError } from "@opencrane/backend/server/infra/mcp-era-probe";
 
-import { _McpEraProbeFailure } from "../mcp-era-probe-composition";
+import { _McpEraProbeFailure } from "../mcp-workflow-composition";
 
-describe("MCP era-probe application translation", function _McpEraProbeTranslationSuite()
+describe("MCP workflow application translation", function _McpWorkflowTranslationSuite()
 {
 	it.each([
 		new McpEraProbeTransportError("network"),
