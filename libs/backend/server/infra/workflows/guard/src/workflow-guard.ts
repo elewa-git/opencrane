@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { ___CreateLogger, ___DoWithTrace, ___GetActiveSpan, type Logger } from "@opencrane/backend/observability";
 import { WorkflowError, WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
-import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowEngine, IWorkflowTaskContext, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskQueueAuthority, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowEngine, IWorkflowTaskContext, IWorkflowTaskDeclaration, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskQueueAuthority, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { WorkflowTaskPolicyError } from "./workflow-guard.errors";
 import { WorkflowStepOutcomes } from "./workflow-guard.types";
@@ -107,6 +107,13 @@ class WorkflowGuard implements IWorkflowEngine
 		this.siloId = _RequireNonBlankString(options.siloId);
 		this.queueAuthority = options.queueAuthority;
 		this.log = options.log ?? ___CreateLogger("workflow-guard");
+	}
+
+	/** Declare a reviewed task for transaction-bound admission without installing a local handler. */
+	declare(declaration: IWorkflowTaskDeclaration): void
+	{
+		this._RequireTaskPolicy(declaration.taskName);
+		this.execution.declare(declaration);
 	}
 
 	/**

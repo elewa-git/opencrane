@@ -34,13 +34,18 @@ export enum WorkflowTaskStates
 	Cancelled = "cancelled",
 }
 
-/** One registered task handler and its stable task name. */
-export interface IWorkflowTaskDefinition<TInput, TResult>
+/** One reviewed task name and retry policy that a process may admit without hosting its handler. */
+export interface IWorkflowTaskDeclaration
 {
 	/** Stable engine-neutral name used by callers to select this task handler. */
 	readonly taskName: string;
 	/** Reviewed attempt limit and delay policy applied whenever the handler asks for a retry. */
 	readonly retryPolicy?: IWorkflowTaskRetryPolicy;
+}
+
+/** One locally registered task handler whose declaration already permits admission. */
+export interface IWorkflowTaskDefinition<TInput, TResult> extends IWorkflowTaskDeclaration
+{
 	/** Runs the task with replay-safe context operations supplied by the execution engine. */
 	readonly run: IWorkflowTaskRunner<TInput, TResult>;
 }
@@ -215,6 +220,8 @@ export interface IWorkflowTaskContext
  */
 export interface IWorkflowEngine
 {
+	/** Declare a reviewed task that this process may admit without registering a local handler. */
+	declare(declaration: IWorkflowTaskDeclaration): void;
 	/** Register a task handler before any caller admits tasks with its name. */
 	register<TInput, TResult>(definition: IWorkflowTaskDefinition<TInput, TResult>): void;
 	/** Admit a task through the caller's transaction, so task admission shares its commit decision. */
@@ -244,6 +251,17 @@ export class WorkflowTaskNotRegisteredError extends WorkflowError
 	{
 		super(`No workflow task is registered for ${taskName}`);
 		this.name = "WorkflowTaskNotRegisteredError";
+	}
+}
+
+/** Error raised when a caller admits a task that no reviewed declaration permits. */
+export class WorkflowTaskNotDeclaredError extends WorkflowError
+{
+	/** Creates an error that reports the missing reviewed task declaration. */
+	constructor(taskName: string)
+	{
+		super(`No workflow task is declared for ${taskName}`);
+		this.name = "WorkflowTaskNotDeclaredError";
 	}
 }
 
