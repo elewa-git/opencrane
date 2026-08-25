@@ -37,6 +37,8 @@ function _Authority(response: Response)
 	const fetch = vi.fn().mockResolvedValue(response);
 	const authority = __CreateHttpSkillAuthoringValidationControllerAuthority({
 		openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:8081",
+		serverServiceName: "opencrane-server",
+		serverNamespace: "silo-a",
 		tokenPath: "/var/run/opencrane/tokens/opencrane.token",
 		requestTimeoutMilliseconds: 1_000,
 		fetch,
@@ -47,6 +49,20 @@ function _Authority(response: Response)
 
 describe("skill authoring validation HTTP authority", function _DescribeHttpSkillAuthoringValidationAuthority()
 {
+	it("rejects an origin outside the configured in-cluster server Service", function _RejectsUntrustedOrigin()
+	{
+		expect(function _CreateUntrustedAuthority()
+		{
+			__CreateHttpSkillAuthoringValidationControllerAuthority({
+				openCraneInternalUrl: "http://attacker.invalid",
+				serverServiceName: "opencrane-server",
+				serverNamespace: "silo-a",
+				tokenPath: "/var/run/opencrane/tokens/opencrane.token",
+				requestTimeoutMilliseconds: 1_000,
+			});
+		}).toThrow(/one in-cluster HTTP origin/);
+	});
+
 	it("claims only the record returned for the requested validation and durable task", async function _Claims()
 	{
 		const { authority, fetch } = _Authority(Response.json(_Record()));

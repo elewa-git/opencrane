@@ -97,6 +97,7 @@ outside the app root.
 ## Runtime & config
 
 - `OPENCRANE_INTERNAL_URL` — same-silo internal OpenCrane origin; Helm derives it from the release.
+- `OPENCRANE_SERVER_SERVICE_NAME` — exact same-silo OpenCrane Service allowed to receive the controller token.
 - `OPENCRANE_CONTROLLER_TOKEN_PATH` — rotating `opencrane-agent-controller` audience token file.
 - `DATABASE_URL` — same-silo database connection used only by the durable validation worker.
 - `OPENCRANE_SILO_ID` — the silo whose saved validation tasks this controller may execute.

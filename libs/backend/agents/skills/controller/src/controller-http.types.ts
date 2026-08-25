@@ -9,6 +9,10 @@ export interface SkillAuthoringValidationControllerHttpAuthorityOptions
 {
 	/** Internal OpenCrane origin with no path, query, or credentials. */
 	readonly openCraneInternalUrl: string;
+	/** Kubernetes Service name that owns the same-silo OpenCrane controller API. */
+	readonly serverServiceName: string;
+	/** Kubernetes namespace that owns the same-silo OpenCrane controller API. */
+	readonly serverNamespace: string;
 	/** Absolute path of the rotating projected controller token. */
 	readonly tokenPath: string;
 	/** Hard timeout for one internal server request. */

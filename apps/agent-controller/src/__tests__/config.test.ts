@@ -55,7 +55,7 @@ function _McpbValidatorProfileJson(): string
 /** Return the minimal complete process environment. */
 function _Environment(): NodeJS.ProcessEnv
 {
-	return { OPENCRANE_INTERNAL_URL: "http://opencrane-server.silo-a.svc.cluster.local:3001", OPENCRANE_CONTROLLER_TOKEN_PATH: "/var/run/opencrane/tokens/opencrane.token", DATABASE_URL: "postgresql://opencrane:test@localhost:5432/opencrane", OPENCRANE_SILO_ID: "silo-a", AGENT_CONTROLLER_POLL_INTERVAL_MS: "1000", AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson(), AGENT_CONTROLLER_SKILL_AUTHORING_VALIDATION_PROFILE_JSON: _SkillAuthoringValidationProfileJson(), AGENT_CONTROLLER_MCPB_VALIDATOR_PROFILE_JSON: _McpbValidatorProfileJson() };
+	return { OPENCRANE_INTERNAL_URL: "http://opencrane-server.silo-a.svc.cluster.local:3001", OPENCRANE_SERVER_SERVICE_NAME: "opencrane-server", OPENCRANE_CONTROLLER_TOKEN_PATH: "/var/run/opencrane/tokens/opencrane.token", DATABASE_URL: "postgresql://opencrane:test@localhost:5432/opencrane", OPENCRANE_SILO_ID: "silo-a", AGENT_CONTROLLER_POLL_INTERVAL_MS: "1000", AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson(), AGENT_CONTROLLER_SKILL_AUTHORING_VALIDATION_PROFILE_JSON: _SkillAuthoringValidationProfileJson(), AGENT_CONTROLLER_MCPB_VALIDATOR_PROFILE_JSON: _McpbValidatorProfileJson() };
 }
 
 describe("agent-controller process config", function _Suite()
@@ -68,6 +68,7 @@ describe("agent-controller process config", function _Suite()
 		expect(config.profiles["managed-default"]?.serviceAccountName).toBe("managed-agent-runtime-default");
 		expect(config.profiles["personal-default"]?.serverNamespace).toBe("silo-a");
 		expect(config.controllerTokenPath).toBe("/var/run/opencrane/tokens/opencrane.token");
+		expect(config.openCraneServerServiceName).toBe("opencrane-server");
 		expect(config.requestTimeoutMilliseconds).toBe(10_000);
 		expect(config.outboxPruneIntervalMilliseconds).toBe(3_600_000);
 		expect(config.profiles["personal-default"]?.serviceAccountName).toBe("agent-runtime-default");

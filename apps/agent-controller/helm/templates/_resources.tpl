@@ -64,6 +64,7 @@
 {{- fail "managedAgentRuntimePlane.managedAgentRuntime.serviceAccountName must be a bounded managed-agent-runtime-* identity" -}}
 {{- end -}}
 {{- $openCraneInternalUrl := default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) .Values.agentController.openCraneInternalUrl -}}
+{{- $openCraneServerServiceName := printf "%s-opencrane-server" (include "opencrane.fullname" .) -}}
 {{- $runtimeStreamUrl := default (printf "%s/api/internal/agent-runtime" $openCraneInternalUrl) .Values.agentController.runtimeProfile.runtimeStreamUrl -}}
 {{- $skillBootstrapUrl := printf "http://%s-opencrane-server.%s.svc.cluster.local:%v/api/internal/agent-runtime" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
 {{- $runtimeLiteLlmUrl := printf "http://%s-litellm.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.litellm.service.port -}}
@@ -326,6 +327,8 @@ spec:
           env:
             - name: OPENCRANE_INTERNAL_URL
               value: {{ $openCraneInternalUrl | quote }}
+            - name: OPENCRANE_SERVER_SERVICE_NAME
+              value: {{ $openCraneServerServiceName | quote }}
             - name: OPENCRANE_CONTROLLER_TOKEN_PATH
               value: /var/run/opencrane/tokens/opencrane.token
             {{- include "opencrane.clustertenantManagerDatabaseEnv" . | nindent 12 }}

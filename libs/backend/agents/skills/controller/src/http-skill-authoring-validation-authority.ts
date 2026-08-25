@@ -27,11 +27,22 @@ function _CreateTokenReader(path: string): SkillAuthoringValidationControllerTok
 	};
 }
 
-/** Requires the in-cluster origin that owns the controller-only API. */
-function _BaseUrl(value: string): URL
+/** Requires one bounded Kubernetes DNS label used to construct the trusted server hostname. */
+function _KubernetesName(value: string, name: string): string
+{
+	if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/u.test(value) || value.length > 63)
+	{
+		throw new Error(`${name} must be one Kubernetes DNS label`);
+	}
+	return value;
+}
+
+/** Requires the exact in-cluster server origin before the adapter reads a controller token. */
+function _BaseUrl(value: string, serverServiceName: string, serverNamespace: string): URL
 {
 	const parsed = URL.parse(value);
-	if (!parsed || parsed.protocol !== "http:" || parsed.pathname !== "/" || parsed.search !== "" || parsed.hash !== "" || parsed.username !== "" || parsed.password !== "")
+	const expectedHostname = `${_KubernetesName(serverServiceName, "serverServiceName")}.${_KubernetesName(serverNamespace, "serverNamespace")}.svc.cluster.local`;
+	if (!parsed || parsed.protocol !== "http:" || parsed.hostname !== expectedHostname || parsed.pathname !== "/" || parsed.search !== "" || parsed.hash !== "" || parsed.username !== "" || parsed.password !== "")
 	{
 		throw new Error("OPENCRANE_INTERNAL_URL must be one in-cluster HTTP origin with no path or credentials");
 	}
@@ -120,7 +131,7 @@ function _ValidationId(value: string): string
  */
 export function __CreateHttpSkillAuthoringValidationControllerAuthority(options: SkillAuthoringValidationControllerHttpAuthorityOptions): SkillAuthoringValidationControllerAuthority
 {
-	const baseUrl = _BaseUrl(options.openCraneInternalUrl);
+	const baseUrl = _BaseUrl(options.openCraneInternalUrl, options.serverServiceName, options.serverNamespace);
 	if (!isAbsolute(options.tokenPath) || !Number.isSafeInteger(options.requestTimeoutMilliseconds) || options.requestTimeoutMilliseconds < 1_000 || options.requestTimeoutMilliseconds > 60_000)
 	{
 		throw new Error("skill authoring validation HTTP authority requires an absolute token path and 1-60s timeout");

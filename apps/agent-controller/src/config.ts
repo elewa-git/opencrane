@@ -43,6 +43,7 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Agent
 	const mcpbValidatorProfile = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_MCPB_VALIDATOR_PROFILE_JSON"), "AGENT_CONTROLLER_MCPB_VALIDATOR_PROFILE_JSON", __ValidateMcpbValidationControllerProfile);
 	return {
 		openCraneInternalUrl: _Required(environment, "OPENCRANE_INTERNAL_URL"),
+		openCraneServerServiceName: _Required(environment, "OPENCRANE_SERVER_SERVICE_NAME"),
 		controllerTokenPath,
 		workflowDatabaseUrl: _Required(environment, "DATABASE_URL"),
 		workflowDatabasePoolSize: _Integer(environment, "AGENT_CONTROLLER_WORKFLOW_DATABASE_POOL_SIZE", 2, 1, 20),
