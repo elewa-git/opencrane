@@ -52,15 +52,17 @@ requirements.
 
 ### Developer workflow — issue #684
 
-**Tier 1 built on `local-dev-workflow`:** plain `npm run serve:opencrane-ui` selects a coherent
+**Tier 1 built on `local-dev-workflow`:** plain `npm run serve:opencrane-ui` starts a coherent
 frontend-only onboarding and chat profile. Persona approval, bootstrap chat, onboarding history,
 normal conversations, AG-UI run progress, files, approvals, and child Agent threads run against one
 disposable in-memory lifecycle; Angular and native API tripwires reject an omitted live binding.
 Build-time provider and route replacements keep local fixtures out of live bundles and leave
-unsupported administration/settings/invitation routes unmounted in Tier 1. Storybook
-retains the detailed component-state catalogue, the profile uses the reviewed production survey and
-one Commander/Guardian first-session path without reproducing backend scoring, and allowlisted URL
-scenarios cover slow, retry, reconnecting, failed-run, and access-change paths.
+unsupported administration/settings/invitation routes unmounted in Tier 1. Plain serve also starts
+Storybook and its Playwright visual checks. The profile uses the reviewed production survey and one
+selectable Commander, Catalyst, Anchor, or Analyst Guardian first-session path without reproducing
+backend scoring; an explicit configuration persists the archetype in browser storage and an unset
+preference defaults to Commander. Allowlisted URL scenarios cover slow, retry, reconnecting,
+failed-run, and access-change paths.
 
 Tier 2 will branch from `local-dev-workflow` for a frontend plus real-backend Agent-chat profile.
 Tier 3 will branch from the latest completed tier for Kubernetes and full infrastructure validation.

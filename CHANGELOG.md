@@ -27,14 +27,15 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 ### Added
 
 - **Frontend developers can now exercise onboarding and chat locally without a backend or
-  infrastructure stack.** Plain `npm run serve:opencrane-ui` selects one coherent browser-only
+  infrastructure stack.** Plain `npm run serve:opencrane-ui` starts one coherent browser-only
   profile for persona approval, first chat, conversations, Agent-run progress, files, approvals,
   and child Agent threads, with deterministic slow, retry, reconnect, failed-run, and access-change
   scenarios plus Angular and native-API tripwires for missed live bindings. Build-time profile
   replacement keeps those fixtures out of production and omits backend-owned routes locally. Local
-  onboarding follows one reviewed
-  production Commander/Guardian survey and first-session path while leaving persona scoring to the
-  backend. The real-backend workflow remains an explicit `development-live` configuration.
+  onboarding can follow the reviewed Commander, Catalyst, Anchor, or Analyst Guardian path; explicit
+  Nx configurations save the choice in browser storage while an unset profile defaults to Commander.
+  The same command starts Storybook and its Playwright visual pass, while the real-backend workflow
+  remains an isolated `development-live` configuration.
 
 - **Org admins can now model departments, teams, and projects as one hierarchy of groups.** Groups
   expose an optional parent, direct membership, and explicit `External` or `Local` authority;
