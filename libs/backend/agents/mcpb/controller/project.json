@@ -1,0 +1,11 @@
+{
+  "name": "backend-agents-mcpb-controller",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/agents/mcpb/controller/src",
+  "tags": ["type:lib", "layer:infra", "scope:mcpb-controller"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/agents/mcpb/controller" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/agents/mcpb/controller" } }
+  }
+}

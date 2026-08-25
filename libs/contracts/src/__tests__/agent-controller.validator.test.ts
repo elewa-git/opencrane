@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ___ParseAgentControllerSkillWorkloadAssignmentCommand, ___ParseAgentControllerSkillWorkloadAssignmentResult, ___ParseAgentControllerSkillWorkloadClaim, ___ParseAgentControllerSkillWorkloadPodRegistrationCommand, ___ParseAgentControllerSkillWorkloadPodRegistrationResult, ___ParseAgentControllerSkillWorkloadReleaseClaim, ___ParseAgentControllerSkillWorkloadReleaseCommand, ___ParseAgentControllerSkillWorkloadReleaseResult } from "../agent-controller-skill-workload.validator";
 import { ___ParseAgentControllerMcpbValidationAssignmentCommand, ___ParseAgentControllerMcpbValidationAssignmentResult, ___ParseAgentControllerMcpbValidationClaim } from "../agent-controller-mcpb-validation.validator";
+import { __CreateMcpbValidatorBootstrapReference, __IsMcpbValidatorBootstrapReference } from "../mcpb-validator-bootstrap-reference";
 import { ___ParseAgentControllerOutboxPrunedCount, ___ParseAgentControllerRunAttemptAssignmentCommand, ___ParseAgentControllerRunAttemptAssignmentResult, ___ParseAgentControllerRunAttemptClaim, ___ParseAgentControllerRunWorkloadRegistrationCommand, ___ParseAgentControllerRunWorkloadRegistrationResult, ___ParseAgentControllerRunWorkloadReleaseClaim } from "../agent-controller.validator";
 
 /** Return one valid runtime attempt claim with optional untrusted response extensions. */
@@ -80,6 +81,15 @@ describe("agent-controller contract validators", function _DescribeValidators()
 		expect(___ParseAgentControllerMcpbValidationAssignmentCommand({ ...assignment, callerSelected: "workload-2" })).toBeNull();
 		expect(___ParseAgentControllerMcpbValidationAssignmentResult({ outcome: "assigned", workloadId: "workload-1", workloadUid: "job-1" }, "workload-1", assignment).outcome).toBe("assigned");
 		expect(function _MismatchedMcpbAssignment() { ___ParseAgentControllerMcpbValidationAssignmentResult({ outcome: "assigned", workloadId: "workload-2", workloadUid: "job-1" }, "workload-1", assignment); }).toThrow("mismatched MCP bundle validation assignment result");
+	});
+
+	it("creates opaque deterministic MCP bundle validator references", function _CreatesMcpbValidatorReference()
+	{
+		const reference = __CreateMcpbValidatorBootstrapReference("workload-1");
+		expect(reference).toMatch(/^mcpb-validator-v1_[a-f0-9]{64}$/u);
+		expect(__CreateMcpbValidatorBootstrapReference("workload-1")).toBe(reference);
+		expect(__IsMcpbValidatorBootstrapReference(reference)).toBe(true);
+		expect(__IsMcpbValidatorBootstrapReference("workload-1")).toBe(false);
 	});
 
 	it("validates every governed skill mutation command with strict schemas", function _ValidatesSkillCommands()

@@ -125,6 +125,9 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   governed-skill controller and the server authority. It creates the opaque Job reference, stores
   only its SHA-256 hash, and rejects any other wire shape; it is not a user credential or a general
   hashing API.
+- `__CreateMcpbValidatorBootstrapReference` and `__IsMcpbValidatorBootstrapReference` — the
+  deterministic opaque reference shared by the MCP bundle controller and validator worker. The Job
+  carries this reference but never the validation identifier it came from.
 - `ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE`,
   `ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME`, `ArtifactPreprocessorJobClaim`, and the
   claim/failure commands — the narrow broker protocol for the isolated PDF converter. These DTOs

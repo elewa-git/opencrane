@@ -30,6 +30,7 @@ export type * from "./agent-controller-skill-workload.types";
 export * from "./agent-controller-skill-workload.validator";
 export type * from "./agent-controller-mcpb-validation.types";
 export * from "./agent-controller-mcpb-validation.validator";
+export * from "./mcpb-validator-bootstrap-reference";
 export * from "./agent-controller.types";
 // Keep sibling-only `_...` wire schemas and parsers out of the cross-package public surface.
 export { ___IsAgentControllerIdentifier, ___IsEmptyAgentControllerCommand } from "./agent-controller-wire.validator";
