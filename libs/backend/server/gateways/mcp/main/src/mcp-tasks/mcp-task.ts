@@ -51,7 +51,7 @@ async function _RecordInputRequired(options: McpTaskWorkflowOptions, input: McpT
 	});
 }
 
-/** Store the one bounded result returned by this first MCP task lifecycle. */
+/** Stores the result after the workflow receives the client's accepted answer. */
 async function _RecordCompleted(options: McpTaskWorkflowOptions, input: McpTaskWorkflowInput, response: McpTaskInputResponse): Promise<string>
 {
 	return await _RetryablePersistence(async function _RecordCompletedWithRetry(): Promise<string>
@@ -73,7 +73,7 @@ function _InputEventName(input: McpTaskWorkflowInput): string
 	return `workflows:mcp-task-input:${digest}`;
 }
 
-/** Wait for client input and save its exact bounded response once. */
+/** Advances a saved task from input request to its recorded result. */
 async function _Run(context: IWorkflowTaskContext, options: McpTaskWorkflowOptions, input: McpTaskWorkflowInput): Promise<string>
 {
 	const task = await _Load(options, input);
@@ -98,20 +98,43 @@ async function _Run(context: IWorkflowTaskContext, options: McpTaskWorkflowOptio
 	});
 }
 
-/** Derive a stable workflow key without exposing MCP call values in engine logs. */
+/**
+ * Derives the workflow idempotency key from the saved task coordinates.
+ *
+ * The engine records this key, so hashing the silo, task ID, and call digest keeps client call
+ * values out of engine logs while making a repeated admission select the same workflow task.
+ *
+ * @returns The opaque engine idempotency key for this task.
+ */
 export function __McpTaskWorkflowKey(input: McpTaskWorkflowInput): string
 {
 	const digest = createHash("sha256").update(JSON.stringify([input.siloId, input.mcpTaskId, input.callDigest])).digest("hex");
 	return `workflows:mcp-task:${digest}`;
 }
 
-/** Return the engine event name used when a client submits an input response. */
+/**
+ * Derives the event name that wakes one saved task after input is accepted.
+ *
+ * The name uses the same task coordinates as the workflow key so two task calls cannot share an
+ * event channel, and it keeps product identifiers out of engine logs.
+ *
+ * @returns The opaque event name passed to the workflow engine.
+ */
 export function __McpTaskInputEventName(input: McpTaskWorkflowInput): string
 {
 	return _InputEventName(input);
 }
 
-/** Register the saved MCP task lifecycle and return its transaction-bound admission API. */
+/**
+ * Registers the saved MCP task lifecycle and returns its admission API.
+ *
+ * The handler checkpoints the input-required transition, then records an accepted answer before it
+ * returns the final result. A replay sees a completed record or saved answer instead of waiting for
+ * a duplicate event; cancellation and failure end the workflow without further work.
+ *
+ * @returns An API that admits a task with its product write and delivers accepted input.
+ * @throws WorkflowTaskTerminalError when the saved task is unavailable, cancelled, failed, or invalid.
+ */
 export function __CreateMcpTaskWorkflow(options: McpTaskWorkflowOptions): McpTaskWorkflow
 {
 	options.execution.register({

@@ -1,0 +1,8 @@
+{
+  "fromSchemaVersion": "0.9.3",
+  "toSchemaVersion": "0.9.3",
+  "sqlSha256": "d0f8ae882e0b5744543aa386a7cae29e86476fcaad572e631140d393a2fda3db",
+  "owner": "apps/opencrane",
+  "sourceTargetBaselineSha256": "cc19d4fc620e7d6906467913169cfc2b771481dadd73a484f6d201e2f3f5d05a",
+  "targetBaselineSha256": "5cf59dcd7bb3cb1812f79711bfd00310714729353db97dd1af8a422305e94438"
+}

@@ -3418,7 +3418,6 @@ DROP TYPE "McpConnectionStatus_legacy";
 CREATE TYPE "McpEraProbeStatus" AS ENUM ('not-required', 'pending', 'accepted', 'rejected');
 CREATE TYPE "McpbValidationState" AS ENUM ('pending', 'verified', 'rejected');
 CREATE TYPE "McpbValidationWorkloadState" AS ENUM ('pending', 'claimed', 'assigned');
-CREATE TYPE "McpTaskState" AS ENUM ('working', 'input_required', 'completed', 'cancelled', 'failed');
 
 CREATE TEMPORARY TABLE "_iam_group_reference" (
     "reference" TEXT NOT NULL,
@@ -3880,52 +3879,6 @@ $$;
 CREATE TRIGGER "mcpb_validation_workloads_live_claim_assignment"
     BEFORE UPDATE OF "state", "claimed_at", "claim_expires_at", "delivery_count" ON "mcpb_validation_workloads"
     FOR EACH ROW EXECUTE FUNCTION "enforce_mcpb_validation_workload_assignment"();
-
-CREATE TABLE "mcp_task_claims" (
-    "silo_id" TEXT NOT NULL,
-    "identity_digest" TEXT NOT NULL,
-    "touched_at" TIMESTAMP(3) NOT NULL,
-    CONSTRAINT "mcp_task_claims_pkey" PRIMARY KEY ("silo_id", "identity_digest")
-);
-ALTER TABLE "mcp_task_claims" ADD CONSTRAINT "mcp_task_claims_identity_check" CHECK (
-    btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
-);
-
-CREATE TABLE "mcp_tasks" (
-    "id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "principal_id" TEXT NOT NULL,
-    "request_key_digest" TEXT NOT NULL,
-    "call_digest" TEXT NOT NULL,
-    "tool_name" TEXT NOT NULL,
-    "task_id" TEXT,
-    "task_name" TEXT,
-    "task_key" TEXT,
-    "state" "McpTaskState" NOT NULL DEFAULT 'working',
-    "input_request" JSONB,
-    "input_response" JSONB,
-    "result" TEXT,
-    "failure_code" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-    CONSTRAINT "mcp_tasks_pkey" PRIMARY KEY ("id")
-);
-CREATE UNIQUE INDEX "mcp_tasks_task_id_key" ON "mcp_tasks"("task_id");
-CREATE UNIQUE INDEX "mcp_tasks_silo_id_request_key_digest_key" ON "mcp_tasks"("silo_id", "request_key_digest");
-CREATE UNIQUE INDEX "mcp_tasks_silo_id_task_key_key" ON "mcp_tasks"("silo_id", "task_key");
-CREATE INDEX "mcp_tasks_silo_id_principal_id_state_created_at_idx" ON "mcp_tasks"("silo_id", "principal_id", "state", "created_at");
-ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_identity_check" CHECK (
-    btrim("silo_id") <> '' AND btrim("principal_id") <> '' AND btrim("tool_name") <> '' AND
-    "request_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "call_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-    "input_request" IS NOT NULL
-);
-ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_state_check" CHECK (
-    ("state" = 'working' AND "result" IS NULL AND "failure_code" IS NULL)
-    OR ("state" = 'input_required' AND "result" IS NULL AND "failure_code" IS NULL)
-    OR ("state" = 'completed' AND "input_response" IS NOT NULL AND btrim("result") <> '' AND "failure_code" IS NULL)
-    OR ("state" = 'cancelled' AND "result" IS NULL)
-    OR ("state" = 'failed' AND "result" IS NULL AND btrim("failure_code") <> '')
-);
 ALTER TABLE "mcpb_validation_workloads" ADD CONSTRAINT "mcpb_validation_workloads_validation_id_fkey" FOREIGN KEY ("validation_id") REFERENCES "mcpb_validations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_registration_digest_check" CHECK (
     ("registration_key_digest" IS NULL AND "registration_digest" IS NULL)

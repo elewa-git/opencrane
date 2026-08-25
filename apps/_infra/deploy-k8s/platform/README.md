@@ -58,6 +58,10 @@ prepares `pg_cron` when that migration needs it, runs the bounded migration Job,
 the ordinary application rollout. A failed Job returns its failure directly. It does not create a
 backup, inspect the existing schema, pause application writes, or restore a previous release.
 
+A reviewed `<version>-to-<version>` repair runs after the ordinary migration, or by itself when a
+database already has that version. The repair checks the recorded predecessor it was written for and
+saves a separate completion record, so a later deploy does not run the same repair again.
+
 Operational backup and restore configuration remains available in the PostgreSQL chart, but it is not
 a condition for running a migration. Deferred migration hardening work is tracked in issue #699.
 

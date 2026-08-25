@@ -35,8 +35,3 @@ Each validation pins one immutable artifact revision and stores only its manifes
 trusted-signature decision. Its linked workload records the admitted Absurd task. This transition
 does not mean that a controller has claimed or assigned a worker. The MCP rows hold the result shown
 to administrators; Absurd keeps the task attempts and checkpoints in its own tables.
-
-This transition also adds MCP task records for asynchronous tool calls. A task saves the caller,
-tool name, request digest, requested input, and admitted Absurd task together. It later saves whether
-the task is working, waiting for input, completed, cancelled, or failed. The saved task does not run a
-tool by itself: the Skills workflow added later will supply the tool-specific work.

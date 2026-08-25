@@ -39,21 +39,28 @@ export interface McpTaskWorkflowBinding
 	readonly taskKey: string;
 }
 
-/** Transaction-scoped persistence operations for the MCP task lifecycle. */
+/**
+ * Provides the product writes and reads for one MCP task transaction.
+ *
+ * Implementations keep a retry tied to the same immutable call, scope client reads to the caller's
+ * silo and principal, and preserve an accepted input before the workflow is notified. `null` always
+ * means the requested task is unavailable or conflicts with saved facts, so the caller must not
+ * infer another principal's task state from it.
+ */
 export interface McpTaskRepository
 {
-	/** Create one task or return the same task when all immutable call facts match. */
+	/** Creates a task or returns its retry when every immutable call fact still matches. */
 	createOrFind(submission: McpTaskSubmissionRecord): Promise<McpTaskCreateResult | null>;
-	/** Bind the admitted workflow task and reject a retry with different task facts. */
+	/** Binds the admitted engine task, or rejects a retry that names different workflow facts. */
 	ensureWorkflow(siloId: string, taskId: string, binding: McpTaskWorkflowBinding): Promise<McpTaskRecord | null>;
-	/** Find one task only inside the authenticated caller's silo and principal. */
+	/** Finds a task for its authenticated owner without exposing another caller's record. */
 	find(siloId: string, principalId: string, taskId: string): Promise<McpTaskRecord | null>;
-	/** Load one exact task for workflow replay. */
+	/** Loads the task whose saved call digest still matches the replayed workflow input. */
 	load(siloId: string, taskId: string, callDigest: string): Promise<McpTaskRecord | null>;
-	/** Mark a working task as waiting for its saved input request. */
+	/** Moves a working task to `InputRequired` without replacing a saved answer or final state. */
 	recordInputRequired(siloId: string, taskId: string, callDigest: string): Promise<McpTaskRecord | null>;
-	/** Save a client answer only when it satisfies the saved input request. */
+	/** Saves an answer when it matches the task request and leaves a repeated matching answer unchanged. */
 	recordInput(siloId: string, principalId: string, taskId: string, response: McpTaskInputResponse): Promise<McpTaskRecord | null>;
-	/** Save the bounded final result after the workflow has received the input event. */
+	/** Saves the final result once after the workflow receives the accepted input event. */
 	recordCompleted(siloId: string, taskId: string, callDigest: string, result: string): Promise<McpTaskRecord | null>;
 }

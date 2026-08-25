@@ -26,6 +26,10 @@ const groupHierarchyTransitionRoot = join(migrationRoot, "0.9.0-to-0.9.3");
 const groupHierarchySql = readFileSync(join(groupHierarchyTransitionRoot, "migration.sql"), "utf8");
 const groupHierarchyManifest = JSON.parse(readFileSync(join(groupHierarchyTransitionRoot, "manifest.json"), "utf8"));
 const groupHierarchySqlDigest = createHash("sha256").update(groupHierarchySql).digest("hex");
+const mcpTaskRepairTransitionRoot = join(migrationRoot, "0.9.3-to-0.9.3");
+const mcpTaskRepairSql = readFileSync(join(mcpTaskRepairTransitionRoot, "migration.sql"), "utf8");
+const mcpTaskRepairManifest = JSON.parse(readFileSync(join(mcpTaskRepairTransitionRoot, "manifest.json"), "utf8"));
+const mcpTaskRepairSqlDigest = createHash("sha256").update(mcpTaskRepairSql).digest("hex");
 
 function requireContract(condition, message)
 {
@@ -258,7 +262,8 @@ requireContract(groupHierarchyManifest.fromSchemaVersion === "0.9.0", "group-hie
 requireContract(groupHierarchyManifest.toSchemaVersion === "0.9.3", "group-hierarchy migration target version must be exact");
 requireContract(groupHierarchyManifest.sqlSha256 === groupHierarchySqlDigest, "group-hierarchy migration SQL digest must match its manifest");
 requireContract(groupHierarchyManifest.sourceTargetBaselineSha256 === organizationManifest.targetBaselineSha256, "0.9.3 migration must name the immutable 0.9.0 source baseline");
-requireContract(groupHierarchyManifest.targetBaselineSha256 === targetDigest, "group-hierarchy migration target digest must match the clean baseline");
+requireContract(groupHierarchyManifest.targetBaselineSha256 === "cc19d4fc620e7d6906467913169cfc2b771481dadd73a484f6d201e2f3f5d05a", "0.9.3 migration manifest must name the baseline recorded by its database history");
+requireContract(mcpTaskRepairManifest.sourceTargetBaselineSha256 === "cc19d4fc620e7d6906467913169cfc2b771481dadd73a484f6d201e2f3f5d05a", "MCP task repair must name the 0.9.3 baseline recorded by the released migration");
 requireContract(groupHierarchyManifest.privilegedExtension === "pg_cron", "0.9.3 migration must bind its reviewed privileged pg_cron prerequisite");
 requireContract(groupHierarchySql.includes("pg_advisory_lock"), "group-hierarchy migration must acquire the session migration lock");
 requireContract(groupHierarchySql.includes("pg_advisory_xact_lock"), "group-hierarchy migration must serialize hierarchy mutation");
@@ -277,6 +282,18 @@ for (const source of [targetBaseline, groupHierarchySql])
 }
 requireContract(groupHierarchySql.includes("COMMIT;\nSELECT pg_advisory_unlock"), "group-hierarchy migration must commit before releasing its session lock");
 requireContract(groupHierarchySql.trimEnd().endsWith("\\endif"), "group-hierarchy migration retry branch must remain explicit");
+requireContract(mcpTaskRepairManifest.fromSchemaVersion === "0.9.3" && mcpTaskRepairManifest.toSchemaVersion === "0.9.3", "MCP task repair must stay inside the 0.9.3 schema version");
+requireContract(mcpTaskRepairManifest.sqlSha256 === mcpTaskRepairSqlDigest, "MCP task repair SQL digest must match its manifest");
+requireContract(mcpTaskRepairManifest.targetBaselineSha256 === targetDigest, "MCP task repair must reach the clean baseline");
+requireContract(mcpTaskRepairSql.includes("CREATE TYPE \"McpTaskState\""), "MCP task repair must add the durable task state vocabulary");
+requireContract(mcpTaskRepairSql.includes('CREATE TABLE IF NOT EXISTS "mcp_task_claims"'), "MCP task repair must add caller claim records idempotently");
+requireContract(mcpTaskRepairSql.includes('CREATE TABLE IF NOT EXISTS "mcp_tasks"'), "MCP task repair must add durable MCP task records idempotently");
+requireContract(mcpTaskRepairSql.includes('CREATE UNIQUE INDEX IF NOT EXISTS "mcp_tasks_silo_id_request_key_digest_key"'), "MCP task repair must retain request idempotency");
+requireContract(mcpTaskRepairSql.includes('"opencrane_migrations"."repair_history"'), "MCP task repair must save its completion record");
+requireContract(mcpTaskRepairSql.includes('"target_baseline_sha256" = current_setting'), "MCP task repair must require the exact recorded predecessor");
+requireContract(mcpTaskRepairSql.includes("to_regclass('public.mcp_tasks') IS NOT NULL"), "MCP task repair must leave a clean fresh database unchanged");
+requireContract(mcpTaskRepairSql.includes("pg_advisory_xact_lock"), "MCP task repair must serialize its schema changes");
+requireContract(mcpTaskRepairSql.includes("COMMIT;\nSELECT pg_advisory_unlock"), "MCP task repair must commit before releasing its session lock");
 for (const [pattern, expected, description] of [
 	[/SELECT pg_advisory_lock\(/gu, 1, "one session migration-lock acquisition"],
 	[/CREATE TABLE IF NOT EXISTS "opencrane_migrations"\."schema_history"/gu, 1, "one schema-history authority"],

@@ -17,7 +17,17 @@ function _AssertSubmission(command: McpTaskSubmissionCommand): void
 		throw new Error("MCP task submission fields are invalid.");
 }
 
-/** Save one task and its workflow admission through the same database transaction. */
+/**
+ * Saves an asynchronous tool call and binds its workflow in the same database transaction.
+ *
+ * A repeated idempotency key returns the existing task only when the caller and immutable call
+ * digest match; otherwise `null` prevents the retry from changing another call. The focused
+ * lifecycle test proves that the task write, engine admission, and receipt binding share the
+ * product transaction.
+ *
+ * @returns The saved task, or `null` when a reused key conflicts with saved facts.
+ * @throws Error when a required submission field is blank or workflow binding conflicts.
+ */
 export async function submitMcpTask(unitOfWork: McpOperatorUnitOfWork, workflow: McpTaskWorkflow, caller: McpTaskCaller, command: McpTaskSubmissionCommand): Promise<McpTaskRecord | null>
 {
 	_AssertSubmission(command);
@@ -37,7 +47,14 @@ export async function submitMcpTask(unitOfWork: McpOperatorUnitOfWork, workflow:
 	});
 }
 
-/** Read one saved MCP task only for its authenticated caller. */
+/**
+ * Reads a saved task for the authenticated caller.
+ *
+ * The repository uses both silo and principal, so `null` covers a missing task and a task owned by
+ * someone else rather than disclosing which case occurred.
+ *
+ * @returns The caller's task, or `null` when it is unavailable to that caller.
+ */
 export async function getMcpTask(unitOfWork: McpOperatorUnitOfWork, caller: McpTaskCaller, taskId: string): Promise<McpTaskRecord | null>
 {
 	return await unitOfWork.execute(async function _Get(transaction): Promise<McpTaskRecord | null>
@@ -46,7 +63,16 @@ export async function getMcpTask(unitOfWork: McpOperatorUnitOfWork, caller: McpT
 	});
 }
 
-/** Save a matching input response before delivering it to the waiting workflow. */
+/**
+ * Saves a matching client response before emitting its workflow event.
+ *
+ * The saved response lets a workflow replay complete without waiting for a second event. `Accepted`
+ * means the event was delivered; `NotAvailable` does not disclose task ownership; and `Conflict`
+ * means the request or response differs from saved input.
+ *
+ * @returns The outcome the client must use to decide whether its input was accepted.
+ * @throws Error when the request identifier or response text is blank.
+ */
 export async function submitMcpTaskInput(unitOfWork: McpOperatorUnitOfWork, workflow: McpTaskWorkflow, caller: McpTaskCaller, taskId: string, response: McpTaskInputResponse): Promise<McpTaskInputSubmissionResult>
 {
 	if (response.requestId.trim().length === 0 || response.value.trim().length === 0)

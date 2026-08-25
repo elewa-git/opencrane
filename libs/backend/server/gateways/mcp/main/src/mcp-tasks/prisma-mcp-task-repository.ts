@@ -10,7 +10,7 @@ import type { McpTaskCreateResult, McpTaskRepository, McpTaskSubmissionRecord, M
 /** Product fields returned by every MCP task repository operation. */
 const _TASK_SELECT = { id: true, siloId: true, principalId: true, requestKeyDigest: true, callDigest: true, toolName: true, taskId: true, taskName: true, taskKey: true, state: true, inputRequest: true, inputResponse: true, result: true, failureCode: true } as const satisfies Prisma.McpTaskSelect;
 
-/** Prisma projection returned for the bounded MCP task selection. */
+/** Represents the fields selected for an MCP task repository operation. */
 type _TaskProjection = Prisma.McpTaskGetPayload<{ select: typeof _TASK_SELECT }>;
 
 /** Turn a request-key digest into a distinct claim identity. */
@@ -19,7 +19,7 @@ function _ClaimDigest(requestKeyDigest: string): string
 	return `sha256:${createHash("sha256").update(`mcp-task:${requestKeyDigest}`).digest("hex")}`;
 }
 
-/** Return one stored input request only when it has the exact bounded shape. */
+/** Returns a stored input request when its JSON value has the required fields. */
 function _InputRequest(value: Prisma.JsonValue | null): McpTaskInputRequest | null
 {
 	if (value === null || typeof value !== "object" || Array.isArray(value))
@@ -29,7 +29,7 @@ function _InputRequest(value: Prisma.JsonValue | null): McpTaskInputRequest | nu
 	return { requestId: value.requestId, message: value.message };
 }
 
-/** Return one stored input response only when it has the exact bounded shape. */
+/** Returns a stored input response when its JSON value has the required fields. */
 function _InputResponse(value: Prisma.JsonValue | null): McpTaskInputResponse | null
 {
 	if (value === null || typeof value !== "object" || Array.isArray(value))
@@ -55,7 +55,7 @@ function _State(value: McpTaskState): McpTaskStates
 	throw new Error("MCP task has an unknown state.");
 }
 
-/** Map one bounded Prisma record into the public MCP task contract. */
+/** Maps a selected Prisma record into the public MCP task contract. */
 function _Record(value: _TaskProjection): McpTaskRecord
 {
 	const inputRequest = _InputRequest(value.inputRequest);
@@ -69,7 +69,16 @@ function _Record(value: _TaskProjection): McpTaskRecord
 	return { id: value.id, siloId: value.siloId, principalId: value.principalId, callDigest: value.callDigest, toolName: value.toolName, state: _State(value.state), inputRequest, inputResponse, result: value.result, failureCode: value.failureCode, workflowTask: { taskId: value.taskId, taskName: value.taskName, idempotencyKey: value.taskKey } };
 }
 
-/** Transaction-scoped Prisma adapter for durable MCP task state. */
+/**
+ * Implements MCP task persistence within the Prisma transaction supplied by the unit of work.
+ *
+ * The adapter serializes callers that reuse a request key, verifies immutable task and workflow
+ * facts on replay, and returns no record when a caller cannot read or change it. The transaction
+ * owner constructs this adapter for every MCP operation; it must not be reused after that
+ * transaction finishes.
+ *
+ * @implements McpTaskRepository
+ */
 export class PrismaMcpTaskRepository implements McpTaskRepository
 {
 	/** Database transaction shared with task admission and product writes. */
@@ -78,7 +87,7 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 	/** Create an adapter bound to one existing database transaction. */
 	constructor(transaction: Prisma.TransactionClient) { this._transaction = transaction; }
 
-	/** Create one task or select the retry already claimed by the caller key. */
+	/** Creates a task or returns a retry after its claim serializes concurrent request-key use. */
 	async createOrFind(submission: McpTaskSubmissionRecord): Promise<McpTaskCreateResult | null>
 	{
 		await this._transaction.mcpTaskClaim.upsert({
@@ -97,7 +106,7 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 		return { created: true, task: _Record(task) };
 	}
 
-	/** Bind the task admitted by Absurd without allowing a later retry to replace it. */
+	/** Binds an admitted task while refusing a retry that would replace saved engine facts. */
 	async ensureWorkflow(siloId: string, taskId: string, binding: McpTaskWorkflowBinding): Promise<McpTaskRecord | null>
 	{
 		const existing = await this._transaction.mcpTask.findFirst({ where: { id: taskId, siloId }, select: _TASK_SELECT });
@@ -127,14 +136,14 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 		return task === null ? null : _Record(task);
 	}
 
-	/** Change a running task to input-required, preserving a replayed final state. */
+	/** Moves a working task to `InputRequired` without replacing a response saved by a replay. */
 	async recordInputRequired(siloId: string, taskId: string, callDigest: string): Promise<McpTaskRecord | null>
 	{
 		await this._transaction.mcpTask.updateMany({ where: { id: taskId, siloId, callDigest, state: McpTaskState.Working, inputResponse: { equals: Prisma.DbNull } }, data: { state: McpTaskState.InputRequired } });
 		return await this.load(siloId, taskId, callDigest);
 	}
 
-	/** Save the one answer that matches the task's request while it is waiting. */
+	/** Saves an answer that matches the waiting request and preserves an identical replay. */
 	async recordInput(siloId: string, principalId: string, taskId: string, response: McpTaskInputResponse): Promise<McpTaskRecord | null>
 	{
 		const task = await this._transaction.mcpTask.findFirst({ where: { id: taskId, siloId, principalId }, select: _TASK_SELECT });
@@ -159,7 +168,7 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 		return saved === null ? null : _Record(saved);
 	}
 
-	/** Store a completed result once and return the recorded winner after a replay race. */
+	/** Saves a completed result and returns the record that survived a replay race. */
 	async recordCompleted(siloId: string, taskId: string, callDigest: string, result: string): Promise<McpTaskRecord | null>
 	{
 		await this._transaction.mcpTask.updateMany({ where: { id: taskId, siloId, callDigest, state: { in: [McpTaskState.Working, McpTaskState.InputRequired] } }, data: { state: McpTaskState.Completed, result, failureCode: null } });

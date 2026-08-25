@@ -2,32 +2,44 @@ import type { IWorkflowEngine, IWorkflowTaskReceipt, IWorkflowTransaction } from
 
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
 
-/** Client-visible states for one asynchronous MCP tool call. */
+/**
+ * Describes the saved lifecycle of an asynchronous MCP tool call.
+ *
+ * These strings are mapped from `McpTaskState` in `mcp_tasks` and are returned in a task record,
+ * so changing one needs both a database migration and a client contract change. The workflow and
+ * input submission paths branch on them; an unknown database value makes the repository reject the
+ * record rather than inventing a client-visible state.
+ */
 export enum McpTaskStates
 {
-	/** The call has been accepted and its workflow still has work to do. */
+	/** The call is saved and the workflow has not yet asked the client for input. */
 	Working = "working",
-	/** The workflow cannot continue until its caller supplies the requested value. */
+	/** The workflow is waiting for the request in `inputRequest`; the client may submit its answer. */
 	InputRequired = "input_required",
-	/** The workflow stored its final result. */
+	/** The workflow saved `result`; this is terminal and the client reads the result instead of submitting input. */
 	Completed = "completed",
-	/** The caller cancelled the task before it stored a result. */
+	/** The caller cancelled the task before it saved a result; this is terminal. */
 	Cancelled = "cancelled",
-	/** The workflow ended with an MCP-visible failure. */
+	/** The workflow ended with `failureCode`; this is terminal. */
 	Failed = "failed",
 }
 
-/** Stable workflow task names registered for asynchronous MCP tool calls. */
+/**
+ * Names the workflow handlers registered for MCP task records.
+ *
+ * `taskName` is saved with an admitted task and checked on replay, so renaming a member would make
+ * a retry appear to be bound to a different workflow.
+ */
 export enum McpTaskTaskNames
 {
-	/** Waits for a client response, then stores the bounded result for one MCP tool call. */
+	/** The handler moves a call to `InputRequired`, waits for input, and records the final result. */
 	Call = "mcp-task.call",
 }
 
-/** Event names delivered to an MCP task workflow. */
+/** Names the engine events that the MCP task workflow accepts. */
 export enum McpTaskEvents
 {
-	/** Carries one accepted response for a saved input request. */
+	/** Carries an accepted response after the repository has saved it against the task request. */
 	InputSubmitted = "mcp-task.input-submitted",
 }
 
@@ -107,14 +119,20 @@ export interface McpTaskAdmission
 	readonly taskKey: string;
 }
 
-/** Result of accepting a client input response. */
+/**
+ * Tells a task-input caller whether the response reached the waiting workflow.
+ *
+ * The value is returned by `submitMcpTaskInput`, not stored in the database. Callers may treat
+ * `Accepted` as a successful handoff, while `NotAvailable` must reveal neither task existence nor
+ * ownership and `Conflict` tells the caller that its request or value differs from saved input.
+ */
 export enum McpTaskInputSubmissionOutcomes
 {
-	/** The response was saved and delivered to the waiting workflow. */
+	/** The repository saved the response and the workflow received its event. */
 	Accepted = "accepted",
-	/** The task is absent, belongs to another caller, or is not waiting for input. */
+	/** The task is absent, belongs to another caller, or cannot accept input now. */
 	NotAvailable = "not_available",
-	/** The response conflicts with the saved request or a previous answer. */
+	/** The request identifier or response value differs from the saved input. */
 	Conflict = "conflict",
 }
 
@@ -138,12 +156,18 @@ export interface McpTaskWorkflowInput
 	readonly callDigest: string;
 }
 
-/** Transaction-bound API that admits the saved MCP task workflow. */
+/**
+ * Admits and wakes the workflow bound to a saved MCP task.
+ *
+ * The submission flow admits the task in the product transaction, then saves the engine receipt so
+ * a replay cannot bind different workflow facts. Input is persisted before `deliverInput` emits its
+ * event, allowing a replayed workflow to use the saved answer.
+ */
 export interface McpTaskWorkflow
 {
-	/** Save or return the workflow task through the same database transaction as the product record. */
+	/** Saves or returns the workflow task through the transaction that created the product record. */
 	admit(transaction: IWorkflowTransaction, input: McpTaskWorkflowInput): Promise<McpTaskAdmission>;
-	/** Deliver one accepted client response to the workflow waiting for that task. */
+	/** Emits the event for a response that the repository has already accepted. */
 	deliverInput(task: IWorkflowTaskReceipt, input: McpTaskWorkflowInput, response: McpTaskInputResponse): Promise<void>;
 }
 

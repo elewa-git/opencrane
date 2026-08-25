@@ -24,6 +24,14 @@ fi
 
 grep -q 'DATABASE_MIGRATION_ROOT=' "$DEPLOY_SCRIPT"
 grep -q 'DATABASE_MIGRATION_ENABLED=true' "$DEPLOY_SCRIPT"
+grep -q 'DATABASE_REPAIR_ENABLED=false' "$DEPLOY_SCRIPT"
+grep -q 'DATABASE_REPAIR_ROOT=' "$DEPLOY_SCRIPT"
+grep -q 'DATABASE_REPAIR_ID="${DATABASE_TARGET_SCHEMA_VERSION}-to-${DATABASE_TARGET_SCHEMA_VERSION}"' "$DEPLOY_SCRIPT"
+grep -q 'DATABASE_MIGRATION_ID="$DATABASE_REPAIR_ID"' "$DEPLOY_SCRIPT"
+if rg -n 'DATABASE_SOURCE_SCHEMA_VERSION.*DATABASE_TARGET_SCHEMA_VERSION' "$DEPLOY_SCRIPT" | rg -q 'DATABASE_REPAIR'; then
+  echo "same-version repair is incorrectly limited to cross-version upgrades" >&2
+  exit 1
+fi
 grep -q -- '--from-release-version fresh is only valid when PostgreSQL has not been created.' "$DEPLOY_SCRIPT"
 grep -q 'Source release manifest' "$DEPLOY_SCRIPT"
 grep -q 'No reviewed database migration exists from schema' "$DEPLOY_SCRIPT"
