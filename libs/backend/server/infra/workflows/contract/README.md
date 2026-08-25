@@ -37,6 +37,33 @@ The important rule is that starting a workflow travels with the database change 
 This package does not own a database connection, the Absurd database tables, recurring schedules, or
 the server process that runs workers.
 
+### Planned 0.10.0 cutover
+
+The next release changes how this workflow path is deployed and how MCP bundles are admitted. This
+is a forward migration from 0.9.3 to 0.10.0. It does not alter, replace, or pretend to re-release
+the history already shipped in 0.9.3.
+
+```text
+  0.9.3 release state
+          │  forward migration
+          ▼
+  Prisma Migrate ──► dedicated migration Job ──► 0.10.0 schema
+  only record of database changes      │
+                                      ▼
+  OCI Image Layout ZIP admission ──► remote v2 era-probe workflow
+  MCP 2026-07-28 only                 │
+                                      ▼
+  retire MCPB routes, schema, and workers
+```
+
+**In this cutover:** [Prisma Migrate](../../../../../../docs/agents/versioning.md) is the only
+record of database changes, and the dedicated migration Job is the one-time Kubernetes task that
+runs those changes before the new release starts. An OCI (Open Container Initiative) Image Layout
+ZIP replaces MCPB, the old MCP bundle format. The new admission accepts only Model Context Protocol
+(MCP) version `2026-07-28` and keeps the remote v2 [era-probe workflow](../../mcp-era-probe/README.md)
+that checks a remote MCP server before it is accepted. The cutover removes the MCPB routes,
+database schema, and workers instead of keeping an old path beside the replacement.
+
 ## Public surface
 
 - `IWorkflowEngine` — starts a task, sends it information, or stops it.
