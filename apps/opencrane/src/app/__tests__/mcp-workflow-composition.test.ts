@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import { McpEraProbeFailureCodes } from "@opencrane/backend/server/gateways/mcp";
 import { McpEraProbeConfigurationError, McpEraProbeProtocolError, McpEraProbeTransportError } from "@opencrane/backend/server/infra/mcp-era-probe";
 
-import { __DeclareSkillAuthoringValidation, _McpEraProbeFailure } from "../mcp-workflow-composition";
+import { __DeclareArtifactPreprocessTask, __DeclareSkillAuthoringValidation, _McpEraProbeFailure } from "../mcp-workflow-composition";
 
 describe("MCP workflow application translation", function _McpWorkflowTranslationSuite()
 {
@@ -13,6 +14,13 @@ describe("MCP workflow application translation", function _McpWorkflowTranslatio
 		const declare = vi.fn();
 		__DeclareSkillAuthoringValidation({ declare });
 		expect(declare).toHaveBeenCalledWith(SkillAuthoringValidationTaskDeclaration);
+	});
+
+	it("declares the remote artifact task before a publication transaction can admit it", function _DeclaresRemoteArtifactPreprocessing()
+	{
+		const declare = vi.fn();
+		__DeclareArtifactPreprocessTask({ declare });
+		expect(declare).toHaveBeenCalledWith(ArtifactPreprocessTaskDeclaration);
 	});
 
 	it.each([
