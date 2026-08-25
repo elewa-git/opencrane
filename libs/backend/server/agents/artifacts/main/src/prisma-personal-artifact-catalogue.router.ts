@@ -12,7 +12,7 @@ import { _CreateArtifactCatalogueRepository } from "./prisma-artifact-authority.
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): PersonalArtifactCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal ? { ownerPrincipalId: principal.subjectId, siloId: principal.siloId } : null;
+	return principal ? { ownerPrincipalId: principal.principalId, siloId: principal.siloId } : null;
 }
 
 /**

@@ -27,7 +27,7 @@ export class LocalDevelopmentAgentThreadGateway implements AgentThreadGateway
 		}
 
 		const key = __LocalAgentThreadKey(parentConversationId, childConversationId);
-		const current = this._state.agentThreads.get(key) ?? __CreateLocalAgentThread(parentConversationId, childConversationId);
+		const current = this._state.agentThreads.get(key) ?? __CreateLocalAgentThread(parentConversationId, childConversationId, this._state.fixture.displayName);
 		this._state.agentThreads.set(key, current);
 		return current;
 	}

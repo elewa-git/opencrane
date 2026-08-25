@@ -5,16 +5,16 @@ enum AgentRunTrigger {
 }
 
 enum AgentRunState {
-  Accepted           @map("accepted")
-  Queued             @map("queued")
-  Assigned           @map("assigned")
-  Running            @map("running")
-  WaitingForInput    @map("waiting_for_input")
-  RecoveryRequired   @map("recovery_required")
-  Cancelling         @map("cancelling")
-  Completed          @map("completed")
-  Failed             @map("failed")
-  Cancelled          @map("cancelled")
+  Accepted         @map("accepted")
+  Queued           @map("queued")
+  Assigned         @map("assigned")
+  Running          @map("running")
+  WaitingForInput  @map("waiting_for_input")
+  RecoveryRequired @map("recovery_required")
+  Cancelling       @map("cancelling")
+  Completed        @map("completed")
+  Failed           @map("failed")
+  Cancelled        @map("cancelled")
 }
 
 enum AgentRunTerminalReason {
@@ -55,29 +55,29 @@ enum ChildRunCompletionDeliveryOutcome {
 
 /// One logical run authority. Retries atomically increment `attempt`; there is no AgentRunAttempt.
 model AgentRun {
-  id                       String                       @id @default(cuid())
-  siloId                   String                       @map("silo_id")
-  agentServiceId           String                       @map("agent_service_id")
-  agentRevisionId          String                       @map("agent_revision_id")
-  conversationId           String?                      @map("conversation_id")
+  id                       String                          @id @default(cuid())
+  siloId                   String                          @map("silo_id")
+  agentServiceId           String                          @map("agent_service_id")
+  agentRevisionId          String                          @map("agent_revision_id")
+  conversationId           String?                         @map("conversation_id")
   trigger                  AgentRunTrigger
-  delegatedUserId          String?                      @map("delegated_user_id")
-  requestIdempotencyKey    String                       @map("request_idempotency_key")
-  rootRunId                String                       @map("root_run_id")
-  parentRunId              String?                      @map("parent_run_id")
-  attempt                  Int                          @default(1)
-  state                    AgentRunState                @default(Accepted)
-  effectiveContractDigest  String                       @map("effective_contract_digest")
-  inputSnapshotDigest      String                       @map("input_snapshot_digest")
-  acceptedAt               DateTime                     @default(now()) @map("accepted_at")
-  startedAt                DateTime?                    @map("started_at")
-  finishedAt               DateTime?                    @map("finished_at")
-  terminalReason           AgentRunTerminalReason?      @map("terminal_reason")
-  costAmount               Decimal?                     @map("cost_amount") @db.Decimal(18, 6)
-  costCurrency             String?                      @map("cost_currency")
-  revision                 AgentRevision                @relation(fields: [agentServiceId, agentRevisionId], references: [agentServiceId, id], onDelete: Restrict)
-  service                  AgentService                 @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
-  conversation             Conversation?                @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  delegatedUserId          String?                         @map("delegated_user_id")
+  requestIdempotencyKey    String                          @map("request_idempotency_key")
+  rootRunId                String                          @map("root_run_id")
+  parentRunId              String?                         @map("parent_run_id")
+  attempt                  Int                             @default(1)
+  state                    AgentRunState                   @default(Accepted)
+  effectiveContractDigest  String                          @map("effective_contract_digest")
+  inputSnapshotDigest      String                          @map("input_snapshot_digest")
+  acceptedAt               DateTime                        @default(now()) @map("accepted_at")
+  startedAt                DateTime?                       @map("started_at")
+  finishedAt               DateTime?                       @map("finished_at")
+  terminalReason           AgentRunTerminalReason?         @map("terminal_reason")
+  costAmount               Decimal?                        @map("cost_amount") @db.Decimal(18, 6)
+  costCurrency             String?                         @map("cost_currency")
+  revision                 AgentRevision                   @relation(fields: [agentServiceId, agentRevisionId], references: [agentServiceId, id], onDelete: Restrict)
+  service                  AgentService                    @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
+  conversation             Conversation?                   @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   inputSnapshot            RunInputSnapshot?
   workloadAssignments      WorkloadAssignment[]
   proofKeys                RunProofKey[]
@@ -87,10 +87,10 @@ model AgentRun {
   toolInvocations          ToolInvocation[]
   outboxEvents             OutboxEvent[]
   steeringRequests         RuntimeSteeringRequest[]
-  spawnedChildReservations ChildRunReservation[]        @relation("ChildRunReservationParent")
-  childReservation         ChildRunReservation?         @relation("ChildRunReservationChild")
-  childCompletionDelivery  ChildRunCompletionDelivery?  @relation("ChildRunCompletionDeliveryChild")
-  receivedChildCompletions ChildRunCompletionDelivery[] @relation("ChildRunCompletionDeliveryParent")
+  spawnedChildReservations ChildRunReservation[]           @relation("ChildRunReservationParent")
+  childReservation         ChildRunReservation?            @relation("ChildRunReservationChild")
+  childCompletionDelivery  ChildRunCompletionDelivery?     @relation("ChildRunCompletionDeliveryChild")
+  receivedChildCompletions ChildRunCompletionDelivery[]    @relation("ChildRunCompletionDeliveryParent")
   agentThreadOrigin        ConversationAgentThread?
   agentThreadDeliveries    AgentThreadParentDelivery[]
   conversationAssets       ConversationAsset[]
@@ -180,29 +180,29 @@ model RunInputSnapshot {
 }
 
 model WorkloadAssignment {
-  runId              String                   @map("run_id")
-  attempt            Int
-  agentServiceId     String                   @map("agent_service_id")
-  agentRevisionId    String                   @map("agent_revision_id")
-  siloId             String                   @map("silo_id")
-  subjectId          String                   @map("subject_id")
-  audience           String
-  serviceAccountName String                   @map("service_account_name")
-  namespace          String
-  workloadKind       WorkloadKind             @map("workload_kind")
-  workloadUid        String                   @map("workload_uid")
-  workloadProfile    String                   @map("workload_profile")
-  podUid             String?                  @map("pod_uid")
-  state              WorkloadAssignmentState  @default(PendingPod)
-  expiresAt          DateTime                 @map("expires_at")
-  createdAt          DateTime                 @default(now()) @map("created_at")
-  registeredAt       DateTime?                @map("registered_at")
-  revokedAt          DateTime?                @map("revoked_at")
-  run                AgentRun                 @relation(fields: [runId, siloId, agentServiceId, agentRevisionId], references: [id, siloId, agentServiceId, agentRevisionId], onDelete: Restrict)
-  bootstrap          WorkloadBootstrap?
-  proofKey           RunProofKey?
-  executionReceipts  ActionExecutionReceipt[]
-  approvalRequests   ApprovalRequest[]
+  runId                    String                          @map("run_id")
+  attempt                  Int
+  agentServiceId           String                          @map("agent_service_id")
+  agentRevisionId          String                          @map("agent_revision_id")
+  siloId                   String                          @map("silo_id")
+  subjectId                String                          @map("subject_id")
+  audience                 String
+  serviceAccountName       String                          @map("service_account_name")
+  namespace                String
+  workloadKind             WorkloadKind                    @map("workload_kind")
+  workloadUid              String                          @map("workload_uid")
+  workloadProfile          String                          @map("workload_profile")
+  podUid                   String?                         @map("pod_uid")
+  state                    WorkloadAssignmentState         @default(PendingPod)
+  expiresAt                DateTime                        @map("expires_at")
+  createdAt                DateTime                        @default(now()) @map("created_at")
+  registeredAt             DateTime?                       @map("registered_at")
+  revokedAt                DateTime?                       @map("revoked_at")
+  run                      AgentRun                        @relation(fields: [runId, siloId, agentServiceId, agentRevisionId], references: [id, siloId, agentServiceId, agentRevisionId], onDelete: Restrict)
+  bootstrap                WorkloadBootstrap?
+  proofKey                 RunProofKey?
+  executionReceipts        ActionExecutionReceipt[]
+  approvalRequests         ApprovalRequest[]
   conversationAssetTickets ConversationAssetOutputTicket[]
 
   @@id([runId, attempt])

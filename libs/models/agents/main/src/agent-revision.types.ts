@@ -1,7 +1,7 @@
 import type { CanonicalJsonSha256Digest, JsonValue } from "@opencrane/util";
 
 import type { AgentRevisionId, AgentServiceId, PersonaRevisionId, UserId } from "./identifiers.types";
-import type { RevisionScopeAttachment } from "./scope-attachment.types";
+import type { RevisionBoundaryAttachment } from "./boundary-attachment.types";
 
 /** Where a revision sits in review. Only `published` may execute; `draft`, `rejected`, and `retired` must never be selected for a run. */
 export type AgentRevisionState = "draft" | "published" | "rejected" | "retired";
@@ -54,7 +54,7 @@ export interface AgentBudget
 
 /**
  * What an agent revision actually runs: prompt policy, persona, model, budget, skills, tools,
- * and knowledge scopes.
+ * and knowledge boundaries.
  *
  * Defined below the persistence layer on purpose, so revision authoring, personal-configuration
  * materialization, and {@link __DigestAgentRevisionContent} all work from one shape. If they
@@ -75,7 +75,7 @@ export interface AgentRevisionContent
 	/** Immutable integration and tool assignments exposed to the runtime. */
 	readonly integrationAssignments: readonly IntegrationAssignmentReference[];
 	/** Revision-scoped knowledge attachments authorised for the runtime. */
-	readonly scopeAttachments: readonly RevisionScopeAttachment[];
+	readonly boundaryAttachments: readonly RevisionBoundaryAttachment[];
 }
 
 /** One published-or-pending version of an agent service's configuration. It never changes after creation: a change means a new revision with a new `digest`. */
@@ -107,8 +107,8 @@ export interface AgentRevision
 	readonly skills: readonly SkillRevisionReference[];
 	/** Immutable integration and tool assignments available to the runtime. */
 	readonly integrationAssignments: readonly IntegrationAssignmentReference[];
-	/** Immutable revision-scoped knowledge scope attachments authorised for the runtime. */
-	readonly scopeAttachments: readonly RevisionScopeAttachment[];
+	/** Immutable knowledge boundary attachments authorised for the runtime. */
+	readonly boundaryAttachments: readonly RevisionBoundaryAttachment[];
 	/** Resource ceilings applied to each run. */
 	readonly budget: AgentBudget;
 	/** Identifier of the user who authored the revision. */

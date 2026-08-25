@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgentThreadDeliveryKinds, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes } from "@opencrane/contracts";
 
-import { __DecodeAgUiSseRecord } from "../ag-ui-sse-decoder";
+import { __DecodeAgUiSocketRecord } from "../ag-ui-socket-decoder";
 import { __AgUiResumeCursor, __CreateAgUiStreamState, __ReduceAgUiStream } from "../ag-ui-stream";
 import type { AgUiStreamRecord } from "../ag-ui-stream.types";
 import { AgUiMessageStatuses } from "../message/message.types";
@@ -19,8 +19,7 @@ function _ToolFailureEnvelope(failureCode = "AuthenticationError", retrying = tr
 /** Decode one valid pinned projection frame or fail the focused test immediately. */
 function _Record(id: string | undefined, data: object): AgUiStreamRecord
 {
-	const cursor = id === undefined ? "" : `id: ${id}\n`;
-	const record = __DecodeAgUiSseRecord(`${cursor}event: ag-ui\ndata: ${JSON.stringify(data)}\n\n`);
+	const record = __DecodeAgUiSocketRecord({ type: "conversation.event", ...(id === undefined ? {} : { id }), event: "ag-ui", data });
 	if (record === null) throw new Error("expected a valid projection record");
 	return record;
 }
@@ -288,17 +287,17 @@ describe("AG-UI stream state", function _Suite()
 		expect([...state.surfaces.values()].map(surface => surface.messageId)).toEqual(["message-1", "message-2"]);
 	});
 
-	it("rejects malformed governed A2UI custom values during strict SSE decoding", function _RejectsMalformedA2uiCustom()
+	it("rejects malformed governed A2UI custom values during strict socket decoding", function _RejectsMalformedA2uiCustom()
 	{
 		const invalid = _A2ui(0, AgUiA2uiSurfaceStates.Ready, [{ surfaceUpdate: { surfaceId: "surface-1", components: [{ id: "choice-1", component: { Select: {} } }] } }]);
 		const frame = `id: cursor-a2ui\nevent: ag-ui\ndata: ${JSON.stringify({ type: EventType.CUSTOM, name: AG_UI_A2UI_ENVELOPE_VERSION, value: invalid })}\n\n`;
-		expect(__DecodeAgUiSseRecord(frame)).toBeNull();
+		expect(__DecodeAgUiSocketRecord(frame)).toBeNull();
 	});
 
 	it("fails closed on unsupported pinned events, malformed data, and sequence gaps", function _FailsClosed()
 	{
-		expect(__DecodeAgUiSseRecord("id: cursor-1\nevent: ag-ui\ndata: {bad}\n\n")).toBeNull();
-		expect(__DecodeAgUiSseRecord(`id: cursor-1\nevent: ag-ui\ndata: ${JSON.stringify({ type: EventType.STATE_SNAPSHOT, snapshot: {} })}\n\n`)).toBeNull();
+		expect(__DecodeAgUiSocketRecord({ type: "conversation.event", id: "cursor-1", event: "ag-ui", data: {bad: true} })).toBeNull();
+		expect(__DecodeAgUiSocketRecord({ type: "conversation.event", id: "cursor-1", event: "ag-ui", data: { type: EventType.STATE_SNAPSHOT, snapshot: {} } })).toBeNull();
 		expect(function _Gap(): void
 		{
 			__ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-1", { type: EventType.TEXT_MESSAGE_CONTENT, messageId: "missing", delta: "hello" }));

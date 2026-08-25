@@ -19,6 +19,12 @@ export const LOCAL_DEVELOPMENT_IDENTITY: LocalDevelopmentIdentity = Object.freez
 	siloId: "local-development",
 });
 
+/** Stable local Principal row selected after the Tier 2 session passes its host checks. */
+export const LOCAL_DEVELOPMENT_PRINCIPAL_ID = "local-development-principal";
+
+/** Fixed issuer stored with the Tier 2 local Principal and authenticated request context. */
+export const LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER = "opencrane-local-development";
+
 /** Runtime coordinates shared by the Tier 2 coordinator, controller, and server verifier. */
 export const LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES: LocalDevelopmentRuntimeIdentities = Object.freeze({
 	serverNamespace: profileContract.runtimeIdentities.serverNamespace,

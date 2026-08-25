@@ -42,15 +42,17 @@ persisted interview states.
 
 ## Priority 0: authority and durable-contract risk
 
-### Authorization scope kinds
+### Authorization subjects and boundaries — resolved
 
-- Owner: `libs/models/authorization/main/src/authorization-scope.types.ts`
-- Control flow: `libs/models/authorization/main/src/scope-matching.ts`
-- Security digest consumer: `libs/backend/server/iam/membership/main/src/fleet-membership-payload-digest.ts`
-- Proposed enum: `AuthorizationScopeKind`, re-exported through `@opencrane/contracts`
+- Owner: `libs/models/authorization/main/src/authorization-boundary.types.ts`
+- Control flow: `libs/models/authorization/main/src/boundary-matching.ts`
+- Stable enums: `AuthorizationSubjectKinds`, `AuthorizationBoundaryKinds`, and
+  `AuthorizationBoundaryCoverages`, re-exported through `@opencrane/contracts`
 
-Six scope variants participate in authorization matching and signed membership payload digests. They
-need one model-owned enum; Prisma's similarly named persistence enum is not the domain owner.
+Authorization no longer encodes organisation, department, team, project, personal, and direct-user
+as parallel categorical scopes. Stored Principal-or-Group subjects are evaluated independently from
+Group-or-Personal resource boundaries; descendant coverage follows persisted Group ancestry, while
+signed fleet membership proves active silo admission without carrying product scope.
 
 ### Runtime execution identity kind
 
@@ -84,12 +86,6 @@ Prisma enums remain adapter-side and map explicitly to model enums.
 
 These are authenticated workload-protocol discriminants. Validators and dispatch branches must use
 the same vocabulary.
-
-### Grant scope, subject, and access
-
-`GrantAccess`, `GrantScope`, and `GrantSubjectType` already exist in
-`libs/contracts/src/grant.types.ts`, but model and route packages duplicate their strings. Establish
-one dependency-neutral owner and map Prisma values at the persistence edge.
 
 ## Priority 1: repeated cross-package vocabulary
 

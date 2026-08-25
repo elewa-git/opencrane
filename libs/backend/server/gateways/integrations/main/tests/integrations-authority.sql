@@ -16,8 +16,10 @@ BEGIN
 END;
 $$;
 
-INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "updated_at")
-VALUES ('integration-service', 'silo-integrations', 'managed', 'Integration agent', 'managed-agent', clock_timestamp());
+INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
+VALUES ('integration-service-principal', 'silo-integrations', 'urn:opencrane:agent-service', 'integration-service', 'internal', clock_timestamp());
+INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
+VALUES ('integration-service', 'silo-integrations', 'managed', 'Integration agent', 'managed-agent', 'integration-service-principal', clock_timestamp());
 INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
 VALUES ('integration-revision', 'integration-service', 1, 'sha256:' || repeat('a', 64), 'prompt-v1', 'integrations-model', '{}', 'user-1');
 INSERT INTO "integrations" ("id", "silo_id", "obot_catalog_entry_id", "display_name", "updated_at")

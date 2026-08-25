@@ -1,10 +1,10 @@
 import { createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-import { FleetMembershipScopeKind, ModelRoutingScope, OrgMemberStatus, OrgRole, PrismaClient } from "@prisma/client";
+import { ModelRoutingScope, OrgMemberStatus, OrgRole, PrincipalProvenance, PrismaClient } from "@prisma/client";
 
 import { __DigestFleetMembershipSignedPayload } from "@opencrane/backend/server/iam/membership";
-import { LOCAL_DEVELOPMENT_IDENTITY, LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_KEY_ID } from "@opencrane/models/local-development";
+import { LOCAL_DEVELOPMENT_IDENTITY, LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_KEY_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER } from "@opencrane/models/local-development";
 import type { SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 
 /** Stable row identifier lets the development seed be safely replayed after a watched-server reload. */
@@ -66,12 +66,7 @@ function _CreateSignedMembership(privateKeyPem: string, issuedAtEpochMs: number)
 		assertions: [{
 			assertionId: LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID,
 			siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
-			subjectId: LOCAL_DEVELOPMENT_IDENTITY.subjectId,
-			scope: {
-				kind: "personal",
-				organizationId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
-				userId: LOCAL_DEVELOPMENT_IDENTITY.subjectId,
-			},
+			subjectId: LOCAL_DEVELOPMENT_IDENTITY.subjectId
 		}],
 	};
 	const payloadDigest = __DigestFleetMembershipSignedPayload(payload);
@@ -115,6 +110,29 @@ async function _Main(): Promise<void>
 		// 2. Store the browser membership and signed run-admission assertion in one transaction.
 		await prisma.$transaction(async function _Seed(transaction): Promise<void>
 		{
+			await transaction.principal.upsert({
+				where: {
+					siloId_issuer_subject: {
+						siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
+						issuer: LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER,
+						subject: LOCAL_DEVELOPMENT_IDENTITY.subjectId
+					}
+				},
+				create: {
+					id: LOCAL_DEVELOPMENT_PRINCIPAL_ID,
+					siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
+					issuer: LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER,
+					subject: LOCAL_DEVELOPMENT_IDENTITY.subjectId,
+					provenance: PrincipalProvenance.External,
+					email: LOCAL_DEVELOPMENT_IDENTITY.email,
+					displayName: LOCAL_DEVELOPMENT_IDENTITY.displayName
+				},
+				update: {
+					provenance: PrincipalProvenance.External,
+					email: LOCAL_DEVELOPMENT_IDENTITY.email,
+					displayName: LOCAL_DEVELOPMENT_IDENTITY.displayName
+				}
+			});
 			await transaction.orgMembership.upsert({
 				where: {
 					clusterTenant_subject: {
@@ -176,17 +194,11 @@ async function _Main(): Promise<void>
 					revisionId: _REVISION_ID,
 					assertionId: LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID,
 					siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
-					subjectId: LOCAL_DEVELOPMENT_IDENTITY.subjectId,
-					scopeKind: FleetMembershipScopeKind.Personal,
-					organizationId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
-					scopeResourceId: LOCAL_DEVELOPMENT_IDENTITY.subjectId,
+					subjectId: LOCAL_DEVELOPMENT_IDENTITY.subjectId
 				},
 				update: {
 					siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
-					subjectId: LOCAL_DEVELOPMENT_IDENTITY.subjectId,
-					scopeKind: FleetMembershipScopeKind.Personal,
-					organizationId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
-					scopeResourceId: LOCAL_DEVELOPMENT_IDENTITY.subjectId,
+					subjectId: LOCAL_DEVELOPMENT_IDENTITY.subjectId
 				},
 			});
 			await transaction.modelDefinition.upsert({

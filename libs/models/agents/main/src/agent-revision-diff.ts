@@ -77,10 +77,10 @@ function _integrationCustodyKeys(revision: AgentRevision): string[]
 	return revision.integrationAssignments.map(function _key(assignment) { return `${assignment.integrationId}=${assignment.custodyReferenceId}`; });
 }
 
-/** Renders scope attachments as stable `scope:subjectType:subjectId` member keys. */
-function _scopeAttachmentKeys(revision: AgentRevision): string[]
+/** Renders boundary attachments as stable kind, identifier, and coverage keys. */
+function _boundaryAttachmentKeys(revision: AgentRevision): string[]
 {
-	return revision.scopeAttachments.map(function _key(attachment) { return `${attachment.scope}:${attachment.subjectType}:${attachment.subjectId}`; });
+	return revision.boundaryAttachments.map(function _Key(attachment) { return `${attachment.boundaryKind}:${attachment.boundaryId}:${attachment.boundaryCoverage}`; });
 }
 
 /** Report a widening when the target raises this budget ceiling; a lowered or equal ceiling is not reported. */
@@ -129,7 +129,7 @@ export function __DiffAgentRevisions(base: AgentRevision, target: AgentRevision)
 		_setChange("skills", _skillKeys(base), _skillKeys(target)),
 		_setChange("integrationTools", _integrationToolKeys(base), _integrationToolKeys(target)),
 		_setChange("integrationCustody", _integrationCustodyKeys(base), _integrationCustodyKeys(target)),
-		_setChange("scopeAttachments", _scopeAttachmentKeys(base), _scopeAttachmentKeys(target)),
+		_setChange("boundaryAttachments", _boundaryAttachmentKeys(base), _boundaryAttachmentKeys(target)),
 	].filter(_isPresent);
 
 	// 4. Flag every security-relevant widening for reviewer confirmation.
@@ -144,10 +144,10 @@ function _collectWidenings(base: AgentRevision, target: AgentRevision, setChange
 	const widenings: RevisionWidening[] = [];
 
 	// Broader knowledge scope: any newly attached scope target.
-	const scopeChange = setChanges.find(function _scope(change) { return change.field === "scopeAttachments"; });
+	const scopeChange = setChanges.find(function _Scope(change) { return change.field === "boundaryAttachments"; });
 	if (scopeChange && scopeChange.added.length > 0)
 	{
-		widenings.push({ kind: "scope", field: "scopeAttachments", detail: `attached ${scopeChange.added.length} additional scope target(s): ${scopeChange.added.join(", ")}` });
+		widenings.push({ kind: "boundary", field: "boundaryAttachments", detail: `attached ${scopeChange.added.length} additional knowledge boundary target(s): ${scopeChange.added.join(", ")}` });
 	}
 
 	// Broader tools: any newly added skill or integration tool.

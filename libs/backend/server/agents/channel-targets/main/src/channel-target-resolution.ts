@@ -79,7 +79,7 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 	{
 		return { outcome: "denied", reason: "host_denied" };
 	}
-	const membership = await dependencies.membership.verifyCurrentMembership(subjectId, hostBinding.siloId, hostBinding.authorizationScope, nowEpochMs);
+	const membership = await dependencies.membership.verifyCurrentMembership(subjectId, hostBinding.siloId, nowEpochMs);
 	if (membership.outcome !== "trusted" || !Number.isSafeInteger(membership.revision) || membership.revision < 1 || !Number.isSafeInteger(membership.trustedUntilEpochMs) || membership.trustedUntilEpochMs <= nowEpochMs)
 	{
 		return { outcome: "denied", reason: "membership_denied" };
@@ -98,7 +98,6 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 		siloId: hostBinding.siloId,
 		conversationId: conversation.conversationId,
 		agentServiceId: conversation.agentServiceId,
-		scope: hostBinding.authorizationScope,
 		requiredActions: ["conversation.read"],
 		membershipRevision: membership.revision,
 		nowEpochMs,

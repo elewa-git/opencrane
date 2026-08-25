@@ -1,20 +1,63 @@
 import { InjectionToken } from "@angular/core";
 
-import { McpAccessPolicy, McpDirectory, McpInstalledServer, McpServer } from "@opencrane/core";
+import { McpAccessPolicy, McpCredentialField, McpDirectory, McpEntitledGroup, McpEntitledUser, McpInstalledServer, McpServer } from "@opencrane/core";
+
+/** Wire shape of a catalogue server. */
+export interface McpServerWire
+{
+	/** Stable id / slug. */
+	id: string;
+	/** Display name. */
+	name?: string;
+	/** Short description. */
+	description?: string;
+	/** Publisher label. */
+	publisher?: string;
+	/** Tile glyph. */
+	glyph?: string;
+	/** Connection type (raw string). */
+	type?: string;
+	/** Lifecycle status (raw string). */
+	approvalStatus?: string;
+	/** Credential fields. */
+	credentialSchema?: McpCredentialField[];
+	/** Entitlement summary. */
+	entitlementSummary?: string;
+}
+
+/** Wire shape of an installed-server record. */
+export interface McpInstalledWire
+{
+	/** Catalogue server id. */
+	serverId: string;
+	/** Connection status (raw string). */
+	connectionStatus?: string;
+	/** Relative last-used label. */
+	lastUsed?: string | null;
+}
+
+/** Wire shape of an access policy. */
+export interface McpAccessPolicyWire
+{
+	/** Server id. */
+	serverId: string;
+	/** Entitled groups. */
+	groups?: McpEntitledGroup[];
+	/** Entitled users. */
+	users?: McpEntitledUser[];
+}
 
 /**
- * Abstraction over the OpenCrane MCP catalogue / credential / activation reads
- * and writes backing the user-facing Tools feature.
+ * Abstraction over the OpenCrane MCP catalogue and install operations backing
+ * the user-facing Tools feature.
  *
  * Components depend only on this interface, so the data source can be swapped
  * (mock fixtures → live OpenCrane client) without touching the screens.
  * Implementations live in this `adapter` lib; the binding is provided in the
  * app's `app.config.ts`.
  *
- * **Security contract.** {@link setCredential} is the only path a secret enters,
- * and it is write-only: a stored credential is never returned by any read
- * method. The agent/LLM/chat never sees a token or provider URL, so no method here exposes raw
- * credential material or provider addressing.
+ * Credential and OAuth activation are absent until a verified custody boundary
+ * is composed.
  */
 export interface McpGateway
 {
@@ -31,53 +74,18 @@ export interface McpGateway
 	 * Install a server for the current user. Resolves with the new installed
 	 * record; its initial {@link McpInstalledServer.connectionStatus} depends on
 	 * the server type (a shared-key multi-user server is ready immediately; a
-	 * single-user or OAuth server still needs a credential / connect).
+	 * single-user or OAuth server remains pending external activation).
 	 *
 	 * @param serverId - The catalogue server id to install.
 	 */
 	install(serverId: string): Promise<McpInstalledServer>;
 
 	/**
-	 * Uninstall a server for the current user (also clears any stored credential).
+	 * Uninstall a server for the current user.
 	 *
 	 * @param serverId - The installed server id to remove.
 	 */
 	uninstall(serverId: string): Promise<void>;
-
-	/**
-	 * Set (or replace) the credential for a single-user server. Write-only: the
-	 * values are sent to the control plane and never returned to the browser.
-	 * Resolves with the updated installed record (now connected/activating).
-	 *
-	 * @param serverId - The server the credential is for.
-	 * @param values   - Field key → value map from the server's config schema.
-	 */
-	setCredential(serverId: string, values: Record<string, string>): Promise<McpInstalledServer>;
-
-	/**
-	 * Remove a stored single-user credential, returning the server to the
-	 * "needs credential" state.
-	 *
-	 * @param serverId - The server whose credential to remove.
-	 */
-	removeCredential(serverId: string): Promise<McpInstalledServer>;
-
-	/**
-	 * Complete the OAuth connect for a remote server. In production this follows
-	 * the provider consent redirect; the mock resolves directly to a connected
-	 * account. Resolves with the updated installed record.
-	 *
-	 * @param serverId - The remote/OAuth server to connect.
-	 */
-	connectOauth(serverId: string): Promise<McpInstalledServer>;
-
-	/**
-	 * Disconnect an OAuth/token connection, returning the server to the
-	 * "needs credential" state without uninstalling it.
-	 *
-	 * @param serverId - The connected server to disconnect.
-	 */
-	disconnect(serverId: string): Promise<McpInstalledServer>;
 
 	// --- Admin (org-admin only; the control plane enforces authorisation) ---
 

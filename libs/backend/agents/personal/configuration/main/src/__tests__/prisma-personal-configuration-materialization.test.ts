@@ -1,7 +1,7 @@
 import { AgentRevisionState, Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { __DigestAgentRevisionContent } from "@opencrane/models/agents";
+import { __DigestAgentRevisionContent, RevisionBoundaryCoverages, RevisionBoundaryKinds } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _PersonalConfigurationMaterializer } from "../materialization/personal-configuration-materializer";
@@ -56,10 +56,11 @@ function _SourceRevision()
 			custodyReferenceId: "custody-1",
 			toolDefinitions: [_Tool()],
 		}],
-		scopeAttachments: [{
-			scope: "Personal",
-			subjectType: "User",
-			subjectId: "user-1",
+		boundaryAttachments: [{
+			boundaryKind: "Personal",
+			boundaryGroupId: null,
+			boundaryPrincipalId: "principal-1",
+			boundaryCoverage: "Exact",
 		}],
 	};
 }
@@ -151,10 +152,10 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 				custodyReferenceId: "custody-1",
 				toolDefinitions: [_Tool()],
 			}],
-			scopeAttachments: [{
-				scope: "personal",
-				subjectType: "user",
-				subjectId: "user-1",
+			boundaryAttachments: [{
+				boundaryKind: RevisionBoundaryKinds.Personal,
+				boundaryId: "principal-1",
+				boundaryCoverage: RevisionBoundaryCoverages.Exact,
 			}],
 		} as const;
 		const runTransaction = vi.fn(async function _RunTransaction(callback: (value: unknown) => Promise<unknown>)
@@ -198,11 +199,12 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 						toolDefinitions: [_Tool()],
 					}],
 				},
-				scopeAttachments: {
+				boundaryAttachments: {
 					create: [{
-						scope: "Personal",
-						subjectType: "User",
-						subjectId: "user-1",
+						siloId: "silo-1",
+						boundaryKind: "Personal",
+						boundaryPrincipalId: "principal-1",
+						boundaryCoverage: "Exact",
 					}],
 				},
 				digest: __DigestAgentRevisionContent("service-1", 2, expectedContent),

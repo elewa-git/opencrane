@@ -41,25 +41,18 @@ export enum McpApprovalStatus
 }
 
 /**
- * Per-user connection state of a server the user has installed.
+ * Determines whether the Tools UI presents an installed MCP server as awaiting external activation
+ * or ready through an administrator-managed key.
  *
- * Activation in the user's agent runtime ("Claw") is automatic once connected;
- * `Activating` and `ActivationFailed` surface that backend step.
+ * The adapter maps the operator API's two retained string values into this closed set. OpenCrane has
+ * no browser credential or OAuth activation command, so `NeedsCredential` is informational here.
  */
 export enum McpConnectionStatus
 {
-	/** Installed but the user still owes a credential. */
+	/** The install remains unusable until a custody flow outside the current browser API activates it. */
 	NeedsCredential = "needs-credential",
-	/** Connected; activating in the agent runtime. */
-	Activating = "activating",
-	/** Connected via a stored credential and active. */
-	Connected = "connected",
-	/** Connected via OAuth and active. */
-	OauthConnected = "oauth-connected",
-	/** Active through an admin-managed shared key (no user action). */
-	SharedKey = "shared-key",
-	/** Activation in the agent runtime failed; retryable. */
-	ActivationFailed = "activation-failed"
+	/** The install is usable through an administrator-managed key and needs no user action. */
+	SharedKey = "shared-key"
 }
 
 /**
@@ -123,8 +116,6 @@ export interface McpInstalledServer
 	connectionStatus: McpConnectionStatus;
 	/** Relative last-used label, or null when never used. */
 	lastUsed: string | null;
-	/** Connected account label for OAuth servers (e.g. an email), when known. */
-	connectedAccount?: string;
 }
 
 /** A user that can be granted access to a server (entitlement target). */
@@ -138,19 +129,24 @@ export interface McpEntitledUser
 	initials: string;
 }
 
+/** A stable local group that can receive an MCP authorization grant. */
+export interface McpEntitledGroup
+{
+	/** Stable local Group identifier used by authorization grants. */
+	id: string;
+	/** Human-readable group name shown in the access editor. */
+	name: string;
+}
+
 /**
- * Access policy for one server — who may install it. Mirrors the control
- * plane's AccessPolicy: an org-wide grant plus explicit group and user grants
- * (additive when {@link everyoneInOrg} is on).
+ * Access policy for one server — which stable local groups and Principals may install it.
  */
 export interface McpAccessPolicy
 {
 	/** The server this policy governs. */
 	serverId: string;
-	/** Whether every current and future org member is entitled. */
-	everyoneInOrg: boolean;
-	/** Entitled group names. */
-	groups: string[];
+	/** Entitled stable local groups. */
+	groups: McpEntitledGroup[];
 	/** Entitled individual users. */
 	users: McpEntitledUser[];
 }
@@ -160,6 +156,6 @@ export interface McpDirectory
 {
 	/** All assignable users. */
 	users: McpEntitledUser[];
-	/** All assignable group names. */
-	groups: string[];
+	/** All assignable stable local groups. */
+	groups: McpEntitledGroup[];
 }

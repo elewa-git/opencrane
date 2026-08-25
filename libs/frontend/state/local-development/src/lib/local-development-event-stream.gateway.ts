@@ -2,13 +2,14 @@ import { Injectable, inject } from "@angular/core";
 import { EventType } from "@ag-ui/core";
 
 import type { AgUiProjectionEvent } from "@opencrane/contracts";
-import { ConversationModes } from "@opencrane/models/conversations";
+import { ConversationModes, MessageContentBlockKinds } from "@opencrane/models/conversations";
 import { __CreateAgUiStreamState, __ReduceAgUiStream, type AgUiStreamRecord, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
-import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
-import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "@opencrane/state/conversation/workspace";
+import { ConversationEventStreamMessageError, ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand, type SubmitConversationEventStreamMessageCommand } from "@opencrane/state/conversation/stream";
+import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type SubmitConversationMessageBlock } from "@opencrane/state/conversation/workspace";
 
 import { LocalDevelopmentScenarioKinds } from "./local-development-scenario.types";
 import { LocalDevelopmentState } from "./local-development-state";
+import { LocalDevelopmentConversationWorkspaceGateway } from "./local-development-workspace.gateway";
 
 /**
  * Emits deterministic Agent-run events through the reducer also used by the live SSE adapter.
@@ -22,6 +23,8 @@ export class LocalDevelopmentConversationEventStream implements ConversationEven
 {
 	/** Shared scenario selection used for reconnecting and failed-run projections. */
 	private readonly _state = inject(LocalDevelopmentState);
+	/** Local command owner that admits a stream submission into the shared conversation projection. */
+	private readonly _workspace = inject(LocalDevelopmentConversationWorkspaceGateway);
 
 	/** Emit a finite deterministic progress sequence, then remain open until the caller aborts. */
 	public async stream(command: StreamConversationEventsCommand): Promise<AgUiStreamState>
@@ -92,6 +95,47 @@ export class LocalDevelopmentConversationEventStream implements ConversationEven
 			lastHeartbeatAt: 1787306400000
 		});
 		return state;
+	}
+
+	/** Admit a participant message through the same shared local workspace used by routed commands. */
+	public async submit(command: SubmitConversationEventStreamMessageCommand): Promise<void>
+	{
+		const blocks = command.blocks.map(function _Block(block): SubmitConversationMessageBlock
+		{
+			if (block.kind !== MessageContentBlockKinds.Text && block.kind !== MessageContentBlockKinds.Artifact)
+			{
+				throw new ConversationEventStreamMessageError();
+			}
+
+			return {
+				id: block.id,
+				kind: block.kind,
+				value: block.value
+			};
+		});
+
+		try
+		{
+			await this._workspace.send({
+				conversationId: command.conversationId,
+				idempotencyKey: command.idempotencyKey,
+				blocks
+			});
+		}
+		catch (error)
+		{
+			if (error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.AccessChanged)
+			{
+				throw new ConversationEventStreamMessageError("conversation_unavailable");
+			}
+
+			if (error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.Conflict)
+			{
+				throw new ConversationEventStreamMessageError("conversation_closed");
+			}
+
+			throw new ConversationEventStreamMessageError();
+		}
 	}
 
 	/** Build an Agent-only stream with the run owned by the selected conversation. */

@@ -11,194 +11,18 @@
  */
 
 import { _AuthOpenapiPaths } from "./auth-openapi-paths";
+import { _AuthSessionOpenapiPaths } from "./auth-session-openapi-paths";
 import { _DomainOpenapiPaths } from "./domain-openapi-paths";
+import { _DomainOpenapiSchemas } from "./domain-openapi-schemas";
 import { _ErrorEnvelopeSchema, _ValidationIssueSchema } from "./error-schemas";
+import { _McpIamOpenapiSchemas } from "./mcp-iam-schemas";
+import { _MetaOpenapiPaths } from "./meta-openapi-paths";
 import { _ModelDefinitionSchema, _ModelDefinitionWriteSchema } from "./model-definition-schemas";
 import { _SelfRunCancellationSchema, _SelfRunStatusSchema } from "./run-schemas";
-import { _DomainOpenapiSchemas } from "./domain-openapi-schemas";
-
-// ---------------------------------------------------------------------------
-// Reusable schema components
-// ---------------------------------------------------------------------------
-
-// Common response helpers
-function notFound(description: string)
-{
-  return {
-    description,
-    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
-  };
-}
-
-function badRequest(description: string)
-{
-  return {
-    description,
-    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
-  };
-}
-
-function conflict(description: string)
-{
-  return {
-    description,
-    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
-  };
-}
-
-function unprocessable(description: string)
-{
-  return {
-    description,
-    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
-  };
-}
-
-function unauthorized(description: string)
-{
-  return {
-    description,
-    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
-  };
-}
-
-function forbidden(description: string)
-{
-  return {
-    description,
-    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
-  };
-}
-
-function upstreamError()
-{
-  return {
-    description: "Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error.",
-    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
-  };
-}
-
-function ok(description: string, schema: object)
-{
-  return {
-    description,
-    content: { "application/json": { schema } },
-  };
-}
-
-function created(description: string, schema: object)
-{
-  return {
-    description,
-    content: { "application/json": { schema } },
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Shared schema references
 // ---------------------------------------------------------------------------
-
-const McpServerCredentialSchema = {
-  type: "object" as const,
-  properties: {
-    id: { type: "string", description: "Stable credential identifier." },
-    displayName: { type: "string", description: "Operator-facing label." },
-  },
-};
-
-const McpServerCredentialInputSchema = {
-  type: "object" as const,
-  required: ["displayName"],
-  properties: {
-    displayName: { type: "string", description: "Operator-facing label." },
-  },
-};
-
-const McpServerSchema = {
-  type: "object" as const,
-  properties: {
-    id: { type: "string" },
-    name: { type: "string" },
-    endpoint: { type: "string" },
-    transport: { type: "string", enum: ["streamable-http", "sse", "websocket"] },
-    grants: { type: "array", items: { type: "object" } },
-    credentials: { type: "array", items: { $ref: "#/components/schemas/McpServerCredential" } },
-  },
-};
-
-const CredentialFieldSchema = {
-  type: "object" as const,
-  required: ["key", "label", "required", "sensitive"],
-  properties: {
-    key: { type: "string", description: "Stable key the value is submitted under." },
-    label: { type: "string", description: "Human-readable field label." },
-    required: { type: "boolean", description: "Whether the field must be supplied." },
-    sensitive: { type: "boolean", description: "Whether the value is secret (masked, never echoed back)." },
-    placeholder: { type: "string", description: "Optional input placeholder." },
-    hint: { type: "string", description: "Optional helper hint." },
-  },
-};
-
-const McpCatalogServerSchema = {
-  type: "object" as const,
-  required: ["id"],
-  description: "A catalogue server as exposed by the operator API (distinct from the registry McpServer). Every field beyond id is optional so the same shape serves the entitled user catalogue and the admin governance view.",
-  properties: {
-    id: { type: "string" },
-    name: { type: "string" },
-    description: { type: "string" },
-    publisher: { type: "string" },
-    glyph: { type: "string" },
-    type: { type: "string", enum: ["single-user", "multi-user", "remote-oauth"], description: "Consumption shape; decides the credential-connect flow." },
-    approvalStatus: { type: "string", enum: ["pending-review", "approved", "published", "disabled"], description: "Governance lifecycle status." },
-    credentialSchema: { type: "array", items: { $ref: "#/components/schemas/CredentialField" } },
-    entitlementSummary: { type: "string", description: "Human-readable summary of who is entitled (admin view)." },
-  },
-};
-
-const McpInstalledSchema = {
-  type: "object" as const,
-  required: ["serverId"],
-  description: "A server installed by the calling user. Never carries credential material — only the connection status and a non-secret account label.",
-  properties: {
-    serverId: { type: "string" },
-    connectionStatus: { type: "string", enum: ["needs-credential", "activating", "connected", "oauth-connected", "shared-key", "activation-failed"] },
-    lastUsed: { type: ["string", "null"], format: "date-time", description: "ISO-8601 timestamp of last use, or null when never used." },
-    connectedAccount: { type: "string", description: "Non-secret display label of the connected account." },
-  },
-};
-
-const EntitledUserSchema = {
-  type: "object" as const,
-  required: ["id", "name", "initials", "color"],
-  properties: {
-    id: { type: "string", description: "Stable user identifier (sub or email)." },
-    name: { type: "string", description: "Display name." },
-    initials: { type: "string", description: "Two-letter initials derived from the name." },
-    color: { type: "string", description: "Deterministic avatar colour derived from the identifier." },
-  },
-};
-
-const McpAccessPolicySchema = {
-  type: "object" as const,
-  required: ["serverId"],
-  properties: {
-    serverId: { type: "string" },
-    everyoneInOrg: { type: "boolean", description: "When true, every caller in the org is entitled (lists ignored)." },
-    groups: { type: "array", items: { type: "string" }, description: "Entitled group identifiers / names." },
-    users: { type: "array", items: { $ref: "#/components/schemas/EntitledUser" } },
-  },
-};
-
-const McpDirectorySchema = {
-  type: "object" as const,
-  required: ["users", "groups"],
-  description: "The selectable universe of users and groups for the admin access editor.",
-  properties: {
-    users: { type: "array", items: { $ref: "#/components/schemas/EntitledUser" } },
-    groups: { type: "array", items: { type: "string" } },
-  },
-};
 
 const ClusterTenantResourceQuotaSchema = {
   type: "object" as const,
@@ -288,37 +112,6 @@ const ClusterTenantUpdateSchema = {
       required: ["quota"],
       properties: { quota: { $ref: "#/components/schemas/ClusterTenantResourceQuota" } },
     },
-  },
-};
-
-const OrgMemberSchema = {
-  type: "object" as const,
-  required: ["subject", "role"],
-  description: "A single organisation membership row — the LOCAL membership registry the org-admin gate reads (an OrgMembership, NOT a Zitadel grant).",
-  properties: {
-    subject: { type: "string", description: "IdP-verified subject (OIDC `sub`) holding the membership." },
-    role: { type: "string", enum: ["Owner", "Admin", "Member"], description: "Role held within the organisation." },
-  },
-};
-
-const OrgMemberWriteSchema = {
-  type: "object" as const,
-  required: ["subject", "role"],
-  description: "Add or update an organisation member (upsert on the unique [org, subject]).",
-  properties: {
-    subject: { type: "string", description: "IdP-verified subject (OIDC `sub`) of the member to add/update." },
-    role: { type: "string", enum: ["Owner", "Admin", "Member"], description: "Role to grant within the organisation." },
-  },
-};
-
-const GroupSchema = {
-  type: "object" as const,
-  properties: {
-    id: { type: "string" },
-    name: { type: "string" },
-    description: { type: "string" },
-    memberCount: { type: "integer" },
-    awarenessGrants: { type: "array", items: { type: "object" } },
   },
 };
 
@@ -457,22 +250,6 @@ const TokenUsageSchema = {
 };
 
 // ---------------------------------------------------------------------------
-// Cursor-paginated response wrapper
-// ---------------------------------------------------------------------------
-
-function paginated(itemSchema: object)
-{
-  return {
-    type: "object" as const,
-    required: ["data", "pagination"],
-    properties: {
-      data: { type: "array", items: itemSchema },
-      pagination: { $ref: "#/components/schemas/Pagination" },
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Spec document — Composed from domain path fragments
 // ---------------------------------------------------------------------------
 
@@ -506,48 +283,11 @@ export const spec = {
       Error: _ErrorEnvelopeSchema,
       ValidationIssue: _ValidationIssueSchema,
       ..._DomainOpenapiSchemas,
-      McpServer: McpServerSchema,
-      McpServerCredential: McpServerCredentialSchema,
-      McpCatalogServer: McpCatalogServerSchema,
-      CredentialField: CredentialFieldSchema,
-      McpInstalled: McpInstalledSchema,
-      McpAccessPolicy: McpAccessPolicySchema,
-      EntitledUser: EntitledUserSchema,
-      McpDirectory: McpDirectorySchema,
+      ..._McpIamOpenapiSchemas,
       ClusterTenant: ClusterTenantSchema,
       ClusterTenantWrite: ClusterTenantWriteSchema,
       ClusterTenantUpdate: ClusterTenantUpdateSchema,
       ClusterTenantResourceQuota: ClusterTenantResourceQuotaSchema,
-      OrgMember: OrgMemberSchema,
-      OrgMemberWrite: OrgMemberWriteSchema,
-      Group: GroupSchema,
-      Share: {
-        type: "object",
-        description: "An inter-user share: an Allow grant the caller created on a recipient for an entitlement they hold (S4).",
-        properties: {
-          id: { type: "string" },
-          payloadType: { type: "string", enum: ["mcp-server"], description: "The MCP entitlement family shared." },
-          payloadId: { type: "string", description: "Id of the shared MCP server." },
-          recipientType: { type: "string", enum: ["user", "group"], description: "Whether the share targets a user (IdP subject) or a group." },
-          recipientId: { type: "string", description: "The recipient user subject or group id." },
-          scope: { type: "string", enum: ["org", "department", "project", "personal"] },
-          note: { type: "string" },
-          sharedBy: { type: "string", description: "IdP subject of the user who created the share." },
-          createdAt: { type: "string", format: "date-time" },
-        },
-        required: ["id", "payloadType", "payloadId", "recipientType", "recipientId", "scope", "createdAt"],
-      },
-      ResourceShare: {
-        type: "object",
-        description: "A direct share of a file/chat (S4c): the resource-scoped Personal group whose members can access it.",
-        properties: {
-          groupId: { type: "string", description: "Id of the resource-scoped share group." },
-          resourceType: { type: "string", enum: ["file", "chat", "dataset"] },
-          resourceId: { type: "string" },
-          members: { type: "array", items: { type: "string" }, description: "IdP subjects the resource is shared with (incl. the owner)." },
-        },
-        required: ["groupId", "resourceType", "resourceId", "members"],
-      },
       AuditEntry: AuditEntrySchema,
       ByokProviderKeyStatus: ByokProviderKeyStatusSchema,
       ProviderKeySetRequest: ProviderKeySetRequestSchema,
@@ -664,130 +404,8 @@ export const spec = {
   paths: {
     // Compose domain paths in their deliberate JSON-serialization order.
     ..._DomainOpenapiPaths,
-
-    // ------------------------------------------------------------------
-    // Auth — OIDC browser flow and session introspection
-    // Human operators: OIDC browser flow.
-    // ------------------------------------------------------------------
-
-    "/auth/me": {
-      get: {
-        operationId: "getAuthStatus",
-        summary: "Return current auth mode and authenticated user identity (if any)",
-        description: "No authentication required. Returns 200 with the current session or an anonymous identity when no session is established.",
-        tags: ["Auth"],
-        security: [],
-        responses: {
-          200: ok("Auth status.", {
-            type: "object",
-            required: ["mode", "authenticated"],
-            properties: {
-              mode: { type: "string", enum: ["development", "oidc"], description: "Active authentication mode for this instance." },
-              authenticated: { type: "boolean" },
-              user: {
-                type: "object",
-                nullable: true,
-                required: ["sub", "issuer", "groups", "isPlatformOperator", "isOrgAdmin"],
-                properties: {
-                  sub: { type: "string" },
-                  issuer: { type: "string", description: "Identity provider that authenticated the user." },
-                  groups: { type: "array", items: { type: "string" }, description: "The caller's group memberships from the OIDC groups claim (empty when none)." },
-                  isPlatformOperator: {
-                    type: "boolean",
-                    description: "True iff the caller's groups intersect OPENCRANE_PLATFORM_OPERATOR_GROUPS. Empty/unset config ⇒ false (fail-closed). Introspection only — the API stays the enforcement point and the frontend uses this only to hide UI. Superseded once a first-class role model lands.",
-                  },
-                  isOrgAdmin: {
-                    type: "boolean",
-                    description: "True iff the caller is an organisation admin (groups intersect OPENCRANE_ORG_ADMIN_GROUPS, or the caller is a platform operator). Gates MCP-catalogue curation/approval (requireOrgAdmin). Empty/unset config ⇒ false (fail-closed). Introspection only — the API stays the enforcement point.",
-                  },
-                  clusterTenant: {
-                    type: ["string", "null"],
-                    description: "The caller's ClusterTenant (customer) key, resolved server-side from their IdP-verified email → tenant → clusterTenantRef. Null when unresolved or ambiguous.",
-                  },
-                  ownedOrgs: {
-                    type: "array",
-                    description: "Organisations the caller owns or administers, derived fresh from their OrgMembership rows (owner/admin only; members excluded). Empty when the caller administers no org. The org-scope half of the membership-derived isOrgAdmin. Introspection only — never taken from request input.",
-                    items: {
-                      type: "object",
-                      required: ["clusterTenant", "role"],
-                      properties: {
-                        clusterTenant: { type: "string", description: "The organisation (ClusterTenant) key." },
-                        role: { type: "string", enum: ["owner", "admin"], description: "The administering role the caller holds in this org." },
-                      },
-                    },
-                  },
-                  email: { type: "string" },
-                  emailVerified: { type: "boolean" },
-                  name: { type: "string" },
-                  picture: { type: "string" },
-                  authenticatedAt: { type: "string", format: "date-time" },
-                },
-              },
-            },
-          }),
-        },
-      },
-    },
-
     ..._AuthOpenapiPaths,
-    "/auth/callback": {
-      get: {
-        operationId: "completeOidcLogin",
-        summary: "OIDC authorization callback — validates the response and establishes a session",
-        description: "Called by the identity provider after a successful login. Redirects back to the SPA.",
-        tags: ["Auth"],
-        security: [],
-        parameters: [
-          { name: "code", in: "query", schema: { type: "string" } },
-          { name: "state", in: "query", schema: { type: "string" } },
-        ],
-        responses: {
-          302: { description: "Redirect back into the application." },
-          503: { description: "OIDC not configured.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        },
-      },
-    },
-
-    "/auth/logout": {
-      post: {
-        operationId: "logout",
-        summary: "Destroy the current session and return the IdP RP-initiated logout URL",
-        description: "Invalidates the server-side session. When OIDC is enabled and the identity provider advertises an `end_session_endpoint`, returns the URL the browser should navigate to so the upstream IdP session is also terminated (OIDC RP-Initiated Logout). The local session is always destroyed; `endSessionUrl` is null when no upstream logout is possible (OIDC disabled, IdP exposes no end-session endpoint, or the session captured no id_token). Non-browser callers may ignore the URL.",
-        tags: ["Auth"],
-        security: [],
-        responses: {
-          200: ok("Session destroyed; optional IdP logout URL returned.", {
-            type: "object",
-            required: ["endSessionUrl"],
-            properties: {
-              endSessionUrl: {
-                type: "string",
-                nullable: true,
-                description: "Absolute URL the browser should navigate to in order to terminate the upstream IdP session. Null when no upstream logout is configured or possible.",
-              },
-            },
-          }),
-        },
-      },
-    },
-
-    // ------------------------------------------------------------------
-    // OpenAPI contract
-    // ------------------------------------------------------------------
-
-    "/openapi.json": {
-      get: {
-        operationId: "getOpenApiSpec",
-        summary: "Retrieve the OpenAPI 3.1 specification for this API",
-        tags: ["Meta"],
-        security: [],
-        responses: {
-          200: {
-            description: "OpenAPI 3.1 document.",
-            content: { "application/json": { schema: { type: "object" } } },
-          },
-        },
-      },
-    },
+    ..._AuthSessionOpenapiPaths,
+    ..._MetaOpenapiPaths,
   },
 };

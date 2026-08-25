@@ -20,6 +20,10 @@ Open the local URL printed by Nx. The root route enters persona onboarding, and 
 normal conversation workspace. Administration, settings, invitation, and live-login routes are not
 mounted in this profile; those URLs return to onboarding.
 
+That single command also starts the interactive Storybook catalogue and runs the tagged Playwright
+visual checks against it. The three processes stay grouped under the Nx task, so UI work and its
+component contracts use one local entry point.
+
 This profile supplies an authenticated local user and coherent in-memory gateways for:
 
 - the persona interview, review, and approval;
@@ -29,13 +33,33 @@ This profile supplies an authenticated local user and coherent in-memory gateway
 - Agent-run progress through the production AG-UI reducer;
 - conversation files, participant approvals, and child Agent threads.
 
-State lives only in the browser process and resets when the development server reloads.
+Mock onboarding and chat state lives only in the browser process and resets when the page reloads.
 
 ::: tip
 Tier 1 does not need PostgreSQL, Docker, the OpenCrane API, LiteLLM, Cognee, the memory gateway, or a
 Kubernetes cluster. Angular HTTP and native OpenCrane API tripwires reject a missed live adapter
 locally before it can open a network transport.
 :::
+
+## Select the local archetype
+
+The first plain serve uses the reviewed Commander/Guardian path. Select another reviewed Guardian
+path with an explicit Nx configuration:
+
+```bash
+npx nx serve opencrane-ui --configuration=development-catalyst
+```
+
+The supported configurations are `development-commander`, `development-catalyst`,
+`development-anchor`, and `development-analyst`. Opening an explicit configuration saves the choice
+in browser local storage for that scheme, hostname, and port. Later plain serves reuse the saved
+choice; they do not overwrite it with Commander.
+
+To return to Commander, stop the explicit configuration, run the plain serve, and clear the site's
+local storage. Reloading an explicit configuration saves its archetype again. Select another explicit
+configuration to replace the choice. Clearing only the downloaded HTTP cache may leave local storage
+intact. This preference survives a
+reload, but the mock interview and conversations do not.
 
 ## Select a deterministic scenario
 
@@ -66,7 +90,8 @@ responsive, and failure states:
 npm run storybook:ui
 ```
 
-Use Storybook when a task concerns one component state. Use the Tier 1 routed profile when the task
+Use the standalone Storybook command when a task concerns only one component state. Plain Tier 1
+serve already includes Storybook and its Playwright visual pass; use the routed UI when the task also
 concerns navigation or interaction between stores and gateways.
 
 ## Start the Tier 2 core profile

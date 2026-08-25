@@ -1,5 +1,5 @@
 import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
-import { __AreReviewedIntegrationToolDefinitionsValid, type AgentRevisionContent, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
+import { __AreReviewedIntegrationToolDefinitionsValid, RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentRevisionContent, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, type CanonicalJsonSha256Digest, type JsonValue } from "@opencrane/util";
 
 /** Returns whether a value is a non-empty string. */
@@ -61,20 +61,20 @@ function _parseIntegrations(raw: unknown): AgentRevisionContent["integrationAssi
 	return assignments.some(assignment => assignment === null) ? null : (assignments as AgentRevisionContent["integrationAssignments"]);
 }
 
-/** Parses the optional scope-attachment array, accepting only the five known scope names and the three known subject types. Absent means no attachments; malformed means the whole request is rejected. */
-function _parseScopeAttachments(raw: unknown): AgentRevisionContent["scopeAttachments"] | null
+/** Parses optional boundary attachments and rejects impossible personal descendant coverage. */
+function _parseBoundaryAttachments(raw: unknown): AgentRevisionContent["boundaryAttachments"] | null
 {
 	if (raw === undefined) return [];
 	if (!Array.isArray(raw)) return null;
-	const scopes = new Set(["org", "department", "team", "project", "personal"]);
-	const subjectTypes = new Set(["group", "tenant", "user"]);
 	const attachments = raw.map(function _attachment(entry)
 	{
 		const item = entry as Record<string, unknown>;
-		if (typeof item?.scope !== "string" || !scopes.has(item.scope) || typeof item?.subjectType !== "string" || !subjectTypes.has(item.subjectType) || !_isNonEmptyString(item?.subjectId)) return null;
-		return { scope: item.scope as AgentRevisionContent["scopeAttachments"][number]["scope"], subjectType: item.subjectType as AgentRevisionContent["scopeAttachments"][number]["subjectType"], subjectId: item.subjectId };
+		if (!_isNonEmptyString(item?.boundaryId)) return null;
+		if (item.boundaryKind === RevisionBoundaryKinds.Personal && item.boundaryCoverage === RevisionBoundaryCoverages.Exact) return { boundaryKind: RevisionBoundaryKinds.Personal, boundaryId: item.boundaryId, boundaryCoverage: RevisionBoundaryCoverages.Exact };
+		if (item.boundaryKind === RevisionBoundaryKinds.Group && (item.boundaryCoverage === RevisionBoundaryCoverages.Exact || item.boundaryCoverage === RevisionBoundaryCoverages.Descendants)) return { boundaryKind: RevisionBoundaryKinds.Group, boundaryId: item.boundaryId, boundaryCoverage: item.boundaryCoverage };
+		return null;
 	});
-	return attachments.some(attachment => attachment === null) ? null : (attachments as AgentRevisionContent["scopeAttachments"]);
+	return attachments.some(attachment => attachment === null) ? null : (attachments as AgentRevisionContent["boundaryAttachments"]);
 }
 
 /**
@@ -109,9 +109,9 @@ export function _ParseAgentRevisionContent(raw: unknown): AgentRevisionContent |
 	// 3. Parse the nested arrays. One malformed entry rejects the whole body — never a partial list.
 	const skills = _parseSkills(body.skills);
 	const integrationAssignments = _parseIntegrations(body.integrationAssignments);
-	const scopeAttachments = _parseScopeAttachments(body.scopeAttachments);
-	if (skills === null || integrationAssignments === null || scopeAttachments === null) return null;
+	const boundaryAttachments = _parseBoundaryAttachments(body.boundaryAttachments);
+	if (skills === null || integrationAssignments === null || boundaryAttachments === null) return null;
 
 	// 4. Rebuild the value field by field, so nothing extra from the request body is carried through.
-	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxCostUsdMicros: budget.maxCostUsdMicros, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, scopeAttachments };
+	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxCostUsdMicros: budget.maxCostUsdMicros, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, boundaryAttachments };
 }

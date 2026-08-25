@@ -61,7 +61,7 @@ export type MaterializeAgentRevisionModelSelectionResult =
  * caller's side rolls these writes back with it.
  *
  * Implemented by: `PrismaAgentRevisionModelSelectionRepository` in
- * `prisma-agent-revision-model-selection.ts`.
+ * `db/prisma-agent-revision-model-selection.ts`.
  * Called by:
  * libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization-unit-of-work.ts
  * (construction) and `personal-configuration-materializer.ts` (invocation).

@@ -136,7 +136,7 @@ function _PrismaFixture(markCompleted: boolean): { readonly prisma: PrismaClient
 				create: vi.fn(async function _CreateRevision(input: { data: { digest: string; personaRevisionId: string } })
 				{
 					state.agentRevision = { id: "agent-revision-1", state: AgentRevisionState.Draft, personaRevisionId: input.data.personaRevisionId, digest: input.data.digest };
-					return { ...state.agentRevision, skillAssignments: [], integrationAssignments: [], scopeAttachments: [] };
+					return { ...state.agentRevision, skillAssignments: [], integrationAssignments: [] };
 				}),
 				update: vi.fn(async function _PublishRevision(input: { data: { state: AgentRevisionState } })
 				{

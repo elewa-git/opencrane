@@ -66,7 +66,8 @@ export class PrismaExternalActionExecutionContextUnitOfWork implements ExternalA
 	{
 		return this.prisma.$transaction(async function _load(transaction)
 		{
-			return new PrismaExternalActionExecutionContextRepository(transaction).load(runId, attempt);
+			const repository = new PrismaExternalActionExecutionContextRepository(transaction);
+			return repository.load(runId, attempt);
 		});
 	}
 }

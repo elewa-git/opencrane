@@ -5,11 +5,15 @@ import type { Logger } from "pino";
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
 import { PrismaAgentRunRetryUnitOfWork, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
+import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS, type ConversationOpenInterruptReader } from "@opencrane/backend/conversations/projection";
 
 import { PrismaConversationMessageAdmissionUnitOfWork } from "./prisma-conversation-message-admission-unit-of-work";
+import { _CreateConversationReplayRepository } from "./prisma-conversation-replay.composition";
 import { PrismaConversationUnitOfWork } from "./prisma-conversation-unit-of-work";
 import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository";
 import { __CreateSelfConversationsRouter } from "../self-conversations.router";
+import { __CreateSelfConversationSocketServer } from "../self-conversation-socket";
+import type { SelfConversationSocketAuthenticator, SelfConversationSocketServer } from "../self-conversation-socket.types";
 import type { ConversationCaller } from "../types/conversation-caller.types";
 import type { ConversationAttachmentAdmissionFactory } from "../conversation-message-admission.types";
 
@@ -17,7 +21,7 @@ import type { ConversationAttachmentAdmissionFactory } from "../conversation-mes
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): ConversationCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal ? { subjectId: principal.subjectId, siloId: principal.siloId } : null;
+	return principal ? { subjectId: principal.externalSubject, issuer: principal.externalIssuer, siloId: principal.siloId } : null;
 }
 
 /** Creates a mutation repository over run admission's final transaction. */
@@ -46,4 +50,14 @@ export function _CreateSelfConversationsRouter(prisma: PrismaClient, runAdmissio
 	const messageAdmission = new PrismaConversationMessageAdmissionUnitOfWork(prisma, runAdmission, _createMutationRepository, createAttachmentAdmission);
 	const authority = new PrismaConversationUnitOfWork(prisma, messageAdmission, new PrismaAgentRunRetryUnitOfWork(prisma));
 	return __CreateSelfConversationsRouter({ resolveCaller: _resolveCaller, authority, logger });
+}
+
+/** Build the socket endpoint over the same Prisma authorities as the participant HTTP router. */
+export function _CreatePrismaSelfConversationSocketServer(prisma: PrismaClient, runAdmission: PersonalRunAdmissionPort, createAttachmentAdmission: ConversationAttachmentAdmissionFactory, logger: Logger, authenticator: SelfConversationSocketAuthenticator, options: { readonly interrupts?: ConversationOpenInterruptReader; readonly shutdownSignal?: AbortSignal } = {}): SelfConversationSocketServer
+{
+	const messageAdmission = new PrismaConversationMessageAdmissionUnitOfWork(prisma, runAdmission, _createMutationRepository, createAttachmentAdmission);
+	const authority = new PrismaConversationUnitOfWork(prisma, messageAdmission, new PrismaAgentRunRetryUnitOfWork(prisma));
+	const interruptOptions = options.interrupts === undefined ? {} : { interrupts: options.interrupts };
+	const shutdownOptions = options.shutdownSignal === undefined ? {} : { shutdownSignal: options.shutdownSignal };
+	return __CreateSelfConversationSocketServer({ authenticator, authority, repository: _CreateConversationReplayRepository(prisma), clock: CONVERSATION_PROJECTION_CLOCK, limits: CONVERSATION_PROJECTION_LIMITS, ...interruptOptions, ...shutdownOptions, logger });
 }

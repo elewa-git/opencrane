@@ -16,7 +16,7 @@ function _dependencies(): ChannelTargetResolutionDependencies
 	return {
 		config: { workloadAudience: "opencrane", channelProxyServiceAccountName: "channel-proxy", channelProxyNamespace: "silo-acme", invocationContextTtlMs: 60_000, allowedRouteHostSuffixes: [".svc.cluster.local"], receiverId: "conversation-replay-v1", receiverEndpoint: "http://agent-runtime.silo-acme.svc.cluster.local:8080/v1/events" },
 		workloadIdentity: { __Review: async function _review() { return { username: "system:serviceaccount:silo-acme:channel-proxy", serviceAccountName: "channel-proxy", namespace: "silo-acme", audiences: ["opencrane"] }; } },
-		hostSilo: { resolveExactHost: async function _resolveHost() { return { siloId: "silo-1", authorizationScope: { kind: "organization", organizationId: "silo-1" } }; } },
+		hostSilo: { resolveExactHost: async function _resolveHost() { return { siloId: "silo-1" }; } },
 		membership: { verifyCurrentMembership: async function _membership() { return { outcome: "trusted", revision: 7, trustedUntilEpochMs: _NOW + 120_000 }; } },
 		repository: {
 			getConversationAuthority: async function _Conversation() { return { conversationId: "conversation-1", siloId: "silo-1", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: ["user-1"] }; },

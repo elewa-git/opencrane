@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { __DigestAgentRevisionContent } from "../agent-revision-content";
 import type { AgentRevisionContent } from "../agent-revision.types";
+import { RevisionBoundaryCoverages, RevisionBoundaryKinds } from "../boundary-attachment.types";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 /** Build one reviewed tool definition fixture. */
@@ -25,7 +26,7 @@ function _Content(overrides: Partial<AgentRevisionContent> = {}): AgentRevisionC
 			custodyReferenceId: "custody-1",
 			toolDefinitions: [_Tool("calendar.read")],
 		}],
-		scopeAttachments: [{ scope: "personal", subjectType: "user", subjectId: "user-1" }],
+		boundaryAttachments: [{ boundaryKind: RevisionBoundaryKinds.Personal, boundaryId: "user-1", boundaryCoverage: RevisionBoundaryCoverages.Exact }],
 		...overrides,
 	};
 }
@@ -38,7 +39,7 @@ describe("agent revision content digest", function _AgentRevisionContentDigestSu
 		const second = __DigestAgentRevisionContent("service-1", 2, _Content());
 
 		expect(second).toBe(first);
-		expect(first).toBe("sha256:e795d21f1d187c75550c2c37096f7c1ed494e310cf6ae0bd3882c389b51b24c2");
+		expect(first).toBe("sha256:16570aaffbf2d5da107c934cd6bbc39f1f94569671d32ba0acffad84a3d560bc");
 	});
 
 	it.each([
@@ -48,7 +49,7 @@ describe("agent revision content digest", function _AgentRevisionContentDigestSu
 		["budget", { budget: { maxTurns: 6, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 } }],
 		["skills", { skills: [{ skillId: "skill-2", revisionId: "skill-revision-2" }] }],
 		["integrations", { integrationAssignments: [{ integrationId: "integration-2", custodyReferenceId: "custody-2", toolDefinitions: [_Tool("mail.read")] }] }],
-		["scope attachments", { scopeAttachments: [{ scope: "team", subjectType: "group", subjectId: "team-1" }] }],
+		["boundary attachments", { boundaryAttachments: [{ boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "team-1", boundaryCoverage: RevisionBoundaryCoverages.Exact }] }],
 	] satisfies readonly (readonly [string, Partial<AgentRevisionContent>])[])("changes when %s change", function _ExecutableFieldChangesDigest(_field, overrides)
 	{
 		const original = __DigestAgentRevisionContent("service-1", 2, _Content());

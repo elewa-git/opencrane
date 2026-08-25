@@ -34,8 +34,9 @@ export function __CreateAgUiStreamState(): AgUiStreamState
  * `accessRevoked` set and carries the single custom event "opencrane.access_revoked", which is how
  * the UI knows to show a revoked state rather than an error.
  *
- * Called by: OpenCraneConversationEventStream (state/conversation/adapter) on a 403, and reached
- * from within the reducer when the server sends the "opencrane.access_revoked" custom event.
+ * Called by: OpenCraneConversationEventStream (state/conversation/adapter) after an access-denied
+ * socket close, and reached from within the reducer when the server sends the
+ * "opencrane.access_revoked" custom event.
  *
  * @returns Empty state marked as revoked. Do not keep reducing into the previous state after this.
  */
@@ -45,7 +46,7 @@ export function __RevokeAgUiStreamAccess(): AgUiStreamState
 }
 
 /**
- * Folds one decoded SSE record into the stream state, returning new state.
+ * Folds one decoded socket projection record into the stream state, returning new state.
  *
  * Order comes only from the records arriving in order — the cursor is an opaque server string and
  * is never parsed or compared to work out what came first.
@@ -62,7 +63,7 @@ export function __RevokeAgUiStreamAccess(): AgUiStreamState
  * frame.
  *
  * @param state - The state so far; never mutated.
- * @param record - One decoded record from {@link __DecodeAgUiSseRecord}.
+ * @param record - One decoded record from {@link __DecodeAgUiSocketRecord}.
  * @returns New state with the record applied; or `state` itself, meaning the record was an exact
  *   duplicate and nothing changed. Records with a cursor advance `cursor`; records without one are
  *   temporary overlays and leave it alone.
@@ -84,16 +85,16 @@ export function __ReduceAgUiStream(state: AgUiStreamState, record: AgUiStreamRec
 }
 
 /**
- * Returns the cursor a reconnecting request must send, or undefined to start from the beginning.
+ * Returns the cursor a reconnecting socket must send, or undefined to start from the beginning.
  *
  * Undefined is normal, not an error: it means no record with a cursor has been accepted yet, so
- * there is nothing to resume from. The caller sends the value as both the `cursor` query parameter
- * and the `Last-Event-ID` header.
+ * there is nothing to resume from. The caller sends the value as the socket `cursor` query
+ * parameter.
  *
- * Called by: OpenCraneConversationEventStream (state/conversation/adapter) before each request.
+ * Called by: OpenCraneConversationEventStream (state/conversation/adapter) before each socket.
  *
  * @param state - Current stream state.
- * @returns The cursor to resume from, or `undefined` meaning request the stream from its start.
+ * @returns The cursor to resume from, or `undefined` meaning start the socket projection from its beginning.
  */
 export function __AgUiResumeCursor(state: AgUiStreamState): string | undefined { return state.cursor ?? undefined; }
 

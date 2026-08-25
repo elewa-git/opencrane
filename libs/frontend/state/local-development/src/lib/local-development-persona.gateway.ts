@@ -3,8 +3,9 @@ import { Injectable, inject } from "@angular/core";
 import { PersonaOnboardingStates, type PersonaOnboardingSnapshot, type PersonaResolutionKinds } from "@opencrane/models/user-onboarding";
 import { type PersonaGateway } from "@opencrane/state/onboarding";
 
+import { __LocalDevelopmentChoiceId } from "./local-development-archetype.fixtures";
 import { __CreateLocalPendingFirstChat } from "./local-development-first-chat.fixtures";
-import { __CreateLocalPersonaInterview, __LocalCommanderGuardianChoiceId } from "./local-development-persona-interview.fixtures";
+import { __CreateLocalPersonaInterview } from "./local-development-persona-interview.fixtures";
 import { __CreateLocalPersonaPreDraftReview, __CreateLocalPersonaReview } from "./local-development-persona-result.fixtures";
 import { LocalDevelopmentState } from "./local-development-state";
 
@@ -56,12 +57,12 @@ export class LocalDevelopmentPersonaGateway implements PersonaGateway
 			throw new Error("The local interview does not offer that answer.");
 		}
 
-		const expectedChoiceId = __LocalCommanderGuardianChoiceId(questionId);
+		const expectedChoiceId = __LocalDevelopmentChoiceId(this._state.fixture, questionId);
 
 		if (!expectedChoiceId || choiceId !== expectedChoiceId)
 		{
 			const expectedChoice = question.choices.find(choice => choice.id === expectedChoiceId);
-			throw new Error(`Tier 1 follows one reviewed Commander/Guardian path. Choose “${expectedChoice?.label ?? expectedChoiceId}” to continue.`);
+			throw new Error(`Tier 1 follows the reviewed ${this._state.fixture.displayName} path. Choose “${expectedChoice?.label ?? expectedChoiceId}” to continue.`);
 		}
 
 		const questions = current.questions.map(candidate => candidate.id === questionId
@@ -88,7 +89,7 @@ export class LocalDevelopmentPersonaGateway implements PersonaGateway
 			throw new Error("Answer every local interview question before continuing.");
 		}
 
-		this._state.persona = __CreateLocalPersonaPreDraftReview(current.questions);
+		this._state.persona = __CreateLocalPersonaPreDraftReview(current.questions, this._state.fixture);
 	}
 
 	/** Reject tie commands because the local interview fixture never produces a tie. */
@@ -108,7 +109,7 @@ export class LocalDevelopmentPersonaGateway implements PersonaGateway
 			throw new Error("The local persona draft is not ready.");
 		}
 
-		this._state.persona = __CreateLocalPersonaReview(current.questions);
+		this._state.persona = __CreateLocalPersonaReview(current.questions, this._state.fixture);
 	}
 
 	/** Approve the displayed revision and install the pending first-chat state. */
@@ -126,6 +127,6 @@ export class LocalDevelopmentPersonaGateway implements PersonaGateway
 			...this._state.persona,
 			state: PersonaOnboardingStates.Ready
 		};
-		this._state.firstChat = __CreateLocalPendingFirstChat();
+		this._state.firstChat = __CreateLocalPendingFirstChat(this._state.fixture);
 	}
 }

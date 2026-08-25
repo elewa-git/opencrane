@@ -25,9 +25,9 @@ Acceptance criteria:
 - The UI never asks the user to choose a silo, dataset, membership proof, persona revision, or
   workload identity.
 
-API: `POST /api/v1/me/conversations/{conversationId}/messages`. The former public
-`POST /api/v1/me/runs` entrypoint is deleted; managed schedules and invocations still use the
-internal run-admission port.
+API: `WSS /api/v1/me/conversations/{conversationId}/socket` with a structured
+`conversation.message.submit` frame. The former public `POST /api/v1/me/runs` entrypoint is
+deleted; managed schedules and invocations still use the internal run-admission port.
 
 ## RUN-02 — See my run history and status
 

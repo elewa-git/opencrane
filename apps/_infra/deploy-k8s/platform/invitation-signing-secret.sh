@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Reuses the same membership values for the migration fence and the final Helm install.
+# Reuses the same membership values for PostgreSQL and the final Helm install.
 build_membership_helm_args()
 {
   local membership_mode="${MEMBERSHIP_MODE:-standalone}"

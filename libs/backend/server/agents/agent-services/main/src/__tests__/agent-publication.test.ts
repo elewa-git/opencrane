@@ -37,7 +37,7 @@ function _revision(): AgentRevision
 		modelDefinitionId: "model-definition-1",
 		skills: [],
 		integrationAssignments: [],
-		scopeAttachments: [],
+		boundaryAttachments: [],
 		budget: { maxTurns: 10, maxTokens: 10000, maxCostUsdMicros: 500_000, maxDurationMs: 60000 },
 		authoredBy: "user-1",
 		createdAt: "2026-07-18T00:00:00.000Z",

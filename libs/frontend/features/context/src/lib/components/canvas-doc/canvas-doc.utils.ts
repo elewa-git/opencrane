@@ -1,4 +1,4 @@
-import { CanvasDocumentSaveStates, CanvasInitiativeStates, ScopeLevel } from "@opencrane/core";
+import { CanvasDocumentSaveStates, CanvasInitiativeStates, ResourceBoundaryKind } from "@opencrane/core";
 import { ScopeChipTones } from "@opencrane/elements/ui";
 
 /** Returns the approved shared-chip tone for an initiative state. */
@@ -35,8 +35,8 @@ export function _CanvasSaveLabel(saveState: CanvasDocumentSaveStates): string
 	}
 }
 
-/** Summarises admitted citation scopes without constructing document content locally. */
-export function _CanvasCitationScopeSummary(scopes: readonly ScopeLevel[]): string
+/** Summarises admitted citation boundary kinds without constructing document content locally. */
+export function _CanvasCitationBoundarySummary(boundaryKinds: readonly ResourceBoundaryKind[]): string
 {
-	return scopes.join(" · ");
+	return boundaryKinds.join(" · ");
 }

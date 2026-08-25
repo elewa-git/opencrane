@@ -1,12 +1,34 @@
-enum GrantScope {
-  Org        @map("org")
-  Department @map("department")
-  Team       @map("team")
-  Project    @map("project")
-  Personal   @map("personal")
+/// One shareable product resource and the principal that owns its personal boundary.
+model ResourceShare {
+  id               String                   @id @default(cuid())
+  siloId           String                   @map("silo_id")
+  resourceKind     String                   @map("resource_kind")
+  resourceId       String                   @map("resource_id")
+  ownerPrincipalId String                   @map("owner_principal_id")
+  owner            Principal                @relation("ResourceShareOwnerPrincipal", fields: [ownerPrincipalId, siloId], references: [id, siloId], onDelete: Restrict)
+  recipients       ResourceShareRecipient[]
+  createdAt        DateTime                 @default(now()) @map("created_at")
+  updatedAt        DateTime                 @updatedAt @map("updated_at")
+
+  @@unique([id, siloId])
+  @@unique([siloId, resourceKind, resourceId])
+  @@map("resource_shares")
 }
 
-enum GrantSubjectType {
-  Group  @map("group")
-  User   @map("user")
+/// One recipient of a resource share, bound to the exact generic grant that authorizes reading.
+model ResourceShareRecipient {
+  siloId               String             @map("silo_id")
+  resourceShareId      String             @map("resource_share_id")
+  principalId          String             @map("principal_id")
+  grantedByPrincipalId String             @map("granted_by_principal_id")
+  grantId              String             @unique @map("grant_id")
+  share                ResourceShare      @relation(fields: [resourceShareId, siloId], references: [id, siloId], onDelete: Cascade)
+  principal            Principal          @relation("ResourceShareRecipientPrincipal", fields: [principalId, siloId], references: [id, siloId], onDelete: Restrict)
+  grantedBy            Principal          @relation("ResourceShareGrantingPrincipal", fields: [grantedByPrincipalId, siloId], references: [id, siloId], onDelete: Restrict)
+  grant                AuthorizationGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  createdAt            DateTime           @default(now()) @map("created_at")
+
+  @@id([resourceShareId, principalId])
+  @@index([siloId, principalId])
+  @@map("resource_share_recipients")
 }

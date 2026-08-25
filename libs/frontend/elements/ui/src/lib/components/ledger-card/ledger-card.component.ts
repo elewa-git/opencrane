@@ -1,17 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, input } from "@angular/core";
 
-import { ScopeLevel } from "@opencrane/core";
+import { ResourceBoundaryKind } from "@opencrane/core";
 import { LedgerCardKinds } from "./ledger-card.types";
 import { ScopeChipComponent } from "../scope-chip/scope-chip.component";
 import { ScopeChipTones } from "../scope-chip/scope-chip.types";
 
-/** Shared-chip tone for each knowledge scope rendered by ledger metadata. */
-const _SCOPE_TONES: Record<ScopeLevel, ScopeChipTones> =
+/** Shared-chip tone for each resource boundary kind rendered by ledger metadata. */
+const _SCOPE_TONES: Record<ResourceBoundaryKind, ScopeChipTones> =
 {
-	[ScopeLevel.Org]: ScopeChipTones.Organization,
-	[ScopeLevel.Dept]: ScopeChipTones.Department,
-	[ScopeLevel.Project]: ScopeChipTones.Project,
-	[ScopeLevel.Personal]: ScopeChipTones.Personal
+	[ResourceBoundaryKind.Group]: ScopeChipTones.Organization,
+	[ResourceBoundaryKind.Personal]: ScopeChipTones.Personal
 };
 
 /** Observation / policy / action ledger card (used in chat and ledger tab). */
@@ -37,8 +35,8 @@ export class LedgerCardComponent
 	/** Entry label text. */
 	public readonly label = input.required<string>();
 
-	/** Knowledge scope of the entry. */
-	public readonly scope = input<ScopeLevel | undefined>(undefined);
+	/** Resource boundary kind of the entry. */
+	public readonly boundaryKind = input<ResourceBoundaryKind | undefined>(undefined);
 
 	/** Source reference. */
 	public readonly entryRef = input<string | undefined>(undefined);
@@ -52,7 +50,7 @@ export class LedgerCardComponent
 	/** Semantic scope treatment for the scope chip. */
 	public readonly scopeTone = computed<ScopeChipTones>(() =>
 	{
-		const level = this.scope();
-		return level ? _SCOPE_TONES[level] : ScopeChipTones.Neutral;
+		const boundaryKind = this.boundaryKind();
+		return boundaryKind ? _SCOPE_TONES[boundaryKind] : ScopeChipTones.Neutral;
 	});
 }

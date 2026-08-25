@@ -9,4 +9,6 @@ export interface PublicAuthenticationComposition
 	readonly productAuthentication: RequestHandler;
 	/** One signed-session middleware instance and store shared by both listeners. */
 	readonly sessionMiddleware: readonly RequestHandler[];
+	/** Product authentication middleware shared by HTTP requests and WebSocket upgrades. */
+	readonly authMiddleware: RequestHandler;
 }

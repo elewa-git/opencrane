@@ -86,11 +86,14 @@ package.
 - `npm run test:storybook:visual` — compare tagged canonical states with committed screenshots.
 - `npm run test:storybook:visual:update` — intentionally refresh those screenshot baselines after
   reviewing the rendered changes; committed baselines live in `tests/storybook/__screenshots__`.
+- `nx run frontend-elements-ui:test-storybook-visual-workbench` — run the same Playwright visual
+  suite against a static catalogue on port 4401; the Tier 1 `opencrane-ui:serve` workbench keeps the
+  interactive catalogue on port 4400 without capturing it during a hot-reload rebuild.
 
 Stories tagged `visual-test-narrow` are captured at the supported 390-pixel viewport instead of the
 default desktop viewport, so responsive contracts remain explicit and reproducible.
-Stories tagged `visual-test-full-viewport` must render exactly one journey canvas whose height is at
-least the selected browser viewport, so short routes cannot expose the body below their surface.
+Stories tagged `visual-test-full-viewport` must render one journey canvas or routed workspace shell
+at the selected browser viewport height, so short routes cannot expose the body below their surface.
 
 ## See also
 

@@ -15,6 +15,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
+- **Database migrations now run directly from their reviewed SQL.** They no longer require a backup,
+  source-schema check, application write pause, or automatic recovery. Deferred migration hardening
+  is tracked in #699.
+
 - **Invited users can now complete standalone registration after the first Owner has claimed the
   silo.** A verified invited identity keeps its OIDC session long enough to accept its signed link,
   while every other product route remains unavailable until that exact subject has an active
@@ -23,14 +27,36 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 ### Added
 
 - **Frontend developers can now exercise onboarding and chat locally without a backend or
-  infrastructure stack.** Plain `npm run serve:opencrane-ui` selects one coherent browser-only
+  infrastructure stack.** Plain `npm run serve:opencrane-ui` starts one coherent browser-only
   profile for persona approval, first chat, conversations, Agent-run progress, files, approvals,
   and child Agent threads, with deterministic slow, retry, reconnect, failed-run, and access-change
   scenarios plus Angular and native-API tripwires for missed live bindings. Build-time profile
   replacement keeps those fixtures out of production and omits backend-owned routes locally. Local
-  onboarding follows one reviewed
-  production Commander/Guardian survey and first-session path while leaving persona scoring to the
-  backend. The real-backend workflow remains an explicit `development-live` configuration.
+  onboarding can follow the reviewed Commander, Catalyst, Anchor, or Analyst Guardian path; explicit
+  Nx configurations save the choice in browser storage while an unset profile defaults to Commander.
+  The same command starts Storybook and its Playwright visual pass, while the real-backend workflow
+  remains an isolated `development-live` configuration.
+
+- **Org admins can now model departments, teams, and projects as one hierarchy of groups.** Groups
+  expose an optional parent, direct membership, and explicit `External` or `Local` authority;
+  sign-in mirrors only externally managed `group:<stable Group.id>` claims, while locally curated
+  membership remains under OpenCrane administration. Missing parents, hierarchy cycles, and
+  attempts to delete a referenced group fail closed.
+
+- **Administrators can now grant product capabilities to people or groups at explicit resource
+  boundaries.** Grants distinguish exact from descendant coverage without inheriting group
+  membership through the hierarchy, managed editors revoke only grants they own, and resource
+  shares create auditable exact-recipient grants without becoming a parallel authorization model.
+- **Platform developers can now add durable, transactionally admitted work without coupling product
+  logic to a scheduler engine.** The engine-neutral workflow contract and scheduling kit preserve
+  idempotency, cancellation, and respawn evidence, while the Absurd adapter admits a task and its
+  first attempt through one parameterized, policy-bound database procedure call in the caller's
+  existing transaction.
+
+- **Operators can now upgrade an existing database to the workflow-task foundation without leaving a
+  superuser credential available.** The direct migration Job prepares `pg_cron`, uses the generated
+  credential solely to install that reviewed prerequisite, and then removes the credential before the
+  ordinary application rollout continues.
 
 - **Application developers can now run the real OpenCrane API, PostgreSQL, and Agent chat locally
   without a Kubernetes cluster.** `npm run dev:tier2` starts the live-gateway UI against a fixed
@@ -47,14 +73,11 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   but remains `ready: true` with HTTP 200 while the database is available; database loss or an
   unreadable report fails closed as `ready: false` with HTTP 503.
 
-- **Operators can now identify an exact compatible release composition and perform fail-closed
-  adjacent-minor database upgrades.** Immutable release manifests bind the repository train to its
-  application, Helm chart, and database revisions; the deploy path accepts only the declared
-  adjacent-minor transition, fences the existing server against writes, completes a CloudNativePG
-  backup, verifies the migration bytes, and runs the bounded transactional migration before the new
-  server returns. The `0.7.0` to `0.8.0` path upgrades an exact source with empty legacy persona
-  state, but stops with `OC708` before mutation when populated persona data requires a reviewed
-  manual mapping; patch, skipped-minor, and major transitions remain manual.
+- **Operators can now identify a release composition and run a reviewed database migration Job.**
+  Immutable release manifests bind the repository train to its application, Helm chart, and database
+  image; the deploy path publishes the verified migration bytes and runs the bounded transactional
+  Job before the ordinary application rollout. The `0.7.0` to `0.8.0` SQL path still stops with
+  `OC708` when populated persona data requires a reviewed manual mapping.
 
 - **Operators can now retire one standalone silo without deleting an active tenant or foreign
   resources.** The app-owned teardown requires an exact cluster context, release composition,
@@ -180,6 +203,12 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   field that caused it.
 
 ### Changed
+
+- **Operators upgrading from 0.9.0 to 0.9.3 now cut over to the same IAM model used by fresh
+  installations.** The digest-bound migration deterministically projects principals, groups,
+  memberships, grants, and resource boundaries, then removes the superseded agent-scope and MCP
+  access-policy authorities; ambiguous or populated unsupported legacy state stops before mutation,
+  and recovery remains backup/restore only.
 
 - **Maintainers now carry durable compatibility and transition evidence with every release-affecting
   change.** Each directly changed or dependency-adapted Nx application records the immutable root

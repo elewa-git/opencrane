@@ -11,7 +11,7 @@ import type { OrgMembershipRepository, OrgMembershipRow } from "./org-membership
  * are stable between calls, and it re-checks each returned role, throwing if the database
  * ever hands back another one.
  *
- * Called by: constructed in libs/backend/server/iam/identity/main/src/oidc.service.ts
+ * Called by: constructed in libs/backend/server/iam/identity/main/src/auth/oidc.service.ts
  * and handed to `OidcAuthServiceBase`, which calls it on every `/auth/me`.
  *
  * @implements {OrgMembershipRepository}

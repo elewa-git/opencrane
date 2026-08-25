@@ -1,7 +1,7 @@
 import { AgentServiceKind, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaAgentRevisionLifecycleRepository } from "../prisma-agent-revision-lifecycle";
+import { PrismaAgentRevisionLifecycleUnitOfWork } from "../db/prisma-agent-revision-lifecycle";
 
 /** Creates the persisted fields mapped into one management catalogue service summary. */
 function _serviceRow()
@@ -15,7 +15,7 @@ describe("Prisma managed agent services catalogue", function _suite()
 	{
 		const findMany = vi.fn().mockResolvedValue([_serviceRow()]);
 		const prisma = { agentService: { findMany } } as unknown as PrismaClient;
-		const repository = new PrismaAgentRevisionLifecycleRepository(prisma);
+		const repository = new PrismaAgentRevisionLifecycleUnitOfWork(prisma);
 
 		await expect(repository.listManagedServices("silo-1")).resolves.toEqual([{ id: "service-1", siloId: "silo-1", kind: "managed", name: "Research", state: "active", activeRevisionId: "revision-1", workloadProfile: "managed", createdAt: "2026-07-26T12:00:00.000Z", updatedAt: "2026-07-26T13:00:00.000Z" }]);
 		expect(findMany).toHaveBeenCalledWith({ where: { siloId: "silo-1", kind: AgentServiceKind.Managed }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 200 });

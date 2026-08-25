@@ -52,15 +52,17 @@ requirements.
 
 ### Developer workflow — issue #684
 
-**Tier 1 built on `local-dev-workflow`:** plain `npm run serve:opencrane-ui` selects a coherent
+**Tier 1 built on `local-dev-workflow`:** plain `npm run serve:opencrane-ui` starts a coherent
 frontend-only onboarding and chat profile. Persona approval, bootstrap chat, onboarding history,
 normal conversations, AG-UI run progress, files, approvals, and child Agent threads run against one
 disposable in-memory lifecycle; Angular and native API tripwires reject an omitted live binding.
 Build-time provider and route replacements keep local fixtures out of live bundles and leave
-unsupported administration/settings/invitation routes unmounted in Tier 1. Storybook
-retains the detailed component-state catalogue, the profile uses the reviewed production survey and
-one Commander/Guardian first-session path without reproducing backend scoring, and allowlisted URL
-scenarios cover slow, retry, reconnecting, failed-run, and access-change paths.
+unsupported administration/settings/invitation routes unmounted in Tier 1. Plain serve also starts
+Storybook and its Playwright visual checks. The profile uses the reviewed production survey and one
+selectable Commander, Catalyst, Anchor, or Analyst Guardian first-session path without reproducing
+backend scoring; an explicit configuration persists the archetype in browser storage and an unset
+preference defaults to Commander. Allowlisted URL scenarios cover slow, retry, reconnecting,
+failed-run, and access-change paths.
 
 **Tier 2 built on `local-dev-workflow`:** `npm run dev:tier2` starts the live-gateway frontend,
 real OpenCrane API, target-baseline PostgreSQL, fixed local identity, and signed local membership.
@@ -278,8 +280,8 @@ Repository train `0.8.0` also replaces the earlier fresh-database-only decision 
 version-to-version authority. Every Nx application records the last root train that adapted its
 production contract, directly or through its dependency graph; immutable release manifests map the
 compatible app, chart, and database revisions. Adjacent minor trains carry reviewed Helm transitions
-and a bounded, backup-gated database migration Job. Patch, skipped-minor, and major transitions stay
-manual. The `0.7.0` to `0.8.0` SQL path migrates empty legacy persona state automatically and fails
+and a bounded database migration Job. The deferred migration hardening work is tracked in #699.
+The `0.7.0` to `0.8.0` SQL path migrates empty legacy persona state automatically and fails
 closed with `OC708` when semantic mapping of populated persona data requires an operator-reviewed
 manual plan.
 
@@ -518,6 +520,7 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
 | [#602](https://github.com/elewa-git/opencrane/issues/602) | Retain completed onboarding as closed/read-only workspace history |
 | [#603](https://github.com/elewa-git/opencrane/issues/603) | Build governed conversation attachments and durable agent-created outputs |
 | [#604](https://github.com/elewa-git/opencrane/issues/604) | Build reusable approvals, choices, free-text elicitation, recovery, and safe disclosure |
+| [#695](https://github.com/elewa-git/opencrane/issues/695) | The Absurd foundation, OAuth refresh workflow, and saved MCP protocol check are complete. `.mcpb` validation, Skills MCP tasks, the warm path, existing-workflow pilots, and the later agent-run migration remain open. |
 
 Closed issues are intentionally absent from the active list: [#128](https://github.com/elewa-git/opencrane/issues/128),
 [#129](https://github.com/elewa-git/opencrane/issues/129),

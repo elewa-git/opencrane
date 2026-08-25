@@ -27,6 +27,12 @@ export interface AuthUser
   /** The caller's group memberships from the OIDC groups/roles claims (empty when none). */
   groups: string[];
 
+  /** Silo whose OIDC client or standalone admission bound this login; absent until post-login admission succeeds. */
+  siloId?: string;
+
+  /** ID-token expiry that bounds how long cached authorization claims remain usable. */
+  authorizationExpiresAt: string;
+
   /**
    * Whether the caller is a platform operator: their groups intersect
    * `OPENCRANE_PLATFORM_OPERATOR_GROUPS`, OR their VERIFIED email equals the per-cluster

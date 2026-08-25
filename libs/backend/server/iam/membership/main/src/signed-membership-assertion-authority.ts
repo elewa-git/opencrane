@@ -1,13 +1,11 @@
-import { __AuthorizationScopesEqual, type AuthorizationScope } from "@opencrane/models/authorization";
-
 import { __VerifyCurrentFleetMembership } from "./membership-authority";
 import type { FleetMembershipAuthorityRepository, FleetMembershipEvidenceConfig, SignedFleetMembershipAssertionAuthority, VerifyFleetMembershipResult } from "./membership-authority.types";
 
 /**
  * Answers membership questions for callers that do not know which assertion applies.
  *
- * Given a subject, silo, and scope it reads the newest stored revision, finds the one assertion
- * matching all three, and hands that assertion to the full check. Requiring exactly one match is
+ * Given a subject and silo it reads the newest stored revision, finds the one assertion matching
+ * both, and hands that assertion to the full check. Requiring exactly one match is
  * deliberate: zero means no membership, and more than one means the stored revision is ambiguous, so
  * picking one would be guessing at authority.
  *
@@ -35,13 +33,12 @@ export class SignedFleetMembershipAssertionVerifier implements SignedFleetMember
 	/**
 	 * @param subjectId - Subject whose membership is in question.
 	 * @param siloId - Silo the request is happening in.
-	 * @param scope - Scope the subject must be a member at.
 	 * @param nowEpochMs - Current time in epoch milliseconds, from the caller.
 	 * @returns `trusted` with the trust window; `denied` with `missing_revision` when nothing is
 	 *          stored, `assertion_mismatch` when zero or several assertions match, or the reason the
 	 *          full check refused.
 	 */
-	async verifyCurrentMembership(subjectId: string, siloId: string, scope: AuthorizationScope, nowEpochMs: number): Promise<VerifyFleetMembershipResult>
+	async verifyCurrentMembership(subjectId: string, siloId: string, nowEpochMs: number): Promise<VerifyFleetMembershipResult>
 	{
 		// 1. Load only the newest revision from the deployment-trusted issuer; absence cannot imply membership.
 		const revision = await this.repository.getLatestSignedRevision(this.evidence.trustedIssuerId, siloId);
@@ -50,17 +47,16 @@ export class SignedFleetMembershipAssertionVerifier implements SignedFleetMember
 		// 2. Select one exact signed assertion without accepting a caller-provided assertion identifier.
 		const assertions = revision.assertions.filter(function _MatchesAssertion(assertion): boolean
 		{
-			return assertion.siloId === siloId && assertion.subjectId === subjectId && __AuthorizationScopesEqual(assertion.scope, scope);
+			return assertion.siloId === siloId && assertion.subjectId === subjectId;
 		});
 		if (assertions.length !== 1) return { outcome: "denied", reason: "assertion_mismatch", revision: revision.revision };
 
-		// 3. Re-run the complete signature, freshness, scope, and monotonic-acceptance authority for that assertion.
+		// 3. Re-run the complete signature, freshness, silo, and monotonic-acceptance authority for that assertion.
 		return __VerifyCurrentFleetMembership(this.repository, this.evidence.verifier, {
 			trustedIssuerId: this.evidence.trustedIssuerId,
 			siloId,
 			subjectId,
 			assertionId: assertions[0]!.assertionId,
-			scope,
 			nowEpochMs,
 			maximumStalenessMs: this.evidence.maximumStalenessMs,
 		});

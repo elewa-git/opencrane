@@ -6,7 +6,7 @@ import { AgentThreadAccessStates, AgentThreadRecoveryStates, AgentThreadRunState
  * The local gateway stores this result so a follow-up or read marker remains visible on the next
  * route read.
  */
-export function __CreateLocalAgentThread(parentConversationId: string, childConversationId: string): AgentThreadSnapshot
+export function __CreateLocalAgentThread(parentConversationId: string, childConversationId: string, agentDisplayName: string): AgentThreadSnapshot
 {
 	return {
 		parentConversationId,
@@ -32,7 +32,7 @@ export function __CreateLocalAgentThread(parentConversationId: string, childConv
 					initials: "Y"
 				},
 				{
-					label: "The Commander (Guardian)",
+					label: agentDisplayName,
 					initials: "TC"
 				}
 			],
@@ -63,7 +63,7 @@ export function __CreateLocalAgentThread(parentConversationId: string, childConv
 				id: "thread-message-local-1",
 				message: {
 					id: "thread-message-local-1",
-					authorName: "The Commander (Guardian)",
+					authorName: agentDisplayName,
 					authorInitials: "TC",
 					authoredByAgent: true,
 					timestampLabel: "09:01",

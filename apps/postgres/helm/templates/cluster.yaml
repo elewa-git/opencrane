@@ -1,6 +1,15 @@
 {{- if eq (len .Values.databases) 0 -}}
 {{- fail "databases must contain at least the initdb database" -}}
 {{- end -}}
+{{- /*
+CloudNativePG reads the PostgreSQL major version from imageName's tag before it decides how to
+upgrade, while the digest keeps the selected bytes immutable.
+@see https://cloudnative-pg.io/docs/1.27/container_images/#image-tag-requirements
+*/ -}}
+{{- $operandImagePattern := printf "^[^[:space:]@]+:%s(\\.[0-9]+)*([-_.][A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}$" .Chart.AppVersion -}}
+{{- if not (regexMatch $operandImagePattern .Values.image) -}}
+{{- fail (printf "image must use a PostgreSQL %s tag plus an exact sha256 OCI digest so CloudNativePG can detect upgrades" .Chart.AppVersion) -}}
+{{- end -}}
 {{- $primary := index .Values.databases 0 -}}
 {{- $databaseNames := dict -}}
 {{- $databaseOwners := dict -}}
@@ -14,48 +23,12 @@
 {{- if lt (int .Values.privileges.jobDeadlineGraceSeconds) 10 -}}
 {{- fail "privileges.jobDeadlineGraceSeconds must be at least 10 so the Job can emit terminal diagnostics" -}}
 {{- end -}}
-{{- if not (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+$" .Values.convergence.targetSchemaVersion) -}}
-{{- fail "convergence.targetSchemaVersion must be an exact semantic version" -}}
-{{- end -}}
-{{- range $digestName, $digest := dict "targetBaselineSha256" .Values.convergence.targetBaselineSha256 "currentProtectedBaselineSha256" .Values.convergence.currentProtectedBaselineSha256 -}}
-{{- if not (regexMatch "^[0-9a-f]{64}$" $digest) -}}
-{{- fail (printf "convergence.%s must be a full lowercase SHA-256" $digestName) -}}
-{{- end -}}
-{{- end -}}
-{{- if .Values.convergence.previousMigration.available -}}
-{{- if or (not (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+-to-[0-9]+\\.[0-9]+\\.[0-9]+$" .Values.convergence.previousMigration.id)) (not (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+$" .Values.convergence.previousMigration.fromSchemaVersion)) (not (regexMatch "^[0-9a-f]{64}$" .Values.convergence.previousMigration.sourceTargetBaselineSha256)) (not (regexMatch "^[0-9a-f]{64}$" .Values.convergence.previousMigration.sqlSha256)) -}}
-{{- fail "convergence.previousMigration must bind an exact migration id, source schema version, source target digest, and SQL digest" -}}
-{{- end -}}
-{{- if eq (len .Values.convergence.previousMigration.sourceProtectedBaselineSha256s) 0 -}}
-{{- fail "convergence.previousMigration.sourceProtectedBaselineSha256s must admit at least one protected origin" -}}
-{{- end -}}
-{{- $protectedOrigins := dict -}}
-{{- range $digest := .Values.convergence.previousMigration.sourceProtectedBaselineSha256s -}}
-{{- if not (regexMatch "^[0-9a-f]{64}$" $digest) -}}
-{{- fail "every admitted protected origin must be a full lowercase SHA-256" -}}
-{{- end -}}
-{{- if hasKey $protectedOrigins $digest -}}
-{{- fail "admitted protected origins must be unique" -}}
-{{- end -}}
-{{- $_ := set $protectedOrigins $digest true -}}
-{{- end -}}
-{{- if .Values.migration.enabled -}}
-{{- if not (hasKey $protectedOrigins .Values.convergence.previousMigration.selectedSourceProtectedBaselineSha256) -}}
-{{- fail "the migration Job requires the classifier-selected admitted protected origin" -}}
-{{- end -}}
-{{- else if .Values.privileges.enabled -}}
-{{- $selectedOrigin := .Values.convergence.previousMigration.selectedSourceProtectedBaselineSha256 -}}
-{{- if not (or (eq $selectedOrigin .Values.convergence.currentProtectedBaselineSha256) (hasKey $protectedOrigins $selectedOrigin)) -}}
-{{- fail "the privilege Job requires the classifier-selected current or admitted protected origin" -}}
-{{- end -}}
-{{- end -}}
-{{- end -}}
 {{- if .Values.migration.enabled -}}
 {{- if not (regexMatch "^[^[:space:]@]+@sha256:[0-9a-f]{64}$" .Values.migration.image) -}}
 {{- fail "migration.image must use an exact sha256 OCI digest when migration is enabled" -}}
 {{- end -}}
-{{- if not .Values.convergence.previousMigration.available -}}
-{{- fail "migration.enabled requires convergence.previousMigration evidence" -}}
+{{- if or (not (regexMatch "^[0-9a-f]{64}$" .Values.migration.sqlSha256)) (not (regexMatch "^[0-9a-f]{64}$" .Values.migration.sourceBaselineSha256)) -}}
+{{- fail "migration.sqlSha256 and migration.sourceBaselineSha256 must be full lowercase SHA-256 digests" -}}
 {{- end -}}
 {{- if or (not .Values.migration.configMap.name) (ne .Values.migration.configMap.key "migration.sql") -}}
 {{- fail "migration execution requires an immutable migration.sql ConfigMap and full SQL digest" -}}
@@ -140,6 +113,12 @@
 {{- if lt (int .Values.postgresql.maxConnections) 1 -}}
 {{- fail "postgresql.maxConnections must be positive" -}}
 {{- end -}}
+{{- if not (kindIs "bool" .Values.superuserAccess.enabled) -}}
+{{- fail "superuserAccess.enabled must be a boolean" -}}
+{{- end -}}
+{{- if and .Values.migration.privilegedExtension.enabled (or (ne .Values.migration.privilegedExtension.name "pg_cron") (not .Values.superuserAccess.enabled)) -}}
+{{- fail "the privileged pg_cron migration requires temporary CNPG superuser access" -}}
+{{- end -}}
 {{- if lt (int .Values.pooler.instances) 1 -}}
 {{- fail "pooler.instances must be positive" -}}
 {{- end -}}
@@ -173,10 +152,13 @@ metadata:
 spec:
   instances: {{ .Values.instances }}
   imageName: {{ .Values.image | quote }}
-  enableSuperuserAccess: false
+  enableSuperuserAccess: {{ .Values.superuserAccess.enabled }}
   postgresql:
+    shared_preload_libraries:
+      - pg_cron
     parameters:
       max_connections: {{ .Values.postgresql.maxConnections | quote }}
+      cron.database_name: "opencrane"
   inheritedMetadata:
     labels:
       {{- include "opencrane.postgres.labels" . | nindent 6 }}

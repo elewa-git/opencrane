@@ -86,7 +86,13 @@ grep -q 'CREATE SCHEMA "opencrane_bootstrap" AUTHORIZATION CURRENT_USER;' "$expe
 grep -q 'REVOKE ALL ON SCHEMA "opencrane_bootstrap" FROM PUBLIC;' "$expected_sql"
 grep -q 'GRANT SELECT ON TABLE "opencrane_bootstrap"."target_baseline" TO "owner""quoted";' "$expected_sql"
 grep -Eq 'VALUES \(TRUE, '\''[0-9a-f]{64}'\''\);' "$expected_sql"
+grep -q 'CREATE EXTENSION IF NOT EXISTS pg_cron;' "$expected_sql"
+grep -q 'GRANT USAGE ON SCHEMA "cron" TO "owner""quoted";' "$expected_sql"
 grep -q 'SET ROLE "owner""quoted";' "$expected_sql"
+if [[ "$(grep -n 'CREATE EXTENSION IF NOT EXISTS pg_cron;' "$expected_sql" | cut -d: -f1)" -ge "$(grep -n 'SET ROLE "owner""quoted";' "$expected_sql" | cut -d: -f1)" ]]; then
+  echo "publisher drops bootstrap superuser authority before installing pg_cron" >&2
+  exit 1
+fi
 grep -q 'OpenCrane target database baseline' "$expected_sql"
 if grep -q 'kubectl.kubernetes.io/last-applied-configuration' "$CAPTURE_FILE"; then
   echo "publisher added the client-side apply annotation to the baseline ConfigMap" >&2

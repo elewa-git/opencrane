@@ -12,11 +12,11 @@ It owns two kinds of thing:
 
 - **Types** for an `AgentService` (a named, reusable agent), its immutable `AgentRevision`
   (a published, frozen version of that agent, carrying revision lineage — `parentRevisionId`,
-  `sourceRevisionId`, `changeMessage` — and revision-scoped `RevisionScopeAttachment`s over the
-  canonical `GrantScope`/`GrantSubjectType` vocabulary), an `AgentRun` (one execution attempt), and
+  `sourceRevisionId`, `changeMessage` — and revision-scoped `RevisionBoundaryAttachment`s over
+  stored Group or Personal knowledge boundaries), an `AgentRun` (one execution attempt), and
   the ordered `RunEvent` emitted by that attempt.
 - A **pure revision diff** (`__DiffAgentRevisions`): line-level prompt diff plus semantic
-  field-level configuration diff, flagging security-relevant widening (broader scopes, tools,
+  field-level configuration diff, flagging security-relevant widening (broader knowledge boundaries, tools,
   credentials, or budgets) for reviewer confirmation. It reads only stable references, never secrets.
 - A **canonical revision digest** (`__DigestAgentRevisionContent`) over the complete
   `AgentRevisionContent`. Every revision-writing authority hashes the same domain value it persists,
@@ -42,8 +42,10 @@ persistence; a wrong answer here can only refuse a legal move, never invent one.
 ## Public surface
 
 - Lifecycle types: `AgentService`/`…State`, `AgentRevision`/`…State`, `AgentRun`/`…State`,
-  `AgentServiceKinds`, `AgentServiceStates`, `AgentRevisionContent`, `AgentBudget`, `RevisionScopeAttachment`, `GrantScope`,
-  `GrantSubjectType`, `RunEvent`, `RunEventTypes`, and the agent/run `*Id` identifier aliases.
+  `AgentServiceKinds`, `AgentServiceStates`, `AgentRevisionContent`, `AgentBudget`,
+  `RevisionBoundaryAttachment`, `RevisionBoundaryKinds`, `RevisionBoundaryCoverages`, `RunEvent`,
+  `RunEventTypes`, and the
+  agent/run `*Id` identifier aliases.
 - `RunEventTypes` is the closed durable vocabulary for streamed messages, tool lifecycle and failure,
   usage, display-safe runtime errors, terminal outcomes, and versioned governed A2UI updates.
 - `PERSONAL_MEMORY_RECALL_TOOL_NAME` is the provider-safe model-visible name, while

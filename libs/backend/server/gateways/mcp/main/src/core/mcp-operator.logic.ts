@@ -1,717 +1,418 @@
-import { randomBytes } from "node:crypto";
-
 import { McpApprovalStatus, McpConnectionStatus, McpServerType, type CredentialField, type Directory, type EntitledUser, type McpAccessPolicy, type McpCatalogServer, type McpInstalled } from "@opencrane/contracts";
-import { Prisma, type PrismaClient } from "@prisma/client";
-
+import { __ResolvePrincipalAuthorization } from "@opencrane/backend/server/iam/authorization";
+import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, type AuthorizationBoundary, type CapabilityReference } from "@opencrane/models/authorization";
 import { ___SortBy } from "@opencrane/util";
-import type { McpAccessPolicyRequest } from "../routes/mcp-operator.types";
-import type { McpOperatorCaller } from "./mcp-operator.logic.types";
+import type { McpAccessPolicyCommand, McpOperatorCaller } from "./mcp-operator.logic.types";
+import type { McpOperatorInstallRecord, McpOperatorPrincipalRecord, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork } from "./mcp-operator-repository.types";
+import { __McpEraProbeRequiredStates } from "../era-probe/mcp-era-probe-state";
 
-/** MCP server row joined with the access policy + entitled users used for filtering. */
-type _McpServerWithPolicyRow = Prisma.McpServerGetPayload<{ include: { accessPolicy: { include: { users: true } } } }>;
+const _CATALOG_ID = "opencrane-core";
+const _CATALOG_REVISION = 1;
+const _USE_CAPABILITY_ID = "mcp-server:use";
+const _ACCESS_MANAGER_ID = "mcp-access-editor";
+const _RESOURCE_KIND = "mcp-server";
 
-/** Per-user install row returned by the install/connect mutations. */
-type _McpInstallRow = Prisma.McpServerInstallGetPayload<object>;
-
-/** Typed Prisma `McpServerType` values (member names, not the @map'd DB labels). */
-const _PRISMA_SERVER_TYPE = {
-  SingleUser: "SingleUser",
-  MultiUser: "MultiUser",
-  RemoteOauth: "RemoteOauth",
-} as const;
-
-/** Typed Prisma `McpApprovalStatus` values used during runtime lookups. */
-const _PRISMA_APPROVAL_STATUS = {
-  PendingReview: "PendingReview",
-  Approved: "Approved",
-  Published: "Published",
-  Disabled: "Disabled",
-} as const;
-
-/** Typed Prisma `McpConnectionStatus` values used during runtime lookups. */
-const _PRISMA_CONNECTION_STATUS = {
-  NeedsCredential: "NeedsCredential",
-  Activating: "Activating",
-  Connected: "Connected",
-  OauthConnected: "OauthConnected",
-  SharedKey: "SharedKey",
-  ActivationFailed: "ActivationFailed",
-} as const;
-
-/** Contract server-type lookup keyed by Prisma enum values. */
-const _TYPE_BY_PRISMA = {
-  [_PRISMA_SERVER_TYPE.SingleUser]: McpServerType.SingleUser,
-  [_PRISMA_SERVER_TYPE.MultiUser]: McpServerType.MultiUser,
-  [_PRISMA_SERVER_TYPE.RemoteOauth]: McpServerType.RemoteOauth,
-};
-
-/** Contract approval-status lookup keyed by Prisma enum values. */
-const _APPROVAL_BY_PRISMA = {
-  [_PRISMA_APPROVAL_STATUS.PendingReview]: McpApprovalStatus.PendingReview,
-  [_PRISMA_APPROVAL_STATUS.Approved]: McpApprovalStatus.Approved,
-  [_PRISMA_APPROVAL_STATUS.Published]: McpApprovalStatus.Published,
-  [_PRISMA_APPROVAL_STATUS.Disabled]: McpApprovalStatus.Disabled,
-};
-
-/** Contract connection-status lookup keyed by Prisma enum values. */
-const _CONNECTION_BY_PRISMA = {
-  [_PRISMA_CONNECTION_STATUS.NeedsCredential]: McpConnectionStatus.NeedsCredential,
-  [_PRISMA_CONNECTION_STATUS.Activating]: McpConnectionStatus.Activating,
-  [_PRISMA_CONNECTION_STATUS.Connected]: McpConnectionStatus.Connected,
-  [_PRISMA_CONNECTION_STATUS.OauthConnected]: McpConnectionStatus.OauthConnected,
-  [_PRISMA_CONNECTION_STATUS.SharedKey]: McpConnectionStatus.SharedKey,
-  [_PRISMA_CONNECTION_STATUS.ActivationFailed]: McpConnectionStatus.ActivationFailed,
-};
-
-/** Deterministic avatar palette indexed by a stable hash of the user identifier. */
+const _TYPE = { SingleUser: McpServerType.SingleUser, MultiUser: McpServerType.MultiUser, RemoteOauth: McpServerType.RemoteOauth } as const;
+const _APPROVAL = { PendingReview: McpApprovalStatus.PendingReview, Approved: McpApprovalStatus.Approved, Published: McpApprovalStatus.Published, Disabled: McpApprovalStatus.Disabled } as const;
+const _REQUIRED_APPROVAL = { Approved: "PendingReview", Published: "Approved" } as const;
+const _CONNECTION = { NeedsCredential: McpConnectionStatus.NeedsCredential, SharedKey: McpConnectionStatus.SharedKey } as const;
 const _AVATAR_COLORS = ["#1F3B6E", "#2E7D32", "#6A1B9A", "#C62828", "#00838F", "#EF6C00", "#4527A0", "#283593"];
 
 /**
- * List the catalogue servers the caller may see: published AND entitled.
+ * Lists published MCP catalog entries that the caller's persisted authorization grants allow.
  *
- * @param prisma - Prisma client used for persistence.
- * @param caller - Identity + entitlement context of the calling user.
- * @returns Published, entitlement-scoped catalogue rows.
+ * A published row is not enough to appear in the catalog: this flow resolves the local Principal
+ * and its persisted group subjects for the MCP-use capability. It returns no rows when that
+ * capability is absent, so a missing catalog entry cannot grant catalog access.
+ *
+ * Called by: {@link mcpOperatorRouter} for `GET /catalog`.
+ * @param unitOfWork - Runs the catalog read and authorization decisions in one operation.
+ * @param caller - Supplies the authenticated silo and local Principal to authorize.
+ * @returns Published catalog entries that have an allow decision; otherwise an empty array.
  */
-export async function listEntitledCatalog(prisma: PrismaClient, caller: McpOperatorCaller): Promise<McpCatalogServer[]>
+export function listEntitledCatalog(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller): Promise<McpCatalogServer[]>
 {
-  // 1. Narrow to published servers in the database so disabled/pending rows never
-  //    leave the governance boundary, then load each server's access policy.
-  const servers = await prisma.mcpServer.findMany({
-    where: { approvalStatus: _PRISMA_APPROVAL_STATUS.Published as Prisma.McpServerWhereInput["approvalStatus"] },
-    include: { accessPolicy: { include: { users: true } } },
-    orderBy: { createdAt: "desc" },
-  });
-
-  // 2. Apply the per-caller entitlement filter (everyone-in-org / user / group),
-  //    bypassed only under the dev-open posture, then map to the wire shape.
-  return servers
-    .filter(function _entitled(server) { return _IsEntitled(server, caller); })
-    .map(function _map(server) { return _MapCatalogServer(server); });
+	return unitOfWork.execute(async function _List(transaction)
+	{
+		const [servers, capability] = await Promise.all([transaction.mcp.listPublishedServers(caller.siloId), _Capability(transaction)]);
+		if (!capability)
+			return [];
+		const decisions = await Promise.all(servers.map(async function _Decide(server)
+		{
+			return await _Allowed(transaction, caller, capability, server.id) ? _MapServer(server) : null;
+		}));
+		return decisions.filter(function _Present(server): server is McpCatalogServer { return server !== null; });
+	});
 }
 
 /**
- * List every catalogue server regardless of status — the org-admin governance view.
+ * Lists every MCP catalog row in the authenticated administrator's silo for governance.
  *
- * @param prisma - Prisma client used for persistence.
- * @returns All catalogue rows in newest-first order.
+ * Unlike {@link listEntitledCatalog}, this view includes unpublished rows because its route is
+ * already gated for organization administrators; the silo still prevents it from reading another
+ * organization's catalog.
+ *
+ * Called by: {@link mcpOperatorRouter} for `GET /servers`.
+ * @param unitOfWork - Runs the silo-scoped catalog read.
+ * @param caller - Supplies the authenticated silo.
+ * @returns All catalog entries in the caller's silo.
  */
-export async function listAllServers(prisma: PrismaClient): Promise<McpCatalogServer[]>
+export function listAllServers(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller): Promise<McpCatalogServer[]>
 {
-  const servers = await prisma.mcpServer.findMany({ orderBy: { createdAt: "desc" } });
-  return servers.map(function _map(server) { return _MapCatalogServer(server); });
+	return unitOfWork.execute(async function _List(transaction)
+	{
+		return (await transaction.mcp.listAllServers(caller.siloId)).map(_MapServer);
+	});
 }
 
 /**
- * List the servers the calling user has installed.
+ * Lists the MCP servers installed for one local Principal.
  *
- * @param prisma - Prisma client used for persistence.
- * @param userId - Stable caller identifier.
- * @returns The caller's install rows in wire shape.
+ * The route resolves the external identity to this persisted Principal before calling the flow, so
+ * the result cannot use another principal's installation rows.
+ *
+ * Called by: {@link mcpOperatorRouter} for `GET /installed`.
+ * @param unitOfWork - Runs the installation read.
+ * @param principalId - Identifies the local Principal whose installations to return.
+ * @returns The principal's installed servers and their persisted connection states.
  */
-export async function listInstalled(prisma: PrismaClient, userId: string): Promise<McpInstalled[]>
+export function listInstalled(unitOfWork: McpOperatorUnitOfWork, principalId: string): Promise<McpInstalled[]>
 {
-  const installs = await prisma.mcpServerInstall.findMany({ where: { userId }, orderBy: { createdAt: "asc" } });
-  return installs.map(function _map(install) { return _MapInstalled(install); });
+	return unitOfWork.execute(async function _List(transaction) { return (await transaction.mcp.listInstalls(principalId)).map(_MapInstall); });
 }
 
 /**
- * Install a catalogue server for the calling user (idempotent per user+server).
+ * Installs a published MCP server after checking its current authorization again.
  *
- * The initial connection state is derived from the server type: a multi-user
- * server is satisfied by the org-wide shared key immediately (`shared-key`),
- * while every other type starts out needing a per-user credential.
+ * A catalog result may be stale by the time a caller installs it. The flow therefore confirms that
+ * the server is still in the caller's silo, still published, and still allowed by the MCP-use
+ * capability before it writes the install. Multi-user servers start as `SharedKey`; other server
+ * types start as `NeedsCredential`. The install and its audit entry commit or roll back together.
  *
- * @param prisma - Prisma client used for persistence.
- * @param userId - Stable caller identifier.
- * @param serverId - Catalogue server identifier to install.
- * @returns The install row, or null when the server does not exist.
+ * Called by: {@link mcpOperatorRouter} for `POST /installed`.
+ * @param unitOfWork - Runs the authorization check, installation write, and audit write together.
+ * @param caller - Supplies the authenticated silo and local Principal to authorize.
+ * @param serverId - Identifies the catalog server to install.
+ * @returns The installed-server response, or `null` when the server is absent, unpublished, or not allowed.
  */
-export async function installServer(prisma: PrismaClient, userId: string, serverId: string): Promise<McpInstalled | null>
+export function installServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string): Promise<McpInstalled | null>
 {
-  // 1. Confirm the server exists so a bad identifier reads as 404 rather than a
-  //    dangling install row pointing at nothing.
-  const server = await prisma.mcpServer.findUnique({ where: { id: serverId }, select: { serverType: true } });
-  if (!server)
-  {
-    return null;
-  }
-
-  // 2. Multi-user servers are brokered by an org-wide shared key, so the install
-  //    is connected on creation; every other type must author a credential first.
-  const initialStatus = server.serverType === _PRISMA_SERVER_TYPE.MultiUser
-    ? _PRISMA_CONNECTION_STATUS.SharedKey
-    : _PRISMA_CONNECTION_STATUS.NeedsCredential;
-
-  // 3. Upsert so a repeated install is idempotent and never duplicates the row,
-  //    leaving an already-connected install untouched.
-  const install = await prisma.mcpServerInstall.upsert({
-    where: { mcpServerId_userId: { mcpServerId: serverId, userId } },
-    create: { mcpServerId: serverId, userId, connectionStatus: initialStatus as Prisma.McpServerInstallCreateInput["connectionStatus"] },
-    update: {},
-  });
-
-  await _AuditInstall(prisma, "Created", serverId, userId, `MCP server ${serverId} installed for ${userId}`);
-  return _MapInstalled(install);
+	return unitOfWork.execute(async function _Install(transaction)
+	{
+		const [server, capability] = await Promise.all([transaction.mcp.findServer(caller.siloId, serverId), _Capability(transaction)]);
+		if (!server || server.approvalStatus !== "Published" || !capability || !(await _Allowed(transaction, caller, capability, serverId)))
+			return null;
+		const status = server.serverType === "MultiUser" ? "SharedKey" : "NeedsCredential";
+		const installed = await transaction.mcp.upsertInstall(serverId, caller.principalId, status);
+		await transaction.mcp.appendAudit("Created", `McpServerInstall/${serverId}:${caller.principalId}`, `MCP server ${serverId} installed for ${caller.principalId}`);
+		return _MapInstall(installed);
+	});
 }
 
 /**
- * Uninstall a server for the calling user, clearing any stored credential handle.
+ * Removes one local Principal's installation of an MCP server.
  *
- * @param prisma - Prisma client used for persistence.
- * @param userId - Stable caller identifier.
- * @param serverId - Installed server identifier.
- * @returns True when an install was removed, false when none existed.
+ * The delete includes both the server and Principal identifiers, so an uninstall request cannot
+ * remove another principal's install. An audit entry is written only when a row was removed.
+ *
+ * Called by: {@link mcpOperatorRouter} for `DELETE /installed/:serverId`.
+ * @param unitOfWork - Runs the deletion and any audit write together.
+ * @param principalId - Identifies the local Principal whose installation may be removed.
+ * @param serverId - Identifies the installed server to remove.
+ * @returns `removed` after deleting an install, or `not_found` when this principal has none.
  */
-export async function uninstallServer(prisma: PrismaClient, userId: string, serverId: string): Promise<boolean>
+export function uninstallServer(unitOfWork: McpOperatorUnitOfWork, principalId: string, serverId: string): Promise<"removed" | "not_found">
 {
-  // 1. Scope the delete to the caller's own install so one user cannot uninstall
-  //    another's; a missing row reads as a no-op 404 at the route.
-  const result = await prisma.mcpServerInstall.deleteMany({ where: { mcpServerId: serverId, userId } });
-  if (result.count === 0)
-  {
-    return false;
-  }
-
-  // 2. Deleting the row drops the credentialRef custody handle with it, so no
-  //    further brokering can occur for this user+server.
-  await _AuditInstall(prisma, "Deleted", serverId, userId, `MCP server ${serverId} uninstalled for ${userId}`);
-  return true;
+	return unitOfWork.execute(async function _Delete(transaction)
+	{
+		const removed = await transaction.mcp.deleteInstall(serverId, principalId);
+		if (removed)
+			await transaction.mcp.appendAudit("Deleted", `McpServerInstall/${serverId}:${principalId}`, `MCP server ${serverId} uninstalled for ${principalId}`);
+		return removed ? "removed" : "not_found";
+	});
 }
 
 /**
- * Store a per-user credential (WRITE-ONLY) and mark the install connected.
+ * Sets a server's approval status to `Approved` in the authenticated silo.
  *
- * The submitted `values` are never persisted as plaintext and never returned: a
- * minted opaque `credentialRef` is the only thing kept, standing in for the secret
- * the gateway plane (Obot) brokers. No response serialises credential material.
+ * The server must be waiting for review and must have accepted protocol evidence, unless it is an
+ * existing catalogue row that predates protocol checks. The update and audit entry share one
+ * database transaction.
  *
- * @param prisma - Prisma client used for persistence.
- * @param userId - Stable caller identifier.
- * @param serverId - Installed server identifier.
- * @returns The updated install row, or null when no install exists for the caller.
+ * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/approve`.
+ * @param unitOfWork - Runs the status update and audit write together.
+ * @param caller - Supplies the authenticated silo and acting Principal.
+ * @param serverId - Identifies the server whose status to set.
+ * @returns The updated server, or `null` when the server is outside the caller's silo or absent.
  */
-export async function setCredential(prisma: PrismaClient, userId: string, serverId: string): Promise<McpInstalled | null>
+export function approveServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string): Promise<McpCatalogServer | null>
 {
-  // 1. Require an existing install so credential authoring follows install; a
-  //    missing install reads as 404 rather than silently creating one.
-  const existing = await prisma.mcpServerInstall.findUnique({ where: { mcpServerId_userId: { mcpServerId: serverId, userId } }, select: { id: true } });
-  if (!existing)
-  {
-    return null;
-  }
-
-  // 2. Mint an opaque custody handle; the raw values are discarded here and the
-  //    secret is brokered by the gateway plane, so nothing secret touches the DB.
-  const credentialRef = `cred_${randomBytes(18).toString("hex")}`;
-
-  // 3. Flip the install to connected and attach the handle.
-  const install = await prisma.mcpServerInstall.update({
-    where: { mcpServerId_userId: { mcpServerId: serverId, userId } },
-    data: { credentialRef, connectionStatus: _PRISMA_CONNECTION_STATUS.Connected as Prisma.McpServerInstallUpdateInput["connectionStatus"] },
-  });
-
-  await _AuditInstall(prisma, "Updated", serverId, userId, `MCP credential connected for ${userId} on server ${serverId}`);
-  return _MapInstalled(install);
+	return _Approval(unitOfWork, caller, serverId, "Approved", "approved");
 }
 
 /**
- * Clear a per-user credential, returning the install to `needs-credential`.
+ * Sets a server's approval status to `Published` in the authenticated silo.
  *
- * @param prisma - Prisma client used for persistence.
- * @param userId - Stable caller identifier.
- * @param serverId - Installed server identifier.
- * @returns The updated install row, or null when no install exists for the caller.
+ * The server must already be approved and must have accepted protocol evidence, unless it is an
+ * existing catalogue row that predates protocol checks. The update and audit entry share one
+ * database transaction.
+ *
+ * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/publish`.
+ * @param unitOfWork - Runs the status update and audit write together.
+ * @param caller - Supplies the authenticated silo and acting Principal.
+ * @param serverId - Identifies the server whose status to set.
+ * @returns The updated server, or `null` when the server is outside the caller's silo or absent.
  */
-export async function clearCredential(prisma: PrismaClient, userId: string, serverId: string): Promise<McpInstalled | null>
+export function publishServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string): Promise<McpCatalogServer | null>
 {
-  return _TransitionInstall(prisma, userId, serverId, _PRISMA_CONNECTION_STATUS.NeedsCredential, true, `MCP credential cleared for ${userId} on server ${serverId}`);
+	return _Approval(unitOfWork, caller, serverId, "Published", "published");
 }
 
 /**
- * Mark a remote-OAuth install connected after a successful OAuth handshake.
+ * Sets a server's approval status to `Disabled` in the authenticated silo.
  *
- * @param prisma - Prisma client used for persistence.
- * @param userId - Stable caller identifier.
- * @param serverId - Installed server identifier.
- * @returns The updated install row, or null when no install exists for the caller.
+ * This endpoint is a status setter: it does not require the server to be in a prior approval
+ * status. A missing server in the silo returns `null`; an updated server is audited and returned.
+ *
+ * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/reject`.
+ * @param unitOfWork - Runs the status update and audit write together.
+ * @param caller - Supplies the authenticated silo and acting Principal.
+ * @param serverId - Identifies the server whose status to set.
+ * @returns The updated server, or `null` when the server is outside the caller's silo or absent.
  */
-export async function connectOauth(prisma: PrismaClient, userId: string, serverId: string): Promise<McpInstalled | null>
+export function rejectServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string): Promise<McpCatalogServer | null>
 {
-  // 1. Require an existing install so the OAuth callback targets a real row.
-  const existing = await prisma.mcpServerInstall.findUnique({ where: { mcpServerId_userId: { mcpServerId: serverId, userId } }, select: { id: true } });
-  if (!existing)
-  {
-    return null;
-  }
-
-  // 2. Mint a custody handle for the brokered OAuth grant and flip to connected;
-  //    the grant material lives in the gateway plane, not here.
-  const credentialRef = `oauth_${randomBytes(18).toString("hex")}`;
-  const install = await prisma.mcpServerInstall.update({
-    where: { mcpServerId_userId: { mcpServerId: serverId, userId } },
-    data: { credentialRef, connectionStatus: _PRISMA_CONNECTION_STATUS.OauthConnected as Prisma.McpServerInstallUpdateInput["connectionStatus"] },
-  });
-
-  await _AuditInstall(prisma, "Updated", serverId, userId, `MCP OAuth connected for ${userId} on server ${serverId}`);
-  return _MapInstalled(install);
+	return _Approval(unitOfWork, caller, serverId, "Disabled", "rejected");
 }
 
 /**
- * Disconnect a remote-OAuth install, returning it to `needs-credential`.
+ * Sets a server's approval status from an administrator's enabled choice.
  *
- * @param prisma - Prisma client used for persistence.
- * @param userId - Stable caller identifier.
- * @param serverId - Installed server identifier.
- * @returns The updated install row, or null when no install exists for the caller.
+ * `false` disables the current server. `true` restores a disabled server to `Published` after the
+ * same saved protocol evidence check used by first publication.
+ *
+ * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/enabled`.
+ * @param unitOfWork - Runs the status update and audit write together.
+ * @param caller - Supplies the authenticated silo and acting Principal.
+ * @param serverId - Identifies the server whose status to set.
+ * @param enabled - Selects `Published` when true and `Disabled` when false.
+ * @returns The updated server, or `null` when the server is outside the caller's silo or absent.
  */
-export async function disconnectOauth(prisma: PrismaClient, userId: string, serverId: string): Promise<McpInstalled | null>
+export function setServerEnabled(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, enabled: boolean): Promise<McpCatalogServer | null>
 {
-  return _TransitionInstall(prisma, userId, serverId, _PRISMA_CONNECTION_STATUS.NeedsCredential, true, `MCP OAuth disconnected for ${userId} on server ${serverId}`);
+	if (enabled)
+		return _Approval(unitOfWork, caller, serverId, "Published", "enabled", "Disabled");
+	return _Approval(unitOfWork, caller, serverId, "Disabled", "disabled");
 }
 
 /**
- * Move a server through the governance lifecycle by setting its approval status.
+ * Reads the access policy represented by grants managed by the MCP access editor.
  *
- * @param prisma - Prisma client used for persistence.
- * @param serverId - Catalogue server identifier.
- * @param target - The Prisma approval-status value to set.
- * @param message - Audit message describing the transition.
- * @returns The updated server in wire shape, or null when it does not exist.
+ * The flow first confirms that the server belongs to the caller's silo, then maps the managed
+ * group and Principal subjects back to local directory records. It does not use identity-provider
+ * claims as policy subjects.
+ *
+ * Called by: {@link mcpOperatorRouter} for `GET /servers/:id/access`.
+ * @param unitOfWork - Runs the silo check, grant read, and local directory reads together.
+ * @param caller - Supplies the authenticated silo.
+ * @param serverId - Identifies the server whose managed grants to read.
+ * @returns The access policy, or `null` when the server is outside the caller's silo or absent.
  */
-async function _SetApprovalStatus(prisma: PrismaClient, serverId: string, target: string, message: string): Promise<McpCatalogServer | null>
+export function getAccessPolicy(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string): Promise<McpAccessPolicy | null>
 {
-  // 1. Confirm the server exists so a bad identifier reads as 404, not a write.
-  const existing = await prisma.mcpServer.findUnique({ where: { id: serverId }, select: { id: true } });
-  if (!existing)
-  {
-    return null;
-  }
-
-  // 2. Set the target status and record an audit entry so governance decisions
-  //    stay traceable in operator history.
-  const server = await prisma.mcpServer.update({
-    where: { id: serverId },
-    data: { approvalStatus: target as Prisma.McpServerUpdateInput["approvalStatus"] },
-  });
-  await prisma.auditEntry.create({ data: { action: "Updated", resource: `McpServer/${serverId}`, message } });
-
-  return _MapCatalogServer(server);
+	return unitOfWork.execute(async function _Read(transaction)
+	{
+		if (!(await transaction.mcp.findServer(caller.siloId, serverId)))
+			return null;
+		const grants = await transaction.managedGrants.listManagedResourceGrants(caller.siloId, _ACCESS_MANAGER_ID, { kind: _RESOURCE_KIND, id: serverId });
+		const groupIds = grants.flatMap(grant => grant.subject.kind === AuthorizationSubjectKinds.Group ? [grant.subject.groupId] : []);
+		const principalIds = grants.flatMap(grant => grant.subject.kind === AuthorizationSubjectKinds.Principal ? [grant.subject.principalId] : []);
+		const [groups, principals] = await Promise.all([transaction.mcp.listGroups(caller.siloId, groupIds), transaction.mcp.listPrincipals(caller.siloId, principalIds)]);
+		return { serverId, groups: [...groups], users: principals.map(_MapPrincipal) };
+	});
 }
 
 /**
- * Approve a server (pending-review → approved).
+ * Reconciles the MCP access editor's grants for one server and records the governance change.
  *
- * @param prisma - Prisma client used for persistence.
- * @param serverId - Catalogue server identifier.
- * @returns The updated server, or null when it does not exist.
+ * The proposed group and Principal identifiers must all resolve inside the caller's silo before the
+ * grants are replaced. This prevents an access policy from naming a record outside that silo. The
+ * reconciliation and audit entry run in the same transaction, so neither persists without the other.
+ *
+ * Called by: {@link mcpOperatorRouter} for `PUT /servers/:id/access`.
+ * @param unitOfWork - Runs the validation reads, grant reconciliation, and audit write together.
+ * @param caller - Supplies the authenticated silo and acting Principal.
+ * @param serverId - Identifies the server whose managed grants to replace.
+ * @param body - Supplies the proposed local group and Principal identifiers.
+ * @returns The reconciled policy, or `null` when the server, a proposed subject, or the capability is absent.
  */
-export async function approveServer(prisma: PrismaClient, serverId: string): Promise<McpCatalogServer | null>
+export function setAccessPolicy(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, body: McpAccessPolicyCommand): Promise<McpAccessPolicy | null>
 {
-  return _SetApprovalStatus(prisma, serverId, _PRISMA_APPROVAL_STATUS.Approved, `MCP server ${serverId} approved`);
+	return unitOfWork.execute(async function _Write(transaction)
+	{
+		if (!(await transaction.mcp.findServer(caller.siloId, serverId)))
+			return null;
+		const groupIds = _Ids(body.groupIds);
+		const principalIds = _Ids(body.principalIds);
+		const [groups, principals, capability] = await Promise.all([transaction.mcp.listGroups(caller.siloId, groupIds), transaction.mcp.listPrincipals(caller.siloId, principalIds), _Capability(transaction)]);
+		if (groups.length !== groupIds.length || principals.length !== principalIds.length || !capability)
+			return null;
+		const resource = { kind: _RESOURCE_KIND, id: serverId } as const;
+		await transaction.managedGrants.reconcileManagedResourceGrants({
+			siloId: caller.siloId,
+			managerId: _ACCESS_MANAGER_ID,
+			resource,
+			grants: [
+				...groups.map(group => ({ subject: { kind: AuthorizationSubjectKinds.Group, groupId: group.id }, boundary: { kind: AuthorizationBoundaryKinds.Group, groupId: group.id }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource, priority: 0, createdByPrincipalId: caller.principalId }) as const),
+				...principals.map(principal => ({ subject: { kind: AuthorizationSubjectKinds.Principal, principalId: principal.id }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: principal.id }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource, priority: 0, createdByPrincipalId: caller.principalId }) as const),
+			],
+			now: new Date(),
+		});
+		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} authorization grants updated`, { siloId: caller.siloId, actorPrincipalId: caller.principalId });
+		return { serverId, groups: [...groups], users: principals.map(_MapPrincipal) };
+	});
 }
 
 /**
- * Publish a server (approved → published) so entitled callers can install it.
+ * Lists local Principals and persisted groups that an administrator may select for MCP access.
  *
- * @param prisma - Prisma client used for persistence.
- * @param serverId - Catalogue server identifier.
- * @returns The updated server, or null when it does not exist.
+ * The directory comes from the authenticated silo's records. This keeps access policy subjects
+ * stable and avoids treating identity-provider group claims as stored authorization subjects.
+ *
+ * Called by: {@link mcpOperatorRouter} for `GET /directory`.
+ * @param unitOfWork - Runs the directory reads in the authenticated silo.
+ * @param caller - Supplies the authenticated silo.
+ * @returns The local group and Principal choices for the MCP access editor.
  */
-export async function publishServer(prisma: PrismaClient, serverId: string): Promise<McpCatalogServer | null>
+export function getDirectory(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller): Promise<Directory>
 {
-  return _SetApprovalStatus(prisma, serverId, _PRISMA_APPROVAL_STATUS.Published, `MCP server ${serverId} published`);
+	return unitOfWork.execute(async function _Directory(transaction)
+	{
+		const [groups, principals] = await Promise.all([transaction.mcp.listGroups(caller.siloId), transaction.mcp.listPrincipals(caller.siloId)]);
+		return { groups: [...groups], users: principals.map(_MapPrincipal) };
+	});
 }
 
 /**
- * Reject a server (→ disabled), removing it from the user-facing catalogue.
+ * Finds the MCP-use capability from the configured catalog revision.
  *
- * @param prisma - Prisma client used for persistence.
- * @param serverId - Catalogue server identifier.
- * @returns The updated server, or null when it does not exist.
+ * Catalog and install flows deny access when this lookup fails because they cannot evaluate a
+ * grant without the capability it grants.
  */
-export async function rejectServer(prisma: PrismaClient, serverId: string): Promise<McpCatalogServer | null>
+async function _Capability(transaction: McpOperatorTransaction): Promise<CapabilityReference | null>
 {
-  return _SetApprovalStatus(prisma, serverId, _PRISMA_APPROVAL_STATUS.Disabled, `MCP server ${serverId} rejected`);
+	return transaction.capabilityCatalog.findCapability(_CATALOG_ID, _CATALOG_REVISION, _USE_CAPABILITY_ID);
 }
 
 /**
- * Toggle a server's availability (true → published, false → disabled).
+ * Checks the caller's personal and persisted-group boundaries for MCP-use access to a server.
  *
- * @param prisma - Prisma client used for persistence.
- * @param serverId - Catalogue server identifier.
- * @param enabled - True publishes; false disables.
- * @returns The updated server, or null when it does not exist.
+ * The authorization repository supplies the local group subjects. That keeps authorization based
+ * on stored Principal and group records instead of claims carried by the request.
  */
-export async function setServerEnabled(prisma: PrismaClient, serverId: string, enabled: boolean): Promise<McpCatalogServer | null>
+async function _Allowed(transaction: McpOperatorTransaction, caller: McpOperatorCaller, capability: CapabilityReference, serverId: string): Promise<boolean>
 {
-  const target = enabled ? _PRISMA_APPROVAL_STATUS.Published : _PRISMA_APPROVAL_STATUS.Disabled;
-  return _SetApprovalStatus(prisma, serverId, target, `MCP server ${serverId} ${enabled ? "enabled" : "disabled"}`);
+	const subjects = await transaction.authorization.resolvePrincipalSubjects(caller.siloId, caller.principalId);
+	const boundaries: AuthorizationBoundary[] = [{ kind: AuthorizationBoundaryKinds.Personal, principalId: caller.principalId }];
+	for (const subject of subjects)
+	{
+		if (subject.kind === AuthorizationSubjectKinds.Group)
+			boundaries.push({ kind: AuthorizationBoundaryKinds.Group, groupId: subject.groupId });
+	}
+	for (const boundary of boundaries)
+	{
+		const decision = await __ResolvePrincipalAuthorization(transaction.authorization, { siloId: caller.siloId, principalId: caller.principalId, boundary, capability, resource: { kind: _RESOURCE_KIND, id: serverId }, nowEpochMs: Date.now() });
+		if (decision.outcome === AuthorizationDecisionOutcomes.Allow)
+			return true;
+	}
+	return false;
 }
 
 /**
- * Read a server's access policy, projecting entitled users into the wire shape.
+ * Writes a requested approval status and appends the matching audit entry.
  *
- * @param prisma - Prisma client used for persistence.
- * @param serverId - Catalogue server identifier.
- * @returns The access policy (defaults when none is authored), or null when the server is absent.
+ * The repository checks the required current approval and protocol states in the same update that
+ * writes the new state. A caller may override the normal approval source for a named transition,
+ * such as restoring a disabled server to `Published`.
  */
-export async function getAccessPolicy(prisma: PrismaClient, serverId: string): Promise<McpAccessPolicy | null>
+function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, status: string, verb: string, sourceStatus?: string): Promise<McpCatalogServer | null>
 {
-  // 1. Confirm the server exists so a bad identifier reads as 404, not an empty policy.
-  const server = await prisma.mcpServer.findUnique({
-    where: { id: serverId },
-    include: { accessPolicy: { include: { users: true } } },
-  });
-  if (!server)
-  {
-    return null;
-  }
+	return unitOfWork.execute(async function _Update(transaction)
+	{
+		const requiredApprovalStatus = sourceStatus ?? (status === "Approved" || status === "Published" ? _REQUIRED_APPROVAL[status] : undefined);
+		const server = await transaction.mcp.setApprovalStatus(caller.siloId, serverId, status, __McpEraProbeRequiredStates(status), requiredApprovalStatus);
+		if (!server)
+			return null;
+		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} ${verb}`, { siloId: caller.siloId, actorPrincipalId: caller.principalId });
+		return _MapServer(server);
+	});
+}
 
-  // 2. Project the persisted policy (or empty defaults) into the wire shape.
-  return _MapAccessPolicy(serverId, server.accessPolicy);
+/** Maps the repository projection into the catalog contract and normalizes optional fields. */
+function _MapServer(server: McpOperatorServerRecord): McpCatalogServer
+{
+	return { id: server.id, name: server.name, description: server.description, publisher: server.publisher ?? undefined, glyph: server.glyph ?? undefined, type: _TYPE[server.serverType as keyof typeof _TYPE], approvalStatus: _APPROVAL[server.approvalStatus as keyof typeof _APPROVAL], credentialSchema: _CredentialSchema(server.credentialSchema), entitlementSummary: server.entitlementSummary ?? undefined };
+}
+
+/** Maps one persisted installation into the response status and ISO timestamp expected by clients. */
+function _MapInstall(install: McpOperatorInstallRecord): McpInstalled
+{
+	return { serverId: install.mcpServerId, connectionStatus: _CONNECTION[install.connectionStatus as keyof typeof _CONNECTION], lastUsed: install.lastUsedAt?.toISOString() ?? null };
 }
 
 /**
- * Replace a server's access policy wholesale (admin authoritative write).
+ * Maps a local Principal into the directory shape used by the access editor.
  *
- * @param prisma - Prisma client used for persistence.
- * @param serverId - Catalogue server identifier.
- * @param body - Full replacement policy (everyoneInOrg + group ids + user ids).
- * @returns The persisted policy in wire shape, or null when the server is absent.
+ * It prefers a stored display name, then a stored email's local part, and finally the Principal ID
+ * so every persisted subject remains selectable even when profile fields are absent.
  */
-export async function setAccessPolicy(prisma: PrismaClient, serverId: string, body: McpAccessPolicyRequest): Promise<McpAccessPolicy | null>
+function _MapPrincipal(principal: McpOperatorPrincipalRecord): EntitledUser
 {
-  // 1. Confirm the server exists before authoring a policy against it.
-  const server = await prisma.mcpServer.findUnique({ where: { id: serverId }, select: { id: true } });
-  if (!server)
-  {
-    return null;
-  }
-
-  // 2. Normalise the submitted ids so blank/duplicate entries cannot inflate the
-  //    entitlement lists.
-  const groups = _NormalizeIds(body.groups);
-  const userIds = _NormalizeIds(body.users);
-
-  // 3. Upsert the policy parent, then replace its user rows wholesale because the
-  //    submitted payload is treated as authoritative.
-  const policy = await prisma.mcpServerAccessPolicy.upsert({
-    where: { mcpServerId: serverId },
-    create: { mcpServerId: serverId, everyoneInOrg: body.everyoneInOrg, groups },
-    update: { everyoneInOrg: body.everyoneInOrg, groups },
-  });
-  await prisma.mcpServerAccessUser.deleteMany({ where: { accessPolicyId: policy.id } });
-  if (userIds.length > 0)
-  {
-    await prisma.mcpServerAccessUser.createMany({
-      data: userIds.map(function _row(userId) { return { accessPolicyId: policy.id, userId }; }),
-    });
-  }
-
-  // 4. Record an audit entry so access changes stay traceable.
-  await prisma.auditEntry.create({ data: { action: "Updated", resource: `McpServer/${serverId}`, message: `MCP server ${serverId} access policy updated` } });
-
-  return _MapAccessPolicy(serverId, { everyoneInOrg: body.everyoneInOrg, groups, users: userIds.map(function _u(userId) { return { userId }; }) });
+	const name = principal.displayName?.trim() || principal.email?.split("@")[0] || principal.id;
+	const words = name.split(/[\s._-]+/).filter(word => word.length > 0);
+	const initials = (words.length >= 2 ? `${words[0][0]}${words[1][0]}` : name.slice(0, 2)).toUpperCase();
+	let checksum = 0;
+	for (let index = 0; index < principal.id.length; index += 1) checksum = (checksum + principal.id.charCodeAt(index)) % _AVATAR_COLORS.length;
+	return { id: principal.id, name, initials, color: _AVATAR_COLORS[checksum] };
 }
 
 /**
- * Build the selectable universe of users and groups for the admin access editor.
+ * Converts a stored schema value into contract fields and drops malformed entries.
  *
- * @param prisma - Prisma client used for persistence.
- * @returns Distinct entitled users plus all group names.
+ * The repository exposes this value as `unknown`, so the mapper must verify each field before a
+ * catalog response can claim that the field has a key and label.
  */
-export async function getDirectory(prisma: PrismaClient): Promise<Directory>
+function _CredentialSchema(value: unknown): CredentialField[]
 {
-  // 1. Load every group (for its name) and its JSON membership list.
-  const groups = await prisma.group.findMany({ orderBy: { name: "asc" }, select: { name: true, members: true } });
-
-  // 2. Also fold in any user already entitled via an access policy so directly
-  //    granted users remain selectable even if not in a group.
-  const accessUsers = await prisma.mcpServerAccessUser.findMany({ select: { userId: true } });
-
-  // 3. Collect distinct principal identifiers from both sources.
-  const userIds = new Set<string>();
-  for (const group of groups)
-  {
-    for (const member of _NormalizeMembers(group.members))
-    {
-      userIds.add(member);
-    }
-  }
-  for (const accessUser of accessUsers)
-  {
-    userIds.add(accessUser.userId);
-  }
-
-  return {
-    users: ___SortBy(Array.from(userIds)).map(function _u(userId) { return _MapEntitledUser(userId); }),
-    groups: groups.map(function _g(group) { return group.name; }),
-  };
+	if (!Array.isArray(value))
+		return [];
+	return value.flatMap(function _Field(entry): CredentialField[]
+	{
+		if (typeof entry !== "object" || entry === null || Array.isArray(entry))
+			return [];
+		const record = entry as Record<string, unknown>;
+		if (typeof record.key !== "string" || typeof record.label !== "string")
+			return [];
+			return [{
+				key: record.key,
+				label: record.label,
+				required: record.required === true,
+				sensitive: record.sensitive === true,
+				...(typeof record.placeholder === "string" ? { placeholder: record.placeholder } : {}),
+				...(typeof record.hint === "string" ? { hint: record.hint } : {}),
+			}];
+	});
 }
 
 /**
- * Resolve a per-mode install transition, optionally clearing the credential handle.
+ * Trims, de-duplicates, and sorts proposed access-policy identifiers.
  *
- * @param prisma - Prisma client used for persistence.
- * @param userId - Stable caller identifier.
- * @param serverId - Installed server identifier.
- * @param status - Target Prisma connection-status value.
- * @param clearRef - When true, the credentialRef custody handle is dropped.
- * @param message - Audit message describing the transition.
- * @returns The updated install row, or null when no install exists for the caller.
+ * Reconciliation compares the resulting identifiers with records found in the caller's silo, so
+ * repeated or blank request values cannot create duplicate grant subjects.
  */
-async function _TransitionInstall(prisma: PrismaClient, userId: string, serverId: string, status: string, clearRef: boolean, message: string): Promise<McpInstalled | null>
+function _Ids(values: readonly string[] | undefined): string[]
 {
-  // 1. Require an existing install so the transition targets a real row.
-  const existing = await prisma.mcpServerInstall.findUnique({ where: { mcpServerId_userId: { mcpServerId: serverId, userId } }, select: { id: true } });
-  if (!existing)
-  {
-    return null;
-  }
-
-  // 2. Apply the status change, dropping the custody handle when the connection
-  //    is being torn down so no stale broker reference survives.
-  const install = await prisma.mcpServerInstall.update({
-    where: { mcpServerId_userId: { mcpServerId: serverId, userId } },
-    data: { connectionStatus: status as Prisma.McpServerInstallUpdateInput["connectionStatus"], ...(clearRef ? { credentialRef: null } : {}) },
-  });
-
-  await _AuditInstall(prisma, "Updated", serverId, userId, message);
-  return _MapInstalled(install);
-}
-
-/**
- * Append an audit entry for a per-user install mutation.
- *
- * @param prisma - Prisma client used for persistence.
- * @param action - Audit action label.
- * @param serverId - Installed server identifier.
- * @param userId - Stable caller identifier.
- * @param message - Human-readable audit message.
- */
-async function _AuditInstall(prisma: PrismaClient, action: string, serverId: string, userId: string, message: string): Promise<void>
-{
-  await prisma.auditEntry.create({ data: { action, resource: `McpServerInstall/${serverId}:${userId}`, message } });
-}
-
-/**
- * Decide whether a caller is entitled to a published server.
- *
- * @param server - Server row with its access policy + entitled users loaded.
- * @param caller - Identity + entitlement context of the calling user.
- * @returns True when the caller may see / install the server.
- */
-function _IsEntitled(server: _McpServerWithPolicyRow, caller: McpOperatorCaller): boolean
-{
-  // 1. Dev-open posture bypasses entitlement so a local install isn't locked out.
-  if (caller.devOpen)
-  {
-    return true;
-  }
-
-  // 2. No policy authored → fail closed; an admin must grant access explicitly.
-  const policy = server.accessPolicy;
-  if (!policy)
-  {
-    return false;
-  }
-
-  // 3. Org-wide grant short-circuits the per-user / per-group lists.
-  if (policy.everyoneInOrg)
-  {
-    return true;
-  }
-
-  // 4. Direct user grant, then group-claim intersection.
-  if (policy.users.some(function _u(user) { return user.userId === caller.userId; }))
-  {
-    return true;
-  }
-
-  return policy.groups.some(function _g(group) { return caller.groups.includes(group); });
-}
-
-/**
- * Map a server row into the operator catalogue wire shape.
- *
- * @param server - Persisted server row.
- * @returns Normalized catalogue server payload.
- */
-function _MapCatalogServer(server: Prisma.McpServerGetPayload<object>): McpCatalogServer
-{
-  return {
-    id: server.id,
-    name: server.name,
-    description: server.description,
-    publisher: server.publisher ?? undefined,
-    glyph: server.glyph ?? undefined,
-    type: _TYPE_BY_PRISMA[server.serverType],
-    approvalStatus: _APPROVAL_BY_PRISMA[server.approvalStatus],
-    credentialSchema: _NormalizeCredentialSchema(server.credentialSchema),
-    entitlementSummary: server.entitlementSummary ?? undefined,
-  };
-}
-
-/**
- * Map a per-user install row into the operator wire shape.
- *
- * Deliberately omits `credentialRef`: the custody handle is never serialised.
- *
- * @param install - Persisted install row.
- * @returns Normalized install payload.
- */
-function _MapInstalled(install: _McpInstallRow): McpInstalled
-{
-  return {
-    serverId: install.mcpServerId,
-    connectionStatus: _CONNECTION_BY_PRISMA[install.connectionStatus],
-    lastUsed: install.lastUsedAt ? install.lastUsedAt.toISOString() : null,
-    connectedAccount: install.connectedAccount ?? undefined,
-  };
-}
-
-/**
- * Project an access policy (or empty defaults) into the wire shape.
- *
- * @param serverId - Governed server identifier.
- * @param policy - Persisted policy with entitled users, or null/partial.
- * @returns Normalized access-policy payload.
- */
-function _MapAccessPolicy(serverId: string, policy: { everyoneInOrg: boolean; groups: string[]; users: { userId: string }[] } | null): McpAccessPolicy
-{
-  return {
-    serverId,
-    everyoneInOrg: policy?.everyoneInOrg ?? false,
-    groups: policy?.groups ?? [],
-    users: (policy?.users ?? []).map(function _u(user) { return _MapEntitledUser(user.userId); }),
-  };
-}
-
-/**
- * Derive an EntitledUser display projection from a stable identifier.
- *
- * @param userId - Stable principal identifier (sub or email).
- * @returns Display name, initials, and a deterministic avatar colour.
- */
-function _MapEntitledUser(userId: string): EntitledUser
-{
-  // 1. Prefer the local-part of an email for the display name; fall back to the id.
-  const localPart = userId.includes("@") ? userId.slice(0, userId.indexOf("@")) : userId;
-  const name = localPart.length > 0 ? localPart : userId;
-
-  // 2. Build two-letter initials from word boundaries in the name.
-  const words = name.split(/[\s._-]+/).filter(function _nonEmpty(word) { return word.length > 0; });
-  const initials = (words.length >= 2 ? `${words[0][0]}${words[1][0]}` : name.slice(0, 2)).toUpperCase();
-
-  // 3. Pick a stable palette colour from a simple checksum of the identifier.
-  let checksum = 0;
-  for (let index = 0; index < userId.length; index += 1)
-  {
-    checksum = (checksum + userId.charCodeAt(index)) % _AVATAR_COLORS.length;
-  }
-
-  return { id: userId, name, initials, color: _AVATAR_COLORS[checksum] };
-}
-
-/**
- * Parse the persisted credential-schema JSON into typed fields.
- *
- * @param value - Raw JSON value from the server row.
- * @returns Credential fields, or an empty array when the value is malformed.
- */
-function _NormalizeCredentialSchema(value: Prisma.JsonValue): CredentialField[]
-{
-  if (!Array.isArray(value))
-  {
-    return [];
-  }
-
-  const fields: CredentialField[] = [];
-  for (const entry of value)
-  {
-    if (typeof entry !== "object" || entry === null || Array.isArray(entry))
-    {
-      continue;
-    }
-
-    const record = entry as Record<string, unknown>;
-    if (typeof record.key !== "string" || typeof record.label !== "string")
-    {
-      continue;
-    }
-
-    fields.push({
-      key: record.key,
-      label: record.label,
-      required: record.required === true,
-      sensitive: record.sensitive === true,
-      ...(typeof record.placeholder === "string" ? { placeholder: record.placeholder } : {}),
-      ...(typeof record.hint === "string" ? { hint: record.hint } : {}),
-    });
-  }
-
-  return fields;
-}
-
-/**
- * Normalize a list of identifiers: trim, drop blanks, de-duplicate, sort.
- *
- * @param values - Raw identifier list from a request body.
- * @returns Canonical identifier list.
- */
-function _NormalizeIds(values: string[] | undefined): string[]
-{
-  if (!Array.isArray(values))
-  {
-    return [];
-  }
-
-  const unique = new Set<string>();
-  for (const value of values)
-  {
-    if (typeof value !== "string")
-    {
-      continue;
-    }
-
-    const trimmed = value.trim();
-    if (trimmed.length > 0)
-    {
-      unique.add(trimmed);
-    }
-  }
-
-  return ___SortBy(Array.from(unique));
-}
-
-/**
- * Normalize a group's JSON membership list into trimmed principal identifiers.
- *
- * @param members - Raw JSON value from the group row.
- * @returns Distinct, sorted principal identifiers.
- */
-function _NormalizeMembers(members: Prisma.JsonValue): string[]
-{
-  if (!Array.isArray(members))
-  {
-    return [];
-  }
-
-  const unique = new Set<string>();
-  for (const member of members)
-  {
-    if (typeof member !== "string")
-    {
-      continue;
-    }
-
-    const trimmed = member.trim();
-    if (trimmed.length > 0)
-    {
-      unique.add(trimmed);
-    }
-  }
-
-  return Array.from(unique);
+	if (!values)
+		return [];
+	return ___SortBy([...new Set(values.map(value => value.trim()).filter(value => value.length > 0))]);
 }

@@ -5,7 +5,7 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@ang
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, MessageRoles } from "@opencrane/models/conversations";
-import { __CreateAgUiStreamState } from "@opencrane/state/conversation/ag-ui";
+import { AgUiMessageStatuses, __CreateAgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
 
 import { ConversationRunStore } from "../conversation-run.store";
@@ -38,8 +38,8 @@ function _Deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (valu
 /** Mutable gateway fake exposing exact store commands. */
 class _FakeGateway implements ConversationWorkspaceGateway
 {
-	/** Next open outcome. */
-	public openResult: ConversationWorkspaceDetail | Error | null = null;
+	/** Current conversation summaries returned to the selected workspace. */
+	public listResult: readonly ConversationWorkspaceDetail[] = [_Detail()];
 	/** Controlled archive completion for mutation race tests. */
 	public archiveResult: Promise<ConversationWorkspaceDetail> | null = null;
 	/** Controlled create completion for mutation race tests. */
@@ -50,6 +50,8 @@ class _FakeGateway implements ConversationWorkspaceGateway
 	public readonly sent: SubmitConversationMessageCommand[] = [];
 	/** Optional send failure used to model ambiguous transport outcomes. */
 	public sendError: Error | null = null;
+	/** Optional pending send used to prove a replacement socket cannot retain a stale submitting state. */
+	public sendResult: Promise<void> | null = null;
 	/** Optional onboarding history outcome. */
 	public historyResult: ConversationOnboardingHistoryProjection | Promise<ConversationOnboardingHistoryProjection> = _OnboardingHistory();
 	/** Number of run reads admitted by the selected immutable mode. */
@@ -57,18 +59,19 @@ class _FakeGateway implements ConversationWorkspaceGateway
 
 	/** Return generic privacy-safe choices. */
 	public async directory() { return { participants: [{ participantRef: "self-ref", isSelf: true, label: "You" }, { participantRef: "other-ref", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-ref", displayName: "Nova" } } as const; }
-	/** Return one current row. */
-	public async list() { return [_Detail()]; }
+	/** Return the configured current rows. */
+	public async list() { return this.listResult; }
 	/** Return the configured separate onboarding history projection. */
 	public async onboardingHistory() { return await this.historyResult; }
-	/** Resolve the configured open outcome. */
-	public async open(conversationId: string): Promise<ConversationWorkspaceDetail> { if (this.openResult instanceof Error) throw this.openResult; return this.openResult ?? _Detail(conversationId); }
+	/** Return a detail for the compatibility read port, which this socket-only store does not call. */
+	public async open(conversationId: string): Promise<ConversationWorkspaceDetail> { return _Detail(conversationId); }
 	/** Record and return one created snapshot. */
 	public async create(command: CreateConversationCommand): Promise<ConversationWorkspaceDetail> { this.created.push(command); return this.createResult ?? { ..._Detail("created-1"), mode: command.mode }; }
 	/** Record one exact message command before returning its controlled outcome. */
 	public async send(command: SubmitConversationMessageCommand): Promise<void>
 	{
 		this.sent.push(command);
+		await this.sendResult;
 		if (this.sendError !== null) throw this.sendError;
 	}
 	/** Return an archived snapshot. */
@@ -90,6 +93,8 @@ class _FakeStream implements ConversationEventStream
 {
 	/** Number of selected streams started. */
 	public starts = 0;
+	/** Commands retained so tests can prove late socket updates cannot cross a manual reconnect. */
+	public readonly commands: StreamConversationEventsCommand[] = [];
 	/** Connection state emitted by the next selected stream. */
 	public status = ConversationEventStreamStatuses.Live;
 	/** Folded stream state emitted by the next selected stream. */
@@ -99,10 +104,14 @@ class _FakeStream implements ConversationEventStream
 	public async stream(command: StreamConversationEventsCommand)
 	{
 		this.starts += 1;
+		this.commands.push(command);
 		const state = this.state;
 		command.onUpdate?.({ status: this.status, state, reconnectAttempt: this.status === ConversationEventStreamStatuses.Reconnecting ? 1 : 0, lastHeartbeatAt: Date.now() });
 		return state;
 	}
+
+	/** Reject participant commands because the store test double owns projection only. */
+	public async submit(): Promise<never> { throw new Error("Test stream does not submit messages."); }
 }
 
 /** Create one component-scoped store and fakes. */
@@ -130,7 +139,7 @@ afterEach(function _ResetTestBed() { TestBed.resetTestingModule(); });
 
 describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 {
-	it("loads the directory and first snapshot before starting the live tail", async function _SnapshotTail()
+	it("loads the directory and leaves onboarding history selected until a conversation is chosen", async function _OnboardingTail()
 	{
 		const [store, _gateway, stream] = _CreateStore();
 		await store.load();
@@ -211,6 +220,7 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 	it("does not navigate to a created conversation after the participant selects another row", async function _StaleCreate()
 	{
 		const [store, gateway] = _CreateStore();
+		gateway.listResult = [_Detail(), _Detail("conversation-2")];
 		await store.load();
 		store.selectCreationMode(ConversationModes.Direct);
 		store.toggleParticipant("other-ref");
@@ -229,6 +239,7 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 	{
 		const [store, gateway] = _CreateStore();
 		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		gateway.listResult = [_Detail(), _Detail("conversation-2")];
 		await store.load();
 		const deferred = _Deferred<ConversationWorkspaceDetail>();
 		gateway.archiveResult = deferred.promise;
@@ -261,14 +272,91 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 		store.updateDraft("Keep this draft");
 		expect(store.draft()).toBe("Keep this draft");
 		expect(store.streamStatus()).toBe(ConversationEventStreamStatuses.Reconnecting);
+		expect(store.canSend()).toBe(false);
 		expect(store.routeState()).toBe(ConversationWorkspaceRouteStates.Ready);
+	});
+
+	it("replaces a reconnecting socket without losing the draft or accepting its late updates", async function _ManualReconnect()
+	{
+		const [store, gateway, stream] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		stream.status = ConversationEventStreamStatuses.Reconnecting;
+		stream.state = { ...__CreateAgUiStreamState(), messages: { "message-1": { id: "message-1", role: "assistant", text: "Keep this projection", status: AgUiMessageStatuses.Completed } } };
+		await store.load();
+		store.updateDraft("Keep this draft");
+		const stale = stream.commands[0]!;
+
+		stream.status = ConversationEventStreamStatuses.Connecting;
+		store.reconnect();
+		stale.onUpdate?.({ status: ConversationEventStreamStatuses.Failed, state: __CreateAgUiStreamState(), reconnectAttempt: 4, lastHeartbeatAt: null });
+
+		expect(stream.starts).toBe(2);
+		expect(store.streamStatus()).toBe(ConversationEventStreamStatuses.Connecting);
+		expect(store.manualReconnectPending()).toBe(true);
+		expect(store.reconnectAttempt()).toBe(0);
+		expect(store.draft()).toBe("Keep this draft");
+		expect(store.live().messages["message-1"]?.text).toBe("Keep this projection");
+
+		store.reconnect();
+		expect(stream.starts).toBe(2);
+	});
+
+	it("releases an interrupted send when manual reconnect replaces its socket", async function _ManualReconnectInterruptedSend()
+	{
+		const [store, gateway, stream] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		await store.load();
+		store.updateDraft("Retry this exact message");
+		const pendingSend = _Deferred<void>();
+		gateway.sendResult = pendingSend.promise;
+		const sent = store.send();
+		const stale = stream.commands[0]!;
+
+		stale.onUpdate?.({ status: ConversationEventStreamStatuses.Reconnecting, state: __CreateAgUiStreamState(), reconnectAttempt: 1, lastHeartbeatAt: null });
+		stream.status = ConversationEventStreamStatuses.Live;
+		store.reconnect();
+
+		expect(store.streamStatus()).toBe(ConversationEventStreamStatuses.Live);
+		expect(store.manualReconnectPending()).toBe(false);
+		expect(store.sending()).toBe(false);
+		expect(store.canSend()).toBe(true);
+
+		pendingSend.resolve();
+		expect(await sent).toBe(false);
+		expect(store.sending()).toBe(false);
+		expect(store.draft()).toBe("Retry this exact message");
+
+		store.updateDraft("Write a different message");
+		expect(await store.send()).toBe(true);
+		expect(gateway.sent[1]?.blocks).toEqual([{ id: "command-key", kind: MessageContentBlockKinds.Text, value: "Write a different message" }]);
+		expect(store.draft()).toBe("");
+	});
+
+	it("uses the changed attachment selection after manual reconnect replaces an interrupted send", async function _ManualReconnectChangedAttachment()
+	{
+		const [store, gateway, stream] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		await store.load();
+		const pendingSend = _Deferred<void>();
+		gateway.sendResult = pendingSend.promise;
+		const sent = store.send(["asset-a"]);
+		const stale = stream.commands[0]!;
+
+		stale.onUpdate?.({ status: ConversationEventStreamStatuses.Reconnecting, state: __CreateAgUiStreamState(), reconnectAttempt: 1, lastHeartbeatAt: null });
+		stream.status = ConversationEventStreamStatuses.Live;
+		store.reconnect();
+		pendingSend.resolve();
+		expect(await sent).toBe(false);
+
+		expect(await store.send(["asset-b"])).toBe(true);
+		expect(gateway.sent[1]?.blocks).toEqual([{ id: "command-key", kind: MessageContentBlockKinds.Artifact, value: "asset-b" }]);
 	});
 
 	it("ignores stale run coordinates for a direct conversation", async function _IgnoreDirectRun()
 	{
 		const [store, gateway, stream] = _CreateStore();
 		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
-		gateway.openResult = { ..._Detail(), mode: ConversationModes.Direct };
+		gateway.listResult = [{ ..._Detail(), mode: ConversationModes.Direct }];
 		stream.state = { ...__CreateAgUiStreamState(), runId: "stale-run" };
 
 		await store.load();
@@ -282,7 +370,7 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 	{
 		const [store, gateway, stream] = _CreateStore();
 		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
-		gateway.openResult = { ..._Detail(), mode: ConversationModes.AgentSession, agentServiceId: "agent-1", participantRefs: ["self-ref"] };
+		gateway.listResult = [{ ..._Detail(), mode: ConversationModes.AgentSession, agentServiceId: "agent-1", participantRefs: ["self-ref"] }];
 		stream.state = { ...__CreateAgUiStreamState(), runId: "run-1" };
 
 		await store.load();
@@ -319,13 +407,26 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 		expect(gateway.sent[0]?.blocks).toEqual([{ id: "command-key", kind: MessageContentBlockKinds.Artifact, value: "asset-1" }]);
 	});
 
-	it("purges a previously visible snapshot and draft on proven access loss", async function _AccessLoss()
+	it("disables the composer after the socket proves a selected conversation closed", async function _ClosedConversation()
 	{
 		const [store, gateway] = _CreateStore();
 		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
 		await store.load();
+		store.updateDraft("Send once");
+		gateway.sendError = new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Conflict, "This conversation is closed and cannot accept messages.");
+
+		expect(await store.send()).toBe(false);
+		expect(store.selected()?.lifecycle).toBe(ConversationLifecycles.Closed);
+		expect(store.canSend()).toBe(false);
+	});
+
+	it("purges a selected conversation and draft when its socket proves access loss", async function _AccessLoss()
+	{
+		const [store, gateway, stream] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		await store.load();
 		store.updateDraft("Private draft");
-		gateway.openResult = new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "This conversation is no longer available.");
+		stream.state = { ...__CreateAgUiStreamState(), accessRevoked: true };
 		await store.open("conversation-1");
 		expect(store.routeState()).toBe(ConversationWorkspaceRouteStates.AccessChanged);
 		expect(store.selected()).toBeNull();

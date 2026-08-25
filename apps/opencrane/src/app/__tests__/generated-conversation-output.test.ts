@@ -28,6 +28,7 @@ function _Database()
 
 	const transaction = {
 		artifactAuthorityClock: { findUnique: vi.fn().mockImplementation(async function _Clock() { return { now: _NOW }; }) },
+		principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
 		workloadAssignment: { findFirst: vi.fn().mockResolvedValue(assignment) },
 		conversationRunEvent: { findFirst: vi.fn().mockResolvedValue({ sequence: 7, payload: { messageId: "assistant:command-1", role: "assistant" } }) },
 		conversationAssetOutputTicket: {

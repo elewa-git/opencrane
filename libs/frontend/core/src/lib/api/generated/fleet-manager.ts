@@ -351,13 +351,6 @@ export interface components {
             /** @enum {string} */
             transport?: "streamable-http" | "sse" | "websocket";
             grants?: Record<string, never>[];
-            credentials?: components["schemas"]["McpServerCredential"][];
-        };
-        McpServerCredential: {
-            /** @description Stable credential identifier. */
-            id?: string;
-            /** @description Operator-facing label. */
-            displayName?: string;
         };
         /** @description A catalogue server as exposed by the operator API (distinct from the registry McpServer). Every field beyond id is optional so the same shape serves the entitled user catalogue and the admin governance view. */
         McpCatalogServer: {
@@ -394,26 +387,28 @@ export interface components {
             /** @description Optional helper hint. */
             hint?: string;
         };
-        /** @description A server installed by the calling user. Never carries credential material — only the connection status and a non-secret account label. */
+        /** @description A server installed by the calling user, with its connection state. */
         McpInstalled: {
             serverId: string;
             /** @enum {string} */
-            connectionStatus?: "needs-credential" | "activating" | "connected" | "oauth-connected" | "shared-key" | "activation-failed";
+            connectionStatus?: "needs-credential" | "shared-key";
             /**
              * Format: date-time
              * @description ISO-8601 timestamp of last use, or null when never used.
              */
             lastUsed?: string | null;
-            /** @description Non-secret display label of the connected account. */
-            connectedAccount?: string;
         };
         McpAccessPolicy: {
             serverId: string;
-            /** @description When true, every caller in the org is entitled (lists ignored). */
-            everyoneInOrg?: boolean;
-            /** @description Entitled group identifiers / names. */
-            groups?: string[];
+            /** @description Stable local groups with an active MCP authorization grant. */
+            groups?: components["schemas"]["EntitledGroup"][];
             users?: components["schemas"]["EntitledUser"][];
+        };
+        EntitledGroup: {
+            /** @description Stable local Group identifier. */
+            id: string;
+            /** @description Human-readable group name. */
+            name: string;
         };
         EntitledUser: {
             /** @description Stable user identifier (sub or email). */
@@ -428,7 +423,7 @@ export interface components {
         /** @description The selectable universe of users and groups for the admin access editor. */
         McpDirectory: {
             users: components["schemas"]["EntitledUser"][];
-            groups: string[];
+            groups: components["schemas"]["EntitledGroup"][];
         };
         ClusterTenant: {
             /** @description Stable cluster-scoped identifier (the customer key). */

@@ -1,12 +1,3 @@
-enum FleetMembershipScopeKind {
-  Organization @map("organization")
-  Department   @map("department")
-  Team         @map("team")
-  Project      @map("project")
-  Personal     @map("personal")
-  DirectUser   @map("direct-user")
-}
-
 model VerifiedFleetMembershipRevision {
   id             String                             @id @default(cuid())
   revision       Int
@@ -30,18 +21,15 @@ model VerifiedFleetMembershipRevision {
 }
 
 model VerifiedFleetMembershipAssertion {
-  id              String                          @id @default(cuid())
-  revisionId      String                          @map("revision_id")
-  assertionId     String                          @map("assertion_id")
-  siloId          String                          @map("silo_id")
-  subjectId       String                          @map("subject_id")
-  scopeKind       FleetMembershipScopeKind        @map("scope_kind")
-  organizationId  String                          @map("organization_id")
-  scopeResourceId String?                         @map("scope_resource_id")
-  revision        VerifiedFleetMembershipRevision @relation(fields: [revisionId, siloId], references: [id, siloId], onDelete: Restrict)
+  id          String                          @id @default(cuid())
+  revisionId  String                          @map("revision_id")
+  assertionId String                          @map("assertion_id")
+  siloId      String                          @map("silo_id")
+  subjectId   String                          @map("subject_id")
+  revision    VerifiedFleetMembershipRevision @relation(fields: [revisionId, siloId], references: [id, siloId], onDelete: Restrict)
 
   @@unique([revisionId, assertionId])
-  @@index([siloId, subjectId, scopeKind, organizationId, scopeResourceId])
+  @@index([siloId, subjectId])
   @@map("verified_fleet_membership_assertions")
 }
 

@@ -79,6 +79,25 @@ export interface OpenCraneObotConfig
 	readonly requestTimeoutMilliseconds: number;
 }
 
+/** Settings for durable control-plane tasks and the remote MCP protocol check. */
+export interface OpenCraneWorkflowConfig
+{
+	/** PostgreSQL URL shared by product writes and Absurd task admission. */
+	readonly databaseUrl: string;
+	/** Maximum number of database connections reserved for Absurd. */
+	readonly databasePoolSize: number;
+	/** Largest accepted response body from a remote MCP server. */
+	readonly mcpEraProbeMaximumResponseBytes: number;
+	/** Hard timeout for one remote MCP protocol check. */
+	readonly mcpEraProbeTimeoutMilliseconds: number;
+	/** Delay between checks for newly admitted durable tasks. */
+	readonly pollIntervalMilliseconds: number;
+	/** Silo that owns every task admitted by this server process. */
+	readonly siloId: string;
+	/** Maximum number of durable tasks handled in parallel. */
+	readonly workerConcurrency: number;
+}
+
 /**
  * One deployment-supplied provider credential that must be registered with the release-local
  * LiteLLM before the silo accepts work. The key is read only from a Kubernetes Secret reference.
@@ -112,4 +131,6 @@ export interface OpenCraneProcessConfig
 	readonly schedulerIntervalMilliseconds: number;
 	/** Optional verified-email contract that can claim exactly one standalone-silo owner. */
 	readonly standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null;
+	/** Durable control-plane task and MCP protocol-check settings. */
+	readonly workflows: OpenCraneWorkflowConfig;
 }

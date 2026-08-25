@@ -33,6 +33,7 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 	it("atomically reserves one generated artifact behind the exact active attempt and message event", async function _Reserves()
 	{
 		const transaction = {
+			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
 			workloadAssignment: { findFirst: vi.fn().mockResolvedValue(_Assignment()) },
 			conversationRunEvent: { findFirst: vi.fn().mockResolvedValue(_MessageEvent()) },
 			conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
@@ -44,7 +45,7 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 		expect(result).toEqual({ outcome: "issued", ticketId: expect.any(String) });
 		expect(transaction.workloadAssignment.findFirst).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 2, namespace: "runtime-ns", serviceAccountName: "agent-runtime-default", podUid: "pod-1", state: WorkloadAssignmentState.Registered, expiresAt: { gt: expect.any(Date) }, run: { attempt: 2 } }, include: { run: true } });
 		expect(transaction.conversationRunEvent.findFirst).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", runId: "run-1", type: "message.started", messageId: "message-1" }, select: { sequence: true, payload: true } });
-		expect(transaction.artifact.create).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1", ownerPrincipalId: "user-1", kind: ArtifactKind.Generated }) });
+		expect(transaction.artifact.create).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1", ownerPrincipalId: "principal-1", kind: ArtifactKind.Generated }) });
 		expect(transaction.artifactUploadLease.create).toHaveBeenCalledWith({ data: expect.objectContaining({ expectedContentAddress: _ADDRESS, expectedByteLength: 5n, mediaType: "application/pdf" }) });
 		expect(transaction.conversationAsset.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", runAttempt: 2, runEventSequence: 7, runMessageId: "message-1", provenance: ConversationAssetProvenance.AgentOutput, state: ConversationAssetState.Uploading }) });
 	});
@@ -52,6 +53,7 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 	it("enforces the approved 200 MiB total across all outputs for one message", async function _LimitsMessageTotal()
 	{
 		const transaction = {
+			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
 			workloadAssignment: { findFirst: vi.fn().mockResolvedValue(_Assignment()) },
 			conversationRunEvent: { findFirst: vi.fn().mockResolvedValue(_MessageEvent()) },
 			conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
@@ -69,7 +71,7 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 	it("returns the same ticket only when every retry coordinate still matches", async function _Idempotent()
 	{
 		const existing = { id: "ticket-1", runEventSequence: 7, outputMessageId: "message-1", asset: { ..._Asset(), uploadLease: { expectedContentAddress: _ADDRESS } } };
-		const transaction = { workloadAssignment: { findFirst: vi.fn().mockResolvedValue(_Assignment()) }, conversationRunEvent: { findFirst: vi.fn().mockResolvedValue(_MessageEvent()) }, conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue(existing) } };
+		const transaction = { principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) }, workloadAssignment: { findFirst: vi.fn().mockResolvedValue(_Assignment()) }, conversationRunEvent: { findFirst: vi.fn().mockResolvedValue(_MessageEvent()) }, conversationAssetOutputTicket: { findUnique: vi.fn().mockResolvedValue(existing) } };
 		const repository = new PrismaConversationAssetOutputRepository(transaction as never);
 
 		expect(await repository.reserve(_IDENTITY, _COMMAND)).toEqual({ outcome: "idempotent", ticketId: "ticket-1" });

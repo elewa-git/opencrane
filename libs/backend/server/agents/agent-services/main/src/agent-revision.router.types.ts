@@ -5,7 +5,7 @@ import type { Logger } from "@opencrane/backend/observability";
 import type { AgentServicePublicationRepository } from "./agent-publication.types";
 import type { AgentRevisionLifecycleRepository, ManagedRunAdmissionPort } from "./agent-revision-lifecycle.types";
 import type { AgentScheduleRepository } from "./agent-schedule.types";
-import type { ScopeGrantResolver } from "./scope-attachment-authority.types";
+import type { BoundaryGrantResolver } from "./boundary-attachment-authority.types";
 
 /**
  * Who is making a management request, worked out by the app from the browser session and request
@@ -16,8 +16,10 @@ import type { ScopeGrantResolver } from "./scope-attachment-authority.types";
  */
 export interface ManagementCaller
 {
-	/** Stable IdP subject of the caller. */
-	readonly subjectId: string;
+	/** Durable local Principal id used by generic authorization. */
+	readonly principalId: string;
+	/** Stable IdP subject retained for authorities that still key user-owned records by OIDC subject. */
+	readonly externalSubject: string;
 	/** Silo the caller is operating within. */
 	readonly siloId: string;
 	/** Whether the caller holds the organisation-admin role required to mutate definitions. */
@@ -44,9 +46,9 @@ export interface AgentServicesRouterDependencies
 	readonly schedules: AgentScheduleRepository;
 	/**
 	 * Grant-compiler-backed resolver used to validate, at attach time, that a caller administers every
-	 * scope they attach — a stored attachment then grants nothing beyond the caller's effective access.
+	 * boundary they attach — a stored attachment then grants nothing beyond the caller's effective access.
 	 */
-	readonly scopeGrantResolver: ScopeGrantResolver;
+	readonly boundaryGrantResolver: BoundaryGrantResolver;
 	/** Resolves the authenticated caller and role from the request, or null when unauthenticated. */
 	resolveCaller(request: Request): ManagementCaller | null;
 	/** Server-owned management clock, replaceable only for deterministic tests. */

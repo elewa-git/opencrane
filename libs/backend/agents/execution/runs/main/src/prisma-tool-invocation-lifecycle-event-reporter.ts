@@ -21,7 +21,8 @@ export class PrismaToolInvocationLifecycleEventUnitOfWork implements ToolInvocat
 	{
 		const appended = await this.prisma.$transaction(async function _append(transaction)
 		{
-			return new PrismaToolInvocationLifecycleEventAppendUnitOfWork(transaction).append(event);
+			const unitOfWork = new PrismaToolInvocationLifecycleEventAppendUnitOfWork(transaction);
+			return unitOfWork.append(event);
 		});
 		if (!appended) throw new Error("tool lifecycle event is no longer valid for the run attempt");
 	}
@@ -29,7 +30,8 @@ export class PrismaToolInvocationLifecycleEventUnitOfWork implements ToolInvocat
 	/** Append within the invocation owner's exact state transaction. */
 	async appendInTransaction(transaction: unknown, event: ToolInvocationLifecycleEvent): Promise<boolean>
 	{
-		return new PrismaToolInvocationLifecycleEventAppendUnitOfWork(transaction as Prisma.TransactionClient).append(event);
+		const unitOfWork = new PrismaToolInvocationLifecycleEventAppendUnitOfWork(transaction as Prisma.TransactionClient);
+		return unitOfWork.append(event);
 	}
 }
 
@@ -48,7 +50,8 @@ class PrismaToolInvocationLifecycleEventAppendUnitOfWork implements ToolInvocati
 	/** Append through the transaction-bound repository. */
 	append(event: ToolInvocationLifecycleEvent): Promise<boolean>
 	{
-		return new PrismaToolInvocationLifecycleEventAppendRepository(this.transaction).append(event);
+		const repository = new PrismaToolInvocationLifecycleEventAppendRepository(this.transaction);
+		return repository.append(event);
 	}
 }
 

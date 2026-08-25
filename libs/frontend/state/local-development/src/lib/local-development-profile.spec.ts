@@ -7,7 +7,7 @@ import { ElicitationBodyKinds, ElicitationRequestStates } from "@opencrane/contr
 import { CONTROL_PLANE_BASE_URL, ControlPlaneApiService } from "@opencrane/core";
 import { ConversationAssetLifecycle } from "@opencrane/models/conversation-assets";
 import { ConversationModes, MessageContentBlockKinds } from "@opencrane/models/conversations";
-import { PersonaOnboardingStates, UserOnboardingRouteStates } from "@opencrane/models/user-onboarding";
+import { PersonaFirstChatArchetypes, PersonaOnboardingStates, UserOnboardingRouteStates } from "@opencrane/models/user-onboarding";
 import { AGENT_THREAD_GATEWAY, AgentThreadTimelineEntryKinds, type AgentThreadGateway } from "@opencrane/state/conversation/agent-threads";
 import { CONVERSATION_ASSETS_GATEWAY, type ConversationAssetsGateway } from "@opencrane/state/conversation/assets";
 import { ELICITATION_GATEWAY, type ConversationElicitationGateway } from "@opencrane/state/conversation/elicitation";
@@ -15,38 +15,43 @@ import { ConversationEventStreamStatuses, type ConversationEventStream, type Con
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationRunStates, ConversationWorkspaceGatewayErrorKinds, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
 import { PERSONA_FIRST_CHAT_GATEWAY, PERSONA_GATEWAY, type PersonaFirstChatGateway, type PersonaGateway } from "@opencrane/state/onboarding";
 
-import { LOCAL_COMMANDER_FIRST_CHAT_OPENING } from "./local-development-first-chat.fixtures";
+import { __LocalDevelopmentArchetypeFixture } from "./local-development-archetype.fixtures";
+import { LOCAL_DEVELOPMENT_ARCHETYPE } from "./local-development-archetype";
 import { provideLocalDevelopmentGateways } from "./local-development.providers";
 import { LOCAL_DEVELOPMENT_SCENARIO } from "./local-development-scenario";
 import { LocalDevelopmentScenarioKinds } from "./local-development-scenario.types";
 
 /** Build one isolated happy-path profile for a focused lifecycle test. */
-function _Profile(scenario = LocalDevelopmentScenarioKinds.HappyPath): Injector
+function _Profile(scenario = LocalDevelopmentScenarioKinds.HappyPath, archetype = PersonaFirstChatArchetypes.Commander): Injector
 {
 	return Injector.create({
 		providers: [
 			...provideLocalDevelopmentGateways(),
 			ControlPlaneApiService,
 			{ provide: CONTROL_PLANE_BASE_URL, useValue: "https://local.opencrane.invalid" },
-			{ provide: LOCAL_DEVELOPMENT_SCENARIO, useValue: scenario }
+			{ provide: LOCAL_DEVELOPMENT_SCENARIO, useValue: scenario },
+			{ provide: LOCAL_DEVELOPMENT_ARCHETYPE, useValue: archetype }
 		]
 	});
 }
 
 describe("Tier 1 local-development profile", function _Suite()
 {
-	it("carries one coherent lifecycle from persona answers into completed onboarding history", async function _OnboardingLifecycle()
+	it.each(Object.values(PersonaFirstChatArchetypes))("carries the %s fixture from persona answers into completed onboarding history", async function _OnboardingLifecycle(archetype: PersonaFirstChatArchetypes)
 	{
-		const injector = _Profile();
+		const fixture = __LocalDevelopmentArchetypeFixture(archetype);
+		const injector = _Profile(LocalDevelopmentScenarioKinds.HappyPath, archetype);
 		const persona = injector.get<PersonaGateway>(PERSONA_GATEWAY);
 		const firstChat = injector.get<PersonaFirstChatGateway>(PERSONA_FIRST_CHAT_GATEWAY);
 		const workspace = injector.get<ConversationWorkspaceGateway>(CONVERSATION_WORKSPACE_GATEWAY);
+		const agentThreads = injector.get<AgentThreadGateway>(AGENT_THREAD_GATEWAY);
 		let survey = await persona.load();
 		expect(survey.questionCount).toBe(10);
 		expect(survey.questions[0]?.prompt).toBe("When you need to make a decision at work, which feels most natural?");
 		expect(survey.questions.at(-1)?.prompt).toBe("Pick the tone that would make you most comfortable working with an AI assistant every day.");
-		const selectedChoiceIds = ["a", "a", "a", "a", "b", "b", "a", "a", "a", "a"] as const;
-		await expect(persona.recordAnswer(survey.interviewId!, survey.questions[0]!.id, "c")).rejects.toThrow("Tier 1 follows one reviewed Commander/Guardian path");
+		const selectedChoiceIds = survey.questions.map(question => fixture.answerChoiceIds[question.id]!);
+		const wrongChoiceId = survey.questions[0]!.choices.find(choice => choice.id !== selectedChoiceIds[0])!.id;
+		await expect(persona.recordAnswer(survey.interviewId!, survey.questions[0]!.id, wrongChoiceId)).rejects.toThrow(`Tier 1 follows the reviewed ${fixture.displayName} path`);
 		expect((await persona.load()).answeredQuestionCount).toBe(0);
 		await persona.recordAnswer(survey.interviewId!, survey.questions[0]!.id, selectedChoiceIds[0]!);
 		await persona.startInterview();
@@ -70,18 +75,33 @@ describe("Tier 1 local-development profile", function _Suite()
 		const review = await persona.load();
 		expect(review.state).toBe(PersonaOnboardingStates.Review);
 		expect(review.questions.map(question => question.selectedChoiceId)).toEqual(selectedChoiceIds);
-		expect(review.result?.displayName).toBe("The Commander (Guardian)");
+		expect(review.result).toMatchObject({
+			displayName: fixture.displayName,
+			primaryColour: fixture.primaryColour,
+			secondaryColour: fixture.secondaryColour,
+			colourScores: fixture.colourScores,
+			opennessScores: fixture.opennessScores
+		});
+		expect(review.result?.instructionPreview).toBe(fixture.instructionPreview);
+		expect(review.result?.instructionPreview).not.toContain("{{");
 		await persona.approve(review.personaRevisionId!);
 		expect((await firstChat.loadRouteState()).state).toBe(UserOnboardingRouteStates.BootstrapChatPending);
 
 		let chat = await firstChat.start();
-		expect(chat.persona?.displayName).toBe("The Commander (Guardian)");
-		expect(chat.contentRevision).toMatchObject({
-			id: "bootstrap-commander-v1",
-			sourceLabel: "docs/design/persona-archetypes/bootstrap-commander.md"
+		expect(chat.persona).toMatchObject({
+			displayName: fixture.displayName,
+			archetype: fixture.archetype,
+			primaryColour: fixture.firstChatColour
 		});
-		expect(chat.transcript[0]?.text).toBe(LOCAL_COMMANDER_FIRST_CHAT_OPENING);
-		expect(chat.currentQuestion?.text).toBe("What are you working on right now?");
+		expect(chat.contentRevision).toMatchObject({
+			id: fixture.firstChat.id,
+			digest: fixture.firstChat.digest,
+			sourceLabel: fixture.firstChat.sourceLabel
+		});
+		expect(chat.transcript[0]?.text).toBe(fixture.firstChat.opening);
+		expect(chat.currentQuestion?.text).toBe(fixture.firstChat.questions[0]);
+		expect((await workspace.directory()).personalAgent?.displayName).toBe(fixture.displayName);
+		expect((await agentThreads.read("conversation-agent", "conversation-child")).summary.participants.at(-1)?.label).toBe(fixture.displayName);
 
 		while (chat.currentQuestion)
 		{

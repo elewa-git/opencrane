@@ -7,7 +7,7 @@ import type { ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custo
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
 import type { RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import { __CreateStandaloneFirstUserAdmissionAuditAppender } from "@opencrane/backend/server/iam/audit";
-import { ___AuthRouter, ___CreateOidcAuthService, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
+import { ___AuthRouter, ___CreateOidcAuthService, PrismaAuthenticatedPrincipalAdmissionUnitOfWork, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 import { ___RequestContext } from "@opencrane/backend/observability";
 import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _CheckHealth, _ErrorHandler, _RateLimit, _TransportSecurity, type PublicHealthReportReader } from "@opencrane/backend/server/infra/http";
@@ -16,6 +16,7 @@ import { _log } from "./log";
 import type { OpenCraneOrganizationMembershipConfig } from "./config.types";
 import { _CreateOrganizationMembersComposition } from "./organization-members-composition";
 import type { PublicAuthenticationComposition } from "./public-app.types";
+import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 import { _RegisterRoutes } from "./routes";
 import { _CreateHttpRequestLogger } from "./telemetry";
 
@@ -32,9 +33,12 @@ function _CreateStandaloneFirstUserAudit(config: StandaloneFirstUserAdmissionCon
 export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null): PublicAuthenticationComposition
 {
 	const authService = ___CreateOidcAuthService(_log, prisma, customApi, standaloneFirstUserAdmission, _CreateStandaloneFirstUserAudit(standaloneFirstUserAdmission));
+	const admission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(prisma, _log);
+	const authMiddleware = ___AuthMiddleware(admission);
 	return {
-		productAuthentication: ___AuthMiddleware(),
-		router: ___AuthRouter(authService, prisma),
+		authMiddleware,
+		productAuthentication: authMiddleware,
+		router: ___AuthRouter(authService),
 		sessionMiddleware: authService.createSessionMiddleware(),
 	};
 }
@@ -56,9 +60,10 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * @param artifactServiceEnabled - Whether conversation assets have a backing service.
  * @param artifactScannerEnabled - Whether newly quarantined conversation files can be consumed.
  * @param health - Cached public service report reader with no topology or error details.
+ * @param mcpWorkflows - Shared transaction and worker authority for saved MCP jobs.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, authentication: PublicAuthenticationComposition, organizationMembership: OpenCraneOrganizationMembershipConfig, artifactServiceEnabled: boolean, artifactScannerEnabled: boolean, health: PublicHealthReportReader): Express
+export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, authentication: PublicAuthenticationComposition, organizationMembership: OpenCraneOrganizationMembershipConfig, artifactServiceEnabled: boolean, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition | null): Express
 {
 	const app = express();
 
@@ -88,7 +93,7 @@ export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, r
 	}
 
 	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, runCancellation, serverNamespace, obotCustody, artifactServiceEnabled, artifactScannerEnabled, organizationMembers.router);
+	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, runCancellation, serverNamespace, obotCustody, artifactServiceEnabled, artifactScannerEnabled, organizationMembers.router, mcpWorkflows);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

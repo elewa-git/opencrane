@@ -1,6 +1,6 @@
 import { Router, type Request, type RequestHandler } from "express";
 
-import type { LocalDevelopmentIdentity } from "@opencrane/models/local-development";
+import { LOCAL_DEVELOPMENT_PRINCIPAL_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER, type LocalDevelopmentIdentity } from "@opencrane/models/local-development";
 
 import type { PublicAuthenticationComposition } from "../app/public-app.types";
 
@@ -101,7 +101,7 @@ function _CreateDevelopmentSessionMiddleware(identity: LocalDevelopmentIdentity)
 		request.session = {
 			authUser: {
 				sub: identity.subjectId,
-				issuer: "opencrane-local-development",
+				issuer: LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER,
 				groups: [],
 				isPlatformOperator: false,
 				isOrgAdmin: true,
@@ -116,7 +116,7 @@ function _CreateDevelopmentSessionMiddleware(identity: LocalDevelopmentIdentity)
 }
 
 /** Require the fixed development session before any product route can execute. */
-function _DevelopmentProductAuthentication(): RequestHandler
+function _DevelopmentProductAuthentication(identity: LocalDevelopmentIdentity): RequestHandler
 {
 	return function _RequireDevelopmentSession(request, response, next): void
 	{
@@ -126,6 +126,12 @@ function _DevelopmentProductAuthentication(): RequestHandler
 			return;
 		}
 
+		request.authenticatedPrincipal = {
+			principalId: LOCAL_DEVELOPMENT_PRINCIPAL_ID,
+			siloId: identity.siloId,
+			issuer: LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER,
+			subject: identity.subjectId
+		};
 		next();
 	};
 }
@@ -160,8 +166,11 @@ function _CreateDevelopmentAuthRouter(identity: LocalDevelopmentIdentity): Route
 /** Compose fixed local authentication without importing it from the production entrypoint. */
 export function _CreateDevelopmentAuthentication(identity: LocalDevelopmentIdentity): PublicAuthenticationComposition
 {
+	const authMiddleware = _DevelopmentProductAuthentication(identity);
+
 	return {
-		productAuthentication: _DevelopmentProductAuthentication(),
+		authMiddleware,
+		productAuthentication: authMiddleware,
 		router: _CreateDevelopmentAuthRouter(identity),
 		sessionMiddleware: [_CreateDevelopmentSessionMiddleware(identity)],
 	};

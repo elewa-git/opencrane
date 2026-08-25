@@ -1,0 +1,9 @@
+{
+  "name": "Absurd",
+  "version": "0.5.0",
+  "upstream": "https://github.com/earendil-works/absurd",
+  "source": "absurd.sql",
+  "license": "Apache-2.0",
+  "licenseFile": "LICENSE",
+  "sha256": "d34309370c539f3a51f2b36b69b1f77551f8e4a14480a1c8def8bb8f40fd9aab"
+}

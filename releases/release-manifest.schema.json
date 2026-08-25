@@ -27,6 +27,7 @@
         "schemaVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
         "baselinePath": { "type": "string", "minLength": 1 },
         "baselineSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "operandImage": { "type": "string", "pattern": "^[^\\s@]+:[0-9]+(\\.[0-9]+)*([-_.][A-Za-z0-9_.-]+)?@sha256:[a-f0-9]{64}$" },
         "carriedForwardFromRepositoryVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
       }
     },

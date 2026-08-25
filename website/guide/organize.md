@@ -1,59 +1,61 @@
-# Organize your company
+# Organise your company
 
-As you add people, skills, and knowledge, you need a way to decide **who shares what**.
-OpenCrane does this with **scopes**.
+OpenCrane represents your organisation with **groups**. A group can sit below another group, so
+the same model covers company-wide, department, team and project structures without fixed
+categories.
 
-::: tip What's a scope?
-A scope is the *reach* of something — how widely it's shared. There are four, from
-narrowest to widest:
-
-```
-personal  ▸  project  ▸  department  ▸  org
- (one person) (a team)   (a division)   (everyone)
-```
+::: tip Two boundary kinds
+OpenCrane authorises resources against either a stored group or one person's personal boundary.
+Names such as “Engineering”, “Platform team” and “Website redesign” are group data, not special
+IAM types.
 :::
 
-## Departments and projects aren't folders
+## Build a group hierarchy
 
-This is the key idea: **you don't create a department as an object.** There's no
-"new department" button. Instead, a department (or project) is simply a **label** you
-attach to people, skills, and knowledge. OpenCrane uses those labels to decide what's
-shared and with whom.
+Give a group a parent when it belongs inside a larger part of the organisation:
 
-That keeps things flexible — your org structure lives in the labels you choose, not
-in a rigid hierarchy you have to maintain.
+```text
+Acme
+├── Product
+│   ├── Platform
+│   └── Website redesign
+└── Finance
+```
 
-::: tip Personal scope is your assistant's scope
-*Personal* isn't just the narrowest option on the list — it's the scope your
-[personal assistant](/guide/persona) always operates in. A managed agent, by contrast, is created
-at *project*, *department* or *org* scope on purpose, because it's meant to be shared. See
-[the personal/managed distinction](/guide/introduction#two-kinds-of-agent-and-why-the-difference-matters).
+The hierarchy describes resource reach. A grant on `Product` with descendant coverage can include
+`Platform` and `Website redesign`; an exact grant covers only `Product`.
+
+Membership remains direct. Adding someone to `Platform` does not silently create a second
+membership row for `Product` or `Acme`.
+
+## Choose who manages membership
+
+Each group has one membership authority:
+
+| Authority | Who changes direct membership |
+|---|---|
+| External | Login-claim reconciliation from your identity provider |
+| Local | An OpenCrane operator through `/api/v1/groups` |
+
+Login claims refer to groups as `group:<stable-group-id>`. Reconciliation updates only external
+groups, so it cannot prune membership that an operator curated in a local group.
+
+::: warning
+Changing a group's parent does not change who belongs to that group. Review descendant grants
+separately because hierarchy changes can change which resource boundaries they cover.
 :::
 
-## How scopes show up
+## Personal boundaries
 
-The same four scopes appear everywhere you share or restrict something:
-
-- **Skills** are published at a scope and promoted to wider ones — a skill that starts
-  *personal* can be promoted to *project*, then *department*, then *org*.
-  → [Agent skills](/guide/skills)
-- **Knowledge** is organized into datasets by scope, so a department's documents only
-  reach that department. → [Organizational knowledge](/guide/knowledge)
-- **Access grants** allow or deny something for a person, team, or whole department.
-  → [Control access](/guide/permissions)
-
-## Grouping people
-
-When you create an agent service, you can tag its team scope — see
-[Create your first agent](/guide/first-agent). That team label is what
-you then reference when you share skills with "engineering" or give a department
-access to a tool — so everyone in that group is covered at once.
+A personal boundary belongs to one principal and is not a hidden group. Use it for private
+assistant memory, personal resources and exact person-to-person sharing.
 
 ## A simple way to start
 
-1. Decide your **departments** (e.g. Engineering, Sales, Support).
-2. Assign each agent service and subject to the scopes it should use.
-3. Share company-wide skills and knowledge at **org** scope; keep team-specific things
-   at **department** or **project** scope.
+1. Create a company group.
+2. Add the department, team and project groups you need beneath it.
+3. Choose external or local membership authority for each group.
+4. Grant access at the narrowest group or personal boundary that fits, using descendant coverage
+   only when the hierarchy should inherit the resource reach.
 
-You can always widen a scope later — start narrow, promote as things prove useful.
+→ [Control who can access what](/guide/permissions) · [Silo IAM](/integrators/silo-iam)

@@ -1,45 +1,29 @@
 #!/usr/bin/env bash
-# Deploy-owned sequencing for the PostgreSQL release. The caller supplies resolved,
-# manifest-bound globals plus log/err functions. This module may fence the application Helm release
-# and reconcile the app-owned PostgreSQL chart; it never selects a migration or edits database bytes.
-
-# Accepts the CLI override only after the release resolver has admitted an approved carry-forward repair.
-validate_unbacked_database_migration_override()
-{
-  if [[ "${ALLOW_UNBACKED_DATABASE_MIGRATION:-0}" != "1" ]]; then return 0; fi
-  if [[ "$DATABASE_TRANSITION_KIND" == "migration" && -n "$DATABASE_CARRY_FORWARD_RELEASE" ]]; then return 0; fi
-  err "--allow-unbacked-database-migration is valid only for an approved carry-forward repair."
-  return 2
-}
+# Runs the reviewed PostgreSQL migration Job directly. The caller supplies migration inputs plus
+# log/err functions; this module does not classify database state, pause application writes, or
+# recover a failed migration.
 
 build_postgres_release_args()
 {
   local migration_enabled="$1"
   local privileges_enabled="$2"
   local job_deadline_grace_seconds=30
-  local helm_status_propagation_grace_seconds=30
-  local helm_timeout_seconds="$((TIMEOUT + job_deadline_grace_seconds + helm_status_propagation_grace_seconds))"
+  local helm_timeout_seconds="$((TIMEOUT + job_deadline_grace_seconds + 30))"
   local pooler_client_selectors_json='[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}}]'
   local databases_json="[{\"name\":\"opencrane\",\"owner\":\"$POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"}]"
   POSTGRES_ARGS=(upgrade --install "$POSTGRES_RELEASE" "$POSTGRES_CHART_DIR"
     --namespace "$NAMESPACE"
+    --set-string "image=$POSTGRES_OPERAND_IMAGE"
     --set-json "databases=$databases_json"
     --set-string "databaseAdmin.name=$POSTGRES_ADMIN_NAME"
     --set-string "databaseAdmin.credentialsSecret=$POSTGRES_ADMIN_CREDENTIALS_SECRET"
     --set-string "bootstrap.targetBaseline.sha256=$POSTGRES_BOOTSTRAP_BASELINE_SHA256"
     --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=$POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP"
     --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=$POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP_KEY"
-    --set-string "convergence.targetSchemaVersion=$DATABASE_TARGET_SCHEMA_VERSION"
-    --set-string "convergence.targetBaselineSha256=$DATABASE_TARGET_BASELINE_SHA256"
-    --set-string "convergence.currentProtectedBaselineSha256=$POSTGRES_BASELINE_SHA256"
-    --set "convergence.previousMigration.available=$DATABASE_PREVIOUS_MIGRATION_AVAILABLE"
-    --set-string "convergence.previousMigration.id=$DATABASE_PREVIOUS_MIGRATION_ID"
-    --set-string "convergence.previousMigration.fromSchemaVersion=$DATABASE_PREVIOUS_SCHEMA_VERSION"
-    --set-string "convergence.previousMigration.sourceTargetBaselineSha256=${DATABASE_PREVIOUS_TARGET_BASELINE_SHA256:-}"
-    --set-json "convergence.previousMigration.sourceProtectedBaselineSha256s=${DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON:-[]}"
-    --set-string "convergence.previousMigration.selectedSourceProtectedBaselineSha256=${DATABASE_SELECTED_PROTECTED_BASELINE_SHA256:-}"
-    --set-string "convergence.previousMigration.sqlSha256=$DATABASE_PREVIOUS_MIGRATION_SQL_SHA256"
+    --set "superuserAccess.enabled=${POSTGRES_SUPERUSER_ACCESS_ENABLED:-false}"
     --set "migration.enabled=$migration_enabled"
+    --set "migration.privilegedExtension.enabled=${DATABASE_PRIVILEGED_EXTENSION_ENABLED:-false}"
+    --set-string "migration.privilegedExtension.name=${DATABASE_PRIVILEGED_EXTENSION:-}"
     --set "privileges.enabled=$privileges_enabled"
     --set-json "pooler.clientPodSelectors=$pooler_client_selectors_json"
     --wait
@@ -50,6 +34,10 @@ build_postgres_release_args()
       --set "migration.timeoutSeconds=$TIMEOUT"
       --set "migration.jobDeadlineGraceSeconds=$job_deadline_grace_seconds"
       --set-string "migration.image=$POSTGRES_MIGRATION_IMAGE"
+      --set-string "migration.sqlSha256=$DATABASE_MIGRATION_SQL_SHA256"
+      --set-string "migration.sourceBaselineSha256=$DATABASE_MIGRATION_SOURCE_BASELINE_SHA256"
+      --set-string "migration.siloId=$DATABASE_MIGRATION_SILO_ID"
+      --set-string "migration.oidcIssuer=$OIDC_ISSUER_URL"
       --set-string "migration.configMap.name=$DATABASE_MIGRATION_CONFIG_MAP"
       --set-string "migration.configMap.key=migration.sql")
   fi
@@ -65,138 +53,58 @@ build_postgres_release_args()
   fi
 }
 
-postgres_release_render_has_recovery()
+wait_for_postgres_resource()
 {
-  local argument
-  local render_args=()
-  build_postgres_release_args false false
-  for argument in "${POSTGRES_ARGS[@]:4}"; do
-    [[ "$argument" == "--reset-then-reuse-values" ]] && continue
-    render_args+=("$argument")
-  done
-  helm template "$POSTGRES_RELEASE" "$POSTGRES_CHART_DIR" "${render_args[@]}" \
-    --show-only templates/cluster.yaml | grep -q '^    recovery:'
+  local condition="$1"
+  local resource="$2"
+  local message="$3"
+  if ! kubectl wait --for="$condition" "$resource" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
+    err "$message"
+    return 1
+  fi
 }
 
 install_postgres_release()
 {
   local migration_enabled="$1"
   local privileges_enabled="$2"
-  local command_status
-  local database_resource
   build_postgres_release_args "$migration_enabled" "$privileges_enabled"
-
-  log "Reconciling PostgreSQL server while preserving bootstrap origin '$POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP'…"
-  if helm "${POSTGRES_ARGS[@]}"; then
-    command_status=0
-  else
-    command_status=$?
-  fi
-  if (( command_status != 0 )); then
-    err "PostgreSQL Helm reconciliation failed."
-    return "$command_status"
-  fi
-  if kubectl wait --for=condition=Ready "cluster/${POSTGRES_RELEASE}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
-    command_status=0
-  else
-    command_status=$?
-  fi
-  if (( command_status != 0 )); then
-    err "PostgreSQL Cluster did not become Ready."
-    return "$command_status"
-  fi
-  if kubectl wait --for=create "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
-    command_status=0
-  else
-    command_status=$?
-  fi
-  if (( command_status != 0 )); then
-    err "PostgreSQL pooler Deployment was not created."
-    return "$command_status"
-  fi
-  if kubectl wait --for=condition=available "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
-    command_status=0
-  else
-    command_status=$?
-  fi
-  if (( command_status != 0 )); then
-    err "PostgreSQL pooler Deployment did not become Available."
-    return "$command_status"
-  fi
-  for database_resource in "${POSTGRES_RELEASE}-obot" "${POSTGRES_RELEASE}-litellm"; do
-    if kubectl wait --for=jsonpath='{.status.applied}'=true "database/${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
-      command_status=0
-    else
-      command_status=$?
-    fi
-    if (( command_status != 0 )); then
-      err "Database resource '$database_resource' was not applied."
-      return "$command_status"
-    fi
-  done
+  log "Reconciling PostgreSQL server…"
+  helm "${POSTGRES_ARGS[@]}" || { err "PostgreSQL Helm reconciliation failed."; return 1; }
+  wait_for_postgres_resource condition=Ready "cluster/${POSTGRES_RELEASE}" "PostgreSQL Cluster did not become Ready." || return $?
+  wait_for_postgres_resource create "deployment/${POSTGRES_RELEASE}-pooler" "PostgreSQL pooler Deployment was not created." || return $?
+  wait_for_postgres_resource condition=available "deployment/${POSTGRES_RELEASE}-pooler" "PostgreSQL pooler Deployment did not become Available." || return $?
+  wait_for_postgres_resource "jsonpath={.status.applied}=true" "database/${POSTGRES_RELEASE}-obot" "Obot database was not applied." || return $?
+  wait_for_postgres_resource "jsonpath={.status.applied}=true" "database/${POSTGRES_RELEASE}-litellm" "LiteLLM database was not applied." || return $?
   if [[ "$migration_enabled" == "true" ]]; then
-    if kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-migration" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
-      command_status=0
-    else
-      command_status=$?
-    fi
-    if (( command_status != 0 )); then
-      err "Database migration Job did not complete."
-      return "$command_status"
-    fi
+    wait_for_postgres_resource condition=complete "job/${POSTGRES_RELEASE}-database-migration" "Database migration Job did not complete." || return $?
   fi
   if [[ "$privileges_enabled" == "true" ]]; then
-    if kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
-      command_status=0
-    else
-      command_status=$?
-    fi
-    if (( command_status != 0 )); then
-      err "Database privilege Job did not complete."
-      return "$command_status"
-    fi
+    wait_for_postgres_resource condition=complete "job/${POSTGRES_RELEASE}-database-privileges" "Database privilege Job did not complete." || return $?
   fi
 }
 
-classify_database_convergence_state()
+# Removes the temporary privileged credential after the pg_cron setup Job has completed.
+revoke_temporary_database_superuser_access()
 {
-  local classification_status classification_output
-  if classification_output="$(classify_live_database_convergence)"; then
-    classification_status=0
-  else
-    classification_status=$?
+  if [[ "${DATABASE_TEMPORARY_SUPERUSER_ACCESS:-false}" != "true" ]]; then
+    return 0
   fi
-  if (( classification_status != 0 )); then
-    err "Unable to read unambiguous live database convergence evidence."
-    return "$classification_status"
-  fi
-  if [[ ! "$classification_output" =~ ^(current|completed|source)\|([0-9a-f]{64})$ \
-    && ! "$classification_output" =~ ^incompatible\|([0-9a-f]{64})?$ ]]; then
-    err "Database convergence classifier returned an invalid or ambiguous state."
-    return 1
-  fi
-  DATABASE_LIVE_CONVERGENCE_STATE="${classification_output%%|*}"
-  DATABASE_SELECTED_PROTECTED_BASELINE_SHA256="${classification_output#*|}"
-  if ! database_convergence_state_is_valid "$DATABASE_LIVE_CONVERGENCE_STATE"; then
-    err "Database convergence classifier returned an invalid or ambiguous state."
-    return 1
-  fi
+  POSTGRES_SUPERUSER_ACCESS_ENABLED=false
+  DATABASE_PRIVILEGED_EXTENSION_ENABLED=false
+  install_postgres_release false false || return $?
+  verify_database_superuser_access_disabled || return $?
+  DATABASE_TEMPORARY_SUPERUSER_ACCESS=false
 }
 
 publish_database_migration_config_map()
 {
-  local publisher_status
   local published_config_map
-  if published_config_map="$(bash "$POSTGRES_MIGRATION_PUBLISHER" \
-    "$NAMESPACE" "$DATABASE_PREVIOUS_MIGRATION_ID" "$DATABASE_MIGRATION_SQL_FILE" \
-    "$DATABASE_PREVIOUS_MIGRATION_SQL_SHA256")"; then
-    publisher_status=0
-  else
-    publisher_status=$?
-  fi
-  if (( publisher_status != 0 )); then
-    err "Unable to publish the exact reviewed database migration SQL."
-    return "$publisher_status"
+  if ! published_config_map="$(bash "$POSTGRES_MIGRATION_PUBLISHER" \
+    "$NAMESPACE" "$DATABASE_MIGRATION_ID" "$DATABASE_MIGRATION_SQL_FILE" \
+    "$DATABASE_MIGRATION_SQL_SHA256")"; then
+    err "Unable to publish the reviewed database migration SQL."
+    return 1
   fi
   if [[ -z "$published_config_map" ]]; then
     err "Database migration SQL publisher returned no immutable ConfigMap name."
@@ -205,200 +113,28 @@ publish_database_migration_config_map()
   DATABASE_MIGRATION_CONFIG_MAP="$published_config_map"
 }
 
-adopt_matching_existing_database_fence()
-{
-  local active_fence
-  local command_status
-  local listed_releases
-  local release_values
-  local release_status
-  if release_status="$(helm status "$RELEASE" -n "$NAMESPACE" -o json)"; then
-    command_status=0
-  else
-    command_status=$?
-  fi
-  if (( command_status != 0 )); then
-    if listed_releases="$(helm list --namespace "$NAMESPACE" --filter "^${RELEASE}$" --output json)"; then
-      command_status=0
-    else
-      command_status=$?
-    fi
-    if (( command_status != 0 )); then
-      err "Unable to determine whether a persisted database migration fence exists."
-      return "$command_status"
-    fi
-    if ! jq -e 'type == "array" and length == 0' <<<"$listed_releases" >/dev/null; then
-      err "OpenCrane Helm release exists but its persisted migration fence is unreadable."
-      return 1
-    fi
-    return 0
-  fi
-  if release_values="$(helm get values "$RELEASE" -n "$NAMESPACE" -o json)"; then
-    command_status=0
-  else
-    command_status=$?
-  fi
-  if (( command_status != 0 )); then
-    err "Unable to read a possible persisted database migration fence."
-    return "$command_status"
-  fi
-  if ! active_fence="$(jq -er '.migrationFence.active // false' <<<"$release_values")"; then
-    err "Unable to classify the persisted database migration fence."
-    return 1
-  fi
-  if [[ "$active_fence" == "false" ]]; then
-    return 0
-  fi
-  if ! DATABASE_FENCE_PRIOR_REPLICAS="$(jq -er --arg from "$FROM_RELEASE_VERSION" --arg to "$RELEASE_VERSION" '
-    select(
-      .migrationFence.active == true
-      and .migrationFence.fromReleaseVersion == $from
-      and .migrationFence.toReleaseVersion == $to
-      and (.clustertenantManager.replicas // 0) == 0
-    )
-    | .migrationFence.previousReplicas
-    | select(type == "number" and . > 0 and floor == .)
-    | tostring
-  ' <<<"$release_values")"; then
-    err "Existing active migration fence does not exactly match this release transition."
-    return 1
-  fi
-  log "Adopted the exact persisted migration fence for completed-transition finalization."
-}
-
 run_database_release_transition()
 {
-  local backup_evidence backup_status classification_status convergence_outcome policy_status
-  if [[ "$POSTGRES_CLUSTER_EXISTS" == "0" && "$DATABASE_TRANSITION_KIND" != "fresh" ]]; then
-    if ! postgres_release_render_has_recovery; then
-      err "A non-fresh database with no live Cluster must render spec.bootstrap.recovery from --postgres-values."
-      return 1
-    fi
-  fi
-
-  if [[ "$DATABASE_TRANSITION_KIND" != "migration" ]]; then
-    if [[ "${DATABASE_PREVIOUS_MIGRATION_AVAILABLE:-false}" == "true" ]]; then
-      if [[ "$POSTGRES_CLUSTER_EXISTS" == "0" ]]; then
-        install_postgres_release false false || return $?
-        POSTGRES_CLUSTER_EXISTS="1"
-      fi
-      classify_database_convergence_state || return $?
-      case "$DATABASE_LIVE_CONVERGENCE_STATE" in
-        current|completed) ;;
-        *)
-          err "Database evidence does not match the requested current release."
-          return 1
-          ;;
-      esac
-    else
-      DATABASE_SELECTED_PROTECTED_BASELINE_SHA256="${POSTGRES_BASELINE_SHA256:-}"
-    fi
+  if [[ "${DATABASE_MIGRATION_ENABLED:-false}" != "true" ]]; then
     install_postgres_release false true
     return
   fi
-
-  if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
-    if classify_database_convergence_state; then
-      classification_status=0
-    else
-      classification_status=$?
-    fi
-    if (( classification_status != 0 )); then
-      return "$classification_status"
-    fi
-    if convergence_outcome="$(resolve_database_convergence_outcome live_transition \
-      "$DATABASE_LIVE_CONVERGENCE_STATE")"; then
-      policy_status=0
-    else
-      policy_status=$?
-    fi
-    if (( policy_status != 0 )); then
-      err "Database convergence policy rejected the live transition state."
-      return "$policy_status"
-    fi
-    case "$convergence_outcome" in
-      reconcile_without_fence)
-        log "Database is already '$DATABASE_LIVE_CONVERGENCE_STATE'; skipping migration and server fencing."
-        adopt_matching_existing_database_fence || return $?
-        install_postgres_release false true
-        return
-        ;;
-      reject_before_fence)
-        err "Live database evidence is incompatible with this release transition; refusing to fence the server."
-        return 1
-        ;;
-      migrate_source)
-        publish_database_migration_config_map || return $?
-        ;;
-      *)
-        err "Database convergence policy returned an unknown live-transition outcome."
-        return 1
-        ;;
-    esac
+  if [[ -z "${DATABASE_MIGRATION_SILO_ID:-}" || -z "${OIDC_ISSUER_URL:-}" ]]; then
+    err "The identity migration requires the ClusterTenant and OIDC issuer."
+    return 2
   fi
-
-  capture_pre_fence_main_release_revision || return $?
-  run_guarded_post_fence_stage fence_existing_opencrane_server || return $?
-  if [[ "$POSTGRES_CLUSTER_EXISTS" == "0" ]]; then
-    log "Restoring the previous-version database before its bounded migration…"
-    run_guarded_post_fence_stage install_postgres_release false false || return $?
-    POSTGRES_CLUSTER_EXISTS="1"
-    if classify_database_convergence_state; then
-      classification_status=0
-    else
-      classification_status=$?
-    fi
-    if (( classification_status != 0 )); then
-      recover_failed_database_transition "$classification_status"
-      return $?
-    fi
-    if convergence_outcome="$(resolve_database_convergence_outcome recovered_transition \
-      "$DATABASE_LIVE_CONVERGENCE_STATE")"; then
-      policy_status=0
-    else
-      policy_status=$?
-    fi
-    if (( policy_status != 0 )); then
-      err "Database convergence policy rejected the recovered transition state."
-      return "$policy_status"
-    fi
-    case "$convergence_outcome" in
-      reconcile_while_fenced)
-        log "Recovered database is already '$DATABASE_LIVE_CONVERGENCE_STATE'; skipping migration."
-        run_guarded_post_fence_stage install_postgres_release false true
-        return
-        ;;
-      reject_keep_fence)
-        err "Recovered database evidence is incompatible with this release transition; the server fence remains active."
-        return 1
-        ;;
-      migrate_recovered_source)
-        run_guarded_post_fence_stage publish_database_migration_config_map || return $?
-        ;;
-      *)
-        err "Database convergence policy returned an unknown recovered-transition outcome."
-        return 1
-        ;;
-    esac
+  install_postgres_release false false || return $?
+  verify_database_pg_cron_server_preflight || return $?
+  publish_database_migration_config_map || return $?
+  if [[ "${DATABASE_PRIVILEGED_EXTENSION:-}" == "pg_cron" ]]; then
+    POSTGRES_SUPERUSER_ACCESS_ENABLED=true
+    DATABASE_PRIVILEGED_EXTENSION_ENABLED=true
+    DATABASE_TEMPORARY_SUPERUSER_ACCESS=true
+    install_postgres_release true false || return $?
+    revoke_temporary_database_superuser_access || return $?
+    verify_database_pg_cron_preflight || return $?
+    install_postgres_release false true
+    return
   fi
-  if [[ "${ALLOW_UNBACKED_DATABASE_MIGRATION:-0}" == "1" ]]; then
-    log "WARNING: operator explicitly allowed this database migration without recovery-backup evidence."
-  else
-    if backup_evidence="$(bash "$POSTGRES_MIGRATION_BACKUP" \
-      "$NAMESPACE" "$POSTGRES_RELEASE" "$TIMEOUT")"; then
-      backup_status=0
-    else
-      backup_status=$?
-    fi
-    if (( backup_status != 0 )); then
-      if recover_failed_database_transition "$backup_status"; then
-        backup_status=0
-      else
-        backup_status=$?
-      fi
-      return "$backup_status"
-    fi
-    log "CNPG recovery evidence completed before migration: $backup_evidence"
-  fi
-  run_guarded_post_fence_stage install_postgres_release true true
+  install_postgres_release true true
 }

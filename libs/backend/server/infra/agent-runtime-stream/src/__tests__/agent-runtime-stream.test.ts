@@ -49,7 +49,7 @@ const _candidate: RuntimeCandidate = {
 	payload: {},
 };
 
-/** Valid external action that may make a deferred resume command due after durable execution. */
+/** Valid external action that may make a deferred resume command due after saved workflow work. */
 const _externalActionCandidate: RuntimeCandidate = {
 	..._candidate,
 	kind: RuntimeCandidateKinds.ExternalAction,

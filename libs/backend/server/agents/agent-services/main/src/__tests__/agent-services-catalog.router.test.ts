@@ -11,7 +11,7 @@ function _dependencies(overrides: Partial<AgentServicesRouterDependencies> = {})
 {
 	return {
 		lifecycle: { listManagedServices: vi.fn().mockResolvedValue([]) },
-		resolveCaller: function _caller() { return { siloId: "silo-1", subjectId: "user-1", isOrgAdmin: false }; },
+		resolveCaller: function _caller() { return { siloId: "silo-1", principalId: "principal-1", externalSubject: "user-1", isOrgAdmin: false }; },
 		logger: { error: vi.fn() } as unknown as Logger,
 		...overrides,
 	} as unknown as AgentServicesRouterDependencies;

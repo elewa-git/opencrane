@@ -4,8 +4,9 @@ import "../app/instrument";
 import { randomBytes } from "node:crypto";
 
 import { __CreateManagedRunAdmissionPort, __CreatePersonalRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy, _CreateRunAdmissionCapacityGate } from "@opencrane/backend/agents/execution/admission";
-import { PrismaManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
+import { _CreateManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
+import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _CreateRunCancellationAuthority } from "../app/run-cancellation-composition";
@@ -18,7 +19,7 @@ import { _ReadDevelopmentConfig } from "./config";
 import { _CreateDevelopmentHealth } from "./health";
 import { _CreateDevelopmentInternalApp } from "./internal-app";
 import { _StartDevelopmentLifecycle } from "./lifecycle";
-import { _CreateDevelopmentMembershipEvidence } from "./membership-evidence";
+import { _CreateDevelopmentMembershipEnvironment } from "./membership-evidence";
 import { _CreateDevelopmentRuntimeConfig } from "./runtime-config";
 import { _CreateUnavailableDevelopmentCoreApi } from "./unavailable-kubernetes";
 
@@ -31,9 +32,10 @@ async function _Main(): Promise<void>
 	const prisma = ___CreatePrismaClient(_log);
 
 	// 2. Reuse the production run authorities with the coordinator-signed local membership evidence.
-	const membershipEvidence = _CreateDevelopmentMembershipEvidence(config.membershipPublicKeyPath);
+	const membershipEnvironment = _CreateDevelopmentMembershipEnvironment(config.membershipPublicKeyPath);
+	const membershipEvidence = _CreateFleetMembershipEvidenceConfig(membershipEnvironment);
 	const capacityGate = _CreateRunAdmissionCapacityGate(__ReadRunAdmissionConcurrencyPolicy());
-	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, capacityGate, new PrismaManagedExecutionEvidenceAuthority(membershipEvidence));
+	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, capacityGate, _CreateManagedExecutionEvidenceAuthority(membershipEnvironment));
 	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, capacityGate, membershipEvidence);
 	const runtimeConfig = _CreateDevelopmentRuntimeConfig();
 	const runCancellation = _CreateRunCancellationAuthority(prisma, runtimeConfig);
@@ -63,6 +65,7 @@ async function _Main(): Promise<void>
 		false,
 		false,
 		health,
+		null
 	);
 
 	// 4. Add the authenticated workload listener only for Agent profiles, then bind both to loopback.

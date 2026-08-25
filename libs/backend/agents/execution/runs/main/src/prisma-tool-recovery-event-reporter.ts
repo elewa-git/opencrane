@@ -22,7 +22,8 @@ export class PrismaToolRecoveryEventReporter implements ToolInvocationRecoveryEv
 	/** Appends the recovery event, using the transaction the caller already holds. */
 	async appendInTransaction(transaction: Prisma.TransactionClient, event: ToolInvocationRecoveryEvent): Promise<boolean>
 	{
-		return new PrismaToolRecoveryEventAppendUnitOfWork(transaction).append(event);
+		const unitOfWork = new PrismaToolRecoveryEventAppendUnitOfWork(transaction);
+		return unitOfWork.append(event);
 	}
 }
 
@@ -34,7 +35,11 @@ class PrismaToolRecoveryEventAppendUnitOfWork implements ToolRecoveryEventAppend
 	/** Keeps the repository on the caller's transaction. */
 	constructor(transaction: Prisma.TransactionClient) { this._transaction = transaction; }
 	/** Appends the event through a repository bound to that transaction. */
-	async append(event: ToolInvocationRecoveryEvent): Promise<boolean> { return new PrismaToolRecoveryEventAppendRepository(this._transaction).append(event); }
+	async append(event: ToolInvocationRecoveryEvent): Promise<boolean>
+	{
+		const repository = new PrismaToolRecoveryEventAppendRepository(this._transaction);
+		return repository.append(event);
+	}
 }
 
 /** Prisma adapter that numbers the recovery event and writes it. */

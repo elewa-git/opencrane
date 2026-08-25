@@ -1,12 +1,82 @@
-model Group {
-  id          String          @id @default(cuid())
-  name        String          @unique
-  scope       GrantScope
-  description String?
-  members     Json            @default("[]")
-  createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
+/// Authority that may change a group's direct membership rows.
+enum GroupMembershipAuthority {
+  /// Login claim reconciliation owns direct membership.
+  External @map("external")
+  /// OpenCrane operators own direct membership.
+  Local    @map("local")
+}
 
-  @@index([scope])
+/// Whether a Principal is asserted by an external identity provider or minted by OpenCrane.
+enum PrincipalProvenance {
+  /// Login reconciliation owns the identity profile.
+  External @map("external")
+  /// OpenCrane owns a non-human workload identity.
+  Internal @map("internal")
+}
+
+/// Stable OIDC identity inside one silo. Email and display name are profile data, never identity keys.
+model Principal {
+  id                          String                            @id @default(cuid())
+  siloId                      String                            @map("silo_id")
+  issuer                      String
+  subject                     String
+  provenance                  PrincipalProvenance               @default(External)
+  email                       String?
+  displayName                 String?                           @map("display_name")
+  createdAt                   DateTime                          @default(now()) @map("created_at")
+  updatedAt                   DateTime                          @updatedAt @map("updated_at")
+  memberships                 GroupMembership[]
+  subjectAuthorizationGrants  AuthorizationGrant[]              @relation("AuthorizationGrantSubjectPrincipal")
+  boundaryAuthorizationGrants AuthorizationGrant[]              @relation("AuthorizationGrantBoundaryPrincipal")
+  ownedResourceShares         ResourceShare[]                   @relation("ResourceShareOwnerPrincipal")
+  receivedResourceShares      ResourceShareRecipient[]          @relation("ResourceShareRecipientPrincipal")
+  grantedResourceShares       ResourceShareRecipient[]          @relation("ResourceShareGrantingPrincipal")
+  memoryDatasets              MemoryDataset[]                   @relation("MemoryDatasetBoundaryPrincipal")
+  agentRevisionBoundaries     AgentRevisionBoundaryAttachment[]
+  managedAgentService         AgentService?                      @relation("ManagedAgentServicePrincipal")
+  mcpServerInstalls           McpServerInstall[]
+
+  @@unique([id, siloId])
+  @@unique([siloId, issuer, subject])
+  @@index([siloId, email])
+  @@map("principals")
+}
+
+/// Hierarchical IAM group inside one silo. A parent expresses hierarchy, not inherited membership.
+model Group {
+  id                          String                            @id @default(cuid())
+  siloId                      String                            @map("silo_id")
+  name                        String
+  description                 String?
+  membershipAuthority         GroupMembershipAuthority          @map("membership_authority")
+  parentId                    String?                           @map("parent_id")
+  parent                      Group?                            @relation("GroupHierarchy", fields: [parentId, siloId], references: [id, siloId], onDelete: Restrict)
+  children                    Group[]                           @relation("GroupHierarchy")
+  memberships                 GroupMembership[]
+  subjectAuthorizationGrants  AuthorizationGrant[]              @relation("AuthorizationGrantSubjectGroup")
+  boundaryAuthorizationGrants AuthorizationGrant[]              @relation("AuthorizationGrantBoundaryGroup")
+  memoryDatasets              MemoryDataset[]                   @relation("MemoryDatasetBoundaryGroup")
+  agentRevisionBoundaries     AgentRevisionBoundaryAttachment[]
+  createdAt                   DateTime                          @default(now()) @map("created_at")
+  updatedAt                   DateTime                          @updatedAt @map("updated_at")
+
+  @@unique([id, siloId])
+  @@unique([siloId, name])
+  @@index([siloId, parentId])
+  @@index([siloId, membershipAuthority])
   @@map("groups")
+}
+
+/// One direct principal-to-group membership. Hierarchy never creates implicit membership rows.
+model GroupMembership {
+  siloId      String    @map("silo_id")
+  groupId     String    @map("group_id")
+  principalId String    @map("principal_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  group       Group     @relation(fields: [groupId, siloId], references: [id, siloId], onDelete: Cascade)
+  principal   Principal @relation(fields: [principalId, siloId], references: [id, siloId], onDelete: Cascade)
+
+  @@id([groupId, principalId])
+  @@index([siloId, principalId])
+  @@map("group_memberships")
 }

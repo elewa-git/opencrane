@@ -8,7 +8,8 @@ const _LOCAL_MARKERS =
 [
 	"Local Developer",
 	"q1-decision-speed",
-	"Tier 1 follows one reviewed Commander/Guardian path",
+	"opencrane.local-development.archetype",
+	"OPENCRANE_LOCAL_DEVELOPMENT_ARCHETYPE",
 	"Tier 1 local development blocked",
 	"mockScenario"
 ];

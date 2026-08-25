@@ -13,19 +13,19 @@ run. Grants can narrow what an agent may do, but cannot manufacture organisation
 authenticated subject
        │
        ▼
-current ClusterTenant membership
+current silo membership
        │
        ▼
-subject grants ∩ agent-service grants
+principal grants ∩ agent-service grants
        │
        ▼
-capability, resource and scope decision
+capability, resource and boundary decision
        │
        ▼
 frozen run evidence
 ```
 
-Membership evidence must name the same silo, subject and scope as the authorisation request.
+Membership evidence must name the same silo and subject as the authorisation request.
 Stale, missing or unverifiable evidence denies the request.
 
 ## Grant composition
@@ -39,7 +39,7 @@ prevents a broadly entitled user from making an under-scoped agent act outside i
 | Organisation membership | Establishes that the subject belongs to the `ClusterTenant` |
 | Subject grants | Bounds what the person may delegate |
 | Agent-service grants | Bounds what the agent definition may exercise |
-| Resource and scope | Selects the exact capability being decided |
+| Resource boundary | Selects an exact group or personal boundary; group coverage can include descendants |
 | Membership revision | Makes the accepted decision auditable |
 
 ## Run admission
@@ -49,13 +49,14 @@ integration assignments, skill revisions, memory policy and capability-set diges
 `RunInputSnapshot`. The runtime receives compiled literals, not a live grant evaluator.
 
 ::: warning
-Never treat a cached group, Kubernetes namespace or runtime claim as current membership.
+Never treat a cached group, Kubernetes namespace or runtime claim as current silo membership.
 Membership authority is checked before a run is admitted and uncertainty fails closed.
 :::
 
 ## Sharing
 
-Direct shares and group grants change future authorisation decisions. They do not rewrite
+Resource shares create exact recipient grants. They and other group or principal grants change
+future authorisation decisions; they do not rewrite
 snapshots or events belonging to already accepted runs.
 
 Source: [`libs/backend/server/iam/authorization/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/authorization/main/README.md)

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import profileContract from "../../profile-contract.json";
-import { __IsLocalDevelopmentProfileKind, LOCAL_DEVELOPMENT_IDENTITY, LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_KEY_ID, LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES, LocalAgentRuntimeModelStrategies, LocalDevelopmentProfileKinds } from "../index";
+import { __IsLocalDevelopmentProfileKind, LOCAL_DEVELOPMENT_IDENTITY, LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID, LOCAL_DEVELOPMENT_MEMBERSHIP_KEY_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER, LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES, LocalAgentRuntimeModelStrategies, LocalDevelopmentProfileKinds } from "../index";
 
 describe("local development profile vocabulary", function _Suite()
 {
@@ -25,5 +25,7 @@ describe("local development profile vocabulary", function _Suite()
 		expect(LOCAL_DEVELOPMENT_MEMBERSHIP_ISSUER_ID).toBe("local-development-issuer");
 		expect(LOCAL_DEVELOPMENT_MEMBERSHIP_KEY_ID).toBe("local-development-key");
 		expect(LOCAL_DEVELOPMENT_MEMBERSHIP_ASSERTION_ID).toBe("local-development-personal-membership");
+		expect(LOCAL_DEVELOPMENT_PRINCIPAL_ID).toBe("local-development-principal");
+		expect(LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER).toBe("opencrane-local-development");
 	});
 });

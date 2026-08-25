@@ -4,8 +4,8 @@ import { Readable } from "node:stream";
 import type { PrismaClient } from "@prisma/client";
 
 import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
-import { _CreateArtifactCatalogueRepository, _CreateArtifactPreprocessAuthority, _CreateArtifactUploadAuthority, __CompleteArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease, __IssueArtifactReadLease, __UploadArtifact, IssueArtifactReadLeaseOutcomes, type ArtifactPreprocessOutputBroker, type ArtifactUploadResult, type VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
-import type { SkillAuthoringArtifactReader, SkillAuthoringInputRecord } from "@opencrane/backend/agents/skills/execution";
+import { _CreateArtifactCatalogueRepository, _CreateArtifactPreprocessAuthority, _CreateArtifactUploadAuthority, __CompleteArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease, __IssueArtifactReadLease, __UploadArtifact, IssueArtifactReadLeaseOutcomes, type ArtifactPreprocessOutputBroker, type ArtifactUploadResult, type PublishedArtifactReadTarget, type VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
+import type { SkillAuthoringArtifactReader } from "@opencrane/backend/agents/skills/execution";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { PrismaConversationAssetOutputUnitOfWork, PrismaConversationAssetUnitOfWork, type ConversationAssetContentBroker, type ConversationAssetReadTarget } from "@opencrane/backend/server/conversation-assets";
 import { ___ParseAndValidateJson } from "@opencrane/util";
@@ -127,26 +127,36 @@ function _PromotionReceipt(value: unknown): { readonly receipt: string }
 	return { receipt: value.receipt };
 }
 
-/** Build the one server-side path that turns a fenced authoring input into verified ArtifactStore bytes. */
-export function _CreateSkillAuthoringArtifactReader(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): SkillAuthoringArtifactReader
+/** Build the server-side path that turns exact published coordinates into verified ArtifactStore bytes. */
+export function _CreatePublishedArtifactReader(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): { read(input: PublishedArtifactReadTarget): Promise<ReadableStream<Uint8Array>> }
 {
 	const repository = _CreateArtifactCatalogueRepository(prisma);
 	return {
-		async read(input: SkillAuthoringInputRecord): Promise<ReadableStream<Uint8Array>>
+		async read(input: PublishedArtifactReadTarget): Promise<ReadableStream<Uint8Array>>
 		{
-			return ___DoWithTrace("skill-authoring.artifact-read", { siloId: input.siloId, artifactId: input.artifactId, artifactRevisionId: input.artifactRevisionId }, async function _ReadArtifact(): Promise<ReadableStream<Uint8Array>>
+			return ___DoWithTrace("artifact.published-read", { siloId: input.siloId, artifactId: input.artifactId, artifactRevisionId: input.artifactRevisionId }, async function _ReadArtifact(): Promise<ReadableStream<Uint8Array>>
 			{
 				const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
 				const signLease = _CreateArtifactReadLeaseSigner(environment);
 				const readPort = _CreateArtifactServiceReadPort(serviceUrl);
 				const issued = await __IssueArtifactReadLease(repository, { sign: signLease }, { siloId: input.siloId, artifactId: input.artifactId, artifactRevisionId: input.artifactRevisionId }, Math.floor(Date.now() / 1_000));
-				if (issued.outcome !== IssueArtifactReadLeaseOutcomes.Issued) throw new Error("artifact read lease denied");
+				if (issued.outcome !== IssueArtifactReadLeaseOutcomes.Issued)
+					throw new Error("artifact read lease denied");
 				const response = await readPort.read(issued.compactLease);
-				if (response.headers.get("content-length") !== String(issued.claims.byteLength) || response.headers.get("content-type") !== issued.claims.mediaType) throw new Error("artifact service read metadata did not match the published revision");
-				return response.body as ReadableStream<Uint8Array>;
+				if (response.headers.get("content-length") !== String(issued.claims.byteLength) || response.headers.get("content-type") !== issued.claims.mediaType)
+					throw new Error("artifact service read metadata did not match the published revision");
+				if (response.body === null)
+					throw new Error("artifact service returned no published artifact body");
+				return response.body;
 			});
 		},
 	};
+}
+
+/** Keep the skill worker's named port while reusing the single published-artifact reader. */
+export function _CreateSkillAuthoringArtifactReader(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): SkillAuthoringArtifactReader
+{
+	return _CreatePublishedArtifactReader(prisma, environment);
 }
 
 /** Build the server-side output broker that owns hashing, promotion, receipt verification, and completion. */

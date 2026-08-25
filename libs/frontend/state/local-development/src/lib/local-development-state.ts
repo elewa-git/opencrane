@@ -6,6 +6,8 @@ import type { AgentThreadSnapshot } from "@opencrane/state/conversation/agent-th
 import type { ConversationAsset } from "@opencrane/state/conversation/assets";
 import { ConversationRunStates, type ConversationRun, type ConversationWorkspaceDetail } from "@opencrane/state/conversation/workspace";
 
+import { __LocalDevelopmentArchetypeFixture } from "./local-development-archetype.fixtures";
+import { LOCAL_DEVELOPMENT_ARCHETYPE } from "./local-development-archetype";
 import { __CreateLocalConversations, __CreateLocalElicitation } from "./local-development-conversation.fixtures";
 import { __CreateLocalPendingFirstChat } from "./local-development-first-chat.fixtures";
 import { __CreateLocalPersonaInterview } from "./local-development-persona-interview.fixtures";
@@ -21,12 +23,14 @@ import { LocalDevelopmentScenarioKinds } from "./local-development-scenario.type
 @Injectable()
 export class LocalDevelopmentState
 {
+	/** Reviewed fixture selected once for this application lifecycle. */
+	public readonly fixture = __LocalDevelopmentArchetypeFixture(inject(LOCAL_DEVELOPMENT_ARCHETYPE));
 	/** Allowlisted behaviour selected when the application started. */
 	public readonly scenario = inject(LOCAL_DEVELOPMENT_SCENARIO);
 	/** Persona lifecycle shared with the onboarding gateways. */
 	public persona: PersonaOnboardingSnapshot = __CreateLocalPersonaInterview();
 	/** Bootstrap conversation unlocked when the persona is approved. */
-	public firstChat: PersonaFirstChatSnapshot = __CreateLocalPendingFirstChat();
+	public firstChat: PersonaFirstChatSnapshot = __CreateLocalPendingFirstChat(this.fixture);
 	/** Conversation projections keyed by their local identifiers. */
 	public readonly conversations = new Map<string, ConversationWorkspaceDetail>(__CreateLocalConversations().map(function _Index(detail): [string, ConversationWorkspaceDetail] { return [detail.id, detail]; }));
 	/** Agent-run projections keyed by their local identifiers. */
@@ -37,6 +41,11 @@ export class LocalDevelopmentState
 	public readonly agentThreads = new Map<string, AgentThreadSnapshot>();
 	/** Approval request displayed through the participant-input port. */
 	public elicitation: ConversationElicitation = __CreateLocalElicitation();
+	/**
+	 * Maps each admitted `idempotencyKey` to the conversation-and-block signature accepted for it. The
+	 * workspace gateway ignores a retry with the same signature and rejects the key if its input changes.
+	 */
+	public readonly admittedMessageCommands = new Map<string, string>();
 	/** Mutation keys already failed once in the retry scenario. */
 	private readonly _failedOnce = new Set<string>();
 	/** Increasing counter used to prevent duplicate local identifiers. */

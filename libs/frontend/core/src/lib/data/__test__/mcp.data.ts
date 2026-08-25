@@ -1,4 +1,4 @@
-import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpDirectory, McpEntitledUser, McpInstalledServer, McpServer, McpServerType } from "../../models/mcp.types";
+import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpDirectory, McpEntitledGroup, McpEntitledUser, McpInstalledServer, McpServer, McpServerType } from "../../models/mcp.types";
 
 /**
  * Mock MCP catalogue backing the dev/default {@link McpServer} reads until the
@@ -119,17 +119,15 @@ export const MCP_CATALOGUE: McpServer[] =
 ];
 
 /**
- * Mock installed-server set for the demo user, covering every connection state
- * the My Tools view renders: a credential owed, OAuth connected, token
- * connected, an admin-managed shared key, and one still activating.
+ * Mock installed-server set for the demo user, covering the two retained states.
  */
 export const MCP_INSTALLED: McpInstalledServer[] =
 [
 	{ serverId: "stripe", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
-	{ serverId: "github", connectionStatus: McpConnectionStatus.OauthConnected, lastUsed: "2 minutes ago", connectedAccount: "jente@acme.com" },
-	{ serverId: "notion", connectionStatus: McpConnectionStatus.Connected, lastUsed: "Yesterday, 16:40" },
+	{ serverId: "github", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
+	{ serverId: "notion", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
 	{ serverId: "postgres-prod", connectionStatus: McpConnectionStatus.SharedKey, lastUsed: "3 days ago" },
-	{ serverId: "slack", connectionStatus: McpConnectionStatus.Activating, lastUsed: null }
+	{ serverId: "slack", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null }
 ];
 
 /** Directory of users an admin can entitle (mock). */
@@ -141,23 +139,32 @@ const _USERS: Record<string, McpEntitledUser> =
 	dana: { id: "dana", name: "Dana Okonkwo", initials: "DA" }
 };
 
+/** Stable local groups available to the mock authorization editor. */
+const _GROUPS: Record<string, McpEntitledGroup> = {
+	engineering: { id: "group-engineering", name: "Engineering" },
+	product: { id: "group-product", name: "Product" },
+	finance: { id: "group-finance", name: "Finance" },
+	data: { id: "group-data", name: "Data" },
+	marketing: { id: "group-marketing", name: "Marketing" }
+};
+
 /** Assignable users + groups for the access-policy editor (mock). */
 export const MCP_DIRECTORY: McpDirectory =
 {
 	users: Object.values(_USERS),
-	groups: ["Engineering", "Product", "Finance", "Data", "Marketing"]
+	groups: Object.values(_GROUPS)
 };
 
 /** Mock access policies keyed by server id (admin access-policy editor). */
 export const MCP_ACCESS_POLICIES: Record<string, McpAccessPolicy> =
 {
-	github: { serverId: "github", everyoneInOrg: true, groups: ["Engineering", "Product"], users: [_USERS["jente"], _USERS["maya"], _USERS["tom"]] },
-	notion: { serverId: "notion", everyoneInOrg: false, groups: ["Product", "Engineering"], users: [_USERS["maya"]] },
-	slack: { serverId: "slack", everyoneInOrg: true, groups: [], users: [] },
-	stripe: { serverId: "stripe", everyoneInOrg: false, groups: ["Finance"], users: [_USERS["dana"]] },
-	"postgres-prod": { serverId: "postgres-prod", everyoneInOrg: false, groups: ["Data"], users: [_USERS["tom"], _USERS["maya"]] },
-	"google-drive": { serverId: "google-drive", everyoneInOrg: true, groups: [], users: [] },
-	linear: { serverId: "linear", everyoneInOrg: false, groups: [], users: [] },
-	figma: { serverId: "figma", everyoneInOrg: false, groups: [], users: [] },
-	sentry: { serverId: "sentry", everyoneInOrg: false, groups: ["Engineering"], users: [] }
+	github: { serverId: "github", groups: [_GROUPS["engineering"], _GROUPS["product"]], users: [_USERS["jente"], _USERS["maya"], _USERS["tom"]] },
+	notion: { serverId: "notion", groups: [_GROUPS["product"], _GROUPS["engineering"]], users: [_USERS["maya"]] },
+	slack: { serverId: "slack", groups: [], users: [] },
+	stripe: { serverId: "stripe", groups: [_GROUPS["finance"]], users: [_USERS["dana"]] },
+	"postgres-prod": { serverId: "postgres-prod", groups: [_GROUPS["data"]], users: [_USERS["tom"], _USERS["maya"]] },
+	"google-drive": { serverId: "google-drive", groups: [], users: [] },
+	linear: { serverId: "linear", groups: [], users: [] },
+	figma: { serverId: "figma", groups: [], users: [] },
+	sentry: { serverId: "sentry", groups: [_GROUPS["engineering"]], users: [] }
 };
