@@ -1,4 +1,5 @@
 import type { IWorkflowEngine, IWorkflowTaskReceipt, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+import type { JsonValue } from "@opencrane/util";
 
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
 
@@ -69,7 +70,7 @@ export interface McpTaskSubmissionCommand
 	/** MCP tool name selected by the client. */
 	readonly toolName: string;
 	/** Tool arguments bound into the immutable call digest without retaining their contents. */
-	readonly arguments: unknown;
+	readonly arguments: JsonValue;
 	/** The one bounded value this initial lifecycle task will wait for. */
 	readonly inputRequest: McpTaskInputRequest;
 }

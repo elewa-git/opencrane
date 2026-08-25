@@ -109,6 +109,52 @@ export const _McpIamOpenapiSchemas = {
 			failureCode: { type: ["string", "null"], enum: ["artifact_mismatch", "bundle_too_large", "invalid_archive", "invalid_manifest", "invalid_signature", "unsupported_manifest_version", null], description: "Bounded rejection reason, or null while pending or verified." },
 		},
 	},
+	McpTaskInputRequest: {
+		type: "object",
+		description: "One value an MCP task needs before its workflow can continue.",
+		required: ["requestId", "message"],
+		additionalProperties: false,
+		properties: {
+			requestId: { type: "string", minLength: 1, maxLength: 128, pattern: "\\S", description: "Identifier the client repeats when it supplies the requested value." },
+			message: { type: "string", minLength: 1, maxLength: 4_000, pattern: "\\S", description: "Plain-language explanation of the value the task needs." },
+		},
+	},
+	McpTaskInputResponse: {
+		type: "object",
+		description: "A client value saved before the task workflow receives its input event.",
+		required: ["requestId", "value"],
+		additionalProperties: false,
+		properties: {
+			requestId: { type: "string", minLength: 1, maxLength: 128, pattern: "\\S", description: "Identifier of the task input request this value answers." },
+			value: { type: "string", minLength: 1, maxLength: 16_000, pattern: "\\S", description: "Text value supplied for the saved input request." },
+		},
+	},
+	McpTaskSubmission: {
+		type: "object",
+		description: "A user request to save an asynchronous MCP tool call and start its workflow.",
+		required: ["idempotencyKey", "toolName", "arguments", "inputRequest"],
+		additionalProperties: false,
+		properties: {
+			idempotencyKey: { type: "string", minLength: 1, maxLength: 128, pattern: "\\S", description: "Caller-chosen key that safely retries the same tool call." },
+			toolName: { type: "string", minLength: 1, maxLength: 256, pattern: "\\S", description: "Name of the selected MCP tool." },
+			arguments: { description: "Tool arguments saved only as a digest that binds the workflow to this call." },
+			inputRequest: { $ref: "#/components/schemas/McpTaskInputRequest" },
+		},
+	},
+	McpTask: {
+		type: "object",
+		description: "The caller-visible progress of an asynchronous MCP tool call. It excludes product ownership and workflow engine details.",
+		required: ["id", "toolName", "state", "inputRequest", "inputResponse", "result", "failureCode"],
+		properties: {
+			id: { type: "string", description: "Stable task identifier used to read progress or submit requested input." },
+			toolName: { type: "string", description: "Name of the MCP tool selected for this task." },
+			state: { type: "string", enum: ["working", "input_required", "completed", "cancelled", "failed"], description: "Saved task state. Input is accepted only while the task is input_required." },
+			inputRequest: { $ref: "#/components/schemas/McpTaskInputRequest", description: "Requested value saved with the task." },
+			inputResponse: { anyOf: [{ $ref: "#/components/schemas/McpTaskInputResponse" }, { type: "null" }], description: "Saved client response, or null before one is accepted." },
+			result: { type: ["string", "null"], description: "Final result when the task has completed, otherwise null." },
+			failureCode: { type: ["string", "null"], description: "Stable failure reason when the task has failed, otherwise null." },
+		},
+	},
 	ResourceShare: {
 		type: "object",
 		description: "A direct file, chat, or dataset share. Each recipient relation is backed by an explicit authorization grant.",

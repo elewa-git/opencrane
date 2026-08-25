@@ -194,6 +194,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mcp/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save an asynchronous MCP tool call and start its workflow */
+        post: operations["submitMcpTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a saved MCP task owned by the calling user */
+        get: operations["getMcpTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/tasks/{id}/input": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save requested input and wake an MCP task workflow */
+        post: operations["submitMcpTaskInput"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/mcp/directory": {
         parameters: {
             query?: never;
@@ -1691,6 +1742,50 @@ export interface components {
              */
             failureCode?: "artifact_mismatch" | "bundle_too_large" | "invalid_archive" | "invalid_manifest" | "invalid_signature" | "unsupported_manifest_version" | null;
         };
+        /** @description One value an MCP task needs before its workflow can continue. */
+        McpTaskInputRequest: {
+            /** @description Identifier the client repeats when it supplies the requested value. */
+            requestId: string;
+            /** @description Plain-language explanation of the value the task needs. */
+            message: string;
+        };
+        /** @description A client value saved before the task workflow receives its input event. */
+        McpTaskInputResponse: {
+            /** @description Identifier of the task input request this value answers. */
+            requestId: string;
+            /** @description Text value supplied for the saved input request. */
+            value: string;
+        };
+        /** @description A user request to save an asynchronous MCP tool call and start its workflow. */
+        McpTaskSubmission: {
+            /** @description Caller-chosen key that safely retries the same tool call. */
+            idempotencyKey: string;
+            /** @description Name of the selected MCP tool. */
+            toolName: string;
+            /** @description Tool arguments saved only as a digest that binds the workflow to this call. */
+            arguments: unknown;
+            inputRequest: components["schemas"]["McpTaskInputRequest"];
+        };
+        /** @description The caller-visible progress of an asynchronous MCP tool call. It excludes product ownership and workflow engine details. */
+        McpTask: {
+            /** @description Stable task identifier used to read progress or submit requested input. */
+            id: string;
+            /** @description Name of the MCP tool selected for this task. */
+            toolName: string;
+            /**
+             * @description Saved task state. Input is accepted only while the task is input_required.
+             * @enum {string}
+             */
+            state: "working" | "input_required" | "completed" | "cancelled" | "failed";
+            /** @description Requested value saved with the task. */
+            inputRequest: components["schemas"]["McpTaskInputRequest"];
+            /** @description Saved client response, or null before one is accepted. */
+            inputResponse: components["schemas"]["McpTaskInputResponse"] | null;
+            /** @description Final result when the task has completed, otherwise null. */
+            result: string | null;
+            /** @description Stable failure reason when the task has failed, otherwise null. */
+            failureCode: string | null;
+        };
         /** @description A direct file, chat, or dataset share. Each recipient relation is backed by an explicit authorization grant. */
         ResourceShare: {
             /** @description Stable share identifier used to manage recipients. */
@@ -2710,6 +2805,141 @@ export interface operations {
             };
             /** @description MCP bundle validation not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    submitMcpTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpTaskSubmission"];
+            };
+        };
+        responses: {
+            /** @description Task and background workflow saved. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpTask"];
+                };
+            };
+            /** @description MCP task fields are invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Task key conflicts with a different call. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMcpTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved task progress. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpTask"];
+                };
+            };
+            /** @description MCP task identifier is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description MCP task not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    submitMcpTaskInput: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpTaskInputResponse"];
+            };
+        };
+        responses: {
+            /** @description Task input accepted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpTask"];
+                };
+            };
+            /** @description MCP task identifier or input fields are invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description MCP task not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Input conflicts with the saved task request or response. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

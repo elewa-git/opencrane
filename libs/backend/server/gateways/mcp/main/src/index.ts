@@ -24,5 +24,8 @@ export { __CreateMcpTaskWorkflow, __McpTaskInputEventName, __McpTaskWorkflowKey 
 export { getMcpTask, submitMcpTask, submitMcpTaskInput } from "./mcp-tasks/mcp-task-submission";
 export { McpTaskEvents, McpTaskInputSubmissionOutcomes, McpTaskStates, McpTaskTaskNames } from "./mcp-tasks/mcp-task.types";
 export type { McpTaskAdmission, McpTaskCaller, McpTaskInputRequest, McpTaskInputResponse, McpTaskInputSubmissionResult, McpTaskRecord, McpTaskSubmissionCommand, McpTaskWorkflow, McpTaskWorkflowInput, McpTaskWorkflowOptions } from "./mcp-tasks/mcp-task.types";
+export { _CreateMcpCallerResolver } from "./routes/mcp-caller";
+export type { McpCallerResolver } from "./routes/mcp-caller.types";
 export * from "./routes/mcp-operator";
+export * from "./routes/mcp-task";
 export * from "./openapi";

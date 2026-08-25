@@ -53,6 +53,12 @@ task lifecycle accepts a call, asks the client for one needed value, and saves t
 workflow continues. It does not run a real Skill yet; the next slice will connect this lifecycle to
 the Skills worker.
 
+The signed-in caller starts a task with `POST /api/v1/mcp/tasks`, reads its progress with
+`GET /api/v1/mcp/tasks/:id`, and sends the requested value with `POST /api/v1/mcp/tasks/:id/input`.
+Each route uses the caller's saved local Principal, so a task owned by someone else is reported as
+not found. The response shows task progress but does not expose the caller's IDs, the saved call
+digest, or Absurd's engine receipt.
+
 ```
  MCP client starts a tool call
         │
@@ -93,6 +99,7 @@ returns credentials and never labels an install connected before a real connecti
 ## Public surface
 
 - `mcpOperatorRouter` — the Express router mounted at `/api/v1/mcp`.
+- `mcpTaskRouter` — the separate caller-owned router mounted at `/api/v1/mcp` for saved tool calls.
 - `registerRemoteServer` — saves a draft server and its protocol-check job together.
 - `__CreateMcpEraProbeWorkflow` — registers the saved background job that checks the server.
 - `submitMcpbValidation` and `getMcpbValidation` — save and read signed MCP bundle checks.
@@ -103,6 +110,8 @@ returns credentials and never labels an install connected before a real connecti
   database transaction.
 - `submitMcpTask`, `getMcpTask`, and `submitMcpTaskInput` — save, read, and continue the durable
   lifecycle behind a future asynchronous MCP tool call.
+- `POST /mcp/tasks`, `GET /mcp/tasks/:id`, and `POST /mcp/tasks/:id/input` — the authenticated
+  public API for starting a task, reading its progress, and providing requested input.
 - `__CreateMcpTaskWorkflow` — registers the saved task lifecycle with Absurd.
 - Operator services: `listEntitledCatalog`, `listInstalled`, `installServer`, `approveServer`,
   `publishServer`, and the access editor.
