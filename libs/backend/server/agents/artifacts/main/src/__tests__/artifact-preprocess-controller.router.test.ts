@@ -17,7 +17,7 @@ function _Task()
 /** Returns a server-issued controller record for the selected PDF job. */
 function _Record()
 {
-	return { preprocessJobId: "preprocess-1", siloId: "silo-a", claim: { claimId: "claim-1", siloId: "silo-a", workloadClass: "artifact_preprocess", profileName: "pdf-preprocessor", idempotencyKey: "workload-key-1", executionReference: "preprocess-1", claimedAt: "2026-08-25T10:00:00.000Z", deliveryCount: 1, expiresAt: "2026-08-25T10:05:00.000Z" } };
+	return { preprocessJobId: "preprocess-1", siloId: "silo-a", claim: { claimId: "claim-1", siloId: "silo-a", workloadClass: "artifact-preprocess", profileName: "pdf-preprocessor", idempotencyKey: "workload-key-1", executionReference: "preprocess-1", claimedAt: "2026-08-25T10:00:00.000Z", deliveryCount: 1, expiresAt: "2026-08-25T10:05:00.000Z" } };
 }
 
 /** Returns a Job binding that matches the selected controller delivery. */
