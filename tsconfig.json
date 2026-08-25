@@ -52,6 +52,9 @@
       "@opencrane/backend/artifacts/preprocessor": [
         "./libs/backend/artifacts/preprocessor/main/src/index.ts"
       ],
+      "@opencrane/backend/artifacts/preprocessor/k8s-launcher": [
+        "./libs/backend/artifacts/preprocessor/k8s-launcher/src/index.ts"
+      ],
       "@opencrane/backend/artifacts/preprocessor/workflows/contract": [
         "./libs/backend/artifacts/preprocessor/workflows/contract/src/index.ts"
       ],

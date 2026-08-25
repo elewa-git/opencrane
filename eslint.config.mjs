@@ -130,6 +130,7 @@ export default [
             { sourceTag: "scope:runtime-workloads", onlyDependOnLibsWithTags: ["scope:runtime-workloads", "scope:shared"] },
             { sourceTag: "scope:mcp-runtime", onlyDependOnLibsWithTags: ["scope:mcp-runtime", "scope:runtime-workloads", "scope:shared"] },
             { sourceTag: "scope:agent-runtime-launcher", onlyDependOnLibsWithTags: ["scope:agent-runtime-launcher", "scope:shared"] },
+			{ sourceTag: "scope:artifact-preprocessor-launcher", onlyDependOnLibsWithTags: ["scope:artifact-preprocessor-launcher", "scope:shared"] },
             { sourceTag: "scope:agent-runtime-cleanup", onlyDependOnLibsWithTags: ["scope:agent-runtime-cleanup", "scope:agent-runtime-launcher", "scope:shared"] },
             { sourceTag: "scope:skills-launcher", onlyDependOnLibsWithTags: ["scope:skills-launcher", "scope:shared"] },
             { sourceTag: "scope:skills-controller", onlyDependOnLibsWithTags: ["scope:skills-controller", "scope:skills-launcher", "scope:skills-workflow-contract", "scope:runtime-workloads", "scope:shared", "scope:workflows"] },
