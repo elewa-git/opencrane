@@ -16,6 +16,7 @@ later boundaries.
 | [`k8s-launcher`](./k8s-launcher/README.md) | Pure suspended Job construction for the dedicated runtime namespace. |
 | [`controller`](./controller/README.md) | Crash-safe assignment, UID-fenced Job release, and exact first-Pod registration. |
 | [`cleanup`](./cleanup/main/README.md) | Exact Job checks and UID-preconditioned deletion after durable cleanup claims. |
+| [`workloads`](./workloads/README.md) | Generic claim and binding records for class-specific MCP and skill executors. |
 
 ```text
 OpenCrane run authority
@@ -30,6 +31,8 @@ execution/protocol ── accepted command/candidate
                                             │ first Pod UID
                                             └────► run authority
         └────► cleanup ─────────────────────► exact read + UID-fenced delete
+        │
+        └────► workloads ───────────────────► class-specific executor claim/binding
 ```
 
 The boundary is language-neutral: a Python, TypeScript, or future runtime must satisfy the same
@@ -55,5 +58,6 @@ protocol details remain owned inside their package.
 - Job contract: [runtime/k8s-launcher](./k8s-launcher/README.md)
 - Assignment-and-release controller: [runtime/controller](./controller/README.md)
 - Exact Job cleanup adapter: [runtime/cleanup](./cleanup/main/README.md)
+- Shared workload claim contract: [runtime workloads](./workloads/README.md)
 - Execution run authority: [execution/runs](../execution/runs/main/README.md)
 - Server stream transport: [agent-runtime-stream](../../server/infra/agent-runtime-stream/README.md)

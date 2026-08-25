@@ -31,6 +31,7 @@ agent principles rather than becoming personal-only by proximity.
 | [`execution/runs`](./execution/runs/main/README.md) | Shared: run and attempt authority. |
 | [`execution/protocol`](./execution/protocol/README.md) | Shared: language-neutral command and candidate authority. |
 | [`runtime`](./runtime/README.md) | Shared: Kubernetes Job projection and controller. |
+| [`runtime/workloads`](./runtime/workloads/README.md) | Shared: generic claim and binding vocabulary for class-specific executors. |
 | [`mcpb/controller`](./mcpb/controller/README.md) | Shared: creates the suspended MCP bundle validator Job from a saved claim. |
 
 ```

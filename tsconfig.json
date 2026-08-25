@@ -178,6 +178,9 @@
       "@opencrane/backend/agents/runtime/k8s-launcher": [
         "./libs/backend/agents/runtime/k8s-launcher/src/index.ts"
       ],
+      "@opencrane/backend/agents/runtime/workloads/contract": [
+        "./libs/backend/agents/runtime/workloads/contract/src/index.ts"
+      ],
       "@opencrane/backend/agents/runtime/cleanup": [
         "./libs/backend/agents/runtime/cleanup/main/src/index.ts"
       ],

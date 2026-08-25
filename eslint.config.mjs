@@ -129,6 +129,7 @@ export default [
             { sourceTag: "scope:workflows", onlyDependOnLibsWithTags: ["scope:shared", "scope:workflows"] },
             { sourceTag: "scope:agent-runtime-launcher", onlyDependOnLibsWithTags: ["scope:agent-runtime-launcher", "scope:shared"] },
             { sourceTag: "scope:agent-runtime-cleanup", onlyDependOnLibsWithTags: ["scope:agent-runtime-cleanup", "scope:agent-runtime-launcher", "scope:shared"] },
+			{ sourceTag: "scope:runtime-workloads", onlyDependOnLibsWithTags: ["scope:runtime-workloads", "scope:shared"] },
             { sourceTag: "scope:skills-launcher", onlyDependOnLibsWithTags: ["scope:skills-launcher", "scope:shared"] },
 			{ sourceTag: "scope:skills-controller", onlyDependOnLibsWithTags: ["scope:skills-controller", "scope:skills-launcher", "scope:skills-workflow-contract", "scope:shared", "scope:workflows"] },
             { sourceTag: "scope:agent-runtime-controller", onlyDependOnLibsWithTags: ["scope:agent-runtime-controller", "scope:agent-runtime-launcher", "scope:shared"] },

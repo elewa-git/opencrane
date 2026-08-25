@@ -39,7 +39,7 @@ app's source.
 | `libs/backend/agents/memory/*` | Generic durable fact metadata and catalog-outbox authority; fact content remains in Cognee. |
 | `libs/backend/agents/execution/*` | Immutable run inputs, run lifecycle, and runtime protocol admission. |
 | [`libs/backend/agents/execution/elicitation`](../../libs/backend/agents/execution/elicitation/main/README.md) | Recoverable participant input, exact response authority, and purpose-specific completion. |
-| `libs/backend/agents/runtime/*` | Kubernetes Job projection and controller orchestration. |
+| `libs/backend/agents/runtime/*` | Kubernetes Job projection, controller orchestration, and executor-neutral workload claim contracts. |
 | `libs/backend/agents/skills/*` | Governed skill authoring, workflow admission, and execution workloads. |
 | `libs/backend/artifacts/*` | Artifact authorization, storage, preprocessing, and fenced malware scanning. |
 | [`libs/backend/channel-proxy`](../../libs/backend/channel-proxy/main/README.md) | Reusable inbound-channel trust-boundary logic. |
