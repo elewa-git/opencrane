@@ -12,6 +12,7 @@
   "allowedFiles": [
     { "path": "apps/opencrane/prisma.config.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
     { "path": "apps/opencrane/prisma/development/seed.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
+    { "path": "apps/opencrane/prisma/development/seed.types.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
     { "path": "apps/opencrane/scripts/emit-openapi.mts", "owner": "apps/opencrane", "classification": "build-entrypoint" },
     { "path": "apps/opencrane/src/app/background-workers.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/app/background-workers.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
@@ -152,7 +153,6 @@
     { "path": "apps/agent-runtime/src/bootstrap/proof.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/config.py", "owner": "apps/agent-runtime", "classification": "app-config" },
     { "path": "apps/agent-runtime/src/constants.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
-    { "path": "apps/agent-runtime/src/development/__init__.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/development/deterministic_model.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/development_runtime.py", "owner": "apps/agent-runtime", "classification": "process-entrypoint" },
     { "path": "apps/agent-runtime/src/model_loop/checkpoints.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
