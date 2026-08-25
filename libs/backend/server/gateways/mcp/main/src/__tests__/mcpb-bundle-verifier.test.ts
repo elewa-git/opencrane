@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Zip, ZipPassThrough } from "fflate";
 
 import { _InspectMcpbBundle } from "../mcpb-validation/mcpb-bundle-verifier";
 import { MCPB_MANIFEST_VERSION, McpbVerificationFailureCodes } from "../mcpb-validation/mcpb-validation.types";
@@ -21,7 +22,7 @@ function _Manifest(overrides: Record<string, unknown> = {}): Record<string, unkn
 	};
 }
 
-/** Build a small uncompressed ZIP file sufficient to exercise the bounded central-directory reader. */
+/** Build a small ZIP file sufficient to exercise the bounded central-directory reader. */
 function _Zip(entries: readonly { readonly name: string; readonly bytes: Buffer }[]): Buffer
 {
 	const localParts: Buffer[] = [];
@@ -57,6 +58,27 @@ function _Zip(entries: readonly { readonly name: string; readonly bytes: Buffer 
 	end.writeUInt32LE(centralDirectory.byteLength, 12);
 	end.writeUInt32LE(localOffset, 16);
 	return Buffer.concat([...localParts, centralDirectory, end]);
+}
+
+/** Build a standards-compliant streaming ZIP that writes sizes through data descriptors. */
+function _StreamingZip(entries: readonly { readonly name: string; readonly bytes: Buffer }[]): Buffer
+{
+	const chunks: Uint8Array[] = [];
+	const archive = new Zip();
+	archive.ondata = function _CollectArchive(error, chunk): void
+	{
+		if (error !== null)
+			throw error;
+		chunks.push(chunk);
+	};
+	for (const entry of entries)
+	{
+		const file = new ZipPassThrough(entry.name);
+		archive.add(file);
+		file.push(entry.bytes, true);
+	}
+	archive.end();
+	return Buffer.concat(chunks.map(function _ToBuffer(chunk): Buffer { return Buffer.from(chunk); }));
 }
 
 /** Build a bundle whose root manifest contains the supplied bytes. */
@@ -116,5 +138,22 @@ describe("MCPB bundle verifier", function _McpbBundleVerifierSuite()
 
 		expect(_InspectMcpbBundle(missing, _TRUSTED_SIGNATURE)).toEqual({ accepted: false, failureCode: McpbVerificationFailureCodes.InvalidArchive });
 		expect(_InspectMcpbBundle(duplicate, _TRUSTED_SIGNATURE)).toEqual({ accepted: false, failureCode: McpbVerificationFailureCodes.InvalidArchive });
+	});
+
+	it("rejects unsafe paths and repeated payload paths before a worker can unpack them", function _RejectsUnsafeArchivePaths()
+	{
+		const manifest = Buffer.from(JSON.stringify(_Manifest()), "utf8");
+		const traversal = _Zip([{ name: "manifest.json", bytes: manifest }, { name: "../server/index.js", bytes: Buffer.from("export {};", "utf8") }]);
+		const duplicate = _Zip([{ name: "manifest.json", bytes: manifest }, { name: "server/index.js", bytes: Buffer.from("export {};", "utf8") }, { name: "server/index.js", bytes: Buffer.from("export default {};", "utf8") }]);
+
+		expect(_InspectMcpbBundle(traversal, _TRUSTED_SIGNATURE)).toEqual({ accepted: false, failureCode: McpbVerificationFailureCodes.InvalidArchive });
+		expect(_InspectMcpbBundle(duplicate, _TRUSTED_SIGNATURE)).toEqual({ accepted: false, failureCode: McpbVerificationFailureCodes.InvalidArchive });
+	});
+
+	it("accepts a standard streaming ZIP entry with a data descriptor", function _AcceptsDataDescriptorArchive()
+	{
+		const bundle = _StreamingZip([{ name: "manifest.json", bytes: Buffer.from(JSON.stringify(_Manifest()), "utf8") }, { name: "server/index.js", bytes: Buffer.from("export {};", "utf8") }]);
+
+		expect(_InspectMcpbBundle(bundle, _TRUSTED_SIGNATURE)).toMatchObject({ accepted: true, manifest: { name: "example-server" } });
 	});
 });
