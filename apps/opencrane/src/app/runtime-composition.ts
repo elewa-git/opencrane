@@ -2,6 +2,7 @@ import * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 
 import { _IssueAttemptLiteLlmKey } from "@opencrane/backend/server/gateways/model-routing";
+import { __CreateMcpbValidationControllerAuthority, __CreateMcpbValidationControllerRouter, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
 import { _RegisterInternalAgentRuntimeStream } from "@opencrane/backend/server/infra/agent-runtime-stream";
 import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AttemptModelKeyMintRequest, type MintedAttemptModelKey } from "@opencrane/backend/agents/execution/runs";
 import { PrismaSkillWorkloadUnitOfWork, _CreateSkillWorkloadExecutionAuthority, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
@@ -68,10 +69,15 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
 			repository: runDispatchRepository,
 			logger: _log,
 		}),
-		skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({
+		 skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({
 			tokenReviewer,
 			namespace: namespaces.serverNamespace,
 			authority: skillWorkloadAuthority,
+			logger: _log,
+		}),
+		mcpbValidationController: __CreateMcpbValidationControllerRouter({
+			tokenReviewer,
+			authority: __CreateMcpbValidationControllerAuthority(new PrismaMcpOperatorUnitOfWork(prisma), config.claimLeaseMilliseconds),
 			logger: _log,
 		}),
 	};

@@ -11,6 +11,9 @@ export { McpRemoteServerRegistrationValidationError, registerRemoteServer } from
 export { MCP_ERA_PROTOCOL_VERSION, McpEraProbeDecisions, McpEraProbeStates, McpEraProbeTaskNames, McpRemoteServerRegistrationOutcomes } from "./era-probe/mcp-era-probe.types";
 export type { McpEraProbeAdmission, McpEraProbeClient, McpEraProbeObservation, McpEraProbeRequest, McpEraProbeTaskInput, McpEraProbeTaskResult, McpEraProbeWorkflow, McpEraProbeWorkflowOptions, McpRemoteServerRegistration, McpRemoteServerRegistrationCommand, McpRemoteServerRegistrationResult } from "./era-probe/mcp-era-probe.types";
 export { __CreateMcpbBundleVerifier } from "./mcpb-validation/mcpb-bundle-verifier";
+export { __CreateMcpbValidationControllerAuthority } from "./mcpb-validation/mcpb-validation-controller-authority";
+export { __CreateMcpbValidationControllerRouter } from "./mcpb-validation/mcpb-validation-controller.router";
+export type { McpbValidationControllerAuthority, McpbValidationControllerLogger, McpbValidationControllerRouterDependencies, McpbValidationControllerTokenReviewer } from "./mcpb-validation/mcpb-validation-controller.types";
 export { getMcpbValidation, submitMcpbValidation } from "./mcpb-validation/mcpb-validation-submission";
 export { McpbValidationSubmissionOutcomes } from "./mcpb-validation/mcpb-validation-submission.types";
 export type { McpbBundleArtifactResolver, McpbValidationSubmissionCommand, McpbValidationSubmissionResult } from "./mcpb-validation/mcpb-validation-submission.types";

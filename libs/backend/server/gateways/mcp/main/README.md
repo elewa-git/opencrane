@@ -48,6 +48,11 @@ inspection job currently verifies the signature, safe archive layout, and packag
 the bundle in an isolated environment, scanning it, building an image, and publishing it are later
 workflow steps.
 
+A future controller asks this package for work through a small internal API. It can claim one saved
+inspection job, then record the Kubernetes Job that will handle it. The server checks the
+controller's own Kubernetes identity and the database lease each time. A controller that has lost
+its lease cannot attach a Job to the work.
+
 The draft server and its background job use one database transaction. Either both are saved, or
 neither is saved. A repeated registration request returns the same draft and the same job.
 
@@ -72,6 +77,10 @@ returns credentials and never labels an install connected before a real connecti
 - `__CreateMcpEraProbeWorkflow` — registers the saved background job that checks the server.
 - `submitMcpbValidation` and `getMcpbValidation` — save and read signed MCP bundle checks.
 - `__CreateMcpbValidationWorkflow` — registers the saved parent and package-inspection jobs.
+- `__CreateMcpbValidationControllerRouter` — protects the internal claim and Job-assignment API for
+  package-inspection work.
+- `__CreateMcpbValidationControllerAuthority` — changes a saved inspection-work lease inside a
+  database transaction.
 - Operator services: `listEntitledCatalog`, `listInstalled`, `installServer`, `approveServer`,
   `publishServer`, and the access editor.
 - `_McpOpenapiPaths` — the OpenAPI path descriptions for this API.
@@ -85,6 +94,15 @@ background jobs, and records audit entries in one database transaction.
 This package does not run agents or call tools. It governs which servers are available and whether a
 user may use them. The external HTTP adapter performs the actual protocol check for the workflow.
 
+The internal controller API is for the `agent-controller` workload only:
+
+- `POST /api/internal/agent-controller/mcpb-validations:claim` claims one available inspection job.
+- `PUT /api/internal/agent-controller/mcpb-validations/:workloadId/assignment` records the
+  Kubernetes Job only while the matching saved lease is still valid.
+
+These routes do not run the Kubernetes Job or execute a bundle. The controller and worker that use
+them are the next pieces of the flow.
+
 ## Dependency direction
 
 Tagged `scope:mcp`: it may depend on the authentication guard, the shared authorization package, the
@@ -96,7 +114,8 @@ an Absurd package directly.
 This package owns the public behavior around `McpServer`, `McpServerInstall`, and
 `McpbValidation` in
 `apps/opencrane/prisma/schema/mcp.prisma`. General `AuthorizationGrant` rows remain owned by the
-authorization package. `PrismaMcpOperatorUnitOfWork` is the public MCP database boundary.
+authorization package. `McpbValidationWorkload` saves the inspection-work lease and recorded
+Kubernetes Job assignment. `PrismaMcpOperatorUnitOfWork` is the public MCP database boundary.
 
 ## See also
 
