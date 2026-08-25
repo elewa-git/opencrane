@@ -1,11 +1,10 @@
 import { Router, type Request, type Response } from "express";
 
 import { z } from "zod";
+import { ___ParseAgentControllerMcpbValidationAssignmentCommand } from "@opencrane/contracts";
 
 import type { McpbValidationControllerRouterDependencies } from "./mcpb-validation-controller.types";
 
-/** Accepts the claim fence and bounded Job UID needed to record one controller assignment. */
-const _ASSIGNMENT = z.object({ claimedAt: z.string().datetime({ offset: true }), deliveryCount: z.number().int().min(1), workloadUid: z.string().trim().min(1).max(256) }).strict();
 /** Accepts no claim fields, so a caller cannot choose which saved workload to receive. */
 const _EMPTY_COMMAND = z.object({}).strict();
 
@@ -76,20 +75,20 @@ export function __CreateMcpbValidationControllerRouter(dependencies: McpbValidat
 				_Problem(response, 401, "controller_identity_denied");
 				return;
 			}
-			const assignment = _ASSIGNMENT.safeParse(request.body);
+			const assignment = ___ParseAgentControllerMcpbValidationAssignmentCommand(request.body);
 			const workloadId = request.params["workloadId"];
-			if (!assignment.success || typeof workloadId !== "string" || workloadId.trim().length === 0)
+			if (assignment === null || typeof workloadId !== "string" || workloadId.trim().length === 0)
 			{
 				_Problem(response, 400, "invalid_assignment");
 				return;
 			}
-			const outcome = await dependencies.authority.commitAssignmentAtomically(workloadId, assignment.data);
+			const outcome = await dependencies.authority.commitAssignmentAtomically(workloadId, assignment);
 			if (outcome === "conflict")
 			{
 				_Problem(response, 409, "stale_or_conflicting_assignment");
 				return;
 			}
-			response.status(200).json({ outcome, workloadId, workloadUid: assignment.data.workloadUid });
+			response.status(200).json({ outcome, workloadId, workloadUid: assignment.workloadUid });
 		}
 		catch (err)
 		{
