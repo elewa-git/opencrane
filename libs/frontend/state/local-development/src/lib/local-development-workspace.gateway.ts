@@ -44,7 +44,7 @@ export class LocalDevelopmentConversationWorkspaceGateway implements Conversatio
 			personalAgentStatus: ConversationPersonalAgentStatuses.Ready,
 			personalAgent: {
 				personalAgentRef: "agent-service-local-1",
-				displayName: "The Commander (Guardian)"
+				displayName: this._state.fixture.displayName
 			}
 		} as const;
 	}

@@ -9,11 +9,11 @@ chat ports. It lets the default development build exercise routed UI and browser
 API, database, LiteLLM, Cognee, memory gateway, Docker, or Kubernetes.
 
 The persona survey copies the reviewed `personal-agent-onboarding` v1 questions and choices from the
-clean database baseline. Persona review and first chat use the real `The Commander (Guardian)`
-template and the exact reviewed Commander bootstrap identity, opening, and prompts. Tier 1 keeps the
-result fixed for UI lifecycle testing and deliberately does not reproduce backend scoring. All live
-choices remain visible, but this profile admits only its documented Commander/Guardian answer path;
-another choice returns a clear local-only error without advancing the survey.
+clean database baseline. Persona review and first chat use the real Guardian templates and the exact
+reviewed Commander, Catalyst, Anchor, or Analyst bootstrap identity, opening, and prompts. Tier 1
+keeps the selected result fixed for UI lifecycle testing and deliberately does not reproduce backend
+scoring. All live choices remain visible, but each profile admits only its documented Guardian answer
+path; another choice returns a clear local-only error without advancing the survey.
 
 The gateways share one state owner. Approving the mock persona therefore unlocks the same first-chat
 record that later appears as completed onboarding history in the conversation workspace. The mock
@@ -39,8 +39,27 @@ one disposable state owner keeps cross-route projections coherent.
 
 - `provideLocalDevelopmentGateways()` binds the authenticated session, persona survey, first chat,
   workspace, event stream, conversation assets, elicitation, and Agent-thread ports.
+- `LOCAL_DEVELOPMENT_ARCHETYPE` and the archetype fixture helpers keep every local projection on one
+  reviewed Commander, Catalyst, Anchor, or Analyst path.
+- `__ResolveLocalDevelopmentArchetype()` applies an explicit command selection, then a browser-saved
+  preference, then the Commander fallback.
 - `mockScenario=happy-path|slow|retry|reconnecting|failed-run|access-changed` selects one
   deterministic development behaviour; unknown values fall back to `happy-path`.
+
+## Select an archetype
+
+Plain `npx nx serve opencrane-ui` reuses the archetype saved for the current browser origin. When no
+valid preference exists, it starts with Commander. Open one explicit configuration to change and save
+the preference:
+
+- `--configuration=development-commander`
+- `--configuration=development-catalyst`
+- `--configuration=development-anchor`
+- `--configuration=development-analyst`
+
+Subsequent plain serves keep that selection. Clearing the site's local storage resets the preference;
+clearing only downloaded HTTP cache files may not. A different scheme, hostname, or port has separate
+browser storage. Mock onboarding and chat progress remain disposable and reset when the page reloads.
 
 ## Dependency direction
 

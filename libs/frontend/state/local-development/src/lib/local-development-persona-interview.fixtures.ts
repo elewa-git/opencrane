@@ -285,26 +285,6 @@ const _REVIEWED_PERSONA_QUESTIONS: readonly PersonaQuestion[] = [
 	}
 ];
 
-/** Reviewed answer path whose backend result is reproduced by the Tier 1 presentation fixture. */
-const _COMMANDER_GUARDIAN_ANSWER_IDS = {
-	"q1-decision-speed": "a",
-	"q2-response-preference": "a",
-	"q3-feedback-preference": "a",
-	"q4-meeting-energy": "a",
-	"q5-new-ideas": "b",
-	"q6-risk-appetite": "b",
-	"q7-suggestion-cadence": "a",
-	"q8-challenge-preference": "a",
-	"q9-relationship-model": "a",
-	"q10-tone-preference": "a"
-} as const;
-
-/** Return the one reviewed answer supported by the fixed local persona result. */
-export function __LocalCommanderGuardianChoiceId(questionId: string): string | null
-{
-	return _COMMANDER_GUARDIAN_ANSWER_IDS[questionId as keyof typeof _COMMANDER_GUARDIAN_ANSWER_IDS] ?? null;
-}
-
 /** Builds the unanswered reviewed persona interview shown when a Tier 1 session starts. */
 export function __CreateLocalPersonaInterview(): PersonaOnboardingSnapshot
 {

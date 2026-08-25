@@ -3,7 +3,6 @@ import { Injectable, inject } from "@angular/core";
 import { PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, PersonaOnboardingStates, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/models/user-onboarding";
 import { PersonaFirstChatConflictError, type PersonaFirstChatAnswerCommand, type PersonaFirstChatGateway, type UserOnboardingRouteSnapshot } from "@opencrane/state/onboarding";
 
-import { LOCAL_COMMANDER_FIRST_CHAT_OPENING, LOCAL_COMMANDER_FIRST_CHAT_QUESTIONS } from "./local-development-first-chat.fixtures";
 import { LocalDevelopmentState } from "./local-development-state";
 
 /**
@@ -62,20 +61,20 @@ export class LocalDevelopmentPersonaFirstChatGateway implements PersonaFirstChat
 					ordinal: 1,
 					role: PersonaFirstChatTranscriptRoles.Assistant,
 					kind: PersonaFirstChatTranscriptKinds.Opening,
-					text: LOCAL_COMMANDER_FIRST_CHAT_OPENING,
+					text: this._state.fixture.firstChat.opening,
 					questionOrdinal: null
 				},
 				{
 					ordinal: 2,
 					role: PersonaFirstChatTranscriptRoles.Assistant,
 					kind: PersonaFirstChatTranscriptKinds.Question,
-					text: LOCAL_COMMANDER_FIRST_CHAT_QUESTIONS[0]!,
+					text: this._state.fixture.firstChat.questions[0]!,
 					questionOrdinal: 1
 				}
 			],
 			currentQuestion: {
 				ordinal: 1,
-				text: LOCAL_COMMANDER_FIRST_CHAT_QUESTIONS[0]!
+				text: this._state.fixture.firstChat.questions[0]!
 			},
 			startedAt: "2026-08-21T09:30:00.000Z"
 		};
@@ -102,7 +101,7 @@ export class LocalDevelopmentPersonaFirstChatGateway implements PersonaFirstChat
 		}
 
 		const nextOrdinal = answered.ordinal + 1;
-		const nextText = LOCAL_COMMANDER_FIRST_CHAT_QUESTIONS[nextOrdinal - 1] ?? null;
+		const nextText = this._state.fixture.firstChat.questions[nextOrdinal - 1] ?? null;
 		const transcript = [
 			...current.transcript,
 			{
