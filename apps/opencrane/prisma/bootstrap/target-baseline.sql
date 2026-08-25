@@ -3011,6 +3011,32 @@ ALTER TABLE "mcpb_validation_workloads" ADD CONSTRAINT "mcpb_validation_workload
     "delivery_count" >= 0
 );
 
+CREATE FUNCTION "enforce_mcpb_validation_workload_assignment"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    requested_lease INTERVAL;
+    transition_time TIMESTAMP(3) := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+BEGIN
+    IF OLD."state" = 'claimed' AND NEW."state" = 'claimed' AND OLD."claim_expires_at" > transition_time AND (NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."claim_expires_at" IS DISTINCT FROM OLD."claim_expires_at" OR NEW."delivery_count" IS DISTINCT FROM OLD."delivery_count") THEN
+        RAISE EXCEPTION 'MCP bundle validation workload cannot replace a live controller lease';
+    END IF;
+    IF NEW."state" = 'claimed' AND (OLD."state" = 'pending' OR (OLD."state" = 'claimed' AND OLD."claim_expires_at" <= transition_time)) THEN
+        requested_lease := NEW."claim_expires_at" - NEW."claimed_at";
+        IF NEW."delivery_count" <> OLD."delivery_count" + 1 OR NEW."workload_uid" IS NOT NULL OR requested_lease <= '0 milliseconds'::INTERVAL OR requested_lease > '5 minutes'::INTERVAL THEN
+            RAISE EXCEPTION 'MCP bundle validation workload claim requires one bounded fresh lease';
+        END IF;
+        NEW."claimed_at" := transition_time;
+        NEW."claim_expires_at" := transition_time + requested_lease;
+    END IF;
+    IF OLD."state" = 'claimed' AND NEW."state" = 'assigned' AND (OLD."claim_expires_at" IS NULL OR OLD."claim_expires_at" <= clock_timestamp()) THEN
+        RAISE EXCEPTION 'MCP bundle validation workload assignment requires a live controller lease';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "mcpb_validation_workloads_live_claim_assignment"
+    BEFORE UPDATE OF "state", "claimed_at", "claim_expires_at", "delivery_count" ON "mcpb_validation_workloads"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_mcpb_validation_workload_assignment"();
+
 -- AddForeignKey
 ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
