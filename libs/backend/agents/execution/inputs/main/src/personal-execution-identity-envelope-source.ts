@@ -11,11 +11,12 @@ import type { IdentityEnvelopeInput, IdentityEnvelopeSource, SessionAssemblyComm
 import { PrismaPersonalExecutionIdentityAuthorityRepository } from "./prisma-personal-execution-identity-authority-repository";
 
 /**
- * Verifies the one signed personal-scope assertion for a browser session, inside the admission
+ * Verifies the one signed personal membership assertion for a browser session, inside the admission
  * transaction.
  *
- * All the request supplies is the subject (from the session) and the silo (from the host), both
- * through the assembly command. Everything else — assertion, organisation, scope, capability digest
+ * All the request supplies is the issuer-bound subject (from the verified session) and the silo
+ * (from the host), both through the assembly command. Everything else — assertion, Principal,
+ * capability digest
  * — this source reads from the database inside the transaction. A browser request body never
  * becomes identity evidence.
  */
@@ -47,11 +48,12 @@ export class PersonalExecutionIdentityEnvelopeSource implements IdentityEnvelope
 	 * Verifies one personal assertion and returns the signed identity evidence.
 	 *
 	 * Refuses when more than one assertion matches rather than picking one: an ambiguous entitlement
-	 * means the organisation the run would act for is unclear, and guessing it could cross an
-	 * organisation boundary.
+	 * means the issuer-bound identity the run would act for is unclear, and guessing it could cross
+	 * a silo boundary.
 	 *
-	 * @param command - The admission command. Only `siloId` (from the request host) and
-	 * `executionSubjectId` (from the session) are used; nothing from a request body.
+	 * @param command - The admission command. Only `siloId` (from the request host),
+	 * `executionIssuer` and `executionSubjectId` (from the verified session identity) are used;
+	 * nothing from a request body.
 	 * @param run - Facts from the run authority. Must be a personal run whose `delegatedUserId`
 	 * equals the command's subject.
 	 * @param transaction - The admission transaction; the signature check, the re-read, and the grant

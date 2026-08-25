@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import type { PersonalExecutionIdentityAuthorityRepository, PersonalFleetMembershipAssertion } from "./personal-execution-identity-envelope-source.types";
 
 /**
- * Reads personal membership assertions and active capability grants with Prisma.
+ * Reads personal membership assertions and active boundary-filtered capability grants with Prisma.
  *
  * Takes a transaction client rather than a Prisma client, so it can never open a second transaction
  * of its own: every read here has to see the same rows as the membership check that runs beside it.
@@ -30,7 +30,7 @@ export class PrismaPersonalExecutionIdentityAuthorityRepository implements Perso
 		return principal?.id ?? null;
 	}
 
-	/** Loads the one current personal assertion available before signature verification. */
+	/** Loads the one current silo-membership assertion available before signature verification. */
 	async loadLatestPersonalAssertion(trustedIssuerId: string, siloId: string, subjectId: string): Promise<PersonalFleetMembershipAssertion | null>
 	{
 		const revision = await this.prisma.verifiedFleetMembershipRevision.findFirst({
@@ -41,7 +41,7 @@ export class PrismaPersonalExecutionIdentityAuthorityRepository implements Perso
 		return _OneAssertion(revision?.assertions ?? []);
 	}
 
-	/** Re-reads the one personal assertion from the exact signed revision just verified. */
+	/** Re-reads the one silo-membership assertion from the exact signed revision just verified. */
 	async loadVerifiedPersonalAssertion(issuerId: string, siloId: string, revision: number, payloadDigest: string, subjectId: string): Promise<PersonalFleetMembershipAssertion | null>
 	{
 		const membership = await this.prisma.verifiedFleetMembershipRevision.findFirst({

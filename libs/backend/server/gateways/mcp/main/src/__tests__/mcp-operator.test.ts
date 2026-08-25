@@ -136,10 +136,10 @@ describe("mcp-operator router", function _suite()
       _enableOidc();
       const { prisma, spies } = _mockPrisma();
       const res = await request(_buildApp(prisma, { sub: "u1", isOrgAdmin: false }))
-        .put("/api/v1/mcp/servers/srv-1/access").send({ everyoneInOrg: true, groups: [], users: [] });
+        .put("/api/v1/mcp/servers/srv-1/access").send({ groupIds: [], principalIds: [] });
 
       expect(res.status).toBe(403);
-      expect(spies["mcpServerAccessPolicy.upsert"]).toBeUndefined();
+    expect(spies["authorizationGrant.create"]).toBeUndefined();
     });
 
     it("denies GET /directory for a non-admin session", async function _denyDirectory()

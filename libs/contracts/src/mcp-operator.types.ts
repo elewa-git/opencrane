@@ -1,10 +1,9 @@
 /**
  * Operator-API contracts for consuming and governing MCP servers.
  *
- * These shapes back the `/api/v1/mcp/*` API the WeOwnAI frontend targets: the
- * entitlement-scoped catalogue, per-user installs / credential connect, and the
- * org-admin governance + access-policy endpoints. This is the sole public MCP contract; there is
- * no parallel unsiloed registry or credential-inventory API.
+ * These shapes back the `/api/v1/mcp/*` API the browser targets: the entitlement-scoped
+ * catalogue, per-user installs, and org-admin governance + access endpoints. This is the sole
+ * public MCP contract; there is no parallel unsiloed registry or credential-inventory API.
  *
  * Custody contract: NO type here ever carries credential material. A connected
  * install reports only its {@link McpConnectionStatus}; the secret lives in the
@@ -14,10 +13,9 @@
 /**
  * How a caller consumes a downstream MCP server.
  *
- * Returned as the `type` field on {@link McpCatalogServer}, and it decides what happens when a
- * user installs the server: a single-user server starts at `NeedsCredential` and must collect
- * the fields in `credentialSchema`; a multi-user server is already usable via the org-wide key;
- * a remote-OAuth server needs an OAuth handshake instead of a form.
+ * Returned as the `type` field on {@link McpCatalogServer}. Installing never starts a connection:
+ * a single-user server still needs its credential collected before use; a multi-user server is
+ * already usable via the org-wide key; a remote-OAuth server needs an OAuth handshake before use.
  * @see https://modelcontextprotocol.io/specification/2025-06-18
  */
 export enum McpServerType

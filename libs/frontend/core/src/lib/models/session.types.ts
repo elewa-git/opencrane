@@ -7,7 +7,7 @@ export interface SessionSummary
 	name: string;
 	/** Session accent colour (dot + active border). */
 	color: string;
-	/** Department key (see DEPARTMENTS). */
+	/** Department key used for sidebar grouping. */
 	dept: string;
 	/** Optional secondary line under the name. */
 	subtitle?: string;

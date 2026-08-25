@@ -2,7 +2,7 @@
  * Holds one signed silo-membership assertion, taken from a revision that named exactly one.
  *
  * A fleet-membership revision is a batch of assertions signed by a trusted issuer and stored locally
- * after verification, so admission can check "is this user still a member of this organisation"
+ * after verification, so admission can check "is this OIDC-bound user still a member of this silo"
  * against a signature rather than by calling the identity provider on every run. The subjects in it
  * are OIDC subject identifiers issued by Zitadel.
  */

@@ -432,7 +432,7 @@ _run_preflight() {
 
   # 3. First-party images pullable — catch a private/typo'd registry before the rollout
   #    sits in ImagePullBackOff. Validate the resolved browser, memory, and database operands
-  #    before the database transition can fence the existing server. A missing local inspector
+  #    before the database migration runs. A missing local inspector
   #    warns rather than changing cluster state.
   local _img
   local _images=("$CONTROL_PLANE_SPA_IMAGE" "$COGNEE_IMAGE" "$POSTGRES_OPERAND_IMAGE")
@@ -1025,7 +1025,7 @@ if [[ "$RELEASE_PREEXISTED" == "1" ]]; then
     "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway" || exit $?
 fi
 
-# 4. Wait for the core workloads. The database schema was created by CNPG initdb or converged by
+# 4. Wait for the core workloads. The database schema was created by CNPG initdb or applied by
 # the bounded deployment-owned migration Job; application startup never mutates it.
 # Wait only on the deployment(s) this chart actually rendered: the fleet chart ships
 # the fleet-manager, the silo chart the clustertenant-manager. A fleet-only (or silo-only)

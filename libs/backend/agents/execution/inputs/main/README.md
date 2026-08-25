@@ -67,10 +67,11 @@ caller input.
   and memory-scope sources. It freezes only the verified user's active Cognee dataset coordinates.
   Admission never stores the recall query, reads fact content, or calls Cognee. The model chooses a
   query only through the approval-required `memory_recall` tool; safe content delivery is deferred to #601.
-- `PersonalExecutionIdentityEnvelopeSource` — selects the sole current personal-scope assertion
-  from signed fleet membership, re-reads that exact verified revision after its high-watermark is
-  advanced, and digests the user's still-valid, unrevoked personal grants in the admission
-  transaction. Browser input never selects the organisation, assertion, or capabilities.
+- `PersonalExecutionIdentityEnvelopeSource` — resolves the exact local `Principal` for the verified
+  OIDC issuer and subject, selects the sole current silo-membership assertion from signed fleet
+  membership, re-reads that exact verified revision after its high-watermark is advanced, and
+  digests the Principal's still-valid, unrevoked boundary-filtered grants in the admission
+  transaction. Browser input never selects the issuer, Principal, assertion, or capabilities.
 - `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
   at admission and refuses an invented, foreign, revoked, or unpublished revision with
   `skill_unavailable`.

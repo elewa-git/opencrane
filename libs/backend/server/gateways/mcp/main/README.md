@@ -64,11 +64,11 @@ another product domain's persistence adapter.
 ## Data & persistence
 
 Owns the public governance behavior over `McpServer` and `McpServerInstall` in
-`apps/opencrane/prisma/schema/mcp.prisma`. MCP entitlement rows remain generic
-`AuthorizationGrant` records owned by the authorization domain. The named
-The `PrismaMcpOperatorUnitOfWork` is the only public MCP persistence seam: it keeps catalogue state,
-installs, generic grants, and audit evidence in one authenticated transaction. The cutover refuses to
-run while any legacy custody reference remains, then removes the obsolete local custody columns.
+`apps/opencrane/prisma/schema/mcp.prisma`. MCP entitlement rows are generic `AuthorizationGrant`
+records owned by the authorization domain. The `PrismaMcpOperatorUnitOfWork` is the only public MCP
+persistence seam: it keeps catalogue state, installs, generic grants, and audit evidence in one
+authenticated transaction. Installation never starts a connection flow; connecting happens through
+the gateway plane after an operator approves the server.
 
 ## See also
 
