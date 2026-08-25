@@ -1,9 +1,15 @@
 import type { McpEraProbeWorkflow, McpOperatorUnitOfWork, McpbBundleArtifactResolver, McpbValidationWorkflow, McpTaskWorkflow } from "@opencrane/backend/server/gateways/mcp";
-import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowEngine, IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
-/** MCP product authority and the one process-owned worker runtime shared by its saved jobs. */
+/**
+ * Groups MCP workflow dependencies with the guarded engine shared by this server process.
+ *
+ * Internal domain composition reuses {@link execution}; {@link runtime} remains the process-owned worker lifecycle.
+ */
 export interface McpWorkflowComposition
 {
+	/** Makes the guarded workflow engine available to other server domain compositions. */
+	readonly execution: IWorkflowEngine;
 	/** Transaction owner shared by MCP catalogue and bundle operations. */
 	readonly unitOfWork: McpOperatorUnitOfWork;
 	/** Absurd worker lifecycle started and drained by the OpenCrane process. */

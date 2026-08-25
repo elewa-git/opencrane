@@ -29,7 +29,11 @@ export function _McpEraProbeFailure(error: unknown): McpEraProbeFailure
 	throw error;
 }
 
-/** Compose one guarded Absurd engine for both remote-server and MCP bundle jobs. */
+/**
+ * Creates the guarded Absurd engine that the server's durable domain workflows share.
+ *
+ * The internal workload composition uses this engine instead of creating another worker runtime.
+ */
 export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: OpenCraneWorkflowConfig): McpWorkflowComposition
 {
 	const queueAuthority = __CreateWorkflowTaskQueueAuthority([
@@ -59,5 +63,5 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 			return await artifactCatalogue.loadPublishedReadTarget({ siloId, artifactId, artifactRevisionId });
 		},
 	};
-	return { runtime, unitOfWork, eraProbeWorkflow, mcpbValidationWorkflow, mcpTaskWorkflow, mcpbArtifacts };
+	return { execution, runtime, unitOfWork, eraProbeWorkflow, mcpbValidationWorkflow, mcpTaskWorkflow, mcpbArtifacts };
 }
