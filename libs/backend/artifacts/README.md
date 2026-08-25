@@ -16,6 +16,7 @@ promotion, and two implement broker-only preprocessing and malware-scanning prot
 | [`authorization`](./authorization/main/README.md) | Artifact write-lease and receipt authority. |
 | [`filesystem`](./filesystem/main/README.md) | On-disk content-addressed store. |
 | [`preprocessor`](./preprocessor/main/README.md) | PDF extraction and broker-only remote worker protocol. |
+| [`preprocessor controller`](./preprocessor/controller/README.md) | Controller task definition that binds an isolated PDF worker before release. |
 | [`preprocessor Job builder`](./preprocessor/k8s-launcher/README.md) | Hardened one-shot Job shape for a controller-started PDF worker. |
 | [`preprocessor workflow contract`](./preprocessor/workflows/contract/README.md) | Shared saved-task name, retry policy, and identifier-only input for one PDF conversion. |
 | [`scanner`](./scanner/main/README.md) | Fenced malware scanning with no storage or publication authority. |
@@ -42,9 +43,10 @@ promotion, and two implement broker-only preprocessing and malware-scanning prot
 
 ## Dependency rule for this tier
 
-All five carry `layer:backend` and `scope:artifacts`. They may import each other and the shared
-artifact model plus shared contracts (`scope:shared`) — nothing else, and never an app. Keeping the
-whole stack in one scope is deliberate: authorization, protocol, and on-disk layout move together.
+The domain packages use `layer:backend` and `scope:artifacts`. The PDF controller, Job builder, and
+workflow contract have smaller dedicated scopes because they cross the server/controller boundary.
+ESLint enforces their one-way dependency rules: no package imports an app, and a worker never gains
+database or storage authority through a controller dependency.
 
 ## See also
 

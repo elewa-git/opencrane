@@ -1,6 +1,6 @@
 # @opencrane/backend/artifacts/preprocessor/workflows/contract — PDF task contract
 
-> [backend](../../../../../../README.md) › [artifacts](../../../../../README.md) › preprocessor › [workflows](../README.md) › contract
+> [backend](../../../../../README.md) › [artifacts](../../../../README.md) › [preprocessor](../../README.md) › [workflows](../README.md) › contract
 
 ## What it owns
 
