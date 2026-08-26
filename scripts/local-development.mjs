@@ -13,6 +13,7 @@ Usage:
   npm run dev:tier2
   npm run dev:tier2:agent
   npm run dev:tier2:agent:local-llm
+  npm run dev:tier2:agent:local-llm -- --provider-key-file keys/openai-key
   npm run dev:tier2:agent:remote-llm -- --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path
   npm run dev:tier2:agent:simulated-llm
 
@@ -21,9 +22,13 @@ Profiles:
   agent  Adds the local agent controller; local-llm is the default
 
 Agent alternatives:
-  local-llm      Local LiteLLM with keys/.openai-key
+  local-llm      Local LiteLLM; defaults to the OpenAI key at keys/.openai-key
   remote-llm     Remote HTTPS LiteLLM with explicit endpoint and admin-key file
   simulated-llm  Simulated model mode without LiteLLM or provider credentials
+
+Alternative A:
+  --provider-key-file keys/<lowercase-provider-name>-key
+  The local model remains the configured OpenAI model; this option changes only the key file.
 
 Alternative B:
   --remote-litellm-endpoint https://litellm.example.test

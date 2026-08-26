@@ -27,6 +27,38 @@ test("agent defaults to Alternative A", function _defaultAgentAlternative()
 
 	assert.equal(configuration.alternative, "local-llm");
 	assert.equal(configuration.developmentProfile, "agent-local");
+	assert.equal(configuration.providerKeyPath, "/repo/keys/.openai-key");
+});
+
+test("Alternative A accepts an explicit provider-key file", function _customProviderKeyFile()
+{
+	const parsed = parseLocalDevelopmentArguments([
+		"--profile",
+		"agent",
+		"--alternative",
+		"local-llm",
+		"--provider-key-file",
+		"keys/openai-key"
+	]);
+	const configuration = createLocalDevelopmentConfiguration(parsed, "/repo", {});
+
+	assert.equal(configuration.providerKeyPath, "/repo/keys/openai-key");
+});
+
+test("Alternative A enforces the lowercase provider-key naming convention", function _providerKeyFileNaming()
+{
+	assert.throws(function _mixedCaseProvider()
+	{
+		parseLocalDevelopmentArguments(["--profile", "agent", "--provider-key-file", "keys/OpenAI-key"]);
+	}, /lowercase-provider-name/);
+	assert.throws(function _wrongDirectory()
+	{
+		parseLocalDevelopmentArguments(["--profile", "agent", "--provider-key-file", "secrets/openai-key"]);
+	}, /lowercase-provider-name/);
+	assert.throws(function _unconfiguredProvider()
+	{
+		parseLocalDevelopmentArguments(["--profile", "agent", "--provider-key-file", "keys/anthropic-key"]);
+	}, /currently requires the OpenAI provider/);
 });
 
 test("named alternatives can print help without runtime-specific settings", function _AlternativeHelp()
@@ -121,6 +153,40 @@ test("core and non-remote alternatives reject remote model options", function _r
 			"https://litellm.example.test"
 		]);
 	}, /only to Alternative B/);
+});
+
+test("provider-key files apply only to Alternative A", function _rejectUnusedProviderKeyFile()
+{
+	assert.throws(function _coreProviderKey()
+	{
+		parseLocalDevelopmentArguments(["--provider-key-file", "keys/provider-key"]);
+	}, /only to --profile agent/);
+	assert.throws(function _remoteProviderKey()
+	{
+		parseLocalDevelopmentArguments([
+			"--profile",
+			"agent",
+			"--alternative",
+			"remote-llm",
+			"--remote-litellm-endpoint",
+			"https://litellm.example.test",
+			"--remote-litellm-master-key-file",
+			"/secure/remote.key",
+			"--provider-key-file",
+			"keys/provider-key"
+		]);
+	}, /only to Alternative A/);
+	assert.throws(function _simulatedProviderKey()
+	{
+		parseLocalDevelopmentArguments([
+			"--profile",
+			"agent",
+			"--alternative",
+			"simulated-llm",
+			"--provider-key-file",
+			"keys/provider-key"
+		]);
+	}, /only to Alternative A/);
 });
 
 test("local service ports are validated before orchestration", function _portValidation()

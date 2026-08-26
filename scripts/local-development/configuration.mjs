@@ -73,7 +73,9 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 		baselinePath: path.join(repositoryRoot, "apps/opencrane/prisma/bootstrap/target-baseline.sql"),
 		seedPath: path.join(repositoryRoot, "apps/postgres/scripts/local-development-seed.sql"),
 		liteLLMConfigPath: path.join(repositoryRoot, "apps/_infra/litellm/local-development/config.yaml"),
-		providerKeyPath: path.join(repositoryRoot, "keys/.openai-key"),
+		providerKeyPath: parsed.providerKeyFile
+			? path.resolve(repositoryRoot, parsed.providerKeyFile)
+			: path.join(repositoryRoot, "keys/.openai-key"),
 		localLiteLLMMasterKeyPath: path.join(repositoryRoot, "keys/.litellm-master-key"),
 		remoteLiteLLMMasterKeyPath: parsed.remoteLiteLLMMasterKeyFile
 			? path.resolve(repositoryRoot, parsed.remoteLiteLLMMasterKeyFile)

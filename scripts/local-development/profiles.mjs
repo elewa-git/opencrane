@@ -46,6 +46,23 @@ function _assertKnownAlternative(alternative)
 	}
 }
 
+function _validateProviderKeyFile(providerKeyFile)
+{
+	if (!/^keys\/[a-z0-9]+(?:-[a-z0-9]+)*-key$/.test(providerKeyFile))
+	{
+		throw new Error("--provider-key-file must follow keys/<lowercase-provider-name>-key");
+	}
+
+	const fileName = providerKeyFile.slice("keys/".length);
+
+	if (fileName !== "openai-key")
+	{
+		throw new Error("Alternative A currently requires the OpenAI provider file keys/openai-key");
+	}
+
+	return providerKeyFile;
+}
+
 function _validateRemoteEndpoint(endpoint)
 {
 	let parsed;
@@ -80,7 +97,8 @@ function _validateRemoteEndpoint(endpoint)
 /**
  * Parses Tier 2 arguments and rejects options that do not apply to the selected profile.
  * Agent defaults to `local-llm`; `remote-llm` requires an HTTPS origin and key-file path before the
- * coordinator can start, while core refuses every Agent alternative.
+ * coordinator can start, while core refuses every Agent alternative. Alternative A accepts an
+ * explicit provider-key path but otherwise keeps the repository-local OpenAI default.
  *
  * Called by: `scripts/local-development.mjs` before configuration or process orchestration.
  * @param {string[]} argumentsList - Command-line arguments after the local-development script name.
@@ -92,6 +110,7 @@ export function parseLocalDevelopmentArguments(argumentsList)
 	const parsed = {
 		profile: LOCAL_DEVELOPMENT_PROFILES.Core,
 		alternative: undefined,
+		providerKeyFile: undefined,
 		remoteLiteLLMEndpoint: undefined,
 		remoteLiteLLMMasterKeyFile: undefined,
 		reset: false,
@@ -110,6 +129,10 @@ export function parseLocalDevelopmentArguments(argumentsList)
 				break;
 			case "--alternative":
 				parsed.alternative = _readOptionValue(argumentsList, index, argument);
+				index += 1;
+				break;
+			case "--provider-key-file":
+				parsed.providerKeyFile = _readOptionValue(argumentsList, index, argument);
 				index += 1;
 				break;
 			case "--remote-litellm-endpoint":
@@ -140,9 +163,9 @@ export function parseLocalDevelopmentArguments(argumentsList)
 
 	if (parsed.profile === LOCAL_DEVELOPMENT_PROFILES.Core)
 	{
-		if (parsed.alternative || parsed.remoteLiteLLMEndpoint || parsed.remoteLiteLLMMasterKeyFile)
+		if (parsed.alternative || parsed.providerKeyFile || parsed.remoteLiteLLMEndpoint || parsed.remoteLiteLLMMasterKeyFile)
 		{
-			throw new Error("LiteLLM alternatives apply only to --profile agent");
+			throw new Error("LiteLLM alternatives and provider settings apply only to --profile agent");
 		}
 
 		return parsed;
@@ -150,6 +173,16 @@ export function parseLocalDevelopmentArguments(argumentsList)
 
 	parsed.alternative ??= LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM;
 	_assertKnownAlternative(parsed.alternative);
+
+	if (parsed.providerKeyFile && parsed.alternative !== LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
+	{
+		throw new Error("--provider-key-file applies only to Alternative A (local-llm)");
+	}
+
+	if (parsed.providerKeyFile)
+	{
+		parsed.providerKeyFile = _validateProviderKeyFile(parsed.providerKeyFile);
+	}
 
 	if (parsed.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.RemoteLiteLLM)
 	{

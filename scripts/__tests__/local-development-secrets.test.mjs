@@ -29,7 +29,7 @@ test("generated master secrets are persisted with owner-only permissions", funct
 	assert.equal(fs.statSync(secretPath).mode & 0o777, 0o600);
 });
 
-test("Alternative A reads the fixed provider file and keeps its master key separate", function _localSecrets(t)
+test("Alternative A reads the default provider file and keeps its master key separate", function _localSecrets(t)
 {
 	const repositoryRoot = _temporaryRepository();
 	t.after(function _cleanup() { fs.rmSync(repositoryRoot, { recursive: true, force: true }); });
@@ -39,6 +39,78 @@ test("Alternative A reads the fixed provider file and keeps its master key separ
 
 	assert.equal(secrets.providerKey, "provider-secret");
 	assert.notEqual(secrets.providerKey, secrets.liteLLMMasterKey);
+});
+
+test("Alternative A reads an explicit owner-only provider-key file", function _customLocalProviderKey(t)
+{
+	const repositoryRoot = _temporaryRepository();
+	t.after(function _cleanup() { fs.rmSync(repositoryRoot, { recursive: true, force: true }); });
+	fs.writeFileSync(path.join(repositoryRoot, "keys/openai-key"), "custom-provider-secret\n", { mode: 0o600 });
+	const configuration = createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments([
+		"--profile",
+		"agent",
+		"--provider-key-file",
+		"keys/openai-key"
+	]), repositoryRoot, {});
+	const secrets = loadLocalDevelopmentSecrets(configuration, function _fixedBytes() { return Buffer.alloc(32, 4); });
+
+	assert.equal(secrets.providerKey, "custom-provider-secret");
+	assert.equal(configuration.providerKeyPath, path.join(repositoryRoot, "keys/openai-key"));
+});
+
+test("Alternative A rejects a provider-key symlink to a managed credential", function _providerKeySymlink(t)
+{
+	const repositoryRoot = _temporaryRepository();
+	t.after(function _cleanup() { fs.rmSync(repositoryRoot, { recursive: true, force: true }); });
+	fs.symlinkSync(".local-postgres-password", path.join(repositoryRoot, "keys/openai-key"));
+	const configuration = createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments([
+		"--profile",
+		"agent",
+		"--provider-key-file",
+		"keys/openai-key"
+	]), repositoryRoot, {});
+
+	assert.throws(function _loadSymlink()
+	{
+		loadLocalDevelopmentSecrets(configuration, function _fixedBytes() { return Buffer.alloc(32, 5); });
+	}, /must not be a symbolic link/);
+});
+
+test("Alternative A rejects a provider key equal to its PostgreSQL password", function _providerDatabaseCredentialReuse(t)
+{
+	const repositoryRoot = _temporaryRepository();
+	t.after(function _cleanup() { fs.rmSync(repositoryRoot, { recursive: true, force: true }); });
+	const repeatedBytes = Buffer.alloc(32, 6);
+	const postgresPassword = `local-postgres-${repeatedBytes.toString("hex")}`;
+	fs.writeFileSync(path.join(repositoryRoot, "keys/openai-key"), `${postgresPassword}\n`, { mode: 0o600 });
+	const configuration = createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments([
+		"--profile",
+		"agent",
+		"--provider-key-file",
+		"keys/openai-key"
+	]), repositoryRoot, {});
+
+	assert.throws(function _loadReusedCredential()
+	{
+		loadLocalDevelopmentSecrets(configuration, function _fixedBytes() { return repeatedBytes; });
+	}, /must be different secrets/);
+	assert.equal(fs.existsSync(configuration.localLiteLLMMasterKeyPath), false);
+});
+
+test("Alternative A rejects a LiteLLM master key equal to its PostgreSQL password", function _masterDatabaseCredentialReuse(t)
+{
+	const repositoryRoot = _temporaryRepository();
+	t.after(function _cleanup() { fs.rmSync(repositoryRoot, { recursive: true, force: true }); });
+	const repeatedBytes = Buffer.alloc(32, 8);
+	const postgresPassword = `local-postgres-${repeatedBytes.toString("hex")}`;
+	fs.writeFileSync(path.join(repositoryRoot, "keys/.openai-key"), "provider-secret\n", { mode: 0o600 });
+	fs.writeFileSync(path.join(repositoryRoot, "keys/.litellm-master-key"), `${postgresPassword}\n`, { mode: 0o600 });
+	const configuration = createLocalDevelopmentConfiguration(parseLocalDevelopmentArguments(["--profile", "agent"]), repositoryRoot, {});
+
+	assert.throws(function _loadReusedCredential()
+	{
+		loadLocalDevelopmentSecrets(configuration, function _fixedBytes() { return repeatedBytes; });
+	}, /must be different secrets/);
 });
 
 test("Alternative B never falls back to the local generated master key", function _remoteSecrets(t)
