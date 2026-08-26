@@ -204,15 +204,15 @@ test("the browser proxy aborts WebSocket handshakes during shutdown", { timeout:
 	await _Close(upstream);
 });
 
-test("the devcontainer and CI share the complete pinned Tier 3 toolchain", function _pinsTools()
+test("the devcontainer enforces the Tier 3 minimum and shares the pinned CI toolchain", function _pinsTools()
 {
 	const devcontainer = JSON.parse(fs.readFileSync(new URL("../../.devcontainer/devcontainer.json", import.meta.url), "utf8"));
 	const dockerfile = fs.readFileSync(new URL("../../.devcontainer/Dockerfile", import.meta.url), "utf8");
 	const workflow = fs.readFileSync(new URL("../../.github/workflows/docker.yml", import.meta.url), "utf8");
 
-	assert.equal(devcontainer.hostRequirements.cpus, 8);
-	assert.equal(devcontainer.hostRequirements.memory, "32gb");
-	assert.equal(devcontainer.hostRequirements.storage, "64gb");
+	assert.equal(devcontainer.hostRequirements.cpus, 4);
+	assert.equal(devcontainer.hostRequirements.memory, "16gb");
+	assert.equal(devcontainer.hostRequirements.storage, "32gb");
 	assert.ok(devcontainer.features["ghcr.io/devcontainers/features/docker-in-docker:4.1.0"]);
 	assert.match(dockerfile, /javascript-node:5\.0\.2-24-bookworm/u);
 	assert.match(dockerfile, /HELM_VERSION=v4\.1\.4/u);

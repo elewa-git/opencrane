@@ -7,7 +7,7 @@ up only when the work crosses that tier's boundary.
 | --- | --- | --- | --- |
 | 1 | Routed UI, browser state, components, and deterministic failures | `npm run serve:opencrane-ui` | Any Node development machine |
 | 2 | Real API, PostgreSQL persistence, run admission, and local Agent execution | `npm run dev:tier2` | A machine with Docker and 4–6 GB free memory |
-| 3 | Helm, Kubernetes identity, NetworkPolicy, migrations, and the full silo | `npm run dev:tier3` | An 8-core, 32 GB, 64 GB GitHub Codespace |
+| 3 | Helm, Kubernetes identity, NetworkPolicy, migrations, and the full silo | `npm run dev:tier3` | Minimum: 4 cores, 16 GB memory, 32 GB storage; recommended: 8 cores, 32 GB memory, 64 GB storage |
 
 ## Tier 1: browser-only frontend
 
@@ -53,9 +53,11 @@ the smoke finishes.
 
 Open the repository in its devcontainer, preferably in a GitHub Codespace. The image uses native
 Linux amd64 and installs the versions used by the smoke job: Node 24, Helm v4.1.4, k3d v5.8.3, and
-kubectl v1.30.10. Docker runs inside the container. The configuration asks Codespaces for 8 cores,
-32 GB of memory, and 64 GB of storage, leaving headroom over the full silo's approximate 6-CPU,
-10–12-GB memory, and 25–30-GB storage requirement.
+kubectl v1.30.10. Docker runs inside the container. The configuration enforces a minimum of 4 cores,
+16 GB of memory, and 32 GB of storage so Codespaces can offer smaller machines. The full silo uses
+approximately 6 CPUs, 10–12 GB of memory, and 25–30 GB of storage, so 4-core machines may be slower
+and the 32-GB disk leaves little room for image and build-cache growth. Use the recommended 8-core,
+32-GB-memory, 64-GB-storage machine for full qualification and repeated builds.
 
 ```bash
 npm run dev:tier3

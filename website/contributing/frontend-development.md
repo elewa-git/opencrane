@@ -162,10 +162,13 @@ npm run dev:tier3
 ```
 
 The devcontainer uses Docker-in-Docker and pins the smoke toolchain to Node 24, Helm v4.1.4, k3d
-v5.8.3, and kubectl v1.30.10. It requests an 8-core, 32 GB, 64 GB Codespace because the full image
-and cluster set is intentionally much heavier than Tier 2. Its `npm ci` creation step can be baked
-into a repository Codespaces prebuild; enabling that prebuild remains a repository setting and uses
-Actions minutes and storage.
+v5.8.3, and kubectl v1.30.10. It enforces a 4-core, 16 GB memory, 32 GB storage minimum so Codespaces
+can offer smaller machines. The full image and cluster set uses approximately 6 CPUs, 10–12 GB of
+memory, and 25–30 GB of storage, so 4-core machines may be slower and the minimum disk leaves little
+room for image and build-cache growth. Use the recommended 8-core, 32 GB memory, 64 GB storage machine
+for full qualification and repeated builds. The `npm ci` creation step can be baked into a repository
+Codespaces prebuild; enabling that prebuild remains a repository setting and uses Actions minutes and
+storage.
 
 The command runs the same current-silo smoke that protects `develop`, with full storage
 qualification and `KEEP_CLUSTER=1`. It therefore builds the affected images, installs the pinned
