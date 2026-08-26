@@ -63,7 +63,7 @@ export class _WorkflowTaskDeclarationRegistry
 	}
 
 	/**
-	 * Validate and retain one declaration without installing an SDK handler.
+	 * Validates and retains one declaration without installing an SDK handler.
 	 * @param declaration - Task name and retry policy allowed into transactional admission.
 	 * @throws WorkflowError when the name, retry policy, or reviewed queue is invalid or conflicts.
 	 */

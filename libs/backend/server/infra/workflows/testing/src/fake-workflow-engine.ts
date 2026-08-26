@@ -220,6 +220,8 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 			},
 			async spawnChild<TInput>(task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 			{
+				if (!self.definitions.has(task.taskName))
+					throw new WorkflowTaskNotRegisteredError(task.taskName);
 				return self.spawn({ client: undefined }, task);
 			},
 			async awaitChild<TResult>(task: IWorkflowTaskReceipt): Promise<TResult>
