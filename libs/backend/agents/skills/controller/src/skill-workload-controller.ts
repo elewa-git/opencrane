@@ -104,12 +104,12 @@ export async function __ReconcileNextSkillWorkloadRelease(options: SkillWorkload
 		const job = __BuildGovernedSkillWorkloadJob({ jobId: claim.workloadId, siloId: claim.siloId, namespace: profile.namespace, capabilityReference }, profile);
 
 		// 3. Flip suspend from true to false with a compare-and-swap, then record the release against the same claim.
-		await options.kubernetes.__EnsureSkillJobReleased(job, claim.workloadUid, claim.expiresAt);
+		await options.kubernetes.releaseJob(job, claim.workloadUid, claim.expiresAt);
 		const released = await options.authority.__CommitRelease(claim.workloadId, { releaseClaimedAt: claim.releaseClaimedAt, releaseDeliveryCount: claim.releaseDeliveryCount, workloadUid: claim.workloadUid }, signal);
 		if (released === "conflict") throw new Error("governed skill workload release lost its database claim fence");
 
 		// 4. Record the first Pod this Job owns. A worker cannot trade its bootstrap reference until that Pod is recorded.
-		const pod = await options.kubernetes.__FindFirstSkillWorkloadPod(job, claim.workloadUid, profile.serviceAccountName);
+		const pod = await options.kubernetes.findFirstPod(job, claim.workloadUid, profile.serviceAccountName);
 		if (pod === null) return { outcome: SkillWorkloadControllerReconcileOutcomes.PendingPod, workloadId: claim.workloadId, workloadUid: claim.workloadUid };
 		const podUid = _RequirePodUid(pod.metadata?.uid);
 		const registered = await options.authority.__RegisterFirstPod(claim.workloadId, { releaseClaimedAt: claim.releaseClaimedAt, releaseDeliveryCount: claim.releaseDeliveryCount, workloadUid: claim.workloadUid, podUid }, signal);
@@ -134,7 +134,7 @@ export async function __ReconcileNextSkillWorkload(options: SkillWorkloadControl
 		const job = __BuildGovernedSkillWorkloadJob({ jobId: claim.workloadId, siloId: claim.siloId, namespace: profile.namespace, capabilityReference }, profile);
 
 		// 3. Create the suspended Job, or adopt an identical one that already exists, and use only the UID Kubernetes returned.
-		const persistedJob = await options.kubernetes.__EnsureSuspendedJob(job);
+		const persistedJob = await options.kubernetes.ensureSuspendedJob(job);
 		const workloadUid = _RequireWorkloadUid(persistedJob.metadata?.uid);
 
 		// 4. Write the assignment back against the same claim, so an out-of-date controller replica cannot assign this Job.

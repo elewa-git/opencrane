@@ -9,6 +9,7 @@ without deciding what the workload runs.
 | Package | What it owns |
 | --- | --- |
 | [contract](./contract/README.md) | The shared claim and binding records for OCI-backed MCP workloads. |
+| [Kubernetes controller](./k8s-controller/README.md) | Exact suspended Job adoption, UID-fenced release, and first-Pod checks. |
 
 ```text
 server-owned workload record
@@ -26,4 +27,4 @@ facts belong to the MCP or skill executor after its own admission checks.
 ## See also
 
 - Parent: [runtime](../README.md)
-- Child: [contract](./contract/README.md)
+- Children: [contract](./contract/README.md) · [Kubernetes controller](./k8s-controller/README.md)
