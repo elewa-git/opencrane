@@ -9,6 +9,7 @@ even after a process restart.
 | Child | Purpose |
 | --- | --- |
 | [contract](contract/README.md) | Names the saved task and the small, safe input and result shared by the server and controller. |
+| [main](main/README.md) | Admits or reuses the task and binds its receipt through one caller-owned database transaction. |
 
 ```text
  future AgentRun attempt workflow
@@ -19,7 +20,7 @@ even after a process restart.
  └───────────────────────────────────────────┘
                  │ registered handler
                  ▼
-          future controller handler runs the attempt
+  future admission rule saves the task, then a controller handler runs the attempt
 ```
 
 The declaration carries only the task name, silo ID, run ID, attempt number, retry rule, and result
