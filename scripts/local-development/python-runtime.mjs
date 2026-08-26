@@ -11,11 +11,11 @@ function _RequirementsDigest(requirementsPath)
 	return crypto.createHash("sha256").update(fs.readFileSync(requirementsPath)).digest("hex");
 }
 
-function _CanImportRuntimeDependencies(pythonExecutable, runCommand)
+async function _CanImportRuntimeDependencies(pythonExecutable, runCommand, signal)
 {
 	try
 	{
-		runCommand(pythonExecutable, ["-B", "-c", _RUNTIME_IMPORT_CHECK]);
+		await runCommand(pythonExecutable, ["-B", "-c", _RUNTIME_IMPORT_CHECK], { signal });
 		return true;
 	}
 	catch
@@ -26,9 +26,12 @@ function _CanImportRuntimeDependencies(pythonExecutable, runCommand)
 
 /**
  * Prepares the repository-owned Python environment before Tier 2 mutates local services.
- * Core skips Python; Agent profiles reinstall only when the pinned requirements digest or import check differs.
+ * Core skips Python; Agent profiles run the pinned install only when the requirements digest changed
+ * or the existing environment cannot import the runtime dependencies.
+ *
+ * @throws Rejects when Python setup fails or the session stops.
  */
-export function prepareLocalAgentRuntimeEnvironment(configuration, runCommand = runLocalCommand)
+export async function prepareLocalAgentRuntimeEnvironment(configuration, runCommand = runLocalCommand)
 {
 	if (configuration.profile !== LOCAL_DEVELOPMENT_PROFILES.Agent)
 	{
@@ -37,7 +40,7 @@ export function prepareLocalAgentRuntimeEnvironment(configuration, runCommand = 
 
 	if (!fs.existsSync(configuration.runtimePythonPath))
 	{
-		runCommand("python3", ["-m", "venv", configuration.runtimeVirtualEnvironmentPath], { inherit: true });
+		await runCommand("python3", ["-m", "venv", configuration.runtimeVirtualEnvironmentPath], { inherit: true, signal: configuration.abortSignal });
 	}
 
 	const requirementsDigest = _RequirementsDigest(configuration.runtimeRequirementsPath);
@@ -45,19 +48,19 @@ export function prepareLocalAgentRuntimeEnvironment(configuration, runCommand = 
 		? fs.readFileSync(configuration.runtimeRequirementsStampPath, "utf8").trim()
 		: "";
 
-	if (installedDigest === requirementsDigest && _CanImportRuntimeDependencies(configuration.runtimePythonPath, runCommand))
+	if (installedDigest === requirementsDigest && await _CanImportRuntimeDependencies(configuration.runtimePythonPath, runCommand, configuration.abortSignal))
 	{
 		return;
 	}
 
-	runCommand(configuration.runtimePythonPath, [
+	await runCommand(configuration.runtimePythonPath, [
 		"-m",
 		"pip",
 		"install",
 		"--disable-pip-version-check",
 		"--requirement",
 		configuration.runtimeRequirementsPath
-	], { inherit: true });
-	runCommand(configuration.runtimePythonPath, ["-B", "-c", _RUNTIME_IMPORT_CHECK]);
+	], { inherit: true, signal: configuration.abortSignal });
+	await runCommand(configuration.runtimePythonPath, ["-B", "-c", _RUNTIME_IMPORT_CHECK], { signal: configuration.abortSignal });
 	fs.writeFileSync(configuration.runtimeRequirementsStampPath, `${requirementsDigest}\n`, { mode: 0o600 });
 }

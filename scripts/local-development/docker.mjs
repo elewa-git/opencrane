@@ -6,16 +6,18 @@ export { removeOwnedContainer, resetLocalDevelopmentContainers, startLocalLiteLL
 export { applyTargetBaseline, ensureLocalLiteLLMDatabase, startLocalPostgres } from "./postgres.mjs";
 
 /**
- * Checks the host tools and repository inputs required before the coordinator mutates local state.
+ * Checks the host tools and repository inputs before the coordinator creates credentials or containers.
  * Agent profiles also require the pinned Python dependency list used to prepare their runtime.
+ *
+ * @throws Rejects when a required command or repository input is unavailable, or the session stops.
  */
-export function validateLocalDevelopmentTools(configuration)
+export async function validateLocalDevelopmentTools(configuration)
 {
 	const commands = ["docker", "npm", "npx"];
 
 	for (const command of commands)
 	{
-		runLocalCommand(command, ["--version"]);
+		await runLocalCommand(command, ["--version"], { signal: configuration.abortSignal });
 	}
 
 	const requiredFiles = [configuration.baselinePath, configuration.seedPath];

@@ -6,7 +6,7 @@ import test from "node:test";
 
 import { prepareLocalAgentRuntimeEnvironment } from "../local-development/python-runtime.mjs";
 
-test("Agent profiles create and reuse a repository-owned runtime environment", function _PrepareRuntime(t)
+test("Agent profiles create and reuse a repository-owned runtime environment", async function _PrepareRuntime(t)
 {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), "opencrane-runtime-python-"));
 	t.after(function _Cleanup() { fs.rmSync(root, { recursive: true, force: true }); });
@@ -40,18 +40,18 @@ test("Agent profiles create and reuse a repository-owned runtime environment", f
 		}
 	};
 
-	prepareLocalAgentRuntimeEnvironment(configuration, runCommand);
+	await prepareLocalAgentRuntimeEnvironment(configuration, runCommand);
 	assert.equal(calls.some(call => call.includes("venv")), true);
 	assert.equal(calls.some(call => call.includes("pip")), true);
 	const firstCallCount = calls.length;
-	prepareLocalAgentRuntimeEnvironment(configuration, runCommand);
+	await prepareLocalAgentRuntimeEnvironment(configuration, runCommand);
 	assert.equal(calls.length, firstCallCount + 1);
 });
 
-test("core does not prepare a Python runtime", function _SkipCore()
+test("core does not prepare a Python runtime", async function _SkipCore()
 {
 	let called = false;
-	prepareLocalAgentRuntimeEnvironment({ profile: "core" }, function _UnexpectedCommand()
+	await prepareLocalAgentRuntimeEnvironment({ profile: "core" }, function _UnexpectedCommand()
 	{
 		called = true;
 	});

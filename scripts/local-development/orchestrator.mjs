@@ -19,6 +19,7 @@ const _OPERATIONS = {
 	ensureLocalLiteLLMDatabase,
 	loadLocalDevelopmentSecrets,
 	prepareLocalAgentRuntimeEnvironment,
+	processHost: process,
 	releaseLocalDevelopmentLock,
 	removeOwnedContainer,
 	removeDisposableDevelopmentCredentials,
@@ -38,11 +39,17 @@ const _OPERATIONS = {
 };
 
 /**
- * Run one Tier 2 composition and release every resource owned by this coordinator.
+ * Runs one Tier 2 composition and releases every resource owned by this coordinator.
+ * Interrupt, termination, and terminal-suspend requests cancel setup or child processes before the
+ * `finally` path stops containers, removes temporary credentials, and releases the session lock.
+ * A terminal-suspend request first resumes the process group because stopped children cannot finish
+ * graceful termination.
  *
  * Called by: `scripts/local-development.mjs` after parsing and validating CLI configuration.
  * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Selected core or Agent composition.
  * @param {Partial<typeof _OPERATIONS>} operationOverrides - Offline seams for orchestration contract tests.
+ * @returns {Promise<void>} Resolves after a requested shutdown finishes cleanup.
+ * @throws Rejects with setup and child-process failures after attempting the same cleanup.
  */
 export async function runLocalDevelopmentSession(configuration, operationOverrides = {})
 {
@@ -50,53 +57,105 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		..._OPERATIONS,
 		...operationOverrides
 	};
-	const lock = operations.acquireLocalDevelopmentLock(configuration.repositoryRoot);
+	const shutdownController = new AbortController();
+	const shutdownReason = new Error("Tier 2 local development stopped");
+	let lock;
 	let secrets;
 	let developmentCredentials;
 	let postgresStarted = false;
 	let liteLLMStarted = false;
 
+	function _requestShutdown()
+	{
+		shutdownController.abort(shutdownReason);
+	}
+
+	function _resumeAndShutdown()
+	{
+		try
+		{
+			if (operations.processHost.platform !== "win32")
+			{
+				operations.processHost.kill(0, "SIGCONT");
+			}
+		}
+		finally
+		{
+			_requestShutdown();
+		}
+	}
+
+	operations.processHost.once("SIGINT", _requestShutdown);
+	operations.processHost.once("SIGTERM", _requestShutdown);
+	operations.processHost.once("SIGTSTP", _resumeAndShutdown);
+
 	try
 	{
-		operations.validateLocalDevelopmentTools(configuration);
+		lock = operations.acquireLocalDevelopmentLock(configuration.repositoryRoot);
+		const sessionConfiguration = {
+			...configuration,
+			abortSignal: shutdownController.signal
+		};
+		await operations.validateLocalDevelopmentTools(sessionConfiguration);
+		shutdownController.signal.throwIfAborted();
+		secrets = operations.loadLocalDevelopmentSecrets(sessionConfiguration);
+		shutdownController.signal.throwIfAborted();
 
-		if (configuration.profile === LOCAL_DEVELOPMENT_PROFILES.Agent)
+		// The coordinator validates remote inputs before Python setup so a bad endpoint or key cannot trigger dependency downloads.
+		if (sessionConfiguration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.RemoteLiteLLM)
 		{
-			operations.prepareLocalAgentRuntimeEnvironment(configuration);
+			await operations.validateLiteLLMModelEndpoint(sessionConfiguration.remoteLiteLLMEndpoint, secrets.liteLLMMasterKey, undefined, shutdownController.signal);
+			shutdownController.signal.throwIfAborted();
 		}
 
-		secrets = operations.loadLocalDevelopmentSecrets(configuration);
-		developmentCredentials = operations.createDisposableDevelopmentCredentials(configuration.profile === LOCAL_DEVELOPMENT_PROFILES.Agent);
-
-		if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.RemoteLiteLLM)
+		if (sessionConfiguration.profile === LOCAL_DEVELOPMENT_PROFILES.Agent)
 		{
-			await operations.validateLiteLLMModelEndpoint(configuration.remoteLiteLLMEndpoint, secrets.liteLLMMasterKey);
+			await operations.prepareLocalAgentRuntimeEnvironment(sessionConfiguration);
+			shutdownController.signal.throwIfAborted();
 		}
 
-		if (configuration.reset)
+		developmentCredentials = operations.createDisposableDevelopmentCredentials(sessionConfiguration.profile === LOCAL_DEVELOPMENT_PROFILES.Agent);
+		shutdownController.signal.throwIfAborted();
+
+		if (sessionConfiguration.reset)
 		{
-			operations.resetLocalDevelopmentContainers(configuration);
+			await operations.resetLocalDevelopmentContainers(sessionConfiguration);
+			shutdownController.signal.throwIfAborted();
 		}
 
-		operations.writeStatus(`Starting Tier 2 profile ${configuration.developmentProfile}\n`);
-		postgresStarted = await operations.startLocalPostgres(configuration, secrets);
-		operations.applyTargetBaseline(configuration);
+		operations.writeStatus(`Starting Tier 2 profile ${sessionConfiguration.developmentProfile}\n`);
+		postgresStarted = await operations.startLocalPostgres(sessionConfiguration, secrets);
+		shutdownController.signal.throwIfAborted();
+		await operations.applyTargetBaseline(sessionConfiguration);
+		shutdownController.signal.throwIfAborted();
 
-		const applicationEnvironment = operations.createApplicationEnvironment(configuration, secrets, developmentCredentials);
-		operations.runLocalCommandSpecification(operations.createDevelopmentSeedCommand(applicationEnvironment), {
-			cwd: configuration.repositoryRoot,
-			inherit: true
+		const applicationEnvironment = operations.createApplicationEnvironment(sessionConfiguration, secrets, developmentCredentials);
+		await operations.runLocalCommandSpecification(operations.createDevelopmentSeedCommand(applicationEnvironment), {
+			cwd: sessionConfiguration.repositoryRoot,
+			inherit: true,
+			signal: shutdownController.signal
 		});
+		shutdownController.signal.throwIfAborted();
 
-		if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
+		if (sessionConfiguration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
 		{
-			operations.ensureLocalLiteLLMDatabase(configuration);
-			liteLLMStarted = await operations.startLocalLiteLLM(configuration, secrets);
-			await operations.waitForLiteLLMModelEndpoint(`http://127.0.0.1:${configuration.liteLLMPort}`, secrets.liteLLMMasterKey);
+			await operations.ensureLocalLiteLLMDatabase(sessionConfiguration);
+			shutdownController.signal.throwIfAborted();
+			liteLLMStarted = await operations.startLocalLiteLLM(sessionConfiguration, secrets);
+			shutdownController.signal.throwIfAborted();
+			await operations.waitForLiteLLMModelEndpoint(`http://127.0.0.1:${sessionConfiguration.liteLLMPort}`, secrets.liteLLMMasterKey, undefined, shutdownController.signal);
+			shutdownController.signal.throwIfAborted();
 		}
 
-		const commands = operations.createApplicationCommands(configuration, applicationEnvironment);
-		await operations.runDevelopmentProcesses(commands, configuration.repositoryRoot);
+		const commands = operations.createApplicationCommands(sessionConfiguration, applicationEnvironment);
+		await operations.runDevelopmentProcesses(commands, sessionConfiguration.repositoryRoot, { signal: shutdownController.signal });
+	}
+	catch (error)
+	{
+		if (error !== shutdownReason)
+		{
+			throw error;
+		}
 	}
 	finally
 	{
@@ -104,12 +163,12 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		{
 			if (liteLLMStarted)
 			{
-				operations.removeOwnedContainer(configuration.liteLLMContainerName);
+				await operations.removeOwnedContainer(configuration.liteLLMContainerName);
 			}
 
 			if (postgresStarted)
 			{
-				operations.stopOwnedContainer(configuration.postgresContainerName);
+				await operations.stopOwnedContainer(configuration.postgresContainerName);
 			}
 		}
 		finally
@@ -123,7 +182,19 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 			}
 			finally
 			{
-				operations.releaseLocalDevelopmentLock(lock);
+				try
+				{
+					if (lock)
+					{
+						operations.releaseLocalDevelopmentLock(lock);
+					}
+				}
+				finally
+				{
+					operations.processHost.removeListener("SIGINT", _requestShutdown);
+					operations.processHost.removeListener("SIGTERM", _requestShutdown);
+					operations.processHost.removeListener("SIGTSTP", _resumeAndShutdown);
+				}
 			}
 		}
 	}

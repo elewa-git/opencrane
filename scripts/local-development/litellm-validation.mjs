@@ -1,8 +1,11 @@
 /**
  * Confirms an authenticated LiteLLM endpoint exposes the `auto` alias expected by seeded revisions.
- * @throws When the endpoint is unreachable, refuses the key, returns invalid JSON, or omits the alias.
+ * A session shutdown interrupts the request instead of making the coordinator wait for its timeout.
+ *
+ * @throws Rejects when the session stops, the endpoint is unreachable, refuses the key, returns invalid JSON, or omits the alias.
+ * @see https://docs.litellm.ai/docs/proxy/model_management for LiteLLM's `GET /model/info` response.
  */
-export async function validateLiteLLMModelEndpoint(endpoint, masterKey, fetchImplementation = fetch)
+export async function validateLiteLLMModelEndpoint(endpoint, masterKey, fetchImplementation = fetch, signal)
 {
 	let response;
 
@@ -10,11 +13,16 @@ export async function validateLiteLLMModelEndpoint(endpoint, masterKey, fetchImp
 	{
 		response = await fetchImplementation(`${endpoint}/model/info`, {
 			headers: { authorization: `Bearer ${masterKey}` },
-			signal: AbortSignal.timeout(10_000)
+			signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000)
 		});
 	}
-	catch
+	catch (error)
 	{
+		if (signal?.aborted)
+		{
+			throw signal.reason;
+		}
+
 		throw new Error("LiteLLM model validation could not reach the configured endpoint");
 	}
 
@@ -43,8 +51,11 @@ export async function validateLiteLLMModelEndpoint(endpoint, masterKey, fetchImp
 	}
 }
 
-/** Waits up to 30 seconds for Alternative A's newly started LiteLLM endpoint to expose `auto`. */
-export async function waitForLiteLLMModelEndpoint(endpoint, masterKey, fetchImplementation = fetch)
+/**
+ * Waits up to 30 seconds for Alternative A's newly started LiteLLM endpoint to expose `auto`.
+ * A shutdown stops retries immediately so container cleanup can begin.
+ */
+export async function waitForLiteLLMModelEndpoint(endpoint, masterKey, fetchImplementation = fetch, signal)
 {
 	let failure;
 
@@ -52,11 +63,16 @@ export async function waitForLiteLLMModelEndpoint(endpoint, masterKey, fetchImpl
 	{
 		try
 		{
-			await validateLiteLLMModelEndpoint(endpoint, masterKey, fetchImplementation);
+			await validateLiteLLMModelEndpoint(endpoint, masterKey, fetchImplementation, signal);
 			return;
 		}
 		catch (error)
 		{
+			if (signal?.aborted)
+			{
+				throw signal.reason;
+			}
+
 			failure = error;
 		}
 
