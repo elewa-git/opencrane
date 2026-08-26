@@ -69,20 +69,19 @@ version tracks the OpenCrane wrapper; its `appVersion` remains the pinned Postgr
 
 ## Database migrations
 
-The clean target baseline remains the fresh-install authority. A schema change also adds an adjacent,
-reviewed SQL transition under `apps/opencrane/prisma/migrations/<from>-to-<to>/`, where `from` is the
-database schema version in the previous repository manifest, not merely the previous repository
-version. Its manifest binds source version, target version, SQL digest, owner, and rollback mode. The
-migration must:
+The clean target baseline remains the fresh-install authority. Prisma Migrate is the only upgrade
+ledger. A schema change adds the next reviewed directory under
+`apps/opencrane/prisma/prisma-migrations/`; do not add a second version-pair SQL manifest. The
+directory name starts with a sortable UTC timestamp and ends with a short description. Prisma stores
+the applied name and checksum in `_prisma_migrations`.
 
-1. acquire the migration advisory lock;
-2. run transactionally; and
-3. update schema history only after success.
+The server never migrates on startup. `apps/opencrane-prisma-migrator` packages the schema and Prisma
+ledger, and `apps/postgres` owns the bounded Job that runs `prisma migrate deploy` from that immutable
+image. A failed migration is repaired forward. It does not require a backup, separate schema version
+check, write pause, or automatic recovery. Issue #699 tracks those deferred hardening controls.
 
-The server never migrates on startup. `apps/postgres` owns the bounded migration Job; the deployment
-owner runs it as a direct migration Job. A failed migration is repaired forward; it does not require
-a backup, schema check, write pause, or automatic recovery. Issue #699 tracks the deferred hardening
-work.
+Released migration history stays where it was published. The 0.10.0 cutover starts the Prisma ledger
+from the released 0.9.3 database and moves forward; it does not rewrite older release artifacts.
 
 ## Required gate
 
