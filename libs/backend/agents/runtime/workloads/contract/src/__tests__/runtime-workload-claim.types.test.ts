@@ -30,8 +30,9 @@ describe("runtime workload claim contract", function _DescribeRuntimeWorkloadCla
 		expect(binding.firstPodUid).toBeUndefined();
 	});
 
-	it("names PDF preprocessing as a distinct executor class", function _ArtifactPreprocess()
+	it("keeps the planned AgentRun and PDF preprocessing classes distinct", function _UsesDistinctRuntimeClasses()
 	{
+		expect(RuntimeWorkloadClaimClasses.WarmRuntime).toBe("warm-runtime");
 		expect(RuntimeWorkloadClaimClasses.ArtifactPreprocess).toBe("artifact-preprocess");
 	});
 });

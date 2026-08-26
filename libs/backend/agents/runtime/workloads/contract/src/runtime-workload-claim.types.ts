@@ -8,6 +8,8 @@
  */
 export enum RuntimeWorkloadClaimClasses
 {
+	/** The planned AgentRun migration will bind this claim to a fixed warm-runtime profile, never an uploaded OCI image. */
+	WarmRuntime = "warm-runtime",
 	/** The claim runs an admitted MCP server, so its controller must use the MCP-specific executor projection. */
 	McpExecutor = "mcp-executor",
 	/** The claim validates a saved Draft Python skill, so its controller must use the skill-validation projection. */

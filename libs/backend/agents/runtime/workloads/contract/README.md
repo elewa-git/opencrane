@@ -21,10 +21,12 @@ server approves a workload class + profile
 class-specific executor reports its binding
 ```
 
-**In this flow:** the future MCP executor will prove an already-imported immutable image before it
-creates an `mcp-executor` claim. The planned [skill validation controller migration](../../../skills/controller/README.md)
-will map a saved validation to `skill-authoring-validation`. Neither caller can select a profile,
-container image, or Kubernetes Job through this package.
+**In this flow:** the planned AgentRun migration will use `warm-runtime`, a fixed agent profile that
+cannot run an uploaded OCI (Open Container Initiative) image. The future MCP executor will prove an
+already-imported immutable image before it creates an `mcp-executor` claim. The planned
+[skill validation controller migration](../../../skills/controller/README.md) will map a saved
+validation to `skill-authoring-validation`. Neither caller can select a profile, container image,
+or Kubernetes Job through this package.
 
 The contract is deliberately small. If it were to carry image details or a Job shape, it would turn
 an approved claim into a second admission path. If it were to carry database state, it would make a
