@@ -13,6 +13,7 @@ root version in the same slice. Documentation-only changes do not advance an app
 | App | Responsibility |
 | --- | --- |
 | [`apps/opencrane`](../../apps/opencrane/README.md) | Authenticated REST API, durable product authority, process composition, Prisma, and the server Helm unit. |
+| [`apps/opencrane-prisma-migrator`](../../apps/opencrane-prisma-migrator/README.md) | Dedicated Prisma Migrate image for the forward 0.10.0 database cutover. |
 | [`apps/opencrane-ui`](../../apps/opencrane-ui/README.md) | Angular web client for organisation and employee surfaces. |
 | [`apps/channel-proxy`](../../apps/channel-proxy/README.md) | Inbound channel authentication and routing boundary. |
 | [`apps/memory-gateway`](../../apps/memory-gateway/README.md) | Private Cognee transport boundary that TokenReviews the server identity. |
