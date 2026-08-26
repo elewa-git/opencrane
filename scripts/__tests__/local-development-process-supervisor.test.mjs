@@ -121,3 +121,204 @@ test("an active setup command terminates when the session shutdown signal aborts
 	await assert.rejects(command, shutdownReason);
 	assert.deepEqual(childSignals, ["SIGTERM"]);
 });
+
+test("an aborted setup command force-stops descendants after its wrapper closes", async function _AbortSetupTree()
+{
+	const shutdownController = new AbortController();
+	const processHost = new EventEmitter();
+	const processSignals = [];
+	let groupAlive = true;
+	processHost.env = { PATH: "/usr/bin" };
+	processHost.platform = "darwin";
+	processHost.kill = function _SignalProcessGroup(processId, signal)
+	{
+		if (signal === 0)
+		{
+			return;
+		}
+
+		processSignals.push({ processId, signal });
+
+		if (signal === "SIGKILL")
+		{
+			groupAlive = false;
+		}
+	};
+	const child = new EventEmitter();
+	child.pid = 411;
+	child.stdin = new PassThrough();
+	child.stdout = new PassThrough();
+	child.stderr = new PassThrough();
+	child.kill = function _UnexpectedDirectSignal() { throw new Error("setup command must be signalled through its process group"); };
+	const command = runLocalCommand("npm", ["run", "db:seed-tier2"], {
+		processHost,
+		shutdownGraceMilliseconds: 0,
+		signal: shutdownController.signal,
+		spawnProcess() { return child; }
+	});
+
+	shutdownController.abort(new Error("session stopped"));
+	queueMicrotask(function _CloseWrapper() { child.emit("close", null, "SIGTERM"); });
+	await assert.rejects(command, /session stopped/);
+
+	assert.equal(groupAlive, false);
+	assert.deepEqual(processSignals, [
+		{ processId: -411, signal: "SIGTERM" },
+		{ processId: -411, signal: "SIGKILL" }
+	]);
+});
+
+test("coordinated processes use isolated groups that one shutdown signal terminates", async function _IsolatedProcessGroup()
+{
+	const shutdownController = new AbortController();
+	const processHost = new EventEmitter();
+	const processSignals = [];
+	let spawnOptions;
+	processHost.env = { PATH: "/usr/bin" };
+	processHost.platform = "darwin";
+	const child = new EventEmitter();
+	child.pid = 321;
+	let groupAlive = true;
+	child.kill = function _UnexpectedDirectSignal() { throw new Error("isolated child must be signalled through its process group"); };
+	processHost.kill = function _SignalProcessGroup(processId, signal)
+	{
+		if (signal === 0)
+		{
+			if (!groupAlive)
+			{
+				const error = new Error("group exited");
+				error.code = "ESRCH";
+				throw error;
+			}
+
+			return;
+		}
+
+		processSignals.push({ processId, signal });
+
+		if (signal === "SIGTERM")
+		{
+			groupAlive = false;
+			queueMicrotask(function _CloseChild() { child.emit("close", 0, signal); });
+		}
+	};
+	const session = runDevelopmentProcesses([{
+		name: "opencrane-ui",
+		command: "npx",
+		arguments: ["nx", "serve", "opencrane-ui"],
+		environment: {}
+	}], "/repo", {
+		processHost,
+		signal: shutdownController.signal,
+		spawnProcess(_command, _arguments, options) { spawnOptions = options; return child; }
+	});
+
+	shutdownController.abort();
+	await session;
+
+	assert.equal(spawnOptions.detached, true);
+	assert.deepEqual(processSignals, [{ processId: -321, signal: "SIGTERM" }]);
+});
+
+test("a descendant that outlives its wrapper receives the forced group stop", async function _ForceDescendantStop()
+{
+	const shutdownController = new AbortController();
+	const processHost = new EventEmitter();
+	const processSignals = [];
+	let groupAlive = true;
+	processHost.env = { PATH: "/usr/bin" };
+	processHost.platform = "darwin";
+	const child = new EventEmitter();
+	child.pid = 512;
+	child.kill = function _UnexpectedDirectSignal() { throw new Error("isolated child must be signalled through its process group"); };
+	processHost.kill = function _SignalProcessGroup(processId, signal)
+	{
+		if (signal === 0)
+		{
+			if (!groupAlive)
+			{
+				const error = new Error("group exited");
+				error.code = "ESRCH";
+				throw error;
+			}
+
+			return;
+		}
+
+		processSignals.push({ processId, signal });
+
+		if (signal === "SIGTERM")
+		{
+			queueMicrotask(function _CloseWrapper() { child.emit("close", 0, signal); });
+		}
+
+		if (signal === "SIGKILL")
+		{
+			groupAlive = false;
+		}
+	};
+	const session = runDevelopmentProcesses([{
+		name: "agent-controller",
+		command: "npx",
+		arguments: ["nx", "run", "agent-controller:dev-tier2"],
+		environment: {}
+	}], "/repo", {
+		processHost,
+		shutdownGraceMilliseconds: 0,
+		signal: shutdownController.signal,
+		spawnProcess() { return child; }
+	});
+
+	shutdownController.abort();
+	await session;
+
+	assert.equal(groupAlive, false);
+	assert.deepEqual(processSignals, [
+		{ processId: -512, signal: "SIGTERM" },
+		{ processId: -512, signal: "SIGKILL" }
+	]);
+});
+
+test("an early wrapper failure still terminates descendants in its process group", async function _EarlyWrapperFailure()
+{
+	const processHost = new EventEmitter();
+	const processSignals = [];
+	let groupAlive = true;
+	processHost.env = { PATH: "/usr/bin" };
+	processHost.platform = "darwin";
+	const child = new EventEmitter();
+	child.pid = 613;
+	child.kill = function _UnexpectedDirectSignal() { throw new Error("isolated child must be signalled through its process group"); };
+	processHost.kill = function _SignalProcessGroup(processId, signal)
+	{
+		if (signal === 0)
+		{
+			if (!groupAlive)
+			{
+				const error = new Error("group exited");
+				error.code = "ESRCH";
+				throw error;
+			}
+
+			return;
+		}
+
+		processSignals.push({ processId, signal });
+		groupAlive = false;
+	};
+	const session = runDevelopmentProcesses([{
+		name: "opencrane-ui",
+		command: "npx",
+		arguments: ["nx", "serve", "opencrane-ui"],
+		environment: {}
+	}], "/repo", {
+		processHost,
+		spawnProcess() { return child; }
+	});
+
+	child.emit("close", 1, null);
+	await assert.rejects(session, /opencrane-ui exited early/);
+
+	assert.equal(groupAlive, false);
+	assert.deepEqual(processSignals, [{ processId: -613, signal: "SIGTERM" }]);
+});

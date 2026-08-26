@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 
+import { _DevelopmentProcessTreeIsRunning, _SignalDevelopmentProcessTree } from "./process-group.mjs";
 import { createToolchainProcessEnvironment } from "./process-environments.mjs";
 
 /**
@@ -13,12 +14,13 @@ export function createDevelopmentChildEnvironment(parentEnvironment, processEnvi
 
 /**
  * Runs the Tier 2 process group and terminates the remaining children when one exits.
- * Interrupt, termination, and terminal-suspend requests use the same shutdown path so the
- * coordinator can release its lock and owned containers, with a five-second forced-stop fallback.
+ * Each POSIX child has its own process group, so shutdown reaches wrappers and descendants before
+ * the coordinator releases its lock and containers. After the grace period, the supervisor
+ * force-stops any group that is still running.
  *
  * @param {readonly object[]} specifications - Commands that form the selected Tier 2 composition.
  * @param {string} repositoryRoot - Working directory inherited by every child process.
- * @param {{ readonly processHost?: typeof process, readonly signal?: AbortSignal, readonly spawnProcess?: typeof spawn }} operations - Injectable process seams for lifecycle tests.
+ * @param {{ readonly processHost?: typeof process, readonly signal?: AbortSignal, readonly shutdownGraceMilliseconds?: number, readonly spawnProcess?: typeof spawn }} operations - Injectable process APIs and shutdown timing for lifecycle tests.
  * @returns {Promise<void>} Resolves after every child closes during a requested shutdown.
  * @throws Rejects when a child cannot start or exits before shutdown begins.
  */
@@ -27,10 +29,12 @@ export async function runDevelopmentProcesses(specifications, repositoryRoot, op
 	const processHost = operations.processHost ?? process;
 	const spawnProcess = operations.spawnProcess ?? spawn;
 	const shutdownSignal = operations.signal;
+	const shutdownGraceMilliseconds = operations.shutdownGraceMilliseconds ?? 5_000;
 	const children = specifications.map(function _start(specification)
 	{
 		const child = spawnProcess(specification.command, specification.arguments, {
 			cwd: repositoryRoot,
+			detached: processHost.platform !== "win32",
 			env: createDevelopmentChildEnvironment(processHost.env, specification.environment),
 			stdio: "inherit"
 		});
@@ -47,10 +51,17 @@ export async function runDevelopmentProcesses(specifications, repositoryRoot, op
 		let failure;
 		let shuttingDown = false;
 		let forceTimer;
+		let forceSent = false;
+		let terminationTargets = [];
 
 		function _finishWhenClosed()
 		{
 			if (remaining.size !== 0)
+			{
+				return;
+			}
+
+			if (shuttingDown && !forceSent && terminationTargets.some(function _treeRunning(entry) { return _DevelopmentProcessTreeIsRunning(entry.child, processHost); }))
 			{
 				return;
 			}
@@ -80,19 +91,24 @@ export async function runDevelopmentProcesses(specifications, repositoryRoot, op
 
 			shuttingDown = true;
 			failure = reason;
+			terminationTargets = children;
 
-			for (const entry of remaining)
+			for (const entry of terminationTargets)
 			{
-				entry.child.kill("SIGTERM");
+				_SignalDevelopmentProcessTree(entry.child, "SIGTERM", processHost);
 			}
 
 			forceTimer = setTimeout(function _forceShutdown()
 			{
-				for (const entry of remaining)
+				forceSent = true;
+
+				for (const entry of terminationTargets)
 				{
-					entry.child.kill("SIGKILL");
+					_SignalDevelopmentProcessTree(entry.child, "SIGKILL", processHost);
 				}
-			}, 5_000);
+
+				_finishWhenClosed();
+			}, shutdownGraceMilliseconds);
 		}
 
 		function _onInterrupt()

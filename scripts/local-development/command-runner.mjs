@@ -1,24 +1,29 @@
 import { spawn } from "node:child_process";
 
+import { _DevelopmentProcessTreeIsRunning, _SignalDevelopmentProcessTree } from "./process-group.mjs";
 import { createToolchainProcessEnvironment } from "./process-environments.mjs";
 
 /**
- * Runs one setup command asynchronously so the coordinator can still react to a shutdown request.
- * Aborting asks the child to terminate and rejects with the abort reason after the child closes.
+ * Runs a setup command asynchronously so the coordinator can still react to a shutdown request.
+ * On POSIX systems, aborting stops the child's process group and waits for descendants after the
+ * wrapper closes. After the grace period, it force-stops any process that remains so container
+ * cleanup cannot race a setup command that is still running.
  *
  * @param {string} command - Executable name or path.
  * @param {readonly string[]} argumentsList - Arguments passed without shell expansion.
- * @param {{ cwd?: string, environment?: Record<string, string>, input?: string | Buffer, inherit?: boolean, acceptFailure?: boolean, signal?: AbortSignal, spawnProcess?: typeof spawn }} options - Process and failure handling options.
+ * @param {{ cwd?: string, environment?: Record<string, string>, input?: string | Buffer, inherit?: boolean, acceptFailure?: boolean, signal?: AbortSignal, processHost?: typeof process, shutdownGraceMilliseconds?: number, spawnProcess?: typeof spawn }} options - Process, test controls, and failure handling options.
  * @returns {Promise<{ status: number | null, signal: NodeJS.Signals | null, stdout: string, stderr: string }>} Completed process result.
  * @throws Rejects when the process cannot start, is aborted, or exits unsuccessfully without `acceptFailure`.
  */
 export async function runLocalCommand(command, argumentsList, options = {})
 {
 	options.signal?.throwIfAborted();
+	const processHost = options.processHost ?? process;
 	const spawnProcess = options.spawnProcess ?? spawn;
 	const child = spawnProcess(command, argumentsList, {
 		cwd: options.cwd,
-		env: createToolchainProcessEnvironment(process.env, options.environment),
+		detached: processHost.platform !== "win32",
+		env: createToolchainProcessEnvironment(processHost.env, options.environment),
 		stdio: options.inherit ? "inherit" : ["pipe", "pipe", "pipe"]
 	});
 
@@ -27,6 +32,8 @@ export async function runLocalCommand(command, argumentsList, options = {})
 		let stdout = "";
 		let stderr = "";
 		let settled = false;
+		let childClosed = false;
+		let forceSent = false;
 		let forceTimer;
 
 		function _finish(callback)
@@ -44,8 +51,17 @@ export async function runLocalCommand(command, argumentsList, options = {})
 
 		function _onAbort()
 		{
-			child.kill("SIGTERM");
-			forceTimer = setTimeout(function _forceStop() { child.kill("SIGKILL"); }, 5_000);
+			_SignalDevelopmentProcessTree(child, "SIGTERM", processHost);
+			forceTimer = setTimeout(function _forceStop()
+			{
+				forceSent = true;
+				_SignalDevelopmentProcessTree(child, "SIGKILL", processHost);
+
+				if (childClosed)
+				{
+					_finish(function _rejectAbort() { reject(options.signal.reason); });
+				}
+			}, options.shutdownGraceMilliseconds ?? 5_000);
 		}
 
 		if (!options.inherit)
@@ -64,6 +80,13 @@ export async function runLocalCommand(command, argumentsList, options = {})
 		});
 		child.once("close", function _onClose(status, signal)
 		{
+			childClosed = true;
+
+			if (options.signal?.aborted && !forceSent && _DevelopmentProcessTreeIsRunning(child, processHost))
+			{
+				return;
+			}
+
 			_finish(function _completeCommand()
 			{
 				if (options.signal?.aborted)

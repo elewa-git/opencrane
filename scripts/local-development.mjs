@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
+import { fileURLToPath } from "node:url";
+
 import { createLocalDevelopmentConfiguration } from "./local-development/configuration.mjs";
+import { shouldRunLocalDevelopmentWorker, runLocalDevelopmentLauncher } from "./local-development/launcher.mjs";
 import { runLocalDevelopmentSession } from "./local-development/orchestrator.mjs";
 import { parseLocalDevelopmentArguments } from "./local-development/profiles.mjs";
 
@@ -30,9 +33,9 @@ State:
   --reset  Remove only the labelled local PostgreSQL/LiteLLM containers and PostgreSQL volume
 `;
 
-async function _main()
+async function _runWorker(argumentsList)
 {
-	const parsed = parseLocalDevelopmentArguments(process.argv.slice(2));
+	const parsed = parseLocalDevelopmentArguments(argumentsList);
 
 	if (parsed.help)
 	{
@@ -43,6 +46,19 @@ async function _main()
 	const repositoryRoot = process.cwd();
 	const configuration = createLocalDevelopmentConfiguration(parsed, repositoryRoot);
 	await runLocalDevelopmentSession(configuration);
+}
+
+async function _main()
+{
+	const argumentsList = process.argv.slice(2);
+
+	if (shouldRunLocalDevelopmentWorker(process.platform, process.env))
+	{
+		await _runWorker(argumentsList);
+		return;
+	}
+
+	process.exitCode = await runLocalDevelopmentLauncher(argumentsList, fileURLToPath(import.meta.url));
 }
 
 _main().catch(function _reportFailure(error)
