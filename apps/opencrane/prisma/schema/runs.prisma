@@ -39,8 +39,6 @@ enum WorkloadKind {
 
 enum RunOutboxEventKind {
   RunAccepted                 @map("run.accepted")
-  RunAttemptRequested         @map("run.attempt_requested")
-  RunWorkloadReleaseRequested @map("run.workload_release_requested")
   RunWorkloadCleanupRequested @map("run.workload_cleanup_requested")
   RunCancellationRequested    @map("run.cancellation_requested")
   RunResumeRequested          @map("run.resume_requested")
@@ -85,6 +83,7 @@ model AgentRun {
   elicitationRequests      ElicitationRequest[]
   executionReceipts        ActionExecutionReceipt[]
   toolInvocations          ToolInvocation[]
+  workflowTasks            AgentRunWorkflowTask[]
   outboxEvents             OutboxEvent[]
   steeringRequests         RuntimeSteeringRequest[]
   spawnedChildReservations ChildRunReservation[]           @relation("ChildRunReservationParent")
@@ -109,6 +108,31 @@ model AgentRun {
   @@index([conversationId, acceptedAt])
   @@index([rootRunId])
   @@map("agent_runs")
+}
+
+/// One controller workflow task for one AgentRun attempt.
+///
+/// The relation uses only `runId`: AgentRun advances its current attempt after a retry, while this
+/// row keeps the earlier attempt and its task receipt available for replay and cleanup.
+model AgentRunWorkflowTask {
+  runId                String    @map("run_id")
+  attempt              Int
+  siloId               String    @map("silo_id")
+  taskKey              String    @map("task_key")
+  taskName             String    @map("task_name")
+  taskId               String?   @unique @map("task_id")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  receiptBoundAt       DateTime? @map("receipt_bound_at")
+  assignmentExpiresAt DateTime? @map("assignment_expires_at")
+  releaseClaimedAt     DateTime? @map("release_claimed_at")
+  releaseExpiresAt     DateTime? @map("release_expires_at")
+  releaseDeliveryCount Int       @default(0) @map("release_delivery_count")
+  attemptKeyDigest     String?   @map("attempt_key_digest")
+  run                   AgentRun  @relation(fields: [runId], references: [id], onDelete: Restrict)
+
+  @@id([runId, attempt])
+  @@unique([siloId, taskKey])
+  @@map("agent_run_workflow_tasks")
 }
 
 /// Append-only proof that a terminal child was delivered to its direct parent's stream or deliberately suppressed.
