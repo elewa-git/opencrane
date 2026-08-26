@@ -184,6 +184,9 @@
       "@opencrane/backend/agents/runtime/mcp-executor/k8s-launcher": [
         "./libs/backend/agents/runtime/mcp-executor/k8s-launcher/src/index.ts"
       ],
+      "@opencrane/backend/agents/runtime/mcp-executor/protocol": [
+        "./libs/backend/agents/runtime/mcp-executor/protocol/src/index.ts"
+      ],
       "@opencrane/backend/agents/runtime/cleanup": [
         "./libs/backend/agents/runtime/cleanup/main/src/index.ts"
       ],

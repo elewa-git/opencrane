@@ -9,6 +9,7 @@ generic agent runtime Pod, and it does not claim that one fixed warm Pod can run
 | Package | What it owns |
 | --- | --- |
 | [Kubernetes launcher](./k8s-launcher/README.md) | Pure construction of the suspended MCP server and companion Job. |
+| [Protocol](./protocol/README.md) | Strict MCP 2026-07-28 discovery, tool-list, and tool-call messages. |
 
 ```text
 saved MCP claim + imported image digest
@@ -27,3 +28,4 @@ token, calls the server over Pod-local networking, and reports through an authen
 
 - Parent: [runtime](../README.md)
 - Shared claim: [workloads/contract](../workloads/contract/README.md)
+- Protocol: [MCP executor protocol](./protocol/README.md)
