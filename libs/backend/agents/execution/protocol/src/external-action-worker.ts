@@ -91,6 +91,12 @@ export class ExternalActionWorker
 		if (invocation === null) return false;
 		return ___DoWithTrace("external_action.worker.run", { runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, state: invocation.state, recoveryMode: invocation.recoveryMode }, async function _run()
 		{
+			if (invocation.state === ToolInvocationStates.Ready)
+			{
+				const admission = await dependencies.classAdmission.admitInvocation(invocation.id);
+				if (admission !== "not_mcp")
+					return true;
+			}
 			switch (invocation.state)
 			{
 				case ToolInvocationStates.Preparing: return _prepare(invocation, now, dependencies);

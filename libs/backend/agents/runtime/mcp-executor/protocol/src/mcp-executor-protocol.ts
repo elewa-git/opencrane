@@ -71,6 +71,12 @@ export function __BuildMcpExecutorToolsListRequest(): JsonValue
 export function __ParseMcpExecutorToolsListResponse(payload: unknown): readonly McpExecutorDiscoveredTool[]
 {
 	const tools = _Result(payload, _TOOLS_LIST_ID)["tools"];
+	return __ParseMcpExecutorDiscoveredTools(tools);
+}
+
+/** Validate the durable companion form of one discovered MCP tool list. */
+export function __ParseMcpExecutorDiscoveredTools(tools: unknown): readonly McpExecutorDiscoveredTool[]
+{
 	if (!Array.isArray(tools) || tools.length > 256)
 		throw new McpExecutorProtocolError("MCP tool list was invalid");
 	const names = new Set<string>();
@@ -81,7 +87,7 @@ export function __ParseMcpExecutorToolsListResponse(payload: unknown): readonly 
 		const tool = value as Record<string, unknown>;
 		const name = tool["name"];
 		const description = tool["description"];
-		if (typeof name !== "string" || name.length === 0 || name.length > 128 || names.has(name) || (description !== undefined && (typeof description !== "string" || description.length > 4_096)) || !_IsMcpExecutorToolInputSchema(tool["inputSchema"]))
+		if (!_AllowedKeys(tool, ["name", "description", "inputSchema"]) || !Object.hasOwn(tool, "name") || !Object.hasOwn(tool, "inputSchema") || typeof name !== "string" || name.length === 0 || name.length > 128 || names.has(name) || (description !== undefined && description !== null && (typeof description !== "string" || description.length > 4_096)) || !_IsMcpExecutorToolInputSchema(tool["inputSchema"]))
 			throw new McpExecutorProtocolError("MCP tool definition was invalid");
 		names.add(name);
 		return { name, description: typeof description === "string" ? description : null, inputSchema: tool["inputSchema"] };
@@ -114,8 +120,31 @@ export function __BuildMcpExecutorToolCallRequest(invocationId: string, toolName
 export function __ParseMcpExecutorToolCallResponse(payload: unknown, invocationId: string): McpExecutorToolCallResult
 {
 	const result = _Result(payload, invocationId);
-	const content = _McpExecutorContentBlocks(result["content"]);
-	if (typeof result["isError"] !== "boolean" || content === null)
+	return __ParseMcpExecutorToolCallResult(result);
+}
+
+/** Validate the durable companion form of one MCP tool result. */
+export function __ParseMcpExecutorToolCallResult(result: unknown): McpExecutorToolCallResult
+{
+	if (typeof result !== "object" || result === null || Array.isArray(result) || !_ExactKeys(result as Record<string, unknown>, ["isError", "content"]))
 		throw new McpExecutorProtocolError("MCP tool call result was invalid");
-	return { isError: result["isError"], content };
+	const value = result as Record<string, unknown>;
+	const content = _McpExecutorContentBlocks(value["content"]);
+	if (typeof value["isError"] !== "boolean" || content === null)
+		throw new McpExecutorProtocolError("MCP tool call result was invalid");
+	return { isError: value["isError"], content };
+}
+
+/** Require an object to contain exactly the named fields. */
+function _ExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean
+{
+	const actual = Object.keys(value).sort();
+	const expected = [...keys].sort();
+	return actual.length === expected.length && actual.every(function _Matches(key, index) { return key === expected[index]; });
+}
+
+/** Refuse unknown fields while allowing documented optional fields to be absent. */
+function _AllowedKeys(value: Record<string, unknown>, keys: readonly string[]): boolean
+{
+	return Object.keys(value).every(function _Allowed(key) { return keys.includes(key); });
 }

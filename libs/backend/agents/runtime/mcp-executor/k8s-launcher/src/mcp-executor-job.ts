@@ -2,13 +2,10 @@ import { createHash } from "node:crypto";
 import type { V1Container, V1Job, V1ResourceRequirements, V1Volume } from "@kubernetes/client-node";
 
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
+import { MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
 import type { McpExecutorJobAssignment, McpExecutorJobProfile } from "./mcp-executor-job.types";
 
-/** ServiceAccount used only by the MCP companion Job class. */
-const _SERVICE_ACCOUNT = "mcp-executor-default";
-/** Token audience accepted only by the MCP executor internal API. */
-const _TOKEN_AUDIENCE = "opencrane-mcp-executor";
 /** Path where the companion reads its rotating projected token. */
 const _TOKEN_PATH = "/var/run/opencrane/tokens/executor.token";
 /** Path where the companion reads the opaque execution reference. */
@@ -74,7 +71,11 @@ function _IsInternalUrl(value: string, serverNamespace: string): boolean
 	{
 		const url = new URL(value);
 		const port = Number(url.port);
-		return url.protocol === "http:" && url.hostname === `opencrane-server.${serverNamespace}.svc.cluster.local` && Number.isSafeInteger(port) && port > 0 && port <= 65_535 && url.pathname === "/api/internal/mcp-executor" && !url.username && !url.password && !url.search && !url.hash;
+		const exactService = `opencrane-server.${serverNamespace}.svc.cluster.local`;
+		const serviceSuffix = `-opencrane-server.${serverNamespace}.svc.cluster.local`;
+		const releasePrefix = url.hostname.endsWith(serviceSuffix) ? url.hostname.slice(0, -serviceSuffix.length) : "";
+		const isServerService = url.hostname === exactService || (releasePrefix.length > 0 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/u.test(releasePrefix));
+		return url.protocol === "http:" && isServerService && Number.isSafeInteger(port) && port > 0 && port <= 65_535 && url.pathname === "/api/internal/mcp-executor" && !url.username && !url.password && !url.search && !url.hash;
 	}
 	catch
 	{
@@ -87,7 +88,7 @@ function _AssertProfile(profile: McpExecutorJobProfile): void
 {
 	const scratchBytes = _BinaryBytes(profile.scratchSize);
 	const namespacePattern = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
-	if (!_IsDigestImage(profile.companionImage) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== _SERVICE_ACCOUNT || profile.namespace === profile.serverNamespace || profile.namespace.length > 63 || !namespacePattern.test(profile.namespace) || !namespacePattern.test(profile.serverNamespace) || !_IsInternalUrl(profile.opencraneInternalUrl, profile.serverNamespace) || !Number.isSafeInteger(profile.projectedTokenTtlSeconds) || profile.projectedTokenTtlSeconds < 600 || profile.projectedTokenTtlSeconds > 3_600 || scratchBytes === null || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_DEADLINE_SECONDS || !_HasBoundedResources(profile.serverResources) || !_HasBoundedResources(profile.companionResources))
+	if (!_IsDigestImage(profile.companionImage) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== MCP_EXECUTOR_SERVICE_ACCOUNT_NAME || profile.namespace === profile.serverNamespace || profile.namespace.length > 63 || !namespacePattern.test(profile.namespace) || !namespacePattern.test(profile.serverNamespace) || !_IsInternalUrl(profile.opencraneInternalUrl, profile.serverNamespace) || !Number.isSafeInteger(profile.projectedTokenTtlSeconds) || profile.projectedTokenTtlSeconds < 600 || profile.projectedTokenTtlSeconds > 3_600 || scratchBytes === null || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_DEADLINE_SECONDS || !_HasBoundedResources(profile.serverResources) || !_HasBoundedResources(profile.companionResources))
 	{
 		throw new Error("MCP executor profile requires a fixed identity and endpoint, immutable companion image, isolated namespace, bounded resources, scratch, token, and lifetime");
 	}
@@ -134,7 +135,7 @@ function _CompanionContainer(profile: McpExecutorJobProfile): V1Container
 /** Gives only the companion its token and claim reference, while each container gets separate scratch space. */
 function _Volumes(profile: McpExecutorJobProfile): V1Volume[]
 {
-	return [{ name: "executor-token", projected: { defaultMode: 0o440, sources: [{ serviceAccountToken: { path: "executor.token", audience: _TOKEN_AUDIENCE, expirationSeconds: profile.projectedTokenTtlSeconds } }] } }, { name: "claim-reference", downwardAPI: { defaultMode: 0o440, items: [{ path: "reference", fieldRef: { fieldPath: "metadata.annotations['opencrane.ai/mcp-execution-reference']" } }] } }, { name: "server-scratch", emptyDir: { sizeLimit: profile.scratchSize } }, { name: "companion-scratch", emptyDir: { sizeLimit: profile.scratchSize } }];
+	return [{ name: "executor-token", projected: { defaultMode: 0o440, sources: [{ serviceAccountToken: { path: "executor.token", audience: MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, expirationSeconds: profile.projectedTokenTtlSeconds } }] } }, { name: "claim-reference", downwardAPI: { defaultMode: 0o440, items: [{ path: "reference", fieldRef: { fieldPath: "metadata.annotations['opencrane.ai/mcp-execution-reference']" } }] } }, { name: "server-scratch", emptyDir: { sizeLimit: profile.scratchSize } }, { name: "companion-scratch", emptyDir: { sizeLimit: profile.scratchSize } }];
 }
 
 /**

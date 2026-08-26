@@ -8,6 +8,7 @@
 {{- $firstUser := .Values.clustertenantManager.firstUser -}}
 {{- $ociRegistry := .Values.clustertenantManager.workflows.ociRegistry -}}
 {{- $ociRegistryAuthorization := $ociRegistry.authorization -}}
+{{- $mcpExecutor := (index .Values "opencrane-mcp-executor").mcpExecutor -}}
 {{- $controlPlaneHost := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
 {{- $channelSiloId := .Values.channelProxy.siloId | default $firstUser.clusterTenant | default .Release.Name -}}
 {{- $openCraneInternalUrl := .Values.channelProxy.openCraneInternalUrl | default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) -}}
@@ -198,6 +199,13 @@ spec:
               value: {{ include "opencrane.agentController.runtimeNamespace" . | quote }}
             - name: AGENT_RUNTIME_MANAGED_NAMESPACE
               value: {{ $managedRuntimeNamespace | quote }}
+            # OCI-backed MCP calls use a separate Job class and Pod-bound companion identity.
+            - name: MCP_EXECUTOR_NAMESPACE
+              value: {{ $mcpExecutor.namespace | quote }}
+            - name: MCP_CONTROLLER_CLAIM_LEASE_SECONDS
+              value: {{ $mcpExecutor.controllerClaimLeaseSeconds | quote }}
+            - name: MCP_COMPANION_CLAIM_LEASE_SECONDS
+              value: {{ $mcpExecutor.companionClaimLeaseSeconds | quote }}
             # The preprocessing router TokenReviews only this Helm-owned worker namespace.
             - name: ARTIFACT_PREPROCESSOR_ENABLED
               value: {{ .Values.artifactPreprocessor.enabled | quote }}

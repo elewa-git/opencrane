@@ -17,4 +17,9 @@ export { __CreateOciImageValidationWorkflow } from "./oci-image-validation/oci-i
 export { OciImageValidationTaskNames } from "./oci-image-validation/oci-image-validation.types";
 export type { OciImageValidationWorkflow } from "./oci-image-validation/oci-image-validation.types";
 export * from "./routes/mcp-operator";
+export { __CreateMcpOciServerPromotionRouter } from "./runtime/mcp-oci-server-promotion.router";
+export { __CreateMcpRuntimeCompanionRouter } from "./runtime/mcp-runtime-companion.router";
+export { __CreateMcpRuntimeControllerRouter } from "./runtime/mcp-runtime-controller.router";
+export { PrismaMcpRuntimeUnitOfWork } from "./runtime/prisma-mcp-runtime-authority";
+export type { McpRuntimeAuthority } from "./runtime/mcp-runtime.types";
 export * from "./openapi";

@@ -2,6 +2,7 @@ enum McpServerTransport {
   StreamableHttp   @map("streamable-http")
   ServerSentEvents @map("sse")
   WebSocket        @map("websocket")
+  OciImage         @map("oci-image")
 }
 
 enum McpEraProbeStatus {
@@ -20,6 +21,59 @@ enum OciImageValidationState {
   Imported @map("imported")
   /// Admission ended without an imported image; this terminal row stores one failure code.
   Rejected @map("rejected")
+}
+
+/// Records whether discovery still owes a decision, accepted the pinned protocol and tool schemas,
+/// or rejected the revision. The runtime reads this persisted value before admitting invocations;
+/// changing a mapped value requires a database migration.
+enum McpServerRevisionState {
+  /// Discovery still owns the revision, so no invocation may select its tools yet.
+  Discovering @map("discovering")
+  /// Discovery froze the protocol version and tool schemas, so invocations may now be admitted.
+  Ready       @map("ready")
+  /// Discovery failed and the revision cannot admit invocations. This state is terminal.
+  Rejected    @map("rejected")
+}
+
+/// Selects the command saved for one OCI-backed MCP execution. The companion branches on this
+/// persisted value, so changing either mapped value requires a database migration.
+enum McpRuntimeExecutionKind {
+  /// The command checks the protocol revision and freezes live tool schemas for a server revision.
+  Discovery  @map("discovery")
+  /// The command calls the tool and arguments already admitted by ToolInvocation authority.
+  Invocation @map("invocation")
+}
+
+/// Tracks which Kubernetes identity the controller has committed for an MCP executor Job. Controller
+/// and companion claims branch on this persisted value; changing a mapped value requires a database
+/// migration.
+enum McpExecutorWorkloadState {
+  /// No Job UID is saved yet, so the controller may claim and create a suspended Job.
+  Pending    @map("pending")
+  /// The suspended Job UID is saved, but Kubernetes has not been told to run it yet.
+  Assigned   @map("assigned")
+  /// Kubernetes has released the saved Job, but the first owned Pod UID is not saved yet.
+  Released   @map("released")
+  /// The first owned Pod UID is saved, so that Pod may claim the execution command.
+  Registered @map("registered")
+  /// The command reached a final or manual-recovery outcome, so no companion may claim it again.
+  Closed     @map("closed")
+}
+
+/// Tracks whether the registered companion may claim, has claimed, or has finished its command. The
+/// runtime persists this value with the companion and ToolInvocation fences; changing a mapped value
+/// requires a database migration.
+enum McpExecutorCommandState {
+  /// No companion holds the command fence, so the registered Pod may claim it.
+  Pending          @map("pending")
+  /// A companion holds the command fence; an expired invocation must enter recovery instead of running again.
+  Claimed          @map("claimed")
+  /// The checked result and all paired authority state were saved. This state is terminal.
+  Succeeded        @map("succeeded")
+  /// Discovery failed or authorization ended before dispatch. This state is terminal.
+  Failed           @map("failed")
+  /// An invocation may have produced an external effect and now requires manual recovery. This state is terminal.
+  RecoveryRequired @map("recovery_required")
 }
 
 enum McpServerStatus {
@@ -84,9 +138,11 @@ model McpServer {
   createdAt              DateTime           @default(now()) @map("created_at")
   updatedAt              DateTime           @updatedAt @map("updated_at")
   installs               McpServerInstall[]
+  revisions              McpServerRevision[]
   source                 ThirdPartySource?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
 
   @@unique([siloId, name])
+  @@unique([id, siloId])
   @@unique([siloId, registrationKeyDigest])
   @@index([approvalStatus])
   @@map("mcp_servers")
@@ -132,10 +188,123 @@ model OciImageValidation {
   completedAt             DateTime?           @map("completed_at")
   createdAt               DateTime            @default(now()) @map("created_at")
   updatedAt               DateTime            @updatedAt @map("updated_at")
+  serverRevision          McpServerRevision?
 
   @@unique([siloId, submissionKeyDigest])
+  @@unique([id, siloId])
   @@index([siloId, state, createdAt])
   @@map("oci_image_validations")
+}
+
+/// One immutable OCI image revision after an administrator explicitly promotes its imported image.
+model McpServerRevision {
+  id                   String                 @id @default(cuid())
+  siloId               String                 @map("silo_id")
+  mcpServerId          String                 @map("mcp_server_id")
+  ociImageValidationId String                 @map("oci_image_validation_id")
+  revision             Int
+  registryReference    String                 @map("registry_reference")
+  protocolVersion      String?                @map("protocol_version")
+  state                McpServerRevisionState @default(Discovering)
+  completedAt          DateTime?              @map("completed_at")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+  server               McpServer              @relation(fields: [mcpServerId, siloId], references: [id, siloId], onDelete: Restrict)
+  validation           OciImageValidation     @relation(fields: [ociImageValidationId, siloId], references: [id, siloId], onDelete: Restrict)
+  tools                McpToolRevision[]
+  executions           McpRuntimeExecution[]
+
+  @@unique([mcpServerId, revision])
+  @@unique([ociImageValidationId, siloId])
+  @@unique([siloId, registryReference])
+  @@unique([id, siloId])
+  @@index([siloId, state])
+  @@map("mcp_server_revisions")
+}
+
+/// A tool schema frozen from one successful MCP 2026-07-28 discovery exchange.
+model McpToolRevision {
+  id                    String            @id @default(cuid())
+  siloId                String            @map("silo_id")
+  serverRevisionId      String            @map("server_revision_id")
+  name                  String
+  description           String?
+  inputSchema           Json              @map("input_schema")
+  inputSchemaDigest     String            @map("input_schema_digest")
+  createdAt             DateTime          @default(now()) @map("created_at")
+  serverRevision        McpServerRevision @relation(fields: [serverRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@unique([serverRevisionId, name])
+  @@unique([id, siloId])
+  @@index([siloId, name])
+  @@map("mcp_tool_revisions")
+}
+
+/// Durable claim, Kubernetes assignment, Pod identity, and terminal fence for one MCP executor Job.
+model McpRuntimeExecution {
+  id                          String                   @id @default(cuid())
+  siloId                      String                   @map("silo_id")
+  serverRevisionId            String                   @map("server_revision_id")
+  toolInvocationId            String?                  @unique @map("tool_invocation_id")
+  kind                        McpRuntimeExecutionKind
+  workloadState               McpExecutorWorkloadState @default(Pending) @map("workload_state")
+  commandState                McpExecutorCommandState @default(Pending) @map("command_state")
+  idempotencyKey              String                   @unique @map("idempotency_key")
+  executionReference          String                   @unique @map("execution_reference")
+  profileName                 String                   @map("profile_name")
+  claimedAt                   DateTime?                @map("claimed_at")
+  deliveryCount               Int                      @default(0) @map("delivery_count")
+  claimExpiresAt              DateTime?                @map("claim_expires_at")
+  workloadUid                 String?                  @unique @map("workload_uid")
+  assignedAt                  DateTime?                @map("assigned_at")
+  releaseClaimedAt            DateTime?                @map("release_claimed_at")
+  releaseDeliveryCount        Int                      @default(0) @map("release_delivery_count")
+  releaseExpiresAt            DateTime?                @map("release_expires_at")
+  releasedAt                  DateTime?                @map("released_at")
+  podUid                      String?                  @unique @map("pod_uid")
+  companionClaimFence         String?                  @map("companion_claim_fence")
+  companionClaimExpiresAt     DateTime?                @map("companion_claim_expires_at")
+  toolInvocationClaimFence    Int?                     @map("tool_invocation_claim_fence")
+  toolInvocationClaimRevision Int?                     @map("tool_invocation_claim_revision")
+  terminalOutcome             String?                  @map("terminal_outcome")
+  terminalPayloadDigest       String?                  @map("terminal_payload_digest")
+  completedAt                 DateTime?                @map("completed_at")
+  createdAt                   DateTime                 @default(now()) @map("created_at")
+  updatedAt                   DateTime                 @updatedAt @map("updated_at")
+  serverRevision              McpServerRevision        @relation(fields: [serverRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
+  toolInvocation              ToolInvocation?          @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
+
+  @@index([workloadState, claimExpiresAt, createdAt])
+  @@index([workloadState, releaseExpiresAt, createdAt])
+  @@index([commandState, companionClaimExpiresAt])
+  @@index([serverRevisionId, kind])
+  @@map("mcp_runtime_executions")
+}
+
+/// Database time used by MCP claim and fence checks.
+view McpRuntimeClock {
+  singleton Int      @unique
+  now       DateTime
+
+  @@map("mcp_runtime_clock")
+}
+
+/// One pending execution locked by the database for controller claim delivery.
+view McpRuntimeClaimCandidate {
+  id          String @unique
+  siloId      String @map("silo_id")
+  profileName String @map("profile_name")
+
+  @@map("mcp_runtime_claim_candidates")
+}
+
+/// One assigned execution locked by the database for Job release delivery.
+view McpRuntimeReleaseClaimCandidate {
+  id          String @unique
+  siloId      String @map("silo_id")
+  profileName String @map("profile_name")
+
+  @@map("mcp_runtime_release_claim_candidates")
 }
 
 // Per-principal installation of an MCP server (operator API).

@@ -48,6 +48,9 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		commandRecoveryMilliseconds: 15_000,
 		commandTtlMilliseconds: 60_000,
 		managedRuntimeNamespace: "managed-runtime",
+		mcpCompanionClaimLeaseMilliseconds: 30_000,
+		mcpControllerClaimLeaseMilliseconds: 30_000,
+		mcpExecutorNamespace: "mcp-executors",
 		memoryGatewayTimeoutMilliseconds: 30_000,
 		memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
 		memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
@@ -55,6 +58,7 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		personalRuntimeNamespace: "personal-runtime",
 		publishedOutboxRetentionMilliseconds: 86_400_000,
 		serverNamespace: "opencrane-server",
+		siloId: "silo-1",
 	};
 }
 

@@ -17,6 +17,7 @@ root version in the same slice. Documentation-only changes do not advance an app
 | [`apps/channel-proxy`](../../apps/channel-proxy/README.md) | Inbound channel authentication and routing boundary. |
 | [`apps/memory-gateway`](../../apps/memory-gateway/README.md) | Private Cognee transport boundary that TokenReviews the server identity. |
 | [`apps/agent-controller`](../../apps/agent-controller/README.md) | Sole Kubernetes mutator for governed run-attempt Jobs. |
+| [`apps/mcp-executor`](../../apps/mcp-executor/README.md) | One-shot token-holding companion for OCI-backed MCP Jobs. |
 | [`apps/agent-runtime`](../../apps/agent-runtime/README.md) | Outbound-only process for one personal or managed run attempt. |
 | [`apps/managed-agent-runtime`](../../apps/managed-agent-runtime/README.md) | Isolated namespace and identity profile for scheduled and triggered managed runs. |
 | [`apps/artifact-service`](../../apps/artifact-service/README.md) | Governed artifact byte promotion and receipt service. |

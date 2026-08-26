@@ -28,6 +28,7 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_BASE_URL", "https://registry.example.test");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_REPOSITORY", "opencrane/mcp-images");
 		vi.stubEnv("OPENCRANE_SILO_ID", "silo-test");
+		vi.stubEnv("MCP_EXECUTOR_NAMESPACE", "mcp-executors");
 	});
 
 	afterEach(function _restoreEnvironment()
@@ -46,6 +47,8 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("ARTIFACT_SCANNER_ENABLED", "true");
 		vi.stubEnv("ARTIFACT_SCANNER_CLAIM_LEASE_SECONDS", "240");
 		vi.stubEnv("ARTIFACT_SCANNER_NAMESPACE", "artifact-scanner");
+		vi.stubEnv("MCP_CONTROLLER_CLAIM_LEASE_SECONDS", "20");
+		vi.stubEnv("MCP_COMPANION_CLAIM_LEASE_SECONDS", "25");
 		vi.stubEnv("OPENCRANE_SCHEDULER_ENABLED", "true");
 		vi.stubEnv("OPENCRANE_SCHEDULER_INTERVAL_MS", "2500");
 
@@ -58,10 +61,14 @@ describe("opencrane process config", function _ProcessConfigSuite()
 				artifactScannerClaimLeaseMilliseconds: 240_000,
 				artifactScannerNamespace: "artifact-scanner",
 				managedRuntimeNamespace: "managed-runs",
+				mcpCompanionClaimLeaseMilliseconds: 25_000,
+				mcpControllerClaimLeaseMilliseconds: 20_000,
+				mcpExecutorNamespace: "mcp-executors",
 				memoryGatewayTimeoutMilliseconds: 30_000,
 				memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
 				memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
 				personalRuntimeNamespace: "personal-runs",
+				siloId: "silo-test",
 			},
 			schedulerEnabled: true,
 			schedulerIntervalMilliseconds: 2500,

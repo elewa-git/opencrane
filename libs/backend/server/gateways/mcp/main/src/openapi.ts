@@ -234,6 +234,29 @@ export const _McpOpenapiPaths = {
     },
   },
 
+  "/mcp/oci-image-validations/{id}/server": {
+    post: {
+      operationId: "promoteOciImageValidationToMcpServer",
+      summary: "Create an MCP server revision from an imported OCI image and start discovery. Org-admin only",
+      tags: ["MCP Operator"],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", minLength: 1, maxLength: 256 } }],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["name", "description"], properties: { name: { type: "string", minLength: 1, maxLength: 120 }, description: { type: "string", maxLength: 1000 } } } } },
+      },
+      responses: {
+        200: ok("The same imported image was already promoted.", { type: "object", required: ["outcome", "serverId", "serverRevisionId", "executionId"], properties: { outcome: { type: "string", enum: ["idempotent"] }, serverId: { type: "string" }, serverRevisionId: { type: "string" }, executionId: { type: "string" } } }),
+        201: created("MCP server revision and discovery execution saved.", { type: "object", required: ["outcome", "serverId", "serverRevisionId", "executionId"], properties: { outcome: { type: "string", enum: ["created"] }, serverId: { type: "string" }, serverRevisionId: { type: "string" }, executionId: { type: "string" } } }),
+        400: badRequest("Promotion fields are invalid."),
+        401: { description: "Authenticated principal is unavailable.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        404: notFound("OCI image validation not found."),
+        409: { description: "The image is not imported or its server promotion conflicts.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        503: { description: "MCP runtime authority is unavailable.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
+  },
+
   "/mcp/directory": {
     get: {
       operationId: "getMcpDirectory",
