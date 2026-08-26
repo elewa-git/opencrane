@@ -1,13 +1,13 @@
 import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
 import { AgentRunTaskDeclaration, AgentRunTaskTerminalStates } from "@opencrane/backend/agents/execution/runs/workflows/contract";
-import type { AgentRunTaskInput, AgentRunTaskResult } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import type { AgentRunTaskInput, AgentRunTaskResult, AgentRunWorkflowControllerRecord, AgentRunWorkflowObservation } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import { _AgentRuntimeAttemptKeySecretName, _BuildAgentRuntimeAttemptKeySecret } from "@opencrane/backend/agents/runtime/controller";
 import { __BuildSuspendedAgentRuntimeJob } from "@opencrane/backend/agents/runtime/k8s-launcher";
 import { WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
-import type { AgentRunWorkflowControllerRecord, AgentRunWorkflowHandlerOptions, AgentRunWorkflowObservation } from "./agent-run-workflow-handler.types";
+import type { AgentRunWorkflowHandlerOptions } from "./agent-run-workflow-handler.types";
 
 /** Returns the immutable UID Kubernetes assigned to the suspended Job. */
 function _JobUid(job: V1Job): string
