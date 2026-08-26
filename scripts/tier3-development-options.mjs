@@ -1,4 +1,6 @@
 const _DEFAULT_PROXY_PORT = 4200;
+/** Gives a loaded minimum-size Codespace the same workload-readiness budget as remote CI. */
+const _DEFAULT_TIMEOUT_SECONDS = "600";
 
 /** Describes the options printed when the Tier 3 command receives `--help`. */
 export const TIER3_DEVELOPMENT_HELP = `OpenCrane Tier 3 k3d development
@@ -13,6 +15,10 @@ Options:
   --proxy-port <port>       Loopback port forwarded by Codespaces (default: 4200).
   --smoke-only              Leave the qualified cluster running without starting the browser proxy.
   --help                    Show this help.
+
+Environment:
+  SMOKE_LOW_DISK_IMAGE_IMPORT=0  Preserve build cache and use one batch import on a larger host.
+  TIMEOUT_SECONDS=<seconds>      Override the 600-second local readiness budget.
 `;
 
 /**
@@ -111,7 +117,9 @@ export function createTier3SessionConfiguration(parentEnvironment, storageMode)
 		smokeEnvironment: {
 			...parentEnvironment,
 			KEEP_CLUSTER: "1",
-			SMOKE_STORAGE_MODE: storageMode
+			SMOKE_LOW_DISK_IMAGE_IMPORT: parentEnvironment.SMOKE_LOW_DISK_IMAGE_IMPORT || "1",
+			SMOKE_STORAGE_MODE: storageMode,
+			TIMEOUT_SECONDS: parentEnvironment.TIMEOUT_SECONDS || _DEFAULT_TIMEOUT_SECONDS
 		},
 		upstreamHost: `${clusterTenant}.${baseDomain}`
 	};

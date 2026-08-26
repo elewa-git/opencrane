@@ -57,10 +57,23 @@ test("Tier 3 always keeps the smoke cluster and applies the selected storage mod
 			CLUSTER_TENANT: "qa",
 			KEEP_CLUSTER: "1",
 			PATH: "/usr/bin",
-			SMOKE_STORAGE_MODE: "fast"
+			SMOKE_LOW_DISK_IMAGE_IMPORT: "1",
+			SMOKE_STORAGE_MODE: "fast",
+			TIMEOUT_SECONDS: "600"
 		},
 		upstreamHost: "qa.local.test"
 	});
+});
+
+test("Tier 3 preserves explicit smoke resource overrides", function _preservesResourceOverrides()
+{
+	const configuration = createTier3SessionConfiguration({
+		SMOKE_LOW_DISK_IMAGE_IMPORT: "0",
+		TIMEOUT_SECONDS: "900"
+	}, "full");
+
+	assert.equal(configuration.smokeEnvironment.SMOKE_LOW_DISK_IMAGE_IMPORT, "0");
+	assert.equal(configuration.smokeEnvironment.TIMEOUT_SECONDS, "900");
 });
 
 test("Tier 3 qualifies smoke before it starts and waits on the matching ingress proxy", async function _ordersSession()
@@ -81,7 +94,7 @@ test("Tier 3 qualifies smoke before it starts and waits on the matching ingress 
 		parentEnvironment: {},
 		runSmoke(environment)
 		{
-			events.push(["smoke", environment.KEEP_CLUSTER, environment.SMOKE_STORAGE_MODE]);
+			events.push(["smoke", environment.KEEP_CLUSTER, environment.SMOKE_STORAGE_MODE, environment.SMOKE_LOW_DISK_IMAGE_IMPORT, environment.TIMEOUT_SECONDS]);
 		},
 		readIngressCertificate(identity)
 		{
@@ -96,7 +109,7 @@ test("Tier 3 qualifies smoke before it starts and waits on the matching ingress 
 	});
 
 	assert.deepEqual(events, [
-		["smoke", "1", "fast"],
+		["smoke", "1", "fast", "1", "600"],
 		["read-certificate", "opencrane-develop-smoke", "opencrane-smoke-clustertenant-tls"],
 		["create-proxy", "smoke.develop-smoke.opencrane.test", certificate],
 		["listen", server, 4300],
@@ -304,12 +317,14 @@ test("the devcontainer enforces the Tier 3 minimum and shares the pinned CI tool
 {
 	const devcontainer = JSON.parse(fs.readFileSync(new URL("../../.devcontainer/devcontainer.json", import.meta.url), "utf8"));
 	const dockerfile = fs.readFileSync(new URL("../../.devcontainer/Dockerfile", import.meta.url), "utf8");
+	const verification = fs.readFileSync(new URL("../../.devcontainer/verify-tools.sh", import.meta.url), "utf8");
 	const workflow = fs.readFileSync(new URL("../../.github/workflows/docker.yml", import.meta.url), "utf8");
 
 	assert.equal(devcontainer.hostRequirements.cpus, 4);
 	assert.equal(devcontainer.hostRequirements.memory, "16gb");
 	assert.equal(devcontainer.hostRequirements.storage, "32gb");
 	assert.ok(devcontainer.features["ghcr.io/devcontainers/features/docker-in-docker:4.1.0"]);
+	assert.match(verification, /docker buildx prune --help \| grep -q -- '--min-free-space'/u);
 	assert.match(dockerfile, /javascript-node:5\.0\.2-24-bookworm/u);
 	assert.match(dockerfile, /HELM_VERSION=v4\.1\.4/u);
 	assert.match(dockerfile, /HELM_LINUX_AMD64_SHA256=70b2c30a19da4db264dfd68c8a3664e05093a361cefd89572ffb36f8abfa3d09/u);
@@ -323,6 +338,18 @@ test("the devcontainer enforces the Tier 3 minimum and shares the pinned CI tool
 	assert.match(workflow, /KUBECTL_VERSION: v1\.30\.10/u);
 	assert.match(workflow, /KUBECTL_LINUX_AMD64_SHA256: bc74dbeefd4b9d53f03016f6778f3ffc9a72ef4ca7b7c80fd5dc1a41d52dcab7/u);
 	assert.match(workflow, /version: v4\.1\.4/u);
+});
+
+test("the minimum Codespaces path reclaims image storage without slowing CI imports", function _protectsLowDiskImport()
+{
+	const smoke = fs.readFileSync(new URL("../../apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh", import.meta.url), "utf8");
+	const imageStorage = fs.readFileSync(new URL("../../apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh", import.meta.url), "utf8");
+
+	assert.match(smoke, /SMOKE_LOW_DISK_IMAGE_IMPORT="\$\{SMOKE_LOW_DISK_IMAGE_IMPORT:-0\}"/u);
+	assert.match(smoke, /_reset_smoke_storage[\s\S]*?_prepare_images &/u);
+	assert.match(imageStorage, /docker buildx prune --all --force --min-free-space 8gb/u);
+	assert.match(imageStorage, /for image in "\$\{SMOKE_IMAGES\[@\]\}"; do[\s\S]*?k3d image import "\$image"[\s\S]*?docker image rm "\$image"/u);
+	assert.match(imageStorage, /if \[\[ "\$SMOKE_LOW_DISK_IMAGE_IMPORT" == "0" \]\]; then[\s\S]*?k3d image import "\$\{SMOKE_IMAGES\[@\]\}"/u);
 });
 
 function _Listen(server)

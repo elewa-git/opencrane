@@ -35,11 +35,13 @@ cluster does not match the assumptions needed to do that job safely.
 `tests/develop-smoke.sh` exercises the real silo deploy entrypoint. It rebuilds Nx-affected images
 from the checkout through a per-project BuildKit cache and resolves unaffected owners from the exact
 digest of the last validated image set. Its sequential image lane overlaps cluster and controller
-preparation, then imports the complete image inventory in one k3d transfer. A pull request bypasses
+preparation, then imports the complete image inventory in one k3d transfer. The Tier 3 contributor
+wrapper instead selects a low-disk path that reclaims BuildKit cache until Docker has 8 GB free,
+imports each image, and removes its Docker-side source after k3d accepts it. A pull request bypasses
 that cluster only when one positive proof binds its exact base SHA to a completed successful push or
-manual-dispatch k3d job, no affected container owner, and only explicitly non-deployment paths. The same evidence works
-for `develop` and reviewed feature-stack bases; unknown or unavailable evidence fails closed to
-k3d. Both tiers install pinned cert-manager and
+manual-dispatch k3d job, no affected container owner, and only explicitly non-deployment paths. The
+same evidence works for `develop` and reviewed feature-stack bases; unknown or unavailable evidence
+fails closed to k3d. Both tiers install pinned cert-manager and
 CloudNativePG and fail on workload, database, Certificate, or TLS health. Ordinary pull requests use
 fast local-path storage; `develop`, explicit k3d dispatches, and storage-sensitive changes install
 the pinned expandable hostpath CSI driver and exercise expansion. Set `KEEP_CLUSTER=1` for local
@@ -47,8 +49,10 @@ diagnosis. Backup/restore and production storage, DNS, and transport remain sepa
 qualifications.
 
 `npm run dev:tier3` is the contributor entrypoint around this smoke. It selects full storage by
-default, retains the cluster, and starts a loopback proxy that sends the smoke host through the real
-ingress while Codespaces keeps its browser-facing forwarded host. Use `--storage-mode fast` only
+default, allows 600 seconds for loaded Codespaces machines, reclaims Docker image-build storage,
+retains the cluster, and starts a loopback proxy that sends the smoke host through the real ingress
+while Codespaces keeps its browser-facing forwarded host. Set `SMOKE_LOW_DISK_IMAGE_IMPORT=0` only
+on a larger machine where preserving reusable build cache matters. Use `--storage-mode fast` only
 when storage expansion is outside the change, or `--smoke-only` when browser access is unnecessary.
 
 Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;

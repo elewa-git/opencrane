@@ -77,8 +77,10 @@ k3d smoke with full storage qualification and `KEEP_CLUSTER=1`, then exposes the
 through a loopback proxy that works behind a Codespaces forwarded URL. The devcontainer supplies
 Docker-in-Docker and the CI-aligned Node 24, Helm v4.1.4, k3d v5.8.3, and kubectl v1.30.10 toolchain,
 enforces a 4-core/16-GB/32-GB minimum, recommends an 8-core/32-GB/64-GB host, and runs `npm ci` early
-enough for a repository prebuild. Fast storage and smoke-only modes remain explicit; production DNS,
-certificates, cloud identity, backup/restore, and real-tenant upgrades remain remote qualification.
+enough for a repository prebuild. Its low-disk import releases disposable build cache and each
+Docker-side image after k3d accepts it, avoiding the peak double-copy on the minimum disk. Fast
+storage and smoke-only modes remain explicit; production DNS, certificates, cloud identity,
+backup/restore, and real-tenant upgrades remain remote qualification.
 
 ## Program — personal-agent platform
 

@@ -192,6 +192,17 @@ for full qualification and repeated builds. The `npm ci` creation step can be ba
 Codespaces prebuild; enabling that prebuild remains a repository setting and uses Actions minutes and
 storage.
 
+On the minimum disk, Tier 3 reclaims reusable BuildKit cache until Docker has 8 GB free, imports one
+image at a time, and removes each Docker-side source after k3d accepts it. The retained cluster keeps
+its own copy. This prevents the temporary source-plus-cluster image duplication from filling a 32 GB
+Codespace. A recommended-size machine can retain the build cache and use the faster batch import:
+
+```bash
+SMOKE_LOW_DISK_IMAGE_IMPORT=0 npm run dev:tier3
+```
+
+The contributor command also allows 600 seconds for workload readiness on a loaded Codespace.
+
 The command runs the same current-silo smoke that protects `develop`, with full storage
 qualification and `KEEP_CLUSTER=1`. It therefore builds the affected images, installs the pinned
 cluster controllers, deploys through the real app-owned release script, and proves database

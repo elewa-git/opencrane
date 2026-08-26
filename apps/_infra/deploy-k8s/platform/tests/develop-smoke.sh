@@ -24,6 +24,7 @@ SMOKE_AFFECTED_PROJECTS="${SMOKE_AFFECTED_PROJECTS-all}"
 SMOKE_BASE_SHA="${SMOKE_BASE_SHA:-}"
 SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
+SMOKE_LOW_DISK_IMAGE_IMPORT="${SMOKE_LOW_DISK_IMAGE_IMPORT:-0}"
 KEY_DIR=""
 CSI_DIR=""
 IMAGE_PREPARATION_PID=""
@@ -67,6 +68,8 @@ _retry()
   done
 }
 
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh"
+
 _diagnostics()
 {
   echo "[develop-smoke] ===== failure diagnostics ====="
@@ -86,37 +89,6 @@ _diagnostics()
     done < <(kubectl get pods -n "$diagnostic_namespace" -o name 2>/dev/null || true)
   done
   echo "[develop-smoke] ===== end diagnostics ====="
-}
-
-# Remove everything the run left in the Docker daemon: the cluster, any node containers a
-# killed earlier run stranded, their named + anonymous volumes, and the label-scoped images.
-# Without this, repeated smoke runs accumulate multi-GB writable layers and dangling image
-# layers until the Docker VM disk fills.
-_teardown_cluster_storage()
-{
-  local containers volumes volume
-  containers="$(docker ps -aq --filter "name=^k3d-${CLUSTER_NAME}-" 2>/dev/null || true)"
-  volumes=""
-  if [[ -n "$containers" ]]; then
-    # shellcheck disable=SC2086
-    volumes="$(docker inspect --format \
-      '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{"\n"}}{{end}}{{end}}' \
-      $containers 2>/dev/null || true)"
-  fi
-  k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
-  if [[ -n "$containers" ]]; then
-    # shellcheck disable=SC2086
-    docker rm -f -v $containers >/dev/null 2>&1 || true
-  fi
-  while IFS= read -r volume; do
-    [[ -z "$volume" ]] && continue
-    docker volume rm "$volume" >/dev/null 2>&1 || true
-  done <<< "$volumes"
-  while IFS= read -r volume; do
-    [[ -z "$volume" ]] && continue
-    docker volume rm "$volume" >/dev/null 2>&1 || true
-  done < <(docker volume ls -q --filter "name=k3d-${CLUSTER_NAME}" 2>/dev/null || true)
-  docker image prune --all --force --filter "label=${SMOKE_IMAGE_LABEL}" >/dev/null 2>&1 || true
 }
 
 _cleanup()
@@ -427,15 +399,21 @@ if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; the
   echo "[develop-smoke] SMOKE_STORAGE_MODE must be 'fast' or 'full', got '$SMOKE_STORAGE_MODE'." >&2
   exit 1
 fi
+if [[ "$SMOKE_LOW_DISK_IMAGE_IMPORT" != "0" && "$SMOKE_LOW_DISK_IMAGE_IMPORT" != "1" ]]; then
+  echo "[develop-smoke] SMOKE_LOW_DISK_IMAGE_IMPORT must be '0' or '1', got '$SMOKE_LOW_DISK_IMAGE_IMPORT'." >&2
+  exit 1
+fi
 
-# Image preparation is the longest independent lane. Start it before k3d so cluster creation and
-# external-controller readiness consume the same wall-clock time without fanning out five builds
-# against the runner's small Docker daemon.
+echo "[develop-smoke] Resetting disposable k3d cluster '$CLUSTER_NAME'"
+_reset_smoke_storage
+
+# Delete a retained cluster before the build lane so a failed low-disk run releases its largest
+# allocation before retrying. Image preparation still overlaps cluster creation and controller
+# readiness without fanning out five builds against the runner's small Docker daemon.
 _prepare_images &
 IMAGE_PREPARATION_PID=$!
 
 echo "[develop-smoke] Creating disposable k3d cluster '$CLUSTER_NAME'"
-k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
 k3d cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "8443:443@loadbalancer" --wait
 
 echo "[develop-smoke] Installing external cluster prerequisites"
@@ -469,8 +447,8 @@ if ! wait "$IMAGE_PREPARATION_PID"; then
   exit 1
 fi
 IMAGE_PREPARATION_PID=""
-echo "[develop-smoke] Importing the complete current-silo image set in one k3d transfer"
-_retry 3 k3d image import "${SMOKE_IMAGES[@]}" --cluster "$CLUSTER_NAME" --mode direct
+echo "[develop-smoke] Importing the complete current-silo image set"
+_import_smoke_images
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 

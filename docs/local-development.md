@@ -63,6 +63,14 @@ and the 32-GB disk leaves little room for image and build-cache growth. Use the 
 npm run dev:tier3
 ```
 
+Tier 3 protects the minimum disk by reclaiming reusable BuildKit cache until Docker has 8 GB free,
+importing the images into k3d one at a time, and deleting each Docker-side source after a successful
+import. The retained k3d copy remains available. This avoids the peak double-copy that
+otherwise fills a 32-GB Codespace. On the recommended 64-GB machine, preserve the reusable build
+cache and use the faster batch import with `SMOKE_LOW_DISK_IMAGE_IMPORT=0 npm run dev:tier3`.
+The contributor command allows 600 seconds for workload readiness unless `TIMEOUT_SECONDS` supplies
+another reviewed value.
+
 After qualification, the command listens on `127.0.0.1:4200`. In Codespaces, open the forwarded
 port labelled **OpenCrane Tier 3** and keep its visibility private. The local proxy preserves the
 browser's `*.app.github.dev` origin while sending the smoke's `.test` host to ingress, so the SPA,
