@@ -113,6 +113,11 @@ Open `http://local-development.localhost:4200`. The coordinator runs the exact U
 `npx nx serve opencrane-ui --configuration=development-live`, but supplies a local session and
 backend composition so no OpenID Connect (OIDC) sign-in is required.
 
+`development-live` is an Angular build configuration, not a standalone environment. It selects the
+real HTTP and WebSocket gateways plus the development proxy instead of Tier 1's in-browser gateway
+implementations. Running that Nx command by itself still requires a separately running backend and
+valid session; the Tier 2 coordinator starts and configures both for local development.
+
 Core supports onboarding, persisted conversations, direct and group messages, and run admission.
 It deliberately leaves Agent execution, models, memory, files, channels, integrations, Obot,
 Cognee, the memory gateway, and Kubernetes disabled.
@@ -135,25 +140,91 @@ bootstrap, authenticated runtime stream, candidate validation, and PostgreSQL pe
 
 | Alternative | Command | Model access and credentials |
 | --- | --- | --- |
-| A — local LiteLLM | `npm run dev:tier2:agent:local-llm` | Starts the pinned local LiteLLM container and the local Agent runner. Reads the provider key from `keys/.openai-key`, creates a separate owner-only local master-key file, and stores attempt-scoped virtual keys in a separate `litellm` database within the Tier 2 PostgreSQL container. |
+| A — local LiteLLM | `npm run dev:tier2:agent:local-llm` | Starts the pinned local LiteLLM container and the local Agent runner. Reads its configured provider credential, creates a separate owner-only local master-key file, and stores attempt-scoped virtual keys in a separate `litellm` database within the Tier 2 PostgreSQL container. |
 | B — remote LiteLLM | `npm run dev:tier2:agent:remote-llm -- --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path` | Connects the local Agent runner to an explicit remote HTTPS LiteLLM proxy using an owner-only admin-key file. It never falls back to Alternative A's local master key or provider key. |
 | C — simulated model | `npm run dev:tier2:agent:simulated-llm` | Runs the local Agent runner with deterministic model events after normal run admission. It starts no LiteLLM process and reads no model or provider credential. |
 
-Alternative B's endpoint and key path above are placeholders. Replace both with the real proxy URL
-and the absolute path of an existing file containing its admin key. The key file must be readable
-only by its owner; for example, set mode `600` on macOS or Linux. The coordinator now checks that
-file and the remote `auto` model before preparing the Python environment, so invalid remote settings
-fail without installing Agent dependencies.
+### Configure a remote LiteLLM proxy
+
+Alternative B's endpoint and key path above are placeholders. Ask the proxy operator for:
+
+- an HTTPS origin such as `https://litellm.dev.example.com`, without credentials, a path, query, or
+  fragment; and
+- an organisation-scoped LiteLLM admin key that can read `GET /model/info` and mint an
+  attempt-scoped key through `POST /key/generate`.
+
+The proxy must expose a model alias named `auto`. Use a dedicated proxy or an admin credential
+scoped to this OpenCrane organisation; a fleet-wide key can mint credentials outside this local
+development boundary. OpenCrane limits each runtime key it mints to one model alias, budget, and
+expiry, but those limits do not replace isolation enforced by the remote proxy.
+
+Create an owner-readable key file without placing the key in the command itself:
+
+```bash
+mkdir -p keys
+(umask 077 && touch keys/.remote-litellm-admin-key)
+chmod 600 keys/.remote-litellm-admin-key
+${EDITOR:-vi} keys/.remote-litellm-admin-key
+```
+
+Put the admin key alone in that file, without quotes. Then replace the example hostname and run:
+
+```bash
+npm run dev:tier2:agent:remote-llm -- \
+  --remote-litellm-endpoint https://litellm.dev.example.com \
+  --remote-litellm-master-key-file "$PWD/keys/.remote-litellm-admin-key"
+```
+
+The `--` after the npm script forwards the two options to the Tier 2 coordinator. The coordinator
+checks the endpoint, key permissions, admin-key access, and `auto` alias before it prepares Python or
+starts a local container.
+
+### Smoke-test the remote proxy
+
+Use this endpoint-only check when you want to confirm the placeholders before starting Tier 2. It
+reads the key inside Node, sends it only in the HTTPS authorization header, and never prints it:
+
+```bash
+export REMOTE_LITELLM_ENDPOINT=https://litellm.dev.example.com
+export REMOTE_LITELLM_ADMIN_KEY_FILE="$PWD/keys/.remote-litellm-admin-key"
+
+node --input-type=module <<'NODE'
+import { readFile } from "node:fs/promises";
+
+const endpoint = process.env.REMOTE_LITELLM_ENDPOINT.replace(/\/$/, "");
+const key = (await readFile(process.env.REMOTE_LITELLM_ADMIN_KEY_FILE, "utf8")).trim();
+const response = await fetch(`${endpoint}/model/info`, {
+  headers: { authorization: `Bearer ${key}` }
+});
+
+if (!response.ok)
+{
+  throw new Error(`LiteLLM returned HTTP ${response.status}`);
+}
+
+const body = await response.json();
+if (!body.data?.some(model => model.model_name === "auto"))
+{
+  throw new Error("LiteLLM does not expose the required auto model alias");
+}
+
+console.log("Remote LiteLLM authentication and auto alias are ready.");
+NODE
+```
+
+An HTTP `401` or `403` means the key is wrong or lacks admin access. A connection error points to
+DNS, VPN, firewall, or certificate trust. An `auto` error means the proxy operator must add that
+alias before Agent chat can mint a restricted runtime key.
+
+For a short end-to-end check, start the remote profile command, open
+`http://local-development.localhost:4200`, enter an Agent conversation, and send one small prompt.
+A completed response proves the server minted an attempt key, the local runtime reached the remote
+proxy, and the authenticated runtime and conversation streams returned the result. Press `Ctrl+C`
+once and wait for cleanup when the check finishes.
 
 The runtime receives an attempt-scoped LiteLLM key in A/B, never the provider key or LiteLLM
 master key. The controller and each runtime attempt also use separate private bearer files; the
 runtime bearer is signed for that attempt's generated process identity.
-
-Alternative B cannot prove that a remote LiteLLM administrator has isolated organisations behind
-the supplied admin key. Use an admin credential scoped to this OpenCrane organisation or a dedicated
-proxy. Do not provide a fleet-wide master key that can mint keys across organisations. OpenCrane
-limits every minted runtime key to one model alias, budget, and expiry, but those limits do not
-replace remote LiteLLM team or tenant isolation.
 
 ::: info
 The coordinator keeps the named PostgreSQL volume between runs. Press `Ctrl+C` and wait for the
@@ -164,11 +235,13 @@ baseline changes; it removes only resources carrying the OpenCrane local-develop
 :::
 
 The lock deliberately rejects a second Tier 2 coordinator because profiles share listener ports,
-the PostgreSQL volume, and the fixed local identity. With an older coordinator that is already
-suspended, run `fg`, then press `Ctrl+C` and wait for it to exit; closing the terminal is unnecessary.
+the PostgreSQL volume, and the fixed local identity. Press `Ctrl+C` once and wait for cleanup before
+starting another profile. `Ctrl+Z` now requests the same cleanup instead of suspending the command,
+so no `fg` sequence or repeated signal is required.
 
 ::: warning
-Do not use `development-live` to prove a Tier 1 change. A successful live request can hide an
-incomplete mock binding; the provider-composition and network-tripwire tests exist to catch exactly
-that drift.
+Do not use `development-live` as the only proof for a Tier 1 change. A real backend can satisfy a
+request that should have used an in-browser Tier 1 gateway, hiding an incomplete mock binding. Run
+the default Tier 1 profile so the provider-composition and network-tripwire tests can catch that
+drift; use `development-live` only for the separate Tier 2 integration check.
 :::
