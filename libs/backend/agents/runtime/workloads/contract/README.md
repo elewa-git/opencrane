@@ -22,8 +22,8 @@ class-specific executor reports its binding
 ```
 
 **In this flow:** the MCP executor proves an already-imported image before it creates an
-`mcp-executor` claim. The existing [skill execution authority](../../../skills/execution/main/README.md)
-keeps its own claim types and is not routed through this contract. No caller can select a profile,
+`mcp-executor` claim. Agent runs, skill validation, and artifact preprocessing use their own
+class-specific profiles through the same claim shape. No caller can select a profile,
 container image, or Kubernetes Job through this package.
 
 The contract is deliberately small. If it carried image details or a Job shape, it would turn an
