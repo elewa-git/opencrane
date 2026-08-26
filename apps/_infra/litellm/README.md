@@ -53,6 +53,9 @@ loopback container. It reads an owner-only OpenAI provider-key file, defaulting 
 convention without changing the configured OpenAI model. The coordinator generates a different
 local LiteLLM master key. Alternative B uses an explicit remote HTTPS LiteLLM origin and admin-key
 file; Alternative C starts no LiteLLM process and reads no provider or model credential.
+Future local provider files follow `keys/<lowercase-provider-name>-key` (for example,
+`keys/anthropic-key`), but each name requires a matching reviewed local LiteLLM configuration and
+coordinator mapping before Alternative A may admit it.
 
 ## See also
 

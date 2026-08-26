@@ -172,6 +172,46 @@ routes `auto` to its configured OpenAI model. For Anthropic, Gemini, or another 
 Alternative B with a remote LiteLLM proxy that owns that provider configuration and exposes the
 required `auto` alias; do not place a different provider's key in the local OpenAI file.
 
+The filename convention itself is provider-neutral. Use the provider's lowercase, kebab-case name:
+
+- OpenAI → `keys/openai-key`
+- Anthropic → `keys/anthropic-key`
+- Google Gemini → `keys/gemini-key`
+- Azure OpenAI → `keys/azure-openai-key`
+- Mistral → `keys/mistral-key`
+
+::: warning
+Only `keys/openai-key` is currently admitted by Alternative A. Creating another correctly named file
+does not configure its provider, and the coordinator rejects it before startup.
+:::
+
+### Add another provider to local-llm
+
+Supporting another provider locally is a reviewed code-and-configuration change, not a command-line
+filename change. A maintainer must update all of these contracts together:
+
+1. Extend the
+   [provider-key validator](https://github.com/elewa-git/opencrane/blob/main/scripts/local-development/profiles.mjs)
+   to admit the provider's exact `keys/<lowercase-provider-name>-key` path while continuing to reject
+   mismatched names and paths outside `keys/`.
+2. Add a provider-specific configuration beside the
+   [local LiteLLM profile](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/litellm/local-development/config.yaml).
+   It must route OpenCrane's required `auto` alias to the selected LiteLLM provider/model identifier
+   and read that provider's credential from an environment variable.
+3. Update the
+   [configuration selector](https://github.com/elewa-git/opencrane/blob/main/scripts/local-development/configuration.mjs)
+   and [container command](https://github.com/elewa-git/opencrane/blob/main/scripts/local-development/commands.mjs)
+   so the container mounts only the selected provider configuration and receives only that
+   provider's key. Keep raw credentials out of command arguments.
+4. Add local-development tests proving the filename/provider match, `auto` routing, environment
+   isolation, owner-only file permissions, symbolic-link rejection, and separation from the
+   PostgreSQL and LiteLLM master credentials.
+5. Update the CLI help and this page only after the new provider path is executable.
+
+Until those changes are implemented and reviewed, use Alternative B for every non-OpenAI provider.
+The remote LiteLLM proxy owns the provider mapping while OpenCrane continues to request `auto` with
+attempt-scoped credentials.
+
 ### Configure a remote LiteLLM proxy
 
 Alternative B's endpoint and key path above are placeholders. Ask the proxy operator for:

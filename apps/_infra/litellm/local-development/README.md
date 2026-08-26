@@ -20,6 +20,17 @@ its reviewed OpenAI configuration. This option changes only credential custody. 
 configuration still routes the `auto` alias to its OpenAI model, so another provider belongs behind
 Alternative B until a separate local provider/model configuration is reviewed.
 
+Provider files use `keys/<lowercase-provider-name>-key`: for example, `keys/anthropic-key`,
+`keys/gemini-key`, `keys/azure-openai-key`, or `keys/mistral-key`. These names describe credential
+custody; they do not select a LiteLLM provider. The current parser admits only `keys/openai-key`.
+
+Adding another local provider requires one provider-specific configuration in this directory that
+keeps the public model alias `auto`, the matching parser allow-list entry, configuration selection,
+and container environment mapping. Tests must prove the selected key never enters command arguments,
+no unselected provider credential reaches the container, and the existing file-permission,
+symbolic-link, and credential-separation checks still fail closed. Until that complete contract
+lands, use Alternative B for non-OpenAI providers.
+
 ## Boundary
 
 Alternative B uses an explicitly configured remote LiteLLM endpoint and does not read this profile.
