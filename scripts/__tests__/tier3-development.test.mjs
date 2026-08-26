@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
+import https from "node:https";
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { closeTier3BrowserProxy, createTier3BrowserProxy } from "../tier3-browser-proxy.mjs";
 import { createTier3SessionConfiguration, parseTier3Arguments } from "../tier3-development-options.mjs";
 import { runTier3Development } from "../tier3-development.mjs";
+import { readTier3IngressCertificate } from "../tier3-ingress-certificate.mjs";
 
 test("Tier 3 defaults to full storage qualification and the Codespaces proxy", function _defaults()
 {
@@ -43,6 +48,10 @@ test("Tier 3 always keeps the smoke cluster and applies the selected storage mod
 		KEEP_CLUSTER: "0",
 		PATH: "/usr/bin"
 	}, "fast"), {
+		ingressCertificate: {
+			certificateName: "opencrane-qa-clustertenant-tls",
+			namespace: "opencrane-develop-smoke",
+		},
 		smokeEnvironment: {
 			BASE_DOMAIN: "local.test",
 			CLUSTER_TENANT: "qa",
@@ -58,10 +67,11 @@ test("Tier 3 qualifies smoke before it starts and waits on the matching ingress 
 {
 	const events = [];
 	const server = {};
+	const certificate = "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n";
 	await runTier3Development({ proxyPort: 4300, smokeOnly: false, storageMode: "fast" }, {
 		createProxy(options)
 		{
-			events.push(["create-proxy", options.upstreamHost]);
+			events.push(["create-proxy", options.upstreamHost, options.upstreamCertificate]);
 			return server;
 		},
 		listenProxy(receivedServer, port)
@@ -73,6 +83,11 @@ test("Tier 3 qualifies smoke before it starts and waits on the matching ingress 
 		{
 			events.push(["smoke", environment.KEEP_CLUSTER, environment.SMOKE_STORAGE_MODE]);
 		},
+		readIngressCertificate(identity)
+		{
+			events.push(["read-certificate", identity.namespace, identity.certificateName]);
+			return certificate;
+		},
 		waitForShutdown(receivedServer)
 		{
 			events.push(["wait", receivedServer]);
@@ -82,10 +97,91 @@ test("Tier 3 qualifies smoke before it starts and waits on the matching ingress 
 
 	assert.deepEqual(events, [
 		["smoke", "1", "fast"],
-		["create-proxy", "smoke.develop-smoke.opencrane.test"],
+		["read-certificate", "opencrane-develop-smoke", "opencrane-smoke-clustertenant-tls"],
+		["create-proxy", "smoke.develop-smoke.opencrane.test", certificate],
 		["listen", server, 4300],
 		["wait", server]
 	]);
+});
+
+test("the ingress certificate reader follows the Certificate's exact Secret", async function _readsCertificate()
+{
+	const certificate = "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n";
+	const calls = [];
+	const result = await readTier3IngressCertificate({
+		certificateName: "custom-release-clustertenant-tls",
+		namespace: "custom-namespace"
+	}, {
+		execFile(command, argumentsList, callback)
+		{
+			calls.push([command, argumentsList]);
+			const output = calls.length === 1 ? "custom-wildcard-tls" : Buffer.from(certificate).toString("base64");
+			callback(null, output, "");
+		}
+	});
+
+	assert.equal(result, certificate);
+	assert.deepEqual(calls, [
+		["kubectl", ["get", "certificate", "custom-release-clustertenant-tls", "-n", "custom-namespace", "-o", "jsonpath={.spec.secretName}"]],
+		["kubectl", ["get", "secret", "custom-wildcard-tls", "-n", "custom-namespace", "-o", "jsonpath={.data.tls\\.crt}"]]
+	]);
+});
+
+test("the ingress certificate reader rejects missing resources and invalid PEM", async function _rejectsCertificateErrors()
+{
+	await assert.rejects(readTier3IngressCertificate({ certificateName: "missing", namespace: "test" }, {
+		execFile(_command, _argumentsList, callback)
+		{
+			callback(new Error("exit 1"), "", "NotFound");
+		}
+	}), /Unable to read the Tier 3 ingress Certificate: NotFound/u);
+
+	let callCount = 0;
+	await assert.rejects(readTier3IngressCertificate({ certificateName: "invalid", namespace: "test" }, {
+		execFile(_command, _argumentsList, callback)
+		{
+			callCount += 1;
+			callback(null, callCount === 1 ? "tls-secret" : Buffer.from("not a certificate").toString("base64"), "");
+		}
+	}), /does not contain a PEM certificate/u);
+});
+
+test("the HTTPS browser proxy fails closed without the smoke ingress certificate", function _requiresCertificate()
+{
+	assert.throws(function _create()
+	{
+		createTier3BrowserProxy({ upstreamHost: "smoke.develop-smoke.opencrane.test" });
+	}, /requires its smoke-issued certificate/u);
+});
+
+test("the HTTPS browser proxy trusts only the supplied smoke certificate", async function _trustsCertificate(context)
+{
+	const trustedFixture = _CreateTlsFixture("smoke.develop-smoke.opencrane.test");
+	context.after(trustedFixture.remove);
+	const untrustedFixture = _CreateTlsFixture("other.test");
+	context.after(untrustedFixture.remove);
+	const upstream = https.createServer({ cert: trustedFixture.certificate, key: trustedFixture.privateKey }, function _respond(_request, response)
+	{
+		response.end("trusted");
+	});
+	await _Listen(upstream);
+	const upstreamAddress = upstream.address();
+	const upstreamOrigin = `https://127.0.0.1:${upstreamAddress.port}`;
+	const upstreamHost = "smoke.develop-smoke.opencrane.test";
+	const trustedProxy = createTier3BrowserProxy({ upstreamCertificate: trustedFixture.certificate, upstreamHost, upstreamOrigin });
+	const untrustedProxy = createTier3BrowserProxy({ upstreamCertificate: untrustedFixture.certificate, upstreamHost, upstreamOrigin });
+	await Promise.all([_Listen(trustedProxy), _Listen(untrustedProxy)]);
+
+	const trustedAddress = trustedProxy.address();
+	const untrustedAddress = untrustedProxy.address();
+	const trustedResult = await _Get(`http://127.0.0.1:${trustedAddress.port}/health`, { host: "example.test" });
+	const untrustedResult = await _Get(`http://127.0.0.1:${untrustedAddress.port}/health`, { host: "example.test" });
+
+	assert.equal(trustedResult.statusCode, 200);
+	assert.equal(trustedResult.body, "trusted");
+	assert.equal(untrustedResult.statusCode, 502);
+	assert.match(untrustedResult.body, /certificate/u);
+	await Promise.all([_Close(trustedProxy), _Close(untrustedProxy), _Close(upstream)]);
 });
 
 test("Tier 3 smoke-only sessions do not create a browser proxy", async function _skipsProxy()
@@ -264,4 +360,44 @@ function _Get(url, headers)
 		});
 		request.once("error", reject);
 	});
+}
+
+/** Creates a self-signed certificate and cleanup callback for hostname and CA trust tests. */
+function _CreateTlsFixture(commonName)
+{
+	const directory = fs.mkdtempSync(path.join(os.tmpdir(), "opencrane-tier3-tls-"));
+	const certificatePath = path.join(directory, "certificate.pem");
+	const privateKeyPath = path.join(directory, "private-key.pem");
+
+	try
+	{
+		execFileSync("openssl", [
+			"req",
+			"-x509",
+			"-newkey",
+			"rsa:2048",
+			"-nodes",
+			"-keyout",
+			privateKeyPath,
+			"-out",
+			certificatePath,
+			"-days",
+			"1",
+			"-subj",
+			`/CN=${commonName}`,
+			"-addext",
+			`subjectAltName=DNS:${commonName}`
+		], { stdio: "ignore" });
+
+		return {
+			certificate: fs.readFileSync(certificatePath, "utf8"),
+			privateKey: fs.readFileSync(privateKeyPath, "utf8"),
+			remove() { fs.rmSync(directory, { force: true, recursive: true }); }
+		};
+	}
+	catch (error)
+	{
+		fs.rmSync(directory, { force: true, recursive: true });
+		throw error;
+	}
 }

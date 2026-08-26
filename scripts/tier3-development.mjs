@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { closeTier3BrowserProxy, createTier3BrowserProxy } from "./tier3-browser-proxy.mjs";
 import { createTier3SessionConfiguration, parseTier3Arguments, TIER3_DEVELOPMENT_HELP } from "./tier3-development-options.mjs";
+import { readTier3IngressCertificate } from "./tier3-ingress-certificate.mjs";
 
 const _SMOKE_PATH = "apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh";
 const _REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -23,11 +24,12 @@ const _REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url));
  * @param {Function} [operations.createProxy] - Creates a stopped ingress proxy.
  * @param {Function} [operations.listenProxy] - Binds that proxy to a loopback port.
  * @param {NodeJS.ProcessEnv} [operations.parentEnvironment] - Supplies smoke identity and process inputs.
+ * @param {Function} [operations.readIngressCertificate] - Reads the smoke-issued ingress certificate.
  * @param {Function} [operations.runSmoke] - Runs the app-owned k3d qualification.
  * @param {Function} [operations.waitForShutdown] - Keeps the proxy alive for inspection.
  * @param {Function} [operations.writeOutput] - Reports the ready session.
  * @returns {Promise<void>} Resolves when smoke-only completes or the developer stops the proxy.
- * @throws Error when the smoke or loopback listener cannot start successfully.
+ * @throws {Error} When smoke, certificate lookup, proxy validation, or the loopback listener fails.
  */
 export async function runTier3Development(options, operations = {})
 {
@@ -35,6 +37,7 @@ export async function runTier3Development(options, operations = {})
 	const runSmoke = operations.runSmoke ?? _RunSmoke;
 	const createProxy = operations.createProxy ?? createTier3BrowserProxy;
 	const listenProxy = operations.listenProxy ?? _ListenProxy;
+	const readIngressCertificate = operations.readIngressCertificate ?? readTier3IngressCertificate;
 	const waitForShutdown = operations.waitForShutdown ?? _WaitForShutdown;
 	const writeOutput = operations.writeOutput ?? function _write(message) { process.stdout.write(message); };
 	await runSmoke(configuration.smokeEnvironment);
@@ -44,7 +47,8 @@ export async function runTier3Development(options, operations = {})
 		return;
 	}
 
-	const server = createProxy({ upstreamHost: configuration.upstreamHost });
+	const upstreamCertificate = await readIngressCertificate(configuration.ingressCertificate);
+	const server = createProxy({ upstreamCertificate, upstreamHost: configuration.upstreamHost });
 	await listenProxy(server, options.proxyPort);
 
 	writeOutput(`\nTier 3 is ready on http://127.0.0.1:${options.proxyPort}.\n`);

@@ -11,21 +11,32 @@ const _UPGRADED_SOCKETS = new WeakMap();
  * The k3d ingress routes by its `.test` host, while Codespaces gives the browser an
  * `*.app.github.dev` host. This proxy keeps the browser-facing origin unchanged and replaces only
  * the upstream Host header, so the SPA, API, and WebSocket routes all cross the real ingress.
+ * HTTPS requests use the supplied smoke certificate as their CA set: omitting it stops proxy
+ * creation, while a different certificate fails the upstream request instead of disabling TLS
+ * verification.
  *
  * Called by: `runTier3Development` after the current-silo smoke passes.
  *
- * @param {{ upstreamOrigin?: string, upstreamHost: string }} options - Ingress listener and smoke-derived host.
+ * @param {{ upstreamCertificate?: string | Buffer, upstreamOrigin?: string, upstreamHost: string }} options - Ingress listener, certificate, and smoke-derived host.
  * @returns A stopped HTTP server that the caller can bind to a loopback port.
+ * @throws {Error} When an HTTPS origin has no smoke-issued certificate.
  */
 export function createTier3BrowserProxy(options)
 {
 	const upstream = new URL(options.upstreamOrigin ?? _DEFAULT_UPSTREAM_ORIGIN);
 	const upstreamHost = options.upstreamHost;
+	const upstreamCertificate = options.upstreamCertificate;
+
+	if (upstream.protocol === "https:" && !upstreamCertificate)
+	{
+		throw new Error("Tier 3 HTTPS ingress requires its smoke-issued certificate.");
+	}
+
 	const transport = upstream.protocol === "https:" ? https : http;
 	const upgradedSockets = new Set();
 	const server = http.createServer(function _forwardRequest(request, response)
 	{
-		const upstreamRequest = transport.request(_RequestOptions(request, upstream, upstreamHost), function _forwardResponse(upstreamResponse)
+		const upstreamRequest = transport.request(_RequestOptions(request, upstream, upstreamHost, upstreamCertificate), function _forwardResponse(upstreamResponse)
 		{
 			response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.statusMessage, upstreamResponse.headers);
 			upstreamResponse.pipe(response);
@@ -46,7 +57,7 @@ export function createTier3BrowserProxy(options)
 	server.on("upgrade", function _forwardUpgrade(request, socket, head)
 	{
 		_TrackUpgradedSocket(upgradedSockets, socket);
-		const upstreamRequest = transport.request(_RequestOptions(request, upstream, upstreamHost));
+		const upstreamRequest = transport.request(_RequestOptions(request, upstream, upstreamHost, upstreamCertificate));
 		socket.once("close", function _abortHandshake() { upstreamRequest.destroy(); });
 		upstreamRequest.once("upgrade", function _connected(upstreamResponse, upstreamSocket, upstreamHead)
 		{
@@ -130,10 +141,10 @@ function _TrackUpgradedSocket(sockets, socket)
 	socket.once("close", function _forget() { sockets.delete(socket); });
 }
 
-/** Builds the upstream request without forwarding the browser host into ingress routing. */
-function _RequestOptions(request, upstream, upstreamHost)
+/** Applies the routing and trust inputs validated by `createTier3BrowserProxy`. */
+function _RequestOptions(request, upstream, upstreamHost, upstreamCertificate)
 {
-	return {
+	const requestOptions = {
 		protocol: upstream.protocol,
 		hostname: upstream.hostname,
 		port: upstream.port,
@@ -143,10 +154,15 @@ function _RequestOptions(request, upstream, upstreamHost)
 			...request.headers,
 			host: upstreamHost
 		},
-		servername: upstreamHost,
-		// The smoke creates its own certificate authority, which the Codespace does not trust.
-		rejectUnauthorized: false
+		servername: upstreamHost
 	};
+
+	if (upstream.protocol === "https:")
+	{
+		requestOptions.ca = upstreamCertificate;
+	}
+
+	return requestOptions;
 }
 
 /** Replays the accepted upstream upgrade response before joining both sockets. */

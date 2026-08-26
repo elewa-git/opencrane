@@ -94,14 +94,20 @@ export function parseTier3Arguments(argumentsList)
  *
  * @param {NodeJS.ProcessEnv} parentEnvironment - Developer tool and optional smoke overrides.
  * @param {"fast" | "full"} storageMode - Storage path the smoke must qualify.
- * @returns {{ smokeEnvironment: NodeJS.ProcessEnv, upstreamHost: string }} The retained smoke inputs and the ingress host they create.
+ * @returns {{ ingressCertificate: { certificateName: string, namespace: string }, smokeEnvironment: NodeJS.ProcessEnv, upstreamHost: string }} The retained smoke inputs and ingress identity they create.
  */
 export function createTier3SessionConfiguration(parentEnvironment, storageMode)
 {
 	const clusterTenant = parentEnvironment.CLUSTER_TENANT || "smoke";
 	const baseDomain = parentEnvironment.BASE_DOMAIN || "develop-smoke.opencrane.test";
+	const namespace = parentEnvironment.NAMESPACE || "opencrane-develop-smoke";
+	const releaseName = parentEnvironment.RELEASE_NAME || `opencrane-${clusterTenant}`;
 
 	return {
+		ingressCertificate: {
+			certificateName: `${releaseName}-clustertenant-tls`,
+			namespace,
+		},
 		smokeEnvironment: {
 			...parentEnvironment,
 			KEEP_CLUSTER: "1",
