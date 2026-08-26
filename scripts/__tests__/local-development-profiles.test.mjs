@@ -29,6 +29,14 @@ test("agent defaults to Alternative A", function _defaultAgentAlternative()
 	assert.equal(configuration.developmentProfile, "agent-local");
 });
 
+test("named alternatives can print help without runtime-specific settings", function _AlternativeHelp()
+{
+	const parsed = parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "remote-llm", "--help"]);
+
+	assert.equal(parsed.help, true);
+	assert.equal(parsed.alternative, "remote-llm");
+});
+
 test("agent accepts exact descriptive alternatives", function _exactAlternatives()
 {
 	const local = parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "local-llm"]);

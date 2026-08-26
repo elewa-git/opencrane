@@ -8,7 +8,10 @@ const _HELP = `OpenCrane Tier 2 local development
 
 Usage:
   npm run dev:tier2
-  npm run dev:tier2 -- --profile agent [--alternative local-llm|remote-llm|simulated-llm]
+  npm run dev:tier2:agent
+  npm run dev:tier2:agent:local-llm
+  npm run dev:tier2:agent:remote-llm -- --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path
+  npm run dev:tier2:agent:simulated-llm
 
 Profiles:
   core   PostgreSQL, the watched server, and the live-gateway UI (default)
