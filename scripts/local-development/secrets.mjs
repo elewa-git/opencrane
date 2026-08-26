@@ -73,8 +73,8 @@ export function readOrCreateLocalSecret(filePath, label, prefix, randomBytes = c
 /**
  * Loads the credentials required by the selected profile without reading keys used by other alternatives.
  * Local mode rejects pairwise reuse because the provider, LiteLLM proxy, and PostgreSQL database
- * authenticate different boundaries. Alternative B also refuses local credential-file paths as its
- * remote admin-key source.
+ * authenticate different boundaries. Alternative B also refuses the local LiteLLM master-key and
+ * configured provider-key paths as its remote admin-key source.
  *
  * Called by: `runLocalDevelopmentSession` before it creates commands or starts child processes.
  * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Selected Tier 2 profile and credential paths.
