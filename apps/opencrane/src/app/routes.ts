@@ -83,7 +83,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },
 	];
 	const gatewayRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(mcpWorkflows.unitOfWork, new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma), mcpWorkflows.eraProbeWorkflow, mcpWorkflows.mcpbValidationWorkflow, mcpWorkflows.mcpbArtifacts) },
+		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(mcpWorkflows.unitOfWork, new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma), mcpWorkflows.eraProbeWorkflow, mcpWorkflows.ociImageValidationWorkflow, mcpWorkflows.ociImageArtifacts) },
 		{ method: "use", path: "/api/v1/integrations", handler: _CreateIntegrationCustodyRouter(prisma, obotCustody, _log) },
 		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma) },
 		{ method: "use", path: "/api/v1/providers/credentials", handler: providerCredentialsRouter(prisma) },

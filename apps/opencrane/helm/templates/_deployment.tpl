@@ -6,6 +6,8 @@
 {{- $fleetMembership := $membership.fleet -}}
 {{- $initialModel := .Values.clustertenantManager.initialModel -}}
 {{- $firstUser := .Values.clustertenantManager.firstUser -}}
+{{- $ociRegistry := .Values.clustertenantManager.workflows.ociRegistry -}}
+{{- $ociRegistryAuthorization := $ociRegistry.authorization -}}
 {{- $controlPlaneHost := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
 {{- $channelSiloId := .Values.channelProxy.siloId | default $firstUser.clusterTenant | default .Release.Name -}}
 {{- $openCraneInternalUrl := .Values.channelProxy.openCraneInternalUrl | default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) -}}
@@ -44,6 +46,15 @@
 {{- end -}}
 {{- if and $firstUser.email (ne $membership.mode "standalone") -}}
 {{- fail "clustertenantManager.firstUser requires membership.mode=standalone" -}}
+{{- end -}}
+{{- if not (hasPrefix "https://" $ociRegistry.baseUrl) -}}
+{{- fail "clustertenantManager.workflows.ociRegistry.baseUrl must use https" -}}
+{{- end -}}
+{{- if empty $ociRegistry.repository -}}
+{{- fail "clustertenantManager.workflows.ociRegistry.repository is required" -}}
+{{- end -}}
+{{- if and $ociRegistryAuthorization.existingSecret (empty $ociRegistryAuthorization.secretKey) -}}
+{{- fail "clustertenantManager.workflows.ociRegistry.authorization.secretKey is required when an existingSecret is configured" -}}
 {{- end -}}
 apiVersion: apps/v1
 kind: Deployment
@@ -136,6 +147,16 @@ spec:
               value: {{ .Values.clustertenantManager.workflows.mcpEraProbeTimeoutMilliseconds | quote }}
             - name: OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES
               value: {{ .Values.clustertenantManager.workflows.mcpEraProbeMaximumResponseBytes | quote }}
+            - name: OPENCRANE_OCI_REGISTRY_BASE_URL
+              value: {{ $ociRegistry.baseUrl | quote }}
+            - name: OPENCRANE_OCI_REGISTRY_REPOSITORY
+              value: {{ $ociRegistry.repository | quote }}
+            - name: OPENCRANE_OCI_REGISTRY_TIMEOUT_MS
+              value: {{ $ociRegistry.requestTimeoutMilliseconds | quote }}
+            {{- if $ociRegistryAuthorization.existingSecret }}
+            - name: OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE
+              value: /var/run/opencrane/oci-registry/authorization
+            {{- end }}
             - name: OPENCRANE_MEMBERSHIP_MODE
               value: {{ $membership.mode | quote }}
             - name: OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS
@@ -333,6 +354,11 @@ spec:
               mountPath: /var/run/opencrane/obot
               readOnly: true
             {{- end }}
+            {{- if $ociRegistryAuthorization.existingSecret }}
+            - name: oci-registry-authorization
+              mountPath: /var/run/opencrane/oci-registry
+              readOnly: true
+            {{- end }}
           livenessProbe:
             # A running server can repair a transient dependency connection; the
             # aggregated health route keeps database readiness as the public gate.
@@ -407,5 +433,15 @@ spec:
             items:
                - key: token
                  path: token
+        {{- end }}
+        {{- if $ociRegistryAuthorization.existingSecret }}
+        # OpenCrane re-reads this file for every registry request so Secret rotation takes effect.
+        - name: oci-registry-authorization
+          secret:
+            secretName: {{ $ociRegistryAuthorization.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ $ociRegistryAuthorization.secretKey | quote }}
+                path: authorization
         {{- end }}
 {{- end }}

@@ -1,7 +1,7 @@
-import type { McpbBundleArtifactTarget, McpbValidationStates, McpbVerificationFailureCodes, McpbVerificationResult } from "./mcpb-validation.types";
+import type { OciImageAdmissionResult, OciImageLayoutArtifactTarget, OciImageValidationStates, OciImageVerificationFailureCodes } from "./oci-image-validation.types";
 
-/** Fields required to create or replay one MCP bundle submission. */
-export interface McpbValidationSubmissionRecord extends McpbBundleArtifactTarget
+/** Fields required to create or replay one OCI image submission. */
+export interface OciImageValidationSubmissionRecord extends OciImageLayoutArtifactTarget
 {
 	/** Digest of the caller key used to find a retried submission. */
 	readonly submissionKeyDigest: string;
@@ -12,15 +12,15 @@ export interface McpbValidationSubmissionRecord extends McpbBundleArtifactTarget
 }
 
 /** Product fields returned to an administrator after submission or replay. */
-export interface McpbValidationRecord
+export interface OciImageValidationRecord
 {
 	/** Stable product validation identifier. */
 	readonly id: string;
 	/** Silo that owns the validation. */
 	readonly siloId: string;
-	/** Exact artifact selected for verification. */
+	/** Exact artifact selected for admission. */
 	readonly artifactId: string;
-	/** Exact published artifact revision selected for verification. */
+	/** Exact published artifact revision selected for admission. */
 	readonly artifactRevisionId: string;
 	/** Canonical SHA-256 address saved when the request was admitted. */
 	readonly contentAddress: string;
@@ -31,41 +31,39 @@ export interface McpbValidationRecord
 	/** Digest that binds every immutable submission field. */
 	readonly submissionDigest: string;
 	/** Current product decision. */
-	readonly state: McpbValidationStates;
-	/** Validated manifest name when the bundle passed. */
-	readonly manifestName: string | null;
-	/** Validated bundle version when the bundle passed. */
-	readonly bundleVersion: string | null;
-	/** Exact root manifest digest when the bundle passed. */
-	readonly manifestDigest: string | null;
-	/** Trusted certificate common name when the bundle passed. */
-	readonly publisher: string | null;
-	/** Trusted certificate fingerprint when the bundle passed. */
-	readonly signerFingerprint: string | null;
-	/** Bounded fixed reason when the bundle was rejected. */
-	readonly failureCode: McpbVerificationFailureCodes | null;
+	readonly state: OciImageValidationStates;
+	/** Digest of the accepted OCI image-layout index bytes. */
+	readonly indexDigest: string | null;
+	/** Digest of the selected OCI image manifest. */
+	readonly imageManifestDigest: string | null;
+	/** Digest of the selected OCI image configuration. */
+	readonly configDigest: string | null;
+	/** Digest-pinned registry image reference that runtime claims may consume. */
+	readonly registryReference: string | null;
+	/** Bounded fixed reason when the layout admission was rejected. */
+	readonly failureCode: OciImageVerificationFailureCodes | null;
 }
 
 /** Result of claiming and resolving one caller submission key. */
-export interface McpbValidationCreateResult
+export interface OciImageValidationCreateResult
 {
 	/** True only when this transaction created the validation row. */
 	readonly created: boolean;
 	/** Validation selected by the caller's submission key. */
-	readonly validation: McpbValidationRecord;
+	readonly validation: OciImageValidationRecord;
 }
 
-/** Result after one transaction tries to save a verification answer. */
-export interface McpbValidationWriteResult
+/** Result after one transaction tries to save an admission answer. */
+export interface OciImageValidationWriteResult
 {
 	/** True when this transaction moved the pending row to a final state. */
 	readonly changed: boolean;
 	/** Stored winner after the idempotent update. */
-	readonly validation: McpbValidationRecord;
+	readonly validation: OciImageValidationRecord;
 }
 
-/** Transaction-scoped persistence operations owned by MCP bundle validation. */
-export interface McpbValidationRepository
+/** Transaction-scoped persistence operations owned by OCI image validation. */
+export interface OciImageValidationRepository
 {
 	/**
 	 * Creates a pending validation or returns the row already claimed by this request key.
@@ -73,7 +71,7 @@ export interface McpbValidationRepository
 	 * @param submission - Authenticated silo, immutable artifact facts, and stable request digests.
 	 * @returns A new or existing validation; `null` means the key belongs to different input.
 	 */
-	createOrFind(submission: McpbValidationSubmissionRecord): Promise<McpbValidationCreateResult | null>;
+	createOrFind(submission: OciImageValidationSubmissionRecord): Promise<OciImageValidationCreateResult | null>;
 	/**
 	 * Finds one validation for an authenticated administrator without exposing another silo.
 	 *
@@ -81,7 +79,7 @@ export interface McpbValidationRepository
 	 * @param validationId - Product validation identifier from the route.
 	 * @returns The validation, or `null` when it is absent or belongs to another silo.
 	 */
-	find(siloId: string, validationId: string): Promise<McpbValidationRecord | null>;
+	find(siloId: string, validationId: string): Promise<OciImageValidationRecord | null>;
 	/**
 	 * Loads one validation only when its silo and submission digest still match the task.
 	 *
@@ -90,15 +88,15 @@ export interface McpbValidationRepository
 	 * @param submissionDigest - Rejects a task whose immutable submission fields were replaced.
 	 * @returns The stored validation, or `null` when the task no longer names it exactly.
 	 */
-	load(siloId: string, validationId: string, submissionDigest: string): Promise<McpbValidationRecord | null>;
+	load(siloId: string, validationId: string, submissionDigest: string): Promise<OciImageValidationRecord | null>;
 	/**
 	 * Stores one pending validation's final result or returns the result that already won.
 	 *
 	 * @param siloId - Keeps the update inside the admitted silo.
 	 * @param validationId - Identifies the validation to finish.
 	 * @param submissionDigest - Prevents stale work from changing replaced input.
-	 * @param result - Bounded manifest/signature answer returned by the verifier.
+	 * @param result - Bounded OCI layout answer returned by the verifier.
 	 * @returns The stored winner and whether this call changed it, or `null` when input no longer matches.
 	 */
-	recordResult(siloId: string, validationId: string, submissionDigest: string, result: McpbVerificationResult): Promise<McpbValidationWriteResult | null>;
+	recordResult(siloId: string, validationId: string, submissionDigest: string, result: OciImageAdmissionResult): Promise<OciImageValidationWriteResult | null>;
 }

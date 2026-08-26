@@ -210,11 +210,18 @@ function _readObotConfig(): OpenCraneObotConfig | null
 /** Read the one bounded Absurd worker and remote MCP protocol-check configuration. */
 function _readWorkflowConfig(): OpenCraneWorkflowConfig
 {
+	const ociRegistryAuthorizationFilePath = process.env.OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE?.trim() || undefined;
+	if (ociRegistryAuthorizationFilePath !== undefined && !isAbsolute(ociRegistryAuthorizationFilePath))
+		throw new Error("OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE must be an absolute mounted file path");
 	return {
 		databasePoolSize: _readBoundedInteger("OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE", 2, 1, 20),
 		databaseUrl: _readRequired("DATABASE_URL"),
 		mcpEraProbeMaximumResponseBytes: _readBoundedInteger("OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES", 65_536, 1_024, 1_048_576),
 		mcpEraProbeTimeoutMilliseconds: _readBoundedInteger("OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS", 5_000, 1_000, 60_000),
+		ociRegistryAuthorizationFilePath,
+		ociRegistryBaseUrl: _readRequired("OPENCRANE_OCI_REGISTRY_BASE_URL"),
+		ociRegistryRepository: _readRequired("OPENCRANE_OCI_REGISTRY_REPOSITORY"),
+		ociRegistryTimeoutMilliseconds: _readBoundedInteger("OPENCRANE_OCI_REGISTRY_TIMEOUT_MS", 30_000, 1_000, 120_000),
 		pollIntervalMilliseconds: _readBoundedInteger("OPENCRANE_WORKFLOW_POLL_INTERVAL_MS", 100, 10, 60_000),
 		siloId: _readRequired("OPENCRANE_SILO_ID"),
 		workerConcurrency: _readBoundedInteger("OPENCRANE_WORKFLOW_WORKER_CONCURRENCY", 2, 1, 20),

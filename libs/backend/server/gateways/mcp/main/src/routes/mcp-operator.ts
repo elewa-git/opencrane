@@ -9,11 +9,11 @@ import { McpRemoteServerRegistrationValidationError, registerRemoteServer } from
 import { ___McpRemoteServerRegistrationSchema } from "../era-probe/mcp-remote-registration.validator";
 import { McpRemoteServerRegistrationOutcomes } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeWorkflow } from "../era-probe/mcp-era-probe.types";
-import { getMcpbValidation, submitMcpbValidation } from "../mcpb-validation/mcpb-validation-submission";
-import { McpbValidationSubmissionOutcomes } from "../mcpb-validation/mcpb-validation-submission.types";
-import type { McpbBundleArtifactResolver } from "../mcpb-validation/mcpb-validation-submission.types";
-import type { McpbValidationWorkflow } from "../mcpb-validation/mcpb-validation.types";
-import { ___McpbValidationIdSchema, ___McpbValidationSubmissionSchema } from "../mcpb-validation/mcpb-validation-submission.validator";
+import { getOciImageValidation, submitOciImageValidation } from "../oci-image-validation/oci-image-validation-submission";
+import { OciImageValidationSubmissionOutcomes } from "../oci-image-validation/oci-image-validation-submission.types";
+import type { OciImageLayoutArtifactResolver } from "../oci-image-validation/oci-image-validation-submission.types";
+import type { OciImageValidationWorkflow } from "../oci-image-validation/oci-image-validation.types";
+import { ___OciImageValidationIdSchema, ___OciImageValidationSubmissionSchema } from "../oci-image-validation/oci-image-validation-submission.validator";
 import { ___McpAccessPolicySchema, ___McpEnabledSchema, ___McpInstallSchema } from "./mcp-operator.validator";
 
 /**
@@ -30,11 +30,11 @@ import { ___McpAccessPolicySchema, ___McpEnabledSchema, ___McpInstallSchema } fr
 	 * @param unitOfWork - Runs each MCP operation with transaction-scoped repositories.
 	 * @param principalDirectory - Resolves the authenticated identity to a local Principal in its silo.
 	 * @param eraProbeWorkflow - Runs the saved protocol check admitted with a server registration.
- * @param mcpbValidationWorkflow - Saves the background job that verifies an uploaded MCP bundle.
- * @param mcpbArtifacts - Resolves exact artifact facts inside the authenticated silo.
+ * @param ociImageValidationWorkflow - Saves the background job that verifies an uploaded OCI image.
+ * @param ociImageArtifacts - Resolves exact artifact facts inside the authenticated silo.
  * @returns Configured Express router.
  */
-export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDirectory: AuthenticatedPrincipalDirectory, eraProbeWorkflow: McpEraProbeWorkflow, mcpbValidationWorkflow: McpbValidationWorkflow, mcpbArtifacts: McpbBundleArtifactResolver): Router
+export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDirectory: AuthenticatedPrincipalDirectory, eraProbeWorkflow: McpEraProbeWorkflow, ociImageValidationWorkflow: OciImageValidationWorkflow, ociImageArtifacts: OciImageLayoutArtifactResolver): Router
 {
   const router = Router();
 
@@ -143,47 +143,47 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     }
   });
 
-	/** Submit one published `.mcpb` artifact and its saved verification job. Org-admin only. */
-	router.post("/bundle-validations", _RequireOrgAdmin(), async function _SubmitMcpBundle(req, res)
+	/** Submit one published OCI image-layout artifact and its saved admission job. Org-admin only. */
+	router.post("/oci-image-validations", _RequireOrgAdmin(), async function _SubmitOciImageValidation(req, res)
 	{
 		const caller = await _ResolveCaller(principalDirectory, req);
 		if (!_SendUnauthorizedWhenMissing(res, caller))
 			return;
-		const parsed = ___McpbValidationSubmissionSchema.safeParse(req.body);
+		const parsed = ___OciImageValidationSubmissionSchema.safeParse(req.body);
 		if (!parsed.success)
 		{
-			res.status(400).json({ error: "MCP bundle validation fields are invalid.", code: "VALIDATION_ERROR" });
+			res.status(400).json({ error: "OCI image validation fields are invalid.", code: "VALIDATION_ERROR" });
 			return;
 		}
-		const result = await submitMcpbValidation(unitOfWork, mcpbValidationWorkflow, mcpbArtifacts, caller, parsed.data);
-		if (result.outcome !== McpbValidationSubmissionOutcomes.Submitted)
+		const result = await submitOciImageValidation(unitOfWork, ociImageValidationWorkflow, ociImageArtifacts, caller, parsed.data);
+		if (result.outcome !== OciImageValidationSubmissionOutcomes.Submitted)
 		{
-			if (result.outcome === McpbValidationSubmissionOutcomes.ArtifactNotFound)
+			if (result.outcome === OciImageValidationSubmissionOutcomes.ArtifactNotFound)
 			{
-				res.status(404).json({ error: "MCP bundle artifact revision not found.", code: "MCPB_ARTIFACT_NOT_FOUND" });
+				res.status(404).json({ error: "OCI image artifact revision not found.", code: "OCI_IMAGE_ARTIFACT_NOT_FOUND" });
 				return;
 			}
-			res.status(409).json({ error: "The submission key is already used by different input.", code: "MCPB_VALIDATION_CONFLICT" });
+			res.status(409).json({ error: "The submission key is already used by different input.", code: "OCI_IMAGE_VALIDATION_CONFLICT" });
 			return;
 		}
 		res.status(201).json(result.validation);
 	});
 
-	/** Return one saved MCP bundle validation inside the authenticated silo. Org-admin only. */
-	router.get("/bundle-validations/:id", _RequireOrgAdmin(), async function _GetMcpBundleValidation(req: Request<{ id: string }>, res)
+	/** Return one saved OCI image admission result inside the authenticated silo. Org-admin only. */
+	router.get("/oci-image-validations/:id", _RequireOrgAdmin(), async function _GetOciImageValidation(req: Request<{ id: string }>, res)
 	{
 		const caller = await _ResolveCaller(principalDirectory, req);
 		if (!_SendUnauthorizedWhenMissing(res, caller))
 			return;
-		if (!___McpbValidationIdSchema.safeParse(req.params.id).success)
+		if (!___OciImageValidationIdSchema.safeParse(req.params.id).success)
 		{
-			res.status(400).json({ error: "MCP bundle validation id is invalid.", code: "VALIDATION_ERROR" });
+			res.status(400).json({ error: "OCI image validation id is invalid.", code: "VALIDATION_ERROR" });
 			return;
 		}
-		const validation = await getMcpbValidation(unitOfWork, caller, req.params.id);
+		const validation = await getOciImageValidation(unitOfWork, caller, req.params.id);
 		if (validation === null)
 		{
-			res.status(404).json({ error: "MCP bundle validation not found.", code: "MCPB_VALIDATION_NOT_FOUND" });
+			res.status(404).json({ error: "OCI image validation not found.", code: "OCI_IMAGE_VALIDATION_NOT_FOUND" });
 			return;
 		}
 		res.json(validation);

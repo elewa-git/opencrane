@@ -10,7 +10,7 @@ which ones administrators approve, and who may install them.
 
 A workflow is a background job whose progress is saved in the database. If OpenCrane restarts, the
 job can continue instead of starting over. Absurd runs these jobs. This package uses workflows to
-check a newly registered MCP server and a submitted signed MCP bundle.
+check a newly registered MCP server and a submitted OCI Image Layout ZIP.
 
 ```
  administrator sends POST /mcp/servers
@@ -28,22 +28,30 @@ check a newly registered MCP server and a submitted signed MCP bundle.
 ```
 
 ```
- administrator sends POST /mcp/bundle-validations
+ administrator sends POST /mcp/oci-image-validations
         │
         ▼
  database transaction
-   ├── save the exact published bundle revision
+   ├── save the exact published OCI image revision
    └── save an Absurd background job
         │
         ▼
- worker checks the signed bundle and its manifest
-   ├── trusted signature + valid manifest ──► verified
-   └── invalid package ─────────────────────► rejected
+ worker validates the OCI layout, descriptors, and content digests
+   ├── invalid archive or layout ────► rejected
+   └── valid immutable OCI layout
+            │
+            ▼
+       copy config, layers, and manifest to the operator registry
+            │
+            ▼
+       save registry/repository@sha256:... ──► imported and stored for a later governed runtime claim
 ```
 
-The bundle check currently verifies the signature and the package manifest. Running the bundle in
-an isolated environment, scanning it, building an image, and publishing it are later workflow
-steps.
+Layout validation checks the OCI Image Layout structure and every content-addressed descriptor. A
+successful admission also copies the exact image into the operator registry and saves its immutable
+digest-pinned reference. It does not treat a valid layout as evidence that the image is an MCP v2
+server: that evidence must come from the actual `server/discover` exchange after a governed runtime
+starts the imported image.
 
 The draft server and its background job use one database transaction. Either both are saved, or
 neither is saved. A repeated registration request returns the same draft and the same job.
@@ -67,8 +75,7 @@ returns credentials and never labels an install connected before a real connecti
 - `mcpOperatorRouter` — the Express router mounted at `/api/v1/mcp`.
 - `registerRemoteServer` — saves a draft server and its protocol-check job together.
 - `__CreateMcpEraProbeWorkflow` — registers the saved background job that checks the server.
-- `submitMcpbValidation` and `getMcpbValidation` — save and read signed MCP bundle checks.
-- `__CreateMcpbValidationWorkflow` — registers the saved bundle verification job.
+- `__CreateOciImageValidationWorkflow` — registers the saved OCI image admission job.
 - Operator services: `listEntitledCatalog`, `listInstalled`, `installServer`, `approveServer`,
   `publishServer`, and the access editor.
 - `_McpOpenapiPaths` — the OpenAPI path descriptions for this API.
@@ -91,7 +98,7 @@ an Absurd package directly.
 ## Data and persistence
 
 This package owns the public behavior around `McpServer`, `McpServerInstall`, and
-`McpbValidation` in
+`OciImageValidation` in
 `apps/opencrane/prisma/schema/mcp.prisma`. General `AuthorizationGrant` rows remain owned by the
 authorization package. `PrismaMcpOperatorUnitOfWork` is the public MCP database boundary.
 
