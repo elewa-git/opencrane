@@ -1,4 +1,4 @@
-# @opencrane/backend/agents/execution/runs/workflows/contract — AgentRun task vocabulary
+# @opencrane/backend/agents/execution/runs/workflows/contract — AgentRun task and controller vocabulary
 
 > [agent-run authority](../../main/README.md) › [workflows](../README.md) › contract
 
@@ -6,11 +6,12 @@
 
 This package belongs to the AgentRun execution flow. An **AgentRun** is one execution of an agent;
 an **attempt** is one try at completing that execution. This package gives the OpenCrane server and
-the agent controller one agreed name and shape for the saved task that represents an attempt.
+the agent controller one agreed shape for the saved task and for the server authority the controller
+uses while it runs that attempt.
 
-The contract carries only the silo ID, run ID, attempt number, retry rule, and terminal-state
-vocabulary. The server admission and later controller handler can use those values without putting
-other runtime details in the task record.
+The saved task carries only the silo ID, run ID, attempt number, retry rule, and terminal-state
+vocabulary. The shared controller types carry non-secret runtime facts and binding commands after the
+task starts; they are not part of the durable task input.
 
 ```text
  AgentRun attempt workflow
@@ -39,12 +40,20 @@ it would expose data in the durable task record; that data must stay behind the 
 - `AgentRunTaskInput` — carries the silo ID, run ID, and attempt number.
 - `AgentRunTaskResult` — reports the same attempt and its terminal state.
 - `AgentRunTaskTerminalStates` — lists the completed, failed, and cancelled outcomes.
+- `AgentRunWorkflowControllerRecord` — carries the server-approved facts for the one runtime Job.
+- `AgentRunWorkflowAttemptKey` — carries the transient model key used to create its Job-owned Secret.
+- `AgentRunWorkflowAssignmentCommand` and `AgentRunWorkflowPodCommand` — bind the exact Job and first
+  Pod to the current attempt.
+- `AgentRunWorkflowReleaseClaim` — carries the time-limited permission to unsuspend that Job.
+- `AgentRunWorkflowObservation` — tells the handler whether it must wait or return a terminal result.
+- `AgentRunWorkflowControllerAuthority` — defines the server operations that exchange these facts.
 
 ## Boundary
 
 The server and controller may share these types, but this package does not save tasks, read the
-database, create Kubernetes objects, or run an agent. It is vocabulary, not a second execution path;
-the database adapter and controller handler belong outside this package.
+database, create Kubernetes objects, or run an agent. Controller-specific Kubernetes and deployment
+options remain in the controller package. This is vocabulary, not a second execution path; the
+database adapter and controller handler belong outside this package.
 
 ## Dependency direction
 
