@@ -78,7 +78,7 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 	// 2. Look up every record the compiled input needs.
 	const personaInstructions = await repositories.loadPersonaInstructions(snapshot.personaRevisionId);
 	const messages = await repositories.loadMessages(snapshot.messageIds);
-	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.integrationAssignments));
+	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.mcpTools));
 	const artifactSummaries = await repositories.loadArtifactSummaries([...snapshot.artifactRevisionIds].sort());
 	const skillSummaries = await repositories.loadSkillSummaries([...snapshot.skillRevisionIds].sort());
 	const model = await repositories.resolveModelRoute(snapshot.modelRoute);

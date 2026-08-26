@@ -6,6 +6,7 @@ import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
 import { _IsIdentityFresh } from "./utils/canonical-inputs";
+import { __AreRunInputSnapshotMcpToolsValid } from "./mcp-tool-snapshot.validator";
 import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "./session-assembly-result.types";
 import type { ApprovedPersonaInput, IdentityEnvelopeInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, ConversationContextInput, ToolPolicyInput } from "./session-assembly.types";
 
@@ -92,6 +93,8 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		const tools = await authorities.toolPolicy.load(command, run.value, transaction);
 		if (tools.outcome === "denied") return tools;
 		if (!_areIntegrationAssignmentsValid(tools.value.integrationAssignments)) return { outcome: "denied", reason: "tool_policy_unavailable" } as const;
+			if (!__AreRunInputSnapshotMcpToolsValid(tools.value.mcpTools))
+				return { outcome: "denied", reason: "tool_policy_unavailable" } as const;
 		const skills = await authorities.skillEligibility.load(command, run.value, tools.value, transaction);
 		if (skills.outcome === "denied") return skills;
 		const budget = await authorities.budgetPolicy.load(command, run.value, transaction);
@@ -139,6 +142,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		skillRevisionIds: ___SortBy([...tools.skillRevisionIds]),
 		memoryQueryPolicy: ___CloneCanonicalJson(memory.memoryQueryPolicy),
 		integrationAssignments: _canonicalIntegrationAssignments(tools.integrationAssignments),
+		mcpTools: _canonicalMcpTools(tools.mcpTools),
 		modelRoute: ___CloneCanonicalJson(tools.modelRoute),
 		budgetPolicy: ___CloneCanonicalJson(budgetPolicy),
 		identitySnapshot: _SnapshotIdentity(identity),
@@ -149,6 +153,17 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 	};
 	const digest = __DigestRunInputSnapshot(withoutDigest);
 	return { ...withoutDigest, digest };
+}
+
+/** Copies and canonically orders exact MCP tool revisions before sealing the run snapshot. */
+function _canonicalMcpTools(tools: ToolPolicyInput["mcpTools"]): ToolPolicyInput["mcpTools"]
+{
+	return [...tools]
+		.map(function _McpTool(tool)
+		{
+			return { toolRevisionId: tool.toolRevisionId, name: tool.name, description: tool.description, inputSchema: ___CloneCanonicalJson(tool.inputSchema), inputSchemaDigest: tool.inputSchemaDigest };
+		})
+		.sort(function _ByRevision(left, right): number { return left.toolRevisionId.localeCompare(right.toolRevisionId); });
 }
 
 /** Drops `capabilitySetDigest`, which is only used during assembly, and keeps every other identity field for the snapshot. */

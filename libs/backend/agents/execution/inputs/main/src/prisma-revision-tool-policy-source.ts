@@ -1,10 +1,11 @@
-import { AgentRevisionState, ArtifactRevisionState, IntegrationCustodyState, IntegrationState, ModelRoutingScope, Prisma, SkillRevisionState, SkillState } from "@prisma/client";
+import { AgentRevisionState, ArtifactRevisionState, IntegrationCustodyState, IntegrationState, McpApprovalStatus, McpServerRevisionState, McpServerStatus, ModelRoutingScope, Prisma, SkillRevisionState, SkillState } from "@prisma/client";
 
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { BudgetPolicyInput, BudgetPolicySource, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput, ToolPolicySource } from "./session-assembly.types";
+import type { BudgetPolicyInput, BudgetPolicySource, McpToolAdmissionClaimRepositoryFactory, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput, ToolPolicySource } from "./session-assembly.types";
+import { __AreRunInputSnapshotMcpToolsValid } from "./mcp-tool-snapshot.validator";
 
 /**
  * Re-checks a published revision's model route, integrations, skills, and artifacts.
@@ -28,6 +29,15 @@ import type { BudgetPolicyInput, BudgetPolicySource, SessionAssemblyCommand, Ses
  */
 export class PrismaRevisionToolPolicySource implements ToolPolicySource
 {
+	/** Builds the typed claim repository on the exact transaction passed to {@link load}. */
+	private readonly _createMcpClaim: McpToolAdmissionClaimRepositoryFactory;
+
+	/** Bind the source to the transaction-scoped MCP policy claim factory. */
+	constructor(createMcpClaim: McpToolAdmissionClaimRepositoryFactory)
+	{
+		this._createMcpClaim = createMcpClaim;
+	}
+
 	/** Loads the revision's tool policy, keeping only same-silo rows that are still usable inside the admission transaction. */
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ToolPolicyInput>>
 	{
@@ -42,6 +52,7 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 			ORDER BY revision."id"
 			FOR UPDATE OF revision
 		`);
+		await this._createMcpClaim(transaction).touch(run.agentRevisionId, command.siloId, new Date(transaction.admittedAt));
 		await transaction.prisma.$queryRaw(Prisma.sql`
 			SELECT custody."id"
 			FROM "agent_revision_integration_assignments" assignment
@@ -60,7 +71,7 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 				state: AgentRevisionState.Published,
 				agentService: { is: { id: run.agentServiceId, siloId: command.siloId, state: "Active", activeRevisionId: run.agentRevisionId } },
 			},
-			include: { modelDefinition: true, integrationAssignments: { include: { integration: true, custodyReference: true } }, skillAssignments: true },
+			include: { modelDefinition: true, integrationAssignments: { include: { integration: true, custodyReference: true } }, mcpToolAssignments: { include: { toolRevision: { include: { serverRevision: { include: { server: true } } } } } }, skillAssignments: true },
 		});
 		if (revision === null || !_IsModelAvailable(revision.modelDefinition, command.siloId)) return { outcome: "denied", reason: "tool_policy_unavailable" };
 		if (revision.integrationAssignments.some(function _IsIntegrationUnavailable(assignment): boolean
@@ -73,6 +84,24 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 				|| !Array.isArray(toolDefinitions)
 				|| !__AreReviewedIntegrationToolDefinitionsValid(toolDefinitions);
 		})) return { outcome: "denied", reason: "tool_policy_unavailable" };
+		const mcpTools = revision.mcpToolAssignments.map(function _McpTool(assignment)
+		{
+			return {
+				toolRevisionId: assignment.toolRevision.id,
+				name: assignment.toolRevision.name,
+				description: assignment.toolRevision.description,
+				inputSchema: ___CloneCanonicalJson(assignment.toolRevision.inputSchema as unknown as JsonValue),
+				inputSchemaDigest: assignment.toolRevision.inputSchemaDigest,
+			};
+		});
+		if (revision.mcpToolAssignments.some(function _UnavailableMcpTool(assignment): boolean
+		{
+			return assignment.siloId !== command.siloId
+				|| assignment.toolRevision.serverRevision.state !== McpServerRevisionState.Ready
+				|| assignment.toolRevision.serverRevision.server.status !== McpServerStatus.Active
+				|| assignment.toolRevision.serverRevision.server.approvalStatus !== McpApprovalStatus.Published;
+		}) || !__AreRunInputSnapshotMcpToolsValid(mcpTools))
+			return { outcome: "denied", reason: "tool_policy_unavailable" };
 
 		// 3. Check every assigned skill and artifact is still in this silo and still published before the snapshot names it.
 		const skillRevisionIds = revision.skillAssignments.map(function _SkillRevisionId(assignment): string { return assignment.skillRevisionId; });
@@ -86,6 +115,7 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 			value: {
 				modelRoute: { alias: revision.modelDefinition.publicModelName, modelDefinitionId: revision.modelDefinition.id, litellmModelId: revision.modelDefinition.litellmModelId },
 				integrationAssignments: revision.integrationAssignments.map(function _IntegrationAssignment(assignment) { return { integrationId: assignment.integrationId, toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as unknown as readonly ReviewedIntegrationToolDefinition[] }; }),
+				mcpTools,
 				skillRevisionIds,
 				artifactRevisionIds,
 			},

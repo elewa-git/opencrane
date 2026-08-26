@@ -361,6 +361,19 @@ describe("external action worker", function _suite()
 		expect(dependencies.invocations.claims).toEqual([]);
 	});
 
+	it("fails a recognized unavailable MCP revision without generic provider fallback", async function _FailsUnavailableMcp()
+	{
+		const adapter = new _Adapter(ExternalActionRecoveryModes.Manual);
+		const dependencies = _dependencies(_invocation(ToolInvocationStates.Ready), adapter);
+		dependencies.value.classAdmission.admitInvocation = vi.fn().mockResolvedValue("not_ready");
+
+		await expect(new ExternalActionWorker(dependencies.value).runOnce()).resolves.toBe(true);
+
+		expect(adapter.dispatchKeys).toEqual([]);
+		expect(dependencies.invocations.lifecycleEvents).toEqual([expect.objectContaining({ eventType: "tool.failed", payload: expect.objectContaining({ reason: "mcp_tool_unavailable" }) })]);
+		expect(dependencies.logWarn).toHaveBeenCalledWith(expect.objectContaining({ failureKind: "mcp_tool_unavailable" }), expect.any(String));
+	});
+
 	it("logs a bounded definite provider failure after its durable outcome commits", async function _definiteFailure()
 	{
 		const adapter: PreparedExternalActionAdapter = {

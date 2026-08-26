@@ -7,6 +7,15 @@ import type { RunInputSnapshotToolDefinition } from "@opencrane/contracts";
 import { ExternalActionRevisionKinds } from "./external-action-executor.types";
 import type { ExternalActionApprovalOpener, ExternalActionExecutionContext, ExternalActionWorkerInvocation } from "./external-action-worker.types";
 
+/** Schema fields the approval authority needs, independent of the tool's execution class. */
+interface FrozenApprovalTool
+{
+	/** Exact input schema presented to the approver and used to validate an approved call. */
+	readonly parametersSchema: RunInputSnapshotToolDefinition["parametersSchema"];
+	/** Digest proving the schema matches the admitted immutable tool revision. */
+	readonly parametersSchemaDigest: string;
+}
+
 /** How long someone has to decide a tool approval. */
 const _APPROVAL_EXPIRY_MILLISECONDS = 15 * 60 * 1_000;
 
@@ -22,8 +31,19 @@ function _integrationTool(toolRevisionId: string): { readonly integrationId: str
 }
 
 /** Find the one tool definition in the snapshot that this invocation's revision id came from. */
-function _frozenTool(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext): RunInputSnapshotToolDefinition
+function _frozenTool(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext): FrozenApprovalTool
 {
+	const mcpMatches = context.snapshot.mcpTools.filter(function _ExactMcpRevision(tool): boolean { return tool.toolRevisionId === invocation.toolRevisionId; });
+	if (mcpMatches.length > 1)
+		throw new Error("approval-required external action has duplicate frozen MCP tool revisions");
+	if (mcpMatches.length === 1)
+	{
+		const mcpTool = mcpMatches[0]!;
+		if (__DigestCanonicalJson(mcpTool.inputSchema) !== mcpTool.inputSchemaDigest)
+			throw new Error("approval-required external action schema digest is invalid");
+		return { parametersSchema: mcpTool.inputSchema, parametersSchemaDigest: mcpTool.inputSchemaDigest };
+	}
+
 	// 1. Split the invocation's revision id into its integration and tool name.
 	const coordinate = _integrationTool(invocation.toolRevisionId);
 	if (coordinate === null) throw new Error("approval-required external action has no frozen integration coordinate");
@@ -54,7 +74,7 @@ function _interruptId(invocation: ExternalActionWorkerInvocation): string
 }
 
 /** Build the command `__OpenDeferredToolApproval` takes. */
-function _openCommand(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext, definition: RunInputSnapshotToolDefinition, now: Date): OpenDeferredToolApprovalCommand
+function _openCommand(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext, definition: FrozenApprovalTool, now: Date): OpenDeferredToolApprovalCommand
 {
 	return {
 		interruptId: _interruptId(invocation),

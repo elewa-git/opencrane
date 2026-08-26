@@ -1,4 +1,4 @@
-import type { RunInputSnapshotIdentity, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
+import type { RunInputSnapshotIdentity, RunInputSnapshotIntegrationAssignment, RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { PersonaRevisionId } from "@opencrane/models/agents";
 import type { MessageContentBlock, MessageId } from "@opencrane/models/conversations";
@@ -80,6 +80,8 @@ export interface ToolPolicyInput
 	 * pinned by `_MCP_PROTOCOL_VERSION` in server/infra/obot-custody.
 	 */
 	integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[];
+	/** Exact Ready MCP tool revisions selected by the AgentRevision. */
+	mcpTools: readonly RunInputSnapshotMcpTool[];
 	/** Immutable skill revisions eligible for this run. */
 	skillRevisionIds: readonly SkillRevisionId[];
 	/** Immutable artifact revisions explicitly made available to the run. */
@@ -314,6 +316,16 @@ export interface ToolPolicySource
 	 */
 	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ToolPolicyInput>>;
 }
+
+/** Serializes the MCP portion of one revision policy read inside run admission. */
+export interface McpToolAdmissionClaimRepository
+{
+	/** Touch the stable claim row before the caller freezes exact MCP tool revisions. */
+	touch(agentRevisionId: string, siloId: string, admittedAt: Date): Promise<void>;
+}
+
+/** Binds an MCP admission-claim repository to the exact run-admission transaction. */
+export type McpToolAdmissionClaimRepositoryFactory = (transaction: RunAdmissionTransaction) => McpToolAdmissionClaimRepository;
 
 /**
  * Re-checks every skill revision the tool policy named, just before the snapshot is saved.

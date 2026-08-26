@@ -74,6 +74,7 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 			budget: INITIAL_PERSONAL_AGENT_POLICY.budget,
 			skills: [],
 			integrationAssignments: [],
+			mcpToolRevisionIds: [],
 			boundaryAttachments: [],
 		};
 		const cmd = {

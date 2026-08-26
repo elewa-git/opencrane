@@ -17,10 +17,23 @@ function _isToolRevisionSegment(value: unknown): value is string
 /** Parses the optional skill-reference array. */
 function _parseSkills(raw: unknown): AgentRevisionContent["skills"] | null
 {
-	if (raw === undefined) return [];
-	if (!Array.isArray(raw)) return null;
+	if (raw === undefined)
+		return [];
+	if (!Array.isArray(raw))
+		return null;
 	const skills = raw.map(function _skill(entry) { const item = entry as Record<string, unknown>; return _isNonEmptyString(item?.skillId) && _isNonEmptyString(item?.revisionId) ? { skillId: item.skillId, revisionId: item.revisionId } : null; });
 	return skills.some(skill => skill === null) ? null : (skills as AgentRevisionContent["skills"]);
+}
+
+/** Parses exact immutable MCP tool revision identifiers from the administrator payload. */
+function _parseMcpToolRevisionIds(raw: unknown): AgentRevisionContent["mcpToolRevisionIds"] | null
+{
+	if (raw === undefined)
+		return [];
+	if (!Array.isArray(raw))
+		return null;
+	const revisionIds = raw.map(function _RevisionId(value): string | null { return _isNonEmptyString(value) ? value : null; });
+	return revisionIds.some(function _Missing(value): boolean { return value === null; }) ? null : revisionIds as string[];
 }
 
 /** Parses reviewed, schema-bound tool definitions from the organisation-admin revision payload. */
@@ -108,10 +121,12 @@ export function _ParseAgentRevisionContent(raw: unknown): AgentRevisionContent |
 
 	// 3. Parse the nested arrays. One malformed entry rejects the whole body — never a partial list.
 	const skills = _parseSkills(body.skills);
+	const mcpToolRevisionIds = _parseMcpToolRevisionIds(body.mcpToolRevisionIds);
 	const integrationAssignments = _parseIntegrations(body.integrationAssignments);
 	const boundaryAttachments = _parseBoundaryAttachments(body.boundaryAttachments);
-	if (skills === null || integrationAssignments === null || boundaryAttachments === null) return null;
+	if (skills === null || mcpToolRevisionIds === null || integrationAssignments === null || boundaryAttachments === null)
+		return null;
 
 	// 4. Rebuild the value field by field, so nothing extra from the request body is carried through.
-	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, boundaryAttachments };
+	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, mcpToolRevisionIds, boundaryAttachments };
 }

@@ -136,6 +136,7 @@ export function _mapRevision(row: AgentRevisionRow): AgentRevision
 		modelDefinitionId: row.modelDefinitionId,
 		skills: row.skillAssignments.map(assignment => ({ skillId: assignment.skillId, revisionId: assignment.skillRevisionId })),
 		integrationAssignments: row.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as unknown as readonly ReviewedIntegrationToolDefinition[] })),
+		mcpToolRevisionIds: row.mcpToolAssignments.map(assignment => assignment.toolRevisionId).sort(),
 		boundaryAttachments: row.boundaryAttachments.map(_boundaryAttachment),
 		budget: row.budget as unknown as AgentBudget,
 		authoredBy: row.authoredBy,

@@ -34,6 +34,7 @@ export interface AgentRevisionRow
 	readonly publishedAt: Date | null;
 	readonly skillAssignments: ReadonlyArray<{ skillId: string; skillRevisionId: string }>;
 	readonly integrationAssignments: ReadonlyArray<{ integrationId: string; custodyReferenceId: string; toolDefinitions: Prisma.JsonValue }>;
+	readonly mcpToolAssignments: ReadonlyArray<{ toolRevisionId: string }>;
 	readonly boundaryAttachments: ReadonlyArray<{ boundaryKind: string; boundaryGroupId: string | null; boundaryPrincipalId: string | null; boundaryCoverage: string }>;
 }
 

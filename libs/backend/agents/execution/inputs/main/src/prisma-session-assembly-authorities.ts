@@ -7,6 +7,7 @@ import { ManagedNoPersonalMemoryScopeSource } from "./managed-no-personal-memory
 import { PersonalMemoryPreferenceFactSource } from "./personal-memory-preference-fact-source";
 import { PersonalMemoryScopeSource } from "./personal-memory-scope-source";
 import { PrismaApprovedPersonaSource } from "./prisma-approved-persona-source";
+import { PrismaMcpToolAdmissionClaimRepository } from "./prisma-mcp-tool-admission-claim-repository";
 import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "./prisma-revision-tool-policy-source";
 import { PrismaRunAuthoritySource } from "./prisma-run-authority-source";
 import { PrismaConversationContextRepository } from "./prisma-conversation-context-repository";
@@ -38,7 +39,7 @@ export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAd
 		conversationContext: new TransactionBoundConversationContextSource(_CreateConversationContextRepository),
 		preferenceFacts: { load: async function _LoadManagedEmptyPreferences() { return { outcome: "loaded", value: [] }; } },
 		memoryScope: new ManagedNoPersonalMemoryScopeSource(),
-		toolPolicy: new PrismaRevisionToolPolicySource(),
+		toolPolicy: new PrismaRevisionToolPolicySource(_CreateMcpToolAdmissionClaimRepository),
 		skillEligibility,
 		budgetPolicy: new PrismaRevisionBudgetPolicySource(),
 		identityEnvelope,
@@ -65,7 +66,7 @@ export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunA
 		conversationContext: new TransactionBoundConversationContextSource(_CreateConversationContextRepository),
 		preferenceFacts: new PersonalMemoryPreferenceFactSource(_CreatePersonalMemory),
 		memoryScope: new PersonalMemoryScopeSource(_CreatePersonalMemory),
-		toolPolicy: new PrismaRevisionToolPolicySource(),
+		toolPolicy: new PrismaRevisionToolPolicySource(_CreateMcpToolAdmissionClaimRepository),
 		skillEligibility,
 		budgetPolicy: new PrismaRevisionBudgetPolicySource(),
 		identityEnvelope,
@@ -82,4 +83,10 @@ function _CreatePersonalMemory(transaction: RunAdmissionTransaction): PrismaPers
 function _CreateConversationContextRepository(transaction: RunAdmissionTransaction): PrismaConversationContextRepository
 {
 	return new PrismaConversationContextRepository(transaction.prisma);
+}
+
+/** Bind the MCP admission claim to the exact final-admission transaction. */
+function _CreateMcpToolAdmissionClaimRepository(transaction: RunAdmissionTransaction): PrismaMcpToolAdmissionClaimRepository
+{
+	return new PrismaMcpToolAdmissionClaimRepository(transaction.prisma);
 }

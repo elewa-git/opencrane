@@ -1,9 +1,9 @@
 import type { Prisma } from "@prisma/client";
 
-import { GeneratedOutputCapability, type CompiledMessage, type CompiledModelRoute, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshot, type RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
+import { GeneratedOutputCapability, type CompiledMessage, type CompiledModelRoute, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshot, type RunInputSnapshotIntegrationAssignment, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
-import { __CompileRunInput } from "@opencrane/backend/agents/execution/inputs";
+import { __AreRunInputSnapshotMcpToolsValid, __CompileRunInput } from "@opencrane/backend/agents/execution/inputs";
 import type { PromptCompilerRepositories } from "@opencrane/backend/agents/execution/inputs";
 
 import { ExternalActionRevisionKinds } from "./external-action-executor.types";
@@ -36,11 +36,33 @@ function _repositories(transaction: Prisma.TransactionClient): PromptCompilerRep
 	return {
 		loadPersonaInstructions(personaRevisionId: string | null): Promise<string> { return _loadPersonaInstructions(transaction, personaRevisionId); },
 		loadMessages(messageIds: readonly string[]): Promise<readonly CompiledMessage[]> { return _loadMessages(transaction, messageIds); },
-		loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): Promise<readonly CompiledToolDefinition[]> { return _loadToolDefinitions(integrationAssignments); },
+		loadToolDefinitions(mcpTools: readonly RunInputSnapshotMcpTool[]): Promise<readonly CompiledToolDefinition[]> { return _loadMcpToolDefinitions(mcpTools); },
 		loadArtifactSummaries(artifactRevisionIds: readonly string[]): Promise<readonly string[]> { return _loadArtifactSummaries(transaction, artifactRevisionIds); },
 		loadSkillSummaries(skillRevisionIds: readonly string[]): Promise<readonly string[]> { return _loadSkillSummaries(transaction, skillRevisionIds); },
 		resolveModelRoute(modelRoute: JsonValue): Promise<CompiledModelRoute> { return _resolveModelRoute(transaction, modelRoute); },
 	};
+}
+
+/** Compiles exact MCP tool revisions without changing the authority id used by ToolInvocation. */
+async function _loadMcpToolDefinitions(mcpTools: readonly RunInputSnapshotMcpTool[]): Promise<readonly CompiledToolDefinition[]>
+{
+	if (!__AreRunInputSnapshotMcpToolsValid(mcpTools))
+		throw new Error("snapshot MCP tools are invalid");
+	const tools = mcpTools.map(function _McpTool(tool): CompiledToolDefinition
+	{
+		return { name: _modelToolNameForMcpRevision(tool.toolRevisionId, tool.name), toolRevisionId: tool.toolRevisionId, description: tool.description ?? "", requiresApproval: true, parametersSchema: ___CloneCanonicalJson(tool.inputSchema), parametersSchemaDigest: tool.inputSchemaDigest };
+	});
+	if (new Set(tools.map(function _Name(tool): string { return tool.name; })).size !== tools.length)
+		throw new Error("compiled model-visible tool names collide");
+	return tools;
+}
+
+/** Derives a provider-safe model-visible name while retaining exact MCP revision identity. */
+function _modelToolNameForMcpRevision(toolRevisionId: string, toolName: string): string
+{
+	const digestSuffix = ___DigestCanonicalJson(toolRevisionId).slice("sha256:".length, "sha256:".length + 12);
+	const readable = toolName.replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "tool";
+	return `${readable.slice(0, 51)}_${digestSuffix}`;
 }
 
 /** Resolve the approved persona revision's compiled instruction text, or empty when non-personal. */

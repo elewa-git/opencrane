@@ -157,6 +157,18 @@ model McpRegistrationClaim {
   @@map("mcp_registration_claims")
 }
 
+// Serializes run admission for one published agent revision without exposing raw SQL to the
+// session-assembly layer. The surrounding Serializable transaction still rechecks current MCP
+// governance before it commits the frozen run snapshot.
+model McpToolAdmissionClaim {
+  agentRevisionId String   @map("agent_revision_id")
+  siloId          String   @map("silo_id")
+  touchedAt       DateTime @updatedAt @map("touched_at")
+
+  @@id([agentRevisionId, siloId])
+  @@map("mcp_tool_admission_claims")
+}
+
 // Serializes two requests that try to use the same OCI image submission key at the same time.
 model OciImageValidationClaim {
   siloId         String   @map("silo_id")
@@ -233,6 +245,7 @@ model McpToolRevision {
   inputSchemaDigest     String            @map("input_schema_digest")
   createdAt             DateTime          @default(now()) @map("created_at")
   serverRevision        McpServerRevision @relation(fields: [serverRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
+  agentRevisionAssignments AgentRevisionMcpToolAssignment[]
 
   @@unique([serverRevisionId, name])
   @@unique([id, siloId])

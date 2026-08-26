@@ -29,6 +29,7 @@ function _revision(overrides: Partial<AgentRevision> = {}): AgentRevision
 	modelDefinitionId: "model-definition-a",
 		skills: [{ skillId: "skill-a", revisionId: "rev-1" }],
 		integrationAssignments: [{ integrationId: "int-a", custodyReferenceId: "cust-1", toolDefinitions: [_Tool("read")] }],
+		mcpToolRevisionIds: ["mcp-tool-revision-a"],
 		boundaryAttachments: [{ boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "proj-1", boundaryCoverage: RevisionBoundaryCoverages.Exact }],
 		budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
 		authoredBy: "user-1",
