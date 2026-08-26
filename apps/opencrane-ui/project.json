@@ -189,6 +189,8 @@
 				},
 				"development-live": {
 					"buildTarget": "opencrane-ui:build:development-live",
+					"host": "local-development.localhost",
+					"port": 4200,
 					"proxyConfig": "apps/opencrane-ui/proxy.dev-live.conf.json"
 				}
 			},
