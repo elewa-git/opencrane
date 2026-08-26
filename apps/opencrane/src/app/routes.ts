@@ -28,6 +28,7 @@ import { _CreateSkillCatalogueRouter } from "@opencrane/backend/server/agents/sk
 import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { _OpenapiRouter, _RateLimit } from "@opencrane/backend/server/infra/http";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
@@ -185,9 +186,9 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "emitEvent" | "spawn">): void
 {
-	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config);
+	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, workflowExecution);
 	const internalControllerRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentControllerRunDispatch },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillWorkloadDispatch },

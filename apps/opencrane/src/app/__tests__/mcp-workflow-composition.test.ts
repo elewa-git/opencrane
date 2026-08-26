@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { AgentRunTaskDeclaration } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import { McpEraProbeFailureCodes } from "@opencrane/backend/server/gateways/mcp";
 import { McpEraProbeConfigurationError, McpEraProbeProtocolError, McpEraProbeTransportError } from "@opencrane/backend/server/infra/mcp-era-probe";
 
-import { __DeclareArtifactPreprocessTask, __DeclareSkillAuthoringValidation, _McpEraProbeFailure } from "../mcp-workflow-composition";
+import { __DeclareAgentRunTask, __DeclareArtifactPreprocessTask, __DeclareSkillAuthoringValidation, _McpEraProbeFailure } from "../mcp-workflow-composition";
 
 describe("MCP workflow application translation", function _McpWorkflowTranslationSuite()
 {
@@ -21,6 +22,13 @@ describe("MCP workflow application translation", function _McpWorkflowTranslatio
 		const declare = vi.fn();
 		__DeclareArtifactPreprocessTask({ declare });
 		expect(declare).toHaveBeenCalledWith(ArtifactPreprocessTaskDeclaration);
+	});
+
+	it("declares the remote AgentRun task before run admission can save it", function _DeclaresRemoteAgentRun()
+	{
+		const declare = vi.fn();
+		__DeclareAgentRunTask({ declare });
+		expect(declare).toHaveBeenCalledWith(AgentRunTaskDeclaration);
 	});
 
 	it.each([

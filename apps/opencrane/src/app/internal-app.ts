@@ -4,6 +4,7 @@ import express, { type Express, type RequestHandler } from "express";
 
 import { ___RequestContext } from "@opencrane/backend/observability";
 import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
@@ -11,13 +12,25 @@ import { _RegisterInternalRoutes } from "./routes";
 import { _CreateHttpRequestLogger } from "./telemetry";
 import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
 
+/** Fails closed when an isolated app test does not supply the process workflow engine. */
+const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEvent" | "spawn"> = {
+	async emitEvent(): Promise<never>
+	{
+		throw new Error("workflow event execution is unavailable");
+	},
+	async spawn(): Promise<never>
+	{
+		throw new Error("workflow task admission is unavailable");
+	},
+};
+
 /**
  * Build the workload-facing Express application.
  *
  * It shares the public listener's signed-session middleware only so channel-proxy can delegate the
  * browser cookie. Every resolver request independently TokenReviews the proxy workload identity.
  */
-export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], mcpRuntime: McpRuntimeComposition): Express
+export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "emitEvent" | "spawn"> = _UnavailableWorkflowExecution): Express
 {
 	const app = express();
 
@@ -35,7 +48,7 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 	app.use(_CreateHttpRequestLogger(_log));
 
 	// 3. Mount only workload-facing routes and terminate failures through the structured handler.
-	_RegisterInternalRoutes(app, prisma, authApi, config, mcpRuntime);
+	_RegisterInternalRoutes(app, prisma, authApi, config, mcpRuntime, workflowExecution);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

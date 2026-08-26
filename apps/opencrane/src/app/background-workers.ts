@@ -6,8 +6,9 @@ import { __CreateRuntimeWorkloadCleanupUseCase, type RunCancellationRepository }
 import { __CreateKubernetesRuntimeWorkloadCleanupStore } from "@opencrane/backend/agents/runtime/cleanup";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { McpRuntimeAuthority } from "@opencrane/backend/server/gateways/mcp";
+import { PrismaSkillAuthoringValidationWorkerUnitOfWork } from "@opencrane/backend/server/agents/skills";
 import { _CreateScheduleTicker, PrismaScheduleTickerUnitOfWork } from "@opencrane/backend/server/agents/scheduling";
-import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowEngine, IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { OpenCraneBackgroundWorkers } from "./background-workers.types";
 import type { OpenCraneProcessConfig } from "./config.types";
@@ -28,13 +29,24 @@ const _EXTERNAL_ACTION_INTERVAL_MILLISECONDS = 1_000;
 /** Delay between server-owned checks for a lost MCP invocation completion report. */
 const _MCP_INVOCATION_RECOVERY_INTERVAL_MILLISECONDS = 1_000;
 
+/** Delays each durable authoring-completion event recovery pass. */
+const _SKILL_VALIDATION_OUTBOX_INTERVAL_MILLISECONDS = 1_000;
+
+/** Rejects a publish only in isolated lifecycle tests that do not compose an engine. */
+const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEvent"> = {
+	async emitEvent(): Promise<never>
+	{
+		throw new Error("workflow event execution is unavailable");
+	},
+};
+
 /**
  * Start all bounded workers that intentionally share the control-plane database and identity.
  *
  * The returned stop handle is the lifecycle boundary: every loop must be stopped before Prisma is
  * disconnected, and none may keep the Node process alive on its own.
  */
-export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runtimeRepairRepository: RunCancellationRepository, config: OpenCraneProcessConfig, externalActions: ExternalActionWorker, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime): Promise<OpenCraneBackgroundWorkers>
+export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runtimeRepairRepository: RunCancellationRepository, config: OpenCraneProcessConfig, externalActions: ExternalActionWorker, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, workflowExecution: Pick<IWorkflowEngine, "emitEvent"> = _UnavailableWorkflowExecution): Promise<OpenCraneBackgroundWorkers>
 {
 	// 1. Prepare optional schedule admission through the same capacity port used by run-now requests.
 	const scheduleTicker = _CreateScheduleTicker(new PrismaScheduleTickerUnitOfWork(prisma), managedRunAdmission, _log);
@@ -81,6 +93,14 @@ export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8
 	const mcpRecoveryHandle = setInterval(function _recoverMcpInvocation() { void mcpRuntime.recoverExpiredInvocation().catch(function _onError(error: unknown) { _log.error({ err: error }, "MCP invocation recovery pass failed"); }); }, _MCP_INVOCATION_RECOVERY_INTERVAL_MILLISECONDS);
 	mcpRecoveryHandle.unref();
 
+	// 7. Deliver completions after a Pod exits too: persistence is the source of truth, not a worker retry.
+	const validationOutbox = new PrismaSkillAuthoringValidationWorkerUnitOfWork(prisma);
+	const validationOutboxHandle = setInterval(function _PublishSkillValidationOutbox()
+	{
+		void _PublishSkillValidationEvent(validationOutbox, workflowExecution).catch(function _onError(error: unknown) { _log.error({ err: error }, "skill authoring validation completion publication failed"); });
+	}, _SKILL_VALIDATION_OUTBOX_INTERVAL_MILLISECONDS);
+	validationOutboxHandle.unref();
+
 	return {
 		async stop(): Promise<void>
 		{
@@ -88,10 +108,23 @@ export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8
 				clearInterval(schedulerHandle);
 			clearInterval(externalActionHandle);
 			clearInterval(mcpRecoveryHandle);
+			clearInterval(validationOutboxHandle);
 			clearInterval(runtimeRepairHandle);
 			clearInterval(runtimeCleanupHandle);
 			runtimeCleanupShutdown.abort();
 			await Promise.all([runtimeCleanup.drain(), externalActions.drain(), workflowRuntime.close()]);
 		},
 	};
+}
+
+/** Publishes at most one persisted authoring completion and marks it sent only after Absurd accepts it. */
+async function _PublishSkillValidationEvent(outbox: PrismaSkillAuthoringValidationWorkerUnitOfWork, execution: Pick<IWorkflowEngine, "emitEvent">): Promise<void>
+{
+	const event = await outbox.nextUnpublished();
+	if (event === null)
+	{
+		return;
+	}
+	await execution.emitEvent(event.task, event.event);
+	await outbox.markEventPublished(event);
 }
