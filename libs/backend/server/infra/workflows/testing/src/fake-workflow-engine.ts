@@ -1,13 +1,27 @@
-import { WorkflowTaskCancelledError, WorkflowTaskNotRegisteredError, WorkflowTaskStates } from "@opencrane/backend/server/infra/workflows/contract";
-import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowTaskEventReceipt, IWorkflowEngine, IWorkflowTransaction, IWorkflowTaskContext, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowWorkerRuntime, IWorkflowWorkers, IWorkflowWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskCancelledError, WorkflowTaskNotDeclaredError, WorkflowTaskNotRegisteredError, WorkflowTaskRetryBackoffKinds, WorkflowTaskStates } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowTaskDeclaration, IWorkflowTaskEventReceipt, IWorkflowEngine, IWorkflowTransaction, IWorkflowTaskContext, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowWorkerRuntime, IWorkflowWorkers, IWorkflowWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { FakeWorkflowTaskSnapshot } from "./fake-workflow-engine.types";
+
+/** Return the persisted default policy when a declaration does not request retries. */
+function _RetryPolicy(policy: IWorkflowTaskDeclaration["retryPolicy"]): NonNullable<IWorkflowTaskDeclaration["retryPolicy"]>
+{
+	return policy ?? { maximumAttempts: 1, backoff: { kind: WorkflowTaskRetryBackoffKinds.Fixed, initialDelaySeconds: 0 } };
+}
+
+/** Compare retry policies by their values instead of their property order. */
+function _SameRetryPolicy(left: NonNullable<IWorkflowTaskDeclaration["retryPolicy"]>, right: NonNullable<IWorkflowTaskDeclaration["retryPolicy"]>): boolean
+{
+	return left.maximumAttempts === right.maximumAttempts && left.backoff.kind === right.backoff.kind && left.backoff.initialDelaySeconds === right.backoff.initialDelaySeconds && left.backoff.multiplier === right.backoff.multiplier && left.backoff.maximumDelaySeconds === right.backoff.maximumDelaySeconds;
+}
 
 /** In-memory execution adapter for deterministic contract and domain tests without an engine. */
 export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRuntime
 {
 	/** Registered task handlers keyed by their stable task name. */
 	private readonly definitions = new Map<string, IWorkflowTaskDefinition<unknown, unknown>>();
+	/** Stores task declarations that permit admission without a local worker handler. */
+	private readonly declarations = new Map<string, IWorkflowTaskDeclaration>();
 	/** Admitted task records keyed by their generated task identifier. */
 	private readonly tasks = new Map<string, _FakeTaskRecord>();
 	/** Reuses one receipt for each task-name and idempotency-key pair. */
@@ -24,18 +38,28 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	/** Register one handler, rejecting a different handler that tries to reuse its name. */
 	register<TInput, TResult>(definition: IWorkflowTaskDefinition<TInput, TResult>): void
 	{
+		this.declare(definition);
 		const existing = this.definitions.get(definition.taskName);
 		if (existing !== undefined && existing.run !== definition.run)
 			throw new Error(`A different workflow task is already registered for ${definition.taskName}`);
 		this.definitions.set(definition.taskName, definition as IWorkflowTaskDefinition<unknown, unknown>);
 	}
 
+	/** Declare one reviewed task without adding a handler that fake workers can execute. */
+	declare(declaration: IWorkflowTaskDeclaration): void
+	{
+		const existing = this.declarations.get(declaration.taskName);
+		if (existing !== undefined && !_SameRetryPolicy(_RetryPolicy(existing.retryPolicy), _RetryPolicy(declaration.retryPolicy)))
+			throw new Error(`A different workflow declaration already exists for ${declaration.taskName}`);
+		this.declarations.set(declaration.taskName, { taskName: declaration.taskName, retryPolicy: declaration.retryPolicy });
+	}
+
 	/** Admit a pending task and retain the caller's transaction only at this port boundary. */
 	async spawn<TInput>(_transaction: IWorkflowTransaction, task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
+		if (!this.declarations.has(task.taskName))
+			throw new WorkflowTaskNotDeclaredError(task.taskName);
 		const definition = this.definitions.get(task.taskName);
-		if (definition === undefined)
-			throw new WorkflowTaskNotRegisteredError(task.taskName);
 
 		const receiptKey = _ReceiptKey(task.taskName, task.idempotencyKey);
 		const existing = this.receiptsByKey.get(receiptKey);
@@ -112,7 +136,7 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	{
 		for (const record of this.tasks.values())
 		{
-			if (record.state === WorkflowTaskStates.Pending)
+			if (record.state === WorkflowTaskStates.Pending && record.definition !== undefined)
 				await this._RunTask(record);
 		}
 	}
@@ -144,6 +168,8 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		record.state = WorkflowTaskStates.Running;
 		try
 		{
+			if (record.definition === undefined)
+				throw new WorkflowTaskNotRegisteredError(record.receipt.taskName);
 			record.result = await record.definition.run(this._ContextFor(record), record.input);
 			this._AssertNotCancelled(record);
 			record.state = WorkflowTaskStates.Completed;
@@ -273,7 +299,7 @@ interface _FakeTaskRecord
 	/** Stable task reference. */
 	receipt: IWorkflowTaskReceipt;
 	/** Registered handler selected by the task receipt. */
-	definition: IWorkflowTaskDefinition<unknown, unknown>;
+	definition: IWorkflowTaskDefinition<unknown, unknown> | undefined;
 	/** Input captured at task admission. */
 	input: unknown;
 	/** Positive attempt number supplied to the next handler run. */

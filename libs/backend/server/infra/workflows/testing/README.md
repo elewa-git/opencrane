@@ -5,8 +5,8 @@
 ## What it owns
 
 This package gives engine adapters one reusable contract suite and gives domain tests a deterministic
-in-memory execution port. The suite drives a fresh adapter harness; the fake models task admission,
-events, child results, cancellation, and worker dispatch without a database or engine.
+in-memory execution port. The suite drives a fresh adapter harness; the fake models local and remote
+task admission, events, child results, cancellation, and worker dispatch without a database or engine.
 
 ```text
  adapter harness ──► [ testing ◄── HERE ] ──► contract assertions
@@ -20,7 +20,8 @@ retries, future time, or production transaction validation.
 
 ## Public surface
 
-- `__FakeWorkflowEngine` — deterministic `IWorkflowEngine` implementation without an engine.
+- `__FakeWorkflowEngine` — deterministic `IWorkflowEngine` implementation that keeps declared remote
+  tasks pending without a local handler.
 - `__TestWorkflowEngineContract` — reusable Vitest suite for fake and real workflow engines.
 - `IWorkflowHarness`, `IWorkflowHarnessFactory`, and fake task-snapshot types.
 

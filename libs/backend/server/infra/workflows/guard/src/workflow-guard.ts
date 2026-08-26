@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { ___CreateLogger, ___DoWithTrace, ___GetActiveSpan, type Logger } from "@opencrane/backend/observability";
 import { WorkflowError, WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
-import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowEngine, IWorkflowTaskContext, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskQueueAuthority, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowEngine, IWorkflowTaskContext, IWorkflowTaskDeclaration, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskQueueAuthority, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { WorkflowTaskPolicyError } from "./workflow-guard.errors";
 import { WorkflowStepOutcomes } from "./workflow-guard.types";
@@ -107,6 +107,21 @@ class WorkflowGuard implements IWorkflowEngine
 		this.siloId = _RequireNonBlankString(options.siloId);
 		this.queueAuthority = options.queueAuthority;
 		this.log = options.log ?? ___CreateLogger("workflow-guard");
+	}
+
+	/**
+	 * Passes a remote task declaration through the same queue policy used for local handlers.
+	 *
+	 * Called by: application composition before it admits a task whose handler runs in another
+	 * process. Rejecting the task here prevents the engine from persisting work on an unreviewed
+	 * queue.
+	 * @param declaration - Task name and retry policy permitted for transaction-bound admission.
+	 * @throws WorkflowTaskPolicyError when the task name has no reviewed queue.
+	 */
+	declare(declaration: IWorkflowTaskDeclaration): void
+	{
+		this._RequireTaskPolicy(declaration.taskName);
+		this.execution.declare(declaration);
 	}
 
 	/**

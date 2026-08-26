@@ -25,6 +25,8 @@ The vendored SQL is pinned byte-for-byte to Absurd 0.5.0. A mismatch between its
 
 `_CreateAbsurdWorkflowEngine` creates the engine and worker ports used by server composition. Its
 return type exposes `IWorkflowEngine` and `IWorkflowWorkerRuntime`, not an Absurd SDK object.
+The engine can also declare a task whose handler runs in another process. That declaration permits
+the server to save the task in a product transaction without starting a local worker for it.
 
 ## Boundary
 
@@ -33,8 +35,8 @@ policy; those stay above the engine adapter. The server gives it the same approv
 workflow guard, so it cannot choose another queue. Workers use the SDK. Starting a saved job uses the
 database transaction supplied by the product change and the parameterised `absurd.spawn_task`
 function.
-Each registered job also supplies its total attempt limit and retry delay. The adapter stores those
-limits with the Absurd task, including when the task is started inside a product database transaction.
+Each declared or registered job also supplies its total attempt limit and retry delay. The adapter
+stores those limits with the Absurd task, including when the task is started inside a product database transaction.
 A retryable error lets Absurd schedule the next attempt. A terminal error is saved as failed before
 the SDK can apply that general retry policy, so work that cannot succeed unchanged stops immediately.
 
