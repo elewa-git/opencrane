@@ -192,7 +192,7 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 	/** Close MCP work when authorization ended the ToolInvocation before provider dispatch. */
 	private async _CloseBeforeDispatch(execution: _TerminalExecution, invocationState: ToolInvocationStates | null): Promise<void>
 	{
-		let commandState = McpExecutorCommandState.Failed;
+		let commandState: McpExecutorCommandState = McpExecutorCommandState.Failed;
 		if (invocationState === ToolInvocationStates.RecoveryRequired)
 			commandState = McpExecutorCommandState.RecoveryRequired;
 		else if (invocationState === ToolInvocationStates.Succeeded)
