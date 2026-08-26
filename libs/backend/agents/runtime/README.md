@@ -17,6 +17,7 @@ later boundaries.
 | [`controller`](./controller/README.md) | Crash-safe assignment, UID-fenced Job release, and exact first-Pod registration. |
 | [`cleanup`](./cleanup/main/README.md) | Exact Job checks and UID-preconditioned deletion after durable cleanup claims. |
 | [`workloads/contract`](./workloads/contract/README.md) | Shared lease and binding fields for class-specific workload controllers. |
+| [`mcp-executor`](./mcp-executor/README.md) | OCI-backed MCP server Job projection with a token-holding companion. |
 
 ```text
 OpenCrane run authority
@@ -60,5 +61,6 @@ protocol details remain owned inside their package.
 - Assignment-and-release controller: [runtime/controller](./controller/README.md)
 - Exact Job cleanup adapter: [runtime/cleanup](./cleanup/main/README.md)
 - Shared workload claim contract: [runtime/workloads/contract](./workloads/contract/README.md)
+- OCI-backed MCP executor: [runtime/mcp-executor](./mcp-executor/README.md)
 - Execution run authority: [execution/runs](../execution/runs/main/README.md)
 - Server stream transport: [agent-runtime-stream](../../server/infra/agent-runtime-stream/README.md)
