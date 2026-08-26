@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { WorkflowTaskNotRegisteredError, WorkflowTaskRetryBackoffKinds } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskRetryBackoffKinds } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
 const _SDK = vi.hoisted(function _SdkHarness()
@@ -98,11 +98,12 @@ describe("Absurd task admission", function _TaskAdmissionSuite()
 		}).toThrow("Workflow task remote.task has a different declaration.");
 	});
 
-	it("requires a local handler when a running task starts child work", async function _RejectsRemoteChildTask()
+	it("uses a remote declaration when a running task starts child work", async function _AdmitsRemoteChildTask()
 	{
+		_SDK.spawn.mockResolvedValue({ taskID: "66666666-6666-4666-8666-666666666666" });
 		const execution = _RemoteExecution();
 
-		await expect(execution.spawnFromTask({ taskName: "remote.task", idempotencyKey: "child-key", input: { value: 1 } })).rejects.toBeInstanceOf(WorkflowTaskNotRegisteredError);
-		expect(_SDK.spawn).not.toHaveBeenCalled();
+		await expect(execution.spawnFromTask({ taskName: "remote.task", idempotencyKey: "child-key", input: { value: 1 } })).resolves.toEqual({ taskId: "66666666-6666-4666-8666-666666666666", taskName: "remote.task", idempotencyKey: "child-key" });
+		expect(_SDK.spawn).toHaveBeenCalledWith("remote.task", { idempotencyKey: "child-key", input: { value: 1 }, inputUndefined: false }, { queue: "control-plane", idempotencyKey: "[\"remote.task\",\"child-key\"]", maxAttempts: 3, retryStrategy: { kind: "fixed", baseSeconds: 30, factor: undefined, maxSeconds: undefined } });
 	});
 });

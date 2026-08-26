@@ -226,7 +226,13 @@ export interface IWorkflowTaskContext
  */
 export interface IWorkflowEngine
 {
-	/** Declare a reviewed task that this process may admit without registering a local handler. */
+	/**
+	 * Declare a reviewed task that this process may admit without registering a local handler.
+	 *
+	 * Called by: server composition for tasks whose handler runs in a controller process.
+	 * @param declaration - Stable task name and retry behavior shared with the remote worker.
+	 * @throws WorkflowError when the name, queue policy, or retry behavior is invalid or conflicts.
+	 */
 	declare(declaration: IWorkflowTaskDeclaration): void;
 	/** Register a task handler before any caller admits tasks with its name. */
 	register<TInput, TResult>(definition: IWorkflowTaskDefinition<TInput, TResult>): void;
@@ -263,7 +269,12 @@ export class WorkflowTaskNotRegisteredError extends WorkflowError
 /** Error raised when a caller admits a task that no reviewed declaration permits. */
 export class WorkflowTaskNotDeclaredError extends WorkflowError
 {
-	/** Creates an error that reports the missing reviewed task declaration. */
+	/**
+	 * Report a task name that composition did not declare for admission.
+	 *
+	 * Called by: workflow adapters before they persist top-level or child work.
+	 * @param taskName - Stable name the caller tried to admit.
+	 */
 	constructor(taskName: string)
 	{
 		super(`No workflow task is declared for ${taskName}`);

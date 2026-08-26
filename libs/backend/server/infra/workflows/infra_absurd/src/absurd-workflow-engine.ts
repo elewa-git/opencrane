@@ -2,7 +2,7 @@ import { Absurd, FailedTask, type TaskContext } from "absurd-sdk";
 import pg, { type Pool as PgPool } from "pg";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { WorkflowError, WorkflowTaskNotDeclaredError, WorkflowTaskNotRegisteredError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import { __NormalizeWorkflowTaskRetryPolicy, WorkflowError, WorkflowTaskNotDeclaredError, WorkflowTaskNotRegisteredError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowEngine, IWorkflowTaskDeclaration, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskReceipt, IWorkflowTaskRetryPolicy, IWorkflowTaskSpawn, IWorkflowTransaction, IWorkflowWorkerRuntime, IWorkflowWorkers, IWorkflowWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _TaskScopedIdempotencyKey, WorkflowTaskAdmission } from "./workflow-task-admission";
@@ -11,7 +11,7 @@ import { _AbsurdTaskContext, _AbsurdTaskEventName } from "./absurd-task-context"
 import { _AbsurdTerminalTaskFailure } from "./absurd-terminal-task-failure";
 import type { IWorkflowTaskAdmissionRequest } from "./workflow-task-admission.types";
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
-import { _NormalizeWorkflowTaskRetryPolicy, _WorkflowTaskDeclarationRegistry } from "./workflow-task-declaration-registry";
+import { _WorkflowTaskDeclarationRegistry } from "./workflow-task-declaration-registry";
 
 const { Pool } = pg;
 
@@ -63,7 +63,7 @@ function _DatabasePoolSize(value: number): number
 /** Converts the shared retry policy to the field names used by Absurd admission. */
 function _AbsurdRetryPolicy(policy: IWorkflowTaskRetryPolicy | undefined): Pick<IWorkflowTaskAdmissionRequest, "maximumAttempts" | "retryStrategy">
 {
-	const value = _NormalizeWorkflowTaskRetryPolicy(policy);
+	const value = __NormalizeWorkflowTaskRetryPolicy(policy);
 	return { maximumAttempts: value.maximumAttempts, retryStrategy: { kind: value.backoff.kind, baseSeconds: value.backoff.initialDelaySeconds, factor: value.backoff.multiplier, maxSeconds: value.backoff.maximumDelaySeconds } };
 }
 
@@ -201,7 +201,7 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		}
 		// 3. Retain the definition that worker contexts will use after dispatch.
 		const stored = definition as unknown as IWorkflowTaskDefinition<unknown, unknown>;
-		const retryPolicy = _NormalizeWorkflowTaskRetryPolicy(stored.retryPolicy);
+		const retryPolicy = __NormalizeWorkflowTaskRetryPolicy(stored.retryPolicy);
 		this.definitions.set(taskName, stored);
 		// 4. Bind the vendor handler to the same reviewed queue before local work can run.
 		const engine = this;
@@ -277,16 +277,15 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	 *
 	 * A running task has no caller-owned product transaction to join. The task-scoped idempotency
 	 * key prevents two task definitions on one queue from treating the same domain key as a match.
-	 * Unlike {@link spawn}, this operation requires a local registered handler because the SDK persists
-	 * and dispatches the child work from this process.
+	 * A reviewed declaration is enough because the explicit queue may be consumed by another process.
 	 */
 	async spawnFromTask<TInput>(task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
-		// 1. Reject a missing handler before asking the SDK to persist child work.
-		const definition = this.definitions.get(task.taskName);
-		if (definition === undefined)
+		// 1. Reject an undeclared child before asking the SDK to persist work on its reviewed queue.
+		const declaration = this.declarations.find(task.taskName);
+		if (declaration === undefined)
 		{
-			throw new WorkflowTaskNotRegisteredError(task.taskName);
+			throw new WorkflowTaskNotDeclaredError(task.taskName);
 		}
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
@@ -294,7 +293,7 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		{
 			// 2. Preserve an absent input and scope the key before it reaches the shared queue.
 			const envelope = _EnvelopeForTask(idempotencyKey, task.input);
-			const retry = _AbsurdRetryPolicy(definition.retryPolicy);
+			const retry = _AbsurdRetryPolicy(declaration.retryPolicy);
 			const queue = this.queueForTask(taskName);
 			const cmd = { queue, idempotencyKey: _TaskScopedIdempotencyKey(taskName, idempotencyKey), maxAttempts: retry.maximumAttempts, retryStrategy: retry.retryStrategy };
 			const engine = this.engineForQueue(queue);

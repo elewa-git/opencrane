@@ -1,19 +1,7 @@
-import { WorkflowTaskCancelledError, WorkflowTaskNotDeclaredError, WorkflowTaskNotRegisteredError, WorkflowTaskRetryBackoffKinds, WorkflowTaskStates } from "@opencrane/backend/server/infra/workflows/contract";
+import { __HaveSameWorkflowTaskRetryPolicy, __NormalizeWorkflowTaskDeclaration, WorkflowTaskCancelledError, WorkflowTaskNotDeclaredError, WorkflowTaskNotRegisteredError, WorkflowTaskStates } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowTaskDeclaration, IWorkflowTaskEventReceipt, IWorkflowEngine, IWorkflowTransaction, IWorkflowTaskContext, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowWorkerRuntime, IWorkflowWorkers, IWorkflowWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { FakeWorkflowTaskSnapshot } from "./fake-workflow-engine.types";
-
-/** Return the persisted default policy when a declaration does not request retries. */
-function _RetryPolicy(policy: IWorkflowTaskDeclaration["retryPolicy"]): NonNullable<IWorkflowTaskDeclaration["retryPolicy"]>
-{
-	return policy ?? { maximumAttempts: 1, backoff: { kind: WorkflowTaskRetryBackoffKinds.Fixed, initialDelaySeconds: 0 } };
-}
-
-/** Compare retry policies by their values instead of their property order. */
-function _SameRetryPolicy(left: NonNullable<IWorkflowTaskDeclaration["retryPolicy"]>, right: NonNullable<IWorkflowTaskDeclaration["retryPolicy"]>): boolean
-{
-	return left.maximumAttempts === right.maximumAttempts && left.backoff.kind === right.backoff.kind && left.backoff.initialDelaySeconds === right.backoff.initialDelaySeconds && left.backoff.multiplier === right.backoff.multiplier && left.backoff.maximumDelaySeconds === right.backoff.maximumDelaySeconds;
-}
 
 /** In-memory execution adapter for deterministic contract and domain tests without an engine. */
 export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRuntime
@@ -48,10 +36,11 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	/** Declare one reviewed task without adding a handler that fake workers can execute. */
 	declare(declaration: IWorkflowTaskDeclaration): void
 	{
-		const existing = this.declarations.get(declaration.taskName);
-		if (existing !== undefined && !_SameRetryPolicy(_RetryPolicy(existing.retryPolicy), _RetryPolicy(declaration.retryPolicy)))
-			throw new Error(`A different workflow declaration already exists for ${declaration.taskName}`);
-		this.declarations.set(declaration.taskName, { taskName: declaration.taskName, retryPolicy: declaration.retryPolicy });
+		const normalized = __NormalizeWorkflowTaskDeclaration(declaration);
+		const existing = this.declarations.get(normalized.taskName);
+		if (existing !== undefined && !__HaveSameWorkflowTaskRetryPolicy(existing.retryPolicy ?? normalized.retryPolicy, normalized.retryPolicy))
+			throw new Error(`A different workflow declaration already exists for ${normalized.taskName}`);
+		this.declarations.set(normalized.taskName, normalized);
 	}
 
 	/** Admit a pending task and retain the caller's transaction only at this port boundary. */
@@ -220,8 +209,6 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 			},
 			async spawnChild<TInput>(task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 			{
-				if (!self.definitions.has(task.taskName))
-					throw new WorkflowTaskNotRegisteredError(task.taskName);
 				return self.spawn({ client: undefined }, task);
 			},
 			async awaitChild<TResult>(task: IWorkflowTaskReceipt): Promise<TResult>
