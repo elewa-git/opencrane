@@ -46,29 +46,31 @@ async function _Main(): Promise<void>
 	await _BootstrapInitialModel({ prisma, coreApi: kubernetes.coreApi, config: config.initialModelBootstrap, namespace: config.runtime.serverNamespace });
 	await _ReconcileChannelTargetRoutes(prisma, config.runtime.channelTargets);
 
-	// 3. Compose one shared capacity gate and deployment-selected membership evidence for every run
+	// 3. Declare every remote task before any product admission can save its task receipt.
+	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows);
+
+	// 4. Compose one shared capacity gate and deployment-selected membership evidence for every run
 	//    entrypoint. Standalone has no key mount and remains deny-only until a local issuer exists.
 	const runAdmissionCapacityGate = _CreateRunAdmissionCapacityGate(__ReadRunAdmissionConcurrencyPolicy());
 	const membershipEvidence = _CreateFleetMembershipEvidenceConfig();
-	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, runAdmissionCapacityGate, _CreateManagedExecutionEvidenceAuthority());
-	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, runAdmissionCapacityGate, membershipEvidence);
+	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, runAdmissionCapacityGate, _CreateManagedExecutionEvidenceAuthority(), workflows.execution);
+	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, runAdmissionCapacityGate, membershipEvidence, workflows.execution);
 	const runCancellation = _CreateRunCancellationAuthority(prisma, config.runtime);
 
-	// 4. Compose the server-owned Obot custody and action transport without exposing it to runtimes.
+	// 5. Compose the server-owned Obot custody and action transport without exposing it to runtimes.
 	const obot = _CreateObotAdapters(config.obot);
 	const externalActions = _CreateExternalActionWorker(prisma, obot.invocation, _log);
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
-	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows);
 
-	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
+	// 6. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
 	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, obot.custody, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware, workflows.execution);
-	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
+	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware), workflows.execution, { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
 
-	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
+	// 7. Start listeners and workers under one drain order so shared dependencies close exactly once.
 	await _StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, obot.stop, workflows.runtime, workflows.execution);
 }
 

@@ -1,0 +1,2 @@
+# Prisma owns the forward-only schema history from the 0.9.3 cutover onward.
+provider = "postgresql"

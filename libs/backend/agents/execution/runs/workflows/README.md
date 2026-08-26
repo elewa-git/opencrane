@@ -2,8 +2,8 @@
 
 > [agent-run authority](../main/README.md) › workflows
 
-This group maps the vocabulary that the OpenCrane server and the agent controller will share when a
-saved workflow runs one AgentRun attempt. A **workflow** is work that can pause and continue later,
+This group owns the vocabulary and admission rule that the OpenCrane server uses to save one
+workflow task for each AgentRun attempt. A **workflow** is work that can pause and continue later,
 even after a process restart.
 
 | Child | Purpose |
@@ -12,23 +12,24 @@ even after a process restart.
 | [main](main/README.md) | Admits or reuses the task and binds its receipt through one caller-owned database transaction. |
 
 ```text
- future AgentRun attempt workflow
+ AgentRun admission or retry
                  │ task name + silo, run, and attempt IDs
                  ▼
  ┌───────────────────────────────────────────┐
  │ AgentRun workflow contract   ◄── HERE      │
  └───────────────────────────────────────────┘
-                 │ registered handler
+                 │ saved task + receipt
                  ▼
-  future admission rule saves the task, then a controller handler runs the attempt
+  later controller handler runs the attempt
 ```
 
 The declaration carries only the task name, silo ID, run ID, attempt number, retry rule, and result
 shape. Neither side may put prompt text, credentials, model output, or Kubernetes object details in
 that task input.
 
-This group does not yet save a task, register a handler, create Kubernetes work, or replace the
-current dispatcher. Those runtime and migration changes belong to a later replacement slice.
+First admission and retry now save and receipt-bind the task in their existing database transaction.
+This group still does not register the controller handler, create Kubernetes work, or replace the
+current dispatcher. Those runtime changes belong to the next replacement slice.
 
 ## Dependency direction
 

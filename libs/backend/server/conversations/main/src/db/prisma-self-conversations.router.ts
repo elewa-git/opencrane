@@ -5,6 +5,7 @@ import type { Logger } from "pino";
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
 import { PrismaAgentRunRetryUnitOfWork, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS, type ConversationOpenInterruptReader } from "@opencrane/backend/conversations/projection";
 
 import { PrismaConversationMessageAdmissionUnitOfWork } from "./prisma-conversation-message-admission-unit-of-work";
@@ -43,20 +44,21 @@ function _createMutationRepository(transaction: RunAdmissionTransaction): Prisma
  * @param runAdmission - Starts an agent run in the same transaction as the message that
  *   triggered it.
  * @param logger - Used only for unexpected failures; never receives message content.
+ * @param workflow - Guarded engine that saves durable retry tasks in the run transaction.
  * @returns An Express router ready to mount.
  */
-export function _CreateSelfConversationsRouter(prisma: PrismaClient, runAdmission: PersonalRunAdmissionPort, createAttachmentAdmission: ConversationAttachmentAdmissionFactory, logger: Logger): Router
+export function _CreateSelfConversationsRouter(prisma: PrismaClient, runAdmission: PersonalRunAdmissionPort, createAttachmentAdmission: ConversationAttachmentAdmissionFactory, logger: Logger, workflow: Pick<IWorkflowEngine, "spawn">): Router
 {
 	const messageAdmission = new PrismaConversationMessageAdmissionUnitOfWork(prisma, runAdmission, _createMutationRepository, createAttachmentAdmission);
-	const authority = new PrismaConversationUnitOfWork(prisma, messageAdmission, new PrismaAgentRunRetryUnitOfWork(prisma));
+	const authority = new PrismaConversationUnitOfWork(prisma, messageAdmission, new PrismaAgentRunRetryUnitOfWork(prisma, workflow));
 	return __CreateSelfConversationsRouter({ resolveCaller: _resolveCaller, authority, logger });
 }
 
 /** Build the socket endpoint over the same Prisma authorities as the participant HTTP router. */
-export function _CreatePrismaSelfConversationSocketServer(prisma: PrismaClient, runAdmission: PersonalRunAdmissionPort, createAttachmentAdmission: ConversationAttachmentAdmissionFactory, logger: Logger, authenticator: SelfConversationSocketAuthenticator, options: { readonly interrupts?: ConversationOpenInterruptReader; readonly shutdownSignal?: AbortSignal } = {}): SelfConversationSocketServer
+export function _CreatePrismaSelfConversationSocketServer(prisma: PrismaClient, runAdmission: PersonalRunAdmissionPort, createAttachmentAdmission: ConversationAttachmentAdmissionFactory, logger: Logger, authenticator: SelfConversationSocketAuthenticator, workflow: Pick<IWorkflowEngine, "spawn">, options: { readonly interrupts?: ConversationOpenInterruptReader; readonly shutdownSignal?: AbortSignal } = {}): SelfConversationSocketServer
 {
 	const messageAdmission = new PrismaConversationMessageAdmissionUnitOfWork(prisma, runAdmission, _createMutationRepository, createAttachmentAdmission);
-	const authority = new PrismaConversationUnitOfWork(prisma, messageAdmission, new PrismaAgentRunRetryUnitOfWork(prisma));
+	const authority = new PrismaConversationUnitOfWork(prisma, messageAdmission, new PrismaAgentRunRetryUnitOfWork(prisma, workflow));
 	const interruptOptions = options.interrupts === undefined ? {} : { interrupts: options.interrupts };
 	const shutdownOptions = options.shutdownSignal === undefined ? {} : { shutdownSignal: options.shutdownSignal };
 	return __CreateSelfConversationSocketServer({ authenticator, authority, repository: _CreateConversationReplayRepository(prisma), clock: CONVERSATION_PROJECTION_CLOCK, limits: CONVERSATION_PROJECTION_LIMITS, ...interruptOptions, ...shutdownOptions, logger });

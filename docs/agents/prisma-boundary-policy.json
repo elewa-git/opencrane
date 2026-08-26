@@ -31,6 +31,13 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-task-repository.ts",
+        "adapter": "PrismaAgentRunWorkflowTaskRepository",
+        "contract": "AgentRunWorkflowTaskRepository",
+        "contractImportPath": "@opencrane/backend/agents/execution/runs/workflows",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization.ts",
         "adapter": "PrismaPersonalConfigurationMaterializationRepository",
         "contract": "PersonalConfigurationMaterializationRepository",
@@ -636,6 +643,18 @@
       }
     ],
     "unitsOfWork": [
+      {
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-task-admission-unit-of-work.ts",
+        "adapter": "PrismaAgentRunWorkflowTaskAdmissionUnitOfWork",
+        "contract": "AgentRunWorkflowTaskAdmissionUnitOfWork",
+        "contractImportPath": "./prisma-agent-run-workflow-task-admission.types",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentRunWorkflowTaskRepository",
+            "importPath": "./prisma-agent-run-workflow-task-repository"
+          }
+        ]
+      },
       {
         "path": "libs/backend/server/infra/workflows/infra_absurd/src/qualification/prisma-workflow-engine-qualification-unit-of-work.ts",
         "adapter": "PrismaWorkflowEngineQualificationUnitOfWork",

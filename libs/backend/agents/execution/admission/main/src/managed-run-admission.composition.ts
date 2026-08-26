@@ -6,6 +6,7 @@ import { __AssembleRunInputSnapshot, __CreatePrismaManagedSessionAssemblyAuthori
 import { PrismaRunAdmissionRepository } from "@opencrane/backend/agents/execution/runs";
 import type { RunAdmissionConcurrencyPolicy } from "@opencrane/backend/agents/execution/runs";
 import type { ManagedExecutionEvidenceAuthority, ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _CreateManagedRunAdmissionPortWithGate } from "./managed-run-admission";
 import type { ManagedSnapshotAssembler, RunAdmissionCapacityGate } from "./managed-run-admission.types";
@@ -55,11 +56,12 @@ export function __ReadRunAdmissionConcurrencyPolicy(environment: NodeJS.ProcessE
  * @param capacityGate - The shared capacity gate, also used by personal admissions. Pass the same
  * instance, not a second gate.
  * @param evidenceAuthority - Checks the service's signed identity and its scope capabilities.
+ * @param workflow - Guarded engine that saves the controller-owned task with every accepted run.
  * @returns A fail-closed, capacity-bounded managed run admission port.
  */
-export function __CreateManagedRunAdmissionPort(prisma: PrismaClient, capacityGate: RunAdmissionCapacityGate, evidenceAuthority: ManagedExecutionEvidenceAuthority): ManagedRunAdmissionPort
+export function __CreateManagedRunAdmissionPort(prisma: PrismaClient, capacityGate: RunAdmissionCapacityGate, evidenceAuthority: ManagedExecutionEvidenceAuthority, workflow: Pick<IWorkflowEngine, "spawn">): ManagedRunAdmissionPort
 {
-	const admission = new PrismaRunAdmissionRepository(prisma);
+	const admission = new PrismaRunAdmissionRepository(prisma, workflow);
 	const identityEnvelope = new ManagedExecutionIdentityEnvelopeSource(evidenceAuthority);
 	const authorities = __CreatePrismaManagedSessionAssemblyAuthorities(admission, identityEnvelope, new PrismaSkillRevisionEligibilitySource());
 	const assemble: ManagedSnapshotAssembler = async function _assemble(command)

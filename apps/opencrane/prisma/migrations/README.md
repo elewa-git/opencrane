@@ -1,17 +1,14 @@
-# Version-to-version database migrations
+# Prisma Migrate ledger
 
-The current clean target baseline remains in `../bootstrap/target-baseline.sql`. This directory is
-the upgrade authority for databases created by an earlier repository train.
+Prisma Migrate is the forward-only list of database changes for the 0.10.0 cutover. A migration is
+a saved database change that Prisma records after it succeeds. The dedicated migration Job runs this
+list; the OpenCrane server never changes the database when it starts.
 
-Each transition has one exact `<from>-to-<to>/` directory containing:
+`20260821000000_initial` is the reviewed 0.9.3 starting shape for Prisma Migrate. The first 0.10.0
+change, `20260825103000_agent_run_workflow_tasks`, adds one saved workflow task and receipt for each
+AgentRun attempt. Further 0.10.0 changes add their own timestamped directories. A migration may
+contain PostgreSQL-specific SQL for rules Prisma cannot describe.
 
-- `migration.sql` — transactional SQL that acquires the migration advisory lock and advances schema
-  history only after success;
-- `manifest.json` — exact `fromSchemaVersion`/`toSchemaVersion`, `sqlSha256`, owner
-  `apps/opencrane`, and any required privileged PostgreSQL extension.
-
-Migrations do not retain old schemas, aliases, or dual-write behavior. A failed migration is repaired
-forward; migration backup, schema checks, write pauses, and automatic recovery are deferred hardening
-work tracked in issue #699.
-
-The migration Job verifies the reviewed SQL bytes before it runs.
+The older version-to-version SQL directories remain released 0.9.3 history. They are not changed by
+this forward cutover and will be removed only after the dedicated Prisma Migrate Job has replaced
+their execution path.

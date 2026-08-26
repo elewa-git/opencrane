@@ -1,7 +1,9 @@
 import { AgentRunState, AgentServiceState as PrismaAgentServiceState, OrgMemberStatus, RunOutboxEventKind, type Prisma } from "@prisma/client";
 
 import type { AgentRun, AgentRunState as DomainAgentRunState, AgentRunTerminalReason, AgentRunTrigger, AgentServiceState as DomainAgentServiceState } from "@opencrane/models/agents";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
+import { PrismaAgentRunWorkflowTaskAdmissionUnitOfWork } from "./prisma-agent-run-workflow-task-admission-unit-of-work";
 import type { AgentRunAuthoritySnapshot, AgentRunRetryTransactionRepository, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
 
 /** Maps a Prisma AgentRun lifecycle identifier to the target contract value. */
@@ -105,11 +107,18 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 {
 	/** Transaction opened by the retry unit of work. */
 	private readonly _transaction: Prisma.TransactionClient;
+	/** Guarded engine that persists the controller-owned retry task. */
+	private readonly _workflow: Pick<IWorkflowEngine, "spawn">;
 
-	/** Creates the adapter around one transaction attempt. */
-	constructor(transaction: Prisma.TransactionClient)
+	/**
+	 * Creates the adapter around one transaction attempt.
+	 * @param transaction - Transaction that owns the retry and task records.
+	 * @param workflow - Guarded engine that saves the controller-owned task receipt.
+	 */
+	constructor(transaction: Prisma.TransactionClient, workflow: Pick<IWorkflowEngine, "spawn">)
 	{
 		this._transaction = transaction;
+		this._workflow = workflow;
 	}
 
 	/**
@@ -218,7 +227,12 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 		const updated = await transaction.agentRun.findUnique({ where: { id: run.id } });
 		if (updated === null) return { status: "not_found" } as const;
 
-		// 4. Write the dispatch event in the same transaction as the attempt, so a retry can never be
+		// 4. Admit the controller task before retaining the temporary legacy event. A task failure rolls
+		// the attempt back, so old and new dispatch records never disagree about whether it exists.
+		const admission = new PrismaAgentRunWorkflowTaskAdmissionUnitOfWork(this._transaction);
+		await admission.admit(this._workflow, { siloId: command.siloId, runId: run.id, attempt: nextAttempt });
+
+		// 5. Write the dispatch event in the same transaction as the attempt, so a retry can never be
 		// recorded with nothing coming to collect it. The sequence continues this run's own numbering,
 		// and the `${runId}:attempt:${n}` key gives one event per attempt — a second insert for the same
 		// attempt would violate the unique key rather than dispatch twice. The payload keeps who asked

@@ -4,7 +4,7 @@
 
 ## What it owns
 
-This package owns the small admission rule for a future AgentRun workflow task. An **AgentRun** is
+This package owns the small admission rule for an AgentRun workflow task. An **AgentRun** is
 one execution of an agent; an **attempt** is one try at completing it. A **workflow** is work that
 can pause and continue later, even after a process restart.
 
@@ -13,7 +13,7 @@ the task record, saves the matching remote task through that same transaction, a
 before the transaction can commit.
 
 ```text
- future run admission or retry
+ run admission or retry
              │ caller-owned database transaction
              ▼
  ┌───────────────────────────────────────────┐
@@ -21,7 +21,7 @@ before the transaction can commit.
  └───────────────────────────────────────────┘
              │ task record + matching receipt
              ▼
- future controller-hosted workflow task
+ saved controller-hosted workflow task
 ```
 
 **In this flow:** [task contract](../contract/README.md) provides the task name and safe input;
@@ -29,22 +29,22 @@ before the transaction can commit.
 engine interface.
 
 This package rejects a missing record, changed silo/run/attempt facts, an empty task key, a changed
-receipt, or a conflicting binding. It does not yet have a database adapter or call site: the forward
-migration must add the per-attempt task record before either first admission or retry uses this rule.
+receipt, or a conflicting binding. The AgentRun database adapter now supplies the record and uses
+this rule for both first admission and retry. A later controller slice will use the saved task.
 
 ## Public surface
 
 - `__AdmitAgentRunWorkflowTask` creates or finds task facts, saves the task, and binds its receipt.
 - `AgentRunWorkflowAdmissionTransaction` and `AgentRunWorkflowTaskRepository` describe the two
-  transaction-scoped ports supplied by a future adapter.
+  transaction-scoped ports supplied by the AgentRun database adapter.
 - `AgentRunWorkflowAdmissionRejectionReasons` and `AgentRunWorkflowAdmissionError` describe why
   admission must stop before the task is saved.
 
 ## Boundary
 
 This package does not open a database transaction, use Prisma, create Kubernetes work, start a
-controller handler, or replace the current dispatcher. It is one reusable rule for the later atomic
-replacement of both initial admission and retry.
+controller handler, or replace the current dispatcher. It is the reusable rule used by the atomic
+database write for both first admission and retry.
 
 ## Dependency direction
 

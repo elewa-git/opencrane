@@ -6,14 +6,14 @@
 
 This package belongs to the AgentRun execution flow. An **AgentRun** is one execution of an agent;
 an **attempt** is one try at completing that execution. This package gives the OpenCrane server and
-the agent controller one agreed name and shape for the future saved task that represents an attempt.
+the agent controller one agreed name and shape for the saved task that represents an attempt.
 
 The contract carries only the silo ID, run ID, attempt number, retry rule, and terminal-state
-vocabulary. The future server admission and controller handler can use those values without putting
+vocabulary. The server admission and later controller handler can use those values without putting
 other runtime details in the task record.
 
 ```text
- future AgentRun attempt workflow
+ AgentRun attempt workflow
        │ task name, IDs, retry rule, result
        ▼
  ┌──────────────────────────────────────────────┐
@@ -21,7 +21,7 @@ other runtime details in the task record.
  └──────────────────────────────────────────────┘
        │ task name, input, retry rule, result
        ▼
- future controller registers and runs the handler
+ later controller registers and runs the handler
 ```
 
 **In this flow:** [AgentRun workflows](../README.md) provides the shared location for this task;
@@ -44,7 +44,7 @@ it would expose data in the durable task record; that data must stay behind the 
 
 The server and controller may share these types, but this package does not save tasks, read the
 database, create Kubernetes objects, or run an agent. It is vocabulary, not a second execution path;
-the required persistence, handler, and migration work belong outside this package.
+the database adapter and controller handler belong outside this package.
 
 ## Dependency direction
 

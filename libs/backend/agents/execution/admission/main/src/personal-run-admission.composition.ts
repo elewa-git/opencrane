@@ -6,6 +6,7 @@ import { __AssembleRunInputSnapshot, __CreatePrismaPersonalSessionAssemblyAuthor
 import { ___CreateLogger } from "@opencrane/backend/observability";
 import { PrismaRunAdmissionRepository } from "@opencrane/backend/agents/execution/runs";
 import type { FleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { __CreatePersonalRunAdmissionPortWithGate } from "./personal-run-admission";
 import { PrismaPersonalRunAdmissionUnitOfWork } from "./prisma-personal-run-admission-unit-of-work";
@@ -29,18 +30,19 @@ import type { RunAdmissionCapacityGate } from "./managed-run-admission.types";
  * {@link __CreateManagedRunAdmissionPort} was given, or the process admits at double its ceiling.
  * @param identityEvidence - Trusted issuer, verifier, and staleness bound for signed fleet
  * membership. Validated eagerly, so a bad value fails at startup.
+ * @param workflow - Guarded engine that saves the controller-owned task with every accepted run.
  * @returns The port the conversations layer calls to start a user's run, or to create a child
  * Agent-thread conversation and its first run in one transaction. See
  * {@link PersonalRunAdmissionPort} for both entry points.
  * @throws When `identityEvidence` is incomplete — surfaced from the
  * {@link PersonalExecutionIdentityEnvelopeSource} constructor at startup, not per request.
  */
-export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, capacityGate: RunAdmissionCapacityGate, identityEvidence: FleetMembershipEvidenceConfig): PersonalRunAdmissionPort
+export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, capacityGate: RunAdmissionCapacityGate, identityEvidence: FleetMembershipEvidenceConfig, workflow: Pick<IWorkflowEngine, "spawn">): PersonalRunAdmissionPort
 {
 	// 1. The repository that owns the admission transaction and writes the AgentRun row with its input
 	// snapshot. It also takes the advisory lock on silo plus idempotency key, which is what makes two
 	// racing calls with the same key resolve to one run instead of two.
-	const admission = new PrismaRunAdmissionRepository(prisma);
+	const admission = new PrismaRunAdmissionRepository(prisma, workflow);
 
 	// 2. The input sources session assembly reads inside that transaction. Identity and skill
 	// eligibility are passed in because signed membership and grant policy are owned elsewhere; the

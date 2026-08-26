@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { _CreateArtifactCatalogueRepository } from "@opencrane/backend/server/agents/artifacts";
 import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { AgentRunTaskDeclaration } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import { __CreateMcpbBundleVerifier, __CreateMcpbValidationWorkflow, __CreateMcpEraProbeWorkflow, __CreateMcpTaskWorkflow, MCP_ERA_PROTOCOL_VERSION, McpEraProbeFailure, McpEraProbeFailureCodes, McpEraProbeTaskNames, McpbValidationTaskNames, McpTaskTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
 import type { McpEraProbeClient, McpbBundleArtifactResolver } from "@opencrane/backend/server/gateways/mcp";
@@ -63,6 +64,12 @@ export function __DeclareArtifactPreprocessTask(execution: Pick<IWorkflowEngine,
 	execution.declare(ArtifactPreprocessTaskDeclaration);
 }
 
+/** Declares the remote AgentRun task before a run admission may save its receipt. */
+export function __DeclareAgentRunTask(execution: Pick<IWorkflowEngine, "declare">): void
+{
+	execution.declare(AgentRunTaskDeclaration);
+}
+
 /**
  * Creates the guarded Absurd engine that the server's durable domain workflows share.
  *
@@ -82,11 +89,13 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 		{ taskName: McpTaskTaskNames.Call, queue: "control-plane" },
 		{ taskName: SkillAuthoringValidationTaskDeclaration.taskName, queue: "skill-authoring" },
 		{ taskName: ArtifactPreprocessTaskDeclaration.taskName, queue: "artifact-preprocessing" },
+		{ taskName: AgentRunTaskDeclaration.taskName, queue: "control-plane" },
 	]);
 	const runtime = _CreateAbsurdWorkflowEngine({ databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
 	__DeclareSkillAuthoringValidation(execution);
 	__DeclareArtifactPreprocessTask(execution);
+	__DeclareAgentRunTask(execution);
 	const transport = __CreateHttpsMcpEraProbeClient({ protocolVersion: MCP_ERA_PROTOCOL_VERSION, maximumResponseBytes: config.mcpEraProbeMaximumResponseBytes, requestTimeoutMilliseconds: config.mcpEraProbeTimeoutMilliseconds });
 	const probe: McpEraProbeClient = {
 		async probe(request)

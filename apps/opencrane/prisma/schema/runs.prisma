@@ -85,6 +85,7 @@ model AgentRun {
   elicitationRequests      ElicitationRequest[]
   executionReceipts        ActionExecutionReceipt[]
   toolInvocations          ToolInvocation[]
+  workflowTasks            AgentRunWorkflowTask[]
   outboxEvents             OutboxEvent[]
   steeringRequests         RuntimeSteeringRequest[]
   spawnedChildReservations ChildRunReservation[]           @relation("ChildRunReservationParent")
@@ -109,6 +110,26 @@ model AgentRun {
   @@index([conversationId, acceptedAt])
   @@index([rootRunId])
   @@map("agent_runs")
+}
+
+/// One immutable controller-owned workflow task for one AgentRun attempt.
+///
+/// The relation uses only `runId`: AgentRun advances its mutable `attempt` field for a retry, while
+/// this record keeps the old attempt and its task receipt available for audit and exact replay.
+model AgentRunWorkflowTask {
+  runId          String    @map("run_id")
+  attempt        Int
+  siloId         String    @map("silo_id")
+  taskKey        String    @map("task_key")
+  taskName       String    @map("task_name")
+  taskId         String?   @unique @map("task_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  receiptBoundAt DateTime? @map("receipt_bound_at")
+  run            AgentRun  @relation(fields: [runId], references: [id], onDelete: Restrict)
+
+  @@id([runId, attempt])
+  @@unique([siloId, taskKey])
+  @@map("agent_run_workflow_tasks")
 }
 
 /// Append-only proof that a terminal child was delivered to its direct parent's stream or deliberately suppressed.

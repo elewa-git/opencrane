@@ -15,8 +15,9 @@ its frozen inputs.
           │  execution/inputs assembles inputs inside this package's transaction
           ▼
  ┌──────────────────────────────────────────┐
- │   runs  ◄── HERE                          │  run + one snapshot + ordered outbox
+ │   runs  ◄── HERE                          │  run + snapshot + task receipt + ordered outbox
  │   · PrismaRunAdmissionRepository          │  duplicate returns the first snapshot
+ │   · AgentRunWorkflowTask                  │  one saved task and receipt per attempt
  │   · RunAdmissionConcurrencyGate            │  bounded wait before a DB connection
  │   · PrismaRunCancellationRepository       │  fence first; clean exact Job; then terminal
  │   · __CreateRuntimeWorkloadCleanupUseCase  │  cleanup policy behind a physical store port
@@ -39,7 +40,8 @@ user is that exact subject; a scheduled or explicitly invoked managed run proves
 principal is the active service. A same-silo key from any other authority scope fails closed without
 exposing a run. A new request locks the AgentService, lets the session assembler
 revalidate every input inside that transaction, and commits the `AgentRun`, its only
-`RunInputSnapshot`, and the ordered `RunAccepted` and `RunAttemptRequested` outbox events together.
+`RunInputSnapshot`, one `AgentRunWorkflowTask` with its workflow receipt, and the ordered
+`RunAccepted` and `RunAttemptRequested` outbox events together.
 For an agent-session message, the conversation authority supplies a transaction callback that also
 persists that canonical message in this same commit. The canonical digest covers every
 snapshot field except its own digest. The persisted snapshot stores revision-selected integration
@@ -66,10 +68,11 @@ host-selected silo, conversation, and run coordinates. The transaction requires 
 membership and continuing participation in that exact conversation. It refuses unless the run is in
 a retryable terminal state and the service is active with the exact revision the run pins, then
 atomically increments the attempt while re-checking every fact — closing the race where two retries
-fire at once. In the same transaction it appends a `RunAttemptRequested` event to the **outbox** (a
-durable table the dispatcher polls) so a started attempt can never be lost between deciding and
-launching. Repeating the same retry key returns that durable next attempt; a different key for the
-already-advanced terminal attempt is a conflict.
+fire at once. In the same transaction it saves and receipt-binds the next attempt's workflow task,
+then appends a `RunAttemptRequested` event to the **outbox** (a durable table the dispatcher polls).
+This temporary outbox write keeps the existing dispatcher as the only runtime executor until the
+controller starts using the saved workflow task. Repeating the same retry key returns that durable
+next attempt; a different key for the already-advanced terminal attempt is a conflict.
 
 `PrismaAgentRunRetryUnitOfWork` keeps that authority behind a persistence-neutral port used by the
 conversation package. It opens fresh transactions around the advisory read and the guarded write,
@@ -186,7 +189,8 @@ credential material under an innocuous field name such as `detail`.
 - `__DigestRunInputSnapshot(snapshot)` — compute the canonical SHA-256 identity of all frozen run
   inputs without digesting the self-referential `digest` field.
 - `PrismaRunAdmissionRepository` — serialise duplicate requests and atomically persist the initial
-  run, snapshot and ordered outbox events around a caller-supplied assembly callback.
+  run, snapshot, workflow task receipt, and ordered outbox events around a caller-supplied assembly
+  callback.
 - `RunAdmissionConcurrencyGate` — bound active and queued admissions for one silo and AgentService
   before the caller can acquire a persistence connection.
 - `RunAdmissionRepository`, `RunAdmissionCommand`, `RunAdmissionTransaction`,
@@ -259,12 +263,13 @@ sibling domains. The auth edge is limited to backend-type-free request-principal
 
 ## Data & persistence
 
-Owns `AgentRun`, its one `RunInputSnapshot`, and run-domain outbox rows in
-`apps/opencrane/prisma/schema/runs.prisma`. Initial admission commits the run, snapshot,
-`RunAccepted`, and first `RunAttemptRequested` event together. An optional caller-owned commit hook
+Owns `AgentRun`, its one `RunInputSnapshot`, `AgentRunWorkflowTask`, and run-domain outbox rows in
+`apps/opencrane/prisma/schema/runs.prisma`. Initial admission commits the run, snapshot, saved
+workflow task receipt, `RunAccepted`, and first `RunAttemptRequested` event together. An optional caller-owned commit hook
 lets the conversation authority add the participant's input message without opening a second
 transaction; it cannot replace or weaken run-owned validation. Later retries atomically advance the
-attempt counter and append another `RunAttemptRequested` event. Dispatch leases that event, persists
+attempt counter, save the next workflow task receipt, and append another `RunAttemptRequested` event.
+Dispatch leases that event, persists
 the immutable `WorkloadAssignment` and `WorkloadBootstrap`, advances the run to `Assigned`, appends
 one `RunWorkloadReleaseRequested` event for that attempt, and publishes only the attempt event in one
 transaction. First-Pod registration publishes the release event atomically, leaving no gap where a
