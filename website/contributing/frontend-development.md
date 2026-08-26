@@ -96,6 +96,10 @@ concerns navigation or interaction between stores and gateways.
 
 ## Start the Tier 2 core profile
 
+Tier 2 requires the Docker CLI and a running Docker-compatible daemon. Docker Desktop provides both
+on macOS and Windows; Docker Engine is sufficient on Linux. Start that container runtime before the
+Tier 2 command. The coordinator validates it but does not start Docker Desktop or another daemon.
+
 Use Tier 2 when a change needs the real OpenCrane API and PostgreSQL persistence. The default core
 profile starts an owned PostgreSQL 17 container, applies the current target database baseline,
 seeds one fixed local user and signed membership, watches the server, and starts the UI with its
@@ -118,7 +122,7 @@ Cognee, the memory gateway, and Kubernetes disabled.
 Select the Agent profile to add the local controller and runtime. Alternative A (`local-llm`) is the default:
 
 ```bash
-npm run dev:tier2 -- --profile agent
+npm run dev:tier2:agent
 ```
 
 On the first Agent-profile run, the coordinator creates `apps/agent-runtime/.venv` and installs the
@@ -129,21 +133,39 @@ configured package index are therefore required only when the environment must b
 The alternatives change only the model boundary; all three keep the real admission, assignment,
 bootstrap, authenticated runtime stream, candidate validation, and PostgreSQL persistence path.
 
-| Alternative | Command suffix | Model access and credentials |
+| Alternative | Command | Model access and credentials |
 | --- | --- | --- |
-| A — local LiteLLM | `--alternative local-llm` | Starts the pinned local LiteLLM container and the local Agent runner. Reads the provider key from `keys/.openai-key`, creates a separate owner-only local master-key file, and stores attempt-scoped virtual keys in a separate `litellm` database within the Tier 2 PostgreSQL container. |
-| B — remote LiteLLM | `--alternative remote-llm --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path` | Connects the local Agent runner to an explicit shared HTTPS LiteLLM proxy using an owner-only admin-key file. It never falls back to Alternative A's local master key or provider key. |
-| C — simulated model | `--alternative simulated-llm` | Runs the local Agent runner with deterministic model events after normal run admission. It starts no LiteLLM process and reads no model or provider credential. |
+| A — local LiteLLM | `npm run dev:tier2:agent:local-llm` | Starts the pinned local LiteLLM container and the local Agent runner. Reads the provider key from `keys/.openai-key`, creates a separate owner-only local master-key file, and stores attempt-scoped virtual keys in a separate `litellm` database within the Tier 2 PostgreSQL container. |
+| B — remote LiteLLM | `npm run dev:tier2:agent:remote-llm -- --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path` | Connects the local Agent runner to an explicit remote HTTPS LiteLLM proxy using an owner-only admin-key file. It never falls back to Alternative A's local master key or provider key. |
+| C — simulated model | `npm run dev:tier2:agent:simulated-llm` | Runs the local Agent runner with deterministic model events after normal run admission. It starts no LiteLLM process and reads no model or provider credential. |
+
+Alternative B's endpoint and key path above are placeholders. Replace both with the real proxy URL
+and the absolute path of an existing file containing its admin key. The key file must be readable
+only by its owner; for example, set mode `600` on macOS or Linux. The coordinator now checks that
+file and the remote `auto` model before preparing the Python environment, so invalid remote settings
+fail without installing Agent dependencies.
 
 The runtime receives an attempt-scoped LiteLLM key in A/B, never the provider key or LiteLLM
 master key. The controller and each runtime attempt also use separate private bearer files; the
 runtime bearer is signed for that attempt's generated process identity.
 
+Alternative B cannot prove that a remote LiteLLM administrator has isolated organisations behind
+the supplied admin key. Use an admin credential scoped to this OpenCrane organisation or a dedicated
+proxy. Do not provide a fleet-wide master key that can mint keys across organisations. OpenCrane
+limits every minted runtime key to one model alias, budget, and expiry, but those limits do not
+replace remote LiteLLM team or tenant isolation.
+
 ::: info
-The coordinator keeps the named PostgreSQL volume between runs but stops containers when the
-session ends. Use `--reset` when the target baseline changes; it removes only resources carrying
-the OpenCrane local-development ownership label.
+The coordinator keeps the named PostgreSQL volume between runs. Press `Ctrl+C` and wait for the
+command to exit before starting another profile. `Ctrl+Z` is also treated as a graceful shutdown,
+not as a suspended job. Either path stops PostgreSQL, removes an owned local LiteLLM container,
+removes temporary credentials, and releases the single-session lock. Use `--reset` when the target
+baseline changes; it removes only resources carrying the OpenCrane local-development ownership label.
 :::
+
+The lock deliberately rejects a second Tier 2 coordinator because profiles share listener ports,
+the PostgreSQL volume, and the fixed local identity. With an older coordinator that is already
+suspended, run `fg`, then press `Ctrl+C` and wait for it to exit; closing the terminal is unnecessary.
 
 ::: warning
 Do not use `development-live` to prove a Tier 1 change. A successful live request can hide an

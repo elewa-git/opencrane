@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
+import { fileURLToPath } from "node:url";
+
 import { createLocalDevelopmentConfiguration } from "./local-development/configuration.mjs";
+import { shouldRunLocalDevelopmentWorker, runLocalDevelopmentLauncher } from "./local-development/launcher.mjs";
 import { runLocalDevelopmentSession } from "./local-development/orchestrator.mjs";
 import { parseLocalDevelopmentArguments } from "./local-development/profiles.mjs";
 
@@ -8,7 +11,10 @@ const _HELP = `OpenCrane Tier 2 local development
 
 Usage:
   npm run dev:tier2
-  npm run dev:tier2 -- --profile agent [--alternative local-llm|remote-llm|simulated-llm]
+  npm run dev:tier2:agent
+  npm run dev:tier2:agent:local-llm
+  npm run dev:tier2:agent:remote-llm -- --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path
+  npm run dev:tier2:agent:simulated-llm
 
 Profiles:
   core   PostgreSQL, the watched server, and the live-gateway UI (default)
@@ -27,9 +33,9 @@ State:
   --reset  Remove only the labelled local PostgreSQL/LiteLLM containers and PostgreSQL volume
 `;
 
-async function _main()
+async function _runWorker(argumentsList)
 {
-	const parsed = parseLocalDevelopmentArguments(process.argv.slice(2));
+	const parsed = parseLocalDevelopmentArguments(argumentsList);
 
 	if (parsed.help)
 	{
@@ -40,6 +46,19 @@ async function _main()
 	const repositoryRoot = process.cwd();
 	const configuration = createLocalDevelopmentConfiguration(parsed, repositoryRoot);
 	await runLocalDevelopmentSession(configuration);
+}
+
+async function _main()
+{
+	const argumentsList = process.argv.slice(2);
+
+	if (shouldRunLocalDevelopmentWorker(process.platform, process.env))
+	{
+		await _runWorker(argumentsList);
+		return;
+	}
+
+	process.exitCode = await runLocalDevelopmentLauncher(argumentsList, fileURLToPath(import.meta.url));
 }
 
 _main().catch(function _reportFailure(error)

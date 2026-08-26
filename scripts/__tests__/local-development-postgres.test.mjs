@@ -32,11 +32,11 @@ test("a PostgreSQL readiness failure stops the exact owned container", async fun
 	assert.deepEqual(stopped, ["opencrane-local-postgres"]);
 });
 
-test("Alternative A creates a separate LiteLLM database only when it is absent", function _liteLLMDatabase()
+test("Alternative A creates a separate LiteLLM database only when it is absent", async function _liteLLMDatabase()
 {
 	const commands = [];
 	const configuration = { postgresContainerName: "opencrane-local-postgres" };
-	ensureLocalLiteLLMDatabase(
+	await ensureLocalLiteLLMDatabase(
 		configuration,
 		function _MissingDatabase() { return ""; },
 		function _Capture(command, argumentsList) { commands.push({ command, argumentsList }); }
@@ -59,17 +59,17 @@ test("Alternative A creates a separate LiteLLM database only when it is absent",
 			"CREATE DATABASE litellm;"
 		]
 	}]);
-	ensureLocalLiteLLMDatabase(configuration, function _ExistingDatabase() { return "1"; }, function _UnexpectedCommand() { throw new Error("database already exists"); });
+	await ensureLocalLiteLLMDatabase(configuration, function _ExistingDatabase() { return "1"; }, function _UnexpectedCommand() { throw new Error("database already exists"); });
 });
 
-test("an empty database receives the reviewed baseline and digest marker", function _AppliesEmptyDatabase()
+test("an empty database receives the reviewed baseline and digest marker", async function _AppliesEmptyDatabase()
 {
 	const fixture = _BaselineOperations(["f", "f"]);
 	const configuration = {
 		baselinePath: "/repo/target-baseline.sql",
 		seedPath: "/repo/local-state.sql"
 	};
-	applyTargetBaseline(configuration, fixture.operations);
+	await applyTargetBaseline(configuration, fixture.operations);
 
 	const digest = crypto.createHash("sha256").update(Buffer.from("reviewed baseline")).digest("hex");
 	assert.deepEqual(fixture.applied, [
@@ -78,25 +78,25 @@ test("an empty database receives the reviewed baseline and digest marker", funct
 	]);
 });
 
-test("a matching database initialization replays without applying SQL", function _ReusesMatchingDatabase()
+test("a matching database initialization replays without applying SQL", async function _ReusesMatchingDatabase()
 {
 	const digest = crypto.createHash("sha256").update(Buffer.from("reviewed baseline")).digest("hex");
 	const fixture = _BaselineOperations(["t", digest]);
-	applyTargetBaseline({ baselinePath: "/repo/target-baseline.sql", seedPath: "/repo/local-state.sql" }, fixture.operations);
+	await applyTargetBaseline({ baselinePath: "/repo/target-baseline.sql", seedPath: "/repo/local-state.sql" }, fixture.operations);
 	assert.deepEqual(fixture.applied, []);
 });
 
-test("database initialization refuses a changed digest and an untracked schema", function _RefusesUnsafeDatabase()
+test("database initialization refuses a changed digest and an untracked schema", async function _RefusesUnsafeDatabase()
 {
 	const mismatch = _BaselineOperations(["t", "different-digest"]);
-	assert.throws(
-		() => applyTargetBaseline({ baselinePath: "/repo/target-baseline.sql", seedPath: "/repo/local-state.sql" }, mismatch.operations),
+	await assert.rejects(
+		applyTargetBaseline({ baselinePath: "/repo/target-baseline.sql", seedPath: "/repo/local-state.sql" }, mismatch.operations),
 		/different target baseline/u
 	);
 
 	const untracked = _BaselineOperations(["f", "t"]);
-	assert.throws(
-		() => applyTargetBaseline({ baselinePath: "/repo/target-baseline.sql", seedPath: "/repo/local-state.sql" }, untracked.operations),
+	await assert.rejects(
+		applyTargetBaseline({ baselinePath: "/repo/target-baseline.sql", seedPath: "/repo/local-state.sql" }, untracked.operations),
 		/untracked application schema/u
 	);
 });

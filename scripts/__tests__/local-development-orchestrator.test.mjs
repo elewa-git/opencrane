@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import test from "node:test";
 
 import { runLocalDevelopmentSession } from "../local-development/orchestrator.mjs";
 
 function _Operations(calls, options = {})
 {
+	const processHost = options.processHost ?? new EventEmitter();
+	processHost.platform ??= "darwin";
+	processHost.kill ??= function _ResumeProcessGroup() {};
+
 	return {
 		acquireLocalDevelopmentLock() { calls.push("lock"); return { lockPath: "/repo/lock" }; },
 		applyTargetBaseline() { calls.push("baseline"); },
@@ -15,6 +20,7 @@ function _Operations(calls, options = {})
 		ensureLocalLiteLLMDatabase() { calls.push("litellm-database"); },
 		loadLocalDevelopmentSecrets() { calls.push("secrets"); return { liteLLMMasterKey: "master-key" }; },
 		prepareLocalAgentRuntimeEnvironment() { calls.push("runtime-python"); },
+		processHost,
 		releaseLocalDevelopmentLock() { calls.push("unlock"); },
 		removeOwnedContainer(name) { calls.push(`remove:${name}`); },
 		removeDisposableDevelopmentCredentials() { calls.push("remove-credentials"); },
@@ -77,7 +83,7 @@ test("Alternative A prepares and validates LiteLLM after the application databas
 
 	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "local-llm", developmentProfile: "agent-local" }), _Operations(calls));
 	assert.equal(calls.includes("credentials:true"), true);
-	assert.ok(calls.indexOf("runtime-python") < calls.indexOf("secrets"));
+	assert.ok(calls.indexOf("secrets") < calls.indexOf("runtime-python"));
 	assert.ok(calls.indexOf("seed") < calls.indexOf("litellm-database"));
 	assert.ok(calls.indexOf("litellm-database") < calls.indexOf("start-litellm"));
 	assert.ok(calls.indexOf("start-litellm") < calls.indexOf("wait-litellm"));
@@ -90,7 +96,31 @@ test("Alternative B validates the remote endpoint before mutating local containe
 	const calls = [];
 
 	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "remote-llm", developmentProfile: "agent-remote", remoteLiteLLMEndpoint: "https://litellm.example.test", reset: true }), _Operations(calls));
+	assert.ok(calls.indexOf("secrets") < calls.indexOf("validate-remote-litellm"));
+	assert.ok(calls.indexOf("validate-remote-litellm") < calls.indexOf("runtime-python"));
 	assert.ok(calls.indexOf("validate-remote-litellm") < calls.indexOf("reset"));
 	assert.ok(calls.indexOf("reset") < calls.indexOf("start-postgres"));
 	assert.equal(calls.includes("start-litellm"), false);
+});
+
+test("a suspend request during LiteLLM setup cleans both containers and releases the lock", async function _SuspendDuringSetup()
+{
+	const calls = [];
+	const processSignals = [];
+	const processHost = new EventEmitter();
+	processHost.platform = "darwin";
+	processHost.kill = function _ResumeProcessGroup(processId, signal) { processSignals.push({ processId, signal }); };
+	const operations = _Operations(calls, { processHost });
+	operations.startLocalLiteLLM = async function _SuspendAfterStart()
+	{
+		calls.push("start-litellm");
+		processHost.emit("SIGTSTP");
+		return true;
+	};
+
+	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "local-llm", developmentProfile: "agent-local" }), operations);
+
+	assert.deepEqual(processSignals, [{ processId: 0, signal: "SIGCONT" }]);
+	assert.deepEqual(calls.slice(-4), ["remove:opencrane-local-litellm", "stop:opencrane-local-postgres", "remove-credentials", "unlock"]);
+	assert.equal(processHost.listenerCount("SIGTSTP"), 0);
 });

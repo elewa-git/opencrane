@@ -53,6 +53,7 @@ describe("OpenCrane UI local-development commands", function _Suite()
 	it("keeps development-live on the single real-backend browser server", function _LiveServe()
 	{
 		const live = openCraneUiProject.targets.serve.configurations["development-live"];
+		const liveBrowser = openCraneUiProject.targets["serve-browser"].configurations["development-live"];
 
 		expect(live.args).toBe("--uiConfiguration=development-live");
 		expect(live.commands).toEqual([
@@ -61,7 +62,11 @@ describe("OpenCrane UI local-development commands", function _Suite()
 				forwardAllArgs: false
 			}
 		]);
-		expect(openCraneUiProject.targets["serve-browser"].configurations["development-live"].proxyConfig).toBe("apps/opencrane-ui/proxy.dev-live.conf.json");
+		expect(liveBrowser).toMatchObject({
+			host: "local-development.localhost",
+			port: 4200,
+			proxyConfig: "apps/opencrane-ui/proxy.dev-live.conf.json"
+		});
 		expect(liveProxy["/api/v1"].ws).toBe(true);
 	});
 });

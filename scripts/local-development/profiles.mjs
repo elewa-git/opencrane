@@ -1,4 +1,7 @@
-/** Names the CLI-level core and Agent process compositions. */
+/**
+ * Defines the process compositions accepted by the Tier 2 CLI.
+ * Core excludes Agent services, while Agent enables one of the model-boundary alternatives below.
+ */
 export const LOCAL_DEVELOPMENT_PROFILES = Object.freeze({
 	Core: "core",
 	Agent: "agent"
@@ -81,7 +84,7 @@ function _validateRemoteEndpoint(endpoint)
  *
  * Called by: `scripts/local-development.mjs` before configuration or process orchestration.
  * @param {string[]} argumentsList - Command-line arguments after the local-development script name.
- * @returns The validated profile, alternative, remote settings, and coordinator flags.
+ * @returns The validated profile, alternative, remote settings, and coordinator flags. A help request returns before profile-specific requirements are checked.
  * @throws When an option is unknown, incomplete, or incompatible with the selected profile.
  */
 export function parseLocalDevelopmentArguments(argumentsList)
@@ -126,6 +129,11 @@ export function parseLocalDevelopmentArguments(argumentsList)
 			default:
 				throw new Error(`Unknown local-development option: ${argument}`);
 		}
+	}
+
+	if (parsed.help)
+	{
+		return parsed;
 	}
 
 	_assertKnownProfile(parsed.profile);

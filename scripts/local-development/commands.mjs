@@ -5,6 +5,12 @@ import { createAgentControllerProcessEnvironment, createOpenCraneServerProcessEn
 const _OWNER_LABEL = "opencrane.local-development.owner=opencrane";
 const _POSTGRES_IMAGE = "postgres@sha256:e38411452a464af89e5adadb8d223bf53b898d47d6ef918b2d58c08707350449";
 const _LITELLM_IMAGE = "ghcr.io/berriai/litellm-non_root@sha256:39718a9cc9138c99ec812bcde24896411cf54502967a36b19897c539b796fdc7";
+/** Prevents child task runners from changing the foreground terminal's mode while the launcher handles shutdown. */
+const _NX_COORDINATED_PROCESS_ENVIRONMENT = Object.freeze({
+	NX_NATIVE_COMMAND_RUNNER: "false",
+	NX_TASKS_RUNNER_DYNAMIC_OUTPUT: "false",
+	NX_TUI: "false"
+});
 
 /** Builds the labelled, loopback-bound PostgreSQL container command used by the coordinator. */
 export function createPostgresRunCommand(configuration, secrets)
@@ -109,7 +115,16 @@ export function createApplicationEnvironment(configuration, secrets, development
 	return baseEnvironment;
 }
 
-/** Builds the watched server, optional controller, and development-live UI process specifications. */
+/**
+ * Builds the watched process specifications for the selected Tier 2 profile.
+ * Core starts the server and UI, while Agent profiles also start the controller. Child task runners
+ * use stream output and avoid terminal modes because the foreground launcher owns shutdown signals.
+ *
+ * Called by: `runLocalDevelopmentSession` after the database seed and any LiteLLM readiness check.
+ * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Selected Tier 2 composition and listener ports.
+ * @param {Record<string, string>} applicationEnvironment - Variables admitted for this local application session.
+ * @returns {readonly object[]} Process specifications in server, optional controller, then UI order.
+ */
 export function createApplicationCommands(configuration, applicationEnvironment)
 {
 	const controllerEnvironment = createAgentControllerProcessEnvironment(applicationEnvironment);
@@ -128,15 +143,19 @@ export function createApplicationCommands(configuration, applicationEnvironment)
 		commands.push({
 			name: "agent-controller",
 			command: "npx",
-			arguments: ["nx", "run", "agent-controller:dev-tier2"],
-			environment: controllerEnvironment
+			arguments: ["nx", "run", "agent-controller:dev-tier2", "--output-style=stream"],
+			environment: {
+				...controllerEnvironment,
+				..._NX_COORDINATED_PROCESS_ENVIRONMENT
+			}
 		});
 	}
 
 	commands.push({
 		name: "opencrane-ui",
 		command: "npx",
-		arguments: ["nx", "serve", "opencrane-ui", "--configuration=development-live", "--port", String(configuration.uiPort)]
+		arguments: ["nx", "serve", "opencrane-ui", "--configuration=development-live", "--port", String(configuration.uiPort), "--output-style=stream"],
+		environment: _NX_COORDINATED_PROCESS_ENVIRONMENT
 	});
 
 	return commands;

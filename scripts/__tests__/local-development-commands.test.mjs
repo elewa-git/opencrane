@@ -60,7 +60,8 @@ test("core launches the watched backend and development-live UI only", function 
 
 	assert.deepEqual(commands.map(function _names(command) { return command.name; }), ["server", "opencrane-ui"]);
 	assert.deepEqual(commands[0].arguments, ["run", "dev:tier2", "-w", "@opencrane/server"]);
-	assert.deepEqual(commands[1].arguments, ["nx", "serve", "opencrane-ui", "--configuration=development-live", "--port", "4200"]);
+	assert.deepEqual(commands[1].arguments, ["nx", "serve", "opencrane-ui", "--configuration=development-live", "--port", "4200", "--output-style=stream"]);
+	assert.equal(commands[1].environment.NX_NATIVE_COMMAND_RUNNER, "false");
 	assert.equal(environment.OPENCRANE_DEVELOPMENT_PROFILE, "core");
 });
 
@@ -75,7 +76,7 @@ test("agent adds its local controller and defaults to Alternative A", function _
 	const commands = createApplicationCommands(configuration, environment);
 
 	assert.deepEqual(commands.map(function _names(command) { return command.name; }), ["server", "agent-controller", "opencrane-ui"]);
-	assert.deepEqual(commands[1].arguments, ["nx", "run", "agent-controller:dev-tier2"]);
+	assert.deepEqual(commands[1].arguments, ["nx", "run", "agent-controller:dev-tier2", "--output-style=stream"]);
 	assert.equal(environment.OPENCRANE_DEVELOPMENT_PROFILE, "agent-local");
 	assert.equal(environment.LITELLM_ENDPOINT, "http://127.0.0.1:4000");
 	assert.equal(environment.OPENCRANE_INITIAL_MODEL_API_KEY, undefined);
@@ -90,14 +91,18 @@ test("agent adds its local controller and defaults to Alternative A", function _
 		serverNamespace: runtimeProfiles["personal-default"].serverNamespace,
 		personal: {
 			namespace: runtimeProfiles["personal-default"].namespace,
+			identityProfile: runtimeProfiles["personal-default"].identityProfile,
 			serviceAccountName: runtimeProfiles["personal-default"].serviceAccountName
 		},
 		managed: {
 			namespace: runtimeProfiles["managed-default"].namespace,
+			identityProfile: runtimeProfiles["managed-default"].identityProfile,
 			serviceAccountName: runtimeProfiles["managed-default"].serviceAccountName
 		}
 	}, _PROFILE_CONTRACT.runtimeIdentities);
 	assert.equal(commands[1].environment.LITELLM_ENDPOINT, "http://127.0.0.1:4000");
+	assert.equal(commands[1].environment.NX_NATIVE_COMMAND_RUNNER, "false");
+	assert.equal(commands[1].environment.NX_TUI, "false");
 	assert.equal(runtimeProfiles["managed-default"].serverNamespace, _PROFILE_CONTRACT.runtimeIdentities.serverNamespace);
 	assert.equal(commands[1].environment.LITELLM_MASTER_KEY, undefined);
 	assert.equal(commands[1].environment.OPENCRANE_INITIAL_MODEL_API_KEY, undefined);

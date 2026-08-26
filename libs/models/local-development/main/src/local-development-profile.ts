@@ -1,6 +1,6 @@
 import profileContract from "../profile-contract.json";
 
-import type { LocalDevelopmentIdentity, LocalDevelopmentRuntimeIdentities } from "./local-development-profile.types";
+import { LocalDevelopmentRuntimeIdentityProfiles, type LocalDevelopmentIdentity, type LocalDevelopmentRuntimeIdentities } from "./local-development-profile.types";
 
 /** Fixed human identity seeded and selected by every Tier 2 application profile. */
 export const LOCAL_DEVELOPMENT_IDENTITY: LocalDevelopmentIdentity = Object.freeze({
@@ -19,8 +19,14 @@ export const LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER = "opencrane-local-development";
 /** Runtime coordinates shared by the Tier 2 coordinator, controller, and server verifier. */
 export const LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES: LocalDevelopmentRuntimeIdentities = Object.freeze({
 	serverNamespace: profileContract.runtimeIdentities.serverNamespace,
-	personal: Object.freeze({ ...profileContract.runtimeIdentities.personal }),
-	managed: Object.freeze({ ...profileContract.runtimeIdentities.managed }),
+	personal: Object.freeze({
+		...profileContract.runtimeIdentities.personal,
+		identityProfile: LocalDevelopmentRuntimeIdentityProfiles.Personal
+	}),
+	managed: Object.freeze({
+		...profileContract.runtimeIdentities.managed,
+		identityProfile: LocalDevelopmentRuntimeIdentityProfiles.Managed
+	}),
 });
 
 /** Issuer stored with the disposable development membership revision. */

@@ -12,10 +12,12 @@
   "runtimeIdentities": {
     "serverNamespace": "local-development-server",
     "personal": {
+      "identityProfile": "personal",
       "namespace": "local-development-personal-runtime",
       "serviceAccountName": "agent-runtime-default"
     },
     "managed": {
+      "identityProfile": "managed",
       "namespace": "local-development-managed-runtime",
       "serviceAccountName": "managed-agent-runtime-default"
     }
