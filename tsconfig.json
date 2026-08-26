@@ -118,6 +118,9 @@
       "@opencrane/backend/agents/execution/runs": [
         "./libs/backend/agents/execution/runs/main/src/index.ts"
       ],
+      "@opencrane/backend/agents/execution/runs/workflows/contract": [
+        "./libs/backend/agents/execution/runs/workflows/contract/src/index.ts"
+      ],
       "@opencrane/backend/agents/execution/elicitation": [
         "./libs/backend/agents/execution/elicitation/main/src/index.ts"
       ],
