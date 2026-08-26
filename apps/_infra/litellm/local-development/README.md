@@ -13,6 +13,13 @@ key; the coordinator generates and supplies the master key independently. LiteLL
 keys in a separate `litellm` database inside the Tier 2 PostgreSQL container. Both containers share
 only the labelled local-development Docker network; the application database remains `opencrane`.
 
+The coordinator reads the provider key from `keys/.openai-key` by default. Pass
+`--provider-key-file keys/openai-key` to use the `keys/<lowercase-provider-name>-key` convention.
+Alternative A rejects paths outside `keys/`, uppercase names, and provider names that do not match
+its reviewed OpenAI configuration. This option changes only credential custody. The reviewed local
+configuration still routes the `auto` alias to its OpenAI model, so another provider belongs behind
+Alternative B until a separate local provider/model configuration is reviewed.
+
 ## Boundary
 
 Alternative B uses an explicitly configured remote LiteLLM endpoint and does not read this profile.

@@ -140,9 +140,37 @@ bootstrap, authenticated runtime stream, candidate validation, and PostgreSQL pe
 
 | Alternative | Command | Model access and credentials |
 | --- | --- | --- |
-| A — local LiteLLM | `npm run dev:tier2:agent:local-llm` | Starts the pinned local LiteLLM container and the local Agent runner. Reads its configured provider credential, creates a separate owner-only local master-key file, and stores attempt-scoped virtual keys in a separate `litellm` database within the Tier 2 PostgreSQL container. |
+| A — local LiteLLM | `npm run dev:tier2:agent:local-llm` | Starts the pinned local LiteLLM container and the local Agent runner. Reads an owner-only OpenAI provider credential from its default or selected file, creates a separate owner-only local master-key file, and stores attempt-scoped virtual keys in a separate `litellm` database within the Tier 2 PostgreSQL container. |
 | B — remote LiteLLM | `npm run dev:tier2:agent:remote-llm -- --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path` | Connects the local Agent runner to an explicit remote HTTPS LiteLLM proxy using an owner-only admin-key file. It never falls back to Alternative A's local master key or provider key. |
 | C — simulated model | `npm run dev:tier2:agent:simulated-llm` | Runs the local Agent runner with deterministic model events after normal run admission. It starts no LiteLLM process and reads no model or provider credential. |
+
+### Select the local provider-key file
+
+Alternative A reads `keys/.openai-key` when no option is supplied. The filename is a default, not a
+LiteLLM requirement. To use the explicit lowercase provider-name convention, create an owner-only
+file and pass its path instead of putting the key itself in the command:
+
+```bash
+mkdir -p keys
+(umask 077 && touch keys/openai-key)
+chmod 600 keys/openai-key
+${EDITOR:-vi} keys/openai-key
+
+npm run dev:tier2:agent:local-llm -- \
+  --provider-key-file keys/openai-key
+```
+
+The `--` forwards the option through npm. Explicit files follow
+`keys/<lowercase-provider-name>-key`; Alternative A therefore accepts `keys/openai-key` and rejects
+uppercase names, other directories, and provider names that do not match its OpenAI configuration.
+The coordinator also rejects missing, empty, non-file, or group/world-accessible credential files.
+Omitting the option on a later run returns to the compatibility default `keys/.openai-key`; the
+selection is not saved in browser storage or rewritten into source.
+
+This option changes only where Alternative A reads its key. The reviewed local LiteLLM profile still
+routes `auto` to its configured OpenAI model. For Anthropic, Gemini, or another provider, use
+Alternative B with a remote LiteLLM proxy that owns that provider configuration and exposes the
+required `auto` alias; do not place a different provider's key in the local OpenAI file.
 
 ### Configure a remote LiteLLM proxy
 

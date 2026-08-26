@@ -48,9 +48,11 @@ An app entrypoint (`type:app`, `scope:litellm`); composed by the silo chart, imp
 
 Tier 2 Alternative A reuses the pinned image with
 [`local-development/config.yaml`](local-development/config.yaml), mounted read-only into a labelled
-loopback container. It reads `keys/.openai-key`, while the coordinator generates a different local
-LiteLLM master key. Alternative B uses an explicit remote HTTPS LiteLLM origin and admin-key file;
-Alternative C starts no LiteLLM process and reads no provider or model credential.
+loopback container. It reads an owner-only OpenAI provider-key file, defaulting to
+`keys/.openai-key`; `--provider-key-file keys/openai-key` selects the lowercase provider-name
+convention without changing the configured OpenAI model. The coordinator generates a different
+local LiteLLM master key. Alternative B uses an explicit remote HTTPS LiteLLM origin and admin-key
+file; Alternative C starts no LiteLLM process and reads no provider or model credential.
 
 ## See also
 
