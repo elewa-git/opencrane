@@ -19,10 +19,13 @@ in-memory browser profile, while these values select the real API and PostgreSQL
 
 ## Public surface
 
-Import `LocalDevelopmentProfileKinds`, `LocalAgentRuntimeModelStrategies`, `LocalDevelopmentIdentity`,
+Import `LocalDevelopmentProfileKinds`, `LocalDevelopmentRuntimeIdentityProfiles`,
+`LocalAgentRuntimeModelStrategies`, `LocalDevelopmentIdentity`,
 `LOCAL_DEVELOPMENT_RUNTIME_IDENTITIES`, and `__ParseLocalDevelopmentProfileKind` from
-`@opencrane/models/local-development`. The same barrel exports the fixed local identity plus the
-membership issuer, key, and personal assertion identifiers used by the app-owned seed and verifier.
+`@opencrane/models/local-development`. The runtime identity enum distinguishes personal and managed
+ServiceAccount rules before the Agent controller starts. The same barrel exports the fixed local
+identity plus the membership issuer, key, and personal assertion identifiers used by the app-owned
+seed and verifier.
 
 ## Boundary
 

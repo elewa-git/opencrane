@@ -5,9 +5,10 @@ import { LOCAL_DEVELOPMENT_PROFILES } from "./profiles.mjs";
 const _LOCAL_RUNTIME_IMAGE = "local-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const _RUNTIME_IDENTITIES = JSON.parse(fs.readFileSync(new URL("../../libs/models/local-development/main/profile-contract.json", import.meta.url), "utf8")).runtimeIdentities;
 
-function _runtimeProfile(namespace, serviceAccountName, runtimeStreamUrl, liteLLMBaseUrl)
+function _runtimeProfile(identityProfile, namespace, serviceAccountName, runtimeStreamUrl, liteLLMBaseUrl)
 {
 	return {
+		identityProfile,
 		namespace,
 		image: _LOCAL_RUNTIME_IMAGE,
 		imagePullPolicy: "Never",
@@ -34,7 +35,11 @@ function _runtimeProfile(namespace, serviceAccountName, runtimeStreamUrl, liteLL
 
 /**
  * Builds the controller environment from the profile contract shared with the server.
- * Core returns no variables because it never starts the Agent controller.
+ * Personal and managed profiles carry their identity class so the controller validates each
+ * ServiceAccount against the right naming rule instead of treating both as personal. Core returns
+ * no variables because it never starts the Agent controller.
+ *
+ * Called by: `createApplicationEnvironment` before it narrows variables for each application process.
  * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Selected Tier 2 composition.
  * @param {{ controllerTokenPath?: string, runtimeLaunchSecretPath?: string }} credentials - Disposable credential paths created for this session.
  * @returns {Record<string, string>} Variables admitted to the Agent controller process.
@@ -51,8 +56,8 @@ export function createAgentControllerEnvironment(configuration, credentials)
 	const liteLLMBaseUrl = `http://litellm.${_RUNTIME_IDENTITIES.serverNamespace}.svc.cluster.local:4000`;
 
 	const profiles = {
-		"personal-default": _runtimeProfile(_RUNTIME_IDENTITIES.personal.namespace, _RUNTIME_IDENTITIES.personal.serviceAccountName, runtimeStreamUrl, liteLLMBaseUrl),
-		"managed-default": _runtimeProfile(_RUNTIME_IDENTITIES.managed.namespace, _RUNTIME_IDENTITIES.managed.serviceAccountName, runtimeStreamUrl, liteLLMBaseUrl)
+		"personal-default": _runtimeProfile(_RUNTIME_IDENTITIES.personal.identityProfile, _RUNTIME_IDENTITIES.personal.namespace, _RUNTIME_IDENTITIES.personal.serviceAccountName, runtimeStreamUrl, liteLLMBaseUrl),
+		"managed-default": _runtimeProfile(_RUNTIME_IDENTITIES.managed.identityProfile, _RUNTIME_IDENTITIES.managed.namespace, _RUNTIME_IDENTITIES.managed.serviceAccountName, runtimeStreamUrl, liteLLMBaseUrl)
 	};
 	const environment = {
 		OPENCRANE_INTERNAL_URL: internalUrl,

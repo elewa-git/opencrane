@@ -18,6 +18,22 @@ export enum LocalDevelopmentProfileKinds
 	AgentSimulated = "agent-simulated",
 }
 
+/**
+ * Identity class attached to each runtime profile created by local development.
+ *
+ * The coordinator serializes these values into the Agent controller environment. The controller
+ * uses the value to validate that a runtime has the matching ServiceAccount name. These values are
+ * process configuration and are not persisted. An unknown value makes the controller reject its
+ * configuration before it starts.
+ */
+export enum LocalDevelopmentRuntimeIdentityProfiles
+{
+	/** The runtime represents work owned by the local developer and must use a personal runtime ServiceAccount. */
+	Personal = "personal",
+	/** The runtime represents a managed Agent service and must use a managed runtime ServiceAccount. */
+	Managed = "managed",
+}
+
 /** Fixed installation-selected human identity used only by the Tier 2 server entrypoint. */
 export interface LocalDevelopmentIdentity
 {
@@ -34,6 +50,8 @@ export interface LocalDevelopmentIdentity
 /** One local runtime identity admitted by the Tier 2 server and controller. */
 interface LocalDevelopmentRuntimeIdentity
 {
+	/** Selects the ServiceAccount naming rules the Agent controller applies to this runtime. */
+	readonly identityProfile: LocalDevelopmentRuntimeIdentityProfiles;
 	/** Namespace assigned to the local process as its simulated workload boundary. */
 	readonly namespace: string;
 	/** ServiceAccount name signed into the process token and reconstructed by the server. */

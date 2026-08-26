@@ -90,10 +90,12 @@ test("agent adds its local controller and defaults to Alternative A", function _
 		serverNamespace: runtimeProfiles["personal-default"].serverNamespace,
 		personal: {
 			namespace: runtimeProfiles["personal-default"].namespace,
+			identityProfile: runtimeProfiles["personal-default"].identityProfile,
 			serviceAccountName: runtimeProfiles["personal-default"].serviceAccountName
 		},
 		managed: {
 			namespace: runtimeProfiles["managed-default"].namespace,
+			identityProfile: runtimeProfiles["managed-default"].identityProfile,
 			serviceAccountName: runtimeProfiles["managed-default"].serviceAccountName
 		}
 	}, _PROFILE_CONTRACT.runtimeIdentities);
