@@ -16,6 +16,7 @@ later boundaries.
 | [`k8s-launcher`](./k8s-launcher/README.md) | Pure suspended Job construction for the dedicated runtime namespace. |
 | [`controller`](./controller/README.md) | Crash-safe assignment, UID-fenced Job release, and exact first-Pod registration. |
 | [`cleanup`](./cleanup/main/README.md) | Exact Job checks and UID-preconditioned deletion after durable cleanup claims. |
+| [`workloads/contract`](./workloads/contract/README.md) | Shared lease and binding fields for class-specific workload controllers. |
 
 ```text
 OpenCrane run authority
@@ -44,6 +45,9 @@ composes it. Cleanup implements the execution/runs physical store contract struc
 the backend-to-infrastructure dependency direction. Runtime packages do not import a model driver.
 Canonical run/event persistence remains in its owning backend domain.
 
+The workload contract carries only database lease and binding fields. Images, credentials, and Job
+shapes remain with each workload class so the contract cannot become another admission path.
+
 Each package barrel is a composition boundary: it exposes runnable factories and required policy
 types, while reconciliation seams, Kubernetes client ports, response decoders, and manifest
 protocol details remain owned inside their package.
@@ -55,5 +59,6 @@ protocol details remain owned inside their package.
 - Job contract: [runtime/k8s-launcher](./k8s-launcher/README.md)
 - Assignment-and-release controller: [runtime/controller](./controller/README.md)
 - Exact Job cleanup adapter: [runtime/cleanup](./cleanup/main/README.md)
+- Shared workload claim contract: [runtime/workloads/contract](./workloads/contract/README.md)
 - Execution run authority: [execution/runs](../execution/runs/main/README.md)
 - Server stream transport: [agent-runtime-stream](../../server/infra/agent-runtime-stream/README.md)

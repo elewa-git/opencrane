@@ -31,6 +31,7 @@ agent principles rather than becoming personal-only by proximity.
 | [`execution/runs`](./execution/runs/main/README.md) | Shared: run and attempt authority. |
 | [`execution/protocol`](./execution/protocol/README.md) | Shared: language-neutral command and candidate authority. |
 | [`runtime`](./runtime/README.md) | Shared: Kubernetes Job projection and controller. |
+| [`runtime/workloads/contract`](./runtime/workloads/contract/README.md) | Shared claim lease and binding fields for class-specific workloads. |
 
 ```
  personal specialization                shared agent execution

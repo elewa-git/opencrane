@@ -126,6 +126,7 @@ export default [
             { sourceTag: "scope:agent-runtime-stream", onlyDependOnLibsWithTags: ["scope:agent-runtime-stream", "scope:workload-identity", "scope:shared"] },
             { sourceTag: "scope:workload-identity", onlyDependOnLibsWithTags: ["scope:workload-identity", "scope:shared"] },
             { sourceTag: "scope:workflows", onlyDependOnLibsWithTags: ["scope:shared", "scope:workflows"] },
+            { sourceTag: "scope:runtime-workloads", onlyDependOnLibsWithTags: ["scope:runtime-workloads", "scope:shared"] },
             { sourceTag: "scope:agent-runtime-launcher", onlyDependOnLibsWithTags: ["scope:agent-runtime-launcher", "scope:shared"] },
             { sourceTag: "scope:agent-runtime-cleanup", onlyDependOnLibsWithTags: ["scope:agent-runtime-cleanup", "scope:agent-runtime-launcher", "scope:shared"] },
             { sourceTag: "scope:skills-launcher", onlyDependOnLibsWithTags: ["scope:skills-launcher", "scope:shared"] },
