@@ -48,7 +48,7 @@ function _ResponseTransaction(request = _Request())
 /** Exact personal-memory ToolInvocation projection used by open and verify cases. */
 function _MemoryInvocation(overrides: Partial<ToolInvocationRecord> = {}): ToolInvocationRecord
 {
-	return { id: "invocation-row-1", siloId: "silo-1", runId: "run-1", attempt: 2, agentRevisionId: "revision-1", subjectId: "user-1", candidateId: "candidate-1", toolInvocationId: "memory-call-1", toolRevisionId: PERSONAL_MEMORY_RECALL_TOOL_REVISION, arguments: { query: "remember this" }, argumentsDigest: __DigestCanonicalJson({ query: "remember this" }), effectiveArguments: { query: "remember this" }, effectiveArgumentsDigest: __DigestCanonicalJson({ query: "remember this" }), requestFingerprint: "sha256:fingerprint", approvalRequired: true, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null, state: ToolInvocationStates.AwaitingApproval, preparationAttempt: 1, retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z"), nextPreparationAttemptAt: NOW, claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 4, ...overrides };
+	return { id: "invocation-row-1", siloId: "silo-1", runId: "run-1", attempt: 2, mcpTaskId: null, agentRevisionId: "revision-1", subjectId: "user-1", candidateId: "candidate-1", toolInvocationId: "memory-call-1", toolRevisionId: PERSONAL_MEMORY_RECALL_TOOL_REVISION, arguments: { query: "remember this" }, argumentsDigest: __DigestCanonicalJson({ query: "remember this" }), effectiveArguments: { query: "remember this" }, effectiveArgumentsDigest: __DigestCanonicalJson({ query: "remember this" }), requestFingerprint: "sha256:fingerprint", approvalRequired: true, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null, state: ToolInvocationStates.AwaitingApproval, preparationAttempt: 1, retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z"), nextPreparationAttemptAt: NOW, claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 4, ...overrides };
 }
 
 /** Immutable personal run snapshot whose digest and persona bind the permission. */
@@ -222,6 +222,20 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		};
 		await expect(_Unit(transaction).openMemoryPermission(_MemoryInvocation(), _MemorySnapshot(), NOW)).resolves.toBe(true);
 		expect(transaction.elicitationRequest.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", attempt: 2, assignedParticipantId: "user-1", purpose: ElicitationPurpose.PersonalMemoryPermission, expiresAt: new Date("2026-08-11T10:15:00.000Z") }) });
+	});
+
+	it("does not open an AgentRun memory request for an MCP-task-owned invocation", async function _RejectsMcpTaskOwnership()
+	{
+		const transaction = {
+			..._Access(),
+			elicitationRequest: { findUnique: vi.fn(), create: vi.fn() },
+			agentRun: { findUnique: vi.fn(), updateMany: vi.fn() },
+		};
+		const invocation = _MemoryInvocation({ runId: null, attempt: null, mcpTaskId: "mcp-task-1" });
+
+		await expect(_Unit(transaction).openMemoryPermission(invocation, _MemorySnapshot(), NOW)).resolves.toBe(false);
+		expect(transaction.elicitationRequest.findUnique).not.toHaveBeenCalled();
+		expect(transaction.elicitationRequest.create).not.toHaveBeenCalled();
 	});
 
 	it("keeps ordinary conversation elicitation access unchanged", async function _AllowsOrdinaryConversation()
