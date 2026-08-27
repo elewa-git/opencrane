@@ -53,7 +53,7 @@ test("Alternative A runs local LiteLLM without exposing either secret in argumen
 	assert.equal(specification.environment.DATABASE_URL, "postgresql://opencrane:postgres-secret@opencrane-local-postgres:5432/litellm");
 });
 
-test("core launches the watched backend and development-live UI only", function _coreCommands()
+test("core launches the watched backend and internal development-live UI only", function _coreCommands()
 {
 	const configuration = _configuration([]);
 	const environment = createApplicationEnvironment(configuration, { postgresPassword: "postgres-secret" }, _MEMBERSHIP_KEYS);
@@ -61,7 +61,7 @@ test("core launches the watched backend and development-live UI only", function 
 
 	assert.deepEqual(commands.map(function _names(command) { return command.name; }), ["server", "opencrane-ui"]);
 	assert.deepEqual(commands[0].arguments, ["run", "dev:tier2", "-w", "@opencrane/server"]);
-	assert.deepEqual(commands[1].arguments, ["nx", "serve", "opencrane-ui", "--configuration=development-live", "--port", "4200", "--output-style=stream"]);
+	assert.deepEqual(commands[1].arguments, ["nx", "run", "opencrane-ui:serve-browser:development-live", "--port", "4200", "--output-style=stream"]);
 	assert.equal(commands[1].environment.NX_NATIVE_COMMAND_RUNNER, "false");
 	assert.equal(environment.OPENCRANE_DEVELOPMENT_PROFILE, "core");
 });

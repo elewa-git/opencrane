@@ -35,7 +35,7 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   onboarding can follow the reviewed Commander, Catalyst, Anchor, or Analyst Guardian path. Plain
   serve enters deterministic onboarding, while named archetype scripts save the chosen fixture and
   open its Agent conversation directly. The same command starts Storybook and its Playwright visual
-  pass, while `serve:opencrane-ui:live` remains the isolated real-backend workflow.
+  pass; backend-connected local development belongs to Tier 2.
 
 - **Org admins can now model departments, teams, and projects as one hierarchy of groups.** Groups
   expose an optional parent, direct membership, and explicit `External` or `Local` authority;
