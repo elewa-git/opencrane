@@ -6,10 +6,11 @@
 
 The agent controller is the sole OpenCrane process allowed to create personal- and managed-agent
 workloads in a customer **silo**. Each silo has a server namespace plus separate runtime namespaces
-for untrusted personal-agent and connector-scoped managed-agent Jobs. The controller has no inbound listener: it polls OpenCrane for authorised desired state, creates a suspended Job only in the namespace bound to that workload profile,
-and reports the
-Job's Kubernetes-issued identity back to OpenCrane. A separate durable claim then lets it release
-that exact Job and register the unique first Pod.
+for untrusted personal-agent and connector-scoped managed-agent Jobs. The controller has no inbound
+listener. Durable workflow tasks ask OpenCrane for the current run authority, create a suspended Job
+only in the namespace bound to that workload profile, and report the Job's Kubernetes-issued
+identity back to OpenCrane. A separate durable claim then lets the task release that exact Job and
+register the unique first Pod.
 
 The same process also projects governed skill workloads into the authoring and tool-runner
 namespaces. Those Jobs are created suspended and their UID is committed to the durable skill record.
@@ -23,6 +24,12 @@ The controller also projects admitted OCI-backed MCP servers into their dedicate
 namespace. The server chooses the imported image digest; deployment configuration fixes the
 OpenCrane companion, ServiceAccount, endpoint, lifetime, and resources. The controller records the
 Job UID before release and records the first Pod UID before the companion may claim work.
+
+When artifact preprocessing is enabled, the same durable worker creates and releases the fixed PDF
+conversion Job in its isolated namespace. The optional Role grants only Job get/create/patch and Pod
+list there; the profile fixes the immutable image, worker identity, same-silo broker endpoint,
+deadline, scratch volume, and resources. Fail-closed admission binds those verbs to the exact
+suspended Job envelope and permits only its one-time release.
 
 Each released skill Job receives an audience-bound projected token and opaque bootstrap reference
 through separate read-only files. Helm fixes the acknowledgement URL to the same-silo OpenCrane
@@ -60,15 +67,16 @@ multiple Pods, and OpenCrane registers the first Pod before bootstrap exchange c
 
 ## Public surface
 
-`Entrypoint:` `src/index.ts` loads telemetry first, validates configuration, creates the narrow
-OpenCrane and Kubernetes adapters, runs the runtime assignment/release and suspended-skill-assignment
-poll loops, and flushes telemetry
-on `SIGTERM`/`SIGINT`.
+`Entrypoint:` `src/index.ts` loads telemetry first, validates configuration, starts the guarded
+AgentRun, skill-authoring, and optional artifact-preprocessing workflow workers, retains the generic
+skill and OCI MCP reconciliation loops, and drains workflows and telemetry on `SIGTERM`/`SIGINT`.
 
 ## Boundary
 
-The process holds no database credentials and exposes no Service, Ingress, public route or health
-listener. Its Kubernetes roles exist only in the dedicated personal and managed runtime namespaces and grant
+The process uses the same release-local OpenCrane database credential as the server so Absurd can
+claim tasks from the queues where server transactions admitted them. Its NetworkPolicy permits only
+the release-local CNPG pooler on TCP 5432. It exposes no Service, Ingress, public route or health
+listener. Its Kubernetes roles exist only in the dedicated workload namespaces and grant
 `get/create/patch` for Jobs, `list` for Pods, and `create` (only) for Secrets — the per-attempt
 LiteLLM key Secret, owned by its Job so it is garbage-collected with it. It cannot create policy,
 read/update/delete Secrets, mutate Pods, or get, replace, delete, or watch any Pod. The minted
@@ -86,10 +94,14 @@ outside the app root.
 ## Runtime & config
 
 - `OPENCRANE_INTERNAL_URL` — same-silo internal OpenCrane origin; Helm derives it from the release.
+- `DATABASE_URL` — release-local OpenCrane database URL read through the existing application Secret.
+- `OPENCRANE_SILO_ID` — silo accepted by the workflow guard for every controller task.
+- `OPENCRANE_SERVER_SERVICE_NAME` and `POD_NAMESPACE` — exact same-silo server coordinates checked
+  by the controller-only HTTP authorities.
+- `OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE`, `OPENCRANE_WORKFLOW_WORKER_CONCURRENCY`, and
+  `OPENCRANE_WORKFLOW_POLL_INTERVAL_MS` — bounded Absurd database, concurrency, and polling limits.
 - `OPENCRANE_CONTROLLER_TOKEN_PATH` — rotating `opencrane-agent-controller` audience token file.
 - `AGENT_CONTROLLER_POLL_INTERVAL_MS` — 100–60,000 ms delay after idle or failure; default 1,000 ms.
-- `AGENT_CONTROLLER_OUTBOX_PRUNE_INTERVAL_MS` — 60 seconds–24 hours between bounded removal of
-  successfully delivered runtime handshakes; default one hour. Failed commands remain durable evidence.
 - `AGENT_CONTROLLER_REQUEST_TIMEOUT_MS` — 1–60 second hard cap independently applied to every
   OpenCrane and Kubernetes request; default 10 seconds. Process shutdown cancels either request type
   immediately, and each retry receives a fresh deadline.
@@ -104,6 +116,8 @@ outside the app root.
 - `AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON` — one immutable profile for OCI-backed MCP Jobs. It
   fixes the companion image, isolated namespace, zero-RBAC ServiceAccount, internal endpoint,
   projected-token lifetime, scratch size, deadline, and both containers' resources.
+- `AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON` — optional immutable PDF Job profile emitted
+  only when artifact preprocessing is enabled.
 
 The image runs as an unprivileged numeric user with a read-only root filesystem. Helm provides two
 separate projected tokens: one for OpenCrane and one for the Kubernetes API. Structured logs go to

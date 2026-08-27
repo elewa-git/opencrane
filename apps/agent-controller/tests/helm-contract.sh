@@ -4,11 +4,17 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 source "$ROOT/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 CONFORMANCE="$ROOT/apps/agent-controller/tests/admission-conformance.sh"
+ARTIFACT_CONFORMANCE="$ROOT/apps/agent-controller/tests/artifact-admission-conformance.sh"
 IDENTITY_CONFORMANCE="$ROOT/apps/agent-controller/tests/identity-conformance.sh"
 MANIFEST="$(mktemp)"
 DISABLED="$(mktemp)"
+ARTIFACT_DISABLED="$(mktemp)"
 ROLE="$(mktemp)"
 BINDING="$(mktemp)"
+ARTIFACT_ROLE="$(mktemp)"
+ARTIFACT_BINDING="$(mktemp)"
+ARTIFACT_ADMISSION="$(mktemp)"
+ARTIFACT_ADMISSION_BINDING="$(mktemp)"
 CLEANUP_ROLE="$(mktemp)"
 CLEANUP_BINDING="$(mktemp)"
 RUNTIME_NAMESPACE="$(mktemp)"
@@ -21,13 +27,14 @@ CONTROLLER_POLICY="$(mktemp)"
 RUNTIME_DENY="$(mktemp)"
 RUNTIME_EGRESS="$(mktemp)"
 prepare_current_chart_sources
-trap 'cleanup_current_chart_sources; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$CLEANUP_ROLE" "$CLEANUP_BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$MANAGED_RUNTIME_QUOTA" "$ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+trap 'cleanup_current_chart_sources; rm -f "$MANIFEST" "$DISABLED" "$ARTIFACT_DISABLED" "$ROLE" "$BINDING" "$ARTIFACT_ROLE" "$ARTIFACT_BINDING" "$ARTIFACT_ADMISSION" "$ARTIFACT_ADMISSION_BINDING" "$CLEANUP_ROLE" "$CLEANUP_BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$MANAGED_RUNTIME_QUOTA" "$ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
 CHART_ROOT="$(current_chart_sources_dir)"
 
 render_enabled() {
   helm template oc "$CHART_ROOT" \
     --namespace server-ns \
     --set agentController.enabled=true \
+    --set-string clustertenantManager.database.existingSecret=opencrane-app-db \
     --set-string agentController.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
     --set-string agentController.runtimeProfile.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
     --set-string managedAgentRuntimePlane.managedAgentRuntime.namespace=oc-opencrane-managed-runtime \
@@ -35,6 +42,8 @@ render_enabled() {
     --set-string agentController.skillWorkloadProfiles.authoring.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
     --set-string agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
     --set-string opencrane-mcp-executor.mcpExecutor.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
+    --set artifactPreprocessor.enabled=true \
+    --set-string artifactPreprocessor.image.digest=sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \
     --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
     --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
     --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
@@ -45,10 +54,15 @@ render_enabled() {
 
 render_enabled > "$MANIFEST"
 render_enabled --set agentController.enabled=false > "$DISABLED"
+render_enabled --set artifactPreprocessor.enabled=false > "$ARTIFACT_DISABLED"
 render_enabled --set-string agentController.openCraneInternalUrl=http://override.example:8081 > "$SKILL_URL_OVERRIDE"
 
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: Role\n/ && $0 ~ /\n  name: agent-controller\n/ { print $0 }' "$MANIFEST" > "$ROLE"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: RoleBinding\n/ && $0 ~ /\n  name: agent-controller\n/ { print $0 }' "$MANIFEST" > "$BINDING"
+awk 'BEGIN { RS="---" } $0 ~ /\nkind: Role\n/ && $0 ~ /\n  name: agent-controller-artifact-preprocessor\n/ { print $0 }' "$MANIFEST" > "$ARTIFACT_ROLE"
+awk 'BEGIN { RS="---" } $0 ~ /\nkind: RoleBinding\n/ && $0 ~ /\n  name: agent-controller-artifact-preprocessor\n/ { print $0 }' "$MANIFEST" > "$ARTIFACT_BINDING"
+awk 'BEGIN { RS="---" } $0 ~ /\nkind: ValidatingAdmissionPolicy\n/ && $0 ~ /app.kubernetes.io\/component: artifact-preprocessor/ { print $0 }' "$MANIFEST" > "$ARTIFACT_ADMISSION"
+awk 'BEGIN { RS="---" } $0 ~ /\nkind: ValidatingAdmissionPolicyBinding\n/ && $0 ~ /app.kubernetes.io\/component: artifact-preprocessor/ { print $0 }' "$MANIFEST" > "$ARTIFACT_ADMISSION_BINDING"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: Role\n/ && $0 ~ /\n  name: oc-opencrane-runtime-cleanup\n/ { print $0 }' "$MANIFEST" > "$CLEANUP_ROLE"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: RoleBinding\n/ && $0 ~ /\n  name: oc-opencrane-runtime-cleanup\n/ { print $0 }' "$MANIFEST" > "$CLEANUP_BINDING"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: Namespace\n/ && $0 ~ /\n  name: oc-opencrane-runtime\n/ { print $0 }' "$MANIFEST" > "$RUNTIME_NAMESPACE"
@@ -144,6 +158,38 @@ if grep -A16 -F 'name: agent-controller-mcp-executor' "$MANIFEST" | grep -Eq 're
   exit 1
 fi
 
+# Artifact preprocessing is optional. When enabled, its isolated namespace grants only the same
+# suspended-Job release and exact-Pod discovery operations used by the shared governed store.
+test -s "$ARTIFACT_ROLE"
+grep -Fq 'namespace: oc-opencrane-artifact-preprocessing' "$ARTIFACT_ROLE"
+grep -Fq 'resources: ["jobs"]' "$ARTIFACT_ROLE"
+grep -Fq 'verbs: ["get", "create", "patch"]' "$ARTIFACT_ROLE"
+grep -Fq 'resources: ["pods"]' "$ARTIFACT_ROLE"
+grep -Fq 'verbs: ["list"]' "$ARTIFACT_ROLE"
+if grep -Eq 'resources: \["secrets"\]|"(delete|update|watch)"' "$ARTIFACT_ROLE"; then
+  echo "artifact preprocessing Role exceeds fenced Job release and Pod discovery authority" >&2
+  exit 1
+fi
+test -s "$ARTIFACT_BINDING"
+grep -A4 -F 'kind: ServiceAccount' "$ARTIFACT_BINDING" | grep -F 'name: agent-controller' >/dev/null
+grep -A4 -F 'kind: ServiceAccount' "$ARTIFACT_BINDING" | grep -F 'namespace: server-ns' >/dev/null
+test -s "$ARTIFACT_ADMISSION"
+test -s "$ARTIFACT_ADMISSION_BINDING"
+grep -Fq 'failurePolicy: Fail' "$ARTIFACT_ADMISSION"
+grep -Fq 'operations: ["CREATE", "UPDATE"]' "$ARTIFACT_ADMISSION"
+grep -Fq 'kubernetes.io/metadata.name: "oc-opencrane-artifact-preprocessing"' "$ARTIFACT_ADMISSION"
+grep -Fq 'request.userInfo.username == "system:serviceaccount:server-ns:agent-controller"' "$ARTIFACT_ADMISSION"
+grep -Fq "object.metadata.name.matches('^artifact-preprocess-[a-f0-9]{24}$')" "$ARTIFACT_ADMISSION"
+grep -Fq "object.spec.template.spec.serviceAccountName == 'artifact-preprocessor'" "$ARTIFACT_ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/elewa-git/opencrane-artifact-preprocessor@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"" "$ARTIFACT_ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env[0].value == \"http://oc-opencrane-opencrane-server.server-ns.svc.cluster.local:8081\"" "$ARTIFACT_ADMISSION"
+grep -Fq "object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-artifact-preprocessor'" "$ARTIFACT_ADMISSION"
+grep -Fq 'quantity(object.spec.template.spec.containers[0].resources.limits.memory).compareTo(quantity("512Mi")) == 0' "$ARTIFACT_ADMISSION"
+grep -Fq "request.operation == 'CREATE' && object.spec.suspend == true" "$ARTIFACT_ADMISSION"
+grep -Fq "oldObject.spec.suspend == true && object.spec.suspend == false" "$ARTIFACT_ADMISSION"
+grep -Fq 'validationActions: [Deny]' "$ARTIFACT_ADMISSION_BINDING"
+grep -Fq 'kubernetes.io/metadata.name: "oc-opencrane-artifact-preprocessing"' "$ARTIFACT_ADMISSION_BINDING"
+
 # The controller receives both profile-owned namespaces in one immutable map; it never gets a
 # process-wide runtime namespace that could let one profile borrow another's RoleBinding.
 grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"namespace\":\"oc-opencrane-runtime\"' >/dev/null
@@ -152,12 +198,39 @@ grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"iden
 grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"serviceAccountName\":\"managed-agent-runtime-default\"' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"namespace\":\"opencrane-mcp-executors\"' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"companionImage\":\"ghcr.io/elewa-git/opencrane-mcp-executor@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"namespace\":\"oc-opencrane-artifact-preprocessing\"' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"image\":\"ghcr.io/elewa-git/opencrane-artifact-preprocessor@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"serverServiceName\":\"oc-opencrane-opencrane-server\"' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"activeDeadlineSeconds\":300' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"ttlSecondsAfterFinished\":0' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://oc-opencrane-opencrane-server.server-ns.svc.cluster.local:8081' >/dev/null
+if grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://override.example:8081' >/dev/null; then
+  echo "artifact worker broker must not inherit the mutable runtime endpoint override" >&2
+  exit 1
+fi
 grep -B8 -A8 -F 'name: oc-opencrane-agent-controller' "$MANIFEST" | grep -F 'namespace: server-ns' >/dev/null
+
+# Durable workflow settings and the release-local application database reach the controller only
+# through fixed environment entries; no literal database URL is rendered into the Deployment.
+grep -A4 -F 'name: DATABASE_URL' "$MANIFEST" | grep -F 'name: opencrane-app-db' >/dev/null
+grep -A4 -F 'name: DATABASE_URL' "$MANIFEST" | grep -F 'key: DATABASE_URL' >/dev/null
+grep -A1 -F 'name: OPENCRANE_SILO_ID' "$MANIFEST" | grep -F 'value: "oc"' >/dev/null
+grep -A1 -F 'name: OPENCRANE_SERVER_SERVICE_NAME' "$MANIFEST" | grep -F 'value: "oc-opencrane-opencrane-server"' >/dev/null
+grep -A3 -F 'name: POD_NAMESPACE' "$MANIFEST" | grep -F 'fieldPath: metadata.namespace' >/dev/null
+grep -A1 -F 'name: OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE' "$MANIFEST" | grep -F 'value: "2"' >/dev/null
+grep -A1 -F 'name: OPENCRANE_WORKFLOW_WORKER_CONCURRENCY' "$MANIFEST" | grep -F 'value: "2"' >/dev/null
+grep -A1 -F 'name: OPENCRANE_WORKFLOW_POLL_INTERVAL_MS' "$MANIFEST" | grep -F 'value: "100"' >/dev/null
+if grep -Fq 'AGENT_CONTROLLER_OUTBOX_PRUNE_INTERVAL_MS' "$MANIFEST"; then
+  echo "agent-controller deployment still renders the retired outbox pruning loop" >&2
+  exit 1
+fi
 
 # Helm, not the controller, owns the namespace-wide network boundary.
 test -s "$CONTROLLER_POLICY"
 grep -Fq 'policyTypes: ["Ingress", "Egress"]' "$CONTROLLER_POLICY"
 grep -Fq 'ingress: []' "$CONTROLLER_POLICY"
+grep -Fq 'cnpg.io/poolerName: oc-postgres-pooler' "$CONTROLLER_POLICY"
+grep -A3 -F 'cnpg.io/poolerName: oc-postgres-pooler' "$CONTROLLER_POLICY" | grep -F 'port: 5432' >/dev/null
 test -s "$RUNTIME_DENY"
 grep -Fq 'policyTypes: ["Ingress", "Egress"]' "$RUNTIME_DENY"
 grep -Fq 'ingress: []' "$RUNTIME_DENY"
@@ -174,6 +247,13 @@ grep -Fq 'kubernetes.io/metadata.name: server-ns' "$MANIFEST"
 grep -Fq 'kubernetes.io/metadata.name: kube-system' "$MANIFEST"
 grep -Fq 'app.kubernetes.io/component: litellm' "$RUNTIME_EGRESS"
 grep -Fq 'port: 4000' "$RUNTIME_EGRESS"
+
+# Disabling only artifact preprocessing removes its controller profile and cross-namespace RBAC
+# without disabling the controller's other workflow and reconciliation responsibilities.
+if grep -Eq 'name: agent-controller-artifact-preprocessor|AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON|create or release artifact preprocessing Jobs' "$ARTIFACT_DISABLED"; then
+  echo "disabled artifact preprocessing retained controller authority or profile" >&2
+  exit 1
+fi
 # Provider actions execute in the server, so the runtime floor must not admit direct Obot traffic.
 if grep -Fq 'app.kubernetes.io/component: mcp-gateway' "$RUNTIME_EGRESS"; then
   echo "runtime egress must not reach the MCP gateway" >&2
@@ -270,6 +350,14 @@ grep -Fq "object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_RUNT
 grep -Fq "object.spec.template.spec.containers[0].volumeMounts.size() == 4" "$ADMISSION"
 grep -Fq 'SERVER_INTERNAL_PORT="$4"' "$CONFORMANCE"
 grep -Fq 'LITELLM_PORT="$5"' "$CONFORMANCE"
+grep -Fq 'usage: artifact-admission-conformance.sh <server-namespace> <artifact-namespace> <release-fullname> <server-internal-port>' "$ARTIFACT_CONFORMANCE"
+grep -Fq '_expect_create_denied "wrong actor" "$WRONG_USER"' "$ARTIFACT_CONFORMANCE"
+grep -Fq '_expect_create_denied "mutable image" "$CONTROLLER_USER"' "$ARTIFACT_CONFORMANCE"
+grep -Fq '_expect_create_denied "foreign broker" "$CONTROLLER_USER"' "$ARTIFACT_CONFORMANCE"
+grep -Fq '_expect_create_denied "host volume" "$CONTROLLER_USER"' "$ARTIFACT_CONFORMANCE"
+grep -Fq '_expect_create_denied "unsuspended create" "$CONTROLLER_USER"' "$ARTIFACT_CONFORMANCE"
+grep -Fq 'release plus an unrelated Job mutation was accepted' "$ARTIFACT_CONFORMANCE"
+grep -Fq 'a released artifact preprocessing Job was resuspended' "$ARTIFACT_CONFORMANCE"
 if grep -Fq 'cluster.local:3001' "$CONFORMANCE"; then
   echo "Admission conformance must use the deployed internal server port" >&2
   exit 1
@@ -357,6 +445,14 @@ if render_enabled --set-string agentController.runtimeProfile.serviceAccountName
 fi
 if render_enabled --set-string agentController.runtimeProfile.image.digest=latest >/dev/null 2>&1; then
   echo "mutable runtime image reference was accepted" >&2
+  exit 1
+fi
+if render_enabled --set-string clustertenantManager.database.existingSecret= >/dev/null 2>&1; then
+  echo "durable controller rendered without the release-local application database" >&2
+  exit 1
+fi
+if render_enabled --set-string artifactPreprocessor.namespace=opencrane-mcp-executors >/dev/null 2>&1; then
+  echo "artifact preprocessing reused another governed workload namespace" >&2
   exit 1
 fi
 if render_enabled --set-string agentController.runtimeProfile.resources.requests.cpu=10x >/dev/null 2>&1; then

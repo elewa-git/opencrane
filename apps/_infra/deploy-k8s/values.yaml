@@ -338,8 +338,6 @@ agentController:
   replicas: 1
   openCraneInternalUrl: ""
   pollIntervalMs: 1000
-  # -- The controller runs retention separately from the fast desired-state polling loop.
-  outboxPruneIntervalMs: 3600000
   # -- Database/server-owned fencing windows. The controller receives their resulting expiries but
   # cannot propose or extend them in its claim/commit requests.
   claimLeaseSeconds: 30

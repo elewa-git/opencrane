@@ -1024,7 +1024,7 @@ if [[ "$RELEASE_PREEXISTED" == "1" ]]; then
     "$POSTGRES_ADMIN_APP_SECRET")" || exit $?
   roll_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT" \
     "$DATABASE_CONNECTION_CHECKSUM" \
-    "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway" || exit $?
+    "${RELEASE}-opencrane-server" "${RELEASE}-agent-controller" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway" || exit $?
 fi
 
 # 4. Wait for the core workloads. The database schema was created by CNPG initdb or converged by

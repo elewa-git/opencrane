@@ -48,6 +48,10 @@
 {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" $mcpExecutorValues.image.digest) }}
 {{- fail "agentController.enabled=true requires an immutable sha256 MCP companion image digest" }}
 {{- end }}
+{{- $database := .Values.clustertenantManager.database -}}
+{{- if and (empty $database.existingSecret) (empty $database.url) }}
+{{- fail "agentController.enabled=true requires clustertenantManager.database.existingSecret or url for durable workflow workers" }}
+{{- end }}
 {{- $controllerName := "agent-controller" -}}
 {{- $runtimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
 {{- $runtimeNamespaceLabel := include "opencrane.agentController.runtimeNamespaceLabelValue" . -}}
@@ -82,15 +86,22 @@
 {{- $authoringNamespace := (index .Values "opencrane-skill-authoring").skillAuthoring.namespace -}}
 {{- $toolRunnerNamespace := (index .Values "opencrane-tool-runner").toolRunner.namespace -}}
 {{- $mcpExecutorNamespace := $mcpExecutorValues.namespace -}}
-{{- if or (eq $authoringNamespace .Release.Namespace) (eq $toolRunnerNamespace .Release.Namespace) (eq $mcpExecutorNamespace .Release.Namespace) (eq $authoringNamespace $toolRunnerNamespace) (eq $authoringNamespace $mcpExecutorNamespace) (eq $toolRunnerNamespace $mcpExecutorNamespace) }}
+{{- $artifactValues := .Values.artifactPreprocessor -}}
+{{- $artifactNamespace := include "opencrane.artifactPreprocessor.namespace" . -}}
+{{- if or (eq $authoringNamespace .Release.Namespace) (eq $toolRunnerNamespace .Release.Namespace) (eq $mcpExecutorNamespace .Release.Namespace) (and $artifactValues.enabled (eq $artifactNamespace .Release.Namespace)) (eq $authoringNamespace $toolRunnerNamespace) (eq $authoringNamespace $mcpExecutorNamespace) (eq $toolRunnerNamespace $mcpExecutorNamespace) (and $artifactValues.enabled (or (eq $artifactNamespace $authoringNamespace) (eq $artifactNamespace $toolRunnerNamespace) (eq $artifactNamespace $mcpExecutorNamespace))) }}
 {{- fail "governed workload namespaces must be distinct from the server and from each other" }}
 {{- end }}
 {{- $mcpCompanionImage := printf "%s@%s" $mcpExecutorValues.image.repository $mcpExecutorValues.image.digest -}}
 {{- $mcpInternalUrl := printf "http://%s-opencrane-server.%s.svc.cluster.local:%v/api/internal/mcp-executor" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
+{{- $serverServiceName := printf "%s-opencrane-server" (include "opencrane.fullname" .) -}}
+{{- $artifactImage := printf "%s@%s" $artifactValues.image.repository $artifactValues.image.digest -}}
+{{- $artifactInternalUrl := printf "http://%s.%s.svc.cluster.local:%v" $serverServiceName .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
+{{- $siloId := .Values.channelProxy.siloId | default .Values.clustertenantManager.firstUser.clusterTenant | default .Release.Name -}}
 {{- $controllerImage := printf "%s@%s" .Values.agentController.image.repository .Values.agentController.image.digest -}}
 {{- $controllerUsername := printf "system:serviceaccount:%s:%s" .Release.Namespace $controllerName -}}
 {{- $skillAdmissionName := printf "%s-skill-workloads" (include "opencrane.agentController.admissionName" .) -}}
 {{- $mcpAdmissionName := printf "%s-mcp-executor" (include "opencrane.agentController.admissionName" .) | trunc 63 | trimSuffix "-" -}}
+{{- $artifactAdmissionName := printf "%s-artifact-preprocessor" (include "opencrane.agentController.admissionName" .) | trunc 63 | trimSuffix "-" -}}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -292,6 +303,248 @@ roleRef:
   kind: Role
   name: {{ $controllerName }}-mcp-executor
 ---
+{{- if $artifactValues.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $controllerName }}-artifact-preprocessor
+  namespace: {{ $artifactNamespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-controller
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "create", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $controllerName }}-artifact-preprocessor
+  namespace: {{ $artifactNamespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-controller
+subjects:
+  - kind: ServiceAccount
+    name: {{ $controllerName }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $controllerName }}-artifact-preprocessor
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $artifactAdmissionName }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: artifact-preprocessor
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    matchPolicy: Exact
+    resourceRules:
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs"]
+        scope: "Namespaced"
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: {{ $artifactNamespace | quote }}
+  validations:
+    - expression: request.userInfo.username == {{ $controllerUsername | toJson }}
+      message: only this release's controller ServiceAccount may create or release artifact preprocessing Jobs
+    - expression: >-
+        object.metadata.namespace == {{ $artifactNamespace | toJson }} &&
+        object.metadata.name.matches('^artifact-preprocess-[a-f0-9]{24}$') &&
+        object.metadata.labels.size() >= 2 && object.metadata.labels.size() <= 6 &&
+        object.metadata.labels.all(k, k in [
+          'app.kubernetes.io/component', 'opencrane.ai/artifact-preprocessor',
+          'batch.kubernetes.io/controller-uid', 'batch.kubernetes.io/job-name',
+          'controller-uid', 'job-name']) &&
+        object.metadata.labels['app.kubernetes.io/component'] == 'artifact-preprocessor' &&
+        object.metadata.labels['opencrane.ai/artifact-preprocessor'] == object.metadata.name &&
+        (!('batch.kubernetes.io/job-name' in object.metadata.labels) || object.metadata.labels['batch.kubernetes.io/job-name'] == object.metadata.name) &&
+        (!('job-name' in object.metadata.labels) || object.metadata.labels['job-name'] == object.metadata.name) &&
+        (!has(object.metadata.uid) || !('batch.kubernetes.io/controller-uid' in object.metadata.labels) || object.metadata.labels['batch.kubernetes.io/controller-uid'] == string(object.metadata.uid)) &&
+        (!has(object.metadata.uid) || !('controller-uid' in object.metadata.labels) || object.metadata.labels['controller-uid'] == string(object.metadata.uid)) &&
+        object.metadata.annotations.size() == 1 &&
+        object.metadata.annotations['opencrane.ai/bootstrap-reference'].matches('^artifact-preprocess-bootstrap-v1_[a-f0-9]{64}$') &&
+        (!has(object.metadata.ownerReferences) || object.metadata.ownerReferences.size() == 0) &&
+        (!has(object.metadata.finalizers) || object.metadata.finalizers.size() == 0) &&
+        (!has(object.metadata.generateName) || object.metadata.generateName == '')
+      message: artifact preprocessing Job identity must match one opaque saved assignment
+    - expression: >-
+        object.spec.parallelism == 1 && object.spec.completions == 1 && object.spec.backoffLimit == 0 &&
+        object.spec.activeDeadlineSeconds > 0 &&
+        object.spec.activeDeadlineSeconds <= {{ $artifactValues.activeDeadlineSeconds }} &&
+        object.spec.ttlSecondsAfterFinished == {{ $artifactValues.ttlSecondsAfterFinished }} &&
+        (!has(object.spec.manualSelector) || object.spec.manualSelector == false) &&
+        (!has(object.spec.completionMode) || object.spec.completionMode == 'NonIndexed') &&
+        !has(object.spec.podFailurePolicy) && !has(object.spec.successPolicy) &&
+        (!has(object.spec.backoffLimitPerIndex) || object.spec.backoffLimitPerIndex == 0) &&
+        (!has(object.spec.maxFailedIndexes) || object.spec.maxFailedIndexes == 0)
+      message: artifact preprocessing Job lifecycle must stay one-shot and bounded
+    - expression: >-
+        !has(object.spec.selector) ||
+        ((!has(object.spec.selector.matchExpressions) || object.spec.selector.matchExpressions.size() == 0) &&
+          has(object.spec.selector.matchLabels) && object.spec.selector.matchLabels.size() > 0 &&
+          object.spec.selector.matchLabels.size() <= 4 &&
+          object.spec.selector.matchLabels.all(k, k in [
+            'batch.kubernetes.io/controller-uid', 'batch.kubernetes.io/job-name',
+            'controller-uid', 'job-name']) &&
+          (!('batch.kubernetes.io/job-name' in object.spec.selector.matchLabels) || object.spec.selector.matchLabels['batch.kubernetes.io/job-name'] == object.metadata.name) &&
+          (!('job-name' in object.spec.selector.matchLabels) || object.spec.selector.matchLabels['job-name'] == object.metadata.name) &&
+          (!has(object.metadata.uid) || !('batch.kubernetes.io/controller-uid' in object.spec.selector.matchLabels) || object.spec.selector.matchLabels['batch.kubernetes.io/controller-uid'] == string(object.metadata.uid)) &&
+          (!has(object.metadata.uid) || !('controller-uid' in object.spec.selector.matchLabels) || object.spec.selector.matchLabels['controller-uid'] == string(object.metadata.uid)))
+      message: only Kubernetes-owned selector labels may be defaulted for artifact preprocessing Jobs
+    - expression: >-
+        object.spec.template.metadata.labels.size() >= 2 && object.spec.template.metadata.labels.size() <= 6 &&
+        object.spec.template.metadata.labels.all(k, k in [
+          'app.kubernetes.io/component', 'opencrane.ai/artifact-preprocessor',
+          'batch.kubernetes.io/controller-uid', 'batch.kubernetes.io/job-name',
+          'controller-uid', 'job-name']) &&
+        object.spec.template.metadata.labels['app.kubernetes.io/component'] == 'artifact-preprocessor' &&
+        object.spec.template.metadata.labels['opencrane.ai/artifact-preprocessor'] == object.metadata.name &&
+        (!('batch.kubernetes.io/job-name' in object.spec.template.metadata.labels) || object.spec.template.metadata.labels['batch.kubernetes.io/job-name'] == object.metadata.name) &&
+        (!('job-name' in object.spec.template.metadata.labels) || object.spec.template.metadata.labels['job-name'] == object.metadata.name) &&
+        (!has(object.metadata.uid) || !('batch.kubernetes.io/controller-uid' in object.spec.template.metadata.labels) || object.spec.template.metadata.labels['batch.kubernetes.io/controller-uid'] == string(object.metadata.uid)) &&
+        (!has(object.metadata.uid) || !('controller-uid' in object.spec.template.metadata.labels) || object.spec.template.metadata.labels['controller-uid'] == string(object.metadata.uid)) &&
+        object.spec.template.metadata.annotations.size() == 1 &&
+        object.spec.template.metadata.annotations['opencrane.ai/bootstrap-reference'] == object.metadata.annotations['opencrane.ai/bootstrap-reference'] &&
+        (!has(object.spec.template.metadata.name) || object.spec.template.metadata.name == '') &&
+        (!has(object.spec.template.metadata.generateName) || object.spec.template.metadata.generateName == '') &&
+        (!has(object.spec.template.metadata.namespace) || object.spec.template.metadata.namespace == '') &&
+        (!has(object.spec.template.metadata.ownerReferences) || object.spec.template.metadata.ownerReferences.size() == 0) &&
+        (!has(object.spec.template.metadata.finalizers) || object.spec.template.metadata.finalizers.size() == 0)
+      message: artifact preprocessing Pod identity must match the saved Job assignment
+    - expression: >-
+        object.spec.template.spec.serviceAccountName == 'artifact-preprocessor' &&
+        (!has(object.spec.template.spec.serviceAccount) || object.spec.template.spec.serviceAccount == 'artifact-preprocessor') &&
+        object.spec.template.spec.automountServiceAccountToken == false &&
+        object.spec.template.spec.enableServiceLinks == false &&
+        object.spec.template.spec.restartPolicy == 'Never' &&
+        object.spec.template.spec.securityContext.runAsNonRoot == true &&
+        object.spec.template.spec.securityContext.runAsUser == 65532 &&
+        object.spec.template.spec.securityContext.runAsGroup == 65532 &&
+        object.spec.template.spec.securityContext.fsGroup == 65532 &&
+        object.spec.template.spec.securityContext.seccompProfile.type == 'RuntimeDefault' &&
+        (!has(object.spec.template.spec.hostNetwork) || object.spec.template.spec.hostNetwork == false) &&
+        (!has(object.spec.template.spec.hostPID) || object.spec.template.spec.hostPID == false) &&
+        (!has(object.spec.template.spec.hostIPC) || object.spec.template.spec.hostIPC == false) &&
+        (!has(object.spec.template.spec.shareProcessNamespace) || object.spec.template.spec.shareProcessNamespace == false) &&
+        (!has(object.spec.template.spec.nodeName) || object.spec.template.spec.nodeName == '') &&
+        (!has(object.spec.template.spec.nodeSelector) || object.spec.template.spec.nodeSelector.size() == 0) &&
+        !has(object.spec.template.spec.affinity) &&
+        (!has(object.spec.template.spec.tolerations) || object.spec.template.spec.tolerations.size() == 0) &&
+        !has(object.spec.template.spec.hostAliases) &&
+        (!has(object.spec.template.spec.imagePullSecrets) || object.spec.template.spec.imagePullSecrets.size() == 0) &&
+        !has(object.spec.template.spec.runtimeClassName) && !has(object.spec.template.spec.priorityClassName) &&
+        (!has(object.spec.template.spec.schedulerName) || object.spec.template.spec.schedulerName == 'default-scheduler') &&
+        object.spec.template.spec.terminationGracePeriodSeconds == 0 &&
+        (!has(object.spec.template.spec.dnsPolicy) || object.spec.template.spec.dnsPolicy == 'ClusterFirst') &&
+        !has(object.spec.template.spec.dnsConfig)
+      message: artifact preprocessing Pod identity and host isolation must match the fixed profile
+    - expression: >-
+        object.spec.template.spec.containers.size() == 1 &&
+        (!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.size() == 0) &&
+        (!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0) &&
+        object.spec.template.spec.containers[0].name == 'artifact-preprocessor' &&
+        object.spec.template.spec.containers[0].image == {{ $artifactImage | toJson }} &&
+        object.spec.template.spec.containers[0].imagePullPolicy == {{ $artifactValues.image.pullPolicy | toJson }} &&
+        object.spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation == false &&
+        object.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem == true &&
+        object.spec.template.spec.containers[0].securityContext.capabilities.drop == ['ALL'] &&
+        (!has(object.spec.template.spec.containers[0].securityContext.capabilities.add) || object.spec.template.spec.containers[0].securityContext.capabilities.add.size() == 0) &&
+        (!has(object.spec.template.spec.containers[0].command) || object.spec.template.spec.containers[0].command.size() == 0) &&
+        (!has(object.spec.template.spec.containers[0].args) || object.spec.template.spec.containers[0].args.size() == 0) &&
+        !has(object.spec.template.spec.containers[0].lifecycle) &&
+        !has(object.spec.template.spec.containers[0].livenessProbe) &&
+        !has(object.spec.template.spec.containers[0].readinessProbe) &&
+        !has(object.spec.template.spec.containers[0].startupProbe) &&
+        !has(object.spec.template.spec.containers[0].envFrom) &&
+        (!has(object.spec.template.spec.containers[0].ports) || object.spec.template.spec.containers[0].ports.size() == 0) &&
+        object.spec.template.spec.containers[0].resources.requests.size() == 2 &&
+        object.spec.template.spec.containers[0].resources.limits.size() == 2 &&
+        quantity(object.spec.template.spec.containers[0].resources.requests.cpu).compareTo(quantity({{ $artifactValues.resources.requests.cpu | toString | toJson }})) == 0 &&
+        quantity(object.spec.template.spec.containers[0].resources.requests.memory).compareTo(quantity({{ $artifactValues.resources.requests.memory | toString | toJson }})) == 0 &&
+        quantity(object.spec.template.spec.containers[0].resources.limits.cpu).compareTo(quantity({{ $artifactValues.resources.limits.cpu | toString | toJson }})) == 0 &&
+        quantity(object.spec.template.spec.containers[0].resources.limits.memory).compareTo(quantity({{ $artifactValues.resources.limits.memory | toString | toJson }})) == 0
+      message: artifact preprocessing image, container shape, security and resources are immutable
+    - expression: >-
+        object.spec.template.spec.containers[0].env.size() == 4 &&
+        object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_INTERNAL_URL' &&
+        object.spec.template.spec.containers[0].env[0].value == {{ $artifactInternalUrl | toJson }} &&
+        object.spec.template.spec.containers[0].env[1].name == 'OPENCRANE_PREPROCESSOR_TOKEN_PATH' &&
+        object.spec.template.spec.containers[0].env[1].value == '/var/run/opencrane/tokens/opencrane.token' &&
+        object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_PREPROCESSOR_BOOTSTRAP_REFERENCE_PATH' &&
+        object.spec.template.spec.containers[0].env[2].value == '/var/run/opencrane/bootstrap/reference' &&
+        object.spec.template.spec.containers[0].env[3].name == 'ARTIFACT_PREPROCESSOR_SCRATCH_DIRECTORY' &&
+        object.spec.template.spec.containers[0].env[3].value == '/scratch' &&
+        object.spec.template.spec.containers[0].volumeMounts.size() == 3 &&
+        object.spec.template.spec.containers[0].volumeMounts[0].name == 'opencrane-token' &&
+        object.spec.template.spec.containers[0].volumeMounts[0].mountPath == '/var/run/opencrane/tokens' &&
+        object.spec.template.spec.containers[0].volumeMounts[0].readOnly == true &&
+        object.spec.template.spec.containers[0].volumeMounts[1].name == 'bootstrap-reference' &&
+        object.spec.template.spec.containers[0].volumeMounts[1].mountPath == '/var/run/opencrane/bootstrap' &&
+        object.spec.template.spec.containers[0].volumeMounts[1].readOnly == true &&
+        object.spec.template.spec.containers[0].volumeMounts[2].name == 'scratch' &&
+        object.spec.template.spec.containers[0].volumeMounts[2].mountPath == '/scratch'
+      message: artifact preprocessing environment and mounts must contain only the fixed broker interfaces
+    - expression: >-
+        object.spec.template.spec.volumes.size() == 3 &&
+        object.spec.template.spec.volumes[0].name == 'opencrane-token' &&
+        object.spec.template.spec.volumes[0].projected.defaultMode == 288 &&
+        object.spec.template.spec.volumes[0].projected.sources.size() == 1 &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.path == 'opencrane.token' &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-artifact-preprocessor' &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.expirationSeconds == 600 &&
+        object.spec.template.spec.volumes[1].name == 'bootstrap-reference' &&
+        object.spec.template.spec.volumes[1].downwardAPI.defaultMode == 288 &&
+        object.spec.template.spec.volumes[1].downwardAPI.items.size() == 1 &&
+        object.spec.template.spec.volumes[1].downwardAPI.items[0].path == 'reference' &&
+        object.spec.template.spec.volumes[1].downwardAPI.items[0].fieldRef.fieldPath == "metadata.annotations['opencrane.ai/bootstrap-reference']" &&
+        object.spec.template.spec.volumes[2].name == 'scratch' &&
+        (!has(object.spec.template.spec.volumes[2].emptyDir.medium) || object.spec.template.spec.volumes[2].emptyDir.medium == '') &&
+        quantity(object.spec.template.spec.volumes[2].emptyDir.sizeLimit).compareTo(quantity({{ $artifactValues.scratchSize | toJson }})) == 0
+      message: artifact preprocessing volumes must be exactly one audience token, one reference, and bounded scratch
+    - expression: >-
+        (request.operation == 'CREATE' && object.spec.suspend == true) ||
+        (request.operation == 'UPDATE' && oldObject.spec.suspend == true && object.spec.suspend == false &&
+          object.metadata.name == oldObject.metadata.name &&
+          object.metadata.labels == oldObject.metadata.labels &&
+          object.metadata.annotations == oldObject.metadata.annotations &&
+          object.spec.parallelism == oldObject.spec.parallelism &&
+          object.spec.completions == oldObject.spec.completions &&
+          object.spec.backoffLimit == oldObject.spec.backoffLimit &&
+          object.spec.activeDeadlineSeconds > 0 &&
+          object.spec.activeDeadlineSeconds <= oldObject.spec.activeDeadlineSeconds &&
+          object.spec.ttlSecondsAfterFinished == oldObject.spec.ttlSecondsAfterFinished &&
+          object.spec.template == oldObject.spec.template)
+      message: artifact preprocessing create must be suspended and update may only release the exact stored Job once
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $artifactAdmissionName }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: artifact-preprocessor
+spec:
+  policyName: {{ $artifactAdmissionName }}
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: {{ $artifactNamespace | quote }}
+---
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -333,14 +586,27 @@ spec:
               drop: ["ALL"]
             readOnlyRootFilesystem: true
           env:
+            {{- include "opencrane.clustertenantManagerDatabaseEnv" . | nindent 12 }}
+            - name: OPENCRANE_SILO_ID
+              value: {{ $siloId | quote }}
             - name: OPENCRANE_INTERNAL_URL
               value: {{ $openCraneInternalUrl | quote }}
+            - name: OPENCRANE_SERVER_SERVICE_NAME
+              value: {{ $serverServiceName | quote }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: OPENCRANE_CONTROLLER_TOKEN_PATH
               value: /var/run/opencrane/tokens/opencrane.token
+            - name: OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE
+              value: {{ .Values.clustertenantManager.workflows.databasePoolSize | quote }}
+            - name: OPENCRANE_WORKFLOW_WORKER_CONCURRENCY
+              value: {{ .Values.clustertenantManager.workflows.workerConcurrency | quote }}
+            - name: OPENCRANE_WORKFLOW_POLL_INTERVAL_MS
+              value: {{ .Values.clustertenantManager.workflows.pollIntervalMilliseconds | quote }}
             - name: AGENT_CONTROLLER_POLL_INTERVAL_MS
               value: {{ .Values.agentController.pollIntervalMs | quote }}
-            - name: AGENT_CONTROLLER_OUTBOX_PRUNE_INTERVAL_MS
-              value: {{ .Values.agentController.outboxPruneIntervalMs | quote }}
             {{- $personalProfileEnv := dict "namespace" $runtimeNamespace "identityProfile" "personal" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "serverNamespace" .Release.Namespace "serviceAccountName" $runtimeServiceAccount "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources }}
             {{- $managedProfileEnv := dict "namespace" $managedRuntimeNamespace "identityProfile" "managed" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "serverNamespace" .Release.Namespace "serviceAccountName" $managedRuntimeServiceAccount "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources }}
             - name: AGENT_CONTROLLER_PROFILES_JSON
@@ -349,6 +615,10 @@ spec:
               value: {{ dict "authoring" (dict "kind" "authoring" "image" $authoringImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.authoring.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $authoringNamespace "serviceAccountName" "skill-authoring-default" "capabilityTokenAudience" "opencrane-skill-authoring" "bootstrapUrl" $skillBootstrapUrl "capabilityTokenPath" "/var/run/opencrane/tokens/capability.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.skillWorkloadProfiles.authoring.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.authoring.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.authoring.resources) "tool-runner" (dict "kind" "tool-runner" "image" $toolRunnerImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.toolRunner.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $toolRunnerNamespace "serviceAccountName" "tool-runner-default" "capabilityTokenAudience" "opencrane-tool-runner" "bootstrapUrl" $skillBootstrapUrl "capabilityTokenPath" "/var/run/opencrane/tokens/capability.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.skillWorkloadProfiles.toolRunner.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.toolRunner.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.toolRunner.resources) | toJson | quote }}
             - name: AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON
               value: {{ dict "companionImage" $mcpCompanionImage "imagePullPolicy" $mcpExecutorValues.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $mcpExecutorNamespace "serviceAccountName" $mcpExecutorValues.serviceAccountName "opencraneInternalUrl" $mcpInternalUrl "projectedTokenTtlSeconds" $mcpExecutorValues.projectedTokenTtlSeconds "scratchSize" $mcpExecutorValues.scratchSize "activeDeadlineSeconds" $mcpExecutorValues.activeDeadlineSeconds "serverResources" $mcpExecutorValues.serverResources "companionResources" $mcpExecutorValues.companionResources | toJson | quote }}
+            {{- if $artifactValues.enabled }}
+            - name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON
+              value: {{ dict "image" $artifactImage "imagePullPolicy" $artifactValues.image.pullPolicy "serverNamespace" .Release.Namespace "serverServiceName" $serverServiceName "namespace" $artifactNamespace "serviceAccountName" "artifact-preprocessor" "tokenAudience" "opencrane-artifact-preprocessor" "openCraneInternalUrl" $artifactInternalUrl "tokenPath" "/var/run/opencrane/tokens/opencrane.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" $artifactValues.scratchSize "activeDeadlineSeconds" $artifactValues.activeDeadlineSeconds "ttlSecondsAfterFinished" $artifactValues.ttlSecondsAfterFinished "resources" $artifactValues.resources | toJson | quote }}
+            {{- end }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "agent-controller") | nindent 12 }}
           volumeMounts:
             - name: opencrane-token
@@ -420,6 +690,16 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              cnpg.io/poolerName: {{ include "opencrane.postgresPoolerName" . }}
+      ports:
+        - protocol: TCP
+          port: 5432
     - to:
         - namespaceSelector:
             matchLabels:
