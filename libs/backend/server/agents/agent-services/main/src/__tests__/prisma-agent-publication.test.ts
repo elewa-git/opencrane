@@ -2,7 +2,7 @@ import { McpApprovalStatus, McpServerRevisionState, McpServerStatus, type Prisma
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuditDecisionRecord } from "@opencrane/backend/server/iam/audit";
-import { PrismaAgentServicePublicationRepository } from "../db/prisma-agent-publication";
+import { PrismaAgentServicePublicationUnitOfWork } from "../db/prisma-agent-publication";
 
 /** Creates one locked Prisma service row. */
 function _serviceRow()
@@ -94,7 +94,7 @@ describe("Prisma AgentService publication adapter", function _suite()
 			auditDecision: { create: auditCreate },
 		};
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaAgentServicePublicationRepository(prisma, { build: vi.fn().mockReturnValue(_auditDecision()) });
+		const repository = new PrismaAgentServicePublicationUnitOfWork(prisma, { build: vi.fn().mockReturnValue(_auditDecision()) });
 
 		const result = await repository.publishRevisionAtomically({ agentServiceId: "service-1", agentRevisionId: "revision-1", expectedServiceState: "draft", expectedActiveRevisionId: null, publishedAt: "2026-07-18T01:00:00.000Z" });
 
@@ -102,6 +102,7 @@ describe("Prisma AgentService publication adapter", function _suite()
 		expect(transaction.agentService.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: "Draft", activeRevisionId: null }) }));
 		expect(transaction.agentRevision.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: "Draft" }) }));
 		expect(auditCreate).toHaveBeenCalledOnce();
+		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
 	});
 
 	it("returns a conflict without mutation when locked authority no longer matches", async function _conflict()
@@ -113,7 +114,7 @@ describe("Prisma AgentService publication adapter", function _suite()
 			auditDecision: { create: vi.fn() },
 		};
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaAgentServicePublicationRepository(prisma, { build: vi.fn().mockReturnValue(_auditDecision()) });
+		const repository = new PrismaAgentServicePublicationUnitOfWork(prisma, { build: vi.fn().mockReturnValue(_auditDecision()) });
 
 		await expect(repository.publishRevisionAtomically({ agentServiceId: "service-1", agentRevisionId: "revision-1", expectedServiceState: "draft", expectedActiveRevisionId: null, publishedAt: "2026-07-18T01:00:00.000Z" })).resolves.toEqual({ status: "conflict", currentActiveRevisionId: null });
 		expect(transaction.agentRevision.updateMany).not.toHaveBeenCalled();
@@ -131,7 +132,7 @@ describe("Prisma AgentService publication adapter", function _suite()
 			auditDecision: { create: vi.fn() },
 		};
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaAgentServicePublicationRepository(prisma, { build: vi.fn().mockReturnValue(_auditDecision()) });
+		const repository = new PrismaAgentServicePublicationUnitOfWork(prisma, { build: vi.fn().mockReturnValue(_auditDecision()) });
 
 		await expect(repository.publishRevisionAtomically({ agentServiceId: "service-1", agentRevisionId: "revision-1", expectedServiceState: "draft", expectedActiveRevisionId: null, publishedAt: "2026-07-18T01:00:00.000Z" })).resolves.toEqual({ status: "invalid_revision" });
 		expect(transaction.agentRevision.updateMany).not.toHaveBeenCalled();

@@ -2,9 +2,9 @@ import { AgentServiceKind, AgentServiceState, PrincipalProvenance } from "@prism
 import { describe, expect, it, vi } from "vitest";
 
 import { MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER } from "../managed-agent-service-principal";
-import { PrismaAgentRevisionLifecycleRepository } from "../db/prisma-agent-revision-lifecycle";
+import { PrismaAgentRevisionLifecycleUnitOfWork } from "../db/prisma-agent-revision-lifecycle";
 
-describe("PrismaAgentRevisionLifecycleRepository", function _Suite()
+describe("PrismaAgentRevisionLifecycleUnitOfWork", function _Suite()
 {
 	it("creates a durable internal Principal before linking a managed service", async function _CreatesPrincipal()
 	{
@@ -40,7 +40,7 @@ describe("PrismaAgentRevisionLifecycleRepository", function _Suite()
 			agentRevision: { create: revisionCreate },
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback) { return callback(transaction); }) };
-		const repository = new PrismaAgentRevisionLifecycleRepository(prisma as never);
+		const repository = new PrismaAgentRevisionLifecycleUnitOfWork(prisma as never);
 
 		const result = await repository.createManagedService({
 			siloId: "silo-1",
@@ -58,5 +58,6 @@ describe("PrismaAgentRevisionLifecycleRepository", function _Suite()
 		expect(principalCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ id: expectedPrincipalId, siloId: "silo-1", issuer: MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER, subject: result.service.id, provenance: PrincipalProvenance.Internal }) });
 		expect(serviceCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ id: result.service.id, principalId: expectedPrincipalId, kind: AgentServiceKind.Managed, state: AgentServiceState.Draft }) });
 		expect(principalCreate.mock.invocationCallOrder[0]).toBeLessThan(serviceCreate.mock.invocationCallOrder[0]);
+		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
 	});
 });

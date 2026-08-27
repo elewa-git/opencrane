@@ -66,7 +66,7 @@ export type AtomicAgentRevisionPublicationResult =
  * write, and it uses exact conditional writes so two administrators publishing at the same moment
  * cannot both succeed.
  *
- * Implemented by: `PrismaAgentServicePublicationRepository` in `db/prisma-agent-publication.ts`.
+ * Implemented by: `PrismaAgentServicePublicationUnitOfWork` in `db/prisma-agent-publication.ts`.
  * Called by: {@link __PublishAgentRevision} in `agent-publication.ts`; a caller-attributed instance
  * is built per request by `_publicationFor` in `prisma-agent-services.router.ts` so the audit row
  * names the real administrator.
@@ -104,7 +104,7 @@ export interface AgentServicePublicationRepository
  * back the publication with it.
  *
  * Implemented by: `_buildPublicationAuditEvidence` in `prisma-agent-services.router.ts`.
- * Called by: `PrismaAgentServicePublicationRepository.publishRevisionAtomically` in
+ * Called by: `PrismaAgentServicePublicationUnitOfWork.publishRevisionAtomically` in
  * `db/prisma-agent-publication.ts`.
  */
 export interface AgentPublicationAuditEvidencePort

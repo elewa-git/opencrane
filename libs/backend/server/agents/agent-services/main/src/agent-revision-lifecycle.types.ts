@@ -300,7 +300,7 @@ export interface AgentServiceHistory
  * (`expectedParentRevisionId`); if someone else appended first, the call returns a conflict with the
  * current newest revision instead of silently overwriting the other author's work.
  *
- * Implemented by: `PrismaAgentRevisionLifecycleRepository` in `db/prisma-agent-revision-lifecycle.ts`.
+ * Implemented by: `PrismaAgentRevisionLifecycleUnitOfWork` in `db/prisma-agent-revision-lifecycle.ts`.
  * Called by: the seven `__*` use cases in `agent-revision-lifecycle.ts`; wired in
  * `prisma-agent-services.router.ts`.
  */

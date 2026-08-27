@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
-import type { AssignedSkillRevision, SessionAssemblyCommand, SessionAssemblyLoad, SkillRevisionEligibilityRepository, SkillRevisionEligibilityRepositoryFactory, SkillRevisionEligibilitySource, ToolPolicyInput } from "./session-assembly.types";
+import type { AssignedSkillRevision, SessionAssemblyCommand, SessionAssemblyLoad, SkillRevisionEligibilityRead, SkillRevisionEligibilityRepository, SkillRevisionEligibilityRepositoryFactory, SkillRevisionEligibilitySource, ToolPolicyInput } from "./session-assembly.types";
 
 /** Reads assigned skill revisions through typed Prisma delegates inside run admission. */
 export class PrismaSkillRevisionEligibilityRepository implements SkillRevisionEligibilityRepository
@@ -17,7 +17,7 @@ export class PrismaSkillRevisionEligibilityRepository implements SkillRevisionEl
 	}
 
 	/** Loads every assigned revision and its current publication facts. */
-	async load(agentRevisionId: string): Promise<readonly AssignedSkillRevision[]>
+	async load(agentRevisionId: string): Promise<SkillRevisionEligibilityRead>
 	{
 		const assignments = await this.prisma.agentRevisionSkillAssignment.findMany({
 			where: { agentRevisionId },
@@ -29,12 +29,13 @@ export class PrismaSkillRevisionEligibilityRepository implements SkillRevisionEl
 			orderBy: { id: "asc" },
 			select: { id: true, state: true, revokedAt: true, skill: { select: { siloId: true } } },
 		});
-		if (revisions.length !== assignments.length)
-			return [];
-		return revisions.map(function _AssignedRevision(revision): AssignedSkillRevision
+		return {
+			isComplete: revisions.length === assignments.length,
+			revisions: revisions.map(function _AssignedRevision(revision): AssignedSkillRevision
 		{
 			return { skillRevisionId: revision.id, isPublished: revision.state === "Published", revokedAt: revision.revokedAt, siloId: revision.skill.siloId };
-		});
+			}),
+		};
 	}
 }
 
@@ -69,9 +70,10 @@ export class PrismaSkillRevisionEligibilitySource implements SkillRevisionEligib
 	{
 		// 1. Load immutable assignment ids, then resolve their current publication and revocation state.
 		const repository = this.createRepository(transaction);
-		const rows = await repository.load(run.agentRevisionId);
-		if (rows.length === 0 && toolPolicy.skillRevisionIds.length > 0)
+		const read = await repository.load(run.agentRevisionId);
+		if (!read.isComplete)
 			return { outcome: "denied", reason: "skill_unavailable" };
+		const rows = read.revisions;
 
 		// 2. Allow fewer skills than the revision assigns, but never one it never assigned, and never the same one twice.
 		const assignedIds = rows.map(function _assignedId(row): string { return row.skillRevisionId; });

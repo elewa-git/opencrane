@@ -12,12 +12,12 @@ interface _SkillRow
 }
 
 /** Builds a fake admission transaction that returns fixed assignment and revision rows. */
-function _Transaction(rows: readonly _SkillRow[])
+function _Transaction(rows: readonly _SkillRow[], missingRevisionIds: readonly string[] = [])
 {
 	return {
 		prisma: {
 			agentRevisionSkillAssignment: { findMany: vi.fn().mockResolvedValue(rows.map(function _Assignment(row) { return { skillRevisionId: row.skillRevisionId }; })) },
-			skillRevision: { findMany: vi.fn().mockResolvedValue(rows.map(function _Revision(row) { return { id: row.skillRevisionId, state: row.isPublished ? "Published" : "Revoked", revokedAt: row.revokedAt, skill: { siloId: row.siloId } }; })) },
+			skillRevision: { findMany: vi.fn().mockResolvedValue(rows.filter(function _Exists(row) { return !missingRevisionIds.includes(row.skillRevisionId); }).map(function _Revision(row) { return { id: row.skillRevisionId, state: row.isPublished ? "Published" : "Revoked", revokedAt: row.revokedAt, skill: { siloId: row.siloId } }; })) },
 		},
 		admittedAt: "2026-07-23T12:00:00.000Z",
 		admittedAtEpochMs: Date.parse("2026-07-23T12:00:00.000Z"),
@@ -62,6 +62,13 @@ describe("PrismaSkillRevisionEligibilitySource", function _describeEligibility()
 	it("denies an invented skill revision that is not assigned to this AgentRevision", async function _deniesInventedRevision()
 	{
 		const result = await _Source().load({ siloId: "silo-1" } as never, { agentRevisionId: "agent-revision-1" } as never, _ToolPolicy(["revision-other"]), _Transaction([{ skillRevisionId: "revision-1", isPublished: true, revokedAt: null, siloId: "silo-1" }]));
+		expect(result).toEqual({ outcome: "denied", reason: "skill_unavailable" });
+	});
+
+	it("denies an incomplete assignment read even when grants narrow the effective set to empty", async function _DeniesMissingRevision()
+	{
+		const rows = [{ skillRevisionId: "revision-1", isPublished: true, revokedAt: null, siloId: "silo-1" }];
+		const result = await _Source().load({ siloId: "silo-1" } as never, { agentRevisionId: "agent-revision-1" } as never, _ToolPolicy([]), _Transaction(rows, ["revision-1"]));
 		expect(result).toEqual({ outcome: "denied", reason: "skill_unavailable" });
 	});
 });

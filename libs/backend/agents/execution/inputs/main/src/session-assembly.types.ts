@@ -344,7 +344,16 @@ export interface SkillRevisionEligibilitySource
 export interface SkillRevisionEligibilityRepository
 {
 	/** Loads every skill revision assigned to one immutable agent revision. */
-	load(agentRevisionId: string): Promise<readonly AssignedSkillRevision[]>;
+	load(agentRevisionId: string): Promise<SkillRevisionEligibilityRead>;
+}
+
+/** Assignment facts plus proof that every assigned revision still exists. */
+export interface SkillRevisionEligibilityRead
+{
+	/** Current facts for every assigned revision that still exists. */
+	readonly revisions: readonly AssignedSkillRevision[];
+	/** Whether every assignment resolved to an existing revision. */
+	readonly isComplete: boolean;
 }
 
 /** Builds the skill reader from the active run-admission transaction. */

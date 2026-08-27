@@ -10,6 +10,25 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-publication.ts",
+        "adapter": "PrismaAgentServicePublicationRepository",
+        "contract": "AgentServicePublicationRepository",
+        "contractImportPath": "../agent-publication.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-revision-lifecycle.ts",
+        "adapter": "PrismaAgentRevisionLifecycleRepository",
+        "contract": "AgentRevisionLifecycleRepository",
+        "contractImportPath": "../agent-revision-lifecycle.types",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentRevisionWriterRepository",
+            "importPath": "./prisma-agent-revision-writer"
+          }
+        ]
+      },
+      {
         "path": "libs/backend/agents/execution/protocol/src/prisma-runtime-dispatch-repository.ts",
         "adapter": "PrismaRuntimeDispatchRepository",
         "contract": "RuntimeStreamBindingRepository",
@@ -19,7 +38,7 @@
       {
         "path": "libs/backend/server/iam/authorization/main/src/prisma-runtime-authority.ts",
         "adapter": "PrismaRuntimeAuthorityRepository",
-        "contract": "RuntimeBootstrapRepository",
+        "contract": "CapabilityActionReceiptRepository",
         "contractImportPath": "./runtime-proof.types",
         "constructs": []
       },
@@ -822,6 +841,30 @@
     ],
     "unitsOfWork": [
       {
+        "path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-publication.ts",
+        "adapter": "PrismaAgentServicePublicationUnitOfWork",
+        "contract": "AgentServicePublicationRepository",
+        "contractImportPath": "../agent-publication.types",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentServicePublicationRepository",
+            "importPath": "<same-file>"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-revision-lifecycle.ts",
+        "adapter": "PrismaAgentRevisionLifecycleUnitOfWork",
+        "contract": "AgentRevisionLifecycleRepository",
+        "contractImportPath": "../agent-revision-lifecycle.types",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentRevisionLifecycleRepository",
+            "importPath": "<same-file>"
+          }
+        ]
+      },
+      {
         "path": "libs/backend/agents/execution/protocol/src/prisma-runtime-dispatch-authority.ts",
         "adapter": "PrismaRuntimeDispatchAuthorityUnitOfWork",
         "contract": "RuntimeCommandStreamAuthority",
@@ -836,7 +879,7 @@
       {
         "path": "libs/backend/server/iam/authorization/main/src/prisma-runtime-authority.ts",
         "adapter": "PrismaRuntimeAuthorityUnitOfWork",
-        "contract": "RuntimeBootstrapRepository",
+        "contract": "CapabilityActionReceiptRepository",
         "contractImportPath": "./runtime-proof.types",
         "constructs": [
           {
@@ -1575,6 +1618,7 @@
     "compositions": [
       "libs/backend/server/agents/agent-services/main/src/db/prisma-boundary-grant.factory.ts",
       "libs/backend/server/agents/agent-services/main/src/db/prisma-managed-agent-service-principal.factory.ts",
+      "libs/backend/server/agents/agent-services/main/src/prisma-agent-services.router.ts",
       "apps/opencrane/src/app/routes.ts",
       "libs/backend/server/iam/groups/main/src/routes/groups.ts",
       "apps/opencrane/src/app/external-action-composition.ts",
