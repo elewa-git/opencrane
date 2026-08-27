@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaFleetMembershipAuthorityRepository } from "../prisma-membership-authority";
+import { PrismaFleetMembershipAuthorityUnitOfWork } from "../prisma-membership-authority";
 
 /** Creates one verified signed membership revision row. */
 function _revisionRow()
@@ -24,8 +24,9 @@ describe("Prisma fleet-membership authority adapter", function _suite()
 {
 	it("maps the latest verified silo-membership assertion without categorical scope fields", async function _latest()
 	{
-		const prisma = { verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(_revisionRow()) } } as unknown as PrismaClient;
-		const repository = new PrismaFleetMembershipAuthorityRepository(prisma);
+		const transaction = { verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(_revisionRow()) } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaFleetMembershipAuthorityUnitOfWork(prisma);
 
 		const revision = await repository.getLatestSignedRevision("fleet-1", "silo-1");
 
@@ -42,7 +43,7 @@ describe("Prisma fleet-membership authority adapter", function _suite()
 			auditDecision: { create: auditCreate },
 		};
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaFleetMembershipAuthorityRepository(prisma);
+		const repository = new PrismaFleetMembershipAuthorityUnitOfWork(prisma);
 
 		await expect(repository.acceptRevisionAtomically({ issuerId: "fleet-1", siloId: "silo-1", revision: 7, payloadDigest: `sha256:${"1".repeat(64)}` })).resolves.toEqual({ status: "accepted", highestAcceptedRevision: 7 });
 		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });

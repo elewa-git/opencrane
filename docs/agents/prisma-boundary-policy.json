@@ -3,6 +3,34 @@
   "owners": {
     "repositories": [
       {
+        "path": "libs/backend/agents/execution/inputs/main/src/prisma-skill-revision-eligibility-source.ts",
+        "adapter": "PrismaSkillRevisionEligibilityRepository",
+        "contract": "SkillRevisionEligibilityRepository",
+        "contractImportPath": "./session-assembly.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/execution/protocol/src/prisma-runtime-dispatch-repository.ts",
+        "adapter": "PrismaRuntimeDispatchRepository",
+        "contract": "RuntimeStreamBindingRepository",
+        "contractImportPath": "./prisma-runtime-dispatch-authority.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/iam/authorization/main/src/prisma-runtime-authority.ts",
+        "adapter": "PrismaRuntimeAuthorityRepository",
+        "contract": "RuntimeBootstrapRepository",
+        "contractImportPath": "./runtime-proof.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/iam/membership/main/src/prisma-membership-authority.ts",
+        "adapter": "PrismaFleetMembershipAuthorityRepository",
+        "contract": "FleetMembershipAuthorityRepository",
+        "contractImportPath": "./membership-authority.types",
+        "constructs": []
+      },
+      {
         "path": "apps/opencrane/src/infra/db/db.ts",
         "adapter": "_PrismaDbHealthProbeRepository",
         "contract": "DbHealthProbeRepository",
@@ -793,6 +821,42 @@
       }
     ],
     "unitsOfWork": [
+      {
+        "path": "libs/backend/agents/execution/protocol/src/prisma-runtime-dispatch-authority.ts",
+        "adapter": "PrismaRuntimeDispatchAuthorityUnitOfWork",
+        "contract": "RuntimeCommandStreamAuthority",
+        "contractImportPath": "@opencrane/backend/server/infra/agent-runtime-stream",
+        "constructs": [
+          {
+            "adapter": "PrismaRuntimeDispatchRepository",
+            "importPath": "./prisma-runtime-dispatch-repository"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/iam/authorization/main/src/prisma-runtime-authority.ts",
+        "adapter": "PrismaRuntimeAuthorityUnitOfWork",
+        "contract": "RuntimeBootstrapRepository",
+        "contractImportPath": "./runtime-proof.types",
+        "constructs": [
+          {
+            "adapter": "PrismaRuntimeAuthorityRepository",
+            "importPath": "<same-file>"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/iam/membership/main/src/prisma-membership-authority.ts",
+        "adapter": "PrismaFleetMembershipAuthorityUnitOfWork",
+        "contract": "FleetMembershipAuthorityRepository",
+        "contractImportPath": "./membership-authority.types",
+        "constructs": [
+          {
+            "adapter": "PrismaFleetMembershipAuthorityRepository",
+            "importPath": "<same-file>"
+          }
+        ]
+      },
       {
         "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-task-admission-unit-of-work.ts",
         "adapter": "PrismaAgentRunWorkflowTaskAdmissionUnitOfWork",

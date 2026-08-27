@@ -10,7 +10,7 @@ import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION 
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __CreatePrismaRunInputCompiler } from "./prisma-run-input-compiler";
-import { PrismaRuntimeDispatchAuthority } from "./prisma-runtime-dispatch-authority";
+import { PrismaRuntimeDispatchAuthorityUnitOfWork } from "./prisma-runtime-dispatch-authority";
 import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchAuthorityConfig, RuntimeElicitationUnitOfWorkFactory } from "./prisma-runtime-dispatch-authority.types";
 
 /** Reviewed arguments for one model-proposed personal-memory recall. */
@@ -75,7 +75,7 @@ function _CreateProductionRuntimeElicitationUnitOfWorkFactory(): RuntimeElicitat
  * @param config - Deployment-fixed namespaces, command lifetime, and retry bounds.
  * @returns One production dispatch authority ready for the runtime stream transport.
  */
-export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig): PrismaRuntimeDispatchAuthority
+export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig): PrismaRuntimeDispatchAuthorityUnitOfWork
 {
-	return new PrismaRuntimeDispatchAuthority(prisma, config, __CreateProductionRunInputCompiler(), new PrismaRuntimeEventReporter(), undefined, _CreateProductionApprovalExpiry(), _CreateProductionRuntimeElicitationUnitOfWorkFactory());
+	return new PrismaRuntimeDispatchAuthorityUnitOfWork(prisma, config, __CreateProductionRunInputCompiler(), new PrismaRuntimeEventReporter(), undefined, _CreateProductionApprovalExpiry(), _CreateProductionRuntimeElicitationUnitOfWorkFactory());
 }

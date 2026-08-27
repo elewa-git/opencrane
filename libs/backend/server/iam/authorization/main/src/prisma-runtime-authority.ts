@@ -28,7 +28,7 @@ function _existing<TResult>(row: { state: string; jti: string; requestFingerprin
 }
 
 /**
- * Stores runtime proof keys and action receipts in Postgres.
+ * Stores runtime proof keys and action receipts inside an existing database transaction.
  *
  * Implements two ports at once because both hinge on the same rows: a bootstrap is spent and its
  * public key registered in one transaction, and every action receipt is looked up against a
@@ -43,11 +43,11 @@ function _existing<TResult>(row: { state: string; jti: string; requestFingerprin
  */
 export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapRepository, CapabilityActionReceiptRepository
 {
-	/** OpenCrane product-authority database client. */
-	private readonly prisma: PrismaClient;
+	/** Transaction that owns the runtime authority change. */
+	private readonly prisma: Prisma.TransactionClient;
 
-	/** Creates the runtime authority adapter over the product-authority Postgres database. */
-	constructor(prisma: PrismaClient)
+	/** Creates the runtime authority repository inside the caller's transaction. */
+	constructor(prisma: Prisma.TransactionClient)
 	{
 		this.prisma = prisma;
 	}
@@ -55,28 +55,24 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 	/** Atomically consumes one bootstrap and binds its runtime-generated proof key. */
 	async consumeAndBindProofKeyAtomically(claim: RuntimeBootstrapClaim): Promise<RuntimeBootstrapConsumptionResult>
 	{
-		try
-		{
-				return await this.prisma.$transaction(async function _consume(transaction: Prisma.TransactionClient)
-				{
-					// 1. Read the one-use bootstrap before claiming its exact unconsumed state.
-					const bootstrap = await transaction.workloadBootstrap.findUnique({ where: { id: claim.bootstrapId } });
+		// 1. Read the one-use bootstrap before claiming its exact unconsumed state.
+		const bootstrap = await this.prisma.workloadBootstrap.findUnique({ where: { id: claim.bootstrapId } });
 				if (bootstrap === null)
 					return { status: "conflict" } as const;
 				if (bootstrap.consumedAt !== null)
 					return { status: "already_consumed" } as const;
 
-				// 2. Consume exact bootstrap coordinates; database triggers revalidate live assignment authority.
-				const receiptId = randomUUID();
-					const consumed = await transaction.workloadBootstrap.updateMany({
+		// 2. Consume exact bootstrap coordinates; database triggers revalidate live assignment authority.
+		const receiptId = randomUUID();
+		const consumed = await this.prisma.workloadBootstrap.updateMany({
 						where: { id: claim.bootstrapId, runId: claim.runId, attempt: claim.attempt, consumedAt: null },
 						data: { consumedAt: new Date(), consumedByPodUid: claim.podUid, receiptId },
-					});
-					if (consumed.count !== 1)
-						return { status: "conflict" } as const;
+		});
+		if (consumed.count !== 1)
+			return { status: "conflict" } as const;
 
-				// 3. Persist only the public proof key bound to this run attempt; no reusable runtime secret exists.
-				await transaction.runProofKey.create({
+		// 3. Persist only the public proof key bound to this run attempt; no reusable runtime secret exists.
+		await this.prisma.runProofKey.create({
 					data: {
 						id: randomUUID(),
 						bootstrapId: claim.bootstrapId,
@@ -88,16 +84,9 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 						publicKeyJwk: claim.proofPublicJwk as unknown as Prisma.InputJsonValue,
 						keyThumbprint: claim.proofKeyThumbprint,
 						expiresAt: new Date(claim.expiresAtEpochMs),
-					},
-					});
-					return { status: "consumed", receiptId } as const;
-				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-		}
-		catch (error)
-		{
-			if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) return { status: "conflict" };
-			throw error;
-		}
+			},
+		});
+		return { status: "consumed", receiptId } as const;
 	}
 
 	/**
@@ -110,18 +99,14 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 	 */
 	async reserve<TResult>(intent: CapabilityActionIntent): Promise<CapabilityActionReservationResult<TResult>>
 	{
-		try
-		{
-			return await this.prisma.$transaction(async function _reserve(transaction: Prisma.TransactionClient)
-			{
-				// 1. Return an existing JTI deterministically; its unique key prevents a second reservation.
-				const existing = await transaction.actionExecutionReceipt.findUnique({ where: { jti: intent.jti } });
+		// 1. Return an existing JTI deterministically; its unique key prevents a second reservation.
+		const existing = await this.prisma.actionExecutionReceipt.findUnique({ where: { jti: intent.jti } });
 				if (existing !== null) return _existing<TResult>(existing);
 
-				// 2. Look up the registered public proof key; a database trigger revalidates the rest.
-				const proofKey = await transaction.runProofKey.findUnique({ where: { keyThumbprint: intent.proofKeyThumbprint } });
+		// 2. Look up the registered public proof key; a database trigger revalidates the rest.
+		const proofKey = await this.prisma.runProofKey.findUnique({ where: { keyThumbprint: intent.proofKeyThumbprint } });
 				if (proofKey === null) throw new Error("verified proof key is absent from current authority");
-				const receipt = await transaction.actionExecutionReceipt.create({
+		const receipt = await this.prisma.actionExecutionReceipt.create({
 					data: {
 						siloId: intent.siloId,
 						subjectId: intent.subjectId,
@@ -150,11 +135,11 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 						replayMode: intent.replayMode === "one_shot" ? PrismaActionReplayMode.OneShot : PrismaActionReplayMode.Idempotent,
 						requestFingerprint: intent.requestFingerprint,
 					},
-					});
+		});
 
-				// 3. Append the exact allow evidence in the same transaction; audit failure prevents I/O.
-				const decisionDigest = __DigestCanonicalJson({ receiptId: receipt.id, jti: intent.jti, requestFingerprint: intent.requestFingerprint, effectivePolicyDigest: intent.effectivePolicyDigest } as JsonValue);
-				await __AppendAuditDecision(transaction, {
+		// 3. Append the exact allow evidence in the same transaction; audit failure prevents I/O.
+		const decisionDigest = __DigestCanonicalJson({ receiptId: receipt.id, jti: intent.jti, requestFingerprint: intent.requestFingerprint, effectivePolicyDigest: intent.effectivePolicyDigest } as JsonValue);
+		await __AppendAuditDecision(this.prisma, {
 					decisionDigest,
 					siloId: intent.siloId,
 					actorKind: "workload",
@@ -182,17 +167,15 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 					effectiveAuthorizationDigest: intent.effectivePolicyDigest,
 					outcome: "allow",
 					reasonCode: "proof_bound_capability_authorized",
-				});
-				return { status: "reserved", reservationId: receipt.id } as const;
-			}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-		}
-		catch (error)
-		{
-			if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-			const existing = await this.prisma.actionExecutionReceipt.findUnique({ where: { jti: intent.jti } });
-			if (existing === null) throw error;
-			return _existing<TResult>(existing);
-		}
+		});
+		return { status: "reserved", reservationId: receipt.id } as const;
+	}
+
+	/** Loads the stable result for a JTI that won a concurrent reservation race. */
+	async findExisting<TResult>(jti: string): Promise<CapabilityActionReservationResult<TResult> | null>
+	{
+		const existing = await this.prisma.actionExecutionReceipt.findUnique({ where: { jti } });
+		return existing === null ? null : _existing<TResult>(existing);
 	}
 
 	/** Completes only an exact Reserved receipt with its canonical JSON result. */
@@ -210,5 +193,88 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 	{
 		const updated = await this.prisma.actionExecutionReceipt.updateMany({ where: { id: reservationId, state: ActionExecutionState.Reserved }, data: { state: ActionExecutionState.Failed, failureCode, completedAt: new Date() } });
 		return { status: updated.count === 1 ? "failed" : "conflict" };
+	}
+}
+
+/** Opens serializable transactions around runtime proof and receipt changes. */
+export class PrismaRuntimeAuthorityUnitOfWork implements RuntimeBootstrapRepository, CapabilityActionReceiptRepository
+{
+	/** OpenCrane product-authority database client. */
+	private readonly prisma: PrismaClient;
+
+	/** Creates the runtime authority unit of work. */
+	constructor(prisma: PrismaClient)
+	{
+		this.prisma = prisma;
+	}
+
+	/** Atomically consumes one bootstrap and binds its runtime-generated proof key. */
+	async consumeAndBindProofKeyAtomically(claim: RuntimeBootstrapClaim): Promise<RuntimeBootstrapConsumptionResult>
+	{
+		try
+		{
+			return await this._Run(async function _Consume(repository)
+			{
+				return repository.consumeAndBindProofKeyAtomically(claim);
+			});
+		}
+		catch (error)
+		{
+			if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034"))
+				return { status: "conflict" };
+			throw error;
+		}
+	}
+
+	/** Reserves one proof-bound action and appends its audit evidence atomically. */
+	async reserve<TResult>(intent: CapabilityActionIntent): Promise<CapabilityActionReservationResult<TResult>>
+	{
+		try
+		{
+			return await this._Run(async function _Reserve(repository)
+			{
+				return repository.reserve<TResult>(intent);
+			});
+		}
+		catch (error)
+		{
+			if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002")
+				throw error;
+			const existing = await this._Run(async function _LoadWinner(repository)
+			{
+				return repository.findExisting<TResult>(intent.jti);
+			});
+			if (existing === null)
+				throw error;
+			return existing;
+		}
+	}
+
+	/** Completes one reserved action with its canonical result. */
+	async markSucceeded<TResult>(reservationId: string, result: TResult): Promise<CapabilityActionSuccessResult<TResult>>
+	{
+		return this._Run(async function _Succeed(repository)
+		{
+			return repository.markSucceeded(reservationId, result);
+		});
+	}
+
+	/** Completes one reserved action with a stable failure code. */
+	async markFailed(reservationId: string, failureCode: string): Promise<CapabilityActionFailureResult>
+	{
+		return this._Run(async function _Fail(repository)
+		{
+			return repository.markFailed(reservationId, failureCode);
+		});
+	}
+
+	/** Runs one runtime-authority operation in a serializable transaction. */
+	private _Run<TResult>(operation: (repository: PrismaRuntimeAuthorityRepository) => Promise<TResult>): Promise<TResult>
+	{
+		return this.prisma.$transaction(async function _Run(transaction: Prisma.TransactionClient)
+		{
+			const repository = new PrismaRuntimeAuthorityRepository(transaction);
+			return operation(repository);
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 }

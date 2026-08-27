@@ -1,6 +1,42 @@
+import type { Prisma } from "@prisma/client";
+
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
-import type { SessionAssemblyCommand, SessionAssemblyLoad, SkillRevisionEligibilitySource, ToolPolicyInput } from "./session-assembly.types";
+import type { AssignedSkillRevision, SessionAssemblyCommand, SessionAssemblyLoad, SkillRevisionEligibilityRepository, SkillRevisionEligibilityRepositoryFactory, SkillRevisionEligibilitySource, ToolPolicyInput } from "./session-assembly.types";
+
+/** Reads assigned skill revisions through typed Prisma delegates inside run admission. */
+export class PrismaSkillRevisionEligibilityRepository implements SkillRevisionEligibilityRepository
+{
+	/** Run-admission transaction that owns every eligibility read. */
+	private readonly prisma: Prisma.TransactionClient;
+
+	/** Creates the skill reader inside the caller's transaction. */
+	constructor(prisma: Prisma.TransactionClient)
+	{
+		this.prisma = prisma;
+	}
+
+	/** Loads every assigned revision and its current publication facts. */
+	async load(agentRevisionId: string): Promise<readonly AssignedSkillRevision[]>
+	{
+		const assignments = await this.prisma.agentRevisionSkillAssignment.findMany({
+			where: { agentRevisionId },
+			orderBy: { skillRevisionId: "asc" },
+			select: { skillRevisionId: true },
+		});
+		const revisions = await this.prisma.skillRevision.findMany({
+			where: { id: { in: assignments.map(function _RevisionId(assignment): string { return assignment.skillRevisionId; }) } },
+			orderBy: { id: "asc" },
+			select: { id: true, state: true, revokedAt: true, skill: { select: { siloId: true } } },
+		});
+		if (revisions.length !== assignments.length)
+			return [];
+		return revisions.map(function _AssignedRevision(revision): AssignedSkillRevision
+		{
+			return { skillRevisionId: revision.id, isPublished: revision.state === "Published", revokedAt: revision.revokedAt, siloId: revision.skill.siloId };
+		});
+	}
+}
 
 /**
  * Re-checks every skill assigned to the revision inside the admission transaction.
@@ -19,25 +55,22 @@ import type { SessionAssemblyCommand, SessionAssemblyLoad, SkillRevisionEligibil
  */
 export class PrismaSkillRevisionEligibilitySource implements SkillRevisionEligibilitySource
 {
+	/** Builds a reader bound to the active admission transaction. */
+	private readonly createRepository: SkillRevisionEligibilityRepositoryFactory;
+
+	/** Creates the source around the transaction-scoped repository factory. */
+	constructor(createRepository: SkillRevisionEligibilityRepositoryFactory)
+	{
+		this.createRepository = createRepository;
+	}
+
 	/** Refuses a partial, foreign, revoked, or otherwise non-published skill assignment before snapshot persistence. */
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, toolPolicy: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>
 	{
 		// 1. Load immutable assignment ids, then resolve their current publication and revocation state.
-		const assignments = await transaction.prisma.agentRevisionSkillAssignment.findMany({
-			where: { agentRevisionId: run.agentRevisionId },
-			orderBy: { skillRevisionId: "asc" },
-			select: { skillRevisionId: true },
-		});
-		const revisions = await transaction.prisma.skillRevision.findMany({
-			where: { id: { in: assignments.map(function _RevisionId(assignment): string { return assignment.skillRevisionId; }) } },
-			orderBy: { id: "asc" },
-			select: { id: true, state: true, revokedAt: true, skill: { select: { siloId: true } } },
-		});
-		const rows = revisions.map(function _AssignedRevision(revision): _AssignedSkillRevision
-		{
-			return { skillRevisionId: revision.id, isPublished: revision.state === "Published", revokedAt: revision.revokedAt, siloId: revision.skill.siloId };
-		});
-		if (rows.length !== assignments.length)
+		const repository = this.createRepository(transaction);
+		const rows = await repository.load(run.agentRevisionId);
+		if (rows.length === 0 && toolPolicy.skillRevisionIds.length > 0)
 			return { outcome: "denied", reason: "skill_unavailable" };
 
 		// 2. Allow fewer skills than the revision assigns, but never one it never assigned, and never the same one twice.
@@ -51,17 +84,4 @@ export class PrismaSkillRevisionEligibilitySource implements SkillRevisionEligib
 			return { outcome: "denied", reason: "skill_unavailable" };
 		return { outcome: "loaded", value: null };
 	}
-}
-
-/** One assigned skill revision plus the fields checked before snapshot persistence. */
-interface _AssignedSkillRevision
-{
-	/** Immutable SkillRevision assigned to the published AgentRevision. */
-	readonly skillRevisionId: string;
-	/** Whether the revision is published. */
-	readonly isPublished: boolean;
-	/** Server-owned revocation instant, if the revision has been withdrawn. */
-	readonly revokedAt: Date | null;
-	/** Silo of the skill that owns this revision. */
-	readonly siloId: string;
 }

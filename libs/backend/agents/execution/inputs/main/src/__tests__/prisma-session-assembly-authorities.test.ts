@@ -4,13 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 import { ManagedNoPersonalMemoryScopeSource } from "../managed-no-personal-memory-scope-source";
 import { PersonalMemoryScopeSource } from "../personal-memory-scope-source";
 import { __CreatePrismaManagedSessionAssemblyAuthorities, __CreatePrismaPersonalSessionAssemblyAuthorities } from "../prisma-session-assembly-authorities";
-import { PrismaSkillRevisionEligibilitySource } from "../prisma-skill-revision-eligibility-source";
 
 describe("Prisma session assembly authority factories", function _DescribePrismaSessionAssemblyAuthorityFactories()
 {
 	it("selects explicit empty personal-memory inputs for managed composition", async function _ComposesManagedAuthorities()
 	{
-		const authorities = __CreatePrismaManagedSessionAssemblyAuthorities({ admit: async function _Admit() { throw new Error("not invoked"); } } as never, { load: async function _Load() { return { outcome: "denied", reason: "identity_unavailable" } as const; } } as never, new PrismaSkillRevisionEligibilitySource());
+		const authorities = __CreatePrismaManagedSessionAssemblyAuthorities({ admit: async function _Admit() { throw new Error("not invoked"); } } as never, { load: async function _Load() { return { outcome: "denied", reason: "identity_unavailable" } as const; } } as never);
 		expect(authorities.memoryScope).toBeInstanceOf(ManagedNoPersonalMemoryScopeSource);
 		await expect(authorities.preferenceFacts.load({} as never, {} as never, {} as never, {} as never)).resolves.toEqual({ outcome: "loaded", value: [] });
 	});
@@ -23,7 +22,7 @@ describe("Prisma session assembly authority factories", function _DescribePrisma
 				memoryFactCatalog: { findMany: vi.fn().mockResolvedValue([{ id: "fact-1", provenance: { sourceKind: MemoryFactProvenanceSourceKinds.ExplicitUserFact, sourceUserId: "user-1" } }]) },
 			},
 		};
-		const authorities = __CreatePrismaPersonalSessionAssemblyAuthorities({ admit: async function _Admit() { throw new Error("not invoked"); } } as never, { load: async function _Load() { return { outcome: "denied", reason: "identity_unavailable" } as const; } } as never, new PrismaSkillRevisionEligibilitySource());
+		const authorities = __CreatePrismaPersonalSessionAssemblyAuthorities({ admit: async function _Admit() { throw new Error("not invoked"); } } as never, { load: async function _Load() { return { outcome: "denied", reason: "identity_unavailable" } as const; } } as never);
 		const command = { siloId: "silo-1" } as never;
 		const run = { agentKind: "personal" } as never;
 		const identity = { kind: "user", principalId: "principal-1", executionSubjectId: "user-1" } as never;

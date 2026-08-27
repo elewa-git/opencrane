@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { PrismaClient } from "@prisma/client";
 
-import { __AssembleRunInputSnapshot, __CreatePrismaPersonalSessionAssemblyAuthorities, PersonalExecutionIdentityEnvelopeSource, PrismaSkillRevisionEligibilitySource } from "@opencrane/backend/agents/execution/inputs";
+import { __AssembleRunInputSnapshot, __CreatePrismaPersonalSessionAssemblyAuthorities, PersonalExecutionIdentityEnvelopeSource } from "@opencrane/backend/agents/execution/inputs";
 import { ___CreateLogger } from "@opencrane/backend/observability";
 import { PrismaRunAdmissionRepository } from "@opencrane/backend/agents/execution/runs";
 import type { FleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
@@ -47,7 +47,7 @@ export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, workflow:
 	// 2. The input sources session assembly reads inside that transaction. Identity and skill
 	// eligibility are passed in because signed membership and grant policy are owned elsewhere; the
 	// factory fills in the rest, including the personal-memory readers a managed run does not get.
-	const authorities = __CreatePrismaPersonalSessionAssemblyAuthorities(admission, new PersonalExecutionIdentityEnvelopeSource(identityEvidence), new PrismaSkillRevisionEligibilitySource());
+	const authorities = __CreatePrismaPersonalSessionAssemblyAuthorities(admission, new PersonalExecutionIdentityEnvelopeSource(identityEvidence));
 
 	// 3. The preflight reads run before the assembly transaction exists, so they need a repository
 	// that opens its own short transaction per call. That is what the Unit of Work adds over

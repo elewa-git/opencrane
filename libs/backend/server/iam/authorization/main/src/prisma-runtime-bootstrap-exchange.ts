@@ -2,7 +2,7 @@ import { WorkloadAssignmentState, WorkloadKind, type PrismaClient } from "@prism
 
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, type AgentRuntimeProjectedTokenAudience, type ManagedAgentRuntimeProjectedTokenAudience } from "@opencrane/contracts";
 
-import { PrismaRuntimeAuthorityRepository } from "./prisma-runtime-authority";
+import { PrismaRuntimeAuthorityUnitOfWork } from "./prisma-runtime-authority";
 import type { RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult } from "./runtime-proof.types";
 import type { RuntimeBootstrapExchangeRecord, RuntimeBootstrapExchangeRepository } from "./runtime-bootstrap.types";
 
@@ -31,13 +31,13 @@ export class PrismaRuntimeBootstrapExchange implements RuntimeBootstrapExchangeR
 	/** OpenCrane product-authority database client. */
 	private readonly prisma: PrismaClient;
 	/** Shared atomic consume-and-bind authority reused unchanged for single-consumption. */
-	private readonly authority: PrismaRuntimeAuthorityRepository;
+	private readonly authority: PrismaRuntimeAuthorityUnitOfWork;
 
 	/** Creates the bootstrap-exchange adapter over the product-authority Postgres database. */
 	constructor(prisma: PrismaClient)
 	{
 		this.prisma = prisma;
-		this.authority = new PrismaRuntimeAuthorityRepository(prisma);
+		this.authority = new PrismaRuntimeAuthorityUnitOfWork(prisma);
 	}
 
 	/**

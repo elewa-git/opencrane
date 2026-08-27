@@ -6,7 +6,7 @@ import { AGENT_RUNTIME_PROTOCOL_V1, ElicitationBodyKinds, ElicitationPurposes, R
 import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { PrismaRuntimeDispatchAuthority } from "../prisma-runtime-dispatch-authority";
+import { PrismaRuntimeDispatchAuthorityUnitOfWork } from "../prisma-runtime-dispatch-authority";
 import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeElicitationUnitOfWorkFactory, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types";
 import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types";
 
@@ -254,7 +254,7 @@ function _authority(options: FakeOptions)
 	const eventReporter = options.eventReporter ?? { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "reported" as const }) };
 	const elicitationUnitOfWork: RuntimeElicitationUnitOfWork = { open: vi.fn().mockResolvedValue(null), expireDue: vi.fn().mockResolvedValue({ expiredCount: 0, resumed: false }) };
 	const elicitationUnitOfWorkFactory = options.elicitationUnitOfWorkFactory ?? { bind: vi.fn().mockReturnValue(elicitationUnitOfWork) };
-	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000 }, options.compileRunInput ?? _compileRunInput, eventReporter, options.clock ?? _clock, options.approvalExpiry, elicitationUnitOfWorkFactory), elicitationUnitOfWork, elicitationUnitOfWorkFactory, ...fake };
+	return { authority: new PrismaRuntimeDispatchAuthorityUnitOfWork(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000 }, options.compileRunInput ?? _compileRunInput, eventReporter, options.clock ?? _clock, options.approvalExpiry, elicitationUnitOfWorkFactory), elicitationUnitOfWork, elicitationUnitOfWorkFactory, ...fake };
 }
 
 /** Build a runtime event candidate bound to a dispatched command. */

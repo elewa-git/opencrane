@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaRuntimeAuthorityRepository } from "../prisma-runtime-authority";
+import { PrismaRuntimeAuthorityUnitOfWork } from "../prisma-runtime-authority";
 import type { CapabilityActionIntent, RuntimeBootstrapClaim } from "../runtime-proof.types";
 
 /** Creates one exact runtime bootstrap claim. */
@@ -70,7 +70,7 @@ describe("Prisma runtime authority adapter", function _suite()
 			runProofKey: { create: proofCreate },
 		};
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRuntimeAuthorityRepository(prisma);
+		const repository = new PrismaRuntimeAuthorityUnitOfWork(prisma);
 
 		const result = await repository.consumeAndBindProofKeyAtomically(_bootstrap());
 
@@ -89,7 +89,7 @@ describe("Prisma runtime authority adapter", function _suite()
 			auditDecision: { create: auditCreate },
 		};
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRuntimeAuthorityRepository(prisma);
+		const repository = new PrismaRuntimeAuthorityUnitOfWork(prisma);
 
 		await expect(repository.reserve(_intent())).resolves.toEqual({ status: "reserved", reservationId: "receipt-1" });
 		expect(receiptCreate).toHaveBeenCalledOnce();

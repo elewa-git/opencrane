@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaSkillRevisionEligibilitySource } from "../prisma-skill-revision-eligibility-source";
+import { PrismaSkillRevisionEligibilityRepository, PrismaSkillRevisionEligibilitySource } from "../prisma-skill-revision-eligibility-source";
 
 /** Assignment and current revision facts exposed by the fake transaction. */
 interface _SkillRow
@@ -30,29 +30,38 @@ function _ToolPolicy(skillRevisionIds: readonly string[])
 	return { modelRoute: {}, mcpTools: [], skillRevisionIds, artifactRevisionIds: [] };
 }
 
+/** Builds the source with a repository bound to the fake admission transaction. */
+function _Source(): PrismaSkillRevisionEligibilitySource
+{
+	return new PrismaSkillRevisionEligibilitySource(function _Create(transaction)
+	{
+		return new PrismaSkillRevisionEligibilityRepository(transaction.prisma);
+	});
+}
+
 describe("PrismaSkillRevisionEligibilitySource", function _describeEligibility()
 {
 	it("accepts the complete same-silo published assignment set", async function _accepts()
 	{
-		const result = await new PrismaSkillRevisionEligibilitySource().load({ siloId: "silo-1" } as never, { agentRevisionId: "agent-revision-1" } as never, _ToolPolicy(["revision-1"]), _Transaction([{ skillRevisionId: "revision-1", isPublished: true, revokedAt: null, siloId: "silo-1" }]));
+		const result = await _Source().load({ siloId: "silo-1" } as never, { agentRevisionId: "agent-revision-1" } as never, _ToolPolicy(["revision-1"]), _Transaction([{ skillRevisionId: "revision-1", isPublished: true, revokedAt: null, siloId: "silo-1" }]));
 		expect(result).toEqual({ outcome: "loaded", value: null });
 	});
 
 	it("denies a revoked assigned revision before any snapshot can be persisted", async function _deniesRevoked()
 	{
-		const result = await new PrismaSkillRevisionEligibilitySource().load({ siloId: "silo-1" } as never, { agentRevisionId: "agent-revision-1" } as never, _ToolPolicy(["revision-1"]), _Transaction([{ skillRevisionId: "revision-1", isPublished: false, revokedAt: new Date("2026-07-23T12:00:00.000Z"), siloId: "silo-1" }]));
+		const result = await _Source().load({ siloId: "silo-1" } as never, { agentRevisionId: "agent-revision-1" } as never, _ToolPolicy(["revision-1"]), _Transaction([{ skillRevisionId: "revision-1", isPublished: false, revokedAt: new Date("2026-07-23T12:00:00.000Z"), siloId: "silo-1" }]));
 		expect(result).toEqual({ outcome: "denied", reason: "skill_unavailable" });
 	});
 
 	it("permits the safe subset that remains after effective-grant intersection", async function _permitsSubset()
 	{
-		const result = await new PrismaSkillRevisionEligibilitySource().load({ siloId: "silo-1" } as never, { agentRevisionId: "agent-revision-1" } as never, _ToolPolicy([]), _Transaction([{ skillRevisionId: "revision-1", isPublished: true, revokedAt: null, siloId: "silo-1" }]));
+		const result = await _Source().load({ siloId: "silo-1" } as never, { agentRevisionId: "agent-revision-1" } as never, _ToolPolicy([]), _Transaction([{ skillRevisionId: "revision-1", isPublished: true, revokedAt: null, siloId: "silo-1" }]));
 		expect(result).toEqual({ outcome: "loaded", value: null });
 	});
 
 	it("denies an invented skill revision that is not assigned to this AgentRevision", async function _deniesInventedRevision()
 	{
-		const result = await new PrismaSkillRevisionEligibilitySource().load({ siloId: "silo-1" } as never, { agentRevisionId: "agent-revision-1" } as never, _ToolPolicy(["revision-other"]), _Transaction([{ skillRevisionId: "revision-1", isPublished: true, revokedAt: null, siloId: "silo-1" }]));
+		const result = await _Source().load({ siloId: "silo-1" } as never, { agentRevisionId: "agent-revision-1" } as never, _ToolPolicy(["revision-other"]), _Transaction([{ skillRevisionId: "revision-1", isPublished: true, revokedAt: null, siloId: "silo-1" }]));
 		expect(result).toEqual({ outcome: "denied", reason: "skill_unavailable" });
 	});
 });

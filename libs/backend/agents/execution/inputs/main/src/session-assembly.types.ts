@@ -321,8 +321,7 @@ export type McpToolAdmissionClaimRepositoryFactory = (transaction: RunAdmissionT
  * skills and then revisions in the same order revocation does, so a skill revoked while admission
  * is running cannot slip into a snapshot. It returns no value — it exists only to refuse.
  *
- * Implemented by: {@link PrismaSkillRevisionEligibilitySource}. Injected by the caller (see
- * `__CreateManagedRunAdmissionPort` and `__CreatePersonalRunAdmissionPort`).
+ * Implemented by: {@link PrismaSkillRevisionEligibilitySource}.
  */
 export interface SkillRevisionEligibilitySource
 {
@@ -339,6 +338,29 @@ export interface SkillRevisionEligibilitySource
 	 * silo, or not published.
 	 */
 	load(command: SessionAssemblyCommand, run: InitialRunAuthority, toolPolicy: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
+}
+
+/** Reads skill assignment and publication facts inside the active run-admission transaction. */
+export interface SkillRevisionEligibilityRepository
+{
+	/** Loads every skill revision assigned to one immutable agent revision. */
+	load(agentRevisionId: string): Promise<readonly AssignedSkillRevision[]>;
+}
+
+/** Builds the skill reader from the active run-admission transaction. */
+export type SkillRevisionEligibilityRepositoryFactory = (transaction: RunAdmissionTransaction) => SkillRevisionEligibilityRepository;
+
+/** Facts used to decide whether one assigned skill revision can enter a run snapshot. */
+export interface AssignedSkillRevision
+{
+	/** Immutable SkillRevision assigned to the published AgentRevision. */
+	readonly skillRevisionId: string;
+	/** Whether the revision is published. */
+	readonly isPublished: boolean;
+	/** Server-owned revocation instant, if the revision has been withdrawn. */
+	readonly revokedAt: Date | null;
+	/** Silo of the skill that owns this revision. */
+	readonly siloId: string;
 }
 
 /**
