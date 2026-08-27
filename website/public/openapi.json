@@ -404,9 +404,10 @@
       },
       "McpCatalogServer": {
         "type": "object",
-        "description": "An MCP server exposed by the operator API. Fields other than id are optional because this shape serves both the entitled catalogue and the organisation-admin governance view.",
+        "description": "An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no Ready OCI revision exists.",
         "required": [
-          "id"
+          "id",
+          "tools"
         ],
         "properties": {
           "id": {
@@ -458,6 +459,70 @@
           "entitlementSummary": {
             "type": "string",
             "description": "Human-readable summary of access grants, returned for the governance view."
+          },
+          "tools": {
+            "type": "array",
+            "description": "Tools from the newest Ready OCI server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission.",
+            "items": {
+              "$ref": "#/components/schemas/McpAssignableToolRevision"
+            }
+          }
+        }
+      },
+      "McpAssignableToolRevision": {
+        "type": "object",
+        "description": "An immutable OCI-backed MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization.",
+        "required": [
+          "toolRevisionId",
+          "serverRevisionId",
+          "name",
+          "description",
+          "inputSchema",
+          "inputSchemaDigest",
+          "eligibility",
+          "readiness"
+        ],
+        "properties": {
+          "toolRevisionId": {
+            "type": "string",
+            "description": "Immutable tool revision identifier saved during discovery."
+          },
+          "serverRevisionId": {
+            "type": "string",
+            "description": "Newest Ready server revision selected for this response."
+          },
+          "name": {
+            "type": "string",
+            "description": "Tool name reported by the MCP server."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Tool description reported by the MCP server, or null when it supplied none."
+          },
+          "inputSchema": {
+            "description": "Input JSON Schema frozen during discovery."
+          },
+          "inputSchemaDigest": {
+            "type": "string",
+            "description": "Digest that binds assignment and run admission to this input schema."
+          },
+          "eligibility": {
+            "type": "string",
+            "enum": [
+              "assignable",
+              "governance-blocked"
+            ],
+            "description": "Whether Published and Active server governance permits assignment. It does not grant caller authority."
+          },
+          "readiness": {
+            "type": "string",
+            "enum": [
+              "ready"
+            ],
+            "description": "Discovery state that made the immutable schema available."
           }
         }
       },
@@ -622,6 +687,128 @@
             "items": {
               "$ref": "#/components/schemas/EntitledGroup"
             }
+          }
+        }
+      },
+      "OciImageValidationSubmission": {
+        "type": "object",
+        "description": "An organisation-admin request to admit one exact published OCI image. The idempotency key makes a retried request return the same saved record.",
+        "required": [
+          "idempotencyKey",
+          "artifactId",
+          "artifactRevisionId"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Caller-chosen key that safely retries this submission."
+          },
+          "artifactId": {
+            "type": "string",
+            "description": "Published artifact identifier in the caller's silo."
+          },
+          "artifactRevisionId": {
+            "type": "string",
+            "description": "Exact immutable published revision to verify."
+          }
+        }
+      },
+      "OciImageValidation": {
+        "type": "object",
+        "description": "Saved status of one OCI image admission. A background workflow checks the full layout and imports every referenced blob into the configured registry.",
+        "required": [
+          "id",
+          "artifactId",
+          "artifactRevisionId",
+          "byteLength",
+          "mediaType",
+          "submissionDigest",
+          "state"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable validation identifier."
+          },
+          "artifactId": {
+            "type": "string",
+            "description": "Published artifact identifier selected at submission."
+          },
+          "artifactRevisionId": {
+            "type": "string",
+            "description": "Immutable artifact revision selected at submission."
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Saved compressed bundle size in bytes."
+          },
+          "mediaType": {
+            "type": "string",
+            "description": "Media type saved with the artifact revision."
+          },
+          "submissionDigest": {
+            "type": "string",
+            "description": "Digest that binds the background job to its immutable input."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "Pending",
+              "Imported",
+              "Rejected"
+            ],
+            "description": "Current admission result."
+          },
+          "indexDigest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Digest of the verified OCI layout index, or null until verification succeeds."
+          },
+          "imageManifestDigest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Digest of the selected OCI image manifest, or null until verification succeeds."
+          },
+          "configDigest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Digest of the selected OCI image configuration, or null until verification succeeds."
+          },
+          "registryReference": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Digest-pinned image reference in the configured registry, or null until import succeeds."
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "artifact_mismatch",
+              "bundle_too_large",
+              "malformed_zip_package",
+              "not_oci_image_layout",
+              "invalid_layout",
+              "invalid_index",
+              "invalid_image_manifest",
+              "validation_failed",
+              "registry_import_failed",
+              null
+            ],
+            "description": "Bounded rejection reason, or null while pending or imported."
           }
         }
       },
@@ -2496,6 +2683,313 @@
           },
           "404": {
             "description": "MCP server not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp/oci-image-validations": {
+      "post": {
+        "operationId": "submitOciImageValidation",
+        "summary": "Save an OCI image admission job. Org-admin only",
+        "tags": [
+          "MCP Operator"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OciImageValidationSubmission"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OCI image admission and background import job saved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OciImageValidation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OCI image admission fields are invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an organisation admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OCI image artifact revision not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Submission key conflicts with another immutable OCI image input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp/oci-image-validations/{id}": {
+      "get": {
+        "operationId": "getOciImageValidation",
+        "summary": "Read one saved OCI image admission. Org-admin only",
+        "tags": [
+          "MCP Operator"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved OCI image admission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OciImageValidation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OCI image admission identifier is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an organisation admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OCI image validation not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp/oci-image-validations/{id}/server": {
+      "post": {
+        "operationId": "promoteOciImageValidationToMcpServer",
+        "summary": "Create an MCP server revision from an imported OCI image and start discovery. Org-admin only",
+        "tags": [
+          "MCP Operator"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "description"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The same imported image was already promoted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "outcome",
+                    "serverId",
+                    "serverRevisionId",
+                    "executionId"
+                  ],
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "idempotent"
+                      ]
+                    },
+                    "serverId": {
+                      "type": "string"
+                    },
+                    "serverRevisionId": {
+                      "type": "string"
+                    },
+                    "executionId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "MCP server revision and discovery execution saved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "outcome",
+                    "serverId",
+                    "serverRevisionId",
+                    "executionId"
+                  ],
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "created"
+                      ]
+                    },
+                    "serverId": {
+                      "type": "string"
+                    },
+                    "serverRevisionId": {
+                      "type": "string"
+                    },
+                    "executionId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Promotion fields are invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authenticated principal is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an organisation admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "OCI image validation not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The image is not imported or its server promotion conflicts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "MCP runtime authority is unavailable.",
             "content": {
               "application/json": {
                 "schema": {
