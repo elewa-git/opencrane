@@ -79,7 +79,7 @@ export class PrismaAgentRunWorkflowTaskReadRepository implements AgentRunWorkflo
 		{
 			return null;
 		}
-		const credentials = _BuildRunAttemptCredentialMintInputs({ modelRoute: task.run.inputSnapshot.modelRoute, budgetPolicy: task.run.inputSnapshot.budgetPolicy, runId: input.runId, attempt: input.attempt, siloId: input.siloId, deliveryCount: 0, assignmentTtlMilliseconds: this.options.assignmentTtlMilliseconds });
+		const credentials = _BuildRunAttemptCredentialMintInputs({ modelRoute: task.run.inputSnapshot.modelRoute, budgetPolicy: task.run.inputSnapshot.budgetPolicy, runId: input.runId, attempt: input.attempt, siloId: input.siloId, assignmentTtlMilliseconds: this.options.assignmentTtlMilliseconds });
 		if (credentials === null)
 		{
 			return null;

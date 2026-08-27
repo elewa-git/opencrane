@@ -9,7 +9,7 @@ export function _BuildRunAttemptCredentialMintInputs(input: RunAttemptCredential
 	const maxBudgetUsd = _SnapshotMaxBudgetUsd(input.budgetPolicy);
 	if (modelAlias === null || maxBudgetUsd === null) return null;
 	return {
-		keyAlias: __BuildRunAttemptKeyAlias(input.runId, input.attempt, input.siloId, input.deliveryCount),
+		keyAlias: __BuildRunAttemptKeyAlias(input.runId, input.attempt, input.siloId),
 		modelAlias,
 		maxBudgetUsd,
 		expirySeconds: _AttemptKeyExpirySeconds(input.assignmentTtlMilliseconds),
@@ -36,9 +36,9 @@ function _SnapshotMaxBudgetUsd(budgetPolicy: unknown): number | null
 }
 
 /** Derive one attempt- and delivery-unique key alias satisfying the issuer's `attempt-<hex>` grammar. */
-export function __BuildRunAttemptKeyAlias(runId: string, attempt: number, siloId: string, deliveryCount: number): string
+export function __BuildRunAttemptKeyAlias(runId: string, attempt: number, siloId: string): string
 {
-	const canonical = JSON.stringify(["opencrane-attempt-litellm-key-alias-v1", runId, attempt, siloId, deliveryCount]);
+	const canonical = JSON.stringify(["opencrane-attempt-litellm-key-alias-v2", runId, attempt, siloId]);
 	return `attempt-${createHash("sha256").update(canonical, "utf8").digest("hex").slice(0, 32)}`;
 }
 

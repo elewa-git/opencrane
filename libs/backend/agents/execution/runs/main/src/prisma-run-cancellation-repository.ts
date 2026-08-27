@@ -84,7 +84,7 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			if (entered.count !== 1) throw new Error("run cancellation lost its lifecycle fence");
 			await transaction.workloadAssignment.updateMany({ where: { runId: run.id, attempt: run.attempt, state: { in: [WorkloadAssignmentState.PendingPod, WorkloadAssignmentState.Registered] } }, data: { state: WorkloadAssignmentState.Revoked, revokedAt: now } });
 			await transaction.runProofKey.updateMany({ where: { runId: run.id, attempt: run.attempt, revokedAt: null }, data: { revokedAt: now } });
-			const approvalCancellation = await __CancelPendingRunApprovalAuthority(transaction, { runId: run.id, attempt: run.attempt, now });
+			await __CancelPendingRunApprovalAuthority(transaction, { runId: run.id, attempt: run.attempt, now });
 			// 4. Record the cancellation request and schedule cleanup from the bound task receipt.
 			const maximum = await transaction.outboxEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
 			let sequence = (maximum._max.sequence ?? 0) + 1;
@@ -92,18 +92,10 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			const runtimeNamespace = _RuntimeNamespace(service.kind, config);
 			const bootstrapReference = bootstrap?.id ?? __AgentRunWorkflowBootstrapReference({ taskId: task.taskId, runId: task.runId, attempt: task.attempt, siloId: task.siloId, agentServiceId: run.agentServiceId, agentRevisionId: run.agentRevisionId, inputSnapshotDigest: run.inputSnapshotDigest });
 			const cleanup = _CleanupProjection(run, assignment, bootstrapReference, service.workloadProfile, runtimeNamespace, "cancellation");
-			const cleanupOrClaimSettlementRequired = assignment !== null || approvalCancellation.activeClaimCount > 0 || task.taskId !== null;
-			if (cleanupOrClaimSettlementRequired)
-			{
-				sequence += 1;
-				const availableAt = assignment === null ? new Date(now.getTime() + config.claimLeaseMilliseconds + config.orphanObservationMarginMilliseconds) : now;
-				await transaction.outboxEvent.create({ data: { runId: run.id, attempt: run.attempt, sequence, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, idempotencyKey: `${run.id}:cleanup:${run.attempt}`, payload: cleanup as unknown as Prisma.InputJsonObject, availableAt } });
-				return { status: "cancelling", runId: run.id, attempt: run.attempt, cleanupRequired: true };
-			}
-
-			// An unbound task cannot have started a controller Job, so absence is authoritative.
-			await _FinalizeCancelledRun(transaction, run, now);
-			return { status: "cancelled", runId: run.id, attempt: run.attempt, cleanupRequired: false };
+			sequence += 1;
+			const availableAt = assignment === null ? new Date(now.getTime() + config.claimLeaseMilliseconds + config.orphanObservationMarginMilliseconds) : now;
+			await transaction.outboxEvent.create({ data: { runId: run.id, attempt: run.attempt, sequence, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, idempotencyKey: `${run.id}:cleanup:${run.attempt}`, payload: cleanup as unknown as Prisma.InputJsonObject, availableAt } });
+			return { status: "cancelling", runId: run.id, attempt: run.attempt, cleanupRequired: true };
 		});
 	}
 

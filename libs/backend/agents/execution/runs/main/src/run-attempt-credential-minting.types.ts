@@ -11,8 +11,6 @@ export interface RunAttemptCredentialInput
 	readonly attempt: number;
 	/** Identifies the silo that owns this model-key request. */
 	readonly siloId: string;
-	/** Makes a legacy caller's key alias distinct across delivery generations. */
-	readonly deliveryCount: number;
 	/** Limits the model key to the server-owned assignment lifetime. */
 	readonly assignmentTtlMilliseconds: number;
 }
