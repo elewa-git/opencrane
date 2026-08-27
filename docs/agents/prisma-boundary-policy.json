@@ -370,14 +370,24 @@
         "adapter": "PrismaArtifactAuthorityRepository",
         "contract": "ArtifactAuthorityRepository",
         "contractImportPath": "./artifact-finalization.types",
-        "constructs": []
+        "constructs": [
+          {
+            "adapter": "PrismaArtifactPreprocessWorkflowRepository",
+            "importPath": "./prisma-artifact-preprocess-workflow-admission"
+          }
+        ]
       },
       {
         "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-scan-repository.ts",
         "adapter": "PrismaArtifactScanRepository",
         "contract": "ArtifactScanRepository",
         "contractImportPath": "./artifact-scanning.types",
-        "constructs": []
+        "constructs": [
+          {
+            "adapter": "PrismaArtifactPreprocessWorkflowRepository",
+            "importPath": "./prisma-artifact-preprocess-workflow-admission"
+          }
+        ]
       },
       {
         "path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-asset-repository.ts",
@@ -398,6 +408,13 @@
         "adapter": "PrismaConversationAssetOutputRepository",
         "contract": "ConversationAssetOutputRepository",
         "contractImportPath": "./conversation-asset-output.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-preprocess-workflow-admission.ts",
+        "adapter": "PrismaArtifactPreprocessWorkflowRepository",
+        "contract": "ArtifactPreprocessWorkflowRepository",
+        "contractImportPath": "./artifact-preprocess-workflow-admission.types",
         "constructs": []
       },
       {

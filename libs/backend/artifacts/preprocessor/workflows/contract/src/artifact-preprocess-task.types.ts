@@ -2,17 +2,26 @@ import { WorkflowTaskRetryBackoffKinds } from "@opencrane/backend/server/infra/w
 import type { IWorkflowTaskDeclaration } from "@opencrane/backend/server/infra/workflows/contract";
 
 /**
- * Names the remote task that converts one already-published PDF into plain text.
+ * Lists the pipeline versions stored with preprocessing jobs and derived artifact revisions.
  *
- * Server admission and controller registration use this shared value, so they cannot schedule a
- * different task for the saved preprocessing job. The contract currently has one member; callers
- * must treat another task name as unsupported.
+ * Server admission writes these values and the controller checks them before binding or completing
+ * work, so changing a serialized value requires a matching database migration and controller update.
  */
-export enum ArtifactPreprocessTaskNames
-{
+export const ArtifactPreprocessPipelineVersions = {
+	/** Converts one published PDF into a derived plain-text artifact. */
+	PdfToText: "pdf-to-text/v1",
+} as const;
+
+/**
+ * Names the remote tasks that the server may save and the controller may run.
+ *
+ * The HTTP receipt parser and task declaration both use this value, so an unknown task name is
+ * rejected instead of being bound to a PDF preprocessing record.
+ */
+export const ArtifactPreprocessTaskNames = {
 	/** Runs one isolated PDF converter and saves its derived text. */
-	Convert = "artifacts.preprocess.pdf-to-text/v1",
-}
+	Convert: `artifacts.preprocess.${ArtifactPreprocessPipelineVersions.PdfToText}`,
+} as const;
 
 /**
  * Identifies a saved preprocessing task without carrying PDF bytes or storage credentials.
@@ -32,9 +41,8 @@ export interface ArtifactPreprocessTaskInput
 /**
  * Defines the declaration that server admission saves and the controller handler registers.
  *
- * Its retry policy stays beside the task name, so future server admission and controller
- * registration use the same task definition. A future composition must use this declaration for
- * both operations.
+ * Its retry policy stays beside the task name, so server admission and controller registration use
+ * the same task definition.
  *
  * @see ArtifactPreprocessTaskNames for the task name this declaration fixes.
  */

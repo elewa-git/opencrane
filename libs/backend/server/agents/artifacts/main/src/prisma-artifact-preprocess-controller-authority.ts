@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { ArtifactKind, ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState, Prisma } from "@prisma/client";
 
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
-import { ArtifactPreprocessTaskNames } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { ArtifactPreprocessPipelineVersions, ArtifactPreprocessTaskNames } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessControllerRecord, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { __CreateArtifactPreprocessBootstrapReference, __HashArtifactPreprocessBootstrapReference, __IsArtifactPreprocessBootstrapReference, type ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
@@ -15,7 +15,7 @@ const _PROFILE_NAME = "pdf-preprocessor";
 const _CLAIM_LIFETIME_MILLISECONDS = 5 * 60_000;
 
 /** Selects the single preprocessing pipeline owned by this controller authority. */
-const _PIPELINE_VERSION = "pdf-to-text/v1";
+const _PIPELINE_VERSION = ArtifactPreprocessPipelineVersions.PdfToText;
 
 /** Loads only the receipt, claim, binding, inbox, and source facts this authority checks. */
 const _PREPROCESS_SELECT = {

@@ -5,8 +5,11 @@ import { ArtifactRevisionState, ArtifactScanJobState, ArtifactState, type Prisma
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
 import { ArtifactScannerVerdict, type ArtifactScannerFailureCommand, type ArtifactScannerJobClaim, type ArtifactScannerResultCommand } from "@opencrane/contracts";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { ConversationAssetScanLifecycleStates, type ArtifactScanRepository, type ArtifactScanSourceRead, type ConversationAssetScanLifecycleRepository } from "./artifact-scanning.types";
+import { __CreateAndAdmitArtifactPreprocessWorkflow } from "./artifact-preprocess-workflow-admission";
+import { PrismaArtifactPreprocessWorkflowRepository } from "./prisma-artifact-preprocess-workflow-admission";
 
 /** Transaction-scoped scan job and quarantine publication repository. */
 export class PrismaArtifactScanRepository implements ArtifactScanRepository
@@ -17,13 +20,25 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 	private readonly claimLeaseMilliseconds: number;
 	/** Conversation-owned repository bound to this exact transaction. */
 	private readonly conversationAssets: ConversationAssetScanLifecycleRepository;
+	/** Saves PDF preprocessing work through the clean-scan database transaction. */
+	private readonly workflow: Pick<IWorkflowEngine, "spawn">;
+	/** Writes the PDF preprocessing record and task receipt through this repository's transaction. */
+	private readonly preprocessWorkflows: PrismaArtifactPreprocessWorkflowRepository;
 
-	/** Binds every delegate to one already-open transaction. */
-	constructor(transaction: Prisma.TransactionClient, claimLeaseMilliseconds: number, conversationAssets: ConversationAssetScanLifecycleRepository)
+	/**
+	 * Binds every delegate to one already-open scanner transaction.
+	 * @param transaction - Prisma client for the current scanner operation.
+	 * @param claimLeaseMilliseconds - Duration assigned to newly claimed scanner work.
+	 * @param conversationAssets - Conversation lifecycle writer bound to this transaction.
+	 * @param workflow - Guarded engine that saves PDF tasks through this transaction.
+	 */
+	constructor(transaction: Prisma.TransactionClient, claimLeaseMilliseconds: number, conversationAssets: ConversationAssetScanLifecycleRepository, workflow: Pick<IWorkflowEngine, "spawn">)
 	{
 		this.transaction = transaction;
 		this.claimLeaseMilliseconds = claimLeaseMilliseconds;
 		this.conversationAssets = conversationAssets;
+		this.workflow = workflow;
+		this.preprocessWorkflows = new PrismaArtifactPreprocessWorkflowRepository(this.transaction);
 	}
 
 	/** Claims one eligible quarantined revision. */
@@ -69,7 +84,7 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 	/** Publishes clean bytes or terminally rejects unsafe bytes. */
 	async complete(command: ArtifactScannerResultCommand): Promise<"completed" | "idempotent" | "stale">
 	{
-		const job = await this.transaction.artifactScanJob.findUnique({ where: { id: command.jobId }, include: { artifactRevision: true } });
+		const job = await this.transaction.artifactScanJob.findUnique({ where: { id: command.jobId }, include: { artifactRevision: { include: { artifact: true } } } });
 		if (job === null) return "stale";
 		if (job.state === ArtifactScanJobState.Clean || job.state === ArtifactScanJobState.Rejected) return "idempotent";
 		const now = await this._databaseNow();
@@ -98,14 +113,22 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 		return "failed";
 	}
 
-	/** Publish one clean revision and its normal derived work. */
-	private async _publishClean(job: { readonly id: string; readonly artifactRevisionId: string; readonly artifactRevision: { readonly artifactId: string; readonly byteLength: bigint; readonly mediaType: string } }, _now: Date): Promise<void>
+	/**
+	 * Publishes a clean revision and saves its normal derived work in the scanner transaction.
+	 *
+	 * A PDF's preprocessing record and task receipt are saved before the clean result commits, so a
+	 * published PDF cannot be left without conversion work when task admission fails.
+	 */
+	private async _publishClean(job: { readonly id: string; readonly artifactRevisionId: string; readonly artifactRevision: { readonly artifactId: string; readonly byteLength: bigint; readonly mediaType: string; readonly artifact: { readonly siloId: string } } }, _now: Date): Promise<void>
 	{
 		await this.transaction.artifactRevision.update({ where: { id: job.artifactRevisionId }, data: { state: ArtifactRevisionState.Published } });
 		await this.transaction.artifact.update({ where: { id: job.artifactRevision.artifactId }, data: { currentRevisionId: job.artifactRevisionId } });
 		await this.conversationAssets.report({ revisionId: job.artifactRevisionId, state: ConversationAssetScanLifecycleStates.Ready, failureCode: null });
 		await this.transaction.artifactOutboxEvent.create({ data: { artifactId: job.artifactRevision.artifactId, revisionId: job.artifactRevisionId, kind: "RevisionPublished", idempotencyKey: `scan:${job.id}`, payload: { byteLength: Number(job.artifactRevision.byteLength), mediaType: job.artifactRevision.mediaType } } });
-		if (job.artifactRevision.mediaType === "application/pdf") await this.transaction.artifactPreprocessJob.create({ data: { sourceRevisionId: job.artifactRevisionId, pipelineVersion: "pdf-to-text/v1" } });
+		if (job.artifactRevision.mediaType === "application/pdf")
+		{
+			await __CreateAndAdmitArtifactPreprocessWorkflow({ workflowTransaction: { client: this.transaction }, preprocessWorkflows: this.preprocessWorkflows }, this.workflow, { siloId: job.artifactRevision.artifact.siloId, sourceRevisionId: job.artifactRevisionId });
+		}
 	}
 
 	/** Reject unsafe bytes without publishing their current pointer. */

@@ -10,10 +10,10 @@ that can wait and continue later. Keeping this description in a shared package m
 process imports the other process's implementation.
 
 ```
- PDF publication will save task ──► shared task contract ◄── controller will run task
-                                      │
-                                      ▼
-                              silo id + job id only
+ PDF publication saves task ──► shared task contract ◄── controller runs task
+                                  │
+                                  ▼
+                          silo id + job id only
 ```
 
 The input never includes PDF bytes, credentials, a Kubernetes Job, or a storage address. The
@@ -23,7 +23,8 @@ server owns PDF and output data. The controller owns starting the one isolated w
 
 - `ArtifactPreprocessTaskDeclaration` supplies the task name and retry policy.
 - `ArtifactPreprocessTaskInput` carries the silo and saved preprocessing job identifiers.
-- `ArtifactPreprocessTaskNames` names the supported PDF conversion task.
+- `ArtifactPreprocessPipelineVersions` and `ArtifactPreprocessTaskNames` keep the supported PDF
+  pipeline and its task name aligned.
 - `ArtifactPreprocessControllerAuthority` and its record/bind/completion types describe the private
   controller exchange. The server issues and persists the claim, bindings, and completion; the
   controller supplies fenced Job and Pod identities, then reloads server-owned completion evidence

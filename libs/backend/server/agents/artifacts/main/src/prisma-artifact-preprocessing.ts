@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState, ArtifactUploadLeaseState, type Prisma } from "@prisma/client";
 
+import { ArtifactPreprocessPipelineVersions } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerRecord, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
@@ -20,7 +21,7 @@ const _RETRY_DELAY_MILLISECONDS = 30_000;
 const _SOURCE_READ_LEASE_MILLISECONDS = _RETRY_DELAY_MILLISECONDS;
 
 /** Fixed source pipeline admitted by the dedicated worker. */
-const _PDF_TO_TEXT_PIPELINE_VERSION = "pdf-to-text/v1";
+const _PDF_TO_TEXT_PIPELINE_VERSION = ArtifactPreprocessPipelineVersions.PdfToText;
 
 /** System principal recorded on server-finalized derived revisions. */
 const _PREPROCESSOR_PRINCIPAL = "system:artifact-preprocessor";

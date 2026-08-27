@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { ArtifactPreprocessControllerAuthority } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _ArtifactPreprocessAuthority } from "./artifact-preprocess-authority";
 import { _ArtifactUploadAuthority } from "./artifact-authority";
@@ -14,17 +15,20 @@ import { PrismaArtifactPublicationUnitOfWork } from "./prisma-artifact-publicati
  * Build the upload authority: the lease reservation and the revision commit, each its own transaction.
  *
  * Wiring the unit of work in here is what keeps transaction handling out of the use cases.
+ * For PDFs, the workflow engine receives that unit of work's Prisma transaction, so source
+ * publication, the preprocessing record, and the saved task receipt commit or roll back together.
  *
  * Called by: `_CreateArtifactUploadGateway` in
  * apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts.
  *
  * @param prisma - The product database client.
+ * @param workflow - Guarded engine that saves PDF tasks within the publication database transaction.
  * @returns An object serving as both the lease repository and the finalization repository,
  *   which reports an exhausted database collision as a `conflict` status rather than throwing.
  */
-export function _CreateArtifactUploadAuthority(prisma: PrismaClient): _ArtifactUploadAuthority
+export function _CreateArtifactUploadAuthority(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">): _ArtifactUploadAuthority
 {
-	return new _ArtifactUploadAuthority(new PrismaArtifactPublicationUnitOfWork(prisma));
+	return new _ArtifactUploadAuthority(new PrismaArtifactPublicationUnitOfWork(prisma, workflow));
 }
 
 /**

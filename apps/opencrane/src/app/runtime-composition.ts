@@ -243,7 +243,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 		artifactScanner: artifactScannerNamespace === null
 			? null
 			: __CreateArtifactScannerRouter({
-				authority: new PrismaArtifactScanUnitOfWork(prisma, config.artifactScannerClaimLeaseMilliseconds, function _ConversationAssets(transaction) { return new PrismaConversationAssetOutputRepository(transaction); }),
+				authority: new PrismaArtifactScanUnitOfWork(prisma, config.artifactScannerClaimLeaseMilliseconds, function _ConversationAssets(transaction) { return new PrismaConversationAssetOutputRepository(transaction); }, workflowExecution),
 				tokenReviewer: _CreateArtifactScannerTokenReviewer(authApi, artifactScannerNamespace),
 				sourceBroker: _CreateArtifactScanSourceBroker(),
 				expectedNamespace: artifactScannerNamespace,

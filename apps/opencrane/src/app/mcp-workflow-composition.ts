@@ -53,8 +53,8 @@ export function __DeclareSkillAuthoringValidation(execution: Pick<IWorkflowEngin
 /**
  * Declares the remote PDF conversion task before a publication transaction may save it.
  *
- * The declaration makes the task name available before a future publication transaction may save
- * its receipt. The server installs no handler; the controller owns the remote handler that creates
+ * The declaration makes the task name available before a publication transaction saves its
+ * receipt. The server installs no handler; the controller owns the remote handler that creates
  * and releases the isolated Job.
  *
  * Called by: `_CreateMcpWorkflowComposition`.
@@ -76,10 +76,9 @@ export function __DeclareAgentRunTask(execution: Pick<IWorkflowEngine, "declare"
 /**
  * Create the guarded Absurd engine shared by remote MCP, OCI admission, skill validation, and artifact preprocessing.
  *
- * The server declares the skill-authoring task on its queue without adding a local handler. That
- * lets a product transaction admit the task while the controller remains responsible for executing
- * the Kubernetes-mutating definition. This ports-only slice does not yet wire a product schema,
- * repository adapter, route, or deployable controller registration.
+ * The server declares remote controller tasks without adding local handlers. Artifact publication
+ * transactions save PDF-task receipts here, while the controller remains responsible for running
+ * the Kubernetes-mutating definitions.
  *
  * @see SkillAuthoringValidationTaskDeclaration — defines the declaration the controller shares.
  */

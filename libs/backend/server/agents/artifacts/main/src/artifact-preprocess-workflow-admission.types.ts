@@ -13,20 +13,51 @@ export interface ArtifactPreprocessWorkflowRecord
 	readonly taskKey: string;
 }
 
-/** Supplies the transaction that product writes and durable task admission must share. */
+/**
+ * Passes the product database transaction to workflow task admission.
+ *
+ * Product repositories build this value from their current Prisma transaction. Passing another
+ * client would allow the PDF publication and its saved task to commit independently.
+ */
 export interface ArtifactPreprocessWorkflowAdmissionTransaction
 {
 	/** Opaque transaction passed unchanged to the workflow engine. */
 	readonly workflowTransaction: IWorkflowTransaction;
 }
 
-/** Returned after the task engine accepted the exact saved preprocessing record. */
-export interface ArtifactPreprocessWorkflowAdmission
+/**
+ * Writes the preprocessing record and workflow receipt through a transaction the caller owns.
+ *
+ * `__CreateAndAdmitArtifactPreprocessWorkflow` in artifact-preprocess-workflow-admission.ts calls
+ * `create` before it saves the remote task, because the task input needs the new preprocessing-job
+ * id. It then calls `bindTask` before the caller commits. An implementation must use the same
+ * database transaction for both methods so a PDF cannot be published with only half of that state.
+ *
+ * Implemented by: `PrismaArtifactPreprocessWorkflowRepository` in
+ * prisma-artifact-preprocess-workflow-admission.ts.
+ */
+export interface ArtifactPreprocessWorkflowRepository
 {
-	/** Immutable preprocessing record used to create the task input. */
-	readonly preprocess: ArtifactPreprocessWorkflowRecord;
-	/** Receipt the engine saved in the caller-owned database transaction. */
-	readonly receipt: IWorkflowTaskReceipt;
+	/** Creates the pending record and returns the job id and task key needed for admission. */
+	create(source: Pick<ArtifactPreprocessWorkflowRecord, "siloId" | "sourceRevisionId">): Promise<ArtifactPreprocessWorkflowRecord>;
+	/** Saves the admitted task id and name on the pending record before the caller commits. */
+	bindTask(record: ArtifactPreprocessWorkflowRecord, receipt: IWorkflowTaskReceipt): Promise<void>;
+}
+
+/**
+ * Carries both views of the database transaction used to publish PDF preprocessing work.
+ *
+ * The workflow engine receives `workflowTransaction`, while the product record uses
+ * `preprocessWorkflows`. Both must wrap the same database transaction; otherwise the task receipt
+ * and preprocessing record could commit independently after a failure.
+ *
+ * Built by: `PrismaArtifactAuthorityRepository` during publication and
+ * `PrismaArtifactScanRepository` after a clean scan.
+ */
+export interface ArtifactPreprocessWorkflowCreationTransaction extends ArtifactPreprocessWorkflowAdmissionTransaction
+{
+	/** Transaction-scoped repository for the preprocessing record and receipt binding. */
+	readonly preprocessWorkflows: ArtifactPreprocessWorkflowRepository;
 }
 
 /**

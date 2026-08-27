@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 
-import { __AdmitArtifactPreprocessWorkflow, ArtifactPreprocessWorkflowAdmissionError } from "../index";
+import { __AdmitArtifactPreprocessWorkflow } from "../artifact-preprocess-workflow-admission";
+import { ArtifactPreprocessWorkflowAdmissionError } from "../artifact-preprocess-workflow-admission.types";
 
 /** Returns immutable task facts for one published PDF. */
 function _Record()
@@ -22,7 +23,7 @@ describe("artifact preprocess workflow admission", function _DescribeArtifactPre
 			return { taskId: "task-1", taskName: ArtifactPreprocessTaskDeclaration.taskName, idempotencyKey: "artifact-preprocess:job-1" };
 		});
 
-		await expect(__AdmitArtifactPreprocessWorkflow({ workflowTransaction }, { spawn } as never, _Record())).resolves.toEqual({ preprocess: _Record(), receipt: { taskId: "task-1", taskName: ArtifactPreprocessTaskDeclaration.taskName, idempotencyKey: "artifact-preprocess:job-1" } });
+		await expect(__AdmitArtifactPreprocessWorkflow({ workflowTransaction }, { spawn } as never, _Record())).resolves.toEqual({ taskId: "task-1", taskName: ArtifactPreprocessTaskDeclaration.taskName, idempotencyKey: "artifact-preprocess:job-1" });
 	});
 
 	it("rejects a conflicting saved-task receipt before the product transaction can commit", async function _RejectsConflictingReceipt()
