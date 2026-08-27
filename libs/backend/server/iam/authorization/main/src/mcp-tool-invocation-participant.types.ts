@@ -7,7 +7,8 @@ import type { ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationComp
  *
  * The MCP runtime uses this port when it must change its command row and the existing
  * `ToolInvocation` row together. The participant keeps arguments, provider claims, results,
- * deliveries, lifecycle events, and recovery events inside the authorization package. Callers
+ * AgentRun deliveries, lifecycle events, and recovery events inside the authorization package.
+ * Task-owned invocations update their MCP task instead of creating an AgentRun delivery. Callers
  * must not keep an instance after the transaction ends.
  *
  * Called by: the OCI MCP runtime authority in
@@ -19,9 +20,9 @@ export interface McpToolInvocationTransactionParticipant
 	findById(invocationId: string): Promise<ToolInvocationRecord | null>;
 	/** Claim the provider dispatch and return the fence that the MCP command must save atomically. */
 	claim(invocationId: string, now: Date, leaseMilliseconds: number): Promise<ToolInvocationClaimResult>;
-	/** Save a checked tool result, its delivery, and its lifecycle event in the caller's transaction. */
+	/** Save a checked result and update either its MCP task or its AgentRun delivery and event. */
 	completeSucceeded(claim: ToolInvocationClaim, result: JsonValue, now: Date): Promise<ToolInvocationCompletionResult>;
-	/** Save a definite tool failure, its delivery, and its lifecycle event in the caller's transaction. */
+	/** Save a definite failure and update either its MCP task or its AgentRun delivery and event. */
 	completeFailed(claim: ToolInvocationClaim, failureCode: string, now: Date): Promise<ToolInvocationCompletionResult>;
 	/** Move an uncertain provider outcome into the existing recovery flow in the caller's transaction. */
 	completeAmbiguous(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationRecord | null>;

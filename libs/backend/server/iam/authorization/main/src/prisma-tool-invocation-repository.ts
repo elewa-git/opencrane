@@ -332,7 +332,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 			return { outcome: ToolInvocationClaimOutcomes.Winner, invocation: winner };
 		return { outcome: ToolInvocationClaimOutcomes.Claimed, claim: { invocationId, kind, fence: nextFence, revision: winner.revision }, invocation: winner };
 	}
-	/** Complete one exact claim and create its one-to-one result delivery. */
+	/** Complete one claim and create a result delivery only when an AgentRun owns it. */
 	async complete(claim: ToolInvocationClaim, payload: ToolResultDeliveryPayload, now: Date): Promise<ToolInvocationCompletionResult>
 	{
 		const safePayload = payload.outcome === ToolResultDeliveryOutcomes.Succeeded ? payload : { ...payload, failureCode: _ToolInvocationSafeFailureCode(payload.failureCode) };
@@ -354,7 +354,8 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 			return { outcome: ToolInvocationCompletionOutcomes.Missing };
 		if (updated.count !== 1)
 			return { outcome: ToolInvocationCompletionOutcomes.Winner, invocation: winner };
-		await this._createDelivery(claim.invocationId, safePayload, now);
+		if (!_ToolInvocationIsMcpTaskOwned(before))
+			await this._createDelivery(claim.invocationId, safePayload, now);
 		return { outcome: ToolInvocationCompletionOutcomes.Completed, invocation: await this._requiredWinner(claim.invocationId), delivery: safePayload };
 	}
 	/** Apply the frozen recovery strategy after one exact ambiguous provider operation. */
