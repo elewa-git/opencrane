@@ -140,77 +140,52 @@ bootstrap, authenticated runtime stream, candidate validation, and PostgreSQL pe
 
 | Alternative | Command | Model access and credentials |
 | --- | --- | --- |
-| A — local LiteLLM | `npm run dev:tier2:agent:local-llm` | Starts the pinned local LiteLLM container and the local Agent runner. Reads an owner-only OpenAI provider credential from its default or selected file, creates a separate owner-only local master-key file, and stores attempt-scoped virtual keys in a separate `litellm` database within the Tier 2 PostgreSQL container. |
+| A — local LiteLLM | `npm run dev:tier2:agent:local-llm` | Starts the pinned local LiteLLM container and the local Agent runner. Selects a reviewed provider/model from conventional owner-only key files, creates a separate owner-only local master-key file, and stores attempt-scoped virtual keys in a separate `litellm` database within the Tier 2 PostgreSQL container. |
 | B — remote LiteLLM | `npm run dev:tier2:agent:remote-llm -- --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path` | Connects the local Agent runner to an explicit remote HTTPS LiteLLM proxy using an owner-only admin-key file. It never falls back to Alternative A's local master key or provider key. |
 | C — simulated model | `npm run dev:tier2:agent:simulated-llm` | Runs the local Agent runner with deterministic model events after normal run admission. It starts no LiteLLM process and reads no model or provider credential. |
 
-### Select the local provider-key file
+### Select a local model
 
-Alternative A reads `keys/.openai-key` when no option is supplied. The filename is a default, not a
-LiteLLM requirement. To use the explicit lowercase provider-name convention, create an owner-only
-file and pass its path instead of putting the key itself in the command:
+Alternative A recognizes these provider/model pairs from the reviewed
+[local-provider registry](https://github.com/elewa-git/opencrane/blob/main/libs/models/local-development/main/provider-contract.json):
+
+- Anthropic: `anthropic/claude-sonnet-4-5-20250929` with `keys/anthropic-key`
+- Gemini: `gemini/gemini-2.5-flash` with `keys/gemini-key`
+- Mistral: `mistral/mistral-small-latest` with `keys/mistral-key`
+- OpenAI: `openai/gpt-5.4-nano` with the default `keys/.openai-key`
+
+Create the matching owner-only key file. The file contains only the upstream provider key:
 
 ```bash
 mkdir -p keys
-(umask 077 && touch keys/openai-key)
-chmod 600 keys/openai-key
-${EDITOR:-vi} keys/openai-key
+(umask 077 && touch keys/anthropic-key)
+chmod 600 keys/anthropic-key
+${EDITOR:-vi} keys/anthropic-key
 
 npm run dev:tier2:agent:local-llm -- \
-  --provider-key-file keys/openai-key
+  --model anthropic/claude-sonnet-4-5-20250929
 ```
 
-The `--` forwards the option through npm. Explicit files follow
-`keys/<lowercase-provider-name>-key`; Alternative A therefore accepts `keys/openai-key` and rejects
-uppercase names, other directories, and provider names that do not match its OpenAI configuration.
-The coordinator also rejects missing, empty, non-file, or group/world-accessible credential files.
-Omitting the option on a later run returns to the compatibility default `keys/.openai-key`; the
-selection is not saved in browser storage or rewritten into source.
+The `--` forwards `--model` through npm. The registry—not the text before `/` in an arbitrary model
+name—derives `keys/<provider>-key`, so an unreviewed model fails before a credential is read. The
+coordinator also rejects a selected key that is missing, empty, linked, not a regular file, or
+accessible by group or other users.
 
-This option changes only where Alternative A reads its key. The reviewed local LiteLLM profile still
-routes `auto` to its configured OpenAI model. For Anthropic, Gemini, or another provider, use
-Alternative B with a remote LiteLLM proxy that owns that provider configuration and exposes the
-required `auto` alias; do not place a different provider's key in the local OpenAI file.
+When `--model` is omitted, the coordinator lists recognized key files, sorts their filenames, and
+chooses the first one. The default OpenAI filename `keys/.openai-key` sorts before visible provider
+filenames such as `keys/anthropic-key`; without OpenAI, the first recognized visible filename wins.
+The coordinator uses that provider's default model from the registry. Unreviewed provider names do
+not participate, and the choice is recalculated on every run from the current `keys/` directory.
 
-The filename convention itself is provider-neutral. Use the provider's lowercase, kebab-case name:
+At startup, Alternative A resolves only the selected provider/model and writes its secret-free
+LiteLLM configuration under `apps/_infra/litellm/local-development/` if that generated file does not
+already exist. Each file maps OpenCrane's stable `auto` alias to one exact reviewed model. The
+coordinator reuses matching generated files on later runs, mounts only the selected file, and reads
+and supplies only its matching key. Generated `*.generated.yaml` files are ignored by Git and remain
+after shutdown so switching among previously used models does not regenerate them.
 
-- OpenAI → `keys/openai-key`
-- Anthropic → `keys/anthropic-key`
-- Google Gemini → `keys/gemini-key`
-- Azure OpenAI → `keys/azure-openai-key`
-- Mistral → `keys/mistral-key`
-
-::: warning
-Only `keys/openai-key` is currently admitted by Alternative A. Creating another correctly named file
-does not configure its provider, and the coordinator rejects it before startup.
-:::
-
-### Add another provider to local-llm
-
-Supporting another provider locally is a reviewed code-and-configuration change, not a command-line
-filename change. A maintainer must update all of these contracts together:
-
-1. Extend the
-   [provider-key validator](https://github.com/elewa-git/opencrane/blob/main/scripts/local-development/profiles.mjs)
-   to admit the provider's exact `keys/<lowercase-provider-name>-key` path while continuing to reject
-   mismatched names and paths outside `keys/`.
-2. Add a provider-specific configuration beside the
-   [local LiteLLM profile](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/litellm/local-development/config.yaml).
-   It must route OpenCrane's required `auto` alias to the selected LiteLLM provider/model identifier
-   and read that provider's credential from an environment variable.
-3. Update the
-   [configuration selector](https://github.com/elewa-git/opencrane/blob/main/scripts/local-development/configuration.mjs)
-   and [container command](https://github.com/elewa-git/opencrane/blob/main/scripts/local-development/commands.mjs)
-   so the container mounts only the selected provider configuration and receives only that
-   provider's key. Keep raw credentials out of command arguments.
-4. Add local-development tests proving the filename/provider match, `auto` routing, environment
-   isolation, owner-only file permissions, symbolic-link rejection, and separation from the
-   PostgreSQL and LiteLLM master credentials.
-5. Update the CLI help and this page only after the new provider path is executable.
-
-Until those changes are implemented and reviewed, use Alternative B for every non-OpenAI provider.
-The remote LiteLLM proxy owns the provider mapping while OpenCrane continues to request `auto` with
-attempt-scoped credentials.
+Adding a provider or model still requires review: extend the registry and the model-selection tests
+together. Merely adding `keys/<new-provider>-key` does not admit an unreviewed provider.
 
 ### Configure a remote LiteLLM proxy
 

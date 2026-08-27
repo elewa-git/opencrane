@@ -46,16 +46,17 @@ An app entrypoint (`type:app`, `scope:litellm`); composed by the silo chart, imp
   provider keys and must never be rotated, or those keys become unreadable.
 - `litellm.image.*`, `.podAnnotations`, `.service.port` — image, restart, and port controls.
 
-Tier 2 Alternative A reuses the pinned image with
-[`local-development/config.yaml`](local-development/config.yaml), mounted read-only into a labelled
-loopback container. It reads an owner-only OpenAI provider-key file, defaulting to
-`keys/.openai-key`; `--provider-key-file keys/openai-key` selects the lowercase provider-name
-convention without changing the configured OpenAI model. The coordinator generates a different
-local LiteLLM master key. Alternative B uses an explicit remote HTTPS LiteLLM origin and admin-key
-file; Alternative C starts no LiteLLM process and reads no provider or model credential.
-Future local provider files follow `keys/<lowercase-provider-name>-key` (for example,
-`keys/anthropic-key`), but each name requires a matching reviewed local LiteLLM configuration and
-coordinator mapping before Alternative A may admit it.
+Tier 2 Alternative A reuses the pinned image in a labelled loopback container. The coordinator reads
+the reviewed model/provider contract from
+[`@opencrane/models/local-development`](../../../libs/models/local-development/main/provider-contract.json),
+discovers matching owner-only provider-key files, and generates one secret-free ignored YAML for the
+selected model under `local-development/` when it is first used. Matching generated files persist
+across runs and retain the provider-neutral `auto` alias. Only the selected configuration is mounted
+read-only and only its provider key enters the container environment. The coordinator generates a
+separate local LiteLLM master key. OpenAI keeps the default `keys/.openai-key`; other reviewed
+providers use `keys/<provider>-key`.
+Alternative B uses an explicit remote HTTPS LiteLLM origin and admin-key file; Alternative C starts
+no LiteLLM process and reads no provider or model credential.
 
 ## See also
 

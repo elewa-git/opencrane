@@ -4,32 +4,31 @@
 
 ## What it owns
 
-This directory owns the reviewed LiteLLM model configuration used by Tier 2 Alternative A. The
-coordinator mounts `config.yaml` read-only into a multi-platform image index pinned by digest before
-supplying the OpenAI provider key through the container environment.
+This directory owns the generated local LiteLLM profiles used by Tier 2 Alternative A. The reviewed
+provider and model vocabulary lives in
+[`@opencrane/models/local-development`](../../../../libs/models/local-development/main/provider-contract.json).
+The coordinator turns the selected registry entry into secret-free `*.generated.yaml`, ignored by
+Git, and mounts only that selected file read-only into the multi-platform image pinned by digest.
 
 The provider key and LiteLLM master key stay separate. The configuration reads only the provider
 key; the coordinator generates and supplies the master key independently. LiteLLM stores its virtual
 keys in a separate `litellm` database inside the Tier 2 PostgreSQL container. Both containers share
 only the labelled local-development Docker network; the application database remains `opencrane`.
 
-The coordinator reads the provider key from `keys/.openai-key` by default. Pass
-`--provider-key-file keys/openai-key` to use the `keys/<lowercase-provider-name>-key` convention.
-Alternative A rejects paths outside `keys/`, uppercase names, and provider names that do not match
-its reviewed OpenAI configuration. This option changes only credential custody. The reviewed local
-configuration still routes the `auto` alias to its OpenAI model, so another provider belongs behind
-Alternative B until a separate local provider/model configuration is reviewed.
+Provider files follow `keys/<lowercase-provider-name>-key`, except that OpenAI retains its default
+`keys/.openai-key`. The current registry recognizes Anthropic, Gemini, Mistral, and OpenAI. An exact
+`--model` registry entry selects its provider; without that option, the first recognized filename in
+sorted order selects its provider's default model.
 
-Provider files use `keys/<lowercase-provider-name>-key`: for example, `keys/anthropic-key`,
-`keys/gemini-key`, `keys/azure-openai-key`, or `keys/mistral-key`. These names describe credential
-custody; they do not select a LiteLLM provider. The current parser admits only `keys/openai-key`.
+The coordinator creates only the selected model's secret-free configuration when it is absent,
+keeps OpenCrane's public model alias as `auto`, mounts only that configuration, and supplies only the
+selected provider key through `OPENCRANE_LOCAL_PROVIDER_KEY`. Matching generated files are validated
+and reused on later runs; they remain after shutdown and never contain credentials. Tests prove
+deterministic selection, explicit default-model selection, model/provider matching, environment
+isolation, owner-only provider-key permissions, symbolic-link rejection, and credential separation.
 
-Adding another local provider requires one provider-specific configuration in this directory that
-keeps the public model alias `auto`, the matching parser allow-list entry, configuration selection,
-and container environment mapping. Tests must prove the selected key never enters command arguments,
-no unselected provider credential reaches the container, and the existing file-permission,
-symbolic-link, and credential-separation checks still fail closed. Until that complete contract
-lands, use Alternative B for non-OpenAI providers.
+Adding another local provider requires a reviewed registry entry and matching tests. A conventional
+filename alone grants no provider or model authority.
 
 ## Boundary
 

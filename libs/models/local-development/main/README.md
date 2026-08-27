@@ -12,10 +12,13 @@ they do not authenticate a caller or grant product authority.
 - The `litellm` and `simulated` runtime model strategies passed from TypeScript to Python.
 - The fixed local human identity and signed-membership identifiers shared by the seed and server.
 - The JSON contract that keeps TypeScript, JavaScript, and Python profile, model-strategy, and runtime-identity values aligned in tests.
+- The reviewed local LiteLLM provider names, exact model identifiers, and per-provider defaults used by the coordinator's key-filename convention.
 - The runtime namespace and ServiceAccount coordinates shared by local token issuers and reviewers.
 
 Production entrypoints must not import this package. Tier 1 also remains independent: it owns an
 in-memory browser profile, while these values select the real API and PostgreSQL Tier 2 workflow.
+The Tier 2 coordinator reads `provider-contract.json` directly so its JavaScript discovery path uses
+the same reviewed vocabulary without importing application or infrastructure code.
 
 ## Public surface
 
