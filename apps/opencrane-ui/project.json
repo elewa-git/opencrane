@@ -242,15 +242,6 @@
 				},
 				"analyst": {
 					"args": "--uiConfiguration=development-analyst"
-				},
-				"live": {
-					"args": "--uiConfiguration=development-live",
-					"commands": [
-						{
-							"command": "nx run opencrane-ui:serve-browser:{args.uiConfiguration}",
-							"forwardAllArgs": false
-						}
-					]
 				}
 			},
 			"defaultConfiguration": "development"
