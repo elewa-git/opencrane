@@ -2,7 +2,7 @@ instances: 1
 image: ""
 
 # This is the physical-server budget, not an application default. The pooler below
-# reserves only 30 server connections across the logical databases, leaving 50
+# reserves only 20 server connections across the logical databases, leaving 60
 # for CNPG's management/replication work and controlled operator access.
 postgresql:
   maxConnections: 80
@@ -18,9 +18,6 @@ superuserAccess:
 databases:
   - name: opencrane
     owner: opencrane
-    credentialsSecret: ""
-  - name: obot
-    owner: obot
     credentialsSecret: ""
   - name: litellm
     owner: litellm
@@ -59,8 +56,8 @@ resources:
     memory: 2Gi
 
 # Every application connection goes through this CNPG-managed PgBouncer Pooler.
-# `maxDbConnections` is per logical database; with the three deployed databases,
-# 3 × 10 = 30 server connections stay below `postgresql.maxConnections` (80).
+# `maxDbConnections` is per logical database; with the two deployed databases,
+# 2 × 10 = 20 server connections stay below `postgresql.maxConnections` (80).
 # `maxClientConnections` bounds queued
 # client connections at the pooler instead of consuming PostgreSQL connections.
 pooler:
@@ -83,8 +80,6 @@ pooler:
   clientPodSelectors:
     - matchLabels:
         app.kubernetes.io/component: opencrane-server
-    - matchLabels:
-        app.kubernetes.io/component: mcp-gateway
     - matchLabels:
         app.kubernetes.io/component: litellm
 

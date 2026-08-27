@@ -13,8 +13,8 @@ global:
   imagePullSecret: ""
 
 # -- Per-ClusterTenant tenant DB (S6 / ADR 0002 decision 3). Each silo runs ONE CNPG server
-#    IN ITS OWN NAMESPACE. It hosts isolated logical databases and credentials for OpenCrane,
-#    Obot and LiteLLM while retaining one
+#    IN ITS OWN NAMESPACE. It hosts isolated logical databases and credentials for OpenCrane
+#    and LiteLLM while retaining one
 #    pod/PVC footprint per silo. The per-namespace Cluster + per-database connection Secrets are
 #    provisioned by the deploy scripts (apps/_infra/deploy-k8s/deploy.sh → k8s-deploy.sh); the
 #    opencrane-ui consumes only its OpenCrane connection Secret. The silo is still the tenant scope,
@@ -659,8 +659,8 @@ clustertenantManager:
       #    embedding model needs no edit here.
       model: "auto-embedding"
       dimensions: 3072
-    # -- Extra pod-template annotations, same convention as `litellm.podAnnotations` /
-    #    `mcpGateway.podAnnotations`. Also a sanctioned, script-driven rollout trigger: Cognee's
+    # -- Extra pod-template annotations, using the same convention as `litellm.podAnnotations`.
+    #    This is also a sanctioned, script-driven rollout trigger: Cognee's
     #    LiteLLM key Secret is minted by the operator at runtime (not Helm-templated), so a plain
     #    `helm upgrade` has no checksum of it to roll Cognee automatically when the key changes.
     #    Bump this (e.g. `--set clustertenantManager.cognee.podAnnotations.restartedAt=<value>`)
@@ -970,7 +970,7 @@ networkPolicy:
   #
   #    CONTEXT: S2 ships per-silo (per-ClusterTenant-namespace) default-deny policies
   #    emitted by the operator. The PLATFORM namespace — where opencrane-ui, LiteLLM,
-  #    channel-proxy, Cognee, Obot (mcp-gateway), and the CNPG Postgres cluster run —
+  #    channel-proxy, Cognee, and the CNPG Postgres cluster run —
   #    has no such policy by default. This section adds one as a gated, additive block.
   #
   #    GATE: `enabled` defaults to FALSE. The whole template is a no-op until an operator
@@ -979,7 +979,7 @@ networkPolicy:
   #
   #      1. Deploy with the flag off (current default) — all planes work normally.
   #      2. Set enabled=true in a staging/dev cluster and run your full smoke test
-  #         (API calls, model routing, agent skill delivery, Obot MCP connections).
+  #         (API calls, model routing, agent skill delivery, and OCI MCP execution).
   #      3. If any path breaks, check whether the missing allow-list entry is in this
   #         template, networkpolicy-planes.yaml, or the app-owned Cognee Helm unit.
   #      4. Once all planes pass, promote to production.

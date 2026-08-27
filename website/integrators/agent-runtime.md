@@ -5,7 +5,7 @@ The control plane remains authoritative for identity, inputs, events, approvals 
 
 > See also: [Run limits and cost](/guide/budgets) (per-run technical ceilings and spending budgets),
 > [Agent delegation](/guide/child-runs) (governed child-run limits),
-> [MCP gateway](/integrators/mcp-gateway) (tool custody),
+> [OCI MCP runtime](/integrators/oci-mcp-runtime) (tool execution),
 > [Memory write, manage and read](/integrators/retrieval-memory) (memory and return boundaries), and
 > [Identity and runtime authentication](/security/identity) (workload proof).
 
@@ -79,8 +79,8 @@ It uses capped ephemeral scratch space and initiates its connection to the contr
 ## External actions
 
 A model tool call becomes an `external_action` candidate. The control plane re-derives its
-arguments digest, checks the frozen grants and approval policy, and executes the action through
-the appropriate custody boundary. Only the authorised result is returned to the paused loop.
+arguments digest, checks the frozen grants and approval policy, and issues one durable claim for the
+appropriate executor class. Only the authorised result is returned to the paused loop.
 
 ::: warning
 Do not add a direct tool executor or durable store to the runtime image. That would create a

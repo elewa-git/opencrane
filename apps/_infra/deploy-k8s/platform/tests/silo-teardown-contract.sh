@@ -102,7 +102,6 @@ case "$command_name" in
     resource=""
     case "$*" in
       *" get cluster/opencrane-retired-fixture-postgres "*) resource="cluster" ;;
-      *" get database/opencrane-retired-fixture-postgres-obot "*) resource="obot" ;;
       *" get database/opencrane-retired-fixture-postgres-litellm "*) resource="litellm" ;;
     esac
     if [[ -n "$resource" ]]; then
@@ -133,7 +132,6 @@ case "$command_name" in
       [[ "$*" == *"--ignore-not-found"* ]] && exit 0
       exit 1
     fi
-    if [[ "$*" == *" delete database/opencrane-retired-fixture-postgres-obot "* ]]; then touch "$MOCK_STATE/obot-deleted"; exit 0; fi
     if [[ "$*" == *" delete database/opencrane-retired-fixture-postgres-litellm "* ]]; then touch "$MOCK_STATE/litellm-deleted"; exit 0; fi
     if [[ "$*" == *" delete cluster/opencrane-retired-fixture-postgres "* ]]; then touch "$MOCK_STATE/cluster-deleted"; exit 0; fi
     if [[ "$*" == *" delete namespace opencrane-retired-fixture-artifacts "* ]]; then touch "$MOCK_STATE/artifact-namespace-deleted"; exit 0; fi
@@ -265,7 +263,6 @@ fi
 SUCCESS_CALLS="$TEST_DIR/success.calls"
 grep -Fq 'helm uninstall opencrane-retired-fixture --kube-context gke_opencrane-dev --namespace opencrane-retired-fixture --wait' "$SUCCESS_CALLS"
 grep -Fq 'helm uninstall opencrane-retired-fixture-postgres --kube-context gke_opencrane-dev --namespace opencrane-retired-fixture --wait' "$SUCCESS_CALLS"
-grep -Fq 'delete database/opencrane-retired-fixture-postgres-obot --namespace opencrane-retired-fixture --wait=true' "$SUCCESS_CALLS"
 grep -Fq 'delete database/opencrane-retired-fixture-postgres-litellm --namespace opencrane-retired-fixture --wait=true' "$SUCCESS_CALLS"
 grep -Fq 'delete cluster/opencrane-retired-fixture-postgres --namespace opencrane-retired-fixture --wait=true' "$SUCCESS_CALLS"
 grep -Fq 'delete pvc --namespace opencrane-retired-fixture --selector app.kubernetes.io/instance=opencrane-retired-fixture-postgres,cnpg.io/cluster=opencrane-retired-fixture-postgres' "$SUCCESS_CALLS"

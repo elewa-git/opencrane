@@ -183,11 +183,10 @@ adapter's dispatch method begins, a missing acknowledgement is ambiguous rather 
 | `Reconciling` | absent or inconclusive | `Ready` or `RecoveryRequired` |
 | `RecoveryRequired` | cancellation | `Failed`; no implicit retry or result exists before resolution |
 
-The current Obot integration declares manual recovery: it provides neither provider idempotency nor
-trusted readback. An ambiguous Obot result therefore pauses the run visibly and remains cancellable;
-it is never dispatched again automatically. Terminal invocation state and its delivery intent share
-one transaction. Runtime command persistence consumes that intent, and reconnect replays the stored
-command body byte for byte.
+An adapter without provider idempotency or trusted readback declares manual recovery. An ambiguous
+result therefore pauses the run visibly and remains cancellable; it is never dispatched again
+automatically. Terminal invocation state and its delivery intent share one transaction. Runtime
+command persistence consumes that intent, and reconnect replays the stored command body byte for byte.
 
 ### Deferred approval lifecycle
 

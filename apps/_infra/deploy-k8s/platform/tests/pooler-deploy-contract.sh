@@ -19,7 +19,6 @@ grep -Fq 'networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST' "$DEPLOY_SCRIP
 grep -Fq '"app.kubernetes.io/component":"agent-controller"' "$MIGRATION_ORCHESTRATOR"
 grep -Fq 'publish_postgres_database_connection' "$CONNECTION_HELPER"
 grep -Fq '"$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"' "$DEPLOY_SCRIPT"
-grep -Fq '"$POSTGRES_POOLER_HOST" obot' "$DEPLOY_SCRIPT"
 grep -Fq '"$POSTGRES_POOLER_HOST" litellm' "$DEPLOY_SCRIPT"
 grep -Fq '"$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane' "$DEPLOY_SCRIPT"
 grep -Fq '"${RELEASE}-opencrane-server" "${RELEASE}-agent-controller" "${RELEASE}-litellm"' "$DEPLOY_SCRIPT"

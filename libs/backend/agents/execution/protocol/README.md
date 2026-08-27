@@ -80,17 +80,15 @@ worker pass recovers the same request without calling the provider.
 It intentionally owns no HTTP listener, Kubernetes resource, model driver, or provider credential.
 Its production factory composes a server-side external-action worker from the ToolInvocation unit
 of work, immutable snapshot loader, personal configuration authority, execution-user memory
-permission authority, and fail-closed provider adapters. Current Obot and sandbox ports expose
-neither provider idempotency nor readback, so they deliberately use manual recovery. Every recovery
+permission authority, and fail-closed provider adapters. Adapters that expose neither provider
+idempotency nor readback deliberately use manual recovery. Every recovery
 strategy forwards the claimed invocation and monotonic claim instead of dropping that authority.
 Personal-memory recall first opens its exact elicitation receipt, then verifies that receipt against
 the current unexpired dispatch claim after acquisition. It stops with
 `safe_delivery_required` before Cognee until recalled content has a transient delivery path that
 cannot enter ToolInvocation results, outboxes, runtime commands, events, logs, Activity, or A2UI.
-The app supplies process persistence, transports, and
-structured logging, then drains the worker before disconnecting Prisma. An integration action has the fixed
-`integration:<integrationId>:<toolName>` shape: its live custody reference and revision allow-list
-are rechecked at execution, so the runtime never sees either credential or mutable permission state.
+The app supplies process persistence, transports, and structured logging, then drains the worker
+before disconnecting Prisma.
 
 ## Public surface
 
@@ -110,7 +108,7 @@ are rechecked at execution, so the runtime never sees either credential or mutab
 
 Pure protocol decisions, Prisma adapters, provider executor construction, and recovery strategies
 remain inside this package. Provider results are persisted before the runtime receives them; the
-runtime never receives a provider credential or calls Obot directly.
+runtime never receives a provider credential or calls an external service directly.
 
 `RuntimeElicitationUnitOfWork` and `RuntimeElicitationUnitOfWorkFactory` are package-private ports.
 Production composition binds them to the elicitation package's exact-transaction adapter. Tests may
@@ -166,11 +164,9 @@ integration authority, the three injected transport-port scopes, and shared cont
 descriptors are projected only from the immutable snapshot; no decision or resume path consults a
 live catalogue. Candidate arguments and the schema digest are validated before admission, and the
 same frozen schema is propagated to deferred approval. The
-authentication edge resolves only the
-backend-type-free request principal. The integration edge is read-only: it resolves and rechecks the revision's live
-custody reference before the Obot invocation port executes an allowed tool. Its fail-closed
-transport adapters implement those narrow ports without exposing credentials. The package never
-imports an app or a model driver.
+authentication edge resolves only the backend-type-free request principal. Fail-closed transport
+adapters implement narrow ports without exposing credentials. The package never imports an app or
+a model driver.
 
 ## See also
 

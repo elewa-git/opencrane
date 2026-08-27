@@ -15,11 +15,6 @@ clustertenantManager:
   image:
     tag: latest
 
-mcpGateway:
-  image:
-    # Pinned to the audited stable tag. Bump deliberately.
-    tag: v0.23.1
-
 litellm:
   # Disabled in dev: the container has an npm cache permission bug that causes
   # CrashLoopBackOff. The operator degrades gracefully (unrestricted model

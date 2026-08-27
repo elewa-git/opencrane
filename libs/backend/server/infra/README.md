@@ -3,7 +3,7 @@
 > [OpenCrane](../../../../README.md) › [backend](../../README.md) › [server](../README.md) › infra
 
 These libraries provide the OpenCrane API process with transport and external-I/O seams. They keep
-HTTP, OIDC, Kubernetes identity, and remote-custody mechanics outside durable backend domains while
+HTTP, OIDC, Kubernetes identity, and remote-service mechanics outside durable backend domains while
 remaining grouped with the server code that composes them.
 
 ## Map
@@ -19,7 +19,6 @@ remaining grouped with the server code that composes them.
 | [`mcp-era-probe`](./mcp-era-probe/README.md) | HTTPS-only, DNS-rebinding-resistant MCP 2026-07-28 discovery probe. |
 | [`oci-registry`](./oci-registry/README.md) | Imports checked OCI images into one configured registry repository by digest. |
 | [`organization-membership-gateway`](./organization-membership-gateway/README.md) | Projected-token-authenticated HTTPS transport to Fleet membership and billing. |
-| [`obot-custody`](./obot-custody/README.md) | Fail-closed Obot custody and MCP invocation ports. |
 | [`sandbox-execution`](./sandbox-execution/README.md) | Fail-closed sandboxed tool-execution port. |
 | [`workflows`](./workflows/README.md) | Engine-neutral saved workflow tasks, guardrails, scheduling helpers, adapters, and test support. |
 

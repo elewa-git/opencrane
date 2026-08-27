@@ -91,23 +91,6 @@ Acceptance criteria:
 
 APIs: `GET/PUT /api/v1/mcp/servers/{id}/access`.
 
-## TOL-07 — Provision an integration into Obot custody
-
-**As an** organisation admin, **I want** to provision write-only integration credentials into Obot
-**so that** OpenCrane stores only an opaque custody reference.
-
-Acceptance criteria:
-
-- The server verifies same-silo active integration and exact catalogue binding before contacting
-  Obot.
-- Inputs support one to 64 named write-only credential values.
-- Results distinguish provisioned, failed, and compensation-failed without returning secret material.
-- Obot unavailable fails closed.
-
-API: `POST /api/v1/integrations/{integrationId}/custody`.
-
-Status: `API partial`; there is no public integration list/create/lifecycle API around this route.
-
 ## TOL-08 — Use an installed tool during a run
 
 **As a** user, **I want** an installed and authorized tool to execute through the run's frozen
@@ -120,5 +103,5 @@ Acceptance criteria:
 - Unavailable transport is a visible failed/unavailable state, never fake success.
 - The UI shows saved, secret-safe success or failure details rather than credentials or proof material.
 
-Status: `API built`; the durable server worker executes through the configured Obot custody adapter,
-stores one terminal result, and enters visible recovery instead of blindly repeating an unknown outcome.
+Status: `API built`; execution uses the admitted immutable OCI MCP image and a durable,
+class-specific executor claim.

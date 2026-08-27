@@ -9,8 +9,8 @@ and the one-off migration Job. CNPG owns the database process itself.
 ## What it owns
 
 A **silo** is one customer's isolated OpenCrane installation. This chart creates one PostgreSQL
-Cluster for that silo, with separate logical databases and credentials for the OpenCrane server,
-LiteLLM, and Obot. It also creates a PgBouncer connection pool and database privilege Jobs.
+Cluster for that silo, with separate logical databases and credentials for the OpenCrane server
+and LiteLLM. It also creates a PgBouncer connection pool and database privilege Jobs.
 
 ```
   application release
@@ -22,11 +22,11 @@ LiteLLM, and Obot. It also creates a PgBouncer connection pool and database priv
   └───────────────────────────────┘
           │ connection Secrets
           ▼
-  server · LiteLLM · Obot
+  server · LiteLLM
 ```
 
 **In this flow:** [OpenCrane server](../opencrane/README.md) ·
-[LiteLLM](../_infra/litellm/README.md) · [Obot](../_infra/obot/README.md)
+[LiteLLM](../_infra/litellm/README.md)
 
 For a migration, the deployer publishes the reviewed SQL as an immutable ConfigMap, prepares
 `pg_cron` when required, and runs the bounded migration Job. The Job checks the SQL bytes before

@@ -49,7 +49,7 @@ platform/k8s-deploy.sh
   the deployer does not require a migration backup, inspect the source schema, pause writes, or roll
   back the application.
 - After the umbrella upgrade, the engine stamps a checksum of the published database connection
-  Secrets onto the consumer Deployments (`opencrane-server`, `litellm`, `mcp-gateway`). An
+  Secrets onto the consumer Deployments (`opencrane-server`, `litellm`). An
   unchanged checksum is a no-op; a changed one triggers exactly one rollout. This replaced an
   unconditional `rollout restart` that double-started the heaviest workloads on every deploy.
 

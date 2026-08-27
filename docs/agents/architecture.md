@@ -68,7 +68,7 @@ cleanup completes.
 Model, tool, memory, and artifact access passes through OpenCrane-owned ports:
 
 - LiteLLM provides model access under attempt-scoped policy;
-- Obot holds integration credentials and mediates Model Context Protocol calls;
+- admitted immutable OCI images execute Model Context Protocol calls in isolated executor Jobs;
 - memory access uses explicit organisation and subject scopes;
 - sandboxed tools run in isolated Jobs; and
 - artifact bytes use short-lived, purpose-bound leases.

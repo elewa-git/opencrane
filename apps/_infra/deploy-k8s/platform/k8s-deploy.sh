@@ -30,7 +30,6 @@
 #                            [--preflight] [--multi-ct] [--verify] [--verify-insecure]
 #                            --postgres-credentials-secret NAME
 #                            [--postgres-owner OWNER]
-#                            --obot-postgres-credentials-secret NAME [--obot-postgres-owner OWNER]
 #                            --litellm-postgres-credentials-secret NAME [--litellm-postgres-owner OWNER]
 #                            --postgres-admin-credentials-secret NAME [--postgres-admin-name NAME]
 #                            [--postgres-values FILE]
@@ -206,8 +205,6 @@ INITIAL_MODEL_API_KEY="${OPENCRANE_INITIAL_MODEL_API_KEY:-}"
 POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_CREDENTIALS_SECRET:-}"
 POSTGRES_VALUES_FILE="${OPENCRANE_POSTGRES_VALUES:-}"
 POSTGRES_OWNER="${OPENCRANE_POSTGRES_OWNER:-opencrane}"
-OBOT_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_OBOT_POSTGRES_CREDENTIALS_SECRET:-}"
-OBOT_POSTGRES_OWNER="${OPENCRANE_OBOT_POSTGRES_OWNER:-obot}"
 LITELLM_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_LITELLM_POSTGRES_CREDENTIALS_SECRET:-}"
 LITELLM_POSTGRES_OWNER="${OPENCRANE_LITELLM_POSTGRES_OWNER:-litellm}"
 POSTGRES_ADMIN_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_ADMIN_CREDENTIALS_SECRET:-}"
@@ -276,8 +273,6 @@ while [[ $# -gt 0 ]]; do
     --verify-insecure)  VERIFY_INSECURE="1"; shift ;;
     --postgres-credentials-secret) POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --postgres-owner) POSTGRES_OWNER="$2"; shift 2 ;;
-    --obot-postgres-credentials-secret) OBOT_POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
-    --obot-postgres-owner) OBOT_POSTGRES_OWNER="$2"; shift 2 ;;
     --litellm-postgres-credentials-secret) LITELLM_POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --litellm-postgres-owner) LITELLM_POSTGRES_OWNER="$2"; shift 2 ;;
     --postgres-admin-credentials-secret) POSTGRES_ADMIN_CREDENTIALS_SECRET="$2"; shift 2 ;;
@@ -412,7 +407,6 @@ _run_preflight() {
     fi
   }
   _preflight_postgres_bootstrap opencrane "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_OWNER"
-  _preflight_postgres_bootstrap obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER"
   _preflight_postgres_bootstrap litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER"
   _preflight_postgres_bootstrap database-admin "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_NAME"
 
@@ -568,7 +562,6 @@ _require_postgres_bootstrap() {
   fi
 }
 _require_postgres_bootstrap opencrane "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_OWNER"
-_require_postgres_bootstrap obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER"
 _require_postgres_bootstrap litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER"
 _require_postgres_bootstrap database-admin "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_NAME"
 
@@ -672,13 +665,11 @@ if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
 fi
 run_database_release_transition
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
-OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
-# Five Prisma connections keep PgBouncer's thirty-connection logical-database budget authoritative.
+# Five OpenCrane connections keep PgBouncer's thirty-connection logical-database budget authoritative.
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
-publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" obot
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
 
@@ -703,12 +694,10 @@ _assert_distinct_cnpg_app_credentials() {
     done
   done
 }
-_assert_distinct_cnpg_app_credentials "$POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET"
+_assert_distinct_cnpg_app_credentials "$POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET"
 
 # Per-database app secrets are canonical. Adapt only the key/name required by third-party charts.
-OBOT_DSN_SECRET="${RELEASE}-obot"
 LITELLM_DATABASE_SECRET="${RELEASE}-litellm-db"
-_copy_cnpg_uri_secret "$OBOT_POSTGRES_APP_SECRET" "$OBOT_DSN_SECRET" dsn
 _copy_cnpg_uri_secret "$LITELLM_POSTGRES_APP_SECRET" "$LITELLM_DATABASE_SECRET" DATABASE_URL
 
 # ArtifactStore uses two distinct per-silo Ed25519 roles: the catalog signs bounded write leases
@@ -1020,11 +1009,11 @@ helm "${helm_args[@]}" || exit $?
 # mid-first-rollout forced a second boot of the heaviest workloads.
 if [[ "$RELEASE_PREEXISTED" == "1" ]]; then
   DATABASE_CONNECTION_CHECKSUM="$(compute_database_connection_checksum "$NAMESPACE" \
-    "$POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" \
+    "$POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" \
     "$POSTGRES_ADMIN_APP_SECRET")" || exit $?
   roll_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT" \
     "$DATABASE_CONNECTION_CHECKSUM" \
-    "${RELEASE}-opencrane-server" "${RELEASE}-agent-controller" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway" || exit $?
+    "${RELEASE}-opencrane-server" "${RELEASE}-agent-controller" "${RELEASE}-litellm" || exit $?
 fi
 
 # 4. Wait for the core workloads. The database schema was created by CNPG initdb or converged by

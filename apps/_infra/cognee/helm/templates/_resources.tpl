@@ -64,7 +64,7 @@ spec:
       labels:
         {{- include "opencrane.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: cognee
-      # Same convention as litellm/mcpGateway's own `podAnnotations` (values.yaml). Also doubles as
+      # Uses the same `podAnnotations` convention as LiteLLM. Also doubles as
       # a sanctioned, script-driven way to force a rollout — e.g.
       # `--set clustertenantManager.cognee.podAnnotations.restartedAt=<value>` — when Cognee needs
       # to pick up a credential change (its LiteLLM key Secret is minted by the operator at

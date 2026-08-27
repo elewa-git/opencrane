@@ -57,7 +57,6 @@ workload needs, such as:
 - Domain Name System resolution;
 - the OpenCrane internal listener;
 - LiteLLM model access;
-- Obot tool access;
 - the memory gateway;
 - the artifact byte service; or
 - the configured telemetry collector.

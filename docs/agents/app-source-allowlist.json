@@ -60,8 +60,6 @@
     { "path": "apps/opencrane/src/infra/health/public-health.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/infra/health/public-health-probe.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/infra/health/public-health.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/infra/obot/obot-adapters.factory.ts", "owner": "apps/opencrane", "classification": "process-composition" },
-    { "path": "apps/opencrane/src/infra/obot/obot-adapters.factory.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/vitest.config.ts", "owner": "apps/opencrane", "classification": "test-config" },
 
     { "path": "apps/opencrane-ui/src/app/app.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
@@ -163,7 +161,6 @@
   "requiredTaggedProjects": [
     "apps/_infra/cognee/project.json",
     "apps/_infra/litellm/project.json",
-    "apps/_infra/obot/project.json",
     "apps/channel-proxy/project.json",
     "apps/memory-gateway/project.json",
     "apps/artifact-service/project.json",

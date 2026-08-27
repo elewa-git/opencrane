@@ -326,7 +326,7 @@ parameter types), and only after grepping to confirm the exact exported name exi
 
 **External specs and third-party services get a `@see` with the URI.** Whenever a comment leans on
 something defined outside this repo — the MCP protocol, AG-UI, A2UI, an RFC, or a third-party service
-such as Obot, LiteLLM, Zitadel or CNPG — link it. A reader must not have to go searching for the
+such as LiteLLM, Zitadel or CNPG — link it. A reader must not have to go searching for the
 document that makes the code correct.
 
 - **Link the pinned revision, not the latest.** If the code pins `2025-06-18`, link that revision's

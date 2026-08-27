@@ -145,7 +145,7 @@ flowchart TD
   the deployer does not require a migration backup, inspect the source schema, pause writes, or roll
   back the application.
 - After the umbrella upgrade, the engine stamps a checksum of the published database connection
-  Secrets onto the consumer Deployments (`opencrane-server`, `litellm`, `mcp-gateway`). An
+  Secrets onto the consumer Deployments (`opencrane-server`, `litellm`). An
   unchanged checksum is a no-op; a changed one triggers exactly one rollout; and a fresh install
   skips the roll entirely because its pods were born after the Secrets were published. (This
   replaced an unconditional `rollout restart` that double-started the heaviest workloads on

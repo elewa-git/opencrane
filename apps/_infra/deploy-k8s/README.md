@@ -28,7 +28,7 @@ wires the pieces and the per-silo networking together.
  │    server · opencrane-ui · channel-proxy · artifact-service  │
  │    · artifact-preprocessor · agent-controller                 │
  │    · skill-authoring · tool-runner                            │
- │    · cognee · litellm · obot                                  │
+ │    · cognee · litellm                                         │
  └────────────────────────────────────────────────────────────┘
         │  requires (external prerequisites, NOT installed here)
         ▼
@@ -41,7 +41,6 @@ wires the pieces and the per-silo networking together.
 · [agent-controller](../../agent-controller/README.md) · [skill-authoring](../../skill-authoring/README.md)
 · [tool-runner](../../tool-runner/README.md)
 · [postgres](../../postgres/README.md) · [cognee](../cognee/README.md) · [litellm](../litellm/README.md)
-· [obot](../obot/README.md)
 
 A silo installs **only** its own namespaced app releases. `--image-tag` selects one reviewed
 OpenCrane build for the server, channel proxy, memory gateway, and artifact service; the deploy
@@ -77,7 +76,7 @@ if the controller identity is compromised. The admission boundary requires Kuber
 `Entrypoint: deploy.sh` — the per-ClusterTenant silo deploy profile, a thin wrapper over the shared
 install core (`platform/k8s-deploy.sh`). It requires a base domain, a ClusterTenant name, one
 `--first-user-email` value, one pre-created PostgreSQL basic-auth Secret per logical database
-(server, Obot, LiteLLM, and database administration), and the reviewed single-page application (SPA)
+(server, LiteLLM, and database administration), and the reviewed single-page application (SPA)
 `--opencrane-ui-digest`. The named email is non-secret and only selects the verified OIDC identity
 that can claim the silo's one subject-bound Owner row at first login; deployment never writes a user
 row directly. A new silo can also pass `--initial-model-provider` with
@@ -184,5 +183,4 @@ package imports it.
   · [agent-controller](../../agent-controller/README.md)
   · [skill-authoring](../../skill-authoring/README.md) · [tool-runner](../../tool-runner/README.md)
   · [postgres](../../postgres/README.md)
-- Composed infra: [cognee](../cognee/README.md) · [litellm](../litellm/README.md) ·
-  [obot](../obot/README.md)
+- Composed infra: [cognee](../cognee/README.md) · [litellm](../litellm/README.md)

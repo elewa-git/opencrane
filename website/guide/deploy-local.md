@@ -24,8 +24,8 @@ apps/_infra/deploy-k8s/deploy.sh \
   --cluster-tenant <org-name> \
   --acme-email operator@example.com \
   --postgres-credentials-secret opencrane-postgres-bootstrap \
-  --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
-  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
+  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
+  --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap
 ```
 
 The chart installs trusted services and distinct restricted namespaces for personal,

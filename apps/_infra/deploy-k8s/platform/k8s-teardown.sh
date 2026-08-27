@@ -150,7 +150,6 @@ if resource_exists cluster "$POSTGRES_RELEASE" "$NAMESPACE"; then
   CNPG_CLUSTER_EXISTS="1"
 fi
 assert_cnpg_owner_if_present cluster "$POSTGRES_RELEASE"
-assert_cnpg_owner_if_present database "${POSTGRES_RELEASE}-obot"
 assert_cnpg_owner_if_present database "${POSTGRES_RELEASE}-litellm"
 
 EXPECTED_AUX_NAMESPACES=(
@@ -304,7 +303,7 @@ done
 
 # The PostgreSQL chart intentionally marks these resources keep. Delete only the exact names
 # already proven to carry this PostgreSQL release's Helm ownership labels.
-for database_name in "${POSTGRES_RELEASE}-obot" "${POSTGRES_RELEASE}-litellm"; do
+for database_name in "${POSTGRES_RELEASE}-litellm"; do
   if resource_exists database "$database_name" "$NAMESPACE"; then
     assert_cnpg_owner_if_present database "$database_name"
     kubectl --context "$CONTEXT" delete "database/$database_name" --namespace "$NAMESPACE" --wait=true

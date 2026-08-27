@@ -16,6 +16,7 @@ rendered="$(helm template opencrane-silo "$CHART_DIR" --namespace pooler-ns \
 runtime_rendered="$(helm template opencrane-silo "$CHART_DIR" \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set agentController.enabled=true \
+  --set-string clustertenantManager.database.existingSecret=test-opencrane-db \
   --set-string agentController.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   --set-string agentController.runtimeProfile.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
   --set-string agentController.skillWorkloadProfiles.authoring.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
@@ -112,10 +113,6 @@ if grep -Fq '          port: 4318' <<<"$otel_default_deny_rendered"; then
   echo "platform default-deny must not widen OTLP egress beyond app-owned collector selectors" >&2
   exit 1
 fi
-
-# The server owns both custody and durable provider action execution, so its MCP egress remains.
-grep -Fq '              app.kubernetes.io/component: mcp-gateway' <<<"$server_policy"
-grep -Fq '          port: 8080' <<<"$server_policy"
 
 if grep -Fq 'cnpg.io/cluster' <<<"$server_policy"; then
   echo "opencrane-server policy bypasses the PostgreSQL pooler" >&2

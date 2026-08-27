@@ -16,8 +16,6 @@
     "tool-runner",
     "cognee",
     "litellm",
-    "obot-gateway-controller",
-    "obot-dynamic-mcp-child",
     "postgres-database",
     "postgres-pooler",
     "postgres-database-privileges",
@@ -39,8 +37,7 @@
         "Deployment/opencrane-memory-gateway",
         "Deployment/opencrane-artifact-service",
         "Deployment/opencrane-cognee",
-        "Deployment/opencrane-litellm",
-        "Deployment/opencrane-mcp-gateway"
+        "Deployment/opencrane-litellm"
       ]
     },
     {
@@ -61,6 +58,7 @@
         "agentController.runtimeProfile.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "agentController.skillWorkloadProfiles.authoring.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "clustertenantManager.database.existingSecret=test-opencrane-db",
         "opencrane-mcp-executor.mcpExecutor.image.digest=sha256:9999999999999999999999999999999999999999999999999999999999999999"
       ],
       "expectedRenderedPodClasses": [
@@ -73,8 +71,7 @@
         "Deployment/opencrane-artifact-scanner",
         "Deployment/opencrane-agent-controller",
         "Deployment/opencrane-cognee",
-        "Deployment/opencrane-litellm",
-        "Deployment/opencrane-mcp-gateway"
+        "Deployment/opencrane-litellm"
       ]
     }
   ],
@@ -131,9 +128,6 @@
     "apps/_infra/deploy-k8s/templates/litellm-deployment.yaml",
     "apps/_infra/deploy-k8s/templates/litellm-secret.yaml",
     "apps/_infra/deploy-k8s/templates/litellm-service.yaml",
-    "apps/_infra/deploy-k8s/templates/mcp-gateway-rbac.yaml",
-    "apps/_infra/deploy-k8s/templates/mcp-gateway-service.yaml",
-    "apps/_infra/deploy-k8s/templates/obot-mcp-gateway-deployment.yaml",
     "apps/_infra/deploy-k8s/templates/opencrane-ui-spa-deployment.yaml",
     "apps/_infra/deploy-k8s/templates/opencrane-ui-spa-service.yaml"
   ],
@@ -256,22 +250,6 @@
       "owner": "apps/_infra/litellm",
       "source": { "type": "file", "path": "apps/_infra/litellm/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.litellm.deployment\"" }
-    },
-    {
-      "id": "obot-gateway-controller",
-      "podClass": "Deployment/mcp-gateway",
-      "renderedPodClass": "Deployment/opencrane-mcp-gateway",
-      "image": "ghcr.io/obot-platform/obot:v0.23.1",
-      "owner": "apps/_infra/obot",
-      "source": { "type": "file", "path": "apps/_infra/obot/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
-      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.obot.deployment\"" }
-    },
-    {
-      "id": "obot-dynamic-mcp-child",
-      "podClass": "Obot-created Pod-or-Deployment/MCP-server",
-      "image": "Obot catalog selected image",
-      "owner": "apps/_infra/obot",
-      "source": { "type": "file", "path": "apps/_infra/obot/helm/templates/_rbac.tpl", "anchor": "resources: [\"deployments\", \"replicasets\"]" }
     },
     {
       "id": "postgres-database",

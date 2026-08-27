@@ -19,7 +19,7 @@ organisation ingress
         +-> opencrane server ---- PostgreSQL
                   |
                   +---- memory-gateway ---- Cognee (sealed foundation)
-                  +---- LiteLLM · Obot (custody + action execution)
+                  +---- LiteLLM
                   |
                   +---- agent-controller
                              |
@@ -90,10 +90,11 @@ NetworkPolicy permits only the named service path required by each workload clas
 not authorization: every sensitive server route also verifies workload identity and current durable
 assignment.
 
-Runtime model traffic reaches LiteLLM with a per-attempt virtual key. Integration actions instead
-cross a durable server-owned invocation fence: the server resolves the current Obot assignment,
-performs the call with its mounted service credential, stores the result, and sends only that saved
-result to the runtime. Runtime Jobs receive no Obot address or credential.
+Runtime model traffic reaches LiteLLM with a per-attempt virtual key. MCP discovery and tool calls
+instead cross a durable server-owned invocation fence: the server freezes an admitted OCI image
+digest, assigns the command to a class-specific executor Job, stores the checked result, and sends
+only that saved result to the runtime. Runtime Jobs receive no registry credential or Kubernetes
+mutation authority.
 
 Uploaded and generated conversation files remain hidden while quarantined. The scanner authenticates
 to the private server route with its dedicated projected ServiceAccount token. The server rechecks

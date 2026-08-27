@@ -75,7 +75,7 @@ other's authority.
 
 ## Shared services
 
-Model routing (via LiteLLM), MCP tool custody (via Obot), skill publication, content-addressed
+Model routing (via LiteLLM), OCI MCP execution, skill publication, content-addressed
 artifacts and organisation memory (via the memory gateway, backed by Cognee) are control-plane
 services. They expose narrow, authenticated boundaries and do not become alternate run or policy
 authorities — a personal or managed run only ever reaches them through the frozen, admitted
