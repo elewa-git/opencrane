@@ -8,21 +8,8 @@ import { PrismaAgentRunWorkflowTaskRepository } from "./prisma-agent-run-workflo
 import { PrismaRunCancellationEventDeferralUnitOfWork } from "./prisma-run-cancellation-event-deferral-repository";
 import type { ClaimNextRunWorkloadCleanupResult, ConfirmRunWorkloadCleanupCommand, ConfirmRunWorkloadCleanupResult, RequestRunCancellationCommand, RequestRunCancellationResult, RunCancellationRepository, RunCancellationRepositoryConfig, RunWorkloadCleanupClaim, RunWorkloadCleanupProjection } from "./run-cancellation.types";
 
-/** Ids read without locking, used only to work out which rows to lock and in what order. */
-interface CleanupCandidateRow
-{
-	/** Cleanup event identifier. */
-	readonly eventId: string;
-	/** Logical run identifier. */
-	readonly runId: string;
-	/** Parent service locked before the run. */
-	readonly agentServiceId: string;
-}
-
 /**
- * Fences a run in Postgres before its physical Job is removed.
- * Its advisory-lock queries cast their results because Prisma cannot deserialize PostgreSQL's void
- * return type from a raw query.
+ * Fences a run in Postgres before its physical workload is removed.
  */
 export class PrismaRunCancellationRepository implements RunCancellationRepository
 {
@@ -30,13 +17,16 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 	private readonly prisma: PrismaClient;
 	/** Fixed claim and orphan-observation policy. */
 	private readonly config: RunCancellationRepositoryConfig;
+	/** Provides one application timestamp for each serializable operation. */
+	private readonly now: () => Date;
 
 	/** Creates cancellation authority over canonical Postgres. */
-	constructor(prisma: PrismaClient, config: RunCancellationRepositoryConfig)
+	constructor(prisma: PrismaClient, config: RunCancellationRepositoryConfig, now: () => Date = function _Now() { return new Date(); })
 	{
 		if (!_ConfigIsValid(config)) throw new Error("run cancellation repository requires distinct bounded runtime namespaces and lease policy");
 		this.prisma = prisma;
 		this.config = config;
+		this.now = now;
 	}
 
 	/** Fences one exact current attempt and records any physical cleanup still required. */
@@ -44,22 +34,11 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 	{
 		if (!_CancellationCommandIsValid(command)) return { status: "conflict", reason: "invalid_request" };
 		const config = this.config;
+		const now = this.now();
 		return this.prisma.$transaction(async function _cancel(transaction: Prisma.TransactionClient): Promise<RequestRunCancellationResult>
 		{
-			// 1. Discover only the service lock key, then lock service -> run -> assignment -> authority -> outbox.
-			const discovered = await transaction.agentRun.findUnique({ where: { id: command.runId } });
-			if (discovered === null) return { status: "not_found" };
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${discovered.agentServiceId} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${discovered.id}, 0))::text AS "lock"`);
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${discovered.id} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT "run_id" FROM "workload_assignments" WHERE "run_id" = ${discovered.id} AND "attempt" = ${command.expectedAttempt} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "workload_bootstraps" WHERE "run_id" = ${discovered.id} AND "attempt" = ${command.expectedAttempt} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_proof_keys" WHERE "run_id" = ${discovered.id} AND "attempt" = ${command.expectedAttempt} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_run_workflow_tasks" WHERE "run_id" = ${discovered.id} AND "attempt" = ${command.expectedAttempt} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "run_id" = ${discovered.id} AND "attempt" = ${command.expectedAttempt} ORDER BY "sequence" FOR UPDATE`);
-
-			// 2. Reload every authority fact and classify replay before performing writes.
-			const run = await transaction.agentRun.findUnique({ where: { id: discovered.id } });
+			// 1. Read every authority fact and classify replay before performing writes.
+			const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
 			if (run === null) return { status: "not_found" };
 			if (run.attempt !== command.expectedAttempt) return { status: "conflict", reason: "attempt_conflict" };
 			if (run.state === AgentRunState.Cancelling || run.state === AgentRunState.Cancelled)
@@ -67,9 +46,6 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 				return { status: "idempotent", runId: run.id, attempt: run.attempt, state: run.state === AgentRunState.Cancelling ? "cancelling" : "cancelled" };
 			}
 			if (run.state === AgentRunState.Completed || run.state === AgentRunState.Failed) return { status: "conflict", reason: "terminal_run" };
-			const databaseTime = await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`);
-			const now = databaseTime[0]?.now;
-			if (!now) return { status: "conflict", reason: "authority_conflict" };
 			const assignment = await transaction.workloadAssignment.findUnique({ where: { runId_attempt: { runId: run.id, attempt: run.attempt } } });
 			const bootstrap = await transaction.workloadBootstrap.findUnique({ where: { runId_attempt: { runId: run.id, attempt: run.attempt } } });
 			const task = await PrismaAgentRunWorkflowTaskRepository.__ReadBoundTask(transaction, run.id, run.attempt);
@@ -79,13 +55,13 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 				return { status: "conflict", reason: "authority_conflict" };
 			}
 
-			// 3. Cancelling is the immediate product-authority fence; physical cleanup may follow later.
+			// 2. Cancelling is the immediate product-authority fence; physical cleanup may follow later.
 			const entered = await transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: run.state }, data: { state: AgentRunState.Cancelling } });
 			if (entered.count !== 1) throw new Error("run cancellation lost its lifecycle fence");
 			await transaction.workloadAssignment.updateMany({ where: { runId: run.id, attempt: run.attempt, state: { in: [WorkloadAssignmentState.PendingPod, WorkloadAssignmentState.Registered] } }, data: { state: WorkloadAssignmentState.Revoked, revokedAt: now } });
 			await transaction.runProofKey.updateMany({ where: { runId: run.id, attempt: run.attempt, revokedAt: null }, data: { revokedAt: now } });
 			await __CancelPendingRunApprovalAuthority(transaction, { runId: run.id, attempt: run.attempt, now });
-			// 4. Record the cancellation request and schedule cleanup from the bound task receipt.
+			// 3. Record the cancellation request and schedule cleanup from the bound task receipt.
 			const maximum = await transaction.outboxEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
 			let sequence = (maximum._max.sequence ?? 0) + 1;
 			await transaction.outboxEvent.create({ data: { runId: run.id, attempt: run.attempt, sequence, kind: RunOutboxEventKind.RunCancellationRequested, idempotencyKey: `${run.id}:cancellation:${run.attempt}`, payload: { runId: run.id, attempt: run.attempt, requestedBy: command.requestedBy }, availableAt: now } });
@@ -96,40 +72,31 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			const availableAt = assignment === null ? new Date(now.getTime() + config.claimLeaseMilliseconds + config.orphanObservationMarginMilliseconds) : now;
 			await transaction.outboxEvent.create({ data: { runId: run.id, attempt: run.attempt, sequence, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, idempotencyKey: `${run.id}:cleanup:${run.attempt}`, payload: cleanup as unknown as Prisma.InputJsonObject, availableAt } });
 			return { status: "cancelling", runId: run.id, attempt: run.attempt, cleanupRequired: true };
-		});
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 
 	/** Claims one cleanup event after its safety horizon and revalidates its run authority. */
 	async claimNextWorkloadCleanupAtomically(): Promise<ClaimNextRunWorkloadCleanupResult>
 	{
 		const config = this.config;
+		const now = this.now();
+		const leaseExpiredBefore = new Date(now.getTime() - config.claimLeaseMilliseconds);
 		return this.prisma.$transaction(async function _claim(transaction: Prisma.TransactionClient): Promise<ClaimNextRunWorkloadCleanupResult>
 		{
-			const candidates = await transaction.$queryRaw<CleanupCandidateRow[]>(Prisma.sql`
-				SELECT event."id" AS "eventId", event."run_id" AS "runId", run."agent_service_id" AS "agentServiceId"
-				FROM "run_outbox_events" event JOIN "agent_runs" run ON run."id" = event."run_id" AND run."attempt" = event."attempt"
-				WHERE event."kind" = 'run.workload_cleanup_requested'::"RunOutboxEventKind"
-				  AND event."published_at" IS NULL AND event."failed_at" IS NULL AND event."available_at" <= clock_timestamp()
-				  AND (event."claimed_at" IS NULL OR event."claimed_at" <= clock_timestamp() - (${config.claimLeaseMilliseconds} * interval '1 millisecond'))
-				ORDER BY event."available_at", event."created_at", event."id" LIMIT 1
-			`);
-			const candidate = candidates[0];
-			if (!candidate) return { status: "none" };
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${candidate.agentServiceId} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${candidate.runId}, 0))::text AS "lock"`);
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${candidate.runId} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "id" = ${candidate.eventId} FOR UPDATE`);
-			const event = await transaction.outboxEvent.findUnique({ where: { id: candidate.eventId } });
-			const run = await transaction.agentRun.findUnique({ where: { id: candidate.runId } });
-			const now = (await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`))[0]?.now;
+			const event = await transaction.outboxEvent.findFirst({
+				where: { kind: RunOutboxEventKind.RunWorkloadCleanupRequested, publishedAt: null, failedAt: null, availableAt: { lte: now }, OR: [{ claimedAt: null }, { claimedAt: { lte: leaseExpiredBefore } }] },
+				orderBy: [{ availableAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+			});
+			if (!event) return { status: "none" };
+			const run = await transaction.agentRun.findUnique({ where: { id: event.runId } });
 			const workload = _ParseCleanupProjection(event?.payload);
-			if (!now || !event || !run || !workload || !_CleanupClaimIsCurrent(event, run, workload, now, config.claimLeaseMilliseconds)) return { status: "none" };
+			if (!run || !workload || !_CleanupClaimIsCurrent(event, run, workload, now, config.claimLeaseMilliseconds)) return { status: "none" };
 			const claimedAt = new Date(Math.max(now.getTime(), (event.claimedAt?.getTime() ?? -1) + 1));
 			const deliveryCount = event.deliveryCount + 1;
 			const claimed = await transaction.outboxEvent.updateMany({ where: { id: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, publishedAt: null, failedAt: null }, data: { claimedAt, deliveryCount } });
 			if (claimed.count !== 1) throw new Error("run workload cleanup lost its event fence");
 			return { status: "claimed", claim: { lease: { eventId: event.id, claimedAt: claimedAt.toISOString(), deliveryCount, expiresAt: new Date(claimedAt.getTime() + config.claimLeaseMilliseconds).toISOString() }, workload } };
-		});
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 
 	/** Confirms exact physical cleanup and finalises a cancelling run only after that evidence commits. */
@@ -137,21 +104,14 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 	{
 		if (!_ConfirmationIsValid(eventId, command)) return { status: "conflict", reason: "invalid_confirmation" };
 		const config = this.config;
+		const now = this.now();
 		return this.prisma.$transaction(async function _confirm(transaction: Prisma.TransactionClient): Promise<ConfirmRunWorkloadCleanupResult>
 		{
-			const discoveredEvent = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
-			if (!discoveredEvent) return { status: "conflict", reason: "claim_not_found" };
-			const discoveredRun = await transaction.agentRun.findUnique({ where: { id: discoveredEvent.runId } });
-			if (!discoveredRun) return { status: "conflict", reason: "authority_conflict" };
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${discoveredRun.agentServiceId} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${discoveredRun.id}, 0))::text AS "lock"`);
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${discoveredRun.id} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "id" = ${eventId} FOR UPDATE`);
 			const event = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
-			const run = await transaction.agentRun.findUnique({ where: { id: discoveredRun.id } });
-			const now = (await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`))[0]?.now;
+			if (!event) return { status: "conflict", reason: "claim_not_found" };
+			const run = await transaction.agentRun.findUnique({ where: { id: event.runId } });
 			const workload = _ParseCleanupProjection(event?.payload);
-			if (!event || !run || !now || !workload || !_ConfirmationMatches(event, workload, command)) return { status: "conflict", reason: "authority_conflict" };
+			if (!run || !workload || !_ConfirmationMatches(event, workload, command)) return { status: "conflict", reason: "authority_conflict" };
 			const runFinalized = workload.reason === "cancellation";
 			if (event.publishedAt !== null) return { status: "idempotent", runId: run.id, attempt: event.attempt, runFinalized: run.state === AgentRunState.Cancelled };
 			if (event.failedAt !== null) return { status: "conflict", reason: "claim_terminal" };
@@ -171,27 +131,24 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			if (published.count !== 1) throw new Error("run workload cleanup lost its confirmation fence");
 			if (runFinalized) await _FinalizeCancelledRun(transaction, run, now);
 			return { status: "confirmed", runId: run.id, attempt: event.attempt, runFinalized };
-		});
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 
 	/** Persist the first orphan absence and force a second observation after the full create horizon. */
 	async deferUnassignedOrphanAbsenceAtomically(eventId: string, claim: RunWorkloadCleanupClaim): Promise<"deferred" | "conflict">
 	{
 		const config = this.config;
+		const now = this.now();
 		return this.prisma.$transaction(async function _defer(transaction: Prisma.TransactionClient): Promise<"deferred" | "conflict">
 		{
 			const event = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
 			if (!event || event.runId !== claim.workload.runId || event.attempt !== claim.workload.attempt) return "conflict";
-			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${event.runId}, 0))::text AS "lock"`);
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "id" = ${eventId} FOR UPDATE`);
-			const locked = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
-			const now = (await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`))[0]?.now;
-			const workload = _ParseCleanupProjection(locked?.payload);
-			if (!locked || !now || !workload || workload.mode !== "unassigned_orphan" || workload.orphanAbsenceObservedAt !== null || locked.claimedAt?.getTime() !== Date.parse(claim.lease.claimedAt) || locked.deliveryCount !== claim.lease.deliveryCount || locked.publishedAt !== null || locked.failedAt !== null) return "conflict";
+			const workload = _ParseCleanupProjection(event.payload);
+			if (!workload || workload.mode !== "unassigned_orphan" || workload.orphanAbsenceObservedAt !== null || event.claimedAt?.getTime() !== Date.parse(claim.lease.claimedAt) || event.deliveryCount !== claim.lease.deliveryCount || event.publishedAt !== null || event.failedAt !== null) return "conflict";
 			const payload = { ...workload, orphanAbsenceObservedAt: now.toISOString() };
-			const deferred = await new PrismaRunCancellationEventDeferralUnitOfWork(transaction).defer({ eventId, claimedAt: locked.claimedAt, deliveryCount: locked.deliveryCount, availableAt: new Date(now.getTime() + config.orphanObservationMarginMilliseconds), payload });
+			const deferred = await new PrismaRunCancellationEventDeferralUnitOfWork(transaction).defer({ eventId, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, availableAt: new Date(now.getTime() + config.orphanObservationMarginMilliseconds), payload });
 			return deferred ? "deferred" : "conflict";
-		});
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 
 }

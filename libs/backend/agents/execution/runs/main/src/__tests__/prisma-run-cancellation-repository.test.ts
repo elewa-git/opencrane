@@ -21,21 +21,10 @@ function _Assignment()
 	return { runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", siloId: "silo-1", namespace: "silo-runtime", workloadProfile: "personal-small", workloadUid: "job-uid-1", workloadKind: WorkloadKind.Job, state: WorkloadAssignmentState.Registered };
 }
 
-/** Returns SQL text from one Prisma tagged query. */
-function _SqlText(value: unknown): string
-{
-	return ((value as { strings?: readonly string[] }).strings ?? []).join(" ");
-}
-
 /** Creates a transaction mock for one cancellation request. */
 function _CancellationTransaction(run: ReturnType<typeof _Run>, task: ReturnType<typeof _Task>, assignment: ReturnType<typeof _Assignment> | null, activeClaimCount = 0)
 {
-	const queryRaw = vi.fn(async function _Query(value: unknown)
-	{
-		return _SqlText(value).includes("clock_timestamp()::timestamp(3)") ? [{ now: new Date("2026-07-20T00:01:00.000Z") }] : [];
-	});
 	return {
-		$queryRaw: queryRaw,
 		agentService: { findUnique: vi.fn().mockResolvedValue({ id: "service-1", workloadProfile: "personal-small" }) },
 		agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 		workloadAssignment: { findUnique: vi.fn().mockResolvedValue(assignment), updateMany: vi.fn().mockResolvedValue({ count: assignment ? 1 : 0 }) },
@@ -66,7 +55,7 @@ function _CancellationTransaction(run: ReturnType<typeof _Run>, task: ReturnType
 function _Repository(transaction: ReturnType<typeof _CancellationTransaction>): PrismaRunCancellationRepository
 {
 	const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-	return new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+	return new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 }, function _Now() { return new Date("2026-07-20T00:01:00.000Z"); });
 }
 
 describe("PrismaRunCancellationRepository", function _DescribeCancellationRepository()
@@ -139,12 +128,9 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 		const workload = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: "silo-runtime", workloadProfile: "personal-small", bootstrapReference: "bootstrap-v1_exact", workloadUid: "job-uid-1", mode: "assigned", reason: "cancellation" };
 		const run = _Run({ state: AgentRunState.Cancelling });
 		const cleanupEvent = { id: "cleanup-1", runId: "run-1", attempt: 1, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, payload: workload, availableAt: new Date("2026-07-20T00:00:00.000Z"), claimedAt: null, publishedAt: null, failedAt: null, deliveryCount: 0 };
-		const claimQuery = vi.fn().mockResolvedValueOnce([{ eventId: "cleanup-1", runId: "run-1", agentServiceId: "service-1" }]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([{ now: new Date("2026-07-20T00:01:00.000Z") }]);
-		const claimTransaction = { $queryRaw: claimQuery, outboxEvent: { findUnique: vi.fn().mockResolvedValue(cleanupEvent), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, agentRun: { findUnique: vi.fn().mockResolvedValue(run) } };
+		const claimTransaction = { outboxEvent: { findFirst: vi.fn().mockResolvedValue(cleanupEvent), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, agentRun: { findUnique: vi.fn().mockResolvedValue(run) } };
 		const claimedEvent = { ...cleanupEvent, claimedAt: new Date("2026-07-20T00:01:00.000Z"), deliveryCount: 1 };
-		const confirmQuery = vi.fn(async function _Query(value: unknown) { return _SqlText(value).includes("clock_timestamp()::timestamp(3)") ? [{ now: new Date("2026-07-20T00:01:10.000Z") }] : []; });
 		const confirmTransaction = {
-			$queryRaw: confirmQuery,
 			outboxEvent: { findUnique: vi.fn().mockResolvedValue(claimedEvent), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 			elicitationRequest: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
@@ -155,7 +141,8 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 		};
 		const transactions = [claimTransaction, confirmTransaction];
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: never) => Promise<unknown>) { return callback(transactions.shift() as never); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+		const times = [new Date("2026-07-20T00:01:00.000Z"), new Date("2026-07-20T00:01:10.000Z")];
+		const repository = new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 }, function _Now() { return times.shift() as Date; });
 
 		await expect(repository.claimNextWorkloadCleanupAtomically()).resolves.toMatchObject({ status: "claimed", claim: { lease: { eventId: "cleanup-1", deliveryCount: 1 }, workload } });
 		await expect(repository.confirmWorkloadCleanupAtomically("cleanup-1", { claimedAt: "2026-07-20T00:01:00.000Z", deliveryCount: 1, runId: "run-1", attempt: 1, workloadUid: "job-uid-1", outcome: "deleted" })).resolves.toEqual({ status: "confirmed", runId: "run-1", attempt: 1, runFinalized: true });
@@ -169,7 +156,6 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 		const run = _Run({ state: AgentRunState.Cancelling });
 		const event = { id: "cleanup-1", runId: "run-1", attempt: 1, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, payload: workload, availableAt: new Date("2026-07-20T00:00:00.000Z"), claimedAt: new Date("2026-07-20T00:01:00.000Z"), publishedAt: null, failedAt: null, deliveryCount: 1 };
 		const transaction = {
-			$queryRaw: vi.fn(async function _Query(value: unknown) { return _SqlText(value).includes("clock_timestamp()::timestamp(3)") ? [{ now: new Date("2026-07-20T00:01:10.000Z") }] : []; }),
 			outboxEvent: { findUnique: vi.fn().mockResolvedValue(event), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn() },
 			elicitationRequest: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
@@ -179,7 +165,7 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 			conversationRunEvent: { aggregate: vi.fn(), create: vi.fn() },
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+		const repository = new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 }, function _Now() { return new Date("2026-07-20T00:01:10.000Z"); });
 
 		await expect(repository.confirmWorkloadCleanupAtomically("cleanup-1", { claimedAt: "2026-07-20T00:01:00.000Z", deliveryCount: 1, runId: "run-1", attempt: 1, workloadUid: "job-uid-1", outcome: "deleted" })).resolves.toEqual({ status: "confirmed", runId: "run-1", attempt: 1, runFinalized: false });
 		expect(transaction.outboxEvent.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "cleanup-1", deliveryCount: 1 }), data: { claimedAt: null, availableAt: new Date("2026-07-20T00:01:20.000Z") } });
@@ -189,14 +175,13 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 		const settledEvent = { ...event, claimedAt: new Date("2026-07-20T00:01:30.000Z"), deliveryCount: 2 };
 		const settledTransaction = {
 			...transaction,
-			$queryRaw: vi.fn(async function _Query(value: unknown) { return _SqlText(value).includes("clock_timestamp()::timestamp(3)") ? [{ now: new Date("2026-07-20T00:01:40.000Z") }] : []; }),
 			outboxEvent: { findUnique: vi.fn().mockResolvedValue(settledEvent), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 			toolInvocation: { ...transaction.toolInvocation, count: vi.fn().mockResolvedValue(0) },
 			conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 5 } }), create: vi.fn().mockResolvedValue({}) },
 		};
 		const settledPrisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof settledTransaction) => Promise<unknown>) { return callback(settledTransaction); }) } as unknown as PrismaClient;
-		const settledRepository = new PrismaRunCancellationRepository(settledPrisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+		const settledRepository = new PrismaRunCancellationRepository(settledPrisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 }, function _Now() { return new Date("2026-07-20T00:01:40.000Z"); });
 
 		await expect(settledRepository.confirmWorkloadCleanupAtomically("cleanup-1", { claimedAt: "2026-07-20T00:01:30.000Z", deliveryCount: 2, runId: "run-1", attempt: 1, workloadUid: "job-uid-1", outcome: "absent" })).resolves.toEqual({ status: "confirmed", runId: "run-1", attempt: 1, runFinalized: true });
 		expect(settledTransaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 1, state: AgentRunState.Cancelling }, data: expect.objectContaining({ state: AgentRunState.Cancelled }) });
@@ -206,9 +191,9 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 	{
 		const workload = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: "silo-runtime", workloadProfile: "personal-small", bootstrapReference: "bootstrap-v1_exact", workloadUid: null, mode: "unassigned_orphan" as const, reason: "cancellation" as const, orphanAbsenceObservedAt: null };
 		const event = { id: "cleanup-1", runId: "run-1", attempt: 1, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, payload: workload, availableAt: new Date("2026-07-20T00:00:00.000Z"), claimedAt: new Date("2026-07-20T00:01:00.000Z"), publishedAt: null, failedAt: null, deliveryCount: 1 };
-		const transaction = { $queryRaw: vi.fn(async function _Query(value: unknown) { return _SqlText(value).includes("clock_timestamp()::timestamp(3)") ? [{ now: new Date("2026-07-20T00:01:05.000Z") }] : []; }), outboxEvent: { findUnique: vi.fn().mockResolvedValue(event), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } };
+		const transaction = { outboxEvent: { findUnique: vi.fn().mockResolvedValue(event), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } };
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: never) => Promise<unknown>) { return callback(transaction as never); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+		const repository = new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 }, function _Now() { return new Date("2026-07-20T00:01:05.000Z"); });
 		const claim = { lease: { eventId: "cleanup-1", claimedAt: "2026-07-20T00:01:00.000Z", deliveryCount: 1, expiresAt: "2026-07-20T00:01:30.000Z" }, workload };
 
 		await expect(repository.deferUnassignedOrphanAbsenceAtomically("cleanup-1", claim)).resolves.toBe("deferred");
