@@ -6172,37 +6172,15 @@ BEGIN
     RETURN NEW;
 END;
 $$;
--- Read-only Prisma delegates expose database time and the existing nonblocking claim selector
--- without granting application code a general raw-SQL capability.
+-- Workflow delivery selects preprocessing tasks, so Prisma exposes only database time here instead
+-- of retaining the retired SQL polling selector or granting application code general raw SQL.
 CREATE VIEW "artifact_authority_clock" AS
     SELECT 1::INTEGER AS "singleton", date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3) AS "now";
-CREATE FUNCTION "select_artifact_preprocess_claim_candidate"() RETURNS TABLE (
-    "job_id" TEXT,
-    "attempt" INTEGER,
-    "derived_artifact_id" TEXT,
-    "source_revision_id" TEXT,
-    "source_artifact_id" TEXT,
-    "silo_id" TEXT,
-    "owner_principal_id" TEXT,
-    "source_byte_length" BIGINT
-) LANGUAGE sql VOLATILE AS $$
-    SELECT job."id", job."attempt", job."derived_artifact_id", revision."id", revision."artifact_id",
-           artifact."silo_id", artifact."owner_principal_id", revision."byte_length"
-      FROM "artifact_preprocess_jobs" job
-      JOIN "artifact_revisions" revision ON revision."id" = job."source_revision_id"
-      JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id"
-     WHERE job."state" IN ('pending', 'retryable_failed')
-       AND (job."next_attempt_at" IS NULL OR job."next_attempt_at" <= clock_timestamp())
-     ORDER BY job."created_at", job."id"
-     FOR UPDATE OF job, revision, artifact SKIP LOCKED
-     LIMIT 1;
-$$;
-CREATE VIEW "artifact_preprocess_claim_candidates" AS
-    SELECT * FROM "select_artifact_preprocess_claim_candidate"();
 CREATE FUNCTION "enforce_artifact_preprocess_job_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE source_state "ArtifactRevisionState"; source_media_type TEXT; source_silo_id TEXT; source_owner_principal_id TEXT; source_artifact_state "ArtifactState";
         output_silo_id TEXT; output_owner_principal_id TEXT; output_kind "ArtifactKind"; output_state "ArtifactState"; output_revision_artifact_id TEXT; output_revision_media_type TEXT; output_revision_state "ArtifactRevisionState"; output_revision_address TEXT; output_revision_length BIGINT;
         output_lease_artifact_id TEXT; output_lease_state "ArtifactUploadLeaseState"; output_lease_address TEXT; output_lease_length BIGINT; output_lease_media_type TEXT; output_lease_expires_at TIMESTAMP(3); output_lease_promoted_address TEXT; output_lease_promoted_length BIGINT;
+        delivery_changed BOOLEAN;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ArtifactPreprocessJob rows cannot be deleted'; END IF;
     SELECT revision."state", revision."media_type", artifact."silo_id", artifact."owner_principal_id", artifact."state" INTO source_state, source_media_type, source_silo_id, source_owner_principal_id, source_artifact_state
@@ -6220,39 +6198,84 @@ BEGIN
     IF NEW."output_lease_id" IS NOT NULL THEN
         SELECT "artifact_id", "state", "expected_content_address", "expected_byte_length", "media_type", "expires_at", "promoted_content_address", "promoted_byte_length" INTO output_lease_artifact_id, output_lease_state, output_lease_address, output_lease_length, output_lease_media_type, output_lease_expires_at, output_lease_promoted_address, output_lease_promoted_length FROM "artifact_upload_leases" WHERE "id" = NEW."output_lease_id" FOR UPDATE;
         IF output_lease_artifact_id IS DISTINCT FROM NEW."derived_artifact_id" OR output_lease_address IS NULL OR output_lease_length IS NULL OR output_lease_media_type <> 'text/plain' THEN RAISE EXCEPTION 'ArtifactPreprocessJob output lease must bind exact text output for its derived Artifact'; END IF;
-        IF NEW."state" = 'claimed' AND (output_lease_state IS DISTINCT FROM 'active' OR output_lease_expires_at > NEW."claim_expires_at") THEN RAISE EXCEPTION 'ArtifactPreprocessJob claimed output lease must remain active within its claim'; END IF;
+        IF NEW."state" = 'claimed' AND NEW."completion_digest" IS NULL AND (output_lease_state IS DISTINCT FROM 'active' OR output_lease_expires_at > NEW."claim_expires_at") THEN RAISE EXCEPTION 'ArtifactPreprocessJob claimed output lease must remain active within its claim'; END IF;
+        IF NEW."state" = 'claimed' AND NEW."completion_digest" IS NOT NULL AND (output_lease_state IS DISTINCT FROM 'finalized' OR output_lease_promoted_address IS DISTINCT FROM output_lease_address OR output_lease_promoted_length IS DISTINCT FROM output_lease_length OR output_lease_promoted_address IS DISTINCT FROM output_revision_address OR output_lease_promoted_length IS DISTINCT FROM output_revision_length) THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion evidence requires its finalized exact output lease'; END IF;
         IF NEW."state" = 'completed' AND (output_lease_state IS DISTINCT FROM 'finalized' OR output_lease_promoted_address IS DISTINCT FROM output_lease_address OR output_lease_promoted_length IS DISTINCT FROM output_lease_length OR output_lease_promoted_address IS DISTINCT FROM output_revision_address OR output_lease_promoted_length IS DISTINCT FROM output_revision_length) THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires its finalized exact output lease'; END IF;
     END IF;
     IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending' OR NEW."attempt" <> 0 OR NEW."claim_fence" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."derived_artifact_id" IS NOT NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."completed_at" IS NOT NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob must begin pending without an output or claim'; END IF;
+        IF NEW."state" <> 'pending' OR NEW."task_key" IS NULL OR NEW."task_key" !~ '^workflows:artifact-preprocess:[0-9a-f]{64}$' OR NEW."task_id" IS NOT NULL OR NEW."task_name" IS NOT NULL OR NEW."delivery_count" <> 0 OR NEW."claim_fence" IS NOT NULL OR NEW."profile_name" IS NOT NULL OR NEW."claimed_at" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."workload_uid" IS NOT NULL OR NEW."first_pod_uid" IS NOT NULL OR NEW."bootstrap_reference_hash" IS NOT NULL OR NEW."bootstrap_namespace" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."derived_artifact_id" IS NOT NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."completion_digest" IS NOT NULL OR NEW."completion_consumed_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob must begin pending with only its stable task key'; END IF;
         RETURN NEW;
     END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."source_revision_id" IS DISTINCT FROM OLD."source_revision_id" OR NEW."pipeline_version" IS DISTINCT FROM OLD."pipeline_version" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN RAISE EXCEPTION 'ArtifactPreprocessJob identity is immutable'; END IF;
-    IF OLD."derived_artifact_id" IS NOT NULL AND NEW."derived_artifact_id" IS DISTINCT FROM OLD."derived_artifact_id" THEN RAISE EXCEPTION 'ArtifactPreprocessJob output Artifact is immutable once allocated'; END IF;
-    IF OLD."derived_revision_id" IS NOT NULL AND NEW."derived_revision_id" IS DISTINCT FROM OLD."derived_revision_id" THEN RAISE EXCEPTION 'ArtifactPreprocessJob output revision is immutable once completed'; END IF;
-    IF NOT ((OLD."state" = 'pending' AND NEW."state" IN ('pending', 'claimed')) OR (OLD."state" = 'retryable_failed' AND NEW."state" IN ('retryable_failed', 'claimed')) OR (OLD."state" = 'claimed' AND NEW."state" IN ('claimed', 'completed', 'retryable_failed', 'terminal_failed')) OR (OLD."state" = 'completed' AND NEW."state" = 'completed') OR (OLD."state" = 'terminal_failed' AND NEW."state" = 'terminal_failed')) THEN RAISE EXCEPTION 'invalid ArtifactPreprocessJob lifecycle transition'; END IF;
-    IF NEW."state" = 'pending' AND (NEW."attempt" <> 0 OR NEW."claim_fence" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."derived_artifact_id" IS NOT NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob pending state cannot carry claim or output facts'; END IF;
-    IF OLD."state" = NEW."state" AND (NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."claim_fence" IS DISTINCT FROM OLD."claim_fence" OR NEW."claim_expires_at" IS DISTINCT FROM OLD."claim_expires_at" OR NEW."next_attempt_at" IS DISTINCT FROM OLD."next_attempt_at" OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" OR (NEW."output_lease_id" IS DISTINCT FROM OLD."output_lease_id" AND NOT (OLD."state" = 'claimed' AND OLD."output_lease_id" IS NULL AND NEW."output_lease_id" IS NOT NULL))) THEN RAISE EXCEPTION 'ArtifactPreprocessJob durable state facts change only through a lifecycle transition'; END IF;
-    IF OLD."state" <> 'claimed' AND NEW."state" = 'claimed' AND (NEW."attempt" <> OLD."attempt" + 1 OR NEW."claim_fence" IS NULL OR NEW."claim_fence" IS NOT DISTINCT FROM OLD."claim_fence" OR NEW."claim_expires_at" IS NULL OR NEW."claim_expires_at" <= clock_timestamp() OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob claim must allocate one fresh fenced output attempt'; END IF;
-    IF OLD."state" = 'claimed' AND NEW."state" = 'retryable_failed' AND OLD."claim_expires_at" <= clock_timestamp() THEN
-        IF NEW."failure_code" <> 'claim_expired' THEN RAISE EXCEPTION 'expired ArtifactPreprocessJob claim may recover only as claim_expired'; END IF;
-    ELSIF OLD."state" = 'claimed' AND (OLD."claim_fence" IS NULL OR OLD."claim_expires_at" IS NULL OR OLD."claim_expires_at" <= clock_timestamp() OR NEW."claim_fence" IS DISTINCT FROM OLD."claim_fence") THEN
-        RAISE EXCEPTION 'ArtifactPreprocessJob completion requires its live claim fence';
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."source_revision_id" IS DISTINCT FROM OLD."source_revision_id" OR NEW."pipeline_version" IS DISTINCT FROM OLD."pipeline_version" OR NEW."task_key" IS DISTINCT FROM OLD."task_key" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN RAISE EXCEPTION 'ArtifactPreprocessJob identity is immutable'; END IF;
+    -- Bind the workflow receipt while pending so a later delivery cannot switch to another task.
+    IF NEW."task_id" IS DISTINCT FROM OLD."task_id" OR NEW."task_name" IS DISTINCT FROM OLD."task_name" THEN
+        IF OLD."state" <> 'pending' OR NEW."state" <> 'pending' OR OLD."task_id" IS NOT NULL OR OLD."task_name" IS NOT NULL OR NEW."task_id" IS NULL OR btrim(NEW."task_id") = '' OR NEW."task_name" <> 'artifacts.preprocess.pdf-to-text/v1' THEN RAISE EXCEPTION 'ArtifactPreprocessJob task receipt binds once while pending'; END IF;
     END IF;
-    IF NEW."state" = 'completed' AND (NEW."claim_fence" IS NULL OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NULL OR NEW."output_lease_id" IS NULL OR NEW."output_lease_id" IS DISTINCT FROM OLD."output_lease_id" OR NEW."completed_at" IS NULL OR NEW."failure_code" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires its fenced derived revision'; END IF;
-    IF NEW."state" = 'completed' AND NOT EXISTS (SELECT 1 FROM "artifact_revision_parents" WHERE "child_revision_id" = NEW."derived_revision_id" AND "parent_revision_id" = NEW."source_revision_id") THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires immutable source lineage'; END IF;
-    IF NEW."state" = 'retryable_failed' AND (NEW."claim_fence" IS NULL OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."failure_code" IS NULL OR NEW."next_attempt_at" IS NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob retryable failure requires bounded retry evidence'; END IF;
-    IF NEW."state" = 'terminal_failed' AND (NEW."claim_fence" IS NULL OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."failure_code" IS NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob terminal failure requires failure evidence'; END IF;
-    IF OLD."state" = 'claimed' AND NEW."state" IN ('retryable_failed', 'terminal_failed') AND OLD."output_lease_id" IS NOT NULL THEN
+    IF OLD."derived_artifact_id" IS NOT NULL AND NEW."derived_artifact_id" IS DISTINCT FROM OLD."derived_artifact_id" THEN RAISE EXCEPTION 'ArtifactPreprocessJob output Artifact is immutable once allocated'; END IF;
+    IF OLD."derived_revision_id" IS NOT NULL AND (NEW."derived_revision_id" IS DISTINCT FROM OLD."derived_revision_id" OR NEW."completion_digest" IS DISTINCT FROM OLD."completion_digest") THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion evidence is immutable once saved'; END IF;
+    IF NOT ((OLD."state" = 'pending' AND NEW."state" IN ('pending', 'claimed')) OR (OLD."state" = 'retryable_failed' AND NEW."state" IN ('retryable_failed', 'claimed')) OR (OLD."state" = 'claimed' AND NEW."state" IN ('claimed', 'completed', 'retryable_failed', 'terminal_failed')) OR (OLD."state" = 'completed' AND NEW."state" = 'completed') OR (OLD."state" = 'terminal_failed' AND NEW."state" = 'terminal_failed')) THEN RAISE EXCEPTION 'invalid ArtifactPreprocessJob lifecycle transition'; END IF;
+    -- Give every workflow delivery a new fence and cleared bindings so it cannot inherit the Job,
+    -- Pod, bootstrap, lease, or completion evidence of an expired attempt.
+    delivery_changed := NEW."delivery_count" IS DISTINCT FROM OLD."delivery_count";
+    IF NEW."state" = 'pending' AND (NEW."delivery_count" <> 0 OR NEW."claim_fence" IS NOT NULL OR NEW."profile_name" IS NOT NULL OR NEW."claimed_at" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."workload_uid" IS NOT NULL OR NEW."first_pod_uid" IS NOT NULL OR NEW."bootstrap_reference_hash" IS NOT NULL OR NEW."bootstrap_namespace" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."derived_artifact_id" IS NOT NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."completion_digest" IS NOT NULL OR NEW."completion_consumed_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob pending state cannot carry delivery or output facts'; END IF;
+    IF NEW."state" = 'claimed' AND delivery_changed THEN
+        IF NEW."delivery_count" <> OLD."delivery_count" + 1 OR NEW."task_id" IS NULL OR NEW."task_name" <> 'artifacts.preprocess.pdf-to-text/v1' OR NEW."claim_fence" IS NULL OR NEW."claim_fence" IS NOT DISTINCT FROM OLD."claim_fence" OR NEW."profile_name" <> 'pdf-preprocessor' OR NEW."claimed_at" IS NULL OR NEW."claim_expires_at" IS NULL OR NEW."claim_expires_at" <= clock_timestamp() OR NEW."claim_expires_at" <= NEW."claimed_at" OR NEW."claim_expires_at" > NEW."claimed_at" + interval '5 minutes' OR NEW."workload_uid" IS NOT NULL OR NEW."first_pod_uid" IS NOT NULL OR NEW."bootstrap_reference_hash" IS NOT NULL OR NEW."bootstrap_namespace" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."completion_digest" IS NOT NULL OR NEW."completion_consumed_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob delivery must use a fresh live bounded fence and clear delivery bindings'; END IF;
+        IF OLD."state" = 'claimed' AND (OLD."claim_expires_at" IS NULL OR OLD."claim_expires_at" > clock_timestamp()) THEN RAISE EXCEPTION 'ArtifactPreprocessJob cannot replace a live delivery'; END IF;
+    ELSIF delivery_changed THEN
+        RAISE EXCEPTION 'ArtifactPreprocessJob delivery count changes only when a delivery is claimed';
+    END IF;
+    IF OLD."state" = NEW."state" AND NOT delivery_changed THEN
+        IF NEW."state" = 'pending' THEN
+            IF NEW."task_id" IS NOT DISTINCT FROM OLD."task_id" AND NEW."task_name" IS NOT DISTINCT FROM OLD."task_name" AND NEW IS DISTINCT FROM OLD THEN RAISE EXCEPTION 'ArtifactPreprocessJob pending state changes only by binding its task receipt'; END IF;
+        ELSIF NEW."state" = 'claimed' THEN
+            IF NEW."claim_fence" IS DISTINCT FROM OLD."claim_fence" OR NEW."profile_name" IS DISTINCT FROM OLD."profile_name" OR NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."claim_expires_at" IS DISTINCT FROM OLD."claim_expires_at" OR NEW."next_attempt_at" IS DISTINCT FROM OLD."next_attempt_at" OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code" OR NEW."completion_consumed_at" IS DISTINCT FROM OLD."completion_consumed_at" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" THEN RAISE EXCEPTION 'ArtifactPreprocessJob delivery facts change only when a delivery is claimed'; END IF;
+            IF NEW."derived_artifact_id" IS DISTINCT FROM OLD."derived_artifact_id" AND NOT (OLD."derived_artifact_id" IS NULL AND NEW."derived_artifact_id" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob derived Artifact binds once'; END IF;
+            IF NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" OR NEW."bootstrap_reference_hash" IS DISTINCT FROM OLD."bootstrap_reference_hash" OR NEW."bootstrap_namespace" IS DISTINCT FROM OLD."bootstrap_namespace" THEN
+                IF OLD."workload_uid" IS NOT NULL OR OLD."bootstrap_reference_hash" IS NOT NULL OR OLD."bootstrap_namespace" IS NOT NULL OR NEW."workload_uid" IS NULL OR NEW."bootstrap_reference_hash" IS NULL OR NEW."bootstrap_namespace" IS NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob workload and bootstrap bind once together'; END IF;
+            END IF;
+            IF NEW."first_pod_uid" IS DISTINCT FROM OLD."first_pod_uid" AND NOT (OLD."first_pod_uid" IS NULL AND NEW."first_pod_uid" IS NOT NULL AND NEW."workload_uid" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob first Pod binds once after its workload'; END IF;
+            IF NEW."output_lease_id" IS DISTINCT FROM OLD."output_lease_id" AND NOT (OLD."output_lease_id" IS NULL AND NEW."output_lease_id" IS NOT NULL AND NEW."derived_artifact_id" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob output lease binds once per delivery'; END IF;
+            IF NEW."derived_revision_id" IS DISTINCT FROM OLD."derived_revision_id" OR NEW."completion_digest" IS DISTINCT FROM OLD."completion_digest" THEN
+                -- Save worker output while the delivery is still claimed; the controller consumes
+                -- this evidence in the separate claimed-to-completed transition below.
+                IF OLD."derived_revision_id" IS NOT NULL OR OLD."completion_digest" IS NOT NULL OR NEW."derived_revision_id" IS NULL OR NEW."completion_digest" IS NULL OR NEW."output_lease_id" IS NULL OR NEW."workload_uid" IS NULL OR NEW."first_pod_uid" IS NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion evidence binds once after its worker output'; END IF;
+            END IF;
+        ELSIF NEW IS DISTINCT FROM OLD THEN
+            RAISE EXCEPTION 'ArtifactPreprocessJob terminal state is immutable';
+        END IF;
+    END IF;
+    IF OLD."state" = 'claimed' AND NEW."state" IN ('retryable_failed', 'terminal_failed') THEN
+        IF OLD."claim_fence" IS NULL OR OLD."claim_expires_at" IS NULL OR (OLD."claim_expires_at" <= clock_timestamp() AND NEW."failure_code" <> 'claim_expired') THEN RAISE EXCEPTION 'ArtifactPreprocessJob failure requires its current delivery or claim_expired evidence'; END IF;
+        IF NEW."delivery_count" <> OLD."delivery_count" OR NEW."claim_fence" IS DISTINCT FROM OLD."claim_fence" OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."completion_digest" IS NOT NULL OR NEW."completion_consumed_at" IS NOT NULL OR NEW."failure_code" IS NULL OR NEW."completed_at" IS NOT NULL OR (NEW."state" = 'retryable_failed' AND NEW."next_attempt_at" IS NULL) OR (NEW."state" = 'terminal_failed' AND NEW."next_attempt_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob failure requires bounded retry or terminal evidence'; END IF;
+    END IF;
+    IF OLD."state" = 'claimed' AND NEW."state" = 'completed' THEN
+        IF NEW."delivery_count" <> OLD."delivery_count" OR NEW."claim_fence" IS DISTINCT FROM OLD."claim_fence" OR NEW."workload_uid" IS NULL OR NEW."first_pod_uid" IS NULL OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NULL OR NEW."output_lease_id" IS NULL OR NEW."completion_digest" IS NULL OR NEW."completion_consumed_at" IS NULL OR NEW."completed_at" IS NULL OR NEW."failure_code" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires consumed fenced worker evidence'; END IF;
+        IF NOT EXISTS (SELECT 1 FROM "artifact_revision_parents" WHERE "child_revision_id" = NEW."derived_revision_id" AND "parent_revision_id" = NEW."source_revision_id") THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires immutable source lineage'; END IF;
+    END IF;
+    IF OLD."state" = 'claimed' AND (NEW."state" IN ('retryable_failed', 'terminal_failed') OR delivery_changed) AND OLD."output_lease_id" IS NOT NULL THEN
         UPDATE "artifact_upload_leases" SET "state" = 'cancelled' WHERE "id" = OLD."output_lease_id" AND "state" IN ('active', 'promoted');
     END IF;
     RETURN NEW;
 END;
 $$;
+CREATE FUNCTION "enforce_artifact_preprocess_claim_completeness"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE current_job "artifact_preprocess_jobs"%ROWTYPE;
+BEGIN
+    -- Check at transaction end so claiming may allocate the derived Artifact in the same commit,
+    -- while still rejecting a claimed delivery that lacks its task, derived Artifact, or live claim.
+    SELECT * INTO current_job FROM "artifact_preprocess_jobs" WHERE "id" = NEW."id";
+    IF current_job."state" = 'claimed' AND (current_job."derived_artifact_id" IS NULL OR current_job."task_id" IS NULL OR current_job."task_name" IS NULL OR current_job."claim_expires_at" IS NULL OR current_job."claim_expires_at" <= clock_timestamp()) THEN
+        RAISE EXCEPTION 'ArtifactPreprocessJob claimed delivery must commit live with its task and derived Artifact';
+    END IF;
+    RETURN NULL;
+END;
+$$;
 CREATE FUNCTION "enforce_artifact_preprocess_output_lease_finalization"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    IF NEW."state" = 'finalized' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" WHERE "output_lease_id" = NEW."id" AND "state" <> 'completed') THEN
-        RAISE EXCEPTION 'ArtifactPreprocessJob output lease may finalize only with its completed job';
+    -- Let the worker finalize its output lease only after saving completion evidence; the controller
+    -- may then consume that evidence and finish the job without extending the worker's expired claim.
+    IF NEW."state" = 'finalized' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" WHERE "output_lease_id" = NEW."id" AND NOT ("state" = 'completed' OR ("state" = 'claimed' AND "derived_revision_id" IS NOT NULL AND "completion_digest" IS NOT NULL))) THEN
+        RAISE EXCEPTION 'ArtifactPreprocessJob output lease may finalize only with saved completion evidence';
     END IF;
     RETURN NULL;
 END;
@@ -7364,7 +7387,11 @@ ALTER TABLE "artifact_revisions" ADD CONSTRAINT "artifact_revisions_index_check"
         ("index_state" <> 'indexed')
     );
 ALTER TABLE "artifact_preprocess_jobs" ADD CONSTRAINT "artifact_preprocess_jobs_identity_check" CHECK (
-        btrim("source_revision_id") <> '' AND btrim("pipeline_version") <> '' AND "attempt" >= 0
+        btrim("source_revision_id") <> '' AND btrim("pipeline_version") <> '' AND btrim("task_key") <> '' AND "delivery_count" >= 0
+        AND ("task_id" IS NULL OR btrim("task_id") <> '') AND ("task_name" IS NULL OR btrim("task_name") <> '')
+        AND ("profile_name" IS NULL OR btrim("profile_name") <> '') AND ("workload_uid" IS NULL OR btrim("workload_uid") <> '')
+        AND ("first_pod_uid" IS NULL OR btrim("first_pod_uid") <> '') AND ("bootstrap_reference_hash" IS NULL OR "bootstrap_reference_hash" ~ '^sha256:[0-9a-f]{64}$')
+        AND ("bootstrap_namespace" IS NULL OR btrim("bootstrap_namespace") <> '') AND ("completion_digest" IS NULL OR "completion_digest" ~ '^sha256:[0-9a-f]{64}$')
         AND ("claim_fence" IS NULL OR btrim("claim_fence") <> '')
         AND ("failure_code" IS NULL OR (btrim("failure_code") <> '' AND length("failure_code") <= 200))
     );
@@ -7709,6 +7736,8 @@ CREATE CONSTRAINT TRIGGER "corrected_memory_facts_require_successor" AFTER INSER
 CREATE TRIGGER "artifact_upload_leases_silo_and_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_upload_leases" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_upload_lease_silo_and_lifecycle"();
 CREATE TRIGGER "artifact_preprocess_jobs_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_preprocess_jobs"
     FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_preprocess_job_lifecycle"();
+CREATE CONSTRAINT TRIGGER "artifact_preprocess_claim_completeness" AFTER INSERT OR UPDATE ON "artifact_preprocess_jobs"
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_preprocess_claim_completeness"();
 CREATE CONSTRAINT TRIGGER "artifact_preprocess_output_lease_finalization" AFTER UPDATE OF "state" ON "artifact_upload_leases"
     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_preprocess_output_lease_finalization"();
 -- Run-input snapshot guards
