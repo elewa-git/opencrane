@@ -75,7 +75,7 @@ function _startHttpServers(publicApp: Express, internalApp: Express, config: Ope
  * Workload routes stay on a separate socket throughout the lifecycle; shutdown stops producers
  * before closing listeners and database state, then flushes telemetry as the final I/O boundary.
  */
-export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runCancellation: RunCancellationRepository, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, conversationSockets: SelfConversationSocketServer, unbindConsole: () => void, externalActions: ExternalActionWorker, stopObot: () => void, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime): Promise<void>
+export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runCancellation: RunCancellationRepository, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, conversationSockets: SelfConversationSocketServer, unbindConsole: () => void, externalActions: ExternalActionWorker, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime): Promise<void>
 {
 	// 1. Start workers only after application composition has registered every durable task.
 	let backgroundWorkers: OpenCraneBackgroundWorkers;
@@ -87,7 +87,6 @@ export async function _StartProcessLifecycle(publicApp: Express, internalApp: Ex
 	{
 		const hardExit = setTimeout(function _forceStartupExit() { process.exit(1); }, 10_000);
 		hardExit.unref();
-		await _runCleanupStage("startup_transport", async function _StopStartupTransport() { stopObot(); });
 		await _runCleanupStage("startup_dependencies", async function _CloseStartupDependencies()
 		{
 			await _settleCleanup([channelTargetRoutes.stop(), workflowRuntime.close(), prisma.$disconnect()]);
@@ -117,7 +116,6 @@ export async function _StartProcessLifecycle(publicApp: Express, internalApp: Ex
 			await _settleCleanup([
 				Promise.resolve().then(_BeginProcessShutdown),
 				Promise.resolve().then(function _CloseConversationSockets() { conversationSockets.close(); }),
-				Promise.resolve().then(function _StopObot() { stopObot(); }),
 			]);
 		});
 		clean = await _runCleanupStage("drain_workers", async function _DrainWorkers() { await _settleCleanup([backgroundWorkers.stop(), channelTargetRoutes.stop()]); }) && clean;

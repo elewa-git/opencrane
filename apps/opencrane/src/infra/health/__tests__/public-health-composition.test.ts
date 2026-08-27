@@ -14,7 +14,6 @@ describe("public health production composition", function _Suite()
 			$transaction: vi.fn(async function _Transaction(run: (transaction: unknown) => Promise<unknown>) { return run({ auditEntry: { findFirst } }); }),
 		};
 		const config = {
-			obot: null,
 			runtime: {
 				channelTargets: {},
 				memoryGatewayUrl: "http://memory-gateway.svc:8080",
@@ -31,7 +30,6 @@ describe("public health production composition", function _Suite()
 
 		const report = await reader.read();
 		expect(report.services[PublicHealthServiceNames.Channels]).toBe(PublicHealthServiceStatuses.Available);
-		expect(report.services[PublicHealthServiceNames.Integrations]).toBe(PublicHealthServiceStatuses.Disabled);
 		expect(findFirst).toHaveBeenCalledOnce();
 		expect(fetch.mock.calls.map(function _Url(call) { return String(call[0]); }).sort()).toEqual([
 			"http://artifact-service.svc:8080/readyz",

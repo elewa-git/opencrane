@@ -27,7 +27,6 @@ import { _ProcessShutdownSignal } from "./app/process-shutdown";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory";
 import { ___CreatePrismaClient } from "./infra/db/db";
 import { ___CreatePublicHealthReportReader } from "./infra/health/public-health";
-import { _CreateObotAdapters } from "./infra/obot/obot-adapters.factory";
 
 /**
  * Compose the process once, from telemetry through coordinated shutdown.
@@ -56,22 +55,21 @@ async function _Main(): Promise<void>
 	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, membershipEvidence);
 	const runCancellation = _CreateRunCancellationAuthority(prisma, config.runtime);
 
-	// 4. Compose the server-owned Obot custody and action transport without exposing it to runtimes.
-	const obot = _CreateObotAdapters(config.obot);
+	// 4. Compose the class-specific MCP authority before the generic external-action worker.
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
 	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime);
-	const externalActions = _CreateExternalActionWorker(prisma, obot.invocation, mcpRuntime.authority, _log);
+	const externalActions = _CreateExternalActionWorker(prisma, mcpRuntime.authority, _log);
 
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
-	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, obot.custody, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime);
+	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware, mcpRuntime, workflows.execution);
 	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, workflows.execution, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	await _StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, obot.stop, mcpRuntime.authority, workflows.runtime);
+	await _StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, mcpRuntime.authority, workflows.runtime);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)

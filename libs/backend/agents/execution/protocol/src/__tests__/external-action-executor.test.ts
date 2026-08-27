@@ -1,13 +1,9 @@
 import { RuntimeCandidateKinds, type RunInputSnapshot, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
-import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/backend/server/infra/obot-custody";
-import type { ObotMcpInvocationPort, ObotMcpToolInvocationCommand } from "@opencrane/backend/server/infra/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/backend/server/infra/sandbox-execution";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
-import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, UnsupportedExternalActionError } from "../external-action-executor";
-import type { IntegrationAssignmentUnavailableReason } from "../external-action-executor.types";
 
 /** Build a candidate for the given tool revision prefix. */
 function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate
@@ -15,75 +11,15 @@ function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate
 	return { protocolVersion: "opencrane.agent-runtime/v1", runtimeInstanceId: "instance-1", commandId: "command-1", candidateId: "candidate-1", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId, toolInvocationId: "invocation-1", argumentsDigest: "sha256:d", arguments: { query: "a" } };
 }
 
-/** Build one reviewed integration tool definition. */
-function _Tool(name = "calendar.read")
-{
-	const parametersSchema = { type: "object", additionalProperties: false } as const;
-	return { name, description: "Read a calendar", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
-}
-
 /** The composition root wires only fail-closed transports until a real one is verified. */
-const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-1", agentRevisionId: "revision-1", integrations: { resolveAssignment: async function _resolve() { return { outcome: "resolved" as const, assignment: { integrationId: "calendar", obotCatalogEntryId: "calendar", obotCustodyReference: "obot:calendar", toolDefinitions: [_Tool()] } }; } }, obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor() };
-
-/** Test-local successful Obot port; production exports only the fail-closed unavailable adapter. */
-class _RecordingObotInvocation implements ObotMcpInvocationPort
-{
-	/** Commands the executor passed to this port. */
-	readonly commands: ObotMcpToolInvocationCommand[] = [];
-
-	/** Record one command and return a controlled opaque result. */
-	async invokeTool(command: ObotMcpToolInvocationCommand)
-	{
-		this.commands.push(command);
-		return { content: { result: "ok" }, isError: false };
-	}
-}
-
-/** Checks that a refusal from live custody keeps its error type and never reaches the Obot port. */
-async function _expectAssignmentUnavailable(reason: IntegrationAssignmentUnavailableReason): Promise<void>
-{
-	const invokeTool = vi.fn();
-	const executor = __CreateExternalActionExecutor(_candidate("integration:calendar:calendar.read"), { ...DEPENDENCIES, integrations: { resolveAssignment: async function _resolve() { return { outcome: "unavailable" as const, reason }; } }, obotMcpInvocation: { invokeTool } });
-	await expect(executor.execute()).rejects.toMatchObject({ name: "IntegrationAssignmentUnavailableError", integrationId: "calendar", reason });
-	expect(invokeTool).not.toHaveBeenCalled();
-}
+const DEPENDENCIES = { siloId: "silo-1", cogneeDatasetId: "cognee-personal-1", sandboxExecutor: new __UnavailableSandboxJobExecutor() };
 
 describe("composition-root external action executor", function _suite()
 {
-	it("fails closed when the integration invocation transport is unavailable", async function _integrationUnavailable()
+	it("refuses a retired integration revision before selecting a generic transport", async function _retiredIntegration()
 	{
 		const executor = __CreateExternalActionExecutor(_candidate("integration:calendar:calendar.read"), DEPENDENCIES);
-		await expect(executor.execute()).rejects.toThrow(/Obot MCP invocation authority is unavailable/);
-	});
-
-	it("resolves a revision integration and invokes only its allowed tool through Obot", async function _integration()
-	{
-		const executor = __CreateExternalActionExecutor(_candidate("integration:calendar:calendar.read"), { ...DEPENDENCIES, obotMcpInvocation: new _RecordingObotInvocation() });
-		await expect(executor.execute()).resolves.toEqual({ result: "ok" });
-	});
-
-	it("turns MCP isError content into a typed failure without forwarding its body", async function _integrationToolFailure()
-	{
-		const executor = __CreateExternalActionExecutor(_candidate("integration:calendar:calendar.read"), { ...DEPENDENCIES, obotMcpInvocation: { invokeTool: async function _invoke() { return { content: { secret: "never-forward" }, isError: true }; } } });
-		await expect(executor.execute()).rejects.toMatchObject({ name: "IntegrationToolReturnedError", message: "integration tool returned a failure result" });
-	});
-
-	it("refuses an incomplete integration revision before resolving live custody", async function _incompleteIntegration()
-	{
-		const resolveAssignment = vi.fn();
-		const executor = __CreateExternalActionExecutor(_candidate("integration:calendar"), { ...DEPENDENCIES, integrations: { resolveAssignment } });
 		await expect(executor.execute()).rejects.toBeInstanceOf(UnsupportedExternalActionError);
-		expect(resolveAssignment).not.toHaveBeenCalled();
-	});
-
-	it("preserves a revoked live assignment as a typed refusal without calling Obot", async function _revoked()
-	{
-		await _expectAssignmentUnavailable("revoked");
-	});
-
-	it("preserves an expired live assignment as a typed refusal without calling Obot", async function _expired()
-	{
-		await _expectAssignmentUnavailable("expired");
 	});
 
 	it("fails closed for a sandbox tool call when no sandbox transport is available", async function _sandbox()

@@ -85,9 +85,6 @@
       "@opencrane/backend/server/iam/identity": [
         "./libs/backend/server/iam/identity/main/src/index.ts"
       ],
-      "@opencrane/backend/server/gateways/integrations": [
-        "./libs/backend/server/gateways/integrations/main/src/index.ts"
-      ],
       "@opencrane/backend/server/iam/membership": [
         "./libs/backend/server/iam/membership/main/src/index.ts"
       ],
@@ -231,9 +228,6 @@
       ],
       "@opencrane/backend/server/infra/http": [
         "./libs/backend/server/infra/http/src/index.ts"
-      ],
-      "@opencrane/backend/server/infra/obot-custody": [
-        "./libs/backend/server/infra/obot-custody/src/index.ts"
       ],
       "@opencrane/backend/server/infra/sandbox-execution": [
         "./libs/backend/server/infra/sandbox-execution/src/index.ts"

@@ -5,7 +5,7 @@ import { ByokProvider } from "@opencrane/contracts";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneObotConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
+import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -183,30 +183,6 @@ function _readChannelTargetConfig(): ChannelTargetRuntimeConfig | null
 	return { ...values, invocationContextTtlMilliseconds: _readBoundedSeconds("CHANNEL_INVOCATION_CONTEXT_TTL_SECONDS", 60, 1, 300) };
 }
 
-/**
- * Read the optional Obot management-transport block from the startup environment.
- *
- * With both values set the authenticated transport is composed; with both absent the feature stays off
- * (fail-closed unavailable adapters). A partial block is a deployment mistake, so startup refuses it
- * rather than half-composing an authority that would fail on first use.
- */
-function _readObotConfig(): OpenCraneObotConfig | null
-{
-	const gatewayUrl = process.env.OBOT_GATEWAY_URL?.trim();
-	const serviceTokenPath = process.env.OBOT_SERVICE_TOKEN_PATH?.trim();
-	if (!gatewayUrl && !serviceTokenPath)
-		return null;
-	if (!gatewayUrl || !serviceTokenPath)
-	{
-		throw new Error("OBOT_GATEWAY_URL and OBOT_SERVICE_TOKEN_PATH must be configured together or not at all");
-	}
-	if (!isAbsolute(serviceTokenPath))
-	{
-		throw new Error("OBOT_SERVICE_TOKEN_PATH must be an absolute mounted file path");
-	}
-	return { gatewayUrl, serviceTokenPath, requestTimeoutMilliseconds: _readBoundedSeconds("OBOT_TIMEOUT_SECONDS", 30, 1, 300) };
-}
-
 /** Read the one bounded Absurd worker and remote MCP protocol-check configuration. */
 function _readWorkflowConfig(): OpenCraneWorkflowConfig
 {
@@ -240,7 +216,6 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
 		initialModelBootstrap: _readInitialModelBootstrap(),
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
-		obot: _readObotConfig(),
 		publicPort: Number(process.env.PORT ?? "8080"),
 			runtime: {
 			artifactScannerEnabled: process.env.ARTIFACT_SCANNER_ENABLED === "true",

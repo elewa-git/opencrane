@@ -4,7 +4,6 @@ import { __DigestCanonicalJson, __OpenDeferredToolApproval, type OpenDeferredToo
 import type { Logger } from "@opencrane/backend/observability";
 import type { RunInputSnapshotToolDefinition } from "@opencrane/contracts";
 
-import { ExternalActionRevisionKinds } from "./external-action-executor.types";
 import type { ExternalActionApprovalOpener, ExternalActionExecutionContext, ExternalActionWorkerInvocation } from "./external-action-worker.types";
 
 /** Schema fields the approval authority needs, independent of the tool's execution class. */
@@ -22,14 +21,6 @@ const _APPROVAL_EXPIRY_MILLISECONDS = 15 * 60 * 1_000;
 /** The Prisma client type `__OpenDeferredToolApproval` already requires. */
 type DeferredToolApprovalPrisma = Parameters<typeof __OpenDeferredToolApproval>[0];
 
-/** Split an `integration:<id>:<tool>` revision id, rejecting anything with a different number of parts. */
-function _integrationTool(toolRevisionId: string): { readonly integrationId: string; readonly toolName: string } | null
-{
-	const parts = toolRevisionId.split(":");
-	if (parts.length !== 3 || parts[0] !== ExternalActionRevisionKinds.Integration || !parts[1] || !parts[2]) return null;
-	return { integrationId: parts[1], toolName: parts[2] };
-}
-
 /** Find the one tool definition in the snapshot that this invocation's revision id came from. */
 function _frozenTool(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext): FrozenApprovalTool
 {
@@ -43,27 +34,7 @@ function _frozenTool(invocation: ExternalActionWorkerInvocation, context: Extern
 			throw new Error("approval-required external action schema digest is invalid");
 		return { parametersSchema: mcpTool.inputSchema, parametersSchemaDigest: mcpTool.inputSchemaDigest };
 	}
-
-	// 1. Split the invocation's revision id into its integration and tool name.
-	const coordinate = _integrationTool(invocation.toolRevisionId);
-	if (coordinate === null) throw new Error("approval-required external action has no frozen integration coordinate");
-
-	// 2. Select one and only one matching definition from the immutable run snapshot.
-	const matches: RunInputSnapshotToolDefinition[] = [];
-	for (const assignment of context.snapshot.integrationAssignments)
-	{
-		if (assignment.integrationId !== coordinate.integrationId) continue;
-		for (const definition of assignment.toolDefinitions)
-		{
-			if (definition.name === coordinate.toolName) matches.push(definition);
-		}
-	}
-	if (matches.length !== 1) throw new Error("approval-required external action has no unique frozen tool schema");
-
-	// 3. Re-hash the schema and check it matches, before the definition is used for approval.
-	const definition = matches[0]!;
-	if (__DigestCanonicalJson(definition.parametersSchema) !== definition.parametersSchemaDigest) throw new Error("approval-required external action schema digest is invalid");
-	return definition;
+	throw new Error("approval-required external action has no frozen MCP tool revision");
 }
 
 /** Build a stable interrupt id that reveals neither the arguments nor any database id. */

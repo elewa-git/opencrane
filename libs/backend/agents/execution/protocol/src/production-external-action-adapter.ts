@@ -2,35 +2,22 @@ import { ExternalActionRecoveryModes, __DigestCanonicalJson, type ToolInvocation
 import { PersonalMemoryPermissionVerificationOutcomes } from "@opencrane/backend/agents/execution/elicitation";
 import { UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
 import { ___DoWithTrace, ___MarkActiveSpanFailed } from "@opencrane/backend/observability";
-import { ObotMcpAuthenticationError, ObotMcpAuthorizationError, ObotMcpInvocationUnavailableError, ObotMcpToolNotAllowedError } from "@opencrane/backend/server/infra/obot-custody";
 import { SandboxExecutionUnavailableError } from "@opencrane/backend/server/infra/sandbox-execution";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
 import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, UnsupportedExternalActionError } from "./external-action-executor";
 import { type DurableExternalActionCommand, type ExternalActionExecutor } from "./external-action-executor.types";
-import { IntegrationAssignmentUnavailableError, IntegrationToolReturnedError, PersonalMemoryPermissionUnavailableError, PersonalMemorySafeDeliveryRequiredError } from "./external-action-errors";
+import { PersonalMemoryPermissionUnavailableError, PersonalMemorySafeDeliveryRequiredError } from "./external-action-errors";
 import { ExternalActionProviderOutcomeKinds, type ExternalActionAdapterFactory, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types";
 import type { ProductionExternalActionAdapterDependencies } from "./production-external-action-adapter.types";
-
-/** Failure code for an integration assignment that was revoked before anything reached the provider. */
-function _integrationFailureCode(error: IntegrationAssignmentUnavailableError): string
-{
-	return `integration_assignment_${error.reason}`;
-}
 
 /** Return a definite failure code, but only for errors that prove no request reached the provider. Anything else returns null. */
 function _provenPreDispatchFailure(error: unknown): string | null
 {
-	if (error instanceof IntegrationAssignmentUnavailableError) return _integrationFailureCode(error);
 	if (error instanceof UnsupportedExternalActionError) return "external_action_unsupported";
 	if (error instanceof PersonalMemoryPermissionUnavailableError) return "memory_permission_unavailable";
 	if (error instanceof PersonalMemorySafeDeliveryRequiredError) return "safe_delivery_required";
-	if (error instanceof ObotMcpToolNotAllowedError) return "integration_tool_not_allowed";
-	if (error instanceof ObotMcpAuthenticationError) return "AuthenticationError";
-	if (error instanceof ObotMcpAuthorizationError) return "PermissionError";
-	if (error instanceof IntegrationToolReturnedError) return "RuntimeError";
-	if (error instanceof ObotMcpInvocationUnavailableError) return "integration_provider_unavailable";
 	if (error instanceof SandboxExecutionUnavailableError) return "sandbox_provider_unavailable";
 	return null;
 }
@@ -45,7 +32,7 @@ interface ClaimBoundExternalActionExecutor
 /** Current server transports have no provider idempotency or readback contract, so they are manual. */
 class _ManualPreparedExternalActionAdapter implements PreparedExternalActionAdapter
 {
-	/** Always Manual: the Obot, sandbox, and memory ports cannot prove what happened after a failure. */
+	/** Always Manual: the sandbox and memory ports cannot prove what happened after a failure. */
 	readonly recoveryMode = ExternalActionRecoveryModes.Manual;
 	/** One durable-command executor selected from the frozen tool revision. */
 	private readonly executor: ClaimBoundExternalActionExecutor;
@@ -101,7 +88,7 @@ function _command(invocation: ExternalActionWorkerInvocation): DurableExternalAc
 }
 
 /**
- * Builds adapters over the integration, memory, and sandbox executors, without contacting a provider.
+ * Builds adapters over the memory and sandbox executors, without contacting a provider.
  *
  * Every adapter it returns reports Manual recovery, because none of the current transports offers a
  * repeat-safe key or a way to read an outcome back. That is a deliberate, visible limitation: an
@@ -167,9 +154,7 @@ export class ProductionExternalActionAdapterFactory implements ExternalActionAda
 		}
 		const executor: ExternalActionExecutor<JsonValue> = __CreateExternalActionExecutor(_command(invocation), {
 			siloId: snapshot.siloId,
-			subjectId: snapshot.identitySnapshot.executionSubjectId,
-			cogneeDatasetId: __PersonalMemoryDatasetId(snapshot),
-			agentRevisionId: snapshot.agentRevisionId,
+				cogneeDatasetId: __PersonalMemoryDatasetId(snapshot),
 			...this.dependencies.transports,
 		});
 		return new _ManualPreparedExternalActionAdapter({ execute: function _Execute() { return executor.execute(); } }, invocation);

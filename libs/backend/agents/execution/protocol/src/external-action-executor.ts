@@ -2,11 +2,19 @@ import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane
 import type { JsonValue } from "@opencrane/util";
 
 import { ExternalActionRevisionKinds, type DurableExternalActionCommand, type ExternalActionExecutor, type ExternalActionExecutorDependencies } from "./external-action-executor.types";
-import { _ExecuteIntegrationExternalAction, UnsupportedExternalActionError } from "./integration-external-action-executor";
 import { _ExecuteMemoryExternalAction } from "./memory-external-action-executor";
 import { _ExecuteSandboxExternalAction } from "./sandbox-external-action-executor";
 
-export { UnsupportedExternalActionError } from "./integration-external-action-executor";
+/** Thrown before dispatch when a saved revision does not name a supported generic action class. */
+export class UnsupportedExternalActionError extends Error
+{
+	/** Create a refusal that identifies the unsupported revision without exposing arguments. */
+	constructor(toolRevisionId: string)
+	{
+		super(`unsupported external action revision: ${toolRevisionId}`);
+		this.name = "UnsupportedExternalActionError";
+	}
+}
 
 /**
  * Return the personal Cognee dataset frozen into an admitted snapshot.
@@ -38,25 +46,23 @@ export function __PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | 
  * Build the executor for one admitted candidate.
  *
  * This factory only picks the transport, from the prefix of the tool revision id. Each executor
- * then makes exactly one outside call: the integration executor rechecks live custody and calls the
- * tool over MCP through Obot, the sandbox executor submits the invocation unchanged, and the memory
- * executor uses only the dataset frozen in the snapshot. An unavailable transport or an unknown
- * prefix throws, so the worker records the invocation as failed or ambiguous instead of inventing a
- * successful result.
+	 * then handles one generic server-owned action: the sandbox executor submits the invocation
+	 * unchanged, while the memory executor refuses persisted delivery until its transient path exists.
+	 * MCP revisions are admitted by the class-specific MCP authority before this factory is reached.
+	 * An unavailable transport or an unknown prefix throws, so the worker records the invocation as
+	 * failed or ambiguous instead of inventing a successful result.
  *
  * Called by: `ProductionExternalActionAdapterFactory.prepare`
  * (production-external-action-adapter.ts), which wraps the returned executor in the
  * manual-recovery adapter.
  *
  * @param candidate - The saved invocation, whose tool revision prefix picks the transport.
- * @param dependencies - The injected transports, plus the silo, subject, dataset, and revision the
- * action is bound to.
+	 * @param dependencies - The injected transports and frozen silo and memory coordinates.
  * @returns An executor whose `execute` makes exactly one routed call.
  * @throws {UnsupportedExternalActionError} From `execute`, when the tool revision names no wired
  * transport.
  * @see ExternalActionRevisionKinds for the prefixes it matches.
- * @see https://modelcontextprotocol.io/specification/2025-06-18 - the MCP revision this repo pins,
- * for what the integration path's tool call and result look like on the wire.
+	 * @see ExternalActionRevisionKinds for the remaining generic transport classes.
  */
 export function __CreateExternalActionExecutor(candidate: DurableExternalActionCommand, dependencies: ExternalActionExecutorDependencies): ExternalActionExecutor<JsonValue>
 {
@@ -64,7 +70,6 @@ export function __CreateExternalActionExecutor(candidate: DurableExternalActionC
 		async execute(): Promise<JsonValue>
 		{
 			const toolRevisionId = candidate.toolRevisionId;
-			if (toolRevisionId.startsWith(`${ExternalActionRevisionKinds.Integration}:`)) return _ExecuteIntegrationExternalAction(candidate, dependencies);
 			if (toolRevisionId.startsWith(`${ExternalActionRevisionKinds.Sandbox}:`)) return _ExecuteSandboxExternalAction(candidate, dependencies);
 			if (toolRevisionId.startsWith(`${ExternalActionRevisionKinds.Memory}:`)) return _ExecuteMemoryExternalAction(candidate, dependencies);
 			throw new UnsupportedExternalActionError(toolRevisionId);

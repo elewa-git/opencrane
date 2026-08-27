@@ -1,12 +1,10 @@
 import type { Prisma } from "@prisma/client";
 
-import { GeneratedOutputCapability, type CompiledMessage, type CompiledModelRoute, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshot, type RunInputSnapshotIntegrationAssignment, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
-import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
+import { GeneratedOutputCapability, type CompiledMessage, type CompiledModelRoute, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshot, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import { ___CloneCanonicalJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { __AreRunInputSnapshotMcpToolsValid, __CompileRunInput } from "@opencrane/backend/agents/execution/inputs";
 import type { PromptCompilerRepositories } from "@opencrane/backend/agents/execution/inputs";
 
-import { ExternalActionRevisionKinds } from "./external-action-executor.types";
 import type { RunInputCompiler } from "./prisma-runtime-dispatch-authority.types";
 
 /** Maps stored message roles to the lowercase roles the compiled input uses. */
@@ -100,40 +98,6 @@ function _messageContent(blocks: Prisma.JsonValue): string
 		else if (block && typeof block === "object" && !Array.isArray(block) && typeof block["text"] === "string") parts.push(block["text"]);
 	}
 	return parts.join("\n");
-}
-
-/**
- * Resolve immutable integration allowances into compiled tool definitions the bounded loop may propose.
- *
- * Each tool keeps an `integration:<id>:<tool>` revision id while receiving a provider-safe,
- * collision-resistant model-visible name. The exact revision id reaches the external-action boundary, which independently rechecks its
- * live custody reference and the revision's allow-list. Third-party actions require an approval
- * until an explicit per-tool approval policy exists. Schema and digest come only from the admitted
- * snapshot; compilation never consults a mutable catalogue or synthesises a permissive fallback.
- */
-async function _loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): Promise<readonly CompiledToolDefinition[]>
-{
-	const tools: CompiledToolDefinition[] = [];
-	for (const assignment of integrationAssignments)
-	{
-		if (!__AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions as readonly ReviewedIntegrationToolDefinition[])) throw new Error("snapshot integration tool definitions are invalid");
-		for (const tool of assignment.toolDefinitions)
-		{
-			// One definition per allowed tool. How to reach the provider is decided later, on the server.
-			const toolRevisionId = `${ExternalActionRevisionKinds.Integration}:${assignment.integrationId}:${tool.name}`;
-			tools.push({ name: _modelToolName(toolRevisionId), toolRevisionId, description: tool.description, requiresApproval: true, parametersSchema: ___CloneCanonicalJson(tool.parametersSchema), parametersSchemaDigest: tool.parametersSchemaDigest });
-		}
-	}
-	if (new Set(tools.map(function _Name(tool): string { return tool.name; })).size !== tools.length) throw new Error("compiled model-visible tool names collide");
-	return tools;
-}
-
-/** Derive a readable provider-safe name while retaining a digest suffix for collision resistance. */
-function _modelToolName(toolRevisionId: string): string
-{
-	const digestSuffix = ___DigestCanonicalJson(toolRevisionId).slice("sha256:".length, "sha256:".length + 12);
-	const readable = toolRevisionId.replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "tool";
-	return `${readable.slice(0, 51)}_${digestSuffix}`;
 }
 
 /** Resolve one-line availability summaries for the immutable artifact revisions offered to the run. */

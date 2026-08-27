@@ -20,7 +20,6 @@ const domains = [
   { kind: "operator", directory: "libs/backend/server/iam/membership/main", project: "backend-server-membership", alias: "@opencrane/backend/server/iam/membership", scope: "scope:membership" },
   { kind: "operator", directory: "libs/backend/server/iam/authorization/main", project: "backend-server-authorization", alias: "@opencrane/backend/server/iam/authorization", scope: "scope:authorization" },
   { kind: "operator", directory: "libs/backend/server/agents/agent-services/main", project: "backend-server-agent-services", alias: "@opencrane/backend/server/agents/agent-services", scope: "scope:agent-services" },
-  { kind: "operator", directory: "libs/backend/server/gateways/integrations/main", project: "backend-server-integrations", alias: "@opencrane/backend/server/gateways/integrations", scope: "scope:integrations" },
 ];
 
 function fail(message)

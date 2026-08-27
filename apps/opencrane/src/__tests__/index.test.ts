@@ -57,7 +57,6 @@ function _buildAuthApp(): Express
         [PublicHealthServiceNames.Memory]: PublicHealthServiceStatuses.Available,
         [PublicHealthServiceNames.Files]: PublicHealthServiceStatuses.Available,
 		[PublicHealthServiceNames.Channels]: PublicHealthServiceStatuses.Available,
-        [PublicHealthServiceNames.Integrations]: PublicHealthServiceStatuses.Disabled,
       },
     });
   });
@@ -163,7 +162,7 @@ describe("Control Plane", () =>
         status: PublicHealthStatuses.Ok,
         ready: true,
       }));
-      expect(Object.keys(res.body.services).sort()).toEqual(["api", "channels", "database", "files", "integrations", "memory", "models"]);
+      expect(Object.keys(res.body.services).sort()).toEqual(["api", "channels", "database", "files", "memory", "models"]);
     });
 
     it("accepts only the bounded runtime-profile ServiceAccount naming contract", async function _RuntimeServiceAccountIdentity()
