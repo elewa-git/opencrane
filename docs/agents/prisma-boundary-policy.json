@@ -31,6 +31,64 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-task-repository.ts",
+        "adapter": "PrismaAgentRunWorkflowTaskRepository",
+        "contract": "AgentRunWorkflowTaskRepository",
+        "contractImportPath": "@opencrane/backend/agents/execution/runs/workflows",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-controller-authority.ts",
+        "adapter": "PrismaAgentRunWorkflowControllerRepository",
+        "contract": "AgentRunWorkflowControllerPersistenceRepository",
+        "contractImportPath": "./agent-run-workflow-controller-authority.types",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentRunWorkflowTaskReadRepository",
+            "importPath": "./prisma-agent-run-workflow-task-read-repository"
+          },
+          {
+            "adapter": "PrismaAgentRunWorkflowAssignmentReleaseRepository",
+            "importPath": "./prisma-agent-run-workflow-assignment-release-repository"
+          },
+          {
+            "adapter": "PrismaAgentRunWorkflowTerminalCleanupRepository",
+            "importPath": "./prisma-agent-run-workflow-terminal-cleanup-repository"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-task-read-repository.ts",
+        "adapter": "PrismaAgentRunWorkflowTaskReadRepository",
+        "contract": "AgentRunWorkflowTaskReadPersistenceRepository",
+        "contractImportPath": "./agent-run-workflow-controller-authority.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-assignment-release-repository.ts",
+        "adapter": "PrismaAgentRunWorkflowAssignmentReleaseRepository",
+        "contract": "AgentRunWorkflowAssignmentReleasePersistenceRepository",
+        "contractImportPath": "./agent-run-workflow-controller-authority.types",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentRunWorkflowTaskReadRepository",
+            "importPath": "./prisma-agent-run-workflow-task-read-repository"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-terminal-cleanup-repository.ts",
+        "adapter": "PrismaAgentRunWorkflowTerminalCleanupRepository",
+        "contract": "AgentRunWorkflowTerminalCleanupPersistenceRepository",
+        "contractImportPath": "./agent-run-workflow-controller-authority.types",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentRunWorkflowTaskReadRepository",
+            "importPath": "./prisma-agent-run-workflow-task-read-repository"
+          }
+        ]
+      },
+      {
         "path": "libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization.ts",
         "adapter": "PrismaPersonalConfigurationMaterializationRepository",
         "contract": "PersonalConfigurationMaterializationRepository",
@@ -354,6 +412,18 @@
         "adapter": "PrismaArtifactPreprocessRepository",
         "contract": "ArtifactPreprocessRepository",
         "contractImportPath": "./artifact-preprocessing.types",
+        "constructs": [
+          {
+            "adapter": "PrismaArtifactPreprocessControllerRepository",
+            "importPath": "./prisma-artifact-preprocess-controller-authority"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-preprocess-controller-authority.ts",
+        "adapter": "PrismaArtifactPreprocessControllerRepository",
+        "contract": "ArtifactPreprocessControllerAuthority",
+        "contractImportPath": "@opencrane/backend/artifacts/preprocessor/workflows/contract",
         "constructs": []
       },
       {
@@ -685,6 +755,30 @@
       }
     ],
     "unitsOfWork": [
+      {
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-task-admission-unit-of-work.ts",
+        "adapter": "PrismaAgentRunWorkflowTaskAdmissionUnitOfWork",
+        "contract": "AgentRunWorkflowTaskAdmissionUnitOfWork",
+        "contractImportPath": "./prisma-agent-run-workflow-task-admission.types",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentRunWorkflowTaskRepository",
+            "importPath": "./prisma-agent-run-workflow-task-repository"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-controller-unit-of-work.ts",
+        "adapter": "PrismaAgentRunWorkflowControllerUnitOfWork",
+        "contract": "AgentRunWorkflowControllerAuthority",
+        "contractImportPath": "@opencrane/backend/agents/execution/runs/workflows/contract",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentRunWorkflowControllerRepository",
+            "importPath": "./prisma-agent-run-workflow-controller-authority"
+          }
+        ]
+      },
       {
         "path": "libs/backend/server/infra/workflows/infra_absurd/src/qualification/prisma-workflow-engine-qualification-unit-of-work.ts",
         "adapter": "PrismaWorkflowEngineQualificationUnitOfWork",
