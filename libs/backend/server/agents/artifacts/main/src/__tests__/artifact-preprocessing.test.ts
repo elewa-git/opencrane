@@ -7,6 +7,7 @@ import type { ArtifactPreprocessRepository } from "../artifact-preprocessing.typ
 function _Repository(overrides: Partial<ArtifactPreprocessRepository> = {}): ArtifactPreprocessRepository
 {
 	return {
+		loadWorkerBootstrap: vi.fn(),
 		claimForTask: vi.fn(),
 		bindWorkload: vi.fn(),
 		bindFirstPod: vi.fn(),

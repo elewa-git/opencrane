@@ -6,7 +6,7 @@ import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/w
 import { ArtifactPreprocessTaskNames } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessControllerRecord, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
-import { __CreateArtifactPreprocessBootstrapReference, __HashArtifactPreprocessBootstrapReference, __IsArtifactPreprocessBootstrapReference } from "@opencrane/contracts";
+import { __CreateArtifactPreprocessBootstrapReference, __HashArtifactPreprocessBootstrapReference, __IsArtifactPreprocessBootstrapReference, type ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 
 /** Selects the one isolated Job profile allowed to process published PDFs. */
 const _PROFILE_NAME = "pdf-preprocessor";
@@ -43,6 +43,7 @@ const _PREPROCESS_SELECT = {
 		select: {
 			state: true,
 			mediaType: true,
+			byteLength: true,
 			artifact: { select: { siloId: true, ownerPrincipalId: true, state: true } },
 		},
 	},
@@ -226,6 +227,37 @@ export class PrismaArtifactPreprocessControllerRepository implements ArtifactPre
 			data: { firstPodUid: command.binding.firstPodUid },
 		});
 		return changed.count === 1 ? "bound" : "conflict";
+	}
+
+	/** Exchanges a mounted reference for its active, fully bound worker delivery. */
+	async loadWorkerBootstrap(reference: string, namespace: string): Promise<ArtifactPreprocessorJobClaim | null>
+	{
+		if (!__IsArtifactPreprocessBootstrapReference(reference) || !_IsNamespace(namespace))
+		{
+			return null;
+		}
+		const bootstrapReferenceHash = await __HashArtifactPreprocessBootstrapReference(reference);
+		const job = await this.transaction.artifactPreprocessJob.findUnique({ where: { bootstrapReferenceHash }, select: _PREPROCESS_SELECT });
+		if (job === null
+			|| job.state !== ArtifactPreprocessJobState.Claimed
+			|| job.bootstrapNamespace !== namespace
+			|| job.workloadUid === null
+			|| job.firstPodUid === null
+			|| job.claimFence === null
+			|| job.claimExpiresAt === null
+			|| job.deliveryCount < 1
+			|| !_IsEligible(job)
+			|| job.sourceRevision.byteLength < 1n
+			|| job.sourceRevision.byteLength > BigInt(Number.MAX_SAFE_INTEGER)
+			|| !await this._IsActive(job))
+		{
+			return null;
+		}
+		return {
+			lease: { jobId: job.id, attempt: job.deliveryCount, claimFence: job.claimFence, expiresAt: job.claimExpiresAt.toISOString() },
+			sourceMediaType: "application/pdf",
+			sourceByteLength: Number(job.sourceRevision.byteLength),
+		};
 	}
 
 	/** Loads only the completion inbox entry owned by the admitted task receipt. */

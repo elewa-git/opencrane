@@ -256,10 +256,10 @@ artifactPreprocessor:
     repository: ghcr.io/elewa-git/opencrane-artifact-preprocessor
     digest: ""
     pullPolicy: IfNotPresent
-  replicas: 1
   projectedTokenTtlSeconds: 600
   scratchSize: 128Mi
-  pollIntervalMs: 1000
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 0
   requestTimeoutMs: 10000
   maximumSourceBytes: 33554432
   maximumOutputBytes: 16777216

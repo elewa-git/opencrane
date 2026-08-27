@@ -17,6 +17,7 @@ function _Dependencies(overrides: Partial<ArtifactPreprocessorRouterDependencies
 			__Review: vi.fn().mockResolvedValue({ username: `system:serviceaccount:${_NAMESPACE}:artifact-preprocessor`, namespace: _NAMESPACE, serviceAccountName: "artifact-preprocessor", audiences: ["opencrane-artifact-preprocessor"] }),
 		},
 		repository: {
+			loadWorkerBootstrap: vi.fn(),
 			claimForTask: vi.fn(),
 			bindWorkload: vi.fn(),
 			bindFirstPod: vi.fn(),
@@ -52,6 +53,19 @@ function _Authorization(): { readonly authorization: string }
 
 describe("artifact preprocessor broker router", function _Suite()
 {
+	it("exchanges the mounted reference for one controller-bound assignment", async function _BootstrapsAssignment()
+	{
+		const claim = { lease: { jobId: "job-1", attempt: 2, claimFence: "fence-2", expiresAt: "2030-01-01T00:00:00.000Z" }, sourceMediaType: "application/pdf" as const, sourceByteLength: 4 };
+		const loadWorkerBootstrap = vi.fn().mockResolvedValue(claim);
+		const dependencies = _Dependencies({ repository: { ..._Dependencies().repository, loadWorkerBootstrap } });
+
+		const response = await request(_App(dependencies)).post("/api/internal/artifact-preprocessor/jobs:bootstrap").set(_Authorization()).send({ reference: "artifact-preprocess-bootstrap-v1_reference" });
+
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual(claim);
+		expect(loadWorkerBootstrap).toHaveBeenCalledWith("artifact-preprocess-bootstrap-v1_reference", _NAMESPACE);
+	});
+
 	it("streams source bytes only through the server-side broker", async function _ReadsSource()
 	{
 		const read = vi.fn().mockResolvedValue({ byteLength: 3, mediaType: "application/pdf", bytes: _Bytes("pdf") });

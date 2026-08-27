@@ -1,4 +1,4 @@
-import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
+import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessControllerRecord, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -71,6 +71,15 @@ export class _ArtifactPreprocessAuthority implements ArtifactPreprocessRepositor
 		return this.unitOfWork.run(async function _Complete(repository)
 		{
 			return repository.complete(preprocessJobId, completion, task);
+		});
+	}
+
+	/** Exchanges the mounted Job reference for the active controller delivery. */
+	loadWorkerBootstrap(reference: string, namespace: string): Promise<ArtifactPreprocessorJobClaim | null>
+	{
+		return this.unitOfWork.run(async function _Load(repository)
+		{
+			return repository.loadWorkerBootstrap(reference, namespace);
 		});
 	}
 

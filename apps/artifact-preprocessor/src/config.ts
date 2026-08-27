@@ -53,8 +53,8 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Artif
 	return {
 		openCraneInternalUrl: _OpenCraneInternalUrl(environment),
 		tokenPath: _AbsolutePath(environment, "OPENCRANE_PREPROCESSOR_TOKEN_PATH"),
+		bootstrapReferencePath: _AbsolutePath(environment, "OPENCRANE_PREPROCESSOR_BOOTSTRAP_REFERENCE_PATH"),
 		scratchDirectory: _AbsolutePath(environment, "ARTIFACT_PREPROCESSOR_SCRATCH_DIRECTORY"),
-		pollIntervalMilliseconds: _Integer(environment, "ARTIFACT_PREPROCESSOR_POLL_INTERVAL_MS", 1_000, 100, 60_000),
 		requestTimeoutMilliseconds: _Integer(environment, "ARTIFACT_PREPROCESSOR_REQUEST_TIMEOUT_MS", 10_000, 1_000, 60_000),
 		maximumSourceBytes: _Integer(environment, "ARTIFACT_PREPROCESSOR_MAX_SOURCE_BYTES", 33_554_432, 1, 536_870_912),
 		maximumOutputBytes: _Integer(environment, "ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES", 16_777_216, 1_024, 67_108_864),

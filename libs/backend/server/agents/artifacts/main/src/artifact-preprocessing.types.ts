@@ -1,6 +1,6 @@
 import type { ArtifactPromotionReceiptClaims, ArtifactReadLeaseClaims, ArtifactWriteLeaseClaims } from "@opencrane/backend/artifacts/authorization";
 import type { ArtifactPreprocessControllerAuthority } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
-import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
+import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 
 /**
  * A signed-ready read permission for the source PDF, plus the facts to check the download against.
@@ -164,6 +164,18 @@ export interface ArtifactPreprocessSourceLeaseIssuer
  */
 export interface ArtifactPreprocessRepository extends ArtifactPreprocessControllerAuthority, ArtifactPreprocessSourceLeaseIssuer
 {
+	/**
+	 * Exchanges a Job-mounted reference for the controller delivery already bound to that Job.
+	 *
+	 * The caller must also prove the expected Kubernetes ServiceAccount identity at the router.
+	 * This lookup checks the stored reference hash, worker namespace, Job and first Pod bindings,
+	 * source state, and database-clock expiry before returning any source facts.
+	 *
+	 * @param reference - Opaque value mounted from the Job annotation.
+	 * @param namespace - Namespace returned by TokenReview for the worker.
+	 * @returns The current claim, or null when any binding or expiry check fails.
+	 */
+	loadWorkerBootstrap(reference: string, namespace: string): Promise<ArtifactPreprocessorJobClaim | null>;
 	/**
 	 * Reserves write permission for text the server has already received and hashed.
 	 *

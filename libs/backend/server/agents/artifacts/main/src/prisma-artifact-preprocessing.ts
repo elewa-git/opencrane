@@ -4,7 +4,7 @@ import { ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState, Artif
 
 import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerRecord, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
-import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
+import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
 import type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ArtifactPreprocessSourceLeaseProjection, CompleteArtifactPreprocessJobResult, FailArtifactPreprocessJobResult, IssueArtifactPreprocessOutputLeaseResult } from "./artifact-preprocessing.types";
@@ -79,6 +79,12 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 	complete(preprocessJobId: string, completion: ArtifactPreprocessCompletion, task: IWorkflowTaskReceipt): Promise<"completed" | "idempotent" | "conflict">
 	{
 		return this.controller.complete(preprocessJobId, completion, task);
+	}
+
+	/** Exchanges the mounted Job reference for its active controller delivery. */
+	loadWorkerBootstrap(reference: string, namespace: string): Promise<ArtifactPreprocessorJobClaim | null>
+	{
+		return this.controller.loadWorkerBootstrap(reference, namespace);
 	}
 
 	/** Allocates one source-read lease only while the exact claim fence remains current. */

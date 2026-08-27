@@ -41,6 +41,31 @@ export function __CreateArtifactPreprocessorRouter(dependencies: ArtifactPreproc
 {
 	const router = Router();
 
+	router.post("/jobs:bootstrap", async function _Bootstrap(request: Request, response: Response): Promise<void>
+	{
+		try
+		{
+			if (!await _IsPreprocessor(request, dependencies))
+			{
+				_RespondProblem(response, 401, "preprocessor_identity_denied");
+				return;
+			}
+			const reference = _ParseBootstrapReference(request.body);
+			const claim = reference === null ? null : await dependencies.repository.loadWorkerBootstrap(reference, dependencies.namespace);
+			if (claim === null)
+			{
+				_RespondProblem(response, 409, "preprocess_bootstrap_denied");
+				return;
+			}
+			response.status(200).json(claim);
+		}
+		catch (err)
+		{
+			dependencies.logger.error({ err, operation: "artifact_preprocessor.bootstrap" }, "Artifact preprocessor bootstrap failed");
+			_RespondProblem(response, 503, "preprocess_authority_unavailable");
+		}
+	});
+
 	router.post("/jobs/:jobId/source", async function _Source(request: Request, response: Response): Promise<void>
 	{
 		try
@@ -169,6 +194,17 @@ function _IdentityMatches(identity: ReviewedArtifactPreprocessorIdentity, namesp
 		&& identity.namespace === namespace
 		&& identity.serviceAccountName === ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME
 		&& identity.audiences.includes(ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE);
+}
+
+/** Reads the opaque reference from an exact one-field request body. */
+function _ParseBootstrapReference(value: unknown): string | null
+{
+	if (value === null || typeof value !== "object" || Array.isArray(value))
+	{
+		return null;
+	}
+	const body = value as Record<string, unknown>;
+	return Object.keys(body).length === 1 && typeof body["reference"] === "string" ? body["reference"] : null;
 }
 
 /** Accept one unambiguous standard bearer credential. */

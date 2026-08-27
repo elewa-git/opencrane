@@ -40,7 +40,7 @@ function _Job(overrides: Record<string, unknown> = {}): Record<string, unknown>
 		derivedArtifactId: null,
 		completionDigest: null,
 		completionConsumedAt: null,
-		sourceRevision: { state: ArtifactRevisionState.Published, mediaType: "application/pdf", artifact: { siloId: "silo-1", ownerPrincipalId: "owner-1", state: ArtifactState.Active } },
+		sourceRevision: { state: ArtifactRevisionState.Published, mediaType: "application/pdf", byteLength: 4n, artifact: { siloId: "silo-1", ownerPrincipalId: "owner-1", state: ArtifactState.Active } },
 		...overrides,
 	};
 }
@@ -119,6 +119,7 @@ describe("Prisma artifact preprocessing controller authority", function _Describ
 		await expect(harness.authority.bindFirstPod("preprocess-1", _Task(), { binding: { ...binding, firstPodUid: "pod-uid-1" } })).resolves.toBe("bound");
 		await expect(harness.authority.bindFirstPod("preprocess-1", _Task(), { binding: { ...binding, firstPodUid: "pod-uid-2" } })).resolves.toBe("conflict");
 		expect(harness.job()).toMatchObject({ workloadUid: "job-uid-1", firstPodUid: "pod-uid-1", bootstrapNamespace: "opencrane-artifact-preprocessor", bootstrapReferenceHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u) });
+		await expect(harness.authority.loadWorkerBootstrap(bootstrapReference, "opencrane-artifact-preprocessor")).resolves.toEqual({ lease: { jobId: "preprocess-1", attempt: 1, claimFence: expect.any(String), expiresAt: new Date(_NOW.getTime() + 5 * 60_000).toISOString() }, sourceMediaType: "application/pdf", sourceByteLength: 4 });
 	});
 
 	it("loads and consumes one server-owned completion idempotently", async function _CompletesFromInbox()
