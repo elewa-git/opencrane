@@ -31,6 +31,11 @@ Cancellation is a positive local signal; the server remains the durable cancella
 Only one start/resume worker is current at a time, and loss of the command stream cancels every
 worker that has not yet returned.
 
+Start and resume suppress `run.completed` while the projector reports any explicit wait reason. A
+single command can wait for both an outside action and participant input. The runtime logs only those
+fixed category names; it never labels a tool call as approval-required because that decision belongs
+to the server.
+
 A combined resume validates every elicitation result before it consumes pending tool-call state.
 Answered ordinary input may carry one JSON response. A protected A2UI answer deliberately carries no
 response, while declined, expired, cancelled, and failed outcomes are response-free terminal

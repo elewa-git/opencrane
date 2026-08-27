@@ -53,6 +53,7 @@ from src.protocol.candidates import (
     normalize_event as _normalize_event,
     tool_call_candidate as _tool_call_candidate,
 )
+from src.protocol.wait_reasons import RuntimeWaitReason as _RuntimeWaitReason
 from src.runtime import retry_delay as _retry_delay, run_forever
 from src.transport.http import post_candidate as _post_candidate
 from src.transport.stream import (
@@ -637,13 +638,15 @@ class RuntimeExecutorTests(unittest.TestCase):
         """A granted tool call surfaces an external-action candidate with the compiled revision + digest."""
         emitted: list[dict] = []
         fixture = [{"type": "tool_call", "toolName": "zulu", "toolCallId": "t2", "arguments": '{"n":1}'}]
-        _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=lambda _compiled, _cancel, _steer: iter(fixture))
+        with mock.patch("src.attempts.execution.run_evidence") as evidence:
+            _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=lambda _compiled, _cancel, _steer: iter(fixture))
         self.assertEqual(emitted[1]["eventType"], "tool.requested")
         action = emitted[2]
         self.assertEqual(action["kind"], "external_action")
         self.assertEqual(action["toolRevisionId"], "rev-zulu")
         self.assertEqual(action["toolInvocationId"], "t2")
         self.assertEqual(action["argumentsDigest"], _arguments_digest({"n": 1}))
+        evidence.assert_any_call(mock.ANY, "waiting", waitReasons=[_RuntimeWaitReason.EXTERNAL_ACTION.value])
 
     def test_unknown_tool_call_is_a_hard_error(self) -> None:
         """A tool call outside the compiled grant set surfaces a hard ``unknown_tool`` error."""

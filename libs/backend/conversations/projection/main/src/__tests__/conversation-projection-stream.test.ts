@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes, RunEventTypes } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_RUN_WAIT_STATE_EVENT, AgUiA2uiSurfaceStates, AgUiRunWaitReasons, AgUiToolRecoveryProviderOutcomes, RunEventTypes } from "@opencrane/contracts";
 
 import { __StreamConversationProjection } from "../conversation-projection-stream";
 import { ConversationProjectionOutcomes } from "../conversation-projection-stream.types";
@@ -66,7 +66,9 @@ describe("live conversation projection", function _Suite()
 		await __StreamConversationProjection({ reader: { readAuthorized: async function _Read() { return { status: ConversationProjectionReadStatuses.Authorized, rows: [] }; } }, interrupts: { readOpen: async function _Open() { return [interrupt]; } }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: function _Write(value): boolean { output.push(value); return true; }, drain: vi.fn() }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal });
 
 		const body = output.join("");
-		expect(body.match(/approval-1/gu)).toHaveLength(1);
+		expect(body.match(/approval-1/gu)).toHaveLength(2);
+		expect(body).toContain(AG_UI_RUN_WAIT_STATE_EVENT);
+		expect(body).toContain(AgUiRunWaitReasons.Approval);
 		expect(body).not.toContain("id:");
 	});
 
@@ -79,8 +81,8 @@ describe("live conversation projection", function _Suite()
 		await __StreamConversationProjection({ reader: { readAuthorized: async function _Read() { return { status: ConversationProjectionReadStatuses.Authorized, rows: [] }; } }, interrupts: { readOpen: async function _Open() { reads += 1; return reads === 1 ? [first, second] : []; } }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: function _Write(value): boolean { output.push(value); return true; }, drain: vi.fn() }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal });
 
 		const body = output.join("");
-		expect(body.match(/approval-1/gu)).toHaveLength(1);
-		expect(body.match(/approval-2/gu)).toHaveLength(1);
+		expect(body.match(/approval-1/gu)).toHaveLength(2);
+		expect(body.match(/approval-2/gu)).toHaveLength(2);
 		expect(body).toContain("opencrane.interrupts_cleared");
 	});
 

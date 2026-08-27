@@ -25,6 +25,13 @@ Each transaction binds one `RuntimeElicitationUnitOfWork` through the injected f
 that bound object for all generic request work in the callback. The port carries request commands,
 not a Prisma client, so the persistence transaction cannot leak into a generic domain function.
 
+While the run lock is held, command polling also reads a closed reason set from the current
+ToolInvocation and ElicitationRequest rows. It distinguishes outside-action work, ordinary runtime
+input, reviewed A2UI action input, tool approval, personal-memory permission, and manual recovery.
+Only this server-side read may name approval or personal-memory permission. The runtime's broader
+`external_action` reason is never treated as proof that a person must approve anything. Traces carry
+only these fixed category names and their count.
+
 This package owns both that pure decision and the Prisma-backed adapter that drives it. The adapter
 loads and locks the live workload assignment for a connected runtime Pod, mints only the command the
 pure authority accepts, and durably advances the monotonic command sequence and the accepted

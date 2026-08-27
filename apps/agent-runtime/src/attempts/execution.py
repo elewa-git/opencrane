@@ -115,10 +115,12 @@ def execute_start_attempt(
                 clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
                 return
             projector.complete_message()
-            if projector.has_pending_input:
-                # A tool call or a question stops the loop here. The run is finished only once the server
-                # sends back a result and a later resume carries on from it. Keep the stored messages and
-                # the pending questions: that resume needs both to find its way back.
+            if projector.wait_reasons:
+                # Report only the fixed categories this process can prove. The server decides whether
+                # an outside action also needs approval after it checks the saved invocation and policy.
+                run_evidence(coordinates, "waiting", waitReasons=sorted(reason.value for reason in projector.wait_reasons))
+                # Keep the stored messages and pending questions because a later server-owned resume
+                # needs both to reconnect the returned results to this command.
                 return
             # Nothing is waiting, so this turn ended the run. Drop what was kept for a resume before
             # reporting completion, so memory lasts no longer than the attempt does.
@@ -281,9 +283,10 @@ def execute_resume_attempt(
                 clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
                 return
             projector.complete_message()
-            if projector.has_pending_input:
-                # Additional tool calls or questions create another control-plane round trip. A
-                # resume may pause repeatedly, and none of those pauses is a completed run.
+            if projector.wait_reasons:
+                # A resume may pause repeatedly. Record the closed reason set without copying model
+                # questions, tool arguments, or any other command content.
+                run_evidence(coordinates, "waiting", waitReasons=sorted(reason.value for reason in projector.wait_reasons))
                 return
             clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
             clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))

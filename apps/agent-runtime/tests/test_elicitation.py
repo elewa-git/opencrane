@@ -21,6 +21,7 @@ from src.model_loop.histories import clear_model_history
 from src.model_loop.openai_generated_outputs import OpenAIGeneratedOutputCollector, OpenAIGeneratedOutputConfiguration
 from src.protocol.event_projector import RuntimeEventProjector
 from src.protocol.elicitation import ELICITATION_TOOL_NAME, canonical_json_digest, elicitation_proposal
+from src.protocol.wait_reasons import RuntimeWaitReason
 
 
 def _coordinates_payload() -> dict:
@@ -88,12 +89,13 @@ class RuntimeElicitationProducerTests(unittest.TestCase):
     def test_runtime_input_candidate_pauses_without_hidden_payload(self) -> None:
         """Ordinary input produces one bound candidate and no premature run completion."""
         emitted: list[dict] = []
-        execute_start_attempt(
-            _start_command(),
-            "runtime-instance-1",
-            emitted.append,
-            event_source=lambda _compiled, _cancel, _steering: iter([_free_text_event()]),
-        )
+        with mock.patch("src.attempts.execution.run_evidence") as evidence:
+            execute_start_attempt(
+                _start_command(),
+                "runtime-instance-1",
+                emitted.append,
+                event_source=lambda _compiled, _cancel, _steering: iter([_free_text_event()]),
+            )
 
         self.assertEqual([item["kind"] for item in emitted], ["event", "elicitation"])
         proposal = emitted[1]["proposal"]
@@ -101,6 +103,7 @@ class RuntimeElicitationProducerTests(unittest.TestCase):
         self.assertNotIn("purposePayload", proposal)
         self.assertNotIn("assignedParticipantId", emitted[1])
         self.assertFalse(any(item.get("eventType") == "run.completed" for item in emitted))
+        evidence.assert_any_call(mock.ANY, "waiting", waitReasons=[RuntimeWaitReason.PARTICIPANT_INPUT.value])
 
     def test_sibling_tool_after_question_is_still_correlated(self) -> None:
         """A later deferred external call is not lost from the saved framework response."""
@@ -118,15 +121,17 @@ class RuntimeElicitationProducerTests(unittest.TestCase):
             "parametersSchema": {},
         }]
 
-        execute_start_attempt(
-            command,
-            "runtime-instance-1",
-            emitted.append,
-            event_source=lambda _compiled, _cancel, _steering: iter(events),
-        )
+        with mock.patch("src.attempts.execution.run_evidence") as evidence:
+            execute_start_attempt(
+                command,
+                "runtime-instance-1",
+                emitted.append,
+                event_source=lambda _compiled, _cancel, _steering: iter(events),
+            )
 
         self.assertEqual([item["kind"] for item in emitted], ["event", "elicitation", "event", "external_action"])
         self.assertFalse(any(item.get("eventType") == "run.completed" for item in emitted))
+        evidence.assert_any_call(mock.ANY, "waiting", waitReasons=[RuntimeWaitReason.EXTERNAL_ACTION.value, RuntimeWaitReason.PARTICIPANT_INPUT.value])
 
     def test_builtin_tool_is_present_without_compiled_external_tools(self) -> None:
         """The production model toolset always exposes the execution-free input request."""

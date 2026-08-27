@@ -769,6 +769,13 @@
         "contract": "GroupClaimProjectionRepository",
         "contractImportPath": "./identity-workflows.types",
         "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/execution/protocol/src/prisma-runtime-wait-reason-repository.ts",
+        "adapter": "PrismaRuntimeWaitReasonRepository",
+        "contract": "RuntimeWaitReasonRepository",
+        "contractImportPath": "./runtime-wait-reasons.types",
+        "constructs": []
       }
     ],
     "unitsOfWork": [
@@ -1308,6 +1315,10 @@
 		  {
 			"adapter": "PrismaRuntimeResumeInputRepository",
 			"importPath": "./prisma-runtime-resume-input-repository"
+		  },
+		  {
+			"adapter": "PrismaRuntimeWaitReasonRepository",
+			"importPath": "./prisma-runtime-wait-reason-repository"
 		  }
 		]
 	  },

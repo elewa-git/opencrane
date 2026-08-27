@@ -187,6 +187,7 @@ function _fakePrisma(options: FakeOptions)
 		},
 		toolInvocation: {
 			async count() { return toolInvocations.filter(row => !["Succeeded", "Failed"].includes(row.state)).length; },
+			async findMany() { return toolInvocations.filter(row => !["Succeeded", "Failed"].includes(row.state)).map(function _WaitRow(row) { return { state: row.state, toolRevisionId: row.toolRevisionId }; }); },
 			async create(args: { data: Omit<FakeToolInvocationRow, "id" | "state" | "preparationAttempt" | "nextPreparationAttemptAt" | "claimAttempt" | "claimKind" | "claimFence" | "claimExpiresAt" | "result" | "failureCode" | "revision" | "recoveryRequiredAt" | "completedAt"> })
 			{
 				const row: FakeToolInvocationRow = { ...args.data, id: `row-${toolInvocations.length + 1}`, state: "Preparing", preparationAttempt: 0, nextPreparationAttemptAt: args.data.retryDeadlineAt, claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 0, recoveryRequiredAt: null, completedAt: null };
@@ -210,6 +211,7 @@ function _fakePrisma(options: FakeOptions)
 				return toolInvocations.find(candidate => candidate.requestFingerprint === args.where.requestFingerprint) ?? null;
 			},
 		},
+		elicitationRequest: { async findMany() { return []; } },
 		toolResultDelivery: {
 			async findMany() { return resultDeliveries.filter(row => row.state === "Pending"); },
 			async updateMany(args: { where: { id: { in: string[] }; state: string }; data: { state: string; consumedAt: Date } })

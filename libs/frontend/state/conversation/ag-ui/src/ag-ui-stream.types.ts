@@ -3,7 +3,7 @@ import type { AgUiA2uiEnvelope, AgUiProjectionEvent, AgUiToolRecoveryRequiredEnv
 
 import type { AgUiAgentThreadParentDelivery } from "./agent-thread-delivery/agent-thread-delivery.types";
 import type { AgUiMessageView } from "./message/message.types";
-import type { AgUiRunFailure, AgUiRunStatuses } from "./run/run.types";
+import type { AgUiRunFailure, AgUiRunStatuses, AgUiRunWaitView } from "./run/run.types";
 import type { AgUiToolView } from "./tool/tool.types";
 
 /**
@@ -34,6 +34,10 @@ export interface AgUiStreamState
 	readonly runFailure: AgUiRunFailure | null;
 	/** Exact display-safe recovery evidence for the current run, when provider outcome is ambiguous. */
 	readonly runRecovery: AgUiToolRecoveryRequiredEnvelope | null;
+	/** Source-scoped waits keyed by source plus opaque wait id. */
+	readonly runWaits: ReadonlyMap<string, AgUiRunWaitView>;
+	/** Deduplicated display categories in stable order. */
+	readonly runWaitReasons: readonly import("@opencrane/contracts").AgUiRunWaitReasons[];
 	/** Still-open AG-UI interrupts. Cursorless reconnect overlays replace this set. */
 	readonly interrupts: readonly Interrupt[];
 	/** Conversation messages assembled from safe events. */

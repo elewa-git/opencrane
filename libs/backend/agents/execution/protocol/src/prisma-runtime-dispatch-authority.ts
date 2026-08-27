@@ -3,7 +3,7 @@ import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, Prisma, R
 
 import type { RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, ElicitationPurposes, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, RuntimeCandidateKinds, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeElicitationCandidate, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
-import { ___DoWithTrace } from "@opencrane/backend/observability";
+import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
 import { ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationAdmissionOutcomes, __AdmitPreparingToolInvocationInTransaction, __DigestCanonicalJson, __ValidateDeferredToolArguments, type ToolInvocationIntent } from "@opencrane/backend/server/iam/authorization";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION, RunEventTypes } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
@@ -297,6 +297,12 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		{
 			context = await _loadContext(transaction, config, identity);
 			if (context === null) return null;
+		}
+		if (context.runState === "waiting_for_input")
+		{
+			const waitReasons = await decisionUnitOfWork.readWaitReasons(context);
+			___GetActiveSpan()?.setAttribute("wait.reasons", [...waitReasons]);
+			___GetActiveSpan()?.setAttribute("wait.reason_count", waitReasons.length);
 		}
 
 		// 2. Bind the stream to the connecting runtime instance so a stale instance cannot be served.

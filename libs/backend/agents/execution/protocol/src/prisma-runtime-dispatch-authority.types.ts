@@ -5,6 +5,7 @@ import type { ExpireElicitationBatchCommand, OpenElicitationCommand, RuntimeElic
 import type { JsonValue } from "@opencrane/util";
 
 import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types";
+import type { RuntimeWaitReasons } from "./runtime-wait-reasons.types";
 
 /**
  * Turns an immutable snapshot into the literal input carried on `start_attempt`.
@@ -121,6 +122,13 @@ export interface RuntimeElicitationUnitOfWorkFactory
  */
 export interface RuntimeCommandDecisionUnitOfWork
 {
+	/**
+	 * Read every server-proven wait reason while the caller still holds the run lock.
+	 *
+	 * @param context - Exact run, attempt, and current run state.
+	 * @returns A deduplicated, stable-order list containing no participant or tool content.
+	 */
+	readWaitReasons(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }): Promise<readonly RuntimeWaitReasons[]>;
 	/**
 	 * Close overdue approvals while the caller holds the lock on the waiting run.
 	 *

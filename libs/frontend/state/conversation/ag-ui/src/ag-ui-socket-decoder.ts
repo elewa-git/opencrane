@@ -1,7 +1,8 @@
 import { EventSchemas, EventType } from "@ag-ui/core";
 
-import { AG_UI_A2UI_ENVELOPE_VERSION, ___ParseAgUiA2uiEnvelope, type AgUiProjectionEvent } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_RUN_WAIT_STATE_EVENT, ___ParseAgUiA2uiEnvelope, type AgUiProjectionEvent } from "@opencrane/contracts";
 import type { AgUiStreamRecord } from "./ag-ui-stream.types";
+import { _IsRunWaitState } from "./run/run-wait.validator";
 
 /**
  * Validates one structured conversation-socket projection frame before the reducer sees it.
@@ -34,6 +35,8 @@ function _ProjectionEvent(value: unknown): AgUiProjectionEvent
 	const parsed = EventSchemas.safeParse(value);
 	if (!parsed.success || !_IsProjectionEvent(parsed.data)) throw new Error("AG-UI socket data must contain a supported projection event");
 	if (parsed.data.type === EventType.CUSTOM && parsed.data.name === AG_UI_A2UI_ENVELOPE_VERSION) ___ParseAgUiA2uiEnvelope(parsed.data.value);
+	if (parsed.data.type === EventType.CUSTOM && parsed.data.name === AG_UI_RUN_WAIT_STATE_EVENT && !_IsRunWaitState(parsed.data.value))
+		throw new Error("AG-UI run wait state is invalid");
 	return parsed.data;
 }
 

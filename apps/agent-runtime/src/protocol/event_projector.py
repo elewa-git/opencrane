@@ -9,6 +9,7 @@ from collections.abc import Callable
 
 from .candidates import candidate, elicitation_candidate, normalize_event, tool_call_candidate
 from .elicitation import elicitation_proposal
+from .wait_reasons import RuntimeWaitReason
 from ..attempts.pending_elicitations import record_pending_elicitation
 
 
@@ -35,22 +36,13 @@ class RuntimeEventProjector:
         # command lifecycles distinct inside the same run attempt.
         self._message_id = f"assistant:{coordinates['commandId']}"
         self._message_started = False
-        self._has_pending_tool_calls = False
+        self._wait_reasons: set[RuntimeWaitReason] = set()
         self._has_pending_elicitations = False
 
     @property
-    def has_pending_tool_calls(self) -> bool:
-        """Whether this command proposed at least one durable external action."""
-        return self._has_pending_tool_calls
-
-    @property
-    def has_pending_input(self) -> bool:
-        """Whether this turn is waiting on something, either a tool call or a question.
-
-        The executor reads this one property and stops there, so a turn waiting on a tool and a turn
-        waiting on a participant are handled the same way: neither is reported as a finished run.
-        """
-        return self._has_pending_tool_calls or self._has_pending_elicitations
+    def wait_reasons(self) -> frozenset[RuntimeWaitReason]:
+        """Return every runtime-proven reason that still blocks this command's completion."""
+        return frozenset(self._wait_reasons)
 
     @property
     def has_pending_elicitations(self) -> bool:
@@ -110,7 +102,7 @@ class RuntimeEventProjector:
         if proposal.get("kind") == "external_action":
             # ``tool.requested`` is ordered before the external-action proposal so the durable event
             # history explains why authorization/execution was requested.
-            self._has_pending_tool_calls = True
+            self._wait_reasons.add(RuntimeWaitReason.EXTERNAL_ACTION)
             self._post_candidate(
                 candidate(
                     self._coordinates,
@@ -172,6 +164,7 @@ class RuntimeEventProjector:
         # Set the flag after sending, not before. If sending raises, this object must not be left saying
         # a question is outstanding that the server never received.
         self._has_pending_elicitations = True
+        self._wait_reasons.add(RuntimeWaitReason.PARTICIPANT_INPUT)
 
     def _start_message(self) -> None:
         """Persist the assistant message start once before text or generated outputs."""

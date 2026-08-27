@@ -68,7 +68,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - `PublicHealthReport` and its fixed service/status enums — the public-safe `/healthz` response
   shared by the server and future status consumers. It reports only
   recognisable capability names and categorical availability, never internal topology or errors.
-- `AG_UI_PROJECTION_VERSION`, `AG_UI_A2UI_ENVELOPE_VERSION`, `AgUiProjectionSourceEvent`,
+- `AG_UI_PROJECTION_VERSION`, `AG_UI_A2UI_ENVELOPE_VERSION`, `AG_UI_RUN_WAIT_STATE_EVENT`, `AgUiProjectionSourceEvent`,
   `AgUiProjectionEvent`, and `AgUiSseRecord` — the stable AG-UI wire vocabulary shared by server and
   browser. Projection and SSE encoding policy live in the separate backend
   [conversation projection package](../backend/conversations/projection/main/README.md).

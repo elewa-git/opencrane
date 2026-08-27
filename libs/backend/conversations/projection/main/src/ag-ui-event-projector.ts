@@ -1,5 +1,5 @@
-import { EventType } from "@ag-ui/core";
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, RunEventTypes, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
+import { EventType, type Interrupt } from "@ag-ui/core";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_RUN_WAIT_STATE_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiRunWaitOperations, AgUiRunWaitReasons, AgUiRunWaitSources, ElicitationPurposes, RunEventTypes, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiRunWait, type AgUiRunWaitStateEnvelope, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
 
 /**
  * Turns one display-safe conversation event into the AG-UI events the client receives, in order.
@@ -17,7 +17,49 @@ import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, 
 export function __ProjectAgUiEvents(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEvent[]
 {
 	if (source.eventType === "conversation.message") return _Message(source);
-	return [_Project(source)];
+	return [_Project(source), ..._WaitEvents(source)];
+}
+
+/** Project fixed wait-state changes next to the event that established or closed the wait. */
+function _WaitEvents(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEvent[]
+{
+	if (source.runId === undefined)
+		return [];
+	const toolCallId = source.payload.toolCallId ?? source.payload.toolRecovery?.toolCallId;
+	if (source.eventType === RunEventTypes.ToolRequested && toolCallId !== undefined)
+		return [_WaitEvent(source.runId, AgUiRunWaitSources.Runtime, AgUiRunWaitOperations.Add, [{ id: `tool:${toolCallId}`, reason: AgUiRunWaitReasons.ExternalAction }])];
+	if (source.eventType === RunEventTypes.ToolCompleted && toolCallId !== undefined)
+		return [_WaitEvent(source.runId, AgUiRunWaitSources.Runtime, AgUiRunWaitOperations.Remove, [{ id: `tool:${toolCallId}`, reason: AgUiRunWaitReasons.ExternalAction }])];
+	if (source.eventType === RunEventTypes.ToolFailed && toolCallId !== undefined && source.payload.toolFailure?.retrying === false)
+		return [_WaitEvent(source.runId, AgUiRunWaitSources.Runtime, AgUiRunWaitOperations.Remove, [{ id: `tool:${toolCallId}`, reason: AgUiRunWaitReasons.ExternalAction }])];
+	if (source.eventType === RunEventTypes.ToolRecoveryRequired && toolCallId !== undefined)
+	{
+		return [
+			_WaitEvent(source.runId, AgUiRunWaitSources.Runtime, AgUiRunWaitOperations.Remove, [{ id: `tool:${toolCallId}`, reason: AgUiRunWaitReasons.ExternalAction }]),
+			_WaitEvent(source.runId, AgUiRunWaitSources.Recovery, AgUiRunWaitOperations.Add, [{ id: `recovery:${toolCallId}`, reason: AgUiRunWaitReasons.RecoveryRequired }]),
+		];
+	}
+	if (source.eventType === RunEventTypes.ElicitationRequested && source.payload.interrupt !== undefined)
+		return [_WaitEvent(source.runId, AgUiRunWaitSources.Participant, AgUiRunWaitOperations.Add, [_ProjectParticipantWait(source.payload.interrupt)])];
+	return [];
+}
+
+/** Map a server-owned interrupt purpose to the display reason the browser may show. */
+export function _ProjectParticipantWait(interrupt: Interrupt): AgUiRunWait
+{
+	let reason = AgUiRunWaitReasons.ParticipantInput;
+	if (interrupt.reason === ElicitationPurposes.ToolApproval)
+		reason = AgUiRunWaitReasons.Approval;
+	if (interrupt.reason === ElicitationPurposes.PersonalMemoryPermission)
+		reason = AgUiRunWaitReasons.PersonalMemoryPermission;
+	return { id: `interrupt:${interrupt.id}`, reason };
+}
+
+/** Build one strict versioned CUSTOM wait-state event. */
+function _WaitEvent(runId: string, source: AgUiRunWaitSources, operation: AgUiRunWaitOperations, waits: readonly AgUiRunWait[]): AgUiProjectionEvent
+{
+	const value: AgUiRunWaitStateEnvelope = { version: AG_UI_RUN_WAIT_STATE_EVENT, runId, source, operation, waits };
+	return { type: EventType.CUSTOM, name: AG_UI_RUN_WAIT_STATE_EVENT, value };
 }
 
 /** Expand one stored message into the standard TEXT_MESSAGE_START / CONTENT / END events. */
