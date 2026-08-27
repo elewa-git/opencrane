@@ -30,10 +30,9 @@ export * from "./skill-workload-bootstrap-reference";
 export * from "./run-input-snapshot.types";
 export type * from "./agent-controller-skill-workload.types";
 export * from "./agent-controller-skill-workload.validator";
-export * from "./agent-controller.types";
+export * from "./agent-controller-identity.types";
 // Keep sibling-only `_...` wire schemas and parsers out of the cross-package public surface.
-export { ___IsAgentControllerIdentifier, ___IsEmptyAgentControllerCommand } from "./agent-controller-wire.validator";
-export * from "./agent-controller.validator";
+export { ___IsAgentControllerIdentifier } from "./agent-controller-wire.validator";
 export * from "./agent-runtime-protocol.types";
 export type * from "./runtime-assignment.types";
 export type * from "./tenant-models.types";

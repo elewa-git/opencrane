@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
 
-import { ___IsAgentControllerIdentifier, ___IsEmptyAgentControllerCommand, _AgentControllerBoundedIdentifierSchema, _AgentControllerMillisecondInstantSchema, _ParseAgentControllerCommand, _ParseAgentControllerModel } from "../agent-controller-wire.validator";
+import { ___IsAgentControllerIdentifier, _AgentControllerBoundedIdentifierSchema, _AgentControllerMillisecondInstantSchema, _ParseAgentControllerCommand, _ParseAgentControllerModel } from "../agent-controller-wire.validator";
 
 describe("agent-controller wire grammar", function _DescribeWireGrammar()
 {
@@ -16,12 +16,6 @@ describe("agent-controller wire grammar", function _DescribeWireGrammar()
 	{
 		expect(_AgentControllerMillisecondInstantSchema.safeParse("2026-07-20T00:00:00.000Z").success).toBe(true);
 		expect(_AgentControllerMillisecondInstantSchema.safeParse("2026-07-20T00:00:00Z").success).toBe(false);
-	});
-
-	it("accepts only a strict empty server-owned command", function _RequiresEmptyCommand()
-	{
-		expect(___IsEmptyAgentControllerCommand({})).toBe(true);
-		expect(___IsEmptyAgentControllerCommand({ policy: "caller-selected" })).toBe(false);
 	});
 
 	it("keeps null command rejection and stable diagnostic paths", function _KeepsParsingSemantics()

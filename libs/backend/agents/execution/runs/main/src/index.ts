@@ -17,10 +17,13 @@
  * libs/backend/server/api-spec for the OpenAPI fragments.
  */
 export * from "./attempt-model-key.types";
+export { __CreateAgentRunWorkflowControllerRouter } from "./agent-run-workflow-controller.router";
+export type { AgentRunWorkflowControllerIdentity, AgentRunWorkflowControllerRouterDependencies, AgentRunWorkflowControllerRouterLogger, AgentRunWorkflowControllerTokenReviewer } from "./agent-run-workflow-controller.router.types";
+export { PrismaAgentRunWorkflowControllerUnitOfWork } from "./prisma-agent-run-workflow-controller-unit-of-work";
+export type { AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-workflow-controller-authority.types";
 export * from "./openapi";
 export { PrismaRunAdmissionRepository } from "./prisma-run-admission-repository";
 export * from "./prisma-run-cancellation-repository";
-export * from "./prisma-run-dispatch-repository";
 export * from "./prisma-self-run-cancellation.router";
 export * from "./prisma-runtime-terminal-reporter";
 export * from "./prisma-runtime-event-reporter";
@@ -37,7 +40,6 @@ export { RunAdmissionConcurrencyDenialReasons, RunAdmissionConcurrencyOutcomes }
 export type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "./run-admission-concurrency.types";
 export * from "./run-admission.types";
 export type { RunCancellationRepository } from "./run-cancellation.types";
-export * from "./run-dispatch.router";
 export * from "./run-input-snapshot-digest";
 export * from "./runtime-workload-cleanup";
 export type { RunRetryAuthority, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";

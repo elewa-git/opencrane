@@ -36,13 +36,16 @@ export interface AgentRunWorkflowControllerRecord extends AgentRunTaskInput
  * Holds the transient model key returned only while the controller creates the Job-owned Secret.
  *
  * The controller passes it straight to Kubernetes and never records it in workflow checkpoints or
- * logs. A replay receives the same key for the same task and bootstrap reference, because an
- * immutable already-created Secret cannot be read or replaced.
+ * logs. A replay mints a fresh key under the same alias and saves only its SHA-256 digest before
+ * Kubernetes receives it. When the immutable Secret already exists, the handler uses that digest
+ * to revoke the fresh unused key without reading or replacing the Secret.
  */
 export interface AgentRunWorkflowAttemptKey
 {
 	/** Carries the model key value; callers must not save or log it. */
 	readonly key: string;
+	/** Names the transient key for revocation without revealing its value in traces or logs. */
+	readonly keyAlias: string;
 }
 
 /**
@@ -99,14 +102,18 @@ export interface AgentRunWorkflowControllerAuthority
 {
 	/** Reloads current task-bound facts without caching them; null means cancellation or retry made this task stale. */
 	loadForTask(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<AgentRunWorkflowControllerRecord | null>;
-	/** Mints the same transient attempt key for every replay of this task and bootstrap reference. */
+	/** Mints a fresh transient attempt key for this task under its stable server-selected alias. */
 	mintAttemptKey(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<AgentRunWorkflowAttemptKey | null>;
+	/** Revokes a newly minted unused key only when its digest still matches this saved workflow task. */
+	revokeAttemptKey(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, attemptKey: AgentRunWorkflowAttemptKey): Promise<void>;
 	/** Binds the suspended Job UID before the controller can release it. */
 	bindAssignment(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWorkflowAssignmentCommand): Promise<"bound" | "idempotent" | "conflict">;
 	/** Binds the first exact Job-owned Pod before it may exchange the bootstrap reference. */
 	bindFirstPod(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWorkflowPodCommand): Promise<"bound" | "idempotent" | "conflict">;
 	/** Takes the server-fenced permission to unsuspend this already-bound Job, or null after cancellation. */
 	claimRelease(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, workloadUid: string): Promise<AgentRunWorkflowReleaseClaim | null>;
+	/** Fences this receipt, records setup failure, and queues exact cleanup for any Job it may have created. */
+	terminalizeFailedTask(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<void>;
 	/** Reads the current terminal state without changing it. */
 	observe(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<AgentRunWorkflowObservation>;
 }

@@ -41,7 +41,7 @@ function _Receipt(record: AgentRunWorkflowTaskRecord, receipt: IWorkflowTaskRece
  * @returns The task record and receipt bound before the caller may commit.
  * @throws {AgentRunWorkflowAdmissionError} When immutable facts, receipt, or binding conflict.
  */
-export async function __AdmitAgentRunWorkflowTask(transaction: AgentRunWorkflowAdmissionTransaction, workflow: IWorkflowEngine, command: AgentRunWorkflowAdmissionCommand): Promise<AgentRunWorkflowAdmission>
+export async function __AdmitAgentRunWorkflowTask(transaction: AgentRunWorkflowAdmissionTransaction, workflow: Pick<IWorkflowEngine, "spawn">, command: AgentRunWorkflowAdmissionCommand): Promise<AgentRunWorkflowAdmission>
 {
 	const resolution = await transaction.tasks.createOrFind(command);
 	const task = _Record(command, resolution.record, resolution.rejectionReason);

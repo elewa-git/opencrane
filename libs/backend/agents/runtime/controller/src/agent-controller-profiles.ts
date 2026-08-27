@@ -68,8 +68,8 @@ export function __ValidateAgentControllerRuntimeProfiles(value: unknown): AgentC
 
 /**
  * Return whether every profile has its own namespace: none shared with another profile, and none
- * equal to the server's. Re-checked by {@link __RunAgentController} before its first poll, so a
- * profile map built without validation still cannot start the loop.
+ * equal to the server's. The startup parser runs this check before it registers durable task
+ * handlers, so an unvalidated profile map cannot create a Job.
  */
 export function _AgentControllerProfilesAreBoundToDistinctNamespaces(profiles: AgentControllerRuntimeProfiles): boolean
 {

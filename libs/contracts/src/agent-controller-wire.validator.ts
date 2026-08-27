@@ -37,9 +37,6 @@ export const _AgentControllerPositiveIntegerSchema = z.custom<number>(_IsPositiv
 /** Shared schema for canonical database instants crossing the private agent-controller API. */
 export const _AgentControllerMillisecondInstantSchema = z.custom<string>(_IsMillisecondInstant, { message: "must be a UTC millisecond instant" });
 
-/** Empty server-owned claim command; strictness rejects caller-selected extensions. */
-const _EmptyCommandSchema = z.object({}).strict();
-
 /** Parse against a Zod model, keeping the failing field path so an HTTP adapter can report which field was wrong. */
 export function _ParseAgentControllerModel<T>(schema: z.ZodType<T>, value: unknown, sourceName: string): T
 {
@@ -56,10 +53,4 @@ export function _ParseAgentControllerCommand<T>(schema: z.ZodType<T>, value: unk
 {
 	const parsed = schema.safeParse(value);
 	return parsed.success ? parsed.data : null;
-}
-
-/** Return whether a claim request body is empty. A claim carries no caller-supplied fields, so any field at all means the request is malformed. */
-export function ___IsEmptyAgentControllerCommand(value: unknown): boolean
-{
-	return _EmptyCommandSchema.safeParse(value).success;
 }

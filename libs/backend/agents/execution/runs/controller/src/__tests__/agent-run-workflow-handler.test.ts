@@ -35,21 +35,23 @@ function _Authority(overrides: Partial<AgentRunWorkflowControllerAuthority> = {}
 {
 	return {
 		async loadForTask() { return { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", workloadProfile: "personal-default", namespace: "silo-a-runtime", bootstrapReference: `bootstrap-v1_${"0".repeat(64)}`, assignmentExpiresAt: "2099-01-01T00:00:00.000Z" }; },
-		async mintAttemptKey() { return { key: "sk-attempt-key" }; },
+		async mintAttemptKey() { return { key: "sk-attempt-key", keyAlias: "attempt-handler-test" }; },
+		async revokeAttemptKey() {},
 		async bindAssignment() { return "bound"; },
 		async bindFirstPod() { return "bound"; },
 		async claimRelease() { return { expiresAt: "2099-01-01T00:00:00.000Z" }; },
+		async terminalizeFailedTask() {},
 		async observe() { return "completed"; },
 		...overrides,
 	};
 }
 
 /** Returns a Kubernetes adapter that records the Job, Secret, release, and Pod operations. */
-function _Kubernetes(calls: string[]): AgentRunWorkflowKubernetesStore
+function _Kubernetes(calls: string[], secretOutcome: "created" | "alreadyExists" = "created"): AgentRunWorkflowKubernetesStore
 {
 	return {
 		async ensureSuspendedJob(expected: V1Job) { calls.push("job"); return { ...expected, metadata: { ...expected.metadata, uid: "job-uid-1" } }; },
-		async ensureAttemptKeySecret(_expected: V1Secret) { calls.push("secret"); },
+		async ensureAttemptKeySecret(_expected: V1Secret) { calls.push("secret"); return secretOutcome; },
 		async releaseJob(expected: V1Job) { calls.push("release"); return expected; },
 		async findFirstPod(_expected: V1Job) { calls.push("pod"); return { metadata: { uid: "pod-uid-1" } } as V1Pod; },
 	};
@@ -83,6 +85,17 @@ describe("AgentRun workflow handler", function _Suite()
 		expect(calls).toEqual(["job", "secret"]);
 	});
 
+	it("revokes the newly minted key when the exact suspended Job already owns its Secret", async function _RevokesUnusedKey()
+	{
+		const calls: string[] = [];
+		const revokeAttemptKey = vi.fn(async function _RevokeAttemptKey() {});
+		const handler = __CreateAgentRunWorkflowHandler({ authority: _Authority({ revokeAttemptKey }), kubernetes: _Kubernetes(calls, "alreadyExists"), profiles: _Profiles(), pollIntervalMilliseconds: 1_000 });
+
+		await expect(handler.run({ checkpoint: async function _Checkpoint(_options: unknown, operation: () => Promise<unknown>) { return await operation(); }, sleepUntil: vi.fn(), task: { taskId: "task-1" } } as never, { siloId: "silo-1", runId: "run-1", attempt: 1 })).resolves.toMatchObject({ terminalState: AgentRunTaskTerminalStates.Completed });
+		expect(revokeAttemptKey).toHaveBeenCalledWith({ siloId: "silo-1", runId: "run-1", attempt: 1 }, { taskId: "task-1" }, { key: "sk-attempt-key", keyAlias: "attempt-handler-test" });
+		expect(calls).toEqual(["job", "secret", "release", "pod"]);
+	});
+
 	it("rechecks current authority after a restart instead of replaying a saved attempt record", async function _RechecksAfterRestart()
 	{
 		const calls: string[] = [];
@@ -100,5 +113,44 @@ describe("AgentRun workflow handler", function _Suite()
 		const result = await handler.run(context, { siloId: "silo-1", runId: "run-1", attempt: 1 });
 		expect(result.terminalState).toBe(AgentRunTaskTerminalStates.Cancelled);
 		expect(calls).toEqual(["job", "secret", "release", "pod"]);
+	});
+
+	it("revokes the raw key before terminalising after a released Job reports a conflicting first Pod", async function _RevokesBeforeTerminalisingReleasedJob()
+	{
+		const calls: string[] = [];
+		const terminalOrder: string[] = [];
+		const handler = __CreateAgentRunWorkflowHandler({
+			authority: _Authority({
+				async bindFirstPod() { return "conflict"; },
+				async revokeAttemptKey() { terminalOrder.push("revoke"); },
+				async terminalizeFailedTask() { terminalOrder.push("terminalize"); },
+			}),
+			kubernetes: _Kubernetes(calls),
+			profiles: _Profiles(),
+			pollIntervalMilliseconds: 1_000,
+		});
+
+		await expect(handler.run({ checkpoint: async function _Checkpoint(_options: unknown, operation: () => Promise<unknown>) { return await operation(); }, sleepUntil: vi.fn(), task: { taskId: "task-1" } } as never, { siloId: "silo-1", runId: "run-1", attempt: 1 })).rejects.toThrow("first Pod no longer matches");
+		expect(calls).toEqual(["job", "secret", "release", "pod"]);
+		expect(terminalOrder).toEqual(["revoke", "terminalize"]);
+	});
+
+	it("revokes the raw key before returning a post-release cancellation observation", async function _RevokesBeforeCancelledObservation()
+	{
+		const calls: string[] = [];
+		const terminalOrder: string[] = [];
+		const handler = __CreateAgentRunWorkflowHandler({
+			authority: _Authority({
+				async observe() { return "cancelled"; },
+				async revokeAttemptKey() { terminalOrder.push("revoke"); },
+			}),
+			kubernetes: _Kubernetes(calls),
+			profiles: _Profiles(),
+			pollIntervalMilliseconds: 1_000,
+		});
+
+		await expect(handler.run({ checkpoint: async function _Checkpoint(_options: unknown, operation: () => Promise<unknown>) { return await operation(); }, sleepUntil: vi.fn(), task: { taskId: "task-1" } } as never, { siloId: "silo-1", runId: "run-1", attempt: 1 })).resolves.toMatchObject({ terminalState: AgentRunTaskTerminalStates.Cancelled });
+		expect(calls).toEqual(["job", "secret", "release", "pod"]);
+		expect(terminalOrder).toEqual(["revoke"]);
 	});
 });

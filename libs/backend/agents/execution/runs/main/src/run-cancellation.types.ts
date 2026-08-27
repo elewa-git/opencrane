@@ -124,7 +124,7 @@ export interface RunWorkloadCleanupProjection
 	/** Whether cleanup already has the assignment's UID, or must first confirm a suspended Job that no assignment claims. */
 	readonly mode: RunWorkloadCleanupMode;
 	/** Why cleanup exists; cancellation finalises the run while failure only removes residue. */
-	readonly reason: "cancellation" | "dispatch_failure" | "runtime_lease_expired";
+	readonly reason: "cancellation" | "dispatch_failure" | "runtime_lease_expired" | "workflow_terminal_failure";
 	/** When the Job was first confirmed absent; kept until a second check after the observation window confirms it. */
 	readonly orphanAbsenceObservedAt?: string | null;
 }
@@ -155,9 +155,6 @@ export interface RunWorkloadCleanupClaim
 export type ClaimNextRunWorkloadCleanupResult =
 	| { readonly status: "claimed"; readonly claim: RunWorkloadCleanupClaim }
 	| { readonly status: "none" };
-
-/** Outcome of one server-owned expired-runtime repair pass. */
-export type RepairExpiredRunResult = { readonly status: "repaired"; readonly runId: string; readonly attempt: number } | { readonly status: "none" };
 
 /** What the cleanup worker reports back, after either deleting the Job by UID or confirming it is gone. */
 export interface ConfirmRunWorkloadCleanupCommand
@@ -194,17 +191,15 @@ export type ConfirmRunWorkloadCleanupResult =
  * queue cleanup ({@link requestCancellationAtomically}). A background worker then picks up that
  * cleanup one item at a time ({@link claimNextWorkloadCleanupAtomically}), deletes the Job through
  * Kubernetes, and reports back what it found ({@link confirmWorkloadCleanupAtomically}). The two
- * odd ones out are {@link deferUnassignedOrphanAbsenceAtomically}, which handles a Job that might
- * still be mid-creation, and {@link repairNextExpiredRunAtomically}, which cleans up after a runtime
- * that died without saying so.
+	 * remaining method, {@link deferUnassignedOrphanAbsenceAtomically}, handles a Job that might still
+	 * be mid-creation.
  *
  * Every method name ends in `Atomically` for a reason: each one does all of its work in a single
  * database transaction. Two workers running the same method at once must not both win, so callers
  * may run them concurrently and act on the returned status rather than locking beforehand.
  *
  * Called by: `_RequestSelfRunCancellation` (a user cancelling their own run),
- * `__CreateRuntimeWorkloadCleanupUseCase` (the cleanup worker), and `_StartBackgroundWorkers` in
- * apps/opencrane (the expired-runtime repair loop).
+	 * `__CreateRuntimeWorkloadCleanupUseCase` (the cleanup worker).
  *
  * @see PrismaRunCancellationRepository — the only implementation.
  * @see _CreateRunCancellationAuthority — builds it for the running process.
@@ -251,14 +246,4 @@ export interface RunCancellationRepository
 	 * @returns `deferred` once the second look is scheduled, or `conflict` if the lease went stale.
 	 */
 	deferUnassignedOrphanAbsenceAtomically(eventId: string, claim: RunWorkloadCleanupClaim): Promise<"deferred" | "conflict">;
-	/**
-	 * Finishes one run whose runtime stopped reporting, using only what the database already knows.
-	 *
-	 * A runtime holds a lease while it works. If that lease expires the runtime is gone, but its run
-	 * is still sitting in a running state. This ends that run. Nothing the dead runtime produced is
-	 * trusted here, because a runtime that missed its lease cannot be asked what it managed to do.
-	 *
-	 * @returns `repaired` with the run it ended, or `none` when no lease has expired.
-	 */
-	repairNextExpiredRunAtomically(): Promise<RepairExpiredRunResult>;
 }

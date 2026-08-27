@@ -1,5 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+
 import { PrismaAgentRunAuthorityRepository } from "./prisma-run-authority";
 import { __StartNextRunAttempt } from "./run-authority";
 import type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AgentRunRetryTransactionRepository, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, RunRetryAuthority, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
@@ -25,11 +27,14 @@ export class PrismaAgentRunRetryUnitOfWork implements RunRetryAuthority
 {
 	/** Product database client used only to open transaction attempts. */
 	private readonly _prisma: PrismaClient;
+	/** Workflow task admission capability shared with each fresh transaction repository. */
+	private readonly _workflow: Pick<IWorkflowEngine, "spawn">;
 
 	/** Creates the retry transaction boundary over the app-owned Prisma client. */
-	constructor(prisma: PrismaClient)
+	constructor(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">)
 	{
 		this._prisma = prisma;
+		this._workflow = workflow;
 	}
 
 	/**
@@ -100,9 +105,10 @@ export class PrismaAgentRunRetryUnitOfWork implements RunRetryAuthority
 	/** Runs one operation with a repository bound to a fresh transaction at the requested isolation. */
 	private async _Run<Result>(work: (repository: AgentRunRetryTransactionRepository) => Promise<Result>, isolationLevel: Prisma.TransactionIsolationLevel): Promise<Result>
 	{
+		const workflow = this._workflow;
 		return this._prisma.$transaction(async function _Run(transaction): Promise<Result>
 		{
-			return work(new PrismaAgentRunAuthorityRepository(transaction));
+			return work(new PrismaAgentRunAuthorityRepository(transaction, workflow));
 		}, { isolationLevel });
 	}
 }

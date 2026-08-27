@@ -206,14 +206,14 @@ export interface AtomicStartNextRunAttemptCommand extends StartNextRunAttemptCom
  * different questions — this one says what the write found, and the domain one says what the
  * participant should be told.
  *
- * Only `started` means an attempt was created and an outbox event written. `idempotent` also means
+ * Only `started` means an attempt was created and its workflow task was admitted. `idempotent` also means
  * an attempt exists, but this call did not create it. The remaining three wrote nothing at all, so a
  * caller must never report progress on them.
  */
 export type AtomicRunAttemptResult =
-	/** The conditional update matched, the attempt is now one higher, the run is back in `Accepted`, and a `RunAttemptRequested` outbox event was written in the same transaction. */
+	/** The conditional update matched, the attempt is now one higher, the run is back in `Accepted`, and its durable workflow task was admitted in the same transaction. */
 	| { readonly status: "started"; readonly run: AgentRun }
-	/** This same retry key already started the next attempt, proved by the stored outbox payload, so nothing was written. `run` is the already-advanced run and is safe to show as success. */
+	/** The next attempt already owns its deterministic workflow task, so nothing was written. `run` is the already-advanced run and is safe to show as success. */
 	| { readonly status: "idempotent"; readonly run: AgentRun }
 	/** The run is no longer on the attempt the caller observed, and the advance was not this caller's. `currentAttempt` is where it actually is, so the caller can re-read and offer retry again. */
 	| { readonly status: "attempt_conflict"; readonly currentAttempt: number }

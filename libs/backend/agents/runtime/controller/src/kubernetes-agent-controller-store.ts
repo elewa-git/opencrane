@@ -1,4 +1,4 @@
-import { Observable, type ConfigurationOptions, type ObservableMiddleware, type RequestContext, type ResponseContext, type V1Job } from "@kubernetes/client-node";
+import { Observable, type ConfigurationOptions, type ObservableMiddleware, type RequestContext, type ResponseContext, type V1Job, type V1Secret } from "@kubernetes/client-node";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { AgentControllerKubernetesStore } from "./agent-controller.types";
@@ -44,8 +44,8 @@ function _Coordinates(resource: V1Job): { readonly name: string; readonly namesp
  * OpenCrane recorded it throws instead of repairing, so drift surfaces rather than being papered
  * over. Every request carries both the process shutdown signal and its own deadline.
  *
- * Called by: `apps/agent-controller/src/index.ts`, which passes the result as
- * `options.kubernetes` to {@link __RunAgentController}.
+ * Called by: `apps/agent-controller/src/index.ts`, which adapts the result for the durable
+ * AgentRun workflow handler.
  * @param options - Batch and Core clients, per-request timeout, and shutdown signal.
  * @returns An adapter satisfying the Kubernetes port; each method is documented on the port.
  * @throws At construction, when `requestTimeoutMilliseconds` is outside 1-60s.
@@ -75,22 +75,23 @@ export function __CreateKubernetesAgentControllerStore(options: AgentControllerK
 				}
 			});
 		},
-		async __EnsureAttemptKeySecret(expected)
+		async __EnsureAttemptKeySecret(expected): Promise<"created" | "alreadyExists">
 		{
-			const name = expected.metadata?.name;
-			const namespace = expected.metadata?.namespace;
-			if (!name || !namespace) throw new Error("agent-controller attempt-key Secret requires deterministic namespaced metadata");
-			await ___DoWithTrace("agent_controller.secret.ensure", { name, namespace }, async function _ensureAttemptKeySecret(): Promise<void>
+			const { name, namespace } = _AttemptKeySecretCoordinates(expected);
+			return await ___DoWithTrace("agent_controller.secret.ensure", { name, namespace }, async function _ensureAttemptKeySecret(): Promise<"created" | "alreadyExists">
 			{
 				try
 				{
 					await options.coreApi.createNamespacedSecret({ namespace, body: expected }, _KubernetesRequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds));
+					return "created";
 				}
 				catch (err)
 				{
-					// The Role only allows create. The name is derived from this attempt and nothing else writes it,
-					// so a 409 can only be our own earlier create of the same Secret — safe to ignore.
-					if (_StatusCode(err) !== 409) throw err;
+					if (_StatusCode(err) === 409)
+					{
+						return "alreadyExists";
+					}
+					throw err;
 				}
 			});
 		},
@@ -127,4 +128,17 @@ export function __CreateKubernetesAgentControllerStore(options: AgentControllerK
 			});
 		},
 	};
+}
+
+/** Validate the expected immutable Secret name and owner reference before its create-only request. */
+function _AttemptKeySecretCoordinates(expected: V1Secret): { readonly name: string; readonly namespace: string }
+{
+	const name = expected.metadata?.name;
+	const namespace = expected.metadata?.namespace;
+	const owner = expected.metadata?.ownerReferences?.[0];
+	if (!name || !namespace || expected.immutable !== true || expected.type !== "Opaque" || expected.metadata?.ownerReferences?.length !== 1 || owner?.apiVersion !== "batch/v1" || owner.kind !== "Job" || !owner.name || !owner.uid || owner.controller !== true || owner.blockOwnerDeletion !== true || !expected.stringData || typeof expected.stringData["key"] !== "string" || expected.stringData["key"].length === 0)
+	{
+		throw new Error("agent-controller attempt-key Secret requires one immutable deterministic Job-owned key");
+	}
+	return { name, namespace };
 }

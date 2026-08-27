@@ -19,8 +19,14 @@ export interface AgentRunWorkflowKubernetesStore
 {
 	/** Creates or adopts the expected suspended Job. */
 	ensureSuspendedJob(expected: V1Job): Promise<V1Job>;
-	/** Creates the Job-owned transient key Secret. */
-	ensureAttemptKeySecret(expected: V1Secret): Promise<void>;
+	/**
+	 * Creates the Job-owned transient key Secret, or reports that its deterministic name already exists.
+	 *
+	 * This store does not read Secrets, so `alreadyExists` does not prove the existing object's owner or
+	 * contents. The handler accepts it only after exact suspended-Job adoption and revokes its fresh
+	 * unused key before it may release that Job.
+	 */
+	ensureAttemptKeySecret(expected: V1Secret): Promise<"created" | "alreadyExists">;
 	/** Releases only the Job UID the server already bound. */
 	releaseJob(expected: V1Job, workloadUid: string, assignmentExpiresAt: string, releaseExpiresAt: string): Promise<V1Job>;
 	/** Returns the first exact Job-owned Pod, or null while Kubernetes has not scheduled it. */

@@ -35,7 +35,6 @@ function _Repository(claim: RunWorkloadCleanupClaim | null): RunCancellationRepo
 		claimNextWorkloadCleanupAtomically: vi.fn().mockResolvedValue(claim === null ? { status: "none" } : { status: "claimed", claim }),
 		confirmWorkloadCleanupAtomically: vi.fn().mockResolvedValue({ status: "confirmed", runId: "run-1", attempt: 3, runFinalized: true }),
 		deferUnassignedOrphanAbsenceAtomically: vi.fn().mockResolvedValue("deferred"),
-		repairNextExpiredRunAtomically: vi.fn(),
 	};
 }
 

@@ -116,20 +116,20 @@ describe("least-privilege Kubernetes controller store", function _Suite()
 		const coreApi = _CoreApi({ async createNamespacedSecret(request) { created = request.body; return request.body; }, async listNamespacedPod() { listed += 1; return { apiVersion: "v1", kind: "PodList", metadata: {}, items: [] }; } });
 		const store = __CreateKubernetesAgentControllerStore(_StoreOptions({ batchApi, coreApi }));
 
-		await store.__EnsureAttemptKeySecret(secret);
+		await expect(store.__EnsureAttemptKeySecret(secret)).resolves.toBe("created");
 
 		expect((created as unknown as V1Secret)?.metadata?.name).toBe("litellm-key-store-test");
 		expect((created as unknown as V1Secret)?.immutable).toBe(true);
 		expect(listed).toBe(0);
 	});
 
-	it("treats an AlreadyExists attempt-key Secret as an idempotent success without any read", async function _AdoptsSecret()
+	it("reports an existing deterministic attempt-key Secret name without reading it", async function _AcceptsExistingSecret()
 	{
 		const batchApi: AgentControllerBatchApi = { async createNamespacedJob() { throw new Error("unexpected Job"); }, async readNamespacedJob() { throw new Error("unexpected Job"); }, async patchNamespacedJob() { throw new Error("unexpected Job"); } };
 		const coreApi = _CoreApi({ async createNamespacedSecret() { throw _Conflict(); } });
 		const store = __CreateKubernetesAgentControllerStore(_StoreOptions({ batchApi, coreApi }));
 
-		await expect(store.__EnsureAttemptKeySecret(_Secret())).resolves.toBeUndefined();
+		await expect(store.__EnsureAttemptKeySecret(_Secret())).resolves.toBe("alreadyExists");
 	});
 
 	it("surfaces a non-conflict attempt-key Secret creation failure", async function _SecretFailure()

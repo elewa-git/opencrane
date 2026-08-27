@@ -2,10 +2,12 @@ import { Prisma, RunOutboxEventKind, type PrismaClient, type RunInputSnapshot as
 
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import { ___CloneCanonicalJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
 import { __AdmissionLockKey } from "./admission-lock-key";
+import { PrismaAgentRunWorkflowTaskAdmissionUnitOfWork } from "./prisma-agent-run-workflow-task-admission-unit-of-work";
 import { RunAdmissionDenialReasons } from "./run-admission.types";
 import type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionCommit, RunAdmissionPrepare, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types";
 
@@ -74,16 +76,20 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 	private readonly clock: RunAdmissionClock;
 	/** Structured persistence-failure signal with process-wide secret redaction. */
 	private readonly log: Logger;
+	/** Guarded engine that saves the controller-owned task in the run admission transaction. */
+	private readonly workflow: Pick<IWorkflowEngine, "spawn">;
 
 	/**
 	 * Creates an initial-admission repository over canonical Postgres.
 	 * @param prisma - Canonical product-authority database client.
+	 * @param workflow - Guarded engine that saves the controller-owned task in the same transaction.
 	 * @param clock - Server-owned admission clock, replaceable only for deterministic tests.
 	 * @param log - Structured redacting logger for otherwise fail-closed persistence failures.
 	 */
-	constructor(prisma: PrismaClient, clock: RunAdmissionClock = { now: function _now(): Date { return new Date(); } }, log: Logger = ___CreateLogger("run-admission"))
+	constructor(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">, clock: RunAdmissionClock = { now: function _now(): Date { return new Date(); } }, log: Logger = ___CreateLogger("run-admission"))
 	{
 		this.prisma = prisma;
+		this.workflow = workflow;
 		this.clock = clock;
 		this.log = log;
 	}
@@ -114,6 +120,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 	async admit<TDenial>(command: RunAdmissionCommand, build: (transaction: RunAdmissionTransaction) => Promise<RunAdmissionBuildResult<TDenial>>, commit?: RunAdmissionCommit, prepare?: RunAdmissionPrepare): Promise<RunAdmissionResult<TDenial>>
 	{
 		const clock = this.clock;
+		const workflow = this.workflow;
 		try
 		{
 			return await this.prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RunAdmissionResult<TDenial>>
@@ -155,8 +162,11 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 					return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
 				}
 
-				// 5. Insert both sides of the deferred snapshot relation plus ordered acceptance and dispatch events in one commit.
+				// 5. Insert both sides of the deferred snapshot relation, admit the controller task, and keep
+				// the temporary legacy dispatch event in the same commit until controller cutover replaces it.
 				await _persistInitialAdmission(transaction, command, compiled.value, admittedAtDate);
+				const admission = new PrismaAgentRunWorkflowTaskAdmissionUnitOfWork(transaction);
+				await admission.admit(workflow, { siloId: command.siloId, runId: command.runId, attempt: 1 });
 				if (commit) await commit({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() }, compiled.value);
 				return { outcome: "accepted", snapshot: compiled.value.snapshot };
 			}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -268,14 +278,10 @@ function _trigger(value: InitialRunAuthority["trigger"]): "Interactive" | "Sched
 }
 
 /**
- * Builds the two outbox rows every admitted run starts with.
+ * Builds the acceptance event every admitted run starts with.
  *
- * Admission does not dispatch anything itself; it records what should happen and lets a worker pick it
- * up, so the run and the intent to start it commit together. `RunAccepted` at sequence 1 is the record
- * that the run exists, and `RunAttemptRequested` at sequence 2 is the command that gets attempt 1
- * running — the sequence numbers are what keep a reader from seeing the attempt before the acceptance.
- * Each `idempotencyKey` is derived from the run id and the attempt, so a worker that redelivers cannot
- * start attempt 1 twice.
+ * The workflow task is admitted in the same database transaction as the run. This event records that
+ * the run exists for observers; it does not command a separate dispatcher to start an attempt.
  *
  * @param runId - The run both events belong to.
  * @param inputSnapshotDigest - Carried in both payloads so a worker can confirm it loaded the snapshot
@@ -294,16 +300,7 @@ export function _InitialRunOutboxData(runId: string, inputSnapshotDigest: string
 		payload: { runId, inputSnapshotDigest },
 		availableAt,
 	};
-	const attemptRequested: Prisma.OutboxEventCreateManyInput = {
-		runId,
-		attempt: 1,
-		sequence: 2,
-		kind: RunOutboxEventKind.RunAttemptRequested,
-		idempotencyKey: `${runId}:attempt:1`,
-		payload: { runId, attempt: 1, inputSnapshotDigest },
-		availableAt,
-	};
-	return [accepted, attemptRequested];
+	return [accepted];
 }
 
 /**

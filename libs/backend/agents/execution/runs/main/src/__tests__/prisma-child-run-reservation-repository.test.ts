@@ -170,15 +170,6 @@ describe("PrismaChildRunReservationRepository", function _describeReservationRep
 				payload: { runId: "child-1", inputSnapshotDigest: childSnapshot.digest },
 				availableAt: acceptedAt,
 			},
-			{
-				runId: "child-1",
-				attempt: 1,
-				sequence: 2,
-				kind: RunOutboxEventKind.RunAttemptRequested,
-				idempotencyKey: "child-1:attempt:1",
-				payload: { runId: "child-1", attempt: 1, inputSnapshotDigest: childSnapshot.digest },
-				availableAt: acceptedAt,
-			},
 		] });
 		expect(transaction.agentRun.create.mock.invocationCallOrder[0]).toBeLessThan(transaction.runInputSnapshot.create.mock.invocationCallOrder[0] ?? 0);
 		expect(transaction.runInputSnapshot.create.mock.invocationCallOrder[0]).toBeLessThan(transaction.childRunReservation.create.mock.invocationCallOrder[0] ?? 0);
