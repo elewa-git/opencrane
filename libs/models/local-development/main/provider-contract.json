@@ -1,0 +1,32 @@
+{
+	"providers": [
+		{
+			"name": "anthropic",
+			"defaultModel": "anthropic/claude-sonnet-4-5-20250929",
+			"models": [
+				"anthropic/claude-sonnet-4-5-20250929"
+			]
+		},
+		{
+			"name": "gemini",
+			"defaultModel": "gemini/gemini-2.5-flash",
+			"models": [
+				"gemini/gemini-2.5-flash"
+			]
+		},
+		{
+			"name": "mistral",
+			"defaultModel": "mistral/mistral-small-latest",
+			"models": [
+				"mistral/mistral-small-latest"
+			]
+		},
+		{
+			"name": "openai",
+			"defaultModel": "openai/gpt-5.4-nano",
+			"models": [
+				"openai/gpt-5.4-nano"
+			]
+		}
+	]
+}

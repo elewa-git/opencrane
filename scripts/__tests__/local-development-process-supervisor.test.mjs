@@ -11,7 +11,7 @@ test("spawned processes inherit only reviewed toolchain variables from the devel
 	const environment = createDevelopmentChildEnvironment({
 		PATH: "/usr/bin",
 		HOME: "/home/developer",
-		OPENAI_API_KEY: "parent-provider-key",
+		OPENCRANE_LOCAL_PROVIDER_KEY: "parent-provider-key",
 		LITELLM_MASTER_KEY: "parent-master-key",
 		OPENCRANE_INITIAL_MODEL_API_KEY: "parent-initial-key",
 		GH_TOKEN: "github-token",

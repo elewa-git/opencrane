@@ -6,6 +6,7 @@ import { acquireLocalDevelopmentLock, releaseLocalDevelopmentLock } from "./lock
 import { runLocalCommandSpecification } from "./command-runner.mjs";
 import { runDevelopmentProcesses } from "./process-supervisor.mjs";
 import { LOCAL_DEVELOPMENT_ALTERNATIVES, LOCAL_DEVELOPMENT_PROFILES } from "./profiles.mjs";
+import { prepareLocalProviderConfiguration } from "./local-provider-configurations.mjs";
 import { prepareLocalAgentRuntimeEnvironment } from "./python-runtime.mjs";
 import { createDisposableDevelopmentCredentials, loadLocalDevelopmentSecrets, removeDisposableDevelopmentCredentials } from "./secrets.mjs";
 
@@ -19,6 +20,7 @@ const _OPERATIONS = {
 	ensureLocalLiteLLMDatabase,
 	loadLocalDevelopmentSecrets,
 	prepareLocalAgentRuntimeEnvironment,
+	prepareLocalProviderConfiguration,
 	processHost: process,
 	releaseLocalDevelopmentLock,
 	removeOwnedContainer,
@@ -92,12 +94,24 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 	try
 	{
 		lock = operations.acquireLocalDevelopmentLock(configuration.repositoryRoot);
-		const sessionConfiguration = {
+		let sessionConfiguration = {
 			...configuration,
 			abortSignal: shutdownController.signal
 		};
 		await operations.validateLocalDevelopmentTools(sessionConfiguration);
 		shutdownController.signal.throwIfAborted();
+
+		if (sessionConfiguration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
+		{
+			const localProviderConfiguration = operations.prepareLocalProviderConfiguration(sessionConfiguration);
+			sessionConfiguration = {
+				...sessionConfiguration,
+				...localProviderConfiguration
+			};
+			operations.writeStatus(`Selected local model ${sessionConfiguration.selectedModel} from ${sessionConfiguration.selectedProvider}\n`);
+			shutdownController.signal.throwIfAborted();
+		}
+
 		secrets = operations.loadLocalDevelopmentSecrets(sessionConfiguration);
 		shutdownController.signal.throwIfAborted();
 

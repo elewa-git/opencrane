@@ -27,38 +27,23 @@ test("agent defaults to Alternative A", function _defaultAgentAlternative()
 
 	assert.equal(configuration.alternative, "local-llm");
 	assert.equal(configuration.developmentProfile, "agent-local");
-	assert.equal(configuration.providerKeyPath, "/repo/keys/.openai-key");
+	assert.equal(configuration.model, undefined);
+	assert.equal(configuration.providerKeyPath, undefined);
 });
 
-test("Alternative A accepts an explicit provider-key file", function _customProviderKeyFile()
+test("Alternative A accepts an exact model for registry validation during setup", function _customModel()
 {
 	const parsed = parseLocalDevelopmentArguments([
 		"--profile",
 		"agent",
 		"--alternative",
 		"local-llm",
-		"--provider-key-file",
-		"keys/openai-key"
+		"--model",
+		"anthropic/claude-sonnet-4-5-20250929"
 	]);
 	const configuration = createLocalDevelopmentConfiguration(parsed, "/repo", {});
 
-	assert.equal(configuration.providerKeyPath, "/repo/keys/openai-key");
-});
-
-test("Alternative A enforces the lowercase provider-key naming convention", function _providerKeyFileNaming()
-{
-	assert.throws(function _mixedCaseProvider()
-	{
-		parseLocalDevelopmentArguments(["--profile", "agent", "--provider-key-file", "keys/OpenAI-key"]);
-	}, /lowercase-provider-name/);
-	assert.throws(function _wrongDirectory()
-	{
-		parseLocalDevelopmentArguments(["--profile", "agent", "--provider-key-file", "secrets/openai-key"]);
-	}, /lowercase-provider-name/);
-	assert.throws(function _unconfiguredProvider()
-	{
-		parseLocalDevelopmentArguments(["--profile", "agent", "--provider-key-file", "keys/anthropic-key"]);
-	}, /currently requires the OpenAI provider/);
+	assert.equal(configuration.model, "anthropic/claude-sonnet-4-5-20250929");
 });
 
 test("named alternatives can print help without runtime-specific settings", function _AlternativeHelp()
@@ -155,13 +140,13 @@ test("core and non-remote alternatives reject remote model options", function _r
 	}, /only to Alternative B/);
 });
 
-test("provider-key files apply only to Alternative A", function _rejectUnusedProviderKeyFile()
+test("model selection applies only to Alternative A", function _rejectUnusedModel()
 {
-	assert.throws(function _coreProviderKey()
+	assert.throws(function _coreModel()
 	{
-		parseLocalDevelopmentArguments(["--provider-key-file", "keys/provider-key"]);
+		parseLocalDevelopmentArguments(["--model", "openai/gpt-5.4-nano"]);
 	}, /only to --profile agent/);
-	assert.throws(function _remoteProviderKey()
+	assert.throws(function _remoteModel()
 	{
 		parseLocalDevelopmentArguments([
 			"--profile",
@@ -172,19 +157,19 @@ test("provider-key files apply only to Alternative A", function _rejectUnusedPro
 			"https://litellm.example.test",
 			"--remote-litellm-master-key-file",
 			"/secure/remote.key",
-			"--provider-key-file",
-			"keys/provider-key"
+			"--model",
+			"openai/gpt-5.4-nano"
 		]);
 	}, /only to Alternative A/);
-	assert.throws(function _simulatedProviderKey()
+	assert.throws(function _simulatedModel()
 	{
 		parseLocalDevelopmentArguments([
 			"--profile",
 			"agent",
 			"--alternative",
 			"simulated-llm",
-			"--provider-key-file",
-			"keys/provider-key"
+			"--model",
+			"openai/gpt-5.4-nano"
 		]);
 	}, /only to Alternative A/);
 });

@@ -53,6 +53,7 @@ pr-stack-integrity-evidence.json
 /.r0-evidence*/
 
 /keys/*
+/apps/_infra/litellm/local-development/*.generated.yaml
 
 # Umbrella subchart packaging is derived from the in-repo sources at render time.
 apps/_infra/deploy-k8s/Chart.lock

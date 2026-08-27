@@ -94,18 +94,18 @@ export function loadLocalDevelopmentSecrets(configuration, randomBytes = crypto.
 
 	if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
 	{
-		const providerKey = _readRequiredSecret(configuration.providerKeyPath, "OpenAI provider key");
+		const providerKey = _readRequiredSecret(configuration.providerKeyPath, "Selected local provider key");
 
 		if (providerKey === postgresPassword)
 		{
-			throw new Error("The OpenAI provider key and local PostgreSQL password must be different secrets");
+			throw new Error("The selected local provider key and local PostgreSQL password must be different secrets");
 		}
 
 		const liteLLMMasterKey = readOrCreateLocalSecret(configuration.localLiteLLMMasterKeyPath, "Local LiteLLM master key", "sk-local-", randomBytes);
 
 		if (providerKey === liteLLMMasterKey)
 		{
-			throw new Error("The OpenAI provider key and LiteLLM master key must be different secrets");
+			throw new Error("The selected local provider key and LiteLLM master key must be different secrets");
 		}
 
 		if (liteLLMMasterKey === postgresPassword)
@@ -125,9 +125,9 @@ export function loadLocalDevelopmentSecrets(configuration, randomBytes = crypto.
 		throw new Error("Alternative B requires a remote admin key file separate from the generated local LiteLLM key");
 	}
 
-	if (path.resolve(configuration.remoteLiteLLMMasterKeyPath) === path.resolve(configuration.providerKeyPath))
+	if (configuration.reviewedProviderKeyPaths.some(providerKeyPath => path.resolve(configuration.remoteLiteLLMMasterKeyPath) === path.resolve(providerKeyPath)))
 	{
-		throw new Error("Alternative B requires a remote admin key file separate from the OpenAI provider key");
+		throw new Error("Alternative B requires a remote admin key file separate from every reviewed local provider key");
 	}
 
 	return {

@@ -9,6 +9,9 @@ export { applyTargetBaseline, ensureLocalLiteLLMDatabase, startLocalPostgres } f
  * Checks the host tools and repository inputs before the coordinator creates credentials or containers.
  * Agent profiles also require the pinned Python dependency list used to prepare their runtime.
  *
+ * Called by: `runLocalDevelopmentSession` before provider selection and secret loading.
+ * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Selected Tier 2 profile, source paths, and shutdown signal.
+ * @returns {Promise<void>} Resolves when every required command and source file is available.
  * @throws Rejects when a required command or repository input is unavailable, or the session stops.
  */
 export async function validateLocalDevelopmentTools(configuration)
@@ -24,7 +27,7 @@ export async function validateLocalDevelopmentTools(configuration)
 
 	if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
 	{
-		requiredFiles.push(configuration.liteLLMConfigPath);
+		requiredFiles.push(configuration.localProviderRegistryPath);
 	}
 
 	if (configuration.profile === "agent")

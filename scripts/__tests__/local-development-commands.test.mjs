@@ -34,6 +34,7 @@ test("PostgreSQL uses a named PostgreSQL 17 container and keeps secrets out of a
 test("Alternative A runs local LiteLLM without exposing either secret in arguments", function _localLiteLLMCommand()
 {
 	const configuration = _configuration(["--profile", "agent"]);
+	configuration.liteLLMConfigPath = "/tmp/opencrane-local-litellm/anthropic.yaml";
 	const secrets = {
 		postgresPassword: "postgres-secret",
 		providerKey: "provider-secret",
@@ -42,12 +43,12 @@ test("Alternative A runs local LiteLLM without exposing either secret in argumen
 	const specification = createLiteLLMRunCommand(configuration, secrets);
 
 	assert.ok(specification.arguments.includes("ghcr.io/berriai/litellm-non_root@sha256:39718a9cc9138c99ec812bcde24896411cf54502967a36b19897c539b796fdc7"));
-	assert.ok(specification.arguments.includes("type=bind,source=/repo/apps/_infra/litellm/local-development/config.yaml,target=/app/opencrane-local.yaml,readonly"));
+	assert.ok(specification.arguments.includes("type=bind,source=/tmp/opencrane-local-litellm/anthropic.yaml,target=/app/opencrane-local.yaml,readonly"));
 	assert.ok(specification.arguments.includes("opencrane-local-development"));
 	assert.ok(!specification.arguments.includes("provider-secret"));
 	assert.ok(!specification.arguments.includes("master-secret"));
 	assert.ok(!specification.arguments.includes("postgres-secret"));
-	assert.equal(specification.environment.OPENAI_API_KEY, "provider-secret");
+	assert.equal(specification.environment.OPENCRANE_LOCAL_PROVIDER_KEY, "provider-secret");
 	assert.equal(specification.environment.LITELLM_MASTER_KEY, "master-secret");
 	assert.equal(specification.environment.DATABASE_URL, "postgresql://opencrane:postgres-secret@opencrane-local-postgres:5432/litellm");
 });

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { getReviewedLocalProviderKeyPaths } from "./local-provider-registry.mjs";
 import { LOCAL_DEVELOPMENT_ALTERNATIVES, LOCAL_DEVELOPMENT_PROFILES } from "./profiles.mjs";
 
 const _DEVELOPMENT_PROFILE_BY_ALTERNATIVE = Object.freeze({
@@ -10,10 +11,13 @@ const _DEVELOPMENT_PROFILE_BY_ALTERNATIVE = Object.freeze({
 /**
  * Resolves one validated CLI selection into the paths, ports, and application profile used by Tier 2.
  * Fixed application ports keep the development host and proxy checks aligned with the server.
+ *
+ * Called by: `scripts/local-development.mjs` after argument validation and before orchestration.
  * @param {ReturnType<typeof import("./profiles.mjs").parseLocalDevelopmentArguments>} parsed - Validated command-line selection.
  * @param {string} repositoryRoot - OpenCrane repository root.
  * @param {NodeJS.ProcessEnv} environment - Optional host-port overrides for local dependencies.
  * @returns {object} Coordinator configuration passed to every startup step.
+ * @throws When a configured port is invalid or the reviewed provider registry cannot be read.
  */
 export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, environment = process.env)
 {
@@ -57,6 +61,7 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 	return {
 		profile: parsed.profile,
 		alternative: parsed.alternative,
+		model: parsed.model,
 		remoteLiteLLMEndpoint: parsed.remoteLiteLLMEndpoint,
 		reset: parsed.reset,
 		developmentProfile,
@@ -72,10 +77,10 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 		liteLLMContainerName: "opencrane-local-litellm",
 		baselinePath: path.join(repositoryRoot, "apps/opencrane/prisma/bootstrap/target-baseline.sql"),
 		seedPath: path.join(repositoryRoot, "apps/postgres/scripts/local-development-seed.sql"),
-		liteLLMConfigPath: path.join(repositoryRoot, "apps/_infra/litellm/local-development/config.yaml"),
-		providerKeyPath: parsed.providerKeyFile
-			? path.resolve(repositoryRoot, parsed.providerKeyFile)
-			: path.join(repositoryRoot, "keys/.openai-key"),
+		localProviderRegistryPath: path.join(repositoryRoot, "libs/models/local-development/main/provider-contract.json"),
+		providerKeysDirectory: path.join(repositoryRoot, "keys"),
+		localLiteLLMConfigurationDirectory: path.join(repositoryRoot, "apps/_infra/litellm/local-development"),
+		reviewedProviderKeyPaths: getReviewedLocalProviderKeyPaths(repositoryRoot),
 		localLiteLLMMasterKeyPath: path.join(repositoryRoot, "keys/.litellm-master-key"),
 		remoteLiteLLMMasterKeyPath: parsed.remoteLiteLLMMasterKeyFile
 			? path.resolve(repositoryRoot, parsed.remoteLiteLLMMasterKeyFile)
