@@ -162,7 +162,7 @@ if [[ -e "$ROOT_DIR/node_modules" ]]; then
   echo "Minimum-host preparation must remove the reproducible workspace dependency tree." >&2
   exit 1
 fi
-_assert_log $'npm cache clean --force\ndocker buildx prune --all --force --min-free-space 12gb\ndocker image prune --force\ndocker info --format {{.DockerRootDir}}'
+_assert_log $'npm cache clean --force\ndocker buildx prune --all --force --min-free-space 12884901888\ndocker image prune --force\ndocker info --format {{.DockerRootDir}}'
 
 # Refuse to build when pruning succeeds but other Docker allocations still consume the reserve.
 _reset_fixture
@@ -184,7 +184,7 @@ _assert_log 'k3d image import image-a image-b --cluster smoke --mode direct'
 _reset_fixture
 SMOKE_HOST_PROFILE="minimum"
 _import_smoke_images
-_assert_log $'docker buildx prune --all --force --min-free-space 12gb\nk3d image import image-a --cluster smoke --mode direct\ndocker image rm image-a\nk3d image import image-b --cluster smoke --mode direct\ndocker image rm image-b\ndocker image prune --force\ndocker buildx prune --all --force --min-free-space 12gb\ndocker info --format {{.DockerRootDir}}'
+_assert_log $'docker buildx prune --all --force --min-free-space 12884901888\nk3d image import image-a --cluster smoke --mode direct\ndocker image rm image-a\nk3d image import image-b --cluster smoke --mode direct\ndocker image rm image-b\ndocker image prune --force\ndocker buildx prune --all --force --min-free-space 12884901888\ndocker info --format {{.DockerRootDir}}'
 
 # Preserve a rejected source image so the developer can diagnose why k3d refused it.
 _reset_fixture

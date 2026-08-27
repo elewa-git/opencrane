@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
 _SMOKE_REQUIRED_DOCKER_FREE_GIB="12"
+# Give BuildKit the reserve in bytes because its `gb` suffix is decimal while the guard below
+# enforces binary GiB.
+_SMOKE_REQUIRED_DOCKER_FREE_BYTES="$((_SMOKE_REQUIRED_DOCKER_FREE_GIB * 1024 * 1024 * 1024))"
 
 # Lists only the image volume whose exact name belongs to this cluster, avoiding similarly prefixed volumes.
 _list_cluster_image_volume()
@@ -114,13 +117,13 @@ _prepare_smoke_host_storage()
   echo "[develop-smoke] Reclaiming host dependencies, package cache, and Docker caches for the minimum disk"
   rm -rf -- "$ROOT_DIR/node_modules"
   npm cache clean --force || return $?
-  docker buildx prune --all --force --min-free-space "${_SMOKE_REQUIRED_DOCKER_FREE_GIB}gb" || return $?
+  docker buildx prune --all --force --min-free-space "$_SMOKE_REQUIRED_DOCKER_FREE_BYTES" || return $?
   docker image prune --force || return $?
   _require_smoke_docker_free_space
 }
 
 # Keep CI's batch import. Minimum-disk Tier 3 releases each source after k3d accepts it, then
-# prunes cache from the completed image builds before checking the 12 GB reserve for deployment pulls.
+# prunes cache from the completed image builds before checking the 12 GiB reserve for deployment pulls.
 _import_smoke_images()
 {
   local image
@@ -129,14 +132,14 @@ _import_smoke_images()
     return $?
   fi
 
-  echo "[develop-smoke] Reclaiming Docker build cache until ${_SMOKE_REQUIRED_DOCKER_FREE_GIB} GB is free for the remaining workload images"
-  docker buildx prune --all --force --min-free-space "${_SMOKE_REQUIRED_DOCKER_FREE_GIB}gb" || return $?
+  echo "[develop-smoke] Reclaiming Docker build cache until ${_SMOKE_REQUIRED_DOCKER_FREE_GIB} GiB is free for the remaining workload images"
+  docker buildx prune --all --force --min-free-space "$_SMOKE_REQUIRED_DOCKER_FREE_BYTES" || return $?
   for image in "${SMOKE_IMAGES[@]}"; do
     echo "[develop-smoke] Importing and releasing $image"
     _retry 3 k3d image import "$image" --cluster "$CLUSTER_NAME" --mode direct || return $?
     docker image rm "$image" || return $?
   done
   docker image prune --force || return $?
-  docker buildx prune --all --force --min-free-space "${_SMOKE_REQUIRED_DOCKER_FREE_GIB}gb" || return $?
+  docker buildx prune --all --force --min-free-space "$_SMOKE_REQUIRED_DOCKER_FREE_BYTES" || return $?
   _require_smoke_docker_free_space
 }

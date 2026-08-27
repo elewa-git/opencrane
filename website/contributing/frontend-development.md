@@ -323,7 +323,7 @@ into a repository Codespaces prebuild; enabling that prebuild remains a reposito
 Actions minutes and storage.
 
 On the minimum disk, Tier 3 removes an existing root `node_modules` tree, clears disposable npm and
-BuildKit caches, reserves 12 GB for all images that arrive after the build, imports one local image at
+BuildKit caches, reserves 12 GiB for all images that arrive after the build, imports one local image at
 a time, and removes each Docker-side source after k3d accepts it. Reinstall the lockfile-bound
 dependencies before other repository work. The retained cluster keeps its own copy, and k3d's
 [direct importer](https://k3d.io/v5.8.3/usage/importing_images/) creates no intermediate archive.
