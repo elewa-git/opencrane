@@ -36,9 +36,11 @@ FROM build AS migration
 
 WORKDIR /app/apps/opencrane
 
+COPY apps/opencrane-prisma-migrator/run-migrations.sh /app/run-migrations.sh
+
 USER node
 
-CMD ["/app/node_modules/.bin/prisma", "migrate", "deploy"]
+CMD ["/app/run-migrations.sh"]
 
 # Runtime stage
 FROM node:22-bookworm-slim

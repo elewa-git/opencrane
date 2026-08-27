@@ -270,7 +270,7 @@
     {
       "id": "postgres-database-migration",
       "podClass": "Job/postgres-database-migration",
-      "image": "ghcr.io/cloudnative-pg/postgresql@sha256:<release-digest>",
+      "image": "ghcr.io/elewa-git/opencrane-prisma-migrator@sha256:<release-digest>",
       "owner": "apps/postgres",
       "source": { "type": "file", "path": "apps/postgres/helm/templates/database-migration-job.yaml", "anchor": "kind: Job", "coversLocalTemplate": true }
     },

@@ -72,7 +72,7 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'ALTER TABLE "conversations" ADD CONSTRAINT "conversations_identity_check"',
 	'ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_reference_shape_check"',
 	'ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_run_id_run_attempt_fkey"',
-	'ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_run_event_sequence_fkey"',
+	'ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_r_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence")',
 	'CREATE UNIQUE INDEX "conversation_run_events_one_message_start"',
 	'ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_exact_output_ticket_fkey"',
 	'CREATE FUNCTION "enforce_conversation_asset_output_ticket_lifecycle"()',

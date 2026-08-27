@@ -12,8 +12,6 @@ for contract in \
   initial-model-provider-helm-args-contract.sh \
   pooler-deploy-contract.sh \
   database-migration-deploy-contract.sh \
-  database-superuser-access-contract.sh \
-  database-pg-cron-preflight-contract.sh \
   workflow-engine-qualification-contract.sh \
   server-key-permissions-contract.sh \
   server-runtime-cleanup-rbac-contract.sh \

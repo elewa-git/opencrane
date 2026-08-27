@@ -29,7 +29,6 @@
         "commands": [
           "bash apps/postgres/tests/helm-contract.sh",
           "bash apps/postgres/tests/baseline-publisher-contract.sh",
-          "bash apps/postgres/tests/migration-publisher-contract.sh",
           "bash apps/_infra/deploy-k8s/platform/tests/database-migration-deploy-contract.sh"
         ],
         "parallel": false

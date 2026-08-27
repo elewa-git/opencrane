@@ -37,10 +37,10 @@ manifest contract; do not introduce parallel version files.
 
 ## Transition policy
 
-- The deployer reads the database schema labels from the requested release manifests and uses a
-  reviewed `<from>-to-<to>` directory when it exists. It does not inspect the live database to admit
-  the migration.
-- A release without a matching migration directory continues with the ordinary PostgreSQL rollout.
+- For an upgrade, the deployer accepts only the release manifest's immediate predecessor and runs
+  the dedicated Prisma migration Job. Prisma's `_prisma_migrations` table decides which saved
+  changes still need to run; the deployer does not select version-pair SQL.
+- A fresh installation uses the target baseline and skips the migration Job.
 - A directly changed application is stamped to the current full root version. This is a
   compatibility stamp, not a claim that every application releases in lockstep.
 - Shared library, root dependency, and lockfile changes stamp nothing on their own: the affected

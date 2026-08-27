@@ -19,9 +19,7 @@ cluster does not match the assumptions needed to do that job safely.
 | `control-plane-image-policy.sh` | Ensures the browser application is the exact reviewed build. Public deployments must use an immutable image digest; only disposable local test clusters may use a locally imported tag. |
 | `cluster-tenant-crd-policy.sh` | Protects the cluster-wide tenant definition from conflicting ownership. It checks whether the definition is missing, owned by this release, safely shared, or conflicting before Helm proceeds. |
 | `database-migration-orchestrator.sh` | Runs the dedicated Prisma Migrate Job and waits for it to finish before application rollout. |
-| `database-pg-cron-preflight.sh` | Confirms that PostgreSQL can schedule the background work used by saved workflow tasks before a migration depends on it. The check is read-only and runs against the database primary. |
 | `qualify-workflow-engine.sh` | Proves on a live silo that newly queued agent work is picked up within the expected time. It opens a temporary connection to the database proxy, runs the application-owned timing check, and keeps the application password out of its output. |
-| `database-superuser-access.sh` | Confirms that temporary database-administrator access has been disabled and its generated credential removed before the application resumes. |
 | `database-release-finalization.sh` | Restarts database consumers when connection details change and waits for the normal application rollout. |
 | `k8s-teardown.sh` | Retires one standalone silo without touching shared cluster services or another tenant. It requires the exact cluster, tenant name, and expected release ownership, blocks protected tenants, and can inventory the planned deletion before removing anything. |
 | `bootstrap-prerequisites.sh` | Prepares a development cluster with the shared ingress, certificate, and PostgreSQL controllers OpenCrane expects. It validates the selected cluster and network address first and refuses to take over resources it does not own. A normal silo deployment never runs it automatically. |
@@ -52,11 +50,11 @@ belong in sibling `apps/_infra/<service>` projects.
 
 ## Database deployment
 
-Every invocation supplies a release version and the version it is upgrading from. When a reviewed
-`<from>-to-<to>` migration directory exists, the deployer publishes its SQL as an immutable ConfigMap,
-prepares `pg_cron` when that migration needs it, runs the bounded migration Job, and then continues
-the ordinary application rollout. A failed Job returns its failure directly. It does not create a
-backup, inspect the existing schema, pause application writes, or restore a previous release.
+Every invocation supplies a release version and the version it is upgrading from. The 0.9.3-to-0.10.0
+upgrade first publishes the OpenCrane connection to the release-local database pool, then runs the
+bounded Prisma migration Job before the ordinary application rollout. Prisma Migrate is the sole
+ordered migration record. A failed Job returns its failure directly. It does not create a backup,
+inspect the existing schema, pause application writes, or restore a previous release.
 
 Operational backup and restore configuration remains available in the PostgreSQL chart, but it is not
 a condition for running a migration. Deferred migration hardening work is tracked in issue #699.

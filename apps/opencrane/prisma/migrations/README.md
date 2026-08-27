@@ -1,7 +1,8 @@
 # Version-to-version database migrations
 
-The current clean target baseline remains in `../bootstrap/target-baseline.sql`. This directory is
-the upgrade authority for databases created by an earlier repository train.
+The current clean target baseline remains in `../bootstrap/target-baseline.sql`. This directory keeps
+the released SQL transitions used before 0.10.0. They remain unchanged as release history, but the
+deployment path no longer executes them.
 
 Each transition has one exact `<from>-to-<to>/` directory containing:
 
@@ -10,8 +11,8 @@ Each transition has one exact `<from>-to-<to>/` directory containing:
 - `manifest.json` — exact `fromSchemaVersion`/`toSchemaVersion`, `sqlSha256`, owner
   `apps/opencrane`, and any required privileged PostgreSQL extension.
 
-Migrations do not retain old schemas, aliases, or dual-write behavior. A failed migration is repaired
-forward; migration backup, schema checks, write pauses, and automatic recovery are deferred hardening
-work tracked in issue #699.
+From 0.10.0 onward, [`../prisma-migrations`](../prisma-migrations/README.md) is the only upgrade ledger.
+Migration backup, schema checks, and write pauses remain deferred hardening work tracked in issue
+#699.
 
-The migration Job verifies the reviewed SQL bytes before it runs.
+These historical files are evidence only.

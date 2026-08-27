@@ -9,7 +9,7 @@ A database migration is a small, ordered database change. It runs before the Ope
 starts, so server startup never changes tables by itself.
 
 ```
- empty database or released 0.9.3 database
+ released 0.9.3 database
                     │
                     ▼
   postgres chart ── creates the bounded migration Job
@@ -28,12 +28,14 @@ starts, so server startup never changes tables by itself.
 [opencrane](../opencrane/README.md) uses the resulting schema.
 
 The image contains Prisma and the versioned migration folders from the same source build. It has no
-HTTP server, Kubernetes permissions, or product request handling. The Job receives only the
-application database URL and either starts a fresh ledger or records the known 0.9.3 starting point.
+HTTP server, Kubernetes permissions, or product request handling. The Job receives the application
+database URL and the admitted source release, then records the known 0.9.3 starting point before
+applying later changes.
 
 ## Public surface
 
-Entrypoint: the `migration` target in `apps/opencrane/deploy/Dockerfile` runs `prisma migrate deploy`.
+Entrypoint: `run-migrations.sh` records the released 0.9.3 baseline and runs `prisma migrate deploy`.
+A failed migration is returned immediately for a forward code or migration repair.
 
 ## Boundary
 
@@ -47,11 +49,11 @@ not import another app at runtime.
 
 ## Runtime & config
 
-The Job supplies `DATABASE_URL`. For a released 0.9.3 database, the Job records the initial Prisma
-migration before applying later ones; a fresh database applies the whole list directly.
+The Job supplies `DATABASE_URL` and `OPENCRANE_MIGRATION_SOURCE_VERSION=0.9.3`. Fresh databases use
+the reviewed target baseline instead and do not run this upgrade image.
 
 ## See also
 
 - Parent map: [apps](../README.md)
 - Database Job: [postgres](../postgres/README.md)
-- Migration folders: [opencrane Prisma migrations](../opencrane/prisma/migrations/README.md)
+- Migration folders: [opencrane Prisma migrations](../opencrane/prisma/prisma-migrations/README.md)

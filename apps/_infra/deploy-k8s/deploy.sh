@@ -80,11 +80,6 @@ done
 [[ -n "$ACME_EMAIL" ]]      || { err "--acme-email is required to issue a browser-trusted certificate for this public silo host."; exit 1; }
 [[ -n "$FIRST_USER_EMAIL" ]] || { err "--first-user-email is required to claim this standalone silo's first owner from a verified OIDC login."; exit 1; }
 
-# The reviewed 0.9.3 IAM migration binds every legacy row to this exact silo instead of
-# inferring tenancy from database placement. The platform deploy engine consumes this only when
-# it executes that adjacent migration.
-PASSTHROUGH+=(--database-migration-silo-id "$CLUSTER_TENANT")
-
 # Fail fast if the external CloudNativePG prerequisite is absent.
 command -v kubectl >/dev/null 2>&1 || { err "kubectl not found."; exit 1; }
 if ! kubectl get crd clusters.postgresql.cnpg.io >/dev/null 2>&1; then

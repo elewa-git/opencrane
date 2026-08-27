@@ -8207,8 +8207,6 @@ INSERT INTO "user_onboarding_bootstrap_questions" ("content_revision_id", "ordin
 -- CreateTable
 -- One immutable ordinary group-message mention owns one child Agent-session conversation.
 -- Display-safe, append-only communication from a child Agent session to its immediate parent group.
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_run_event_sequence_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_run_event_sequence_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_state_check" CHECK (
     ("state" IN ('pending', 'retryable_failed') AND "claim_fence" IS NULL AND "claim_expires_at" IS NULL AND "completed_at" IS NULL)
     OR ("state" = 'claimed' AND "claim_fence" IS NOT NULL AND "claim_expires_at" IS NOT NULL AND "completed_at" IS NULL)
@@ -11699,3 +11697,6 @@ END;
 $$;
 
 SELECT absurd.create_queue('control-plane');
+SELECT absurd.create_queue('artifact-preprocessing');
+SELECT absurd.create_queue('skill-authoring');
+SELECT absurd.create_queue('agent-runs');

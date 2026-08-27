@@ -110,8 +110,6 @@ fi
 source "$COGNEE_IMAGE_POLICY"
 source "$SCRIPT_DIR/initial-model-provider.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
-source "$SCRIPT_DIR/database-pg-cron-preflight.sh"
-source "$SCRIPT_DIR/database-superuser-access.sh"
 source "$SCRIPT_DIR/database-migration-orchestrator.sh"
 source "$SCRIPT_DIR/database-release-finalization.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
@@ -133,12 +131,10 @@ if [[ ! -f "$POSTGRES_CONNECTION_PUBLISHER" ]]; then
   exit 1
 fi
 POSTGRES_BASELINE_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-initdb-baseline-config-map.sh"
-POSTGRES_MIGRATION_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-database-migration-config-map.sh"
 POSTGRES_BASELINE_FILE="$SCRIPT_DIR/../../../opencrane/prisma/bootstrap/target-baseline.sql"
 REPOSITORY_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-if [[ ! -f "$POSTGRES_BASELINE_PUBLISHER" || ! -f "$POSTGRES_MIGRATION_PUBLISHER" \
-  || ! -s "$POSTGRES_BASELINE_FILE" ]]; then
-  echo "[k8s-deploy] OpenCrane database baseline or migration deployment helpers are missing." >&2
+if [[ ! -f "$POSTGRES_BASELINE_PUBLISHER" || ! -s "$POSTGRES_BASELINE_FILE" ]]; then
+  echo "[k8s-deploy] OpenCrane database baseline helper is missing." >&2
   exit 1
 fi
 NAMESPACE="opencrane-system"
@@ -209,8 +205,7 @@ LITELLM_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_LITELLM_POSTGRES_CREDENTIALS_SE
 LITELLM_POSTGRES_OWNER="${OPENCRANE_LITELLM_POSTGRES_OWNER:-litellm}"
 POSTGRES_ADMIN_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_ADMIN_CREDENTIALS_SECRET:-}"
 POSTGRES_ADMIN_NAME="${OPENCRANE_POSTGRES_ADMIN_NAME:-opencrane_database_admin}"
-POSTGRES_MIGRATION_IMAGE="${OPENCRANE_POSTGRES_MIGRATION_IMAGE:-ghcr.io/cloudnative-pg/postgresql@sha256:b1deeed2aa998b2f381e39c5cadb9ec06127708c8bd62965743af19abf21628f}"
-DATABASE_MIGRATION_SILO_ID="${OPENCRANE_DATABASE_MIGRATION_SILO_ID:-}"
+PRISMA_MIGRATOR_IMAGE="${OPENCRANE_PRISMA_MIGRATOR_IMAGE:-}"
 # --preflight runs a fail-FAST environment check BEFORE any cluster mutation and exits 0/1
 # without installing. It catches the failures that otherwise surface as a half-installed,
 # crash-looping cluster: no default StorageClass (every PVC pends), a CNI that silently
@@ -277,8 +272,7 @@ while [[ $# -gt 0 ]]; do
     --litellm-postgres-owner) LITELLM_POSTGRES_OWNER="$2"; shift 2 ;;
     --postgres-admin-credentials-secret) POSTGRES_ADMIN_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --postgres-admin-name) POSTGRES_ADMIN_NAME="$2"; shift 2 ;;
-    --postgres-migration-image) POSTGRES_MIGRATION_IMAGE="$2"; shift 2 ;;
-    --database-migration-silo-id) DATABASE_MIGRATION_SILO_ID="$2"; shift 2 ;;
+    --prisma-migrator-image) PRISMA_MIGRATOR_IMAGE="$2"; shift 2 ;;
     --postgres-values) POSTGRES_VALUES_FILE="$2"; shift 2 ;;
     --release-version) RELEASE_VERSION="$2"; shift 2 ;;
     --from-release-version) FROM_RELEASE_VERSION="$2"; shift 2 ;;
@@ -597,13 +591,6 @@ if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
 fi
 
 DATABASE_MIGRATION_ENABLED=false
-DATABASE_MIGRATION_ID=""
-DATABASE_MIGRATION_SQL_FILE=""
-DATABASE_MIGRATION_SQL_SHA256=""
-DATABASE_MIGRATION_SOURCE_BASELINE_SHA256=""
-DATABASE_PRIVILEGED_EXTENSION=""
-DATABASE_MIGRATION_CONFIG_MAP=""
-DATABASE_MIGRATION_ROOT=""
 if [[ "$FROM_RELEASE_VERSION" == "fresh" && "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
   err "--from-release-version fresh is only valid when PostgreSQL has not been created."
   exit 1
@@ -612,33 +599,18 @@ if [[ "$FROM_RELEASE_VERSION" != "fresh" && ! -f "$REPOSITORY_ROOT/releases/${FR
   err "Source release manifest 'releases/${FROM_RELEASE_VERSION}.json' does not exist."
   exit 1
 fi
-if [[ "$FROM_RELEASE_VERSION" != "fresh" ]]; then
-  DATABASE_SOURCE_SCHEMA_VERSION="$(jq -r '.database.schemaVersion // empty' "$REPOSITORY_ROOT/releases/${FROM_RELEASE_VERSION}.json")"
-  DATABASE_TARGET_SCHEMA_VERSION="$(jq -r '.database.schemaVersion // empty' "$RELEASE_MANIFEST")"
-  DATABASE_MIGRATION_ROOT="$REPOSITORY_ROOT/apps/opencrane/prisma/migrations/${DATABASE_SOURCE_SCHEMA_VERSION}-to-${DATABASE_TARGET_SCHEMA_VERSION}"
-fi
-if [[ -n "$DATABASE_MIGRATION_ROOT" && -f "$DATABASE_MIGRATION_ROOT/migration.sql" && -f "$DATABASE_MIGRATION_ROOT/manifest.json" ]]; then
-  DATABASE_MIGRATION_ENABLED=true
-  DATABASE_MIGRATION_ID="${DATABASE_SOURCE_SCHEMA_VERSION}-to-${DATABASE_TARGET_SCHEMA_VERSION}"
-  DATABASE_MIGRATION_SQL_FILE="$DATABASE_MIGRATION_ROOT/migration.sql"
-  DATABASE_MIGRATION_SQL_SHA256="$(jq -r '.sqlSha256 // empty' "$DATABASE_MIGRATION_ROOT/manifest.json")"
-  DATABASE_MIGRATION_SOURCE_BASELINE_SHA256="$(jq -r '.sourceTargetBaselineSha256 // empty' "$DATABASE_MIGRATION_ROOT/manifest.json")"
-  DATABASE_PRIVILEGED_EXTENSION="$(jq -r '.privilegedExtension // empty' "$DATABASE_MIGRATION_ROOT/manifest.json")"
-  if [[ ! "$POSTGRES_MIGRATION_IMAGE" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
-    err "Database migration requires --postgres-migration-image with an exact sha256 OCI digest."
-    exit 1
-  fi
-  if [[ ! "$DATABASE_MIGRATION_SQL_SHA256" =~ ^[0-9a-f]{64}$ || ! "$DATABASE_MIGRATION_SOURCE_BASELINE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
-    err "Database migration manifest must provide SQL and source-baseline digests."
-    exit 1
-  fi
-  if [[ -n "$DATABASE_PRIVILEGED_EXTENSION" && "$DATABASE_PRIVILEGED_EXTENSION" != "pg_cron" ]]; then
-    err "Database migration manifest declares an unsupported privileged extension."
-    exit 1
-  fi
-elif [[ "$FROM_RELEASE_VERSION" != "fresh" && "$DATABASE_SOURCE_SCHEMA_VERSION" != "$DATABASE_TARGET_SCHEMA_VERSION" ]]; then
-  err "No reviewed database migration exists from schema '$DATABASE_SOURCE_SCHEMA_VERSION' to '$DATABASE_TARGET_SCHEMA_VERSION'."
+EXPECTED_PREDECESSOR_RELEASE_VERSION="$(jq -r '.previousRepositoryVersion // empty' "$RELEASE_MANIFEST")"
+# The migration image contains one forward path, so upgrades must start from the release it expects.
+if [[ "$FROM_RELEASE_VERSION" != "fresh" && "$FROM_RELEASE_VERSION" != "$EXPECTED_PREDECESSOR_RELEASE_VERSION" ]]; then
+  err "Source release '$FROM_RELEASE_VERSION' is not the candidate's exact predecessor '$EXPECTED_PREDECESSOR_RELEASE_VERSION'."
   exit 1
+fi
+if [[ "$FROM_RELEASE_VERSION" != "fresh" ]]; then
+  DATABASE_MIGRATION_ENABLED=true
+  if [[ ! "$PRISMA_MIGRATOR_IMAGE" =~ ^ghcr\.io/elewa-git/opencrane-prisma-migrator@sha256:[0-9a-f]{64}$ ]]; then
+    err "Database migration requires --prisma-migrator-image with the exact OpenCrane Prisma migrator digest."
+    exit 1
+  fi
 fi
 
 _load_kubernetes_api_helm_args networkPolicy "PostgreSQL pooler"
@@ -663,15 +635,17 @@ _copy_cnpg_uri_secret() {
 if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
   ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"
 fi
-run_database_release_transition
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
+prepare_database_release_transition
+# Publish the pooler URI before enabling the Job because the migrator reads this Secret as DATABASE_URL.
 # Five OpenCrane connections keep PgBouncer's thirty-connection logical-database budget authoritative.
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
+finish_database_release_transition
 
 _assert_distinct_cnpg_app_credentials() {
   local app_secrets=("$@")
