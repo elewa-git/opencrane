@@ -72,9 +72,9 @@
     },
     "litellm": {
       "root": "apps/_infra/litellm",
-      "adaptedVersion": "0.9.3",
-      "chartVersion": "0.9.3",
-      "chartAppVersion": "0.9.3"
+      "adaptedVersion": "0.8.0",
+      "chartVersion": "0.8.0",
+      "chartAppVersion": "0.8.0"
     },
     "managed-agent-runtime": {
       "root": "apps/managed-agent-runtime",
