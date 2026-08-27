@@ -48,10 +48,11 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   call in an isolated MCP-specific Kubernetes Job with a durable claim, bounded identity, and retry
   and cleanup ownership.
 
-- **Artifact processing, skill work, and agent runs can now survive worker or server restarts.** Their
-  Absurd workflows claim saved work, fence every delivery, retry recoverable failures, preserve
-  completion evidence, and clean up expired or replaced workload and output leases without returning
-  to SQL polling.
+- **Artifact processing and skill work can now survive worker or server restarts.** Their Absurd
+  workflows claim saved work, fence every delivery, retry recoverable failures, preserve completion
+  evidence, and clean up expired or replaced workload and output leases. AgentRun execution and
+  terminal recovery also use Absurd; its physical Kubernetes Job cleanup remains on the existing
+  database-polled reconciler until that final ownership moves.
 
 - **Users and operators can now see the availability of every user-visible service through
   unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,
