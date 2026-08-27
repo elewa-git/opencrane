@@ -19,6 +19,7 @@ describe("artifact preprocessing Job builder", function _DescribeArtifactPreproc
 	it("builds a suspended one-shot worker without product identifiers or database credentials", function _BuildsHardenedJob()
 	{
 		const job = __BuildArtifactPreprocessorJob(_Assignment(), _Profile());
+		expect(job).toMatchObject({ apiVersion: "batch/v1", kind: "Job" });
 		expect(job.spec).toMatchObject({ suspend: true, backoffLimit: 0, completions: 1, parallelism: 1, ttlSecondsAfterFinished: 0 });
 		expect(job.spec?.template.spec).toMatchObject({ serviceAccountName: "artifact-preprocessor", automountServiceAccountToken: false, restartPolicy: "Never" });
 		expect(job.spec?.template.spec?.containers[0]?.securityContext).toMatchObject({ allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } });

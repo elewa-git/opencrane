@@ -18,8 +18,8 @@ releases only that recorded Job.
 
 **In this flow:** [workflow contract](../workflows/contract/README.md) · [Job builder](../k8s-launcher/README.md) · [server artifact authority](../../../server/agents/artifacts/main/README.md).
 
-No production composition registers the handler in this slice. Its tests verify the bind-before-
-release sequence without starting the existing polling worker as a one-shot Job.
+The agent-controller registers this handler when the deployment enables PDF preprocessing. Its tests
+verify that OpenCrane records the Job and first Pod before the controller releases the one-shot Job.
 
 ## Public surface
 

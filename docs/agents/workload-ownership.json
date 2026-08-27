@@ -67,7 +67,6 @@
         "Deployment/opencrane-channel-proxy",
         "Deployment/opencrane-memory-gateway",
         "Deployment/opencrane-artifact-service",
-        "Deployment/opencrane-artifact-preprocessor",
         "Deployment/opencrane-artifact-scanner",
         "Deployment/opencrane-agent-controller",
         "Deployment/opencrane-cognee",
@@ -76,6 +75,11 @@
     }
   ],
   "dynamicWorkloads": [
+    {
+      "path": "libs/backend/artifacts/preprocessor/k8s-launcher/src/artifact-preprocessor-job.ts",
+      "anchor": "kind: \"Job\"",
+      "workloadIds": ["artifact-preprocessor"]
+    },
     {
       "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts",
       "anchor": "kind: \"Job\"",
@@ -104,7 +108,7 @@
     {
       "path": "libs/backend/agents/runtime/workloads/k8s-controller/src/governed-job-controller.ts",
       "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
-      "workloadIds": ["skill-authoring", "tool-runner", "mcp-executor"]
+      "workloadIds": ["artifact-preprocessor", "skill-authoring", "tool-runner", "mcp-executor"]
     }
   ],
   "nonProducingRuntimeMatches": [
@@ -180,12 +184,10 @@
     },
     {
       "id": "artifact-preprocessor",
-      "podClass": "Deployment/artifact-preprocessor",
-      "renderedPodClass": "Deployment/opencrane-artifact-preprocessor",
+      "podClass": "Job/artifact-preprocess",
       "image": "ghcr.io/elewa-git/opencrane-artifact-preprocessor@sha256:<release-digest>",
       "owner": "apps/artifact-preprocessor",
-      "source": { "type": "file", "path": "apps/artifact-preprocessor/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
-      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.artifactPreprocessor.resources\"" }
+      "source": { "type": "file", "path": "libs/backend/artifacts/preprocessor/k8s-launcher/src/artifact-preprocessor-job.ts", "anchor": "kind: \"Job\"" }
     },
     {
       "id": "artifact-scanner",

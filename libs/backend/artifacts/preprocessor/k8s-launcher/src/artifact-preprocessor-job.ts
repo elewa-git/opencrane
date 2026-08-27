@@ -99,8 +99,8 @@ function _AssertAssignment(assignment: ArtifactPreprocessorJobAssignment, profil
  * The builder checks the deployment profile and controller assignment before it creates a manifest.
  * That prevents a caller from widening the worker identity, broker endpoint, namespace, or bootstrap
  * reference. The returned Job starts suspended, leaving release to a separate controller action.
- * This package has no production caller yet; its contract test verifies the hardened shape and those
- * rejections.
+ * Called by: `__CreateArtifactPreprocessHandler`, which gives the manifest to the controller's
+ * UID-checked Kubernetes store.
  *
  * @param assignment - Controller-selected task coordinates and opaque bootstrap reference.
  * @param profile - Deployment-owned worker identity, broker endpoint, and resource policy.
@@ -113,6 +113,8 @@ export function __BuildArtifactPreprocessorJob(assignment: ArtifactPreprocessorJ
 	_AssertAssignment(assignment, profile);
 	const name = __ArtifactPreprocessorJobName(assignment);
 	return {
+		apiVersion: "batch/v1",
+		kind: "Job",
 		metadata: { name, namespace: profile.namespace, labels: { "app.kubernetes.io/component": "artifact-preprocessor", "opencrane.ai/artifact-preprocessor": name }, annotations: { "opencrane.ai/bootstrap-reference": assignment.bootstrapReference } },
 		spec: {
 			suspend: true,
