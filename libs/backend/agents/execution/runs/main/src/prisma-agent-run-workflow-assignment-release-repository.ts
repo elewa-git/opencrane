@@ -5,7 +5,11 @@ import type { AgentRunWorkflowAssignmentCommand, AgentRunWorkflowControllerRecor
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { AgentRunWorkflowAssignmentReleasePersistenceRepository, AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-workflow-controller-authority.types";
-import { __AgentRunWorkflowBootstrapClaimDigest, __AgentRunWorkflowBootstrapReferenceForTask, __AgentRunWorkflowRuntimeIdentity, __CanCreateOrObserveAgentRunWorkflowTask, __CurrentAgentRunWorkflowTask, type AgentRunWorkflowSnapshotIdentity, type AgentRunWorkflowTaskRow, PrismaAgentRunWorkflowTaskReadRepository } from "./prisma-agent-run-workflow-task-read-repository";
+import { __AgentRunWorkflowBootstrapClaimDigest, __AgentRunWorkflowBootstrapReferenceForTask, __AgentRunWorkflowRuntimeIdentity, __CanCreateOrObserveAgentRunWorkflowTask, __CurrentAgentRunWorkflowTask, PrismaAgentRunWorkflowTaskReadRepository } from "./prisma-agent-run-workflow-task-read-repository";
+import type { AgentRunWorkflowSnapshotIdentity } from "./prisma-agent-run-workflow-task-read-repository.types";
+
+/** Names the task row returned by the shared receipt-fenced reader. */
+type AgentRunWorkflowTaskRow = NonNullable<Awaited<ReturnType<PrismaAgentRunWorkflowTaskReadRepository["read"]>>>;
 
 /** Owns exact Job assignment, first-Pod binding, and release fences for a receipt-bound task. */
 export class PrismaAgentRunWorkflowAssignmentReleaseRepository implements AgentRunWorkflowAssignmentReleasePersistenceRepository

@@ -10,6 +10,7 @@ import { _BuildRunAttemptCredentialMintInputs } from "./run-attempt-credential-m
 import { __AgentRunWorkflowBootstrapReference } from "./agent-run-workflow-bootstrap-reference";
 import type { AttemptModelKeyMintRequest } from "./attempt-model-key.types";
 import type { AgentRunWorkflowControllerAuthorityOptions, AgentRunWorkflowTaskReadPersistenceRepository } from "./agent-run-workflow-controller-authority.types";
+import type { AgentRunWorkflowSnapshotIdentity } from "./prisma-agent-run-workflow-task-read-repository.types";
 
 /** Selects the saved task, current run, active service, and frozen snapshot for controller reads. */
 export const __AGENT_RUN_WORKFLOW_TASK_SELECT = {
@@ -42,18 +43,7 @@ export const __AGENT_RUN_WORKFLOW_TASK_SELECT = {
 } as const satisfies Prisma.AgentRunWorkflowTaskSelect;
 
 /** Holds the durable task facts protected by the task receipt fence. */
-export type AgentRunWorkflowTaskRow = Prisma.AgentRunWorkflowTaskGetPayload<{ readonly select: typeof __AGENT_RUN_WORKFLOW_TASK_SELECT }>;
-
-/** Holds frozen identity evidence that chooses the task's runtime workload class. */
-export interface AgentRunWorkflowSnapshotIdentity
-{
-	/** Identifies the person or managed service that owns this run. */
-	readonly subjectId: string;
-	/** Identifies the managed service, or is null for a personal run. */
-	readonly managedServiceId: string | null;
-	/** Limits how long the snapshot remains valid for workload assignment. */
-	readonly trustedUntil: Date;
-}
+type AgentRunWorkflowTaskRow = Prisma.AgentRunWorkflowTaskGetPayload<{ readonly select: typeof __AGENT_RUN_WORKFLOW_TASK_SELECT }>;
 
 /** Reads receipt-fenced task facts and derives non-secret credentials after its transaction commits. */
 export class PrismaAgentRunWorkflowTaskReadRepository implements AgentRunWorkflowTaskReadPersistenceRepository

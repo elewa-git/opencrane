@@ -6,7 +6,10 @@ import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workf
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository";
 import type { AgentRunWorkflowControllerAuthorityOptions, AgentRunWorkflowTerminalCleanupPersistenceRepository } from "./agent-run-workflow-controller-authority.types";
 import type { RunWorkloadCleanupProjection } from "./run-cancellation.types";
-import { __AgentRunWorkflowBootstrapReferenceForTask, __AgentRunWorkflowRuntimeIdentity, type AgentRunWorkflowTaskRow, PrismaAgentRunWorkflowTaskReadRepository } from "./prisma-agent-run-workflow-task-read-repository";
+import { __AgentRunWorkflowBootstrapReferenceForTask, __AgentRunWorkflowRuntimeIdentity, PrismaAgentRunWorkflowTaskReadRepository } from "./prisma-agent-run-workflow-task-read-repository";
+
+/** Names the task row returned by the shared receipt-fenced reader. */
+type AgentRunWorkflowTaskRow = NonNullable<Awaited<ReturnType<PrismaAgentRunWorkflowTaskReadRepository["read"]>>>;
 
 /** Owns terminal task cleanup and read-only task outcome classification. */
 export class PrismaAgentRunWorkflowTerminalCleanupRepository implements AgentRunWorkflowTerminalCleanupPersistenceRepository
