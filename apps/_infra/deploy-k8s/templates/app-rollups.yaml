@@ -48,10 +48,3 @@
 ---
 {{ include "opencrane.litellm.service" . }}
 ---
-{{ include "opencrane.obot.rbac" . }}
----
-{{ include "opencrane.obot.deployment" . }}
----
-{{ include "opencrane.obot.service" . }}
----
-{{ include "opencrane.obot.networkPolicy" . }}

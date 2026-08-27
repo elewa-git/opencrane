@@ -233,17 +233,6 @@ spec:
         - protocol: TCP
           port: {{ .Values.litellm.service.port }}
     {{- end }}
-    {{- if and .Values.mcpGateway.enabled (ne (include "opencrane.mcpGatewayShared" .) "true") }}
-    # Release-local Obot transport for server-owned custody and durable action execution.
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: mcp-gateway
-      ports:
-        - protocol: TCP
-          port: {{ .Values.mcpGateway.service.port }}
-    {{- end }}
     {{- if .Values.channelProxy.enabled }}
     # Release-local live conversation-event delivery lets the server check the channel proxy.
     - to:
