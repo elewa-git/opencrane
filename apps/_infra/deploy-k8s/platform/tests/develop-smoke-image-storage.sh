@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+_SMOKE_REQUIRED_DOCKER_FREE_GIB="12"
+
 # Lists only the image volume whose exact name belongs to this cluster, avoiding similarly prefixed volumes.
 _list_cluster_image_volume()
 {
@@ -83,21 +85,57 @@ _reset_smoke_storage()
   done <<< "$_SMOKE_CAPTURED_VOLUMES"
 }
 
-# Keep CI's batch import; minimum-disk Tier 3 trades reusable cache for 8 GB of reserved Docker
-# headroom and releases each source only after k3d accepts it.
+# Fail before k3d can turn exhausted Docker storage into node disk pressure.
+_require_smoke_docker_free_space()
+{
+  local available_kib docker_root
+  if ! docker_root="$(docker info --format '{{.DockerRootDir}}')" || [[ -z "$docker_root" ]]; then
+    echo "[develop-smoke] Docker did not report its root directory for the disk-budget check." >&2
+    return 1
+  fi
+  if ! available_kib="$(df -Pk "$docker_root" | awk 'NR == 2 { print $4 }')" \
+    || [[ ! "$available_kib" =~ ^[0-9]+$ ]]; then
+    echo "[develop-smoke] Could not measure free storage under Docker root '$docker_root'." >&2
+    return 1
+  fi
+  if [[ "$available_kib" -lt "$((_SMOKE_REQUIRED_DOCKER_FREE_GIB * 1024 * 1024))" ]]; then
+    echo "[develop-smoke] Docker root '$docker_root' has $((available_kib / 1024)) MiB free; Tier 3 minimum-host mode requires $((_SMOKE_REQUIRED_DOCKER_FREE_GIB * 1024)) MiB." >&2
+    return 1
+  fi
+}
+
+# Remove reproducible host dependencies and caches before image builds consume the minimum disk.
+_prepare_smoke_host_storage()
+{
+  if [[ "$SMOKE_HOST_PROFILE" == "recommended" ]]; then
+    return 0
+  fi
+
+  echo "[develop-smoke] Reclaiming host dependencies, package cache, and Docker caches for the minimum disk"
+  rm -rf -- "$ROOT_DIR/node_modules"
+  npm cache clean --force || return $?
+  docker buildx prune --all --force --min-free-space "${_SMOKE_REQUIRED_DOCKER_FREE_GIB}gb" || return $?
+  docker image prune --force || return $?
+  _require_smoke_docker_free_space
+}
+
+# Keep CI's batch import; minimum-disk Tier 3 reserves space for images pulled during deployment
+# and releases each source only after k3d accepts it.
 _import_smoke_images()
 {
   local image
-  if [[ "$SMOKE_LOW_DISK_IMAGE_IMPORT" == "0" ]]; then
+  if [[ "$SMOKE_HOST_PROFILE" == "recommended" ]]; then
     _retry 3 k3d image import "${SMOKE_IMAGES[@]}" --cluster "$CLUSTER_NAME" --mode direct
     return $?
   fi
 
-  echo "[develop-smoke] Reclaiming Docker build cache until 8 GB is free for the k3d import"
-  docker buildx prune --all --force --min-free-space 8gb || return $?
+  echo "[develop-smoke] Reclaiming Docker build cache until ${_SMOKE_REQUIRED_DOCKER_FREE_GIB} GB is free for the remaining workload images"
+  docker buildx prune --all --force --min-free-space "${_SMOKE_REQUIRED_DOCKER_FREE_GIB}gb" || return $?
   for image in "${SMOKE_IMAGES[@]}"; do
     echo "[develop-smoke] Importing and releasing $image"
     _retry 3 k3d image import "$image" --cluster "$CLUSTER_NAME" --mode direct || return $?
     docker image rm "$image" || return $?
   done
+  docker image prune --force || return $?
+  _require_smoke_docker_free_space
 }

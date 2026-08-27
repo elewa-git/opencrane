@@ -7,18 +7,18 @@ export const TIER3_DEVELOPMENT_HELP = `OpenCrane Tier 3 k3d development
 
 Usage:
   npm run dev:tier3
-  npm run dev:tier3 -- --storage-mode fast
+  npm run dev:tier3 -- --storage-mode full
   npm run dev:tier3 -- --smoke-only
 
 Options:
-  --storage-mode full|fast  Full storage qualification is the default.
+  --storage-mode fast|full  Fast storage is the minimum-host default; full proves expansion.
   --proxy-port <port>       Loopback port forwarded by Codespaces (default: 4200).
   --smoke-only              Leave the qualified cluster running without starting the browser proxy.
   --help                    Show this help.
 
 Environment:
-  SMOKE_LOW_DISK_IMAGE_IMPORT=0  Preserve build cache and use one batch import on a larger host.
-  TIMEOUT_SECONDS=<seconds>      Override the 600-second local readiness budget.
+  SMOKE_HOST_PROFILE=recommended  Preserve dependencies and caches and use a batch import.
+  TIMEOUT_SECONDS=<seconds>       Override the 600-second local readiness budget.
 `;
 
 /**
@@ -35,7 +35,7 @@ export function parseTier3Arguments(argumentsList)
 		help: false,
 		proxyPort: _DEFAULT_PROXY_PORT,
 		smokeOnly: false,
-		storageMode: "full"
+		storageMode: "fast"
 	};
 
 	for (let index = 0; index < argumentsList.length; index += 1)
@@ -93,8 +93,8 @@ export function parseTier3Arguments(argumentsList)
  * Builds the smoke environment and matching ingress identity for an interactive Tier 3 session.
  *
  * The wrapper always retains the cluster so a passing or failed run remains available for kubectl
- * diagnosis. Other smoke inputs stay under the developer's control, except the selected storage
- * profile, which comes from the reviewed command options.
+ * diagnosis. The command-selected storage mode overrides the matching smoke input. The minimum
+ * host profile applies unless the developer explicitly selects the recommended profile.
  *
  * Called by: `runTier3Development` before it starts `develop-smoke.sh`.
  *
@@ -117,7 +117,7 @@ export function createTier3SessionConfiguration(parentEnvironment, storageMode)
 		smokeEnvironment: {
 			...parentEnvironment,
 			KEEP_CLUSTER: "1",
-			SMOKE_LOW_DISK_IMAGE_IMPORT: parentEnvironment.SMOKE_LOW_DISK_IMAGE_IMPORT || "1",
+			SMOKE_HOST_PROFILE: parentEnvironment.SMOKE_HOST_PROFILE || "minimum",
 			SMOKE_STORAGE_MODE: storageMode,
 			TIMEOUT_SECONDS: parentEnvironment.TIMEOUT_SECONDS || _DEFAULT_TIMEOUT_SECONDS
 		},

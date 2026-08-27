@@ -56,18 +56,26 @@ Linux amd64 and installs the versions used by the smoke job: Node 24, Helm v4.1.
 kubectl v1.30.10. Docker runs inside the container. The configuration enforces a minimum of 4 cores,
 16 GB of memory, and 32 GB of storage so Codespaces can offer smaller machines. The full silo uses
 approximately 6 CPUs, 10–12 GB of memory, and 25–30 GB of storage, so 4-core machines may be slower
-and the 32-GB disk leaves little room for image and build-cache growth. Use the recommended 8-core,
-32-GB-memory, 64-GB-storage machine for full qualification and repeated builds.
+and the 32-GB disk cannot also hold the complete workspace dependency tree or storage-expansion
+driver. Use the recommended 8-core, 32-GB-memory, 64-GB-storage machine for full storage
+qualification, repository-wide work, and repeated builds.
 
 ```bash
 npm run dev:tier3
 ```
 
-Tier 3 protects the minimum disk by reclaiming reusable BuildKit cache until Docker has 8 GB free,
-importing the images into k3d one at a time, and deleting each Docker-side source after a successful
-import. The retained k3d copy remains available. This avoids the peak double-copy that
-otherwise fills a 32-GB Codespace. On the recommended 64-GB machine, preserve the reusable build
-cache and use the faster batch import with `SMOKE_LOW_DISK_IMAGE_IMPORT=0 npm run dev:tier3`.
+Tier 3 protects the minimum disk by using k3d's local-path storage while still deploying every
+application workload. It removes an existing root `node_modules` tree, clears the host npm cache and
+reusable BuildKit cache, reserves 12 GB for the imported and later-pulled workload images, imports
+local images one at a time, and removes each Docker-side source after k3d accepts it. These inputs are
+reproducible from `package-lock.json`; reinstall them before other repository work. The direct
+importer writes no intermediate archive or image volume. On the recommended 64-GB machine, preserve
+reusable dependencies and caches, use the faster batch import, and prove storage expansion:
+
+```bash
+SMOKE_HOST_PROFILE=recommended npm run dev:tier3 -- --storage-mode full
+```
+
 The contributor command allows 600 seconds for workload readiness unless `TIMEOUT_SECONDS` supplies
 another reviewed value.
 
@@ -77,10 +85,11 @@ browser's `*.app.github.dev` origin while sending the smoke's `.test` host to in
 `/api`, `/gateway`, and WebSocket routes all use the real chart routing. Port-forwarding only the
 SPA service is not enough: its nginx container deliberately does not proxy application routes.
 
-Use fast local-path storage when the change does not concern storage expansion:
+The minimum-host command already uses fast local-path storage. Select full storage explicitly when
+the change concerns storage expansion:
 
 ```bash
-npm run dev:tier3 -- --storage-mode fast
+npm run dev:tier3 -- --storage-mode full
 ```
 
 Use `--smoke-only` when a browser is unnecessary. To stop the retained cluster after diagnosis,
@@ -89,10 +98,13 @@ does not touch Tier 2 containers or volumes.
 
 ## Codespaces prebuilds
 
-The devcontainer runs `npm ci` during creation, so a repository administrator can enable a
-Codespaces prebuild for this configuration and cache the lockfile-bound workspace dependencies.
-Prebuilds consume Actions minutes and storage; keep them for branches that regularly need Tier 3.
-The Docker-in-Docker data volume remains Codespace-local and is not part of a prebuild.
+The minimum-host devcontainer skips `npm ci` because Tier 3's Node entrypoint uses built-in modules
+and every workload installs its own dependencies inside its image build. When at least 40 GB remains
+free during creation, the recommended-host profile installs the lockfile-bound workspace dependencies
+and can be baked into a Codespaces prebuild. Set
+`OPENCRANE_DEVCONTAINER_INSTALL_DEPENDENCIES=1` to force installation for other repository work.
+Prebuilds consume Actions minutes and storage. The Docker-in-Docker data volume remains
+Codespace-local and is not part of a prebuild.
 
 ## Qualification boundary
 

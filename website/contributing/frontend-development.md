@@ -186,27 +186,31 @@ npm run dev:tier3
 The devcontainer uses Docker-in-Docker and pins the smoke toolchain to Node 24, Helm v4.1.4, k3d
 v5.8.3, and kubectl v1.30.10. It enforces a 4-core, 16 GB memory, 32 GB storage minimum so Codespaces
 can offer smaller machines. The full image and cluster set uses approximately 6 CPUs, 10–12 GB of
-memory, and 25–30 GB of storage, so 4-core machines may be slower and the minimum disk leaves little
-room for image and build-cache growth. Use the recommended 8-core, 32 GB memory, 64 GB storage machine
-for full qualification and repeated builds. The `npm ci` creation step can be baked into a repository
-Codespaces prebuild; enabling that prebuild remains a repository setting and uses Actions minutes and
-storage.
+memory, and 25–30 GB of storage, so the minimum host skips the workspace dependency tree and uses
+local-path storage while still deploying every application workload. Use the recommended 8-core,
+32 GB memory, 64 GB storage machine for storage-expansion qualification, repository-wide work, and
+repeated builds. When at least 40 GB remains free, the creation step runs `npm ci` and can be baked
+into a repository Codespaces prebuild; enabling that prebuild remains a repository setting and uses
+Actions minutes and storage.
 
-On the minimum disk, Tier 3 reclaims reusable BuildKit cache until Docker has 8 GB free, imports one
-image at a time, and removes each Docker-side source after k3d accepts it. The retained cluster keeps
-its own copy. This prevents the temporary source-plus-cluster image duplication from filling a 32 GB
-Codespace. A recommended-size machine can retain the build cache and use the faster batch import:
+On the minimum disk, Tier 3 removes an existing root `node_modules` tree, clears disposable npm and
+BuildKit caches, reserves 12 GB for all images that arrive after the build, imports one local image at
+a time, and removes each Docker-side source after k3d accepts it. Reinstall the lockfile-bound
+dependencies before other repository work. The retained cluster keeps its own copy, and k3d's
+[direct importer](https://k3d.io/v5.8.3/usage/importing_images/) creates no intermediate archive or
+image volume. A recommended-size machine can retain the caches, use the faster batch import, and
+qualify storage expansion:
 
 ```bash
-SMOKE_LOW_DISK_IMAGE_IMPORT=0 npm run dev:tier3
+SMOKE_HOST_PROFILE=recommended npm run dev:tier3 -- --storage-mode full
 ```
 
 The contributor command also allows 600 seconds for workload readiness on a loaded Codespace.
 
-The command runs the same current-silo smoke that protects `develop`, with full storage
-qualification and `KEEP_CLUSTER=1`. It therefore builds the affected images, installs the pinned
-cluster controllers, deploys through the real app-owned release script, and proves database
-isolation, TLS ingress, enabled workloads, and storage before returning control to the developer.
+The command runs the same current-silo smoke that protects `develop`, with `KEEP_CLUSTER=1`. It
+therefore builds the affected images, installs the pinned cluster controllers, deploys through the
+real app-owned release script, and proves database isolation, TLS ingress, enabled workloads, and
+the selected storage profile before returning control to the developer.
 
 After the smoke passes, open the Codespaces port labelled **OpenCrane Tier 3** and keep its
 visibility private. A loopback proxy on port 4200 keeps the forwarded `*.app.github.dev` browser
@@ -214,10 +218,11 @@ origin but sends the smoke's `.test` host to the k3d ingress. That preserves the
 `/gateway`, and WebSocket routing. A direct port-forward to the SPA service would load static files
 but fail application routes because the SPA container deliberately has no reverse proxy.
 
-Use the fast local-path storage profile only when storage expansion is outside the change:
+The minimum-host command uses fast local-path storage. Select full storage when the change concerns
+storage expansion:
 
 ```bash
-npm run dev:tier3 -- --storage-mode fast
+npm run dev:tier3 -- --storage-mode full
 ```
 
 Use `--smoke-only` when no browser is needed. The cluster stays available after either command so

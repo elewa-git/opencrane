@@ -73,14 +73,15 @@ LiteLLM, B using an explicit remote HTTPS LiteLLM, and C using deterministic mod
 provider credentials.
 
 **Tier 3 built on `tier-2-local-application`:** `npm run dev:tier3` reuses the blocking current-silo
-k3d smoke with full storage qualification and `KEEP_CLUSTER=1`, then exposes the qualified ingress
+k3d smoke with `KEEP_CLUSTER=1`, then exposes the qualified ingress
 through a loopback proxy that works behind a Codespaces forwarded URL. The devcontainer supplies
 Docker-in-Docker and the CI-aligned Node 24, Helm v4.1.4, k3d v5.8.3, and kubectl v1.30.10 toolchain,
-enforces a 4-core/16-GB/32-GB minimum, recommends an 8-core/32-GB/64-GB host, and runs `npm ci` early
-enough for a repository prebuild. Its low-disk import releases disposable build cache and each
-Docker-side image after k3d accepts it, avoiding the peak double-copy on the minimum disk. Fast
-storage and smoke-only modes remain explicit; production DNS, certificates, cloud identity,
-backup/restore, and real-tenant upgrades remain remote qualification.
+enforces a 4-core/16-GB/32-GB minimum and recommends an 8-core/32-GB/64-GB host. The minimum profile
+skips or removes the unused host dependency tree, uses local-path storage, clears disposable caches,
+and releases each Docker-side image after k3d accepts it. The recommended profile installs workspace dependencies
+for a repository prebuild and can opt into batch imports plus storage expansion. Smoke-only mode
+remains explicit; production DNS, certificates, cloud identity, backup/restore, and real-tenant
+upgrades remain remote qualification.
 
 ## Program — personal-agent platform
 

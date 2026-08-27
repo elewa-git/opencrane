@@ -116,6 +116,9 @@ jobs:
       - name: Prove app-owned deployable selection
         run: npm run test:affected-deployables
 
+      - name: Prove local development workflows
+        run: npm run test:local-development
+
       - name: Emit affected deployable matrix
         id: affected
         env:

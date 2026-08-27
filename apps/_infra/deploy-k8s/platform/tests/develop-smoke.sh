@@ -24,7 +24,7 @@ SMOKE_AFFECTED_PROJECTS="${SMOKE_AFFECTED_PROJECTS-all}"
 SMOKE_BASE_SHA="${SMOKE_BASE_SHA:-}"
 SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
-SMOKE_LOW_DISK_IMAGE_IMPORT="${SMOKE_LOW_DISK_IMAGE_IMPORT:-0}"
+SMOKE_HOST_PROFILE="${SMOKE_HOST_PROFILE:-recommended}"
 KEY_DIR=""
 CSI_DIR=""
 IMAGE_PREPARATION_PID=""
@@ -393,19 +393,20 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for command in curl docker git helm k3d kubectl openssl; do _require_command "$command"; done
+for command in awk curl df docker git helm k3d kubectl npm openssl; do _require_command "$command"; done
 docker info >/dev/null 2>&1 || { echo "[develop-smoke] Docker daemon is not reachable." >&2; exit 1; }
 if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; then
   echo "[develop-smoke] SMOKE_STORAGE_MODE must be 'fast' or 'full', got '$SMOKE_STORAGE_MODE'." >&2
   exit 1
 fi
-if [[ "$SMOKE_LOW_DISK_IMAGE_IMPORT" != "0" && "$SMOKE_LOW_DISK_IMAGE_IMPORT" != "1" ]]; then
-  echo "[develop-smoke] SMOKE_LOW_DISK_IMAGE_IMPORT must be '0' or '1', got '$SMOKE_LOW_DISK_IMAGE_IMPORT'." >&2
+if [[ "$SMOKE_HOST_PROFILE" != "minimum" && "$SMOKE_HOST_PROFILE" != "recommended" ]]; then
+  echo "[develop-smoke] SMOKE_HOST_PROFILE must be 'minimum' or 'recommended', got '$SMOKE_HOST_PROFILE'." >&2
   exit 1
 fi
 
 echo "[develop-smoke] Resetting disposable k3d cluster '$CLUSTER_NAME'"
 _reset_smoke_storage
+_prepare_smoke_host_storage
 
 # Delete a retained cluster before the build lane so a failed low-disk run releases its largest
 # allocation before retrying. Image preparation still overlaps cluster creation and controller
@@ -414,7 +415,11 @@ _prepare_images &
 IMAGE_PREPARATION_PID=$!
 
 echo "[develop-smoke] Creating disposable k3d cluster '$CLUSTER_NAME'"
-k3d cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "8443:443@loadbalancer" --wait
+# Skip k3d's image-import volume because minimum-host sessions need that Docker allocation for
+# workload images imported directly into the node.
+# @see https://k3d.io/v5.8.3/usage/commands/k3d_cluster_create/
+k3d cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "8443:443@loadbalancer" \
+  --no-image-volume --wait
 
 echo "[develop-smoke] Installing external cluster prerequisites"
 if [[ "$SMOKE_STORAGE_MODE" == "full" ]]; then

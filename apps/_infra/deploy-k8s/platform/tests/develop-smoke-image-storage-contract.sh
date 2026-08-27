@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 MODULE="$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh"
 TEST_DIR="$(mktemp -d)"
+REPOSITORY_FIXTURE="$TEST_DIR/repository"
 CALL_LOG="$TEST_DIR/calls.log"
 CONTAINER_STATE="$TEST_DIR/container"
 VOLUME_STATE="$TEST_DIR/volume"
@@ -15,9 +16,11 @@ VOLUME_LIST_VISIBLE="1"
 VOLUME_LIST_ERROR="0"
 FOREIGN_VOLUME_VISIBLE="0"
 VOLUME_NAME="k3d-smoke-images"
+DOCKER_AVAILABLE_KIB="$((13 * 1024 * 1024))"
 trap 'rm -rf -- "$TEST_DIR"' EXIT
 
 source "$MODULE"
+ROOT_DIR="$REPOSITORY_FIXTURE"
 
 _retry()
 {
@@ -45,6 +48,10 @@ _state_is_set()
 docker()
 {
   _log_call "docker $*"
+  if [[ "$1 $2" == "info --format" ]]; then
+    printf '%s\n' "$ROOT_DIR"
+    return 0
+  fi
   if [[ "$1 $2" == "ps -aq" ]]; then
     _state_is_set "$CONTAINER_STATE" && printf '%s\n' container-1
     return 0
@@ -84,6 +91,18 @@ docker()
   return 0
 }
 
+npm()
+{
+  _log_call "npm $*"
+  return 0
+}
+
+df()
+{
+  printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+  printf 'fixture 33554432 0 %s 0%% %s\n' "$DOCKER_AVAILABLE_KIB" "$ROOT_DIR"
+}
+
 k3d()
 {
   _log_call "k3d $*"
@@ -110,6 +129,7 @@ _reset_fixture()
   VOLUME_LIST_ERROR="0"
   FOREIGN_VOLUME_VISIBLE="0"
   VOLUME_NAME="k3d-smoke-images"
+  DOCKER_AVAILABLE_KIB="$((13 * 1024 * 1024))"
 }
 
 _assert_log()
@@ -127,21 +147,47 @@ CLUSTER_NAME="smoke"
 SMOKE_IMAGE_LABEL="opencrane.develop-smoke=true"
 SMOKE_IMAGES=(image-a image-b)
 
+# Prove CI does not clear host caches that later jobs can reuse.
+_reset_fixture
+SMOKE_HOST_PROFILE="recommended"
+_prepare_smoke_host_storage
+_assert_log ''
+
+# Prove the minimum-host path removes existing dependencies and clears caches before image builds.
+_reset_fixture
+mkdir -p "$ROOT_DIR/node_modules"
+SMOKE_HOST_PROFILE="minimum"
+_prepare_smoke_host_storage
+if [[ -e "$ROOT_DIR/node_modules" ]]; then
+  echo "Minimum-host preparation must remove the reproducible workspace dependency tree." >&2
+  exit 1
+fi
+_assert_log $'npm cache clean --force\ndocker buildx prune --all --force --min-free-space 12gb\ndocker image prune --force\ndocker info --format {{.DockerRootDir}}'
+
+# Refuse to build when pruning succeeds but other Docker allocations still consume the reserve.
+_reset_fixture
+SMOKE_HOST_PROFILE="minimum"
+DOCKER_AVAILABLE_KIB="$((11 * 1024 * 1024))"
+if _prepare_smoke_host_storage 2>/dev/null; then
+  echo "Minimum-host preparation must enforce its free-space reserve." >&2
+  exit 1
+fi
+
 # Prove the default CI path keeps one batch import and does not reclaim reusable cache.
 _reset_fixture
-SMOKE_LOW_DISK_IMAGE_IMPORT="0"
+SMOKE_HOST_PROFILE="recommended"
 _import_smoke_images
 _assert_log 'k3d image import image-a image-b --cluster smoke --mode direct'
 
 # Prove minimum-disk mode reclaims cache and releases each source after a successful import.
 _reset_fixture
-SMOKE_LOW_DISK_IMAGE_IMPORT="1"
+SMOKE_HOST_PROFILE="minimum"
 _import_smoke_images
-_assert_log $'docker buildx prune --all --force --min-free-space 8gb\nk3d image import image-a --cluster smoke --mode direct\ndocker image rm image-a\nk3d image import image-b --cluster smoke --mode direct\ndocker image rm image-b'
+_assert_log $'docker buildx prune --all --force --min-free-space 12gb\nk3d image import image-a --cluster smoke --mode direct\ndocker image rm image-a\nk3d image import image-b --cluster smoke --mode direct\ndocker image rm image-b\ndocker image prune --force\ndocker info --format {{.DockerRootDir}}'
 
 # Preserve a rejected source image so the developer can diagnose why k3d refused it.
 _reset_fixture
-SMOKE_LOW_DISK_IMAGE_IMPORT="1"
+SMOKE_HOST_PROFILE="minimum"
 FAIL_IMPORT_IMAGE="image-b"
 if _import_smoke_images; then
   echo "Low-disk import must fail when k3d rejects an image." >&2

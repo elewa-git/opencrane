@@ -7,29 +7,30 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { closeTier3BrowserProxy, createTier3BrowserProxy } from "../tier3-browser-proxy.mjs";
 import { createTier3SessionConfiguration, parseTier3Arguments } from "../tier3-development-options.mjs";
 import { runTier3Development } from "../tier3-development.mjs";
 import { readTier3IngressCertificate } from "../tier3-ingress-certificate.mjs";
 
-test("Tier 3 defaults to full storage qualification and the Codespaces proxy", function _defaults()
+test("Tier 3 defaults to the minimum-host storage profile and the Codespaces proxy", function _defaults()
 {
 	assert.deepEqual(parseTier3Arguments([]), {
 		help: false,
 		proxyPort: 4200,
 		smokeOnly: false,
-		storageMode: "full"
+		storageMode: "fast"
 	});
 });
 
-test("Tier 3 accepts the documented fast and smoke-only overrides", function _overrides()
+test("Tier 3 accepts the documented full-storage and smoke-only overrides", function _overrides()
 {
-	assert.deepEqual(parseTier3Arguments(["--storage-mode", "fast", "--proxy-port", "4300", "--smoke-only"]), {
+	assert.deepEqual(parseTier3Arguments(["--storage-mode", "full", "--proxy-port", "4300", "--smoke-only"]), {
 		help: false,
 		proxyPort: 4300,
 		smokeOnly: true,
-		storageMode: "fast"
+		storageMode: "full"
 	});
 });
 
@@ -57,7 +58,7 @@ test("Tier 3 always keeps the smoke cluster and applies the selected storage mod
 			CLUSTER_TENANT: "qa",
 			KEEP_CLUSTER: "1",
 			PATH: "/usr/bin",
-			SMOKE_LOW_DISK_IMAGE_IMPORT: "1",
+			SMOKE_HOST_PROFILE: "minimum",
 			SMOKE_STORAGE_MODE: "fast",
 			TIMEOUT_SECONDS: "600"
 		},
@@ -68,11 +69,11 @@ test("Tier 3 always keeps the smoke cluster and applies the selected storage mod
 test("Tier 3 preserves explicit smoke resource overrides", function _preservesResourceOverrides()
 {
 	const configuration = createTier3SessionConfiguration({
-		SMOKE_LOW_DISK_IMAGE_IMPORT: "0",
+		SMOKE_HOST_PROFILE: "recommended",
 		TIMEOUT_SECONDS: "900"
 	}, "full");
 
-	assert.equal(configuration.smokeEnvironment.SMOKE_LOW_DISK_IMAGE_IMPORT, "0");
+	assert.equal(configuration.smokeEnvironment.SMOKE_HOST_PROFILE, "recommended");
 	assert.equal(configuration.smokeEnvironment.TIMEOUT_SECONDS, "900");
 });
 
@@ -94,7 +95,7 @@ test("Tier 3 qualifies smoke before it starts and waits on the matching ingress 
 		parentEnvironment: {},
 		runSmoke(environment)
 		{
-			events.push(["smoke", environment.KEEP_CLUSTER, environment.SMOKE_STORAGE_MODE, environment.SMOKE_LOW_DISK_IMAGE_IMPORT, environment.TIMEOUT_SECONDS]);
+			events.push(["smoke", environment.KEEP_CLUSTER, environment.SMOKE_STORAGE_MODE, environment.SMOKE_HOST_PROFILE, environment.TIMEOUT_SECONDS]);
 		},
 		readIngressCertificate(identity)
 		{
@@ -109,7 +110,7 @@ test("Tier 3 qualifies smoke before it starts and waits on the matching ingress 
 	});
 
 	assert.deepEqual(events, [
-		["smoke", "1", "fast", "1", "600"],
+		["smoke", "1", "fast", "minimum", "600"],
 		["read-certificate", "opencrane-develop-smoke", "opencrane-smoke-clustertenant-tls"],
 		["create-proxy", "smoke.develop-smoke.opencrane.test", certificate],
 		["listen", server, 4300],
@@ -318,12 +319,16 @@ test("the devcontainer enforces the Tier 3 minimum and shares the pinned CI tool
 	const devcontainer = JSON.parse(fs.readFileSync(new URL("../../.devcontainer/devcontainer.json", import.meta.url), "utf8"));
 	const dockerfile = fs.readFileSync(new URL("../../.devcontainer/Dockerfile", import.meta.url), "utf8");
 	const verification = fs.readFileSync(new URL("../../.devcontainer/verify-tools.sh", import.meta.url), "utf8");
+	const onCreate = fs.readFileSync(new URL("../../.devcontainer/on-create.sh", import.meta.url), "utf8");
 	const workflow = fs.readFileSync(new URL("../../.github/workflows/docker.yml", import.meta.url), "utf8");
 
 	assert.equal(devcontainer.hostRequirements.cpus, 4);
 	assert.equal(devcontainer.hostRequirements.memory, "16gb");
 	assert.equal(devcontainer.hostRequirements.storage, "32gb");
 	assert.ok(devcontainer.features["ghcr.io/devcontainers/features/docker-in-docker:4.1.0"]);
+	assert.equal(devcontainer.onCreateCommand, "bash .devcontainer/on-create.sh");
+	assert.match(onCreate, /RECOMMENDED_FREE_KIB="\$\(\(40 \* 1024 \* 1024\)\)"/u);
+	assert.match(onCreate, /npm cache clean --force/u);
 	assert.match(verification, /docker buildx prune --help \| grep -q -- '--min-free-space'/u);
 	assert.match(dockerfile, /javascript-node:5\.0\.2-24-bookworm/u);
 	assert.match(dockerfile, /HELM_VERSION=v4\.1\.4/u);
@@ -340,16 +345,49 @@ test("the devcontainer enforces the Tier 3 minimum and shares the pinned CI tool
 	assert.match(workflow, /version: v4\.1\.4/u);
 });
 
+test("the devcontainer installs workspace dependencies only with recommended-host headroom", function _budgetsCreationStorage(context)
+{
+	const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "opencrane-tier3-on-create-"));
+	context.after(function _removeFixture() { fs.rmSync(fixture, { force: true, recursive: true }); });
+	const callLog = path.join(fixture, "npm.calls");
+	const npmStub = path.join(fixture, "npm");
+	fs.writeFileSync(npmStub, `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "$NPM_CALL_LOG"\n`);
+	fs.chmodSync(npmStub, 0o755);
+	const executable = fileURLToPath(new URL("../../.devcontainer/on-create.sh", import.meta.url));
+	const environment = {
+		...process.env,
+		NPM_CALL_LOG: callLog,
+		PATH: `${fixture}:${process.env.PATH}`
+	};
+
+	execFileSync("bash", [executable], {
+		env: { ...environment, OPENCRANE_DEVCONTAINER_AVAILABLE_KIB: String(20 * 1024 * 1024) }
+	});
+	assert.equal(fs.readFileSync(callLog, "utf8"), "cache clean --force\n");
+
+	fs.writeFileSync(callLog, "");
+	execFileSync("bash", [executable], {
+		env: { ...environment, OPENCRANE_DEVCONTAINER_AVAILABLE_KIB: String(45 * 1024 * 1024) }
+	});
+	assert.equal(fs.readFileSync(callLog, "utf8"), "ci\n");
+});
+
 test("the minimum Codespaces path reclaims image storage without slowing CI imports", function _protectsLowDiskImport()
 {
 	const smoke = fs.readFileSync(new URL("../../apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh", import.meta.url), "utf8");
 	const imageStorage = fs.readFileSync(new URL("../../apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh", import.meta.url), "utf8");
 
-	assert.match(smoke, /SMOKE_LOW_DISK_IMAGE_IMPORT="\$\{SMOKE_LOW_DISK_IMAGE_IMPORT:-0\}"/u);
-	assert.match(smoke, /_reset_smoke_storage[\s\S]*?_prepare_images &/u);
-	assert.match(imageStorage, /docker buildx prune --all --force --min-free-space 8gb/u);
+	assert.match(smoke, /SMOKE_HOST_PROFILE="\$\{SMOKE_HOST_PROFILE:-recommended\}"/u);
+	assert.match(smoke, /_reset_smoke_storage[\s\S]*?_prepare_smoke_host_storage[\s\S]*?_prepare_images &/u);
+	assert.match(smoke, /k3d cluster create[\s\S]*?--no-image-volume --wait/u);
+	assert.match(imageStorage, /rm -rf -- "\$ROOT_DIR\/node_modules"/u);
+	assert.match(imageStorage, /npm cache clean --force/u);
+	assert.match(imageStorage, /docker buildx prune --all --force --min-free-space "\$\{_SMOKE_REQUIRED_DOCKER_FREE_GIB\}gb"/u);
+	assert.match(imageStorage, /df -Pk "\$docker_root"/u);
+	assert.match(imageStorage, /available_kib[\s\S]*?_SMOKE_REQUIRED_DOCKER_FREE_GIB/u);
 	assert.match(imageStorage, /for image in "\$\{SMOKE_IMAGES\[@\]\}"; do[\s\S]*?k3d image import "\$image"[\s\S]*?docker image rm "\$image"/u);
-	assert.match(imageStorage, /if \[\[ "\$SMOKE_LOW_DISK_IMAGE_IMPORT" == "0" \]\]; then[\s\S]*?k3d image import "\$\{SMOKE_IMAGES\[@\]\}"/u);
+	assert.match(imageStorage, /done[\s\S]*?docker image prune --force/u);
+	assert.match(imageStorage, /if \[\[ "\$SMOKE_HOST_PROFILE" == "recommended" \]\]; then[\s\S]*?k3d image import "\$\{SMOKE_IMAGES\[@\]\}"/u);
 });
 
 function _Listen(server)

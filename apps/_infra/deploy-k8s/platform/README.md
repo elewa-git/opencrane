@@ -36,8 +36,9 @@ cluster does not match the assumptions needed to do that job safely.
 from the checkout through a per-project BuildKit cache and resolves unaffected owners from the exact
 digest of the last validated image set. Its sequential image lane overlaps cluster and controller
 preparation, then imports the complete image inventory in one k3d transfer. The Tier 3 contributor
-wrapper instead selects a low-disk path that reclaims BuildKit cache until Docker has 8 GB free,
-imports each image, and removes its Docker-side source after k3d accepts it. A pull request bypasses
+wrapper instead selects a low-disk path that removes the reproducible workspace dependency tree,
+clears disposable host caches, reserves 12 GB for the remaining workload images, imports each local
+image, and removes its Docker-side source after k3d accepts it. A pull request bypasses
 that cluster only when one positive proof binds its exact base SHA to a completed successful push or
 manual-dispatch k3d job, no affected container owner, and only explicitly non-deployment paths. The
 same evidence works for `develop` and reviewed feature-stack bases; unknown or unavailable evidence
@@ -48,12 +49,13 @@ the pinned expandable hostpath CSI driver and exercise expansion. Set `KEEP_CLUS
 diagnosis. Backup/restore and production storage, DNS, and transport remain separate live
 qualifications.
 
-`npm run dev:tier3` is the contributor entrypoint around this smoke. It selects full storage by
-default, allows 600 seconds for loaded Codespaces machines, reclaims Docker image-build storage,
-retains the cluster, and starts a loopback proxy that sends the smoke host through the real ingress
-while Codespaces keeps its browser-facing forwarded host. Set `SMOKE_LOW_DISK_IMAGE_IMPORT=0` only
-on a larger machine where preserving reusable build cache matters. Use `--storage-mode fast` only
-when storage expansion is outside the change, or `--smoke-only` when browser access is unnecessary.
+`npm run dev:tier3` is the contributor entrypoint around this smoke. Its minimum-host default uses
+fast local-path storage, allows 600 seconds for loaded Codespaces machines, reclaims host package and
+Docker image-build caches, retains the cluster, and starts a loopback proxy that sends the smoke host
+through the real ingress while Codespaces keeps its browser-facing forwarded host. On a recommended
+host, use `SMOKE_HOST_PROFILE=recommended npm run dev:tier3 -- --storage-mode full` to preserve
+dependencies and caches, batch the import, and prove storage expansion. Use `--smoke-only` when
+browser access is unnecessary.
 
 Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads

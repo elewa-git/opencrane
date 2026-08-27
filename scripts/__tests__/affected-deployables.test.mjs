@@ -197,7 +197,7 @@ test("overlaps image preparation and keeps the fast direct k3d batch", function 
 	assert.match(smoke, /--cache-from "type=registry,ref=\$\{SMOKE_BUILD_CACHE_UNTRUSTED\}:\$\{project\}"/u);
 	assert.match(smoke, /--cache-to "type=registry,ref=\$\{SMOKE_BUILD_CACHE_EXPORT\}:\$\{project\},mode=max"/u);
 	assert.match(imageStorage, /k3d image import "\$\{SMOKE_IMAGES\[@\]\}" --cluster "\$CLUSTER_NAME" --mode direct/u);
-	assert.match(imageStorage, /SMOKE_LOW_DISK_IMAGE_IMPORT" == "0"[\s\S]*?k3d image import "\$\{SMOKE_IMAGES\[@\]\}"/u);
+	assert.match(imageStorage, /SMOKE_HOST_PROFILE" == "recommended"[\s\S]*?k3d image import "\$\{SMOKE_IMAGES\[@\]\}"/u);
 });
 
 test("executes the current-silo image storage contract", function _ExecutesImageStorageContract()
