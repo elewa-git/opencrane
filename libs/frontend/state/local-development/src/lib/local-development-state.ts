@@ -48,6 +48,8 @@ export class LocalDevelopmentState
 	public readonly admittedMessageCommands = new Map<string, string>();
 	/** Mutation keys already failed once in the retry scenario. */
 	private readonly _failedOnce = new Set<string>();
+	/** Conversation streams that already exposed the reconnect interruption. */
+	private readonly _interruptedStreams = new Set<string>();
 	/** Increasing counter used to prevent duplicate local identifiers. */
 	private _sequence = 10;
 
@@ -72,6 +74,24 @@ export class LocalDevelopmentState
 
 		this._failedOnce.add(operation);
 		throw new Error("The local scenario interrupted this operation. Retry to continue.");
+	}
+
+	/**
+	 * Marks the first stream for a conversation as the reconnecting interruption. The workspace store
+	 * replaces that stream manually; later streams proceed so the replacement can become live.
+	 *
+	 * @param conversationId Identifies the conversation whose first stream may be interrupted.
+	 * @returns `true` when the caller must pause at reconnecting, or `false` when it should emit normally.
+	 */
+	public interruptFirstStream(conversationId: string): boolean
+	{
+		if (this.scenario !== LocalDevelopmentScenarioKinds.Reconnecting || this._interruptedStreams.has(conversationId))
+		{
+			return false;
+		}
+
+		this._interruptedStreams.add(conversationId);
+		return true;
 	}
 
 	/** Create a deterministic identifier for a new local record. */
