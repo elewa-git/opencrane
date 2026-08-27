@@ -65,12 +65,12 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   persistence. Developers can choose a local LiteLLM proxy, an explicit shared HTTPS LiteLLM proxy,
   or credential-free deterministic model output while Cognee, memory, Obot, artifacts, channels,
   and Kubernetes remain explicitly disabled. The local proxy discovers reviewed
-  provider credentials (`keys/.openai-key` for OpenAI and `keys/<provider>-key` otherwise): an exact
-  reviewed `--model` selects its provider, while an
-  omitted model deterministically uses the default for the first recognized filename in sorted
-  order. A selected model's secret-free configuration is generated once under the ignored local
-  LiteLLM development directory and reused on later runs; only that configuration and provider key
-  are supplied to LiteLLM.
+  provider credentials using `keys/.<provider>-key`:
+  `--provider` selects a reviewed provider and its default model, while `--model` selects an exact
+  reviewed model and its owner. Omitting both deterministically uses the default for the first
+  recognized filename in sorted order. A selected model's secret-free configuration is generated
+  once under the ignored local LiteLLM development directory and reused on later runs; only that
+  configuration and provider key are supplied to LiteLLM.
 
 - **Users and operators can now see the availability of every user-visible service through
   unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,

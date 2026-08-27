@@ -149,33 +149,44 @@ bootstrap, authenticated runtime stream, candidate validation, and PostgreSQL pe
 Alternative A recognizes these provider/model pairs from the reviewed
 [local-provider registry](https://github.com/elewa-git/opencrane/blob/main/libs/models/local-development/main/provider-contract.json):
 
-- Anthropic: `anthropic/claude-sonnet-4-5-20250929` with `keys/anthropic-key`
-- Gemini: `gemini/gemini-2.5-flash` with `keys/gemini-key`
-- Mistral: `mistral/mistral-small-latest` with `keys/mistral-key`
-- OpenAI: `openai/gpt-5.4-nano` with the default `keys/.openai-key`
+- Anthropic: `anthropic/claude-sonnet-4-5-20250929` with `keys/.anthropic-key`
+- Gemini: `gemini/gemini-2.5-flash` with `keys/.gemini-key`
+- Mistral: `mistral/mistral-small-latest` with `keys/.mistral-key`
+- OpenAI: `openai/gpt-5.4-nano` with `keys/.openai-key`
 
 Create the matching owner-only key file. The file contains only the upstream provider key:
 
 ```bash
 mkdir -p keys
-(umask 077 && touch keys/anthropic-key)
-chmod 600 keys/anthropic-key
-${EDITOR:-vi} keys/anthropic-key
+(umask 077 && touch keys/.anthropic-key)
+chmod 600 keys/.anthropic-key
+${EDITOR:-vi} keys/.anthropic-key
 
 npm run dev:tier2:agent:local-llm -- \
+  --provider anthropic
+```
+
+The `--` forwards `--provider` through npm. An explicit provider uses its reviewed `defaultModel`.
+To choose another model owned by that provider, pass both options:
+
+```bash
+npm run dev:tier2:agent:local-llm -- \
+  --provider anthropic \
   --model anthropic/claude-sonnet-4-5-20250929
 ```
 
-The `--` forwards `--model` through npm. The registry—not the text before `/` in an arbitrary model
-name—derives `keys/<provider>-key`, so an unreviewed model fails before a credential is read. The
-coordinator also rejects a selected key that is missing, empty, linked, not a regular file, or
-accessible by group or other users.
+You may also pass `--model` alone; its exact registry entry selects the owning provider. When both
+options are present, startup rejects a model owned by a different provider. The registry—not the
+text before `/` in an arbitrary model name—derives `keys/.<provider>-key`, so an unreviewed provider
+or model fails before a credential is read. The coordinator also rejects a selected key that is
+missing, empty, linked, not a regular file, or accessible by group or other users.
 
-When `--model` is omitted, the coordinator lists recognized key files, sorts their filenames, and
-chooses the first one. The default OpenAI filename `keys/.openai-key` sorts before visible provider
-filenames such as `keys/anthropic-key`; without OpenAI, the first recognized visible filename wins.
-The coordinator uses that provider's default model from the registry. Unreviewed provider names do
-not participate, and the choice is recalculated on every run from the current `keys/` directory.
+When both `--provider` and `--model` are omitted, the coordinator lists recognized key files, sorts
+their filenames, and chooses the first provider. Because every provider file is hidden, ordinary
+lexical order applies directly: for example, `keys/.anthropic-key` sorts before
+`keys/.openai-key`. The coordinator uses that provider's `defaultModel` from the registry.
+Unreviewed provider names do not participate, and the choice is recalculated on every run from the
+current `keys/` directory.
 
 At startup, Alternative A resolves only the selected provider/model and writes its secret-free
 LiteLLM configuration under `apps/_infra/litellm/local-development/` if that generated file does not
@@ -185,7 +196,7 @@ and supplies only its matching key. Generated `*.generated.yaml` files are ignor
 after shutdown so switching among previously used models does not regenerate them.
 
 Adding a provider or model still requires review: extend the registry and the model-selection tests
-together. Merely adding `keys/<new-provider>-key` does not admit an unreviewed provider.
+together. Merely adding `keys/.<new-provider>-key` does not admit an unreviewed provider.
 
 ### Configure a remote LiteLLM proxy
 

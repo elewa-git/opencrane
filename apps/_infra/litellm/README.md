@@ -53,8 +53,9 @@ discovers matching owner-only provider-key files, and generates one secret-free 
 selected model under `local-development/` when it is first used. Matching generated files persist
 across runs and retain the provider-neutral `auto` alias. Only the selected configuration is mounted
 read-only and only its provider key enters the container environment. The coordinator generates a
-separate local LiteLLM master key. OpenAI keeps the default `keys/.openai-key`; other reviewed
-providers use `keys/<provider>-key`.
+separate local LiteLLM master key. Every reviewed provider uses the hidden
+`keys/.<provider>-key` convention. `--provider` chooses a reviewed provider and its `defaultModel`;
+`--model` can select another exact reviewed model owned by that provider.
 Alternative B uses an explicit remote HTTPS LiteLLM origin and admin-key file; Alternative C starts
 no LiteLLM process and reads no provider or model credential.
 
