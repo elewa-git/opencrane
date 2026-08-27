@@ -179,11 +179,12 @@ SMOKE_HOST_PROFILE="recommended"
 _import_smoke_images
 _assert_log 'k3d image import image-a image-b --cluster smoke --mode direct'
 
-# Prove minimum-disk mode reclaims cache and releases each source after a successful import.
+# Prove minimum-disk mode releases each imported source, prunes build cache again, and then checks
+# the deployment reserve.
 _reset_fixture
 SMOKE_HOST_PROFILE="minimum"
 _import_smoke_images
-_assert_log $'docker buildx prune --all --force --min-free-space 12gb\nk3d image import image-a --cluster smoke --mode direct\ndocker image rm image-a\nk3d image import image-b --cluster smoke --mode direct\ndocker image rm image-b\ndocker image prune --force\ndocker info --format {{.DockerRootDir}}'
+_assert_log $'docker buildx prune --all --force --min-free-space 12gb\nk3d image import image-a --cluster smoke --mode direct\ndocker image rm image-a\nk3d image import image-b --cluster smoke --mode direct\ndocker image rm image-b\ndocker image prune --force\ndocker buildx prune --all --force --min-free-space 12gb\ndocker info --format {{.DockerRootDir}}'
 
 # Preserve a rejected source image so the developer can diagnose why k3d refused it.
 _reset_fixture

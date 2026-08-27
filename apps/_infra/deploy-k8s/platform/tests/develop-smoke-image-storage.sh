@@ -119,8 +119,8 @@ _prepare_smoke_host_storage()
   _require_smoke_docker_free_space
 }
 
-# Keep CI's batch import; minimum-disk Tier 3 reserves space for images pulled during deployment
-# and releases each source only after k3d accepts it.
+# Keep CI's batch import. Minimum-disk Tier 3 releases each source after k3d accepts it, then
+# prunes cache from the completed image builds before checking the 12 GB reserve for deployment pulls.
 _import_smoke_images()
 {
   local image
@@ -137,5 +137,6 @@ _import_smoke_images()
     docker image rm "$image" || return $?
   done
   docker image prune --force || return $?
+  docker buildx prune --all --force --min-free-space "${_SMOKE_REQUIRED_DOCKER_FREE_GIB}gb" || return $?
   _require_smoke_docker_free_space
 }
