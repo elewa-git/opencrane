@@ -415,11 +415,7 @@ _prepare_images &
 IMAGE_PREPARATION_PID=$!
 
 echo "[develop-smoke] Creating disposable k3d cluster '$CLUSTER_NAME'"
-# Skip k3d's image-import volume because minimum-host sessions need that Docker allocation for
-# workload images imported directly into the node.
-# @see https://k3d.io/v5.8.3/usage/commands/k3d_cluster_create/
-k3d cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "8443:443@loadbalancer" \
-  --no-image-volume --wait
+k3d cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "8443:443@loadbalancer" --wait
 
 echo "[develop-smoke] Installing external cluster prerequisites"
 if [[ "$SMOKE_STORAGE_MODE" == "full" ]]; then

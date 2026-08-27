@@ -67,10 +67,12 @@ npm run dev:tier3
 Tier 3 protects the minimum disk by using k3d's local-path storage while still deploying every
 application workload. It removes an existing root `node_modules` tree, clears the host npm cache and
 reusable BuildKit cache, reserves 12 GB for the imported and later-pulled workload images, imports
-local images one at a time, and removes each Docker-side source after k3d accepts it. These inputs are
-reproducible from `package-lock.json`; reinstall them before other repository work. The direct
-importer writes no intermediate archive or image volume. On the recommended 64-GB machine, preserve
-reusable dependencies and caches, use the faster batch import, and prove storage expansion:
+local images one at a time, and removes each Docker-side source after k3d accepts it. The workspace
+dependencies are reproducible from `package-lock.json`; reinstall them before other repository
+work. The direct importer writes no intermediate archive. Keep k3d's default image volume: the
+pinned v5.8.3 create path rolls back the cluster when Codespaces disables that volume. On the
+recommended 64-GB machine, preserve reusable dependencies and caches, use the faster batch import,
+and prove storage expansion:
 
 ```bash
 SMOKE_HOST_PROFILE=recommended npm run dev:tier3 -- --storage-mode full

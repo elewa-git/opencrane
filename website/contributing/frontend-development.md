@@ -197,9 +197,10 @@ On the minimum disk, Tier 3 removes an existing root `node_modules` tree, clears
 BuildKit caches, reserves 12 GB for all images that arrive after the build, imports one local image at
 a time, and removes each Docker-side source after k3d accepts it. Reinstall the lockfile-bound
 dependencies before other repository work. The retained cluster keeps its own copy, and k3d's
-[direct importer](https://k3d.io/v5.8.3/usage/importing_images/) creates no intermediate archive or
-image volume. A recommended-size machine can retain the caches, use the faster batch import, and
-qualify storage expansion:
+[direct importer](https://k3d.io/v5.8.3/usage/importing_images/) creates no intermediate archive.
+Keep k3d's default image volume: the pinned v5.8.3 create path rolls back the cluster when Codespaces
+disables that volume. A recommended-size machine can retain the caches, use the faster batch import,
+and qualify storage expansion:
 
 ```bash
 SMOKE_HOST_PROFILE=recommended npm run dev:tier3 -- --storage-mode full

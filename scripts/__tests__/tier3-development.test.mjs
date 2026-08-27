@@ -379,7 +379,10 @@ test("the minimum Codespaces path reclaims image storage without slowing CI impo
 
 	assert.match(smoke, /SMOKE_HOST_PROFILE="\$\{SMOKE_HOST_PROFILE:-recommended\}"/u);
 	assert.match(smoke, /_reset_smoke_storage[\s\S]*?_prepare_smoke_host_storage[\s\S]*?_prepare_images &/u);
-	assert.match(smoke, /k3d cluster create[\s\S]*?--no-image-volume --wait/u);
+	assert.match(smoke, /k3d cluster create[\s\S]*?--wait/u);
+	// A 32 GB Codespace needs k3d's default image volume because v5.8.3 rolls back cluster
+	// creation after failing to discover its tools node when that volume is disabled.
+	assert.doesNotMatch(smoke, /--no-image-volume/u);
 	assert.match(imageStorage, /rm -rf -- "\$ROOT_DIR\/node_modules"/u);
 	assert.match(imageStorage, /npm cache clean --force/u);
 	assert.match(imageStorage, /docker buildx prune --all --force --min-free-space "\$\{_SMOKE_REQUIRED_DOCKER_FREE_GIB\}gb"/u);
