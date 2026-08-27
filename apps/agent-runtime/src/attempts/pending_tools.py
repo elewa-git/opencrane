@@ -4,9 +4,9 @@ An ``external_action`` candidate carries its execution arguments to the server-o
 authority. This bounded registry retains only the model-framework call identity needed to match a
 saved result back into the same attempt. A resume consumes a complete batch exactly once.
 
-This registry is deliberately not durable: the runtime Job never restarts (``backoffLimit: 0``), so
-a lost process also loses its stream fence and the attempt terminates server-side. A resume that
-cannot find its pending call fails closed with a typed loop error rather than guessing.
+This registry is deliberately not durable. A container restart can replay the Pod's public binding,
+but it cannot reconstruct an in-flight framework call. A resume that cannot find its pending call
+fails closed with a typed loop error rather than guessing.
 """
 
 from .pending_result_lock import PENDING_RESULT_LOCK

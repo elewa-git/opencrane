@@ -10,10 +10,10 @@ run after its own process restarts.
 | --- | --- |
 | [main](./main/README.md) | AgentRun admission, retries, lifecycle state, and server-side persistence. |
 | [workflows](./workflows/README.md) | The shared saved-task vocabulary and database-transaction admission rule. |
-| [controller](./controller/README.md) | The controller task that turns one approved attempt into one runtime Job. |
+| [controller](./controller/README.md) | The controller task that claims and uses one warm runtime Pod. |
 
 ```text
- run admission ──► saved workflow task ──► controller ──► runtime Job
+ run admission ──► saved workflow task ──► controller ──► claimed warm Pod
                                            runs ◄── HERE
 ```
 

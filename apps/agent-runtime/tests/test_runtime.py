@@ -19,7 +19,7 @@ from unittest import mock
 from urllib.error import HTTPError, URLError
 
 from src.bootstrap.exchange import BootstrapDeniedError
-from src.bootstrap.proof import rfc7638_thumbprint as _rfc7638_thumbprint
+from src.bootstrap.proof import load_or_create_proof_key as _load_or_create_proof_key, rfc7638_thumbprint as _rfc7638_thumbprint
 from src.constants import CHECKPOINT_FILENAME
 from src.model_loop.checkpoints import (
     checkpoint_path as _checkpoint_path,
@@ -157,6 +157,34 @@ class RuntimeThumbprintTests(unittest.TestCase):
         self.assertNotIn("=", first)
         self.assertEqual(first, _rfc7638_thumbprint("x-coordinate", "y-coordinate"))
         self.assertNotEqual(first, _rfc7638_thumbprint("x-coordinate", "other-coordinate"))
+
+    def test_public_proof_evidence_survives_a_container_restart(self) -> None:
+        """The same Pod reloads its first public thumbprint without storing a model or private key."""
+        public_jwk = {"kty": "EC", "crv": "P-256", "x": "x-coordinate", "y": "y-coordinate"}
+        evidence = {"publicJwk": public_jwk, "thumbprint": _rfc7638_thumbprint("x-coordinate", "y-coordinate")}
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "proof-evidence.json")
+            with mock.patch("src.bootstrap.proof.generate_proof_key", return_value=evidence) as generate:
+                first = _load_or_create_proof_key(path)
+                second = _load_or_create_proof_key(path)
+
+            self.assertEqual(first, second)
+            generate.assert_called_once()
+            with open(path, "r", encoding="utf-8") as evidence_file:
+                stored = json.load(evidence_file)
+            self.assertEqual(stored, evidence)
+            self.assertNotIn("private", str(stored).lower())
+            self.assertNotIn("model", str(stored).lower())
+
+    def test_changed_saved_public_evidence_fails_closed(self) -> None:
+        """A damaged restart file cannot silently create a different proof for an already claimed Pod."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "proof-evidence.json")
+            with open(path, "w", encoding="utf-8") as evidence_file:
+                json.dump({"publicJwk": {"kty": "EC", "crv": "P-256", "x": "x-coordinate", "y": "y-coordinate"}, "thumbprint": "changed"}, evidence_file)
+
+            with self.assertRaisesRegex(RuntimeError, "thumbprint does not match"):
+                _load_or_create_proof_key(path)
 
 
 class RuntimeCommandFramingTests(unittest.TestCase):
@@ -918,8 +946,8 @@ class RuntimePydanticAiDriverTests(unittest.TestCase):
         from pydantic_ai.providers.openai import OpenAIProvider  # noqa: F401
 
 
-class RuntimeBootstrapGateTests(unittest.TestCase):
-    """Validate the one-use bootstrap gate before any stream opens."""
+class RuntimeWarmBindingGateTests(unittest.TestCase):
+    """Validate the one-use warm binding before any stream opens."""
 
     def setUp(self) -> None:
         """Point the shell at temp credential files and a fake proof key without cryptography."""
@@ -927,75 +955,80 @@ class RuntimeBootstrapGateTests(unittest.TestCase):
         self._token.write("projected-token")
         self._token.flush()
         self._token.close()
-        self._bootstrap = tempfile.NamedTemporaryFile("w", suffix=".ref", delete=False)
-        self._bootstrap.write("bootstrap-v1_" + "a" * 64)
-        self._bootstrap.flush()
-        self._bootstrap.close()
         os.environ["OPENCRANE_RUNTIME_STREAM_URL"] = "http://opencrane.svc/api/internal/agent-runtime"
         os.environ["OPENCRANE_RUNTIME_TOKEN_PATH"] = self._token.name
-        os.environ["OPENCRANE_RUNTIME_BOOTSTRAP_PATH"] = self._bootstrap.name
         os.environ["POD_UID"] = "pod-1"
+        os.environ["OPENCRANE_WARM_BINDING_PORT"] = "8081"
+        os.environ["OPENCRANE_WARM_PROFILE"] = "personal-claimed"
         self._proof_key = {"publicJwk": {"kty": "EC", "crv": "P-256", "x": "a", "y": "b"}, "thumbprint": "t"}
 
     def tearDown(self) -> None:
         """Restore the real keygen and remove the temporary credential files."""
         os.unlink(self._token.name)
-        os.unlink(self._bootstrap.name)
-        for name in ("OPENCRANE_RUNTIME_STREAM_URL", "OPENCRANE_RUNTIME_TOKEN_PATH", "OPENCRANE_RUNTIME_BOOTSTRAP_PATH", "POD_UID"):
+        for name in ("OPENCRANE_RUNTIME_STREAM_URL", "OPENCRANE_RUNTIME_TOKEN_PATH", "POD_UID", "OPENCRANE_WARM_BINDING_PORT", "OPENCRANE_WARM_PROFILE"):
             os.environ.pop(name, None)
 
-    def test_denied_bootstrap_never_opens_a_stream(self) -> None:
-        """A refused bootstrap ends the process fail-closed without opening a command stream."""
+    def test_denied_warm_binding_never_opens_a_stream(self) -> None:
+        """A refused warm binding ends the process without opening a command stream."""
         opened: list[str] = []
 
-        def _deny(_url: str, _token: str, _reference: str, _key: dict) -> None:
+        def _deny(_url: str, _token: str, _key: dict) -> str:
             raise BootstrapDeniedError("already consumed")
 
-        def _open(_url: str, _token: str, _instance: str, _pod: str) -> int:
+        def _open(_url: str, _token: str, _instance: str, _pod: str, *, attempt_model_key: str) -> int:
             opened.append(_instance)
             return 0
 
         run_forever(
             open_stream=_open,
-            perform_bootstrap=_deny,
+            perform_warm_binding=_deny,
             generate_key=lambda: self._proof_key,
+            start_warm_readiness_server=lambda _port, _pod, _profile: object(),
         )
         self.assertEqual(opened, [])
 
-    def test_successful_bootstrap_precedes_the_stream(self) -> None:
-        """The stream opens only after exactly one successful bootstrap binding."""
+    def test_successful_warm_binding_precedes_the_stream(self) -> None:
+        """Readiness and one warm binding happen before the command stream opens."""
         calls: list[str] = []
 
-        def _bind(_url: str, _token: str, _reference: str, _key: dict) -> None:
-            calls.append("bootstrap")
+        def _ready(_port: int, _pod: str, _profile: str) -> object:
+            calls.append("readiness")
+            return object()
+
+        def _bind(_url: str, _token: str, _key: dict) -> str:
+            calls.append("binding")
+            return "attempt-model-key"
 
         class _Stop(Exception):
             """Sentinel to break the otherwise infinite reconnect loop after one open."""
 
-        def _open(_url: str, _token: str, _instance: str, _pod: str) -> int:
+        def _open(_url: str, _token: str, _instance: str, _pod: str, *, attempt_model_key: str) -> int:
+            self.assertEqual(attempt_model_key, "attempt-model-key")
             calls.append("stream")
             raise _Stop()
 
         with self.assertRaises(_Stop):
             run_forever(
                 open_stream=_open,
-                perform_bootstrap=_bind,
+                perform_warm_binding=_bind,
                 generate_key=lambda: self._proof_key,
+                start_warm_readiness_server=_ready,
             )
-        self.assertEqual(calls, ["bootstrap", "stream"])
+        self.assertEqual(calls, ["readiness", "binding", "stream"])
 
     def test_clean_stream_eof_uses_bounded_reconnect_backoff(self) -> None:
         """A peer returning immediate 200/EOF cannot force the runtime into a hot reconnect loop."""
         opens = 0
 
-        def _bind(_url: str, _token: str, _reference: str, _key: dict) -> None:
-            return None
+        def _bind(_url: str, _token: str, _key: dict) -> str:
+            return "attempt-model-key"
 
         class _Stop(Exception):
             """Sentinel raised after observing the reconnect attempt."""
 
-        def _open(_url: str, _token: str, _instance: str, _pod: str) -> int:
+        def _open(_url: str, _token: str, _instance: str, _pod: str, *, attempt_model_key: str) -> int:
             nonlocal opens
+            self.assertEqual(attempt_model_key, "attempt-model-key")
             opens += 1
             if opens == 2:
                 raise _Stop()
@@ -1005,8 +1038,9 @@ class RuntimeBootstrapGateTests(unittest.TestCase):
             with self.assertRaises(_Stop):
                 run_forever(
                     open_stream=_open,
-                    perform_bootstrap=_bind,
+                    perform_warm_binding=_bind,
                     generate_key=lambda: self._proof_key,
+                    start_warm_readiness_server=lambda _port, _pod, _profile: object(),
                 )
 
         self.assertEqual(opens, 2)

@@ -1,53 +1,65 @@
-# @opencrane/backend/agents/execution/runs/controller — AgentRun workflow executor
+# @opencrane/backend/agents/execution/runs/controller — AgentRun workflow handler
 
 > [agent-run authority](../main/README.md) › controller
 
 ## What it owns
 
-This package defines the handler that will run one saved AgentRun task in the agent controller. A
-workflow is saved work that can pause and continue after a restart. Application composition does not
-register this handler yet: the later cutover will replace the old controller-wide attempt and release
-polling loop while reusing the existing suspended Job, Job UID, first Pod, and runtime bootstrap rules.
-
-The server still decides whether an attempt may run and stores every lifecycle update. This package
-only turns that approved attempt into its one Kubernetes Job.
+A **workflow** is a saved task that can continue after a restart. This package defines the Absurd
+handler for one AgentRun attempt.
 
 ```text
  saved AgentRun task
-          │ approved run and fixed profile
-          ▼
- ┌──────────────────────────────────┐
- │ AgentRun controller  ◄── HERE     │
- └──────────────────────────────────┘
-          │ suspended Job, then first Pod
-          ▼
- runtime worker ──► server-owned terminal state
+        │
+        ▼
+ ┌────────────────────────────────────┐
+ │ AgentRun workflow handler ◄── HERE │
+ │ find a generic warm Pod            │
+ └────────────────────────────────────┘
+        │
+        ▼
+ reserve it in the database
+        │
+        ▼
+ activate profile → prove readiness → let Pod bind
+        │
+        ▼
+ wait for run completion
+        │
+        ▼
+ delete the used Pod
 ```
 
-**In this flow:** [task vocabulary](../workflows/contract/README.md) · [runtime controller](../../../runtime/controller/README.md)
+**In this flow:** [workflow contract](../workflows/contract/README.md) · [runtime controller](../../../runtime/controller/README.md)
 
-The Job stays suspended until the server records its Kubernetes-issued identifier. On a restart, the
-handler reloads the server's current task facts before it creates Kubernetes work. A malformed, stale,
-cancelled, or retried task therefore stops before it can start a different attempt.
+Absurd checkpoints the Kubernetes steps. If the controller restarts, it resumes the same saved task
+and reads the saved Pod identity instead of starting a second run.
 
 ## Public surface
 
-- `__CreateAgentRunWorkflowHandler` builds the controller task definition.
-- The exported types define its server authority, Kubernetes adapter, fixed profiles, and task facts.
+- `__CreateWarmAgentRunWorkflowHandler(options)` creates the saved task handler.
+- `__CreateHttpWarmAgentRunWorkflowControllerAuthority(options)` connects the handler to the
+  server-owned run authority.
+- The exported option types define the fixed warm profiles, Kubernetes adapter, polling interval,
+  and private server client.
 
 ## Boundary
 
-It must not decide the run state, load a database directly, create an OCI workload, or use the
-generic warm agent Pod. The runtime profile remains fixed by deployment configuration.
+The handler does not read the database, choose a container image, or trust Kubernetes labels as run
+authority. The server decides whether a Pod may be reserved and whether each saved lifecycle update
+is still current. The Kubernetes adapter performs only the requested read, profile change, readiness
+probe, or UID-checked deletion.
+
+This handler runs the normal AgentRun runtime only. OCI-backed MCP and code-skill workloads have
+their own executor class.
 
 ## Dependency direction
 
-This `scope:execution-runs` infrastructure package may use the AgentRun task contract and runtime
-controller boundary. It must not import application composition, Prisma, OCI admission, or warm-pool
-implementation details.
+Tagged `scope:execution-runs` and `layer:infra`: it may depend on the AgentRun workflow contract and
+runtime-controller ports. It never imports application composition, Prisma, or OCI admission.
 
 ## See also
 
-- Parent: [AgentRun authority](../main/README.md)
-- Task vocabulary: [workflow contract](../workflows/contract/README.md)
-- Existing Kubernetes boundary: [runtime controller](../../../runtime/controller/README.md)
+- [AgentRun authority](../main/README.md)
+- [Workflow contract](../workflows/contract/README.md)
+- [Warm Kubernetes controller](../../../runtime/controller/README.md)
+- [Warm pool definitions](../../../runtime/k8s-launcher/README.md)

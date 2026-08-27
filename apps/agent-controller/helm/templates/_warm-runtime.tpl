@@ -67,7 +67,6 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
           env:
-            - { name: OPENCRANE_RUNTIME_MODE, value: warm }
             - { name: OPENCRANE_RUNTIME_STREAM_URL, value: {{ printf "%s/api/internal/warm-runtime" $serverUrl | quote }} }
             - { name: OPENCRANE_RUNTIME_TOKEN_PATH, value: /var/run/opencrane/tokens/warm.token }
             - { name: OPENCRANE_RUNTIME_LITELLM_BASE_URL, value: {{ $litellmUrl | quote }} }

@@ -5,10 +5,10 @@ creates a database row and owns the request id and its lifecycle. The model fram
 question only by the tool call id it generated. This registry stores the link between them, so that
 when the answer comes back the runtime can hand it to the call that is waiting for it.
 
-Nothing here is written to a database, and that is deliberate. The runtime Job never restarts
-(``backoffLimit: 0``), so if the process dies the stream fence dies with it and the server ends the
-attempt anyway. A resume that cannot find its question therefore refuses to continue rather than
-guessing which call the answer belongs to.
+Nothing here is written to a database, and that is deliberate. A container restart can replay the
+Pod's public binding, but it cannot reconstruct an in-flight framework call. A resume that cannot
+find its question therefore refuses to continue rather than guessing which call the answer belongs
+to.
 """
 
 from .pending_result_lock import PENDING_RESULT_LOCK

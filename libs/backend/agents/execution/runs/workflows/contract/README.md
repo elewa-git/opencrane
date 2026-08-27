@@ -22,7 +22,7 @@ task starts; they are not part of the durable task input.
  └──────────────────────────────────────────────┘
        │ task name, input, retry rule, result
        ▼
- future controller registers and runs the handler
+ controller claims and runs one warm Pod
 ```
 
 **In this flow:** [AgentRun workflows](../README.md) provides the shared location for this task;
@@ -40,13 +40,13 @@ it would expose data in the durable task record; that data must stay behind the 
 - `AgentRunTaskInput` — carries the silo ID, run ID, and attempt number.
 - `AgentRunTaskResult` — reports the same attempt and its terminal state.
 - `AgentRunTaskTerminalStates` — lists the completed, failed, and cancelled outcomes.
-- `AgentRunWorkflowControllerRecord` — carries the server-approved facts for the one runtime Job.
-- `AgentRunWorkflowAttemptKey` — carries the transient model key used to create its Job-owned Secret.
-- `AgentRunWorkflowAssignmentCommand` and `AgentRunWorkflowPodCommand` — bind the exact Job and first
-  Pod to the current attempt.
-- `AgentRunWorkflowReleaseClaim` — carries the time-limited permission to unsuspend that Job.
+- `AgentRunWorkflowControllerRecord` — carries the server-approved facts for one warm-runtime claim.
+- `AgentRunWarmRuntimeReservationCommand` — describes one generic warm Pod offered for reservation.
+- `AgentRunWarmRuntimeActivationCommand` and `AgentRunWarmRuntimeReadinessCommand` — record the exact
+  profile change and readiness proof.
+- `AgentRunWarmRuntimeDeletionCommand` — names the exact used Pod that must be deleted.
 - `AgentRunWorkflowObservation` — tells the handler whether it must wait or return a terminal result.
-- `AgentRunWorkflowControllerAuthority` — defines the server operations that exchange these facts.
+- `AgentRunWarmRuntimeControllerAuthority` — defines the server operations that save these steps.
 
 ## Boundary
 

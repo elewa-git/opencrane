@@ -152,10 +152,12 @@
     { "path": "apps/agent-runtime/src/protocol/candidates.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/protocol/elicitation.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/protocol/event_projector.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
+    { "path": "apps/agent-runtime/src/protocol/wait_reasons.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/runtime.py", "owner": "apps/agent-runtime", "classification": "process-entrypoint" },
     { "path": "apps/agent-runtime/src/transport/http.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/transport/output.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/transport/stream.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
+    { "path": "apps/agent-runtime/src/warm_runtime.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/qualification/__init__.py", "owner": "apps/agent-runtime", "classification": "composition-test" },
     { "path": "apps/agent-runtime/qualification/test_generated_output.py", "owner": "apps/agent-runtime", "classification": "composition-test" }
   ],

@@ -63,7 +63,7 @@ export class PrismaAgentRunWorkflowTaskReadRepository
 
 }
 
-/** Builds the opaque bootstrap reference from immutable task and run identity. */
+/** Builds the internal binding reference from immutable task and run identity. */
 export function __AgentRunWorkflowBootstrapReferenceForTask(task: AgentRunWorkflowTaskRow): string
 {
 	if (task.taskId === null)
@@ -73,7 +73,7 @@ export function __AgentRunWorkflowBootstrapReferenceForTask(task: AgentRunWorkfl
 	return __AgentRunWorkflowBootstrapReference({ taskId: task.taskId, runId: task.runId, attempt: task.attempt, siloId: task.siloId, agentServiceId: task.run.agentServiceId, agentRevisionId: task.run.agentRevisionId, inputSnapshotDigest: task.run.inputSnapshotDigest });
 }
 
-/** Digests immutable assignment fields so a bootstrap reference cannot move to another Job. */
+/** Digests immutable assignment fields so a binding reference cannot move to another workload. */
 export function __AgentRunWorkflowBootstrapClaimDigest(reference: string, assignment: WorkloadAssignment): string
 {
 	const canonical = JSON.stringify(["opencrane-workload-bootstrap-integrity-v1", reference, assignment.runId, assignment.attempt, assignment.agentServiceId, assignment.agentRevisionId, assignment.siloId, assignment.subjectId, assignment.audience, assignment.serviceAccountName, assignment.namespace, assignment.workloadKind, assignment.workloadUid, assignment.workloadProfile, assignment.expiresAt.toISOString(), assignment.createdAt.toISOString()]);

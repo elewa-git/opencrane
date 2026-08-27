@@ -13,8 +13,7 @@ import re
 import threading
 from collections.abc import Callable, Iterator
 
-from ..config import environment, read_attempt_litellm_key
-from ..constants import DEFAULT_LITELLM_KEY_PATH
+from ..config import environment
 from .generated_output_policy import order_generated_outputs as _order_generated_outputs
 from .generated_output_policy import validate_generated_output_batch
 from .histories import load_model_history, store_model_history
@@ -449,18 +448,14 @@ def _model_loop_components(compiled_input: dict[str, object], attempt_model_key:
     and the attempt-scoped key is read at the point of use so no master or provider credential enters
     the runtime.
     """
-    # Configuration chooses only the in-cluster proxy endpoint and key mount. The immutable compiled
-    # snapshot remains the sole authority for the actual model alias and instructions.
+    # Configuration chooses only the in-cluster proxy endpoint. The immutable compiled snapshot
+    # remains the sole authority for the actual model alias and instructions.
     base_url = environment("OPENCRANE_RUNTIME_LITELLM_BASE_URL")
-    # A fresh Job reads its mounted attempt key at the model boundary. A claimed warm Pod receives
-    # the same scoped value only after its proof-key binding commits and keeps it in process memory.
-    if attempt_model_key is None:
-        key_path = environment("OPENCRANE_RUNTIME_LITELLM_KEY_PATH", DEFAULT_LITELLM_KEY_PATH)
-        attempt_key = read_attempt_litellm_key(key_path)
-    elif not attempt_model_key:
+    # The claimed warm Pod receives this scoped value only after its proof-key binding commits and
+    # keeps it in process memory. There is no mounted-key fallback.
+    if not attempt_model_key:
         raise RuntimeError("warm runtime attempt model key is empty")
-    else:
-        attempt_key = attempt_model_key
+    attempt_key = attempt_model_key
     model_route = compiled_input.get("model")
     model_alias = model_route.get("modelAlias") if isinstance(model_route, dict) else None
     if not isinstance(model_alias, str) or not model_alias:

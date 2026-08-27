@@ -11,6 +11,7 @@
     "artifact-scanner",
     "agent-controller",
     "agent-runtime",
+    "managed-agent-runtime",
     "mcp-executor",
     "skill-authoring",
     "tool-runner",
@@ -69,6 +70,8 @@
         "Deployment/opencrane-artifact-service",
         "Deployment/opencrane-artifact-scanner",
         "Deployment/opencrane-agent-controller",
+        "Deployment/opencrane-personal-warm",
+        "Deployment/opencrane-managed-warm",
         "Deployment/opencrane-cognee",
         "Deployment/opencrane-litellm"
       ]
@@ -79,11 +82,6 @@
       "path": "libs/backend/artifacts/preprocessor/k8s-launcher/src/artifact-preprocessor-job.ts",
       "anchor": "kind: \"Job\"",
       "workloadIds": ["artifact-preprocessor"]
-    },
-    {
-      "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts",
-      "anchor": "kind: \"Job\"",
-      "workloadIds": ["agent-runtime"]
     },
     {
       "path": "libs/backend/agents/runtime/mcp-executor/k8s-launcher/src/mcp-executor-job.ts",
@@ -101,24 +99,12 @@
       "workloadIds": ["tool-runner"]
     },
     {
-      "path": "libs/backend/agents/runtime/controller/src/kubernetes-agent-controller-store.ts",
-      "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _KubernetesRequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
-      "workloadIds": ["agent-runtime"]
-    },
-    {
       "path": "libs/backend/agents/runtime/workloads/k8s-controller/src/governed-job-controller.ts",
       "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
       "workloadIds": ["artifact-preprocessor", "skill-authoring", "tool-runner", "mcp-executor"]
     }
   ],
-  "nonProducingRuntimeMatches": [
-    {
-      "path": "libs/backend/agents/runtime/controller/src/agent-runtime-attempt-key.ts",
-      "anchor": "kind: \"Job\"",
-      "context": "secret-owner-reference",
-      "reason": "This is a Secret owner reference to an already-created attempt Job; it cannot create a pod."
-    }
-  ],
+  "nonProducingRuntimeMatches": [],
   "nonWorkloadDynamicKinds": [],
   "forbiddenPaths": [
     "apps/_infra/deploy-k8s/templates/clustertenant-manager-certificate.yaml",
@@ -209,10 +195,21 @@
     },
     {
       "id": "agent-runtime",
-      "podClass": "Job/agent-runtime-attempt",
+      "podClass": "Deployment/agent-runtime-personal-warm",
+      "renderedPodClass": "Deployment/opencrane-personal-warm",
       "image": "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:<release-digest>",
       "owner": "apps/agent-runtime",
-      "source": { "type": "file", "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts", "anchor": "kind: \"Job\"" }
+      "source": { "type": "file", "path": "apps/agent-controller/helm/templates/_warm-runtime.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/agent-controller/helm/templates/_resources.tpl", "anchor": "include \"opencrane.agentController.warmRuntimeResources\"" }
+    },
+    {
+      "id": "managed-agent-runtime",
+      "podClass": "Deployment/agent-runtime-managed-warm",
+      "renderedPodClass": "Deployment/opencrane-managed-warm",
+      "image": "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:<release-digest>",
+      "owner": "apps/agent-runtime",
+      "source": { "type": "file", "path": "apps/agent-controller/helm/templates/_warm-runtime.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/agent-controller/helm/templates/_resources.tpl", "anchor": "include \"opencrane.agentController.warmRuntimeResources\"" }
     },
     {
       "id": "mcp-executor",

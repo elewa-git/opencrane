@@ -11,12 +11,11 @@ the environment itself.
 # control plane uses it to decide which request and candidate shapes it can interpret.
 PROTOCOL_VERSION = "opencrane.agent-runtime/v1"
 
-# Paths fixed by the Kubernetes Job projection contract. The supported path settings may override
+# Paths fixed by the Kubernetes runtime contract. The supported path settings may override
 # these defaults, but the container never falls back to an unprojected credential source.
 DEFAULT_TOKEN_PATH = "/var/run/opencrane/tokens/runtime.token"
-DEFAULT_BOOTSTRAP_PATH = "/var/run/opencrane/bootstrap/reference"
-DEFAULT_LITELLM_KEY_PATH = "/var/run/opencrane/litellm/key"
 DEFAULT_CHECKPOINT_DIR = "/tmp/opencrane/checkpoints"
+DEFAULT_PROOF_EVIDENCE_PATH = "/tmp/opencrane/proof-evidence.json"
 
 # The checkpoint version guards the local optimisation format; it is unrelated to the wire protocol.
 # Keep these versions separate so a replaceable local serialization can evolve without claiming a

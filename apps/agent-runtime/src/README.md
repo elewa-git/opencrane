@@ -11,10 +11,10 @@ results and therefore cannot repeat a provider action after reconnecting.
 ## Component map
 
 ```text
-runtime.py  process lifecycle and bounded reconnects
+runtime.py  warm binding, process lifecycle, and bounded reconnects
 │
 ├── bootstrap/ ───────────────────────┐
-│   proof evidence + one-use exchange │
+│   proof evidence + one-use binding  │
 │                                     ▼
 └── transport/ ◄──────────────── control-plane HTTP/SSE
     command stream + output bytes      │
@@ -34,8 +34,9 @@ config.py · constants.py · observability.py support the components above.
 
 | Component | Consumes | Produces | Must never own |
 | --- | --- | --- | --- |
-| `runtime.py` | Mounted settings and projected identity files | One bootstrapped outbound stream | Run selection or durable state |
-| `bootstrap/` | Bootstrap reference, projected token, generated public key evidence | One accepted proof-key binding | Retry after permanent refusal |
+| `runtime.py` | Warm settings, projected identity, and generated proof evidence | One bound outbound stream | Run selection or durable state |
+| `warm_runtime.py` | Pod UID and fixed claimed profile | Local readiness responses | Run identity or credentials |
+| `bootstrap/` | Projected token and generated public key evidence | One accepted proof-key binding and in-memory model key | Retry after permanent refusal |
 | `transport/` | Authenticated server-sent events and candidate dictionaries | Dispatched commands and bounded HTTP requests | An inbound listener or local queue |
 | `attempts/` | Fenced start, resume, and cancel commands | Ordered candidates, exact saved tool and elicitation results, and safe run evidence | Tool execution, participant selection, approval, or canonical cancellation |
 | `model_loop/` | Compiled input, attempt-scoped LiteLLM key, authorised resume results | Framework-neutral model events | Direct tool execution, participant authority, or implicit retries |
@@ -43,23 +44,24 @@ config.py · constants.py · observability.py support the components above.
 
 ## Runtime sequence
 
-1. `runtime.py` reads the mounted settings, generates public proof-key binding evidence, and asks
-   `bootstrap/` to bind it exactly once.
-2. `transport/stream.py` opens the sole outbound command stream with the projected workload token.
-3. A `start_attempt` command creates a cancellation signal and terminal gate, then runs
+1. `runtime.py` starts the local readiness server and generates public proof-key evidence.
+2. `bootstrap/` asks the server to bind this reviewed Pod to its saved reservation. The returned
+   attempt model key stays in process memory.
+3. `transport/stream.py` opens the sole outbound command stream with the projected workload token.
+4. A `start_attempt` command creates a cancellation signal and terminal gate, then runs
    `attempts/execution.py` on a worker thread so the stream can still receive cancellation.
-4. `model_loop/driver.py` calls LiteLLM through Pydantic AI with every implicit retry path disabled.
+5. `model_loop/driver.py` calls LiteLLM through Pydantic AI with every implicit retry path disabled.
    It translates framework events into small dictionaries; framework objects never cross the seam.
-5. `protocol/candidates.py` binds each event to the accepted command coordinates. Tool calls become
+6. `protocol/candidates.py` binds each event to the accepted command coordinates. Tool calls become
    `external_action` candidates only after resolving the exact revision from the compiled grant set.
    `protocol/elicitation.py` admits one strictly bounded ordinary-input or A2UI-action request,
    computes its canonical digest, and carries no participant or absolute-expiry coordinate.
-6. `transport/http.py` delivers each non-terminal candidate once. A neutral `output_asset` starts
+7. `transport/http.py` delivers each non-terminal candidate once. A neutral `output_asset` starts
    the assistant message when needed, then `transport/output.py` reserves and uploads exact bytes
    through the private control-plane broker. The runtime sends its message id, never a database
    sequence, storage lease, or receipt. Terminal delivery alone may reuse
    its stable identifier after an ambiguous network loss.
-7. A `resume_attempt` carries exact saved tool and participant-input results. `attempts/tool_results.py` maps each
+8. A `resume_attempt` carries exact saved tool and participant-input results. `attempts/tool_results.py` maps each
    `toolInvocationId` back to the pending call recorded at proposal time
    (`attempts/pending_tools.py`) and feeds the framework that saved result.
    `attempts/elicitation_results.py` rejects unknown fields and invalid terminal shapes before any
@@ -78,7 +80,10 @@ config.py · constants.py · observability.py support the components above.
 - Every candidate echoes the runtime instance, command, run, attempt, and fence that admitted it.
 - The local checkpoint is encrypted, replaceable, and bound to run coordinates. Missing, corrupt,
   foreign, or stale checkpoint data is discarded; it never overrides server state.
-- Bootstrap refusal is permanent. Exceptional and clean-close transport loss reconnect with bounded
+- Public proof evidence is saved in the Pod's temporary scratch before the first bind. A container
+  restart on the same Pod reuses that public evidence and receives a fresh model key in memory. No
+  private proof key or model key is written to disk.
+- Binding refusal is permanent. Exceptional and clean-close transport loss reconnect with bounded
   jitter. Non-terminal candidates are not replayed after ambiguous delivery. A terminal candidate
   may replay unchanged after an ambiguous network loss; an explicit HTTP refusal is permanent.
 - Secrets are read at their point of use and never included in logs, spans, candidates, checkpoints,
