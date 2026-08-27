@@ -236,25 +236,41 @@ describe("Tier 1 local-development profile", function _Suite()
 		expect((await workspace.run("run-local-1")).state).toBe(ConversationRunStates.Accepted);
 	});
 
-	it("reports reconnecting before using the production stream reducer", async function _ReconnectScenario()
+	it("holds the first stream at reconnecting until its replacement becomes live", async function _ReconnectScenario()
 	{
 		const stream = _Profile(LocalDevelopmentScenarioKinds.Reconnecting).get<ConversationEventStream>(CONVERSATION_WORKSPACE_EVENT_STREAM);
-		const controller = new AbortController();
-		const updates: ConversationEventStreamUpdate[] = [];
-
-		const state = await stream.stream({ conversationId: "conversation-agent", signal: controller.signal, onUpdate: function _Update(update): void
+		const interruptedController = new AbortController();
+		const interruptedUpdates: ConversationEventStreamUpdate[] = [];
+		const interruptedStream = stream.stream({ conversationId: "conversation-agent", signal: interruptedController.signal, onUpdate: function _InterruptedUpdate(update): void
 		{
-			updates.push(update);
+			interruptedUpdates.push(update);
+		} });
+
+		expect(interruptedUpdates.map(update => update.status)).toEqual([
+			ConversationEventStreamStatuses.Connecting,
+			ConversationEventStreamStatuses.Reconnecting
+		]);
+		expect(interruptedUpdates.every(update => update.status !== ConversationEventStreamStatuses.Live)).toBe(true);
+		interruptedController.abort();
+		const interruptedState = await interruptedStream;
+		expect(interruptedState.cursor).toBeNull();
+		expect(interruptedUpdates.at(-1)?.status).toBe(ConversationEventStreamStatuses.Aborted);
+
+		const replacementController = new AbortController();
+		const replacementUpdates: ConversationEventStreamUpdate[] = [];
+		const replacementState = await stream.stream({ conversationId: "conversation-agent", signal: replacementController.signal, onUpdate: function _ReplacementUpdate(update): void
+		{
+			replacementUpdates.push(update);
 
 			if (update.state.cursor === "local-cursor-5")
 			{
-				controller.abort();
+				replacementController.abort();
 			}
 		} });
 
-		expect(updates.some(function _Reconnects(update) { return update.status === ConversationEventStreamStatuses.Reconnecting; })).toBe(true);
-		expect(state.cursor).toBe("local-cursor-5");
-		expect(updates.at(-1)?.status).toBe(ConversationEventStreamStatuses.Aborted);
+		expect(replacementUpdates.some(update => update.status === ConversationEventStreamStatuses.Reconnecting)).toBe(false);
+		expect(replacementState.cursor).toBe("local-cursor-5");
+		expect(replacementUpdates.at(-1)?.status).toBe(ConversationEventStreamStatuses.Aborted);
 	});
 
 	it("fails an access-changed detail read with the canonical gateway kind", async function _AccessChangedScenario()
@@ -262,6 +278,26 @@ describe("Tier 1 local-development profile", function _Suite()
 		const workspace = _Profile(LocalDevelopmentScenarioKinds.AccessChanged).get<ConversationWorkspaceGateway>(CONVERSATION_WORKSPACE_GATEWAY);
 
 		await expect(workspace.open("conversation-agent")).rejects.toMatchObject({ kind: ConversationWorkspaceGatewayErrorKinds.AccessChanged });
+	});
+
+	it("revokes the routed stream when conversation access changes", async function _AccessChangedStreamScenario()
+	{
+		const stream = _Profile(LocalDevelopmentScenarioKinds.AccessChanged).get<ConversationEventStream>(CONVERSATION_WORKSPACE_EVENT_STREAM);
+		const updates: ConversationEventStreamUpdate[] = [];
+		const state = await stream.stream({ conversationId: "conversation-agent", signal: new AbortController().signal, onUpdate: function _Update(update): void
+		{
+			updates.push(update);
+		} });
+
+		expect(updates.map(update => update.status)).toEqual([
+			ConversationEventStreamStatuses.Connecting,
+			ConversationEventStreamStatuses.Failed
+		]);
+		expect(state.accessRevoked).toBe(true);
+		expect(state.cursor).toBeNull();
+		expect(Object.keys(state.messages)).toHaveLength(0);
+		expect(Object.keys(state.tools)).toHaveLength(0);
+		expect(state.surfaces.size).toBe(0);
 	});
 
 	it("blocks an accidentally retained Angular HTTP adapter before transport", async function _NetworkTripwire()
