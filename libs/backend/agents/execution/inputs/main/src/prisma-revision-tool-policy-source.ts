@@ -1,4 +1,4 @@
-import { AgentRevisionState, ArtifactRevisionState, McpApprovalStatus, McpServerRevisionState, McpServerStatus, ModelRoutingScope, Prisma, SkillRevisionState, SkillState } from "@prisma/client";
+import { AgentRevisionState, ArtifactRevisionState, McpApprovalStatus, McpServerRevisionState, McpServerStatus, ModelRoutingScope, SkillRevisionState, SkillState } from "@prisma/client";
 
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -9,15 +9,15 @@ import { __AreRunInputSnapshotMcpToolsValid } from "./mcp-tool-snapshot.validato
 /**
  * Re-checks a published revision's model route, selected MCP tool revisions, skills, and artifacts.
  *
- * Locks the revision and updates its MCP admission claim before reading. The revision lock prevents
- * publication changes during the read, while the claim makes concurrent MCP policy reads for this
- * revision wait for each other.
+ * Updates the revision's MCP admission claim before reading. The surrounding Serializable admission
+ * transaction makes a concurrent publication change conflict with this snapshot instead of requiring
+ * handwritten row locks.
  *
  * The model route it returns names a LiteLLM model alias and carries no provider credentials,
  * because the compiled input reaches the runtime as opaque data.
  *
  * @implements ToolPolicySource
- * @see PrismaRevisionBudgetPolicySource - locks the same revision row in the same order.
+ * @see PrismaRevisionBudgetPolicySource - reads the same revision in the admission transaction.
  */
 export class PrismaRevisionToolPolicySource implements ToolPolicySource
 {
@@ -33,20 +33,10 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 	/** Loads the revision's tool policy, keeping only same-silo rows that are still usable inside the admission transaction. */
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ToolPolicyInput>>
 	{
-		// 1. Lock the revision before updating its claim so every admission takes the locks in the same order.
-		await transaction.prisma.$queryRaw(Prisma.sql`
-			SELECT revision."id"
-			FROM "agent_revisions" revision
-			JOIN "agent_services" service ON service."id" = revision."agent_service_id"
-			WHERE revision."id" = ${run.agentRevisionId}
-				AND revision."agent_service_id" = ${run.agentServiceId}
-				AND service."silo_id" = ${command.siloId}
-			ORDER BY revision."id"
-			FOR UPDATE OF revision
-		`);
+		// 1. Touch the claim in the same Serializable admission transaction as the immutable snapshot.
 		await this._createMcpClaim(transaction).touch(run.agentRevisionId, command.siloId, new Date(transaction.admittedAt));
 
-		// 2. Read the model, MCP, and skill assignments only after the revision and claim locks are held.
+		// 2. Read the model, MCP, and skill assignments after the claim has joined the transaction snapshot.
 		const revision = await transaction.prisma.agentRevision.findFirst({
 			where: {
 				id: run.agentRevisionId,
@@ -98,8 +88,8 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 /**
  * Reads the revision's resource limits and turns them into the per-run budget the compiler reads.
  *
- * Locks the same revision row as {@link PrismaRevisionToolPolicySource}, in the same order, so the
- * two cannot deadlock and neither can read a revision the other is mid-publish on.
+ * Reads the same revision as {@link PrismaRevisionToolPolicySource} inside the surrounding
+ * Serializable admission transaction, so a concurrent publication change cannot commit unnoticed.
  *
  * Applies no defaults. A budget with a missing or non-positive limit is refused, because a run
  * admitted without a real ceiling could consume tokens without bound. The wall-clock deadline is
@@ -112,26 +102,14 @@ export class PrismaRevisionBudgetPolicySource implements BudgetPolicySource
 	/** Refuses a budget policy that is missing, out of date, malformed, or holds values it cannot represent. */
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<BudgetPolicyInput>>
 	{
-		// 1. Lock the exact revision, matching the tool-policy lock order so a publication change cannot race the budget read.
-		await transaction.prisma.$queryRaw(Prisma.sql`
-			SELECT revision."id"
-			FROM "agent_revisions" revision
-			JOIN "agent_services" service ON service."id" = revision."agent_service_id"
-			WHERE revision."id" = ${run.agentRevisionId}
-				AND revision."agent_service_id" = ${run.agentServiceId}
-				AND service."silo_id" = ${command.siloId}
-			ORDER BY revision."id"
-			FOR UPDATE OF revision
-		`);
-
-		// 2. Under that lock, check the revision is still published. Do not trust the revision id an earlier caller passed.
+		// 1. Re-check that the exact revision is still published. Do not trust the revision id an earlier caller passed.
 		const revision = await transaction.prisma.agentRevision.findFirst({
 			where: { id: run.agentRevisionId, agentServiceId: run.agentServiceId, state: AgentRevisionState.Published, agentService: { is: { siloId: command.siloId, state: "Active", activeRevisionId: run.agentRevisionId } } },
 			select: { budget: true },
 		});
 		if (revision === null) return { outcome: "denied", reason: "budget_unavailable" };
 
-		// 3. Keep only limits that are all present and positive, plus the server's deadline. A caller can never supply a default.
+		// 2. Keep only limits that are all present and positive, plus the server's deadline. A caller can never supply a default.
 		const budgetPolicy = _ParseBudget(revision.budget as unknown as JsonValue, transaction.admittedAtEpochMs);
 		return budgetPolicy === null ? { outcome: "denied", reason: "budget_unavailable" } : { outcome: "loaded", value: { budgetPolicy } };
 	}

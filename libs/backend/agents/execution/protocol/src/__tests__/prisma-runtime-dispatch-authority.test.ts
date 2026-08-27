@@ -132,7 +132,7 @@ function _fakePrisma(options: FakeOptions)
 	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId, audience, serviceAccountName: workloadIdentity.serviceAccountName, namespace: workloadIdentity.namespace, workloadKind: "Job", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.podUid === undefined ? "pod-1" : options.podUid, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
 	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
 	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, conversationId: options.conversationId ?? null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: options.managed ? { kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", effectiveBoundaryAttachmentDigest: `sha256:${"a".repeat(64)}`, fleetMembershipRevision: 3 } : { kind: "user", executionSubjectId: "user-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
-	const queryRaw = vi.fn().mockResolvedValue([]);
+	const transactionOptions: unknown[] = [];
 
 	/** Return whether a stream row matches the fields given in a where clause. */
 	function _streamMatches(row: FakeStreamRow, where: Record<string, unknown>): boolean
@@ -144,8 +144,7 @@ function _fakePrisma(options: FakeOptions)
 	}
 
 	const client = {
-		async $transaction(run_: (tx: unknown) => Promise<unknown>) { return run_(client); },
-		$queryRaw: queryRaw,
+		async $transaction(run_: (tx: unknown) => Promise<unknown>, options?: unknown) { transactionOptions.push(options); return run_(client); },
 		workloadAssignment: {
 			async findUnique(args: { where: { namespace_podUid?: { namespace: string; podUid: string } } })
 			{
@@ -157,7 +156,14 @@ function _fakePrisma(options: FakeOptions)
 		runInputSnapshot: { async findUnique(args: { where: { runId_digest?: { runId: string; digest: string } } }) { return args.where.runId_digest && args.where.runId_digest.digest === snapshot.digest ? snapshot : null; } },
 		runtimeCommandStream: {
 			async findUnique(args: { where: { runId_attempt: { runId: string; attempt: number } } }) { return streams.find(row => row.runId === args.where.runId_attempt.runId && row.attempt === args.where.runId_attempt.attempt) ?? null; },
-			async create(args: { data: { runId: string; attempt: number; runtimeInstanceId: string } }) { const row = { runId: args.data.runId, attempt: args.data.attempt, fence: 1, inputGeneration: 0, runtimeInstanceId: args.data.runtimeInstanceId, nextCommandSequence: 1, acceptedCandidateIds: [] }; streams.push(row); return row; },
+			async createMany(args: { data: readonly { runId: string; attempt: number; runtimeInstanceId: string }[] })
+			{
+				const data = args.data[0];
+				if (!data || streams.some(row => row.runId === data.runId && row.attempt === data.attempt))
+					return { count: 0 };
+				streams.push({ runId: data.runId, attempt: data.attempt, fence: 1, inputGeneration: 0, runtimeInstanceId: data.runtimeInstanceId, nextCommandSequence: 1, acceptedCandidateIds: [] });
+				return { count: 1 };
+			},
 			async updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> })
 			{
 				let count = 0;
@@ -231,7 +237,7 @@ function _fakePrisma(options: FakeOptions)
 			},
 		},
 	};
-	return { prisma: client as unknown as PrismaClient, queryRaw, run, streams, commands, resultDeliveries, elicitationResultDeliveries, steeringRequests, toolInvocations };
+	return { prisma: client as unknown as PrismaClient, transactionOptions, run, streams, commands, resultDeliveries, elicitationResultDeliveries, steeringRequests, toolInvocations };
 }
 
 /** Deterministic fake compiler: the same snapshot and live attempt yield byte-identical input. */
@@ -294,15 +300,12 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(command?.assignment.identity).toEqual({ kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", fleetMembershipRevision: 3, effectiveBoundaryAttachmentDigest: `sha256:${"a".repeat(64)}` });
 	});
 
-	it("takes the per-run advisory lock before its row lock, matching cancellation", async function _ordersRunLocks()
+	it("runs command admission at Serializable isolation", async function _UsesSerializableTransaction()
 	{
 		const context = _authority({ runState: "Running" });
 
 		await context.authority.__NextCommand(_identity, _open, 0);
-		const queries = context.queryRaw.mock.calls.map(function _sql(call) { return ((call[0] as { strings?: readonly string[] }).strings ?? []).join(" "); });
-		expect(queries[0]).toContain("pg_advisory_xact_lock");
-		expect(queries[0]).toContain('::text AS "lock"');
-		expect(queries[1]).toContain('FROM "agent_runs"');
+		expect(context.transactionOptions).toContainEqual({ isolationLevel: "Serializable" });
 	});
 
 	it("idempotently redelivers the same start command to a reconnecting instance", async function _redelivers()

@@ -34,8 +34,8 @@ function _existing<TResult>(row: { state: string; jti: string; requestFingerprin
  * public key registered in one transaction, and every action receipt is looked up against a
  * registered key.
  *
- * Both transactions take explicit `FOR UPDATE` row locks in a fixed order — run, then assignment,
- * then bootstrap — so two runtimes racing on the same bootstrap serialise instead of deadlocking.
+ * Bootstrap consumption uses an exact conditional write, and action reservation uses the receipt's
+ * unique JTI, so concurrent runtimes cannot take the same authority twice.
  * Reserving an action also appends its audit entry in the same transaction, so an action can never
  * run without a recorded decision.
  *
@@ -57,22 +57,23 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 	{
 		try
 		{
-			return await this.prisma.$transaction(async function _consume(transaction: Prisma.TransactionClient)
-			{
-				// 1. Lock run, assignment, and bootstrap in authority order before checking one-time state.
-				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${claim.runId} FOR UPDATE`);
-				await transaction.$queryRaw(Prisma.sql`SELECT "run_id" FROM "workload_assignments" WHERE "run_id" = ${claim.runId} AND "attempt" = ${claim.attempt} FOR UPDATE`);
-				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "workload_bootstraps" WHERE "id" = ${claim.bootstrapId} FOR UPDATE`);
-				const bootstrap = await transaction.workloadBootstrap.findUnique({ where: { id: claim.bootstrapId } });
-				if (bootstrap === null) return { status: "conflict" } as const;
-				if (bootstrap.consumedAt !== null) return { status: "already_consumed" } as const;
+				return await this.prisma.$transaction(async function _consume(transaction: Prisma.TransactionClient)
+				{
+					// 1. Read the one-use bootstrap before claiming its exact unconsumed state.
+					const bootstrap = await transaction.workloadBootstrap.findUnique({ where: { id: claim.bootstrapId } });
+				if (bootstrap === null)
+					return { status: "conflict" } as const;
+				if (bootstrap.consumedAt !== null)
+					return { status: "already_consumed" } as const;
 
 				// 2. Consume exact bootstrap coordinates; database triggers revalidate live assignment authority.
 				const receiptId = randomUUID();
-				await transaction.workloadBootstrap.update({
-					where: { id: claim.bootstrapId },
-					data: { consumedAt: new Date(), consumedByPodUid: claim.podUid, receiptId },
-				});
+					const consumed = await transaction.workloadBootstrap.updateMany({
+						where: { id: claim.bootstrapId, runId: claim.runId, attempt: claim.attempt, consumedAt: null },
+						data: { consumedAt: new Date(), consumedByPodUid: claim.podUid, receiptId },
+					});
+					if (consumed.count !== 1)
+						return { status: "conflict" } as const;
 
 				// 3. Persist only the public proof key bound to this run attempt; no reusable runtime secret exists.
 				await transaction.runProofKey.create({
@@ -88,9 +89,9 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 						keyThumbprint: claim.proofKeyThumbprint,
 						expiresAt: new Date(claim.expiresAtEpochMs),
 					},
-				});
-				return { status: "consumed", receiptId } as const;
-			});
+					});
+					return { status: "consumed", receiptId } as const;
+				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 		}
 		catch (error)
 		{
@@ -113,8 +114,7 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 		{
 			return await this.prisma.$transaction(async function _reserve(transaction: Prisma.TransactionClient)
 			{
-				// 1. Return a locked existing JTI deterministically; a reserved/failed row is never re-executed.
-				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "action_execution_receipts" WHERE "jti" = ${intent.jti} FOR UPDATE`);
+				// 1. Return an existing JTI deterministically; its unique key prevents a second reservation.
 				const existing = await transaction.actionExecutionReceipt.findUnique({ where: { jti: intent.jti } });
 				if (existing !== null) return _existing<TResult>(existing);
 
@@ -150,7 +150,7 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 						replayMode: intent.replayMode === "one_shot" ? PrismaActionReplayMode.OneShot : PrismaActionReplayMode.Idempotent,
 						requestFingerprint: intent.requestFingerprint,
 					},
-				});
+					});
 
 				// 3. Append the exact allow evidence in the same transaction; audit failure prevents I/O.
 				const decisionDigest = __DigestCanonicalJson({ receiptId: receipt.id, jti: intent.jti, requestFingerprint: intent.requestFingerprint, effectivePolicyDigest: intent.effectivePolicyDigest } as JsonValue);
@@ -184,7 +184,7 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 					reasonCode: "proof_bound_capability_authorized",
 				});
 				return { status: "reserved", reservationId: receipt.id } as const;
-			});
+			}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 		}
 		catch (error)
 		{

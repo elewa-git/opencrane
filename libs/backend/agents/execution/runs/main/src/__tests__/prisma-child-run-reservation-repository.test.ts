@@ -80,14 +80,13 @@ function _prisma<TTransaction>(transaction: TTransaction): PrismaClient
 
 describe("PrismaChildRunReservationRepository", function _describeReservationRepository()
 {
-	it("locks a running parent and atomically persists its bounded child authority", async function _persistsReservation()
+	it("rechecks a running parent and atomically persists its bounded child authority", async function _persistsReservation()
 	{
 		const parent = _snapshot("parent-1", "parent-service", "parent-revision");
 		const childBase = _snapshot("child-1", "child-service", "child-revision", "conversation-1");
 		const child = { ...childBase, budgetPolicy: { maxTokens: 100, maxCostUsdMicros: 500_000 } };
 		const childSnapshot = { ...child, digest: __DigestRunInputSnapshot(child) };
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([]),
 			agentRun: {
 				findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
 					id: "parent-1",
@@ -181,7 +180,6 @@ describe("PrismaChildRunReservationRepository", function _describeReservationRep
 		const child = { ...childBase, budgetPolicy: { maxTokens: 100, maxCostUsdMicros: 500_000 } };
 		const childSnapshot = { ...child, digest: __DigestRunInputSnapshot(child) };
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([]),
 			agentRun: {
 				findUnique: vi.fn().mockResolvedValue({
 					id: "child-1",
@@ -203,14 +201,6 @@ describe("PrismaChildRunReservationRepository", function _describeReservationRep
 		const result = await repository.reserve(_command(parent), { build: vi.fn() });
 
 		expect(result).toEqual({ outcome: "idempotent", snapshot: childSnapshot });
-		expect(transaction.$queryRaw).toHaveBeenCalledTimes(1);
-		expect((transaction.$queryRaw.mock.calls[0]?.[0] as { sql: string }).sql).toContain('::text AS "lock"');
-		// The advisory-lock key is a text parameter, and PostgreSQL rejects a NUL byte in text with
-		// SQLSTATE 22021, failing the whole reservation.
-		for (const [statement] of transaction.$queryRaw.mock.calls)
-		{
-			expect((statement as { values: unknown[] }).values.filter(function _IsText(value): value is string { return typeof value === "string"; }).join("")).not.toContain(String.fromCharCode(0));
-		}
 		expect(transaction.agentRun.create).not.toHaveBeenCalled();
 		expect(transaction.runInputSnapshot.create).not.toHaveBeenCalled();
 		expect(transaction.childRunReservation.create).not.toHaveBeenCalled();

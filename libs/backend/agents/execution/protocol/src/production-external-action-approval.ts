@@ -4,7 +4,8 @@ import { __DigestCanonicalJson, __OpenDeferredToolApproval, type OpenDeferredToo
 import type { Logger } from "@opencrane/backend/observability";
 import type { RunInputSnapshotMcpTool } from "@opencrane/contracts";
 
-import type { ExternalActionApprovalOpener, ExternalActionExecutionContext, ExternalActionWorkerInvocation } from "./external-action-worker.types";
+import { _IsAgentRunExternalActionInvocation } from "./external-action-worker-ownership";
+import type { AgentRunExternalActionWorkerInvocation, ExternalActionApprovalOpener, ExternalActionExecutionContext, ExternalActionWorkerInvocation } from "./external-action-worker.types";
 
 /** Schema fields the approval authority needs, independent of the tool's execution class. */
 interface FrozenApprovalTool
@@ -45,7 +46,7 @@ function _interruptId(invocation: ExternalActionWorkerInvocation): string
 }
 
 /** Build the command `__OpenDeferredToolApproval` takes. */
-function _openCommand(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext, definition: FrozenApprovalTool, now: Date): OpenDeferredToolApprovalCommand
+function _openCommand(invocation: AgentRunExternalActionWorkerInvocation, context: ExternalActionExecutionContext, definition: FrozenApprovalTool, now: Date): OpenDeferredToolApprovalCommand
 {
 	return {
 		interruptId: _interruptId(invocation),
@@ -82,6 +83,8 @@ class _ProductionExternalActionApprovalOpener implements ExternalActionApprovalO
 	/** Find the frozen tool definition, then open one approval through `__OpenDeferredToolApproval`. */
 	async open(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext, now: Date): Promise<boolean>
 	{
+		if (!_IsAgentRunExternalActionInvocation(invocation))
+			return false;
 		const definition = _frozenTool(invocation, context);
 		return __OpenDeferredToolApproval(this.prisma, _openCommand(invocation, context, definition, now), this.logger);
 	}

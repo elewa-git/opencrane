@@ -10,7 +10,7 @@ import type { RuntimeWaitReasons } from "./runtime-wait-reasons.types";
 /**
  * Turns an immutable snapshot into the literal input carried on `start_attempt`.
  *
- * The dispatch authority calls it inside the same locked transaction that loads the snapshot, so it
+ * The dispatch authority calls it inside the same Serializable transaction that loads the snapshot, so it
  * reads only immutable records and must return byte-identical output for a given snapshot and live
  * attempt on every mint and idempotent redelivery. The runtime treats the returned payload as opaque.
  */

@@ -63,11 +63,10 @@ describe("Prisma runtime authority adapter", function _suite()
 {
 	it("consumes bootstrap and stores only its public proof key in one transaction", async function _consume()
 	{
-		const bootstrapUpdate = vi.fn().mockResolvedValue({ id: "bootstrap-1" });
+		const bootstrapUpdate = vi.fn().mockResolvedValue({ count: 1 });
 		const proofCreate = vi.fn().mockResolvedValue({ id: "proof-1" });
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([]),
-			workloadBootstrap: { findUnique: vi.fn().mockResolvedValue({ id: "bootstrap-1", consumedAt: null }), update: bootstrapUpdate },
+			workloadBootstrap: { findUnique: vi.fn().mockResolvedValue({ id: "bootstrap-1", consumedAt: null }), updateMany: bootstrapUpdate },
 			runProofKey: { create: proofCreate },
 		};
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
@@ -76,7 +75,6 @@ describe("Prisma runtime authority adapter", function _suite()
 		const result = await repository.consumeAndBindProofKeyAtomically(_bootstrap());
 
 		expect(result.status).toBe("consumed");
-		expect(transaction.$queryRaw).toHaveBeenCalledTimes(3);
 		expect(bootstrapUpdate).toHaveBeenCalledOnce();
 		expect(proofCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ publicKeyJwk: { kty: "EC", crv: "P-256", x: "x", y: "y" }, keyThumbprint: "k".repeat(43) }) });
 	});
@@ -86,7 +84,6 @@ describe("Prisma runtime authority adapter", function _suite()
 		const receiptCreate = vi.fn().mockResolvedValue({ id: "receipt-1" });
 		const auditCreate = vi.fn().mockResolvedValue({ id: "audit-1" });
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([]),
 			actionExecutionReceipt: { findUnique: vi.fn().mockResolvedValue(null), create: receiptCreate },
 			runProofKey: { findUnique: vi.fn().mockResolvedValue({ id: "proof-1" }) },
 			auditDecision: { create: auditCreate },

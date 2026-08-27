@@ -58,7 +58,7 @@ idempotency semantics.
 capacity boundary for live personal and managed entrypoints.
 It partitions capacity by `(siloId, AgentServiceId)`, starts only the configured number of admissions,
 and holds a bounded FIFO queue **before** its work can open a PostgreSQL transaction. A full queue is
-rejected with `admission_concurrency_limited`; it does not turn a hot service row lock into an
+rejected with `admission_concurrency_limited`; it does not let one busy service consume an
 unbounded connection pool. The production entrypoint must use this gate before calling
 `PrismaRunAdmissionRepository.admit()` and must keep its policy aligned with the database pool budget.
 
@@ -225,12 +225,12 @@ This package neither trusts a child-supplied subject, silo or lineage nor create
 itself.
 
 The reservation repository is the sole durable child-admission boundary. It derives parent facts
-from locked database rows and the parent snapshot, rechecks the target policy, and records the
+from one Serializable database transaction and the parent snapshot, rechecks the target policy, and records the
 derived depth with the child allocation. Replaying the same inherited-silo idempotency key returns
 only the exact sealed child; any coordinate mismatch fails closed.
 
-Completion delivery is a separate, child-keyed ledger rather than an in-memory callback. It locks
-the terminal child, its reservation, and the parent event stream before adding a single
+Completion delivery is a separate, child-keyed ledger rather than an in-memory callback. It validates
+the terminal child, its reservation, and the parent event stream before conditionally adding a single
 `child.run.*` event. A duplicate report returns the existing ledger result. A parent without a
 conversation stream, or a parent that has already terminalised, is recorded as a deliberate
 suppressed outcome instead of silently losing the result or violating the event-stream fence.

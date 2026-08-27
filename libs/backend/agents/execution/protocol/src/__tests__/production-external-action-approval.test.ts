@@ -31,6 +31,7 @@ function _invocation(): ToolInvocationRecord
 		siloId: "silo-1",
 		runId: "run-1",
 		attempt: 1,
+		mcpTaskId: null,
 		agentRevisionId: "revision-1",
 		subjectId: "user-1",
 		candidateId: "candidate-1",
@@ -89,6 +90,16 @@ function _snapshot(): RunInputSnapshot
 
 describe("production external-action approval opener", function _suite()
 {
+	it("rejects standalone MCP tasks before opening an AgentRun approval", async function _RejectsStandaloneMcpTask()
+	{
+		_openApproval.mockClear();
+		const opener = __CreateProductionExternalActionApprovalOpener({} as PrismaClient, { warn: vi.fn(), error: vi.fn() } as unknown as Logger);
+		const invocation = { ..._invocation(), runId: null, attempt: null, mcpTaskId: "mcp-task-1" };
+
+		await expect(opener.open(invocation, { snapshot: _snapshot() }, _NOW)).resolves.toBe(false);
+		expect(_openApproval).not.toHaveBeenCalled();
+	});
+
 	it("opens from the exact frozen schema with an opaque stable id and bounded expiry", async function _opens()
 	{
 		_openApproval.mockClear();

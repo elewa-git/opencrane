@@ -84,7 +84,7 @@ export class PrismaFleetMembershipAuthorityRepository implements FleetMembership
 			return this.prisma.$transaction(async function _accept(transaction: Prisma.TransactionClient)
 			{
 				return _acceptRevision(transaction, acceptance);
-			});
+			}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 		}
 		return _acceptRevision(this.prisma, acceptance);
 	}
@@ -99,11 +99,8 @@ function _ownsTransaction(prisma: PrismaClient | Prisma.TransactionClient): pris
 /** Advances the membership high-watermark and audit inside the caller's already selected transaction. */
 async function _acceptRevision(transaction: Prisma.TransactionClient, acceptance: FleetMembershipAcceptance): Promise<FleetMembershipAcceptanceResult>
 {
-	// 1. Serialize even the first acceptance for an issuer/silo pair, where no row exists to lock. The
-	// length prefix keeps pairs distinct without a NUL byte, which PostgreSQL text rejects. Cast the
-	// lock result because Prisma cannot deserialize PostgreSQL's void return type from a raw query.
-	const lockKey = `${acceptance.issuerId.length}:${acceptance.issuerId}${acceptance.siloId}`;
-	await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS "lock"`);
+	// 1. Read the current high-watermark in the caller's transaction. The exact conditional write below
+	// decides which concurrent acceptance owns the update without a handwritten advisory lock.
 	const current = await transaction.highestAcceptedFleetMembership.findUnique({ where: { issuerId_siloId: { issuerId: acceptance.issuerId, siloId: acceptance.siloId } }, include: { verified: true } });
 	if (current !== null && (current.revision > acceptance.revision || (current.revision === acceptance.revision && current.verified.payloadDigest !== acceptance.payloadDigest)))
 	{
@@ -116,11 +113,24 @@ async function _acceptRevision(transaction: Prisma.TransactionClient, acceptance
 	const revision = await transaction.verifiedFleetMembershipRevision.findFirst({ where: { issuerId: acceptance.issuerId, siloId: acceptance.siloId, revision: acceptance.revision, payloadDigest: acceptance.payloadDigest } });
 	if (revision === null)
 		return { status: "conflict", highestAcceptedRevision: current?.revision ?? 0 } as const;
-	await transaction.highestAcceptedFleetMembership.upsert({
-		where: { issuerId_siloId: { issuerId: acceptance.issuerId, siloId: acceptance.siloId } },
-		create: { issuerId: acceptance.issuerId, siloId: acceptance.siloId, revisionId: revision.id, revision: acceptance.revision },
-		update: { revisionId: revision.id, revision: acceptance.revision, acceptedAt: new Date() },
-	});
+	if (current === null)
+	{
+		await transaction.highestAcceptedFleetMembership.create({ data: { issuerId: acceptance.issuerId, siloId: acceptance.siloId, revisionId: revision.id, revision: acceptance.revision } });
+	}
+	else
+	{
+		const advanced = await transaction.highestAcceptedFleetMembership.updateMany({
+			where: { issuerId: acceptance.issuerId, siloId: acceptance.siloId, revisionId: current.revisionId, revision: current.revision },
+			data: { revisionId: revision.id, revision: acceptance.revision, acceptedAt: new Date() },
+		});
+		if (advanced.count !== 1)
+		{
+			const winner = await transaction.highestAcceptedFleetMembership.findUnique({ where: { issuerId_siloId: { issuerId: acceptance.issuerId, siloId: acceptance.siloId } }, include: { verified: true } });
+			if (winner?.revision === acceptance.revision && winner.verified.payloadDigest === acceptance.payloadDigest)
+				return { status: "already_accepted", highestAcceptedRevision: winner.revision } as const;
+			return { status: "conflict", highestAcceptedRevision: winner?.revision ?? current.revision } as const;
+		}
+	}
 
 	// 3. Write the audit row in the same transaction so the stored state and the audit log agree.
 	const decisionDigest = __DigestCanonicalJson({ issuerId: acceptance.issuerId, siloId: acceptance.siloId, revision: acceptance.revision, payloadDigest: acceptance.payloadDigest } as JsonValue);

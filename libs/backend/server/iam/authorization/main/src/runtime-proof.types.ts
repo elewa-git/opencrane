@@ -255,7 +255,7 @@ export type CapabilityActionFailureResult = { readonly status: "failed" | "confl
  * OUTSIDE any transaction, and `markSucceeded` / `markFailed` close the row.
  *
  * `Atomically` is not used in these names because each method already runs as one transaction —
- * `reserve` in particular takes a row lock on the `jti` before deciding.
+ * `reserve` relies on the unique `jti` database fence before deciding.
  * Implemented by: ./prisma-runtime-authority.ts (`PrismaRuntimeAuthorityRepository`).
  * @see {@link __ExecuteCapabilityAction} which is the only correct way to drive this order.
  */

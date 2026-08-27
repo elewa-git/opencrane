@@ -102,7 +102,7 @@ export function _runTerminalReason(value: string | null): AgentRunTerminalReason
 	}
 }
 
-/** Maps one locked Prisma service row to the dependency-light target contract. */
+/** Maps one Prisma service row to the dependency-light target contract. */
 export function _mapService(row: AgentServiceRow): AgentService
 {
 	return {
@@ -118,7 +118,7 @@ export function _mapService(row: AgentServiceRow): AgentService
 	};
 }
 
-/** Maps one locked Prisma revision row and its immutable assignments to the target contract. */
+/** Maps one Prisma revision row and its immutable assignments to the target contract. */
 export function _mapRevision(row: AgentRevisionRow): AgentRevision
 {
 	return {

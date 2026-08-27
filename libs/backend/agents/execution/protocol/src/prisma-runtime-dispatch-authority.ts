@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, Prisma, RuntimeCommandKind, RuntimeSteeringRequestState, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
+import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, Prisma, RuntimeCommandKind, RuntimeSteeringRequestState, WorkloadAssignmentState, WorkloadKind, type PrismaClient } from "@prisma/client";
 
 import type { RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, ElicitationPurposes, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, RuntimeCandidateKinds, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeElicitationCandidate, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, ElicitationPurposes, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, RuntimeCandidateKinds, WARM_RUNTIME_SERVICE_ACCOUNT_NAME, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeElicitationCandidate, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
 import { ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationAdmissionOutcomes, __AdmitPreparingToolInvocationInTransaction, __DigestCanonicalJson, __ValidateDeferredToolArguments, type ToolInvocationIntent } from "@opencrane/backend/server/iam/authorization";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION, RunEventTypes } from "@opencrane/models/agents";
@@ -19,7 +19,7 @@ import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protoc
 import { RuntimeAdmissionOutcomes, type RuntimeAdmissionRunState, type RuntimeAttemptAuthority, type RuntimeProtocolClock } from "./runtime-protocol-authority.types";
 import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeElicitationUnitOfWorkFactory, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types";
 
-/** Database facts about one connected runtime Pod's run and assignment, read under a row lock. */
+/** Database facts about one connected runtime Pod's run and assignment. */
 interface RuntimeDispatchContext
 {
 	/** Run authorised for the connected Pod. */
@@ -42,7 +42,7 @@ interface RuntimeDispatchContext
 	readonly inputSnapshotDigest: string;
 	/** The immutable input snapshot sent in the start-attempt command. */
 	readonly snapshot: RunInputSnapshot;
-	/** Agent-session conversation derived from the locked snapshot. */
+	/** Agent-session conversation derived from the immutable snapshot. */
 	readonly conversationId: string | null;
 	/** Approved persona revision compiled for the run, when present. */
 	readonly personaRevisionId: string | null;
@@ -52,6 +52,8 @@ interface RuntimeDispatchContext
 	readonly capabilitySetDigest: string;
 	/** Expected Kubernetes ServiceAccount name for the runtime workload. */
 	readonly serviceAccountName: string;
+	/** Kubernetes workload kind that distinguishes a fresh Job from a claimed warm Pod. */
+	readonly workloadKind: WorkloadKind;
 	/** Registered runtime Pod UID bound to the assignment. */
 	readonly podUid: string;
 	/** When the assignment lease expires, in epoch milliseconds. It is never extended. */
@@ -277,18 +279,18 @@ function _IsNamespace(value: string): boolean
 {
 	return value.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
 }
-/** Create a new command, or re-send a stored one, inside a single locked transaction. */
+/** Create a new command, or re-send a stored one, inside one Serializable transaction. */
 async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, approvalExpiry: RuntimeApprovalExpiry | null, elicitationUnitOfWorkFactory: RuntimeElicitationUnitOfWorkFactory, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen, afterSequence: number): Promise<RuntimeCommandEnvelope | null>
 {
 	if (!Number.isSafeInteger(afterSequence) || afterSequence < 0) return null;
 	return prisma.$transaction(async function _dispatch(transaction: Prisma.TransactionClient): Promise<RuntimeCommandEnvelope | null>
 	{
 		const elicitationUnitOfWork = elicitationUnitOfWorkFactory.bind(transaction);
-		// 1. Load and lock the live assignment, run, and snapshot before any authority decision.
+		// 1. Load the live assignment, run, and snapshot before any authority decision.
 		let context = await _loadContext(transaction, config, identity);
 		if (context === null) return null;
 		// An attempt waiting for approval cannot move on until overdue approvals are closed. That runs
-		// in this same transaction and under the same run lock, and then the context is read again, so
+		// in this same transaction, and then the context is read again, so
 		// the next command is chosen from what the database says now, not from the values read earlier.
 		const decisionUnitOfWork = new PrismaRuntimeCommandDecisionUnitOfWork(transaction);
 		const expiry = await decisionUnitOfWork.expireWaiting(context, approvalExpiry, elicitationUnitOfWork, new Date(clock.nowEpochMs()));
@@ -339,7 +341,7 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		if (envelope === null) return null;
 		const admission = __AdmitRuntimeCommand({ authority, command: envelope, clock });
 		if (admission.outcome !== RuntimeAdmissionOutcomes.Accepted) return null;
-		// 5. Persist the accepted command (with any resume payload) and advance the sequence under lock.
+		// 5. Persist the accepted command (with any resume payload) and advance its exact sequence fence.
 		await transaction.runtimeDispatchedCommand.create({ data: { runId: context.runId, attempt: context.attempt, sequence: envelope.sequence, commandId: envelope.commandId, kind, fence: envelope.fence, payload: extras.resume === null ? Prisma.DbNull : extras.resume as unknown as Prisma.InputJsonValue, issuedAt: new Date(envelope.issuedAt), expiresAt: new Date(envelope.expiresAt) } });
 		const advanced = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { nextCommandSequence: admission.nextCommandSequence } });
 		if (advanced.count !== 1) throw new Error("runtime dispatch lost its command sequence fence");
@@ -351,7 +353,7 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 			await stateUnitOfWork.consumeElicitationResultDeliveries(extras.resumeElicitationResultDeliveryIds, new Date(nowEpochMs));
 		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeSteeringRequestIds.length > 0) await transaction.runtimeSteeringRequest.updateMany({ where: { id: { in: [...extras.resumeSteeringRequestIds] }, state: RuntimeSteeringRequestState.Pending }, data: { state: RuntimeSteeringRequestState.Consumed, consumedAt: new Date(nowEpochMs) } });
 		return envelope;
-	});
+	}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 /** Admit one runtime candidate and durably record its id when the pure authority accepts it. */
 async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate, eventReporter: RuntimeEventReporter | null, elicitationUnitOfWorkFactory: RuntimeElicitationUnitOfWorkFactory): Promise<RuntimeCandidateDispatchResult>
@@ -363,7 +365,7 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 		return await prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RuntimeCandidateDispatchResult>
 		{
 			const elicitationUnitOfWork = elicitationUnitOfWorkFactory.bind(transaction);
-			// 1. Load and lock the live assignment, run, and snapshot for the Pod that is asking.
+			// 1. Load the live assignment, run, and snapshot for the Pod that is asking.
 			const context = await _loadContext(transaction, config, identity);
 			if (context === null) return { accepted: false, reason: "unknown_workload" };
 			const stream = await transaction.runtimeCommandStream.findUnique({ where: { runId_attempt: { runId: context.runId, attempt: context.attempt } } });
@@ -403,11 +405,11 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 			// 2c. Apply transaction-local canonical event effects before accepting the id.
 			const sideEffectDenial = await _ApplyRuntimeCandidateSideEffects(transaction, candidate, context.runId, context.attempt, sourceCommand.kind === RuntimeCommandKind.StartAttempt, eventReporter);
 			if (sideEffectDenial !== null) return { accepted: false, reason: sideEffectDenial };
-			// 3. Append the accepted candidate id monotonically under the held stream lock.
+			// 3. Append the accepted candidate id monotonically under the exact stream sequence fence.
 			const appended = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { acceptedCandidateIds: { push: candidate.candidateId } } });
 			if (appended.count !== 1) throw new Error("runtime dispatch lost its candidate acceptance fence");
 			return { accepted: true };
-		});
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 	catch (error)
 	{
@@ -416,7 +418,7 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 	}
 }
 
-/** Bind one generic runtime proposal to locked run, conversation, participant, and server time. */
+/** Bind one generic runtime proposal to transaction-consistent run, conversation, participant, and server time. */
 async function _OpenRuntimeElicitation(context: RuntimeDispatchContext, candidate: RuntimeElicitationCandidate, elicitationUnitOfWork: RuntimeElicitationUnitOfWork, now: Date): Promise<boolean>
 {
 	if (context.identity.kind !== RunInputSnapshotIdentityKinds.User || context.conversationId === null) return false;
@@ -488,17 +490,18 @@ function _ToolInvocationFingerprint(candidate: RuntimeExternalActionCandidate, a
 }
 
 /** Return whether the assignment's namespace, token audience, and ServiceAccount name match the snapshot identity's kind. */
-function _RuntimePlaneMatches(identity: RuntimeAssignmentIdentity, assignment: { namespace: string; audience: string; serviceAccountName: string }, config: RuntimeDispatchAuthorityConfig): boolean
+function _RuntimePlaneMatches(identity: RuntimeAssignmentIdentity, assignment: { namespace: string; audience: string; serviceAccountName: string; workloadKind: WorkloadKind }, config: RuntimeDispatchAuthorityConfig): boolean
 {
+	const warm = assignment.workloadKind === WorkloadKind.Deployment && assignment.serviceAccountName === WARM_RUNTIME_SERVICE_ACCOUNT_NAME;
 	if (identity.kind === RunInputSnapshotIdentityKinds.Service)
 	{
 		return assignment.namespace === config.managedRuntimeNamespace
 			&& assignment.audience === MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE
-			&& ___IsManagedAgentRuntimeServiceAccountName(assignment.serviceAccountName);
+			&& (warm || (assignment.workloadKind === WorkloadKind.Job && ___IsManagedAgentRuntimeServiceAccountName(assignment.serviceAccountName)));
 	}
 	return assignment.namespace === config.personalRuntimeNamespace
 		&& assignment.audience === AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE
-		&& ___IsAgentRuntimeServiceAccountName(assignment.serviceAccountName);
+		&& (warm || (assignment.workloadKind === WorkloadKind.Job && ___IsAgentRuntimeServiceAccountName(assignment.serviceAccountName)));
 }
 
 /** Unbind the runtime instance from its stream if the closing connection still owns it. */
@@ -509,27 +512,17 @@ async function _releaseStream(prisma: PrismaClient, config: RuntimeDispatchAutho
 		const context = await _loadContext(transaction, config, identity);
 		if (context === null) return;
 		await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, runtimeInstanceId: open.runtimeInstanceId }, data: { runtimeInstanceId: null } });
-	});
+	}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
-/** Load and lock the assignment, run, and snapshot for this namespace and Pod UID. */
+/** Load the assignment, run, and snapshot for this namespace and Pod UID. */
 async function _loadContext(transaction: Prisma.TransactionClient, config: RuntimeDispatchAuthorityConfig, identity: RuntimeStreamWorkloadIdentity): Promise<RuntimeDispatchContext | null>
 {
-	// 1. Find the run id first, without locking the assignment. Everything that ends or cancels a run
-	// locks the run before the assignment, so keeping that order stops a runtime report from
-	// deadlocking with a cancel.
-	const discovered = await transaction.workloadAssignment.findUnique({ where: { namespace_podUid: { namespace: identity.namespace, podUid: identity.podUid } } });
-	if (discovered === null) return null;
-	// Cancellation and terminal reports also take the advisory lock before the row locks. Taking them
-	// in this order lets only one writer work on a run without deadlocking. The text cast lets Prisma
-	// deserialize PostgreSQL's void lock result from this raw query.
-	await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${discovered.runId}, 0))::text AS "lock"`);
-	await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${discovered.runId} FOR UPDATE`);
-	await transaction.$queryRaw(Prisma.sql`SELECT "run_id" FROM "workload_assignments" WHERE "namespace" = ${identity.namespace} AND "pod_uid" = ${identity.podUid} FOR UPDATE`);
+	// 1. Resolve the one assignment fenced by its unique namespace and Pod UID.
 	const assignment = await transaction.workloadAssignment.findUnique({ where: { namespace_podUid: { namespace: identity.namespace, podUid: identity.podUid } } });
 	if (assignment === null || assignment.podUid === null || assignment.state !== WorkloadAssignmentState.Registered || assignment.serviceAccountName !== identity.serviceAccountName) return null;
 
-	// 2. Reload the owning run and its immutable snapshot under the assignment lock.
+	// 2. Load the owning run and its immutable snapshot in the same Serializable transaction.
 	const run = await transaction.agentRun.findUnique({ where: { id: assignment.runId } });
 	if (run === null || run.attempt !== assignment.attempt || run.agentServiceId !== assignment.agentServiceId || run.agentRevisionId !== assignment.agentRevisionId || run.siloId !== assignment.siloId) return null;
 	const snapshot = await transaction.runInputSnapshot.findUnique({ where: { runId_digest: { runId: run.id, digest: run.inputSnapshotDigest } } });
@@ -555,6 +548,7 @@ async function _loadContext(transaction: Prisma.TransactionClient, config: Runti
 		identity: snapshotIdentity,
 		capabilitySetDigest: snapshot.capabilitySetDigest,
 		serviceAccountName: assignment.serviceAccountName,
+		workloadKind: assignment.workloadKind,
 		podUid: assignment.podUid,
 		leaseExpiresAtEpochMs: assignment.expiresAt.getTime(),
 		assignmentIssuedAt: assignment.createdAt.toISOString(),
@@ -565,20 +559,25 @@ async function _loadContext(transaction: Prisma.TransactionClient, config: Runti
 /** Lazily create the stream row and bind it to the connecting instance, or reject a stale instance. */
 async function _bindRuntimeInstance(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, runtimeInstanceId: string): Promise<string | null>
 {
-	// 1. Lock the stream row if it already exists so binding and sequence advance are serialised.
-	await transaction.$queryRaw(Prisma.sql`SELECT "run_id" FROM "runtime_command_streams" WHERE "run_id" = ${context.runId} AND "attempt" = ${context.attempt} FOR UPDATE`);
+	// 1. Create the stream through its run-attempt uniqueness fence when no writer owns it yet.
 	const existing = await transaction.runtimeCommandStream.findUnique({ where: { runId_attempt: { runId: context.runId, attempt: context.attempt } } });
 	if (existing === null)
 	{
-		await transaction.runtimeCommandStream.create({ data: { runId: context.runId, attempt: context.attempt, runtimeInstanceId } });
-		return runtimeInstanceId;
+		const created = await transaction.runtimeCommandStream.createMany({ data: [{ runId: context.runId, attempt: context.attempt, runtimeInstanceId }], skipDuplicates: true });
+		if (created.count === 1)
+			return runtimeInstanceId;
+		const winner = await transaction.runtimeCommandStream.findUnique({ where: { runId_attempt: { runId: context.runId, attempt: context.attempt } } });
+		return winner?.runtimeInstanceId === runtimeInstanceId ? runtimeInstanceId : null;
 	}
 
 	// 2. Bind a previously released stream, keep the same instance, and reject any other instance.
 	if (existing.runtimeInstanceId === null)
 	{
-		await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, runtimeInstanceId: null }, data: { runtimeInstanceId } });
-		return runtimeInstanceId;
+		const bound = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, runtimeInstanceId: null }, data: { runtimeInstanceId } });
+		if (bound.count === 1)
+			return runtimeInstanceId;
+		const winner = await transaction.runtimeCommandStream.findUnique({ where: { runId_attempt: { runId: context.runId, attempt: context.attempt } } });
+		return winner?.runtimeInstanceId === runtimeInstanceId ? runtimeInstanceId : null;
 	}
 	return existing.runtimeInstanceId === runtimeInstanceId ? runtimeInstanceId : null;
 }

@@ -1,14 +1,12 @@
-import { Prisma } from "@prisma/client";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
 import type { SessionAssemblyCommand, SessionAssemblyLoad, SkillRevisionEligibilitySource, ToolPolicyInput } from "./session-assembly.types";
 
 /**
- * Locks and re-checks every skill assigned to the revision, inside the admission transaction.
+ * Re-checks every skill assigned to the revision inside the admission transaction.
  *
- * Runs last among the input sources, so its locks are the newest ones held when the snapshot
- * commits. It locks skills and then revisions in the same order revocation does, so a skill revoked
- * while admission is running cannot slip into the snapshot.
+ * The surrounding Serializable transaction makes a concurrent assignment or revocation conflict
+ * with snapshot persistence, so this reader needs no handwritten SQL lock order.
  *
  * Returns no value — it exists only to refuse. Naming fewer skills than the revision assigns is
  * allowed (grants can narrow the set); naming one the revision never assigned, or naming one twice,
@@ -24,50 +22,43 @@ export class PrismaSkillRevisionEligibilitySource implements SkillRevisionEligib
 	/** Refuses a partial, foreign, revoked, or otherwise non-published skill assignment before snapshot persistence. */
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, toolPolicy: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>
 	{
-		// 1. Lock skills, then revisions, in the same order revocation does, so one of the two clearly finishes first and this snapshot sees the result.
-		await transaction.prisma.$queryRaw(Prisma.sql`
-			SELECT skill."id"
-			FROM "agent_revision_skill_assignments" assignment
-			JOIN "skill_revisions" revision ON revision."id" = assignment."skill_revision_id"
-			JOIN "skills" skill ON skill."id" = revision."skill_id"
-			WHERE assignment."agent_revision_id" = ${run.agentRevisionId}
-			ORDER BY skill."id"
-			FOR UPDATE OF skill
-		`);
-		const rows = await transaction.prisma.$queryRaw<readonly _AssignedSkillRevision[]>(Prisma.sql`
-			SELECT assignment."skill_revision_id" AS "skillRevisionId", revision."state" = 'published'::"SkillRevisionState" AS "isPublished", revision."revoked_at" AS "revokedAt", skill."silo_id" AS "siloId"
-			FROM "agent_revision_skill_assignments" assignment
-			JOIN "skill_revisions" revision ON revision."id" = assignment."skill_revision_id"
-			JOIN "skills" skill ON skill."id" = revision."skill_id"
-			WHERE assignment."agent_revision_id" = ${run.agentRevisionId}
-			ORDER BY revision."id"
-			FOR UPDATE OF revision
-		`);
-		await transaction.prisma.$queryRaw(Prisma.sql`
-			SELECT assignment."agent_revision_id"
-			FROM "agent_revision_skill_assignments" assignment
-			WHERE assignment."agent_revision_id" = ${run.agentRevisionId}
-			ORDER BY assignment."skill_revision_id"
-			FOR UPDATE OF assignment
-		`);
+		// 1. Load immutable assignment ids, then resolve their current publication and revocation state.
+		const assignments = await transaction.prisma.agentRevisionSkillAssignment.findMany({
+			where: { agentRevisionId: run.agentRevisionId },
+			orderBy: { skillRevisionId: "asc" },
+			select: { skillRevisionId: true },
+		});
+		const revisions = await transaction.prisma.skillRevision.findMany({
+			where: { id: { in: assignments.map(function _RevisionId(assignment): string { return assignment.skillRevisionId; }) } },
+			orderBy: { id: "asc" },
+			select: { id: true, state: true, revokedAt: true, skill: { select: { siloId: true } } },
+		});
+		const rows = revisions.map(function _AssignedRevision(revision): _AssignedSkillRevision
+		{
+			return { skillRevisionId: revision.id, isPublished: revision.state === "Published", revokedAt: revision.revokedAt, siloId: revision.skill.siloId };
+		});
+		if (rows.length !== assignments.length)
+			return { outcome: "denied", reason: "skill_unavailable" };
 
 		// 2. Allow fewer skills than the revision assigns, but never one it never assigned, and never the same one twice.
 		const assignedIds = rows.map(function _assignedId(row): string { return row.skillRevisionId; });
 		const suppliedIds = [...toolPolicy.skillRevisionIds];
-		if (new Set(suppliedIds).size !== suppliedIds.length || !suppliedIds.every(function _isAssigned(id): boolean { return assignedIds.includes(id); })) return { outcome: "denied", reason: "skill_unavailable" };
+		if (new Set(suppliedIds).size !== suppliedIds.length || !suppliedIds.every(function _isAssigned(id): boolean { return assignedIds.includes(id); }))
+			return { outcome: "denied", reason: "skill_unavailable" };
 
 		// 3. Of the skills the tool policy named, accept only same-silo published revisions with no revokedAt; the snapshot then keeps exactly those ids.
-		if (!rows.filter(function _isSupplied(row): boolean { return suppliedIds.includes(row.skillRevisionId); }).every(function _isEligible(row): boolean { return row.siloId === command.siloId && row.isPublished && row.revokedAt === null; })) return { outcome: "denied", reason: "skill_unavailable" };
+		if (!rows.filter(function _isSupplied(row): boolean { return suppliedIds.includes(row.skillRevisionId); }).every(function _isEligible(row): boolean { return row.siloId === command.siloId && row.isPublished && row.revokedAt === null; }))
+			return { outcome: "denied", reason: "skill_unavailable" };
 		return { outcome: "loaded", value: null };
 	}
 }
 
-/** One row from the locking query above: a skill assignment plus the fields it is checked against. */
+/** One assigned skill revision plus the fields checked before snapshot persistence. */
 interface _AssignedSkillRevision
 {
 	/** Immutable SkillRevision assigned to the published AgentRevision. */
 	readonly skillRevisionId: string;
-	/** Whether the locked revision's state is `published`, as computed by the query. */
+	/** Whether the revision is published. */
 	readonly isPublished: boolean;
 	/** Server-owned revocation instant, if the revision has been withdrawn. */
 	readonly revokedAt: Date | null;

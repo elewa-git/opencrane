@@ -2,10 +2,26 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PrismaSkillRevisionEligibilitySource } from "../prisma-skill-revision-eligibility-source";
 
-/** Builds a fake admission transaction that returns a fixed result for the locking query. */
-function _Transaction(rows: readonly unknown[])
+/** Assignment and current revision facts exposed by the fake transaction. */
+interface _SkillRow
 {
-	return { prisma: { $queryRaw: vi.fn().mockResolvedValue(rows) }, admittedAt: "2026-07-23T12:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-23T12:00:00.000Z") } as never;
+	readonly skillRevisionId: string;
+	readonly isPublished: boolean;
+	readonly revokedAt: Date | null;
+	readonly siloId: string;
+}
+
+/** Builds a fake admission transaction that returns fixed assignment and revision rows. */
+function _Transaction(rows: readonly _SkillRow[])
+{
+	return {
+		prisma: {
+			agentRevisionSkillAssignment: { findMany: vi.fn().mockResolvedValue(rows.map(function _Assignment(row) { return { skillRevisionId: row.skillRevisionId }; })) },
+			skillRevision: { findMany: vi.fn().mockResolvedValue(rows.map(function _Revision(row) { return { id: row.skillRevisionId, state: row.isPublished ? "Published" : "Revoked", revokedAt: row.revokedAt, skill: { siloId: row.siloId } }; })) },
+		},
+		admittedAt: "2026-07-23T12:00:00.000Z",
+		admittedAtEpochMs: Date.parse("2026-07-23T12:00:00.000Z"),
+	} as never;
 }
 
 /** Builds the skill ids a tool policy would name for one run. */
@@ -16,7 +32,7 @@ function _ToolPolicy(skillRevisionIds: readonly string[])
 
 describe("PrismaSkillRevisionEligibilitySource", function _describeEligibility()
 {
-	it("accepts the complete same-silo published assignment set while it is locked", async function _accepts()
+	it("accepts the complete same-silo published assignment set", async function _accepts()
 	{
 		const result = await new PrismaSkillRevisionEligibilitySource().load({ siloId: "silo-1" } as never, { agentRevisionId: "agent-revision-1" } as never, _ToolPolicy(["revision-1"]), _Transaction([{ skillRevisionId: "revision-1", isPublished: true, revokedAt: null, siloId: "silo-1" }]));
 		expect(result).toEqual({ outcome: "loaded", value: null });

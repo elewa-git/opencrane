@@ -22,7 +22,7 @@ function _McpToolAssignment(overrides: Record<string, unknown> = {})
 /** Creates a stand-in transaction holding one revision and the rows it points at. */
 function _Transaction(revision: unknown, skills: unknown[] = [], artifacts: unknown[] = []): RunAdmissionTransaction
 {
-	return { prisma: { $queryRaw: vi.fn().mockResolvedValue([]), mcpToolAdmissionClaim: { upsert: vi.fn().mockResolvedValue({}) }, agentRevision: { findFirst: vi.fn().mockResolvedValue(revision) }, skillRevision: { findMany: vi.fn().mockResolvedValue(skills) }, artifactRevision: { findMany: vi.fn().mockResolvedValue(artifacts) } } as never, admittedAt: "2026-07-26T00:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-26T00:00:00.000Z") };
+	return { prisma: { mcpToolAdmissionClaim: { upsert: vi.fn().mockResolvedValue({}) }, agentRevision: { findFirst: vi.fn().mockResolvedValue(revision) }, skillRevision: { findMany: vi.fn().mockResolvedValue(skills) }, artifactRevision: { findMany: vi.fn().mockResolvedValue(artifacts) } } as never, admittedAt: "2026-07-26T00:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-26T00:00:00.000Z") };
 }
 
 /** Binds the tool-policy source to the transaction-scoped claim repository used in production. */
@@ -45,11 +45,10 @@ function _Skill(overrides: Record<string, unknown> = {})
 
 describe("PrismaRevisionToolPolicySource", function _DescribePrismaRevisionToolPolicySource()
 {
-	it("locks and freezes only live model, MCP, skill, and artifact references", async function _LoadsLivePolicy()
+	it("freezes only live model, MCP, skill, and artifact references", async function _LoadsLivePolicy()
 	{
 		const transaction = _Transaction(_Revision(), [_Skill()], [{ id: "artifact-revision-1", state: ArtifactRevisionState.Published }]);
 		await expect(_ToolPolicySource().load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "loaded", value: { modelRoute: { alias: "tenant-model", modelDefinitionId: "model-definition-1", litellmModelId: "litellm-deployment-1" }, mcpTools: [{ toolRevisionId: "mcp-tool-revision-1", name: "calendar.read", description: "Read a calendar", inputSchema: { type: "object", additionalProperties: false }, inputSchemaDigest: ___DigestCanonicalJson({ type: "object", additionalProperties: false }) }], skillRevisionIds: ["skill-revision-1"], artifactRevisionIds: ["artifact-revision-1"] } });
-		expect(transaction.prisma.$queryRaw).toHaveBeenCalledTimes(1);
 		expect(transaction.prisma.mcpToolAdmissionClaim.upsert).toHaveBeenCalledWith({ where: { agentRevisionId_siloId: { agentRevisionId: "revision-1", siloId: "silo-1" } }, create: { agentRevisionId: "revision-1", siloId: "silo-1", touchedAt: new Date("2026-07-26T00:00:00.000Z") }, update: { touchedAt: new Date("2026-07-26T00:00:00.000Z") } });
 	});
 

@@ -63,8 +63,8 @@ export type AtomicAgentRevisionPublicationResult =
  *
  * Both read methods are silo-scoped and return `null` for anything outside the caller's silo, so a
  * caller cannot tell a foreign service from a missing one. `publishRevisionAtomically` is the only
- * write, and it is built as one locked transaction so two administrators publishing at the same
- * moment cannot both succeed.
+ * write, and it uses exact conditional writes so two administrators publishing at the same moment
+ * cannot both succeed.
  *
  * Implemented by: `PrismaAgentServicePublicationRepository` in `db/prisma-agent-publication.ts`.
  * Called by: {@link __PublishAgentRevision} in `agent-publication.ts`; a caller-attributed instance
@@ -80,8 +80,8 @@ export interface AgentServicePublicationRepository
 	/**
 	 * Marks the draft published and points the service at it, in one transaction.
 	 *
-	 * The implementation locks the service row, then the revision row, always in that order, so
-	 * concurrent publishes queue instead of deadlocking. It then re-checks the service state, the
+		 * The implementation conditionally claims the exact service state, then the exact draft. It
+		 * re-checks the service state, the
 	 * active revision, the revision's parent service, and that the revision is still a draft. Any
 	 * mismatch aborts with `conflict` and writes nothing. An audit row is appended before commit, so a
 	 * failed audit write rolls the whole publication back.
@@ -109,7 +109,7 @@ export interface AgentServicePublicationRepository
  */
 export interface AgentPublicationAuditEvidencePort
 {
-	/** Builds the audit evidence from the locked records that will commit. */
+	/** Builds the audit evidence from the records the conditional writes will commit. */
 	build(publication: AtomicAgentRevisionPublication, service: AgentService, revision: AgentRevision): AuditDecisionRecord;
 }
 

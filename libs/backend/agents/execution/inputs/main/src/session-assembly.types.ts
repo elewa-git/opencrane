@@ -283,8 +283,8 @@ export interface MemoryScopeSource
 /**
  * Reads the model, MCP tools, skills, and artifacts assigned by the revision.
  *
- * It locks the revision and updates its MCP admission claim before reading. Those writes make a
- * publication change or another policy read for the same revision wait until admission finishes.
+ * It updates the MCP admission claim before reading inside the Serializable admission transaction.
+ * A concurrent publication change then conflicts with snapshot persistence.
  *
  * Implemented by: {@link PrismaRevisionToolPolicySource}.
  */
@@ -295,8 +295,7 @@ export interface ToolPolicySource
 	 *
 	 * @param command - The admission command; its silo bounds every row that may be returned.
 	 * @param run - Facts from {@link RunAuthoritySource}.
-	 * @param transaction - The admission transaction. The row locks are taken on it, so they are held
-	 * until admission commits or rolls back.
+		 * @param transaction - The Serializable admission transaction that owns every recheck and write.
 	 * @returns `loaded` with the run's tool policy. `denied` with `tool_policy_unavailable` when the
 	 * revision is no longer published, an MCP server revision is not Ready, its server is inactive or
 	 * unpublished, or an assigned skill or artifact is not published in this silo. An operator has to
@@ -428,9 +427,9 @@ export interface SessionAssemblyAuthorities
 	preferenceFacts: PreferenceFactSource;
 	/** Decides which memory the run may use. Needs a verified identity and the frozen conversation first. */
 	memoryScope: MemoryScopeSource;
-	/** Reads the revision's model, MCP tools, skills, and artifacts, under row locks. */
+	/** Reads the revision's model, MCP tools, skills, and artifacts in the admission transaction. */
 	toolPolicy: ToolPolicySource;
-	/** Re-checks the named skill revisions last, so its locks are still held when the snapshot commits. */
+	/** Re-checks the named skill revisions last before the snapshot commits. */
 	skillEligibility: SkillRevisionEligibilitySource;
 	/** Reads the run's token, turn, and deadline limits. */
 	budgetPolicy: BudgetPolicySource;

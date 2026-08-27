@@ -9,7 +9,8 @@ import type { JsonValue } from "@opencrane/util";
 import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, UnsupportedExternalActionError } from "./external-action-executor";
 import { type DurableExternalActionCommand, type ExternalActionExecutor } from "./external-action-executor.types";
 import { PersonalMemoryPermissionUnavailableError, PersonalMemorySafeDeliveryRequiredError } from "./external-action-errors";
-import { ExternalActionProviderOutcomeKinds, type ExternalActionAdapterFactory, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types";
+import { _IsAgentRunExternalActionInvocation } from "./external-action-worker-ownership";
+import { ExternalActionProviderOutcomeKinds, type AgentRunExternalActionWorkerInvocation, type ExternalActionAdapterFactory, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types";
 import type { ProductionExternalActionAdapterDependencies } from "./production-external-action-adapter.types";
 
 /** Return a definite failure code, but only for errors that prove no request reached the provider. Anything else returns null. */
@@ -75,7 +76,7 @@ class _ManualPreparedExternalActionAdapter implements PreparedExternalActionAdap
 }
 
 /** Build the command the server-side executors take. */
-function _command(invocation: ExternalActionWorkerInvocation): DurableExternalActionCommand
+function _command(invocation: AgentRunExternalActionWorkerInvocation): DurableExternalActionCommand
 {
 	return {
 		runId: invocation.runId,
@@ -123,6 +124,8 @@ export class ProductionExternalActionAdapterFactory implements ExternalActionAda
 	 */
 	prepare(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext): PreparedExternalActionAdapter
 	{
+		if (!_IsAgentRunExternalActionInvocation(invocation))
+			throw new Error("external action invocation is not owned by an AgentRun");
 		if (__DigestCanonicalJson(invocation.effectiveArguments) !== invocation.effectiveArgumentsDigest) throw new Error("external action effective arguments failed integrity validation");
 		const snapshot = context.snapshot;
 		if (invocation.toolRevisionId === UPGRADE_SESSION_TOOL_REVISION)

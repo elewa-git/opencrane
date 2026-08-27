@@ -45,9 +45,9 @@ async function _isModelDefinitionAvailable(transaction: Prisma.TransactionClient
 /**
  * Stores managed-agent services and revisions in Postgres.
  *
- * Every write runs in one transaction that takes a row lock on the parent service first, so two
- * concurrent edits queue rather than race: the second one sees the first one's revision and returns
- * a conflict instead of overwriting it.
+ * Every edit claims the exact parent-service state with a conditional Prisma write before appending.
+ * The service claim and the unique revision number prevent concurrent editors from overwriting each
+ * other without relying on handwritten row locks.
  *
  * Revisions are never edited or deleted. Revise adds a new draft; restore adds a new draft that
  * copies an older revision's content and records both its lineage parent and the revision it was
@@ -55,8 +55,6 @@ async function _isModelDefinitionAvailable(transaction: Prisma.TransactionClient
  *
  * Called by: constructed in `prisma-agent-services.router.ts` and passed to the router as
  * `lifecycle`.
- * NEEDS-HUMAN: the row lock is PostgreSQL `SELECT … FOR UPDATE`; add the doc URI for the Postgres
- * major version this deployment pins.
  */
 export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLifecycleRepository
 {
@@ -127,7 +125,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
     const createdAtDate = new Date(createdAt);
     return this.prisma.$transaction(async function _revise(transaction: Prisma.TransactionClient): Promise<AppendAgentRevisionResult>
     {
-      const guard = await _lockAndReadHead(transaction, command.agentServiceId, command.siloId, command.expectedParentRevisionId);
+	      const guard = await _claimAndReadHead(transaction, command.agentServiceId, command.siloId, command.expectedParentRevisionId, createdAtDate);
       if (guard.outcome !== _HeadGuardOutcomes.Ready)
         return guard.result;
       if (!await _isModelDefinitionAvailable(transaction, command.content.modelDefinitionId, guard.siloId))
@@ -155,7 +153,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
     const createdAtDate = new Date(createdAt);
     return this.prisma.$transaction(async function _restore(transaction: Prisma.TransactionClient): Promise<AppendAgentRevisionResult>
     {
-      const guard = await _lockAndReadHead(transaction, command.agentServiceId, command.siloId, command.expectedParentRevisionId);
+	      const guard = await _claimAndReadHead(transaction, command.agentServiceId, command.siloId, command.expectedParentRevisionId, createdAtDate);
       if (guard.outcome !== _HeadGuardOutcomes.Ready)
         return guard.result;
       // Silo-scope the source lookup: a foreign-silo revision must be a 404, never a distinct 409
@@ -189,23 +187,30 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
     const changedAtDate = new Date(changedAt);
     return this.prisma.$transaction(async function _change(transaction: Prisma.TransactionClient): Promise<ChangeAgentServiceStateResult>
     {
-      await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${command.agentServiceId} AND "silo_id" = ${command.siloId} FOR UPDATE`);
-      const row = await transaction.agentService.findFirst({ where: { id: command.agentServiceId, siloId: command.siloId } });
+	      const row = await transaction.agentService.findFirst({ where: { id: command.agentServiceId, siloId: command.siloId } });
       if (row === null)
         return { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceNotFound };
       if (_serviceState(row.state) !== command.expectedState)
         return { outcome: _LifecycleOutcomes.Conflict, currentState: _serviceState(row.state) };
       if (command.action === AgentServiceLifecycleActions.Enable && row.activeRevisionId === null)
         return { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceNotRunnable };
-      const updated = await transaction.agentService.update({
-        where: { id: command.agentServiceId },
-        data: {
-          state: _targetServiceState(command.action),
+	      const changed = await transaction.agentService.updateMany({
+	        where: { id: command.agentServiceId, siloId: command.siloId, state: row.state, activeRevisionId: row.activeRevisionId },
+	        data: {
+	          state: _targetServiceState(command.action),
           activeRevisionId: command.action === AgentServiceLifecycleActions.Retire ? null : undefined,
-          updatedAt: changedAtDate,
-        },
-      });
-      return { outcome: _LifecycleOutcomes.Changed, service: _mapService(updated) };
+	          updatedAt: changedAtDate,
+	        },
+	      });
+	      if (changed.count !== 1)
+	      {
+	        const winner = await transaction.agentService.findFirst({ where: { id: command.agentServiceId, siloId: command.siloId } });
+	        if (winner === null)
+	          return { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceNotFound };
+	        return { outcome: _LifecycleOutcomes.Conflict, currentState: _serviceState(winner.state) };
+	      }
+	      const updated = await transaction.agentService.findUniqueOrThrow({ where: { id: command.agentServiceId } });
+	      return { outcome: _LifecycleOutcomes.Changed, service: _mapService(updated) };
     });
   }
 
@@ -220,7 +225,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
   }
 }
 
-/** Names whether a locked service may receive a new revision. */
+/** Names whether a claimed service may receive a new revision. */
 enum _HeadGuardOutcomes
 {
   /** Allows the caller to append after it reads the current head. */
@@ -229,30 +234,43 @@ enum _HeadGuardOutcomes
   Blocked = "blocked",
 }
 
-/** Guard result after locking a service and validating the expected head revision. */
+/** Guard result after claiming a service and validating the expected head revision. */
 type _HeadGuard =
   | { readonly outcome: _HeadGuardOutcomes.Ready; readonly siloId: string; readonly head: { id: string; revision: number } }
   | { readonly outcome: _HeadGuardOutcomes.Blocked; readonly result: AppendAgentRevisionResult };
 
 /**
- * Locks the service row, then checks the caller is editing the newest revision.
+ * Claims the exact service row, then checks the caller is editing the newest revision.
  *
  * Returns `blocked` for three cases the caller must not proceed past: the service is missing (or in
  * another silo — indistinguishable on purpose), the service is retired, or the newest stored revision
  * is not the one the caller said they edited. The last case returns the current newest revision id so
  * the caller can re-apply its edit on top of it.
  */
-async function _lockAndReadHead(transaction: Prisma.TransactionClient, agentServiceId: string, siloId: string, expectedParentRevisionId: string | null): Promise<_HeadGuard>
+async function _claimAndReadHead(transaction: Prisma.TransactionClient, agentServiceId: string, siloId: string, expectedParentRevisionId: string | null, claimedAt: Date): Promise<_HeadGuard>
 {
-  await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${agentServiceId} AND "silo_id" = ${siloId} FOR UPDATE`);
-  const service = await transaction.agentService.findFirst({ where: { id: agentServiceId, siloId } });
+	  const service = await transaction.agentService.findFirst({ where: { id: agentServiceId, siloId } });
   // A service in another silo is indistinguishable from a missing one — no cross-silo existence oracle.
   if (service === null)
     return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceNotFound } };
   if (_serviceState(service.state) === AgentServiceStates.Retired)
     return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceRetired } };
-  const head = await transaction.agentRevision.findFirst({ where: { agentServiceId }, orderBy: { revision: "desc" }, select: { id: true, revision: true } });
-  if (head === null || head.id !== expectedParentRevisionId)
-    return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Conflict, currentHeadRevisionId: head?.id ?? null } };
-  return { outcome: _HeadGuardOutcomes.Ready, siloId: service.siloId, head };
+	  const head = await transaction.agentRevision.findFirst({ where: { agentServiceId }, orderBy: { revision: "desc" }, select: { id: true, revision: true } });
+	  if (head === null || head.id !== expectedParentRevisionId)
+	    return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Conflict, currentHeadRevisionId: head?.id ?? null } };
+	  const claimed = await transaction.agentService.updateMany({
+	    where: { id: agentServiceId, siloId, state: service.state, activeRevisionId: service.activeRevisionId, updatedAt: service.updatedAt },
+	    data: { updatedAt: claimedAt },
+	  });
+	  if (claimed.count !== 1)
+	  {
+	    const winner = await transaction.agentService.findFirst({ where: { id: agentServiceId, siloId } });
+	    if (winner === null)
+	      return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceNotFound } };
+	    if (_serviceState(winner.state) === AgentServiceStates.Retired)
+	      return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceRetired } };
+	    const winnerHead = await transaction.agentRevision.findFirst({ where: { agentServiceId }, orderBy: { revision: "desc" }, select: { id: true } });
+	    return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Conflict, currentHeadRevisionId: winnerHead?.id ?? null } };
+	  }
+	  return { outcome: _HeadGuardOutcomes.Ready, siloId: service.siloId, head };
 }

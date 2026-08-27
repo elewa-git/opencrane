@@ -1,10 +1,13 @@
-import { AgentRevisionState, AgentServiceState, McpApprovalStatus, McpServerRevisionState, McpServerStatus, Prisma, type PrismaClient } from "@prisma/client";
+import { AgentRevisionState, AgentServiceState, McpApprovalStatus, McpServerRevisionState, McpServerStatus, type PrismaClient } from "@prisma/client";
 
 import type { AgentRevision, AgentService } from "@opencrane/models/agents";
 
 import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
 import type { AgentPublicationAuditEvidencePort, AgentServicePublicationRepository, AtomicAgentRevisionPublication, AtomicAgentRevisionPublicationResult } from "../agent-publication.types";
 import { _mapRevision, _mapService, _serviceState } from "./prisma-agent-mappers";
+
+/** Signals that a conditional publication write lost ownership and must roll its transaction back. */
+class _PublicationConflict extends Error {}
 
 /**
  * Publishes agent revisions in Postgres, writing the revision, the service's active revision, and the
@@ -48,41 +51,58 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 		return row === null ? null : _mapRevision(row);
 	}
 
-	/** Atomically publishes and activates only the locked expected authority state. */
+	/** Atomically publishes and activates only the expected authority state. */
 	async publishRevisionAtomically(publication: AtomicAgentRevisionPublication): Promise<AtomicAgentRevisionPublicationResult>
 	{
 		const auditEvidence = this.auditEvidence;
-		return this.prisma.$transaction(async function _publish(transaction: Prisma.TransactionClient)
+		try
 		{
-			// 1. Lock parent service then child revision so every publication follows one deadlock-safe order.
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${publication.agentServiceId} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_revisions" WHERE "id" = ${publication.agentRevisionId} FOR UPDATE`);
-			const serviceRow = await transaction.agentService.findUnique({ where: { id: publication.agentServiceId } });
-			const revisionRow = await transaction.agentRevision.findUnique({ where: { id: publication.agentRevisionId }, include: { skillAssignments: true, mcpToolAssignments: { include: { toolRevision: { include: { serverRevision: { include: { server: true } } } } } }, boundaryAttachments: true } });
-			if (serviceRow === null || revisionRow === null || _serviceState(serviceRow.state) !== publication.expectedServiceState || serviceRow.activeRevisionId !== publication.expectedActiveRevisionId || revisionRow.agentServiceId !== publication.agentServiceId || revisionRow.state !== AgentRevisionState.Draft)
+			return await this.prisma.$transaction(async function _publish(transaction)
 			{
-				return { status: "conflict", currentActiveRevisionId: serviceRow?.activeRevisionId ?? null } as const;
-			}
-			if (revisionRow.mcpToolAssignments.some(function _UnavailableMcpTool(assignment): boolean
-			{
-				return assignment.siloId !== serviceRow.siloId
-					|| assignment.toolRevision.serverRevision.state !== McpServerRevisionState.Ready
-					|| assignment.toolRevision.serverRevision.server.status !== McpServerStatus.Active
-					|| assignment.toolRevision.serverRevision.server.approvalStatus !== McpApprovalStatus.Published;
-			}))
-			{
-				return { status: "invalid_revision" } as const;
-			}
+				// 1. Read the expected authority state before trying to own its exact coordinates.
+				const serviceRow = await transaction.agentService.findUnique({ where: { id: publication.agentServiceId } });
+				const revisionRow = await transaction.agentRevision.findUnique({ where: { id: publication.agentRevisionId }, include: { skillAssignments: true, mcpToolAssignments: { include: { toolRevision: { include: { serverRevision: { include: { server: true } } } } } }, boundaryAttachments: true } });
+				if (serviceRow === null || revisionRow === null || _serviceState(serviceRow.state) !== publication.expectedServiceState || serviceRow.activeRevisionId !== publication.expectedActiveRevisionId || revisionRow.agentServiceId !== publication.agentServiceId || revisionRow.state !== AgentRevisionState.Draft)
+					return { status: "conflict", currentActiveRevisionId: serviceRow?.activeRevisionId ?? null } as const;
+				if (revisionRow.mcpToolAssignments.some(function _UnavailableMcpTool(assignment): boolean
+				{
+					return assignment.siloId !== serviceRow.siloId
+						|| assignment.toolRevision.serverRevision.state !== McpServerRevisionState.Ready
+						|| assignment.toolRevision.serverRevision.server.status !== McpServerStatus.Active
+						|| assignment.toolRevision.serverRevision.server.approvalStatus !== McpApprovalStatus.Published;
+				}))
+					return { status: "invalid_revision" } as const;
 
-			// 2. Change both lifecycle coordinates inside the same transaction so neither can escape alone.
-			const publishedRow = await transaction.agentRevision.update({ where: { id: publication.agentRevisionId }, data: { state: AgentRevisionState.Published, publishedAt: new Date(publication.publishedAt) }, include: { skillAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } });
-			const activeRow = await transaction.agentService.update({ where: { id: publication.agentServiceId }, data: { state: AgentServiceState.Active, activeRevisionId: publication.agentRevisionId, updatedAt: new Date(publication.publishedAt) } });
+				// 2. Claim the exact service state, then publish the exact draft. A lost second write throws so
+				// the first write also rolls back.
+				const publishedAt = new Date(publication.publishedAt);
+				const activated = await transaction.agentService.updateMany({
+					where: { id: publication.agentServiceId, siloId: serviceRow.siloId, state: serviceRow.state, activeRevisionId: serviceRow.activeRevisionId },
+					data: { state: AgentServiceState.Active, activeRevisionId: publication.agentRevisionId, updatedAt: publishedAt },
+				});
+				if (activated.count !== 1)
+					throw new _PublicationConflict();
+				const published = await transaction.agentRevision.updateMany({ where: { id: publication.agentRevisionId, agentServiceId: publication.agentServiceId, state: AgentRevisionState.Draft }, data: { state: AgentRevisionState.Published, publishedAt } });
+				if (published.count !== 1)
+					throw new _PublicationConflict();
+				const [activeRow, publishedRow] = await Promise.all([
+					transaction.agentService.findUniqueOrThrow({ where: { id: publication.agentServiceId } }),
+					transaction.agentRevision.findUniqueOrThrow({ where: { id: publication.agentRevisionId }, include: { skillAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } }),
+				]);
 
-			// 3. Append authenticated decision evidence before commit; audit failure rolls back publication.
-			const service = _mapService(serviceRow);
-			const revision = _mapRevision(revisionRow);
-			await __AppendAuditDecision(transaction, auditEvidence.build(publication, service, revision));
-			return { status: "published", service: _mapService(activeRow), revision: _mapRevision(publishedRow) } as const;
-		});
+				// 3. Append authenticated decision evidence before commit; audit failure rolls back publication.
+				const service = _mapService(serviceRow);
+				const revision = _mapRevision(revisionRow);
+				await __AppendAuditDecision(transaction, auditEvidence.build(publication, service, revision));
+				return { status: "published", service: _mapService(activeRow), revision: _mapRevision(publishedRow) } as const;
+			});
+		}
+		catch (error)
+		{
+			if (!(error instanceof _PublicationConflict))
+				throw error;
+			const winner = await this.prisma.agentService.findUnique({ where: { id: publication.agentServiceId }, select: { activeRevisionId: true } });
+			return { status: "conflict", currentActiveRevisionId: winner?.activeRevisionId ?? null } as const;
+		}
 	}
 }

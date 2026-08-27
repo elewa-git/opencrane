@@ -13,8 +13,8 @@ const _MESSAGE_ROLE: Record<string, CompiledMessage["role"]> = { User: "user", A
 /**
  * Build the {@link RunInputCompiler} the dispatch authority calls when it creates `start_attempt`.
  *
- * It binds the deterministic prompt compiler to control-plane read ports backed by the same locked
- * Prisma transaction that loaded the snapshot, so every read is of an immutable record and the
+ * It binds the deterministic prompt compiler to control-plane read ports backed by the same
+ * Serializable Prisma transaction that loaded the snapshot, so every read is of an immutable record and the
  * compiled output stays byte-identical across restarts and idempotent redeliveries. Personal-memory
  * query coordinates remain outside the compiled payload; recall can begin only through the declared
  * memory tool after its exact elicitation receipt is accepted.
@@ -28,7 +28,7 @@ export function __CreatePrismaRunInputCompiler(): RunInputCompiler
 	};
 }
 
-/** Assemble the control-plane read ports over one locked transaction client. */
+/** Assemble the control-plane read ports over one Serializable transaction client. */
 function _repositories(transaction: Prisma.TransactionClient): PromptCompilerRepositories
 {
 	return {

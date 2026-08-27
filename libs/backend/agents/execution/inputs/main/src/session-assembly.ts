@@ -64,7 +64,7 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 	// source below can read a conversation the caller has only just created.
 	const admitted = await authorities.admission.admit(command, async function _compileWithinAdmission(transaction)
 	{
-		// 3. Load the run and its locked revision first; every later source needs them.
+		// 3. Load the run and its frozen revision first; every later source needs them.
 		const run = await authorities.runAuthority.load(command, transaction);
 		if (run.outcome === "denied") return run;
 

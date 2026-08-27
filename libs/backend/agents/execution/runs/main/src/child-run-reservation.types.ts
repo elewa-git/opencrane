@@ -2,7 +2,7 @@ import type { RunInputSnapshot } from "@opencrane/contracts";
 
 import type { ChildRunAdmissionLimits, ChildRunTargetAuthorization, PreparedChildRunAdmission } from "./child-run-admission.types";
 
-/** Request to write one prepared child run, carrying everything needed to re-check the parent under its lock. */
+/** Request to write one prepared child run, carrying everything needed to re-check the parent transactionally. */
 export interface ChildRunReservationCommand
 {
 	/** Idempotency key scoped to the child run's inherited silo. */
@@ -11,13 +11,13 @@ export interface ChildRunReservationCommand
 	readonly parentSnapshotDigest: string;
 	/** Child coordinates prepared from parent authority rather than caller-supplied lineage. */
 	readonly prepared: PreparedChildRunAdmission;
-	/** Server-owned recursion limits rechecked while the parent is locked. */
+	/** Server-owned recursion limits rechecked with the parent. */
 	readonly limits: ChildRunAdmissionLimits;
-	/** Exact delegation policy rechecked while the parent is locked. */
+	/** Exact delegation policy rechecked with the parent. */
 	readonly targetAuthorization: ChildRunTargetAuthorization;
 }
 
-/** Callback that builds the child's snapshot, and only runs after the parent row is locked and re-checked. */
+/** Callback that builds the child's snapshot only after the parent is rechecked. */
 export interface ChildRunReservationBuild
 {
 	/** Builds the immutable child runtime input from the parent-fenced prepared admission. */
@@ -37,12 +37,11 @@ export interface ChildRunReservationBuildResult
 export type ChildRunReservationResult = { readonly outcome: "reserved" | "idempotent"; readonly snapshot: RunInputSnapshot } | { readonly outcome: "denied"; readonly reason: "invalid_command" | "invalid_parent_authority" | "parent_not_admittable" | "parent_snapshot_stale" | "depth_exceeded" | "budget_exceeded" | "fanout_exceeded" | "target_not_authorized" | "target_authorization_unavailable" | "authority_conflict" | "persistence_unavailable" };
 
 /**
- * Writes a child run, once the parent has been locked and re-checked.
+ * Writes a child run once the parent has been rechecked.
  *
- * Locking the parent is this port's job, not the caller's. Inside that lock it re-runs the child
- * admission decision — limits, budget and target policy — so a policy change or a sibling that
- * spent the remaining budget cannot slip in between the decision and the write. The child run, its
- * snapshot, its budget reservation and its dispatch outbox row all commit together.
+ * The repository re-runs the child admission decision — limits, budget and target policy — inside a
+ * Serializable transaction. A concurrent sibling forces one transaction to retry before it can
+ * overspend the parent budget. The child run, snapshot, reservation and outbox row commit together.
  *
  * Implemented by `PrismaChildRunReservationRepository`. No production caller found yet: the
  * spawning path that will use it is not wired, so check before assuming this is live.

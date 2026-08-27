@@ -65,7 +65,7 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 		const snapshot = { ..._snapshot(), conversationId: null, personaRevisionId: null, memoryQueryPolicy: { scope: "none" }, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.Service, executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", effectiveBoundaryAttachments: [], effectiveBoundaryAttachmentDigest: `sha256:${"f".repeat(64)}`, fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" } } as RunInputSnapshot;
 		const command = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: RunInputSnapshotIdentityKinds.Service, trigger: "schedule", requestIdempotencyKey: "schedule:service-1:slot-1" } as const;
 		const authority = { ..._authority(), agentKind: AgentServiceKinds.Managed, trigger: "schedule", delegatedUserId: null } as const;
-		const transaction = { ..._taskStore(), $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ siloId: "silo-1", attempt: 1 }), create: vi.fn().mockResolvedValue({ id: "run-1" }) }, runInputSnapshot: { create: vi.fn().mockResolvedValue({ id: "snapshot-1" }) }, outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 2 }) } };
+		const transaction = { ..._taskStore(), agentRun: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ siloId: "silo-1", attempt: 1 }), create: vi.fn().mockResolvedValue({ id: "run-1" }) }, runInputSnapshot: { create: vi.fn().mockResolvedValue({ id: "snapshot-1" }) }, outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 2 }) } };
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma, _workflow(), { now: function _now() { return new Date("2026-07-20T00:00:00.000Z"); } });
 
@@ -75,19 +75,11 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 
 	it("creates the logical run, immutable snapshot, and acceptance event in one transaction", async function _persistsAdmission()
 	{
-		const transaction = { ..._taskStore(), $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ siloId: "silo-1", attempt: 1 }), create: vi.fn().mockResolvedValue({ id: "run-1" }) }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "snapshot-1" }) }, outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 2 }) } };
+		const transaction = { ..._taskStore(), agentRun: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ siloId: "silo-1", attempt: 1 }), create: vi.fn().mockResolvedValue({ id: "run-1" }) }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "snapshot-1" }) }, outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 2 }) } };
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma, _workflow(), { now: function _now() { return new Date("2026-07-20T00:00:00.000Z"); } });
 
 		await expect(repository.admit(_command(), async function _build() { return { outcome: "ready", value: { authority: _authority(), snapshot: _snapshot() } } as const; })).resolves.toEqual({ outcome: "accepted", snapshot: _snapshot() });
-		expect(transaction.$queryRaw).toHaveBeenCalledTimes(2);
-		expect((transaction.$queryRaw.mock.calls[0]?.[0] as { sql: string }).sql).toContain('::text AS "lock"');
-		// PostgreSQL rejects a NUL byte in text with SQLSTATE 22021 and fails the whole statement, so
-		// an advisory-lock key carrying one made every admission return 503 against a real database.
-		for (const [statement] of transaction.$queryRaw.mock.calls)
-		{
-			expect((statement as { values: unknown[] }).values.filter(function _IsText(value): value is string { return typeof value === "string"; }).join("")).not.toContain(String.fromCharCode(0));
-		}
 		expect(transaction.agentRun.create).toHaveBeenCalledWith({ data: expect.objectContaining({ inputSnapshotDigest: `sha256:${"c".repeat(64)}`, acceptedAt: new Date("2026-07-20T00:00:00.000Z") }) });
 		expect(transaction.runInputSnapshot.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", digest: `sha256:${"c".repeat(64)}`, messageIds: ["message-1"] }) });
 		expect(transaction.outboxEvent.createMany).toHaveBeenCalledWith({ data: [expect.objectContaining({ sequence: 1, kind: "RunAccepted", idempotencyKey: "run-1:accepted" })] });
@@ -98,7 +90,6 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 		const order: string[] = [];
 		const transaction = {
 			..._taskStore(),
-			$queryRaw: vi.fn().mockResolvedValue([]),
 			agentRun: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ siloId: "silo-1", attempt: 1 }), create: vi.fn(async function _CreateRun() { order.push("run"); }) },
 			runInputSnapshot: { create: vi.fn(async function _CreateSnapshot() { order.push("snapshot"); }) },
 			outboxEvent: { createMany: vi.fn(async function _CreateOutbox() { order.push("outbox"); }) },
@@ -118,7 +109,7 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 	it("prepares child authority before compilation and commits remaining writes last", async function _PreparesChildAuthority()
 	{
 		const order: string[] = [];
-		const transaction = { ..._taskStore(), $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ siloId: "silo-1", attempt: 1 }), create: vi.fn(async function _CreateRun() { order.push("run"); }) }, runInputSnapshot: { create: vi.fn(async function _CreateSnapshot() { order.push("snapshot"); }) }, outboxEvent: { createMany: vi.fn(async function _CreateOutbox() { order.push("outbox"); }) } };
+		const transaction = { ..._taskStore(), agentRun: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ siloId: "silo-1", attempt: 1 }), create: vi.fn(async function _CreateRun() { order.push("run"); }) }, runInputSnapshot: { create: vi.fn(async function _CreateSnapshot() { order.push("snapshot"); }) }, outboxEvent: { createMany: vi.fn(async function _CreateOutbox() { order.push("outbox"); }) } };
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma, _workflow());
 
@@ -133,7 +124,7 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 	it("rolls back prepared child authority when snapshot compilation denies", async function _RollsBackPreparedAuthority()
 	{
 		const committedChildren: string[] = [];
-		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue(null) } };
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue(null) } };
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>)
 		{
 			const pendingChildren: string[] = [];
@@ -157,7 +148,7 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 	it("rolls back prepared child authority when compiled coordinates conflict", async function _RollsBackPreparedAuthorityConflict()
 	{
 		const committedChildren: string[] = [];
-		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue(null) } };
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue(null) } };
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>)
 		{
 			const pendingChildren: string[] = [];
@@ -177,7 +168,7 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 	it("does not replay preparation for an existing exact run", async function _SkipsPrepareForIdempotentRun()
 	{
 		const snapshot = _snapshot();
-		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: snapshot.identitySnapshot.executionSubjectId, inputSnapshotDigest: snapshot.digest }) }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ...snapshot, compiledAt: new Date(snapshot.compiledAt) }) } };
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: snapshot.identitySnapshot.executionSubjectId, inputSnapshotDigest: snapshot.digest }) }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ...snapshot, compiledAt: new Date(snapshot.compiledAt) }) } };
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma, _workflow());
 		const prepare = vi.fn();
@@ -189,7 +180,7 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 	it("returns a null-conversation snapshot before a later retry can load or compile a new request instant", async function _returnsIdempotent()
 	{
 		const snapshot = { ..._snapshot(), conversationId: null };
-		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: snapshot.identitySnapshot.executionSubjectId, inputSnapshotDigest: snapshot.digest }), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ...snapshot, compiledAt: new Date(snapshot.compiledAt) }), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: snapshot.identitySnapshot.executionSubjectId, inputSnapshotDigest: snapshot.digest }), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ...snapshot, compiledAt: new Date(snapshot.compiledAt) }), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma, _workflow(), { now: function _now() { return new Date("2026-07-20T00:05:00.000Z"); } });
 		let compiled = false;
@@ -207,7 +198,7 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 	])("denies a same-silo delivery key already used by %s", async function _deniesCrossScopeDuplicate(_description: string, difference: object)
 	{
 		const snapshot = _snapshot();
-		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: snapshot.identitySnapshot.executionSubjectId, inputSnapshotDigest: snapshot.digest, ...difference }), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn(), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: snapshot.identitySnapshot.executionSubjectId, inputSnapshotDigest: snapshot.digest, ...difference }), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn(), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma, _workflow());
 		const build = vi.fn();
@@ -231,7 +222,7 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 
 	it("rejects an interactive authority whose delegated user differs from the signed snapshot subject", async function _rejectsDelegationMismatch()
 	{
-		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn(), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn(), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma, _workflow());
 
@@ -268,7 +259,7 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 	it("denies a recovered snapshot that names another execution subject", async function _deniesSnapshotSubjectMismatch()
 	{
 		const snapshot = { ..._snapshot(), identitySnapshot: { ..._snapshot().identitySnapshot, executionSubjectId: "user-2" } };
-		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: "user-1", inputSnapshotDigest: snapshot.digest }), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ...snapshot, compiledAt: new Date(snapshot.compiledAt) }), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: "user-1", inputSnapshotDigest: snapshot.digest }), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ...snapshot, compiledAt: new Date(snapshot.compiledAt) }), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma, _workflow());
 

@@ -6,7 +6,6 @@ import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/
 import { ___CloneCanonicalJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
-import { __AdmissionLockKey } from "./admission-lock-key";
 import { PrismaAgentRunWorkflowTaskAdmissionUnitOfWork } from "./prisma-agent-run-workflow-task-admission-unit-of-work";
 import { RunAdmissionDenialReasons } from "./run-admission.types";
 import type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionCommit, RunAdmissionPrepare, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types";
@@ -51,18 +50,14 @@ class _PreparedAdmissionDenied<TDenial> extends Error
  * its two outbox events. Either all of it commits or none of it does, so no reader can ever see a run
  * without its snapshot, or a snapshot without the dispatch command that starts it.
  *
- * Two locks make that safe under concurrent callers: an advisory lock on silo + idempotency key holds a
- * second delivery of the same request back until the first finishes, then a `FOR UPDATE` on the
- * AgentService row is taken before any input is re-read, in the lock order the rest of the run code
- * follows.
+ * Serializable isolation and the unique silo + idempotency key make that safe under concurrent
+ * callers. A losing duplicate recovers the winner's immutable snapshot after its transaction ends.
  *
  * This class owns the transaction, and that ownership is the contract. Callers hand in callbacks and
  * receive a `Prisma.TransactionClient`, never the `PrismaClient` held here; they must write only on the
  * client they are given and must not open a transaction of their own, which would commit separately and
  * break the all-or-nothing guarantee above. The single read outside the transaction is the duplicate
  * recovery in the catch block, which uses the root client because the transaction is already gone.
- * The advisory-lock query casts its result because Prisma cannot deserialize PostgreSQL's void return
- * type from a raw query.
  *
  * Called by: `__AssembleRunInputSnapshot` (execution/inputs/main/src/session-assembly.ts), wired in by
  * `prisma-session-assembly-authorities.ts`.
@@ -125,8 +120,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 		{
 			return await this.prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RunAdmissionResult<TDenial>>
 			{
-				// 1. Serialize the user-visible key before loading inputs so a duplicate never recompiles at a later instant.
-				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${__AdmissionLockKey(command.siloId, command.requestIdempotencyKey)}, 0))::text AS "lock"`);
+					// 1. Check the unique user-visible key before loading inputs so a committed duplicate is never recompiled.
 				const existing = await transaction.agentRun.findUnique({ where: { siloId_requestIdempotencyKey: { siloId: command.siloId, requestIdempotencyKey: command.requestIdempotencyKey } } });
 				if (existing !== null)
 				{
@@ -139,8 +133,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 					}
 				}
 
-				// 2. Lock the service before every source revalidates its inputs, preserving the established run lock order.
-				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${command.agentServiceId} AND "silo_id" = ${command.siloId} FOR UPDATE`);
+					// 2. Revalidate every input against the same Serializable transaction snapshot.
 				const admittedAtDate = clock.now();
 				const admittedAt = admittedAtDate.toISOString();
 				// 3. Let the caller create the rows its own inputs need, so a child conversation exists

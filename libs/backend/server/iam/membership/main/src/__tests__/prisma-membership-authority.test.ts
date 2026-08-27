@@ -32,13 +32,12 @@ describe("Prisma fleet-membership authority adapter", function _suite()
 		expect(revision?.assertions[0]).toEqual({ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1" });
 	});
 
-	it("commits a newer high-watermark and audit through one serialized transaction", async function _accept()
+	it("creates a newer high-watermark and audit through one Serializable transaction", async function _accept()
 	{
-		const upsert = vi.fn().mockResolvedValue({ revision: 7 });
+		const create = vi.fn().mockResolvedValue({ revision: 7 });
 		const auditCreate = vi.fn().mockResolvedValue({ id: "audit-1" });
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([]),
-			highestAcceptedFleetMembership: { findUnique: vi.fn().mockResolvedValue(null), upsert },
+			highestAcceptedFleetMembership: { findUnique: vi.fn().mockResolvedValue(null), create },
 			verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(_revisionRow()) },
 			auditDecision: { create: auditCreate },
 		};
@@ -46,12 +45,8 @@ describe("Prisma fleet-membership authority adapter", function _suite()
 		const repository = new PrismaFleetMembershipAuthorityRepository(prisma);
 
 		await expect(repository.acceptRevisionAtomically({ issuerId: "fleet-1", siloId: "silo-1", revision: 7, payloadDigest: `sha256:${"1".repeat(64)}` })).resolves.toEqual({ status: "accepted", highestAcceptedRevision: 7 });
-		expect(transaction.$queryRaw).toHaveBeenCalledOnce();
-		const lockStatement = transaction.$queryRaw.mock.calls[0]?.[0] as { readonly sql: string; readonly values: readonly unknown[] };
-		expect(lockStatement.sql).toContain('::text AS "lock"');
-		expect(lockStatement.values).toContain("7:fleet-1silo-1");
-		expect(lockStatement.values.filter(function _IsText(value): value is string { return typeof value === "string"; }).join("")).not.toContain(String.fromCharCode(0));
-		expect(upsert).toHaveBeenCalledOnce();
+		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
+		expect(create).toHaveBeenCalledOnce();
 		expect(auditCreate).toHaveBeenCalledOnce();
 	});
 });

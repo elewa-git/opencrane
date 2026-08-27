@@ -15,7 +15,7 @@ function _invocation(toolRevisionId: string): ExternalActionWorkerInvocation
 {
 	const proposedArguments = { query: "proposed" };
 	const effectiveArguments = { query: "approved" };
-	return { id: "row-1", siloId: "silo-1", runId: "run-1", attempt: 1, agentRevisionId: "revision-1", subjectId: "user-1", candidateId: "candidate-1", toolInvocationId: "tool-1", toolRevisionId, arguments: proposedArguments, argumentsDigest: ___DigestCanonicalJson(proposedArguments), effectiveArguments, effectiveArgumentsDigest: ___DigestCanonicalJson(effectiveArguments), requestFingerprint: "sha256:fingerprint", approvalRequired: false, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null, state: ToolInvocationStates.Ready, preparationAttempt: 1, retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-08-11T10:00:00.000Z"), claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 2 };
+	return { id: "row-1", siloId: "silo-1", runId: "run-1", attempt: 1, mcpTaskId: null, agentRevisionId: "revision-1", subjectId: "user-1", candidateId: "candidate-1", toolInvocationId: "tool-1", toolRevisionId, arguments: proposedArguments, argumentsDigest: ___DigestCanonicalJson(proposedArguments), effectiveArguments, effectiveArgumentsDigest: ___DigestCanonicalJson(effectiveArguments), requestFingerprint: "sha256:fingerprint", approvalRequired: false, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null, state: ToolInvocationStates.Ready, preparationAttempt: 1, retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-08-11T10:00:00.000Z"), claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 2 };
 }
 
 /** Build one immutable personal snapshot. */
@@ -46,6 +46,12 @@ function _factory(proposeUpgradeSession = vi.fn().mockResolvedValue({ changeId: 
 
 describe("production external action adapter", function _suite()
 {
+	it("rejects standalone MCP tasks before creating an AgentRun command", function _RejectsStandaloneMcpTask()
+	{
+		const invocation = { ..._invocation("sandbox:image-1"), runId: null, attempt: null, mcpTaskId: "mcp-task-1" };
+		expect(function _prepare() { _factory().prepare(invocation, _context()); }).toThrow("not owned by an AgentRun");
+	});
+
 	it("marks current provider ports as manual recovery", function _manualMode()
 	{
 		const adapter = _factory().prepare(_invocation("sandbox:image-1"), _context());

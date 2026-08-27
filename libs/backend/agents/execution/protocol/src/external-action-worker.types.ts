@@ -102,6 +102,13 @@ export interface ExternalActionExecutionContextUnitOfWork extends ExternalAction
  */
 export type ExternalActionWorkerInvocation = ToolInvocationRecord;
 
+/** A ToolInvocation owned by one exact AgentRun attempt rather than by a standalone MCP task. */
+export type AgentRunExternalActionWorkerInvocation = ExternalActionWorkerInvocation & {
+	readonly runId: string;
+	readonly attempt: number;
+	readonly mcpTaskId: null;
+};
+
 /**
  * Finds the next saved invocation the worker should act on.
  *

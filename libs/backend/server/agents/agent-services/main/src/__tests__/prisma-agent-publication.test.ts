@@ -81,14 +81,15 @@ describe("Prisma AgentService publication adapter", function _suite()
 		const revisionRow = _revisionRow();
 		const auditCreate = vi.fn().mockResolvedValue({ id: "audit-1" });
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([]),
 			agentService: {
 				findUnique: vi.fn().mockResolvedValue(serviceRow),
-				update: vi.fn().mockResolvedValue({ ...serviceRow, state: "Active", activeRevisionId: "revision-1", updatedAt: new Date("2026-07-18T01:00:00.000Z") }),
+				findUniqueOrThrow: vi.fn().mockResolvedValue({ ...serviceRow, state: "Active", activeRevisionId: "revision-1", updatedAt: new Date("2026-07-18T01:00:00.000Z") }),
+				updateMany: vi.fn().mockResolvedValue({ count: 1 }),
 			},
 			agentRevision: {
 				findUnique: vi.fn().mockResolvedValue(revisionRow),
-				update: vi.fn().mockResolvedValue({ ...revisionRow, state: "Published", publishedAt: new Date("2026-07-18T01:00:00.000Z") }),
+				findUniqueOrThrow: vi.fn().mockResolvedValue({ ...revisionRow, state: "Published", publishedAt: new Date("2026-07-18T01:00:00.000Z") }),
+				updateMany: vi.fn().mockResolvedValue({ count: 1 }),
 			},
 			auditDecision: { create: auditCreate },
 		};
@@ -98,7 +99,8 @@ describe("Prisma AgentService publication adapter", function _suite()
 		const result = await repository.publishRevisionAtomically({ agentServiceId: "service-1", agentRevisionId: "revision-1", expectedServiceState: "draft", expectedActiveRevisionId: null, publishedAt: "2026-07-18T01:00:00.000Z" });
 
 		expect(result.status).toBe("published");
-		expect(transaction.$queryRaw).toHaveBeenCalledTimes(2);
+		expect(transaction.agentService.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: "Draft", activeRevisionId: null }) }));
+		expect(transaction.agentRevision.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: "Draft" }) }));
 		expect(auditCreate).toHaveBeenCalledOnce();
 	});
 
@@ -106,16 +108,15 @@ describe("Prisma AgentService publication adapter", function _suite()
 	{
 		const serviceRow = { ..._serviceRow(), state: "Retired" };
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([]),
-			agentService: { findUnique: vi.fn().mockResolvedValue(serviceRow), update: vi.fn() },
-			agentRevision: { findUnique: vi.fn().mockResolvedValue(_revisionRow()), update: vi.fn() },
+			agentService: { findUnique: vi.fn().mockResolvedValue(serviceRow), updateMany: vi.fn() },
+			agentRevision: { findUnique: vi.fn().mockResolvedValue(_revisionRow()), updateMany: vi.fn() },
 			auditDecision: { create: vi.fn() },
 		};
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaAgentServicePublicationRepository(prisma, { build: vi.fn().mockReturnValue(_auditDecision()) });
 
 		await expect(repository.publishRevisionAtomically({ agentServiceId: "service-1", agentRevisionId: "revision-1", expectedServiceState: "draft", expectedActiveRevisionId: null, publishedAt: "2026-07-18T01:00:00.000Z" })).resolves.toEqual({ status: "conflict", currentActiveRevisionId: null });
-		expect(transaction.agentRevision.update).not.toHaveBeenCalled();
+		expect(transaction.agentRevision.updateMany).not.toHaveBeenCalled();
 		expect(transaction.auditDecision.create).not.toHaveBeenCalled();
 	});
 
@@ -125,15 +126,14 @@ describe("Prisma AgentService publication adapter", function _suite()
 		const assignment = _McpToolAssignment();
 		const revisionRow = { ..._revisionRow(), mcpToolAssignments: [{ ...assignment, toolRevision: { serverRevision: { ...assignment.toolRevision.serverRevision, state: McpServerRevisionState.Discovering } } }] };
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([]),
-			agentService: { findUnique: vi.fn().mockResolvedValue(serviceRow), update: vi.fn() },
-			agentRevision: { findUnique: vi.fn().mockResolvedValue(revisionRow), update: vi.fn() },
+			agentService: { findUnique: vi.fn().mockResolvedValue(serviceRow), updateMany: vi.fn() },
+			agentRevision: { findUnique: vi.fn().mockResolvedValue(revisionRow), updateMany: vi.fn() },
 			auditDecision: { create: vi.fn() },
 		};
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaAgentServicePublicationRepository(prisma, { build: vi.fn().mockReturnValue(_auditDecision()) });
 
 		await expect(repository.publishRevisionAtomically({ agentServiceId: "service-1", agentRevisionId: "revision-1", expectedServiceState: "draft", expectedActiveRevisionId: null, publishedAt: "2026-07-18T01:00:00.000Z" })).resolves.toEqual({ status: "invalid_revision" });
-		expect(transaction.agentRevision.update).not.toHaveBeenCalled();
+		expect(transaction.agentRevision.updateMany).not.toHaveBeenCalled();
 	});
 });

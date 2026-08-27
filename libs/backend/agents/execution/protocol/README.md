@@ -18,14 +18,14 @@ When the executor proposes an event or outside action, it performs the mirror ch
 domain may persist or execute that proposal.
 
 Runtime input follows the same rule. A bounded `runtime_input` or reviewed `a2ui_action` proposal is
-turned into a durable elicitation request on the locked candidate transaction before its candidate
+turned into a durable elicitation request in the Serializable candidate transaction before its candidate
 id is accepted. Replays must match the exact saved request. Command polling expires tool approvals
 and generic requests on that same transaction, and resumes only after neither kind remains pending.
 Each transaction binds one `RuntimeElicitationUnitOfWork` through the injected factory and reuses
 that bound object for all generic request work in the callback. The port carries request commands,
 not a Prisma client, so the persistence transaction cannot leak into a generic domain function.
 
-While the run lock is held, command polling also reads a closed reason set from the current
+During that transaction, command polling also reads a closed reason set from the current
 ToolInvocation and ElicitationRequest rows. It distinguishes outside-action work, ordinary runtime
 input, reviewed A2UI action input, tool approval, personal-memory permission, and manual recovery.
 Only this server-side read may name approval or personal-memory permission. The runtime's broader
@@ -33,10 +33,10 @@ Only this server-side read may name approval or personal-memory permission. The 
 only these fixed category names and their count.
 
 This package owns both that pure decision and the Prisma-backed adapter that drives it. The adapter
-loads and locks the live workload assignment for a connected runtime Pod, mints only the command the
+loads and validates the live workload assignment for a connected runtime Pod, mints only the command the
 pure authority accepts, and durably advances the monotonic command sequence and the accepted
 candidate ids so a transport reconnect can neither reorder nor duplicate work. Its compiler adapter
-hydrates the immutable snapshot through the same locked Prisma transaction before dispatch.
+hydrates the immutable snapshot through the same Serializable Prisma transaction before dispatch.
 For runtime events, the app injects the canonical run-event authority into that transaction. Every
 allowed message, tool, usage, safe error, A2UI, or terminal event is persisted before its candidate
 id may advance. Unknown event names and unsafe or oversized payloads fail closed without accepting

@@ -3,7 +3,6 @@ import { AgentRunState, AgentRunTrigger, Prisma, type AgentRun as PrismaAgentRun
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 
-import { __AdmissionLockKey } from "./admission-lock-key";
 import { __PrepareChildRunAdmission } from "./child-run-admission";
 import type { ChildRunParentAuthority, PrepareChildRunAdmissionCommand, PreparedChildRunAdmission } from "./child-run-admission.types";
 import { _InitialRunOutboxData, _RunInputSnapshot, _RunInputSnapshotData } from "./prisma-run-admission-repository";
@@ -11,9 +10,7 @@ import { __DigestRunInputSnapshot } from "./run-input-snapshot-digest";
 import type { ChildRunReservationBuild, ChildRunReservationCommand, ChildRunReservationRepository, ChildRunReservationResult } from "./child-run-reservation.types";
 
 /**
- * Atomically persists one child admission while its direct parent is locked.
- * Its advisory-lock query casts the result because Prisma cannot deserialize PostgreSQL's void return
- * type from a raw query.
+ * Atomically persists one child admission while its direct parent is rechecked.
  */
 export class PrismaChildRunReservationRepository implements ChildRunReservationRepository
 {
@@ -37,8 +34,7 @@ export class PrismaChildRunReservationRepository implements ChildRunReservationR
 		{
 			return await this.prisma.$transaction(async function _reserve(transaction): Promise<ChildRunReservationResult>
 			{
-				// 1. Serialize one inherited-silo key before observing or creating a child.
-				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${__AdmissionLockKey(command.prepared.siloId, command.requestIdempotencyKey)}, 0))::text AS "lock"`);
+					// 1. Check the unique inherited-silo request key before creating a child.
 				const existing = await transaction.agentRun.findUnique({ where: { siloId_requestIdempotencyKey: { siloId: command.prepared.siloId, requestIdempotencyKey: command.requestIdempotencyKey } } });
 				if (existing !== null)
 				{
@@ -48,8 +44,7 @@ export class PrismaChildRunReservationRepository implements ChildRunReservationR
 					return { outcome: "idempotent", snapshot: _RunInputSnapshot(existingSnapshot) };
 				}
 
-				// 2. Lock the parent before calculating capacity, preventing concurrent siblings from over-reserving it.
-				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${command.prepared.parentRunId} FOR UPDATE`);
+					// 2. Recheck the parent before calculating capacity. Serializable isolation prevents concurrent siblings from over-reserving it.
 				const parent = await transaction.agentRun.findUnique({ where: { id: command.prepared.parentRunId } });
 				if (parent === null || !_isAdmittableParent(parent, command)) return { outcome: "denied", reason: "parent_not_admittable" };
 				const snapshot = await transaction.runInputSnapshot.findUnique({ where: { runId_digest: { runId: parent.id, digest: parent.inputSnapshotDigest } } });
@@ -69,7 +64,7 @@ export class PrismaChildRunReservationRepository implements ChildRunReservationR
 				if (!_isChildSnapshot(value.snapshot, prepared.value, value.effectiveContractDigest)) return { outcome: "denied", reason: "authority_conflict" };
 				await _persist(transaction, command, value.snapshot, prepared.value);
 				return { outcome: "reserved", snapshot: value.snapshot };
-			});
+				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 		}
 		catch (error)
 		{
@@ -100,7 +95,7 @@ function _isValidCommand(command: ChildRunReservationCommand): boolean
 	return command.requestIdempotencyKey.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(command.parentSnapshotDigest);
 }
 
-/** Returns a parent authority derived solely from locked rows and its frozen input snapshot. */
+/** Returns a parent authority derived solely from transaction-consistent rows and its frozen input snapshot. */
 function _parentAuthority(
 	parent: PrismaAgentRun,
 	snapshot: PrismaRunInputSnapshot,
@@ -136,7 +131,7 @@ function _parentAuthority(
 	return authority;
 }
 
-/** Returns whether the locked parent retains the exact running lineage and snapshot requested by the child. */
+/** Returns whether the parent retains the exact running lineage and snapshot requested by the child. */
 function _isAdmittableParent(parent: PrismaAgentRun, command: ChildRunReservationCommand): boolean
 {
 	return parent.state === AgentRunState.Running
@@ -145,7 +140,7 @@ function _isAdmittableParent(parent: PrismaAgentRun, command: ChildRunReservatio
 		&& parent.inputSnapshotDigest === command.parentSnapshotDigest;
 }
 
-/** Returns whether the locked parent snapshot exactly binds the requested parent identity. */
+/** Returns whether the parent snapshot exactly binds the requested parent identity. */
 function _isParentSnapshot(snapshot: PrismaRunInputSnapshot, command: ChildRunReservationCommand): boolean
 {
 	return snapshot.runId === command.prepared.parentRunId && snapshot.siloId === command.prepared.siloId && snapshot.digest === command.parentSnapshotDigest;
