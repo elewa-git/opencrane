@@ -385,8 +385,9 @@ test("the minimum Codespaces path reclaims image storage without slowing CI impo
 	assert.doesNotMatch(smoke, /--no-image-volume/u);
 	assert.match(imageStorage, /rm -rf -- "\$ROOT_DIR\/node_modules"/u);
 	assert.match(imageStorage, /npm cache clean --force/u);
-	assert.match(imageStorage, /_SMOKE_REQUIRED_DOCKER_FREE_BYTES="\$\(\(_SMOKE_REQUIRED_DOCKER_FREE_GIB \* 1024 \* 1024 \* 1024\)\)"/u);
-	assert.match(imageStorage, /docker buildx prune --all --force --min-free-space "\$_SMOKE_REQUIRED_DOCKER_FREE_BYTES"/u);
+	assert.match(imageStorage, /_SMOKE_DOCKER_PRUNE_TARGET_GIB="\$\(\(_SMOKE_REQUIRED_DOCKER_FREE_GIB \+ 1\)\)"/u);
+	assert.match(imageStorage, /_SMOKE_DOCKER_PRUNE_TARGET_BYTES="\$\(\(_SMOKE_DOCKER_PRUNE_TARGET_GIB \* 1024 \* 1024 \* 1024\)\)"/u);
+	assert.match(imageStorage, /docker buildx prune --all --force --min-free-space "\$_SMOKE_DOCKER_PRUNE_TARGET_BYTES"/u);
 	assert.match(imageStorage, /df -Pk "\$docker_root"/u);
 	assert.match(imageStorage, /available_kib[\s\S]*?_SMOKE_REQUIRED_DOCKER_FREE_GIB/u);
 	assert.match(imageStorage, /for image in "\$\{SMOKE_IMAGES\[@\]\}"; do[\s\S]*?k3d image import "\$image"[\s\S]*?docker image rm "\$image"/u);
