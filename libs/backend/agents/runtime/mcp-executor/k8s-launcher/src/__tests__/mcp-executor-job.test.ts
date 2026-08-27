@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
 
 import { __BuildSuspendedMcpExecutorJob } from "../mcp-executor-job";
+import type { McpExecutorJobAssignment } from "../mcp-executor-job.types";
 
 /** Builds a valid MCP claim and imported image assignment. */
-function _Assignment()
+function _Assignment(): McpExecutorJobAssignment
 {
 	return { claim: { claimId: "claim-1", siloId: "silo-1", workloadClass: RuntimeWorkloadClaimClasses.McpExecutor, profileName: "mcp-default", idempotencyKey: "invocation-1", claimedAt: "2026-08-26T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-08-26T00:01:00.000Z", executionReference: "mcp-execution-v1_abcdef" }, registryReference: `registry.internal/opencrane/mcp@sha256:${"a".repeat(64)}`, namespace: "opencrane-mcp" };
 }
