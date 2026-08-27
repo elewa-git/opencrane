@@ -94,30 +94,33 @@ Storybook Playwright visual suite together. It provides an authenticated local u
 in-memory implementations for persona onboarding, first chat, normal conversations, AG-UI run
 progress, files, approvals, and child Agent threads. It needs no API, PostgreSQL, Docker, LiteLLM,
 Cognee, memory gateway, or Kubernetes cluster. Unsupported administration, settings, and invitation
-URLs redirect to onboarding. Any accidentally retained Angular or native OpenCrane API adapter is
-stopped by a local tripwire.
+URLs return to onboarding for plain serve or Agent chat for a named profile. Any accidentally
+retained Angular or native OpenCrane API adapter is stopped by a local tripwire.
 
-The first plain serve defaults to the reviewed Commander/Guardian path. Use one explicit command to
-change the archetype:
+Plain serve opens onboarding and uses the reviewed Commander/Guardian path when no browser
+preference exists. Use a named command to select an archetype and open its Agent conversation
+directly:
 
 ```bash
-npx nx serve opencrane-ui --configuration=development-catalyst
+npm run serve:opencrane-ui:catalyst
 ```
 
-The supported suffixes are `commander`, `catalyst`, `anchor`, and `analyst`. Loading an explicit
-configuration saves that choice in browser local storage for the current origin, so later plain serves
-reuse it. To return to Commander, stop the explicit configuration, run the plain serve, and clear the
-site's local storage. Reloading an explicit configuration saves its archetype again. Mock workflow
-progress still resets on reload; only the archetype preference persists.
+The named alternatives are `serve:opencrane-ui:commander`, `serve:opencrane-ui:catalyst`,
+`serve:opencrane-ui:anchor`, and `serve:opencrane-ui:analyst`. Each saves its archetype in browser
+local storage for the current origin. A later plain serve still enters onboarding, but reuses the
+saved deterministic path; it does not reproduce backend persona scoring. Clear the site's local
+storage to remove that preference. Mock workflow progress still resets on reload.
 
 Use `?mockScenario=slow`, `retry`, `reconnecting`, `failed-run`, or `access-changed` to exercise a
 deterministic non-happy path. `happy-path` is the default. Component-level variants remain
 independently available through `npm run storybook:ui` when the routed UI and Playwright pass are not
 needed.
 
-`npx nx serve opencrane-ui --configuration=development-live` is the explicit live-backend path. It
-uses the live gateway/route entry points and `proxy.dev-live.conf.json`; plain serve has no backend
-proxy.
+`npm run serve:opencrane-ui:live` is the explicit live-backend path. It uses the live gateway/route
+entry points and `proxy.dev-live.conf.json`; plain serve has no backend proxy. The live proxy targets
+`https://platform.dev.opencrane.ai`, so this profile requires network access and a valid session in
+that environment. A terminal `http proxy error` or `ETIMEDOUT` means the remote backend is
+unreachable; the live profile stays fail-closed instead of switching to local fixtures.
 
 ## See also
 

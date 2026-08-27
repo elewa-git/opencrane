@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { APP_ROUTES } from "../app.routes";
-import { APP_ROUTES as LOCAL_APP_ROUTES } from "../app.routes.local";
+import { _LocalDevelopmentEntryRoute, APP_ROUTES as LOCAL_APP_ROUTES } from "../app.routes.local";
 
 describe("OpenCrane app route composition", function _OpenCraneAppRouteComposition()
 {
@@ -42,5 +42,15 @@ describe("OpenCrane app route composition", function _OpenCraneAppRouteCompositi
 			expect(route?.loadChildren ?? route?.loadComponent).toBeTypeOf("function");
 		}
 		expect(paths.indexOf("chats/:parentConversationId/threads/:childConversationId")).toBeLessThan(paths.indexOf("chats"));
+	});
+
+	it("opens onboarding for a plain build and Agent chat for an archetype build", function _LocalEntryRoute()
+	{
+		expect(_LocalDevelopmentEntryRoute()).toBe("onboarding");
+
+		for (const archetype of ["commander", "catalyst", "anchor", "analyst"])
+		{
+			expect(_LocalDevelopmentEntryRoute(archetype)).toBe("chats/conversation-agent");
+		}
 	});
 });

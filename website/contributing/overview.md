@@ -46,7 +46,7 @@ Two threads run underneath every step of that journey:
 
 | Page | Covers |
 | --- | --- |
-| [Frontend development](/contributing/frontend-development) | Tier 1 browser-only work, Storybook, and Tier 2 real-backend profiles with local, remote, or simulated Agent model access |
+| [Frontend development](/contributing/frontend-development) | Tier 1 browser-only work, its gateway-extension pattern and Storybook checks, plus Tier 2 real-backend profiles with local, remote, or simulated Agent model access |
 | [The CI pipeline](/contributing/ci-pipeline) | The three workflows, what each `docker.yml` job gates, and the caching layers that keep it fast |
 | [Deploying](/contributing/deploying) | The script-only rule, the deploy chain, bootstrap prerequisites, and the warnings that save hours |
 | [Versions and migrations](/contributing/versions-and-migrations) | The repository train, the stamp rule, chart and database migrations, and how CI enforces them |

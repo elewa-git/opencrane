@@ -7,12 +7,27 @@ import liveProxy from "../../../proxy.dev-live.conf.json";
 /** Reads UI Elements targets as test data without creating a source dependency on that library. */
 const _UI_ELEMENTS_PROJECT = JSON.parse(fs.readFileSync(new URL("../../../../../libs/frontend/elements/ui/project.json", import.meta.url), "utf8"));
 
-/** Explicit local serve configurations and the archetypes they inject. */
+/** Reads root scripts as command-contract data without creating a source dependency on the workspace root. */
+const _ROOT_PACKAGE = JSON.parse(fs.readFileSync(new URL("../../../../../package.json", import.meta.url), "utf8"));
+
+/** Maps public local serve configurations to their internal builds and injected archetypes. */
 const _ARCHETYPE_CONFIGURATIONS = {
-	"development-commander": "commander",
-	"development-catalyst": "catalyst",
-	"development-anchor": "anchor",
-	"development-analyst": "analyst"
+	commander: {
+		buildConfiguration: "development-commander",
+		archetype: "commander"
+	},
+	catalyst: {
+		buildConfiguration: "development-catalyst",
+		archetype: "catalyst"
+	},
+	anchor: {
+		buildConfiguration: "development-anchor",
+		archetype: "anchor"
+	},
+	analyst: {
+		buildConfiguration: "development-analyst",
+		archetype: "analyst"
+	}
 } as const;
 
 describe("OpenCrane UI local-development commands", function _Suite()
@@ -21,18 +36,19 @@ describe("OpenCrane UI local-development commands", function _Suite()
 	{
 		const development = openCraneUiProject.targets.build.configurations.development;
 
-		for (const [configuration, archetype] of Object.entries(_ARCHETYPE_CONFIGURATIONS))
+		for (const [configuration, selection] of Object.entries(_ARCHETYPE_CONFIGURATIONS))
 		{
-			const serveBrowser = openCraneUiProject.targets["serve-browser"].configurations[configuration as keyof typeof _ARCHETYPE_CONFIGURATIONS];
+			const serveBrowser = openCraneUiProject.targets["serve-browser"].configurations[selection.buildConfiguration];
 			const serve = openCraneUiProject.targets.serve.configurations[configuration as keyof typeof _ARCHETYPE_CONFIGURATIONS];
-			const build = openCraneUiProject.targets.build.configurations[configuration as keyof typeof _ARCHETYPE_CONFIGURATIONS];
+			const build = openCraneUiProject.targets.build.configurations[selection.buildConfiguration];
 
-			expect(serveBrowser.buildTarget).toBe(`opencrane-ui:build:${configuration}`);
+			expect(serveBrowser.buildTarget).toBe(`opencrane-ui:build:${selection.buildConfiguration}`);
 			expect({ ...build, define: undefined }).toEqual({ ...development, define: undefined });
 			expect(build.define).toEqual({
-				OPENCRANE_LOCAL_DEVELOPMENT_ARCHETYPE: `"${archetype}"`
+				OPENCRANE_LOCAL_DEVELOPMENT_ARCHETYPE: `"${selection.archetype}"`
 			});
-			expect(serve.args).toBe(`--uiConfiguration=${configuration}`);
+			expect(serve.args).toBe(`--uiConfiguration=${selection.buildConfiguration}`);
+			expect(_ROOT_PACKAGE.scripts[`serve:opencrane-ui:${configuration}`]).toBe(`nx serve opencrane-ui --configuration=${configuration}`);
 		}
 	});
 
@@ -52,7 +68,7 @@ describe("OpenCrane UI local-development commands", function _Suite()
 
 	it("keeps development-live on the single real-backend browser server", function _LiveServe()
 	{
-		const live = openCraneUiProject.targets.serve.configurations["development-live"];
+		const live = openCraneUiProject.targets.serve.configurations.live;
 		const liveBrowser = openCraneUiProject.targets["serve-browser"].configurations["development-live"];
 
 		expect(live.args).toBe("--uiConfiguration=development-live");
@@ -68,5 +84,6 @@ describe("OpenCrane UI local-development commands", function _Suite()
 			proxyConfig: "apps/opencrane-ui/proxy.dev-live.conf.json"
 		});
 		expect(liveProxy["/api/v1"].ws).toBe(true);
+		expect(_ROOT_PACKAGE.scripts["serve:opencrane-ui:live"]).toBe("nx serve opencrane-ui --configuration=live");
 	});
 });

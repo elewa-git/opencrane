@@ -234,19 +234,19 @@
 					]
 				},
 				"development": {},
-				"development-commander": {
+				"commander": {
 					"args": "--uiConfiguration=development-commander"
 				},
-				"development-catalyst": {
+				"catalyst": {
 					"args": "--uiConfiguration=development-catalyst"
 				},
-				"development-anchor": {
+				"anchor": {
 					"args": "--uiConfiguration=development-anchor"
 				},
-				"development-analyst": {
+				"analyst": {
 					"args": "--uiConfiguration=development-analyst"
 				},
-				"development-live": {
+				"live": {
 					"args": "--uiConfiguration=development-live",
 					"commands": [
 						{

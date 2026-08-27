@@ -60,9 +60,10 @@ Build-time provider and route replacements keep local fixtures out of live bundl
 unsupported administration/settings/invitation routes unmounted in Tier 1. Plain serve also starts
 Storybook and its Playwright visual checks. The profile uses the reviewed production survey and one
 selectable Commander, Catalyst, Anchor, or Analyst Guardian first-session path without reproducing
-backend scoring; an explicit configuration persists the archetype in browser storage and an unset
-preference defaults to Commander. Allowlisted URL scenarios cover slow, retry, reconnecting,
-failed-run, and access-change paths.
+backend scoring. Plain serve enters deterministic onboarding, while named archetype scripts persist
+the fixture in browser storage and open its Agent conversation directly; an unset preference uses
+Commander. Allowlisted URL scenarios cover slow, retry, reconnecting, failed-run, and access-change
+paths.
 
 **Tier 2 built on `local-dev-workflow`:** `npm run dev:tier2` starts the live-gateway frontend,
 real OpenCrane API, target-baseline PostgreSQL, fixed local identity, and signed local membership.
