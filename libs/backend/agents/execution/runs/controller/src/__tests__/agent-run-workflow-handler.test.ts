@@ -99,7 +99,8 @@ describe("AgentRun workflow handler", function _Suite()
 	it("rechecks current authority after a restart instead of replaying a saved attempt record", async function _RechecksAfterRestart()
 	{
 		const calls: string[] = [];
-		const authority = _Authority();
+		const terminalizeFailedTask = vi.fn(async function _TerminalizeFailedTask() {});
+		const authority = _Authority({ terminalizeFailedTask });
 		let active = true;
 		const originalLoad = authority.loadForTask;
 		authority.loadForTask = async function _LoadForTask(input, task)
@@ -112,6 +113,7 @@ describe("AgentRun workflow handler", function _Suite()
 		active = false;
 		const result = await handler.run(context, { siloId: "silo-1", runId: "run-1", attempt: 1 });
 		expect(result.terminalState).toBe(AgentRunTaskTerminalStates.Cancelled);
+		expect(terminalizeFailedTask).toHaveBeenCalledOnce();
 		expect(calls).toEqual(["job", "secret", "release", "pod"]);
 	});
 

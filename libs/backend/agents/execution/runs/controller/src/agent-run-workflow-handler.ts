@@ -251,6 +251,12 @@ async function _executeAgentRunTask(options: AgentRunWorkflowHandlerOptions, con
 	const record = await _loadCurrentAttempt(options, context, input);
 	if (record === null)
 	{
+		// Ask the server to fail and clean up any live run still owned by this receipt. Its receipt
+		// fence makes this a no-op when cancellation or a newer attempt already ended our authority.
+		await _retryExternal(async function _TerminalizeUnavailableAttempt(): Promise<void>
+		{
+			await options.authority.terminalizeFailedTask(input, context.task);
+		});
 		return _cancelledResult(input);
 	}
 
