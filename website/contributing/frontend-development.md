@@ -99,32 +99,6 @@ Use the standalone Storybook command when a task concerns only one component sta
 serve already includes Storybook and its Playwright visual pass; use the routed UI when the task also
 concerns navigation or interaction between stores and gateways.
 
-## Connect to a real backend explicitly
-
-When a frontend change genuinely needs the shared development backend, select the separate live
-configuration:
-
-```bash
-npm run serve:opencrane-ui:live
-```
-
-That configuration keeps the live provider and route entry points and enables the dedicated
-development proxy. Default development replaces those entry points at build time, so production
-and development-live bundles do not import the local fixtures. The live configuration therefore
-requires a reachable backend and a valid live session.
-
-The proxy currently targets `https://platform.dev.opencrane.ai`. The command has started correctly
-when Nx prints the local URL. If the page remains blank while the terminal reports `http proxy
-error` or `ETIMEDOUT` for `/api/v1/auth/me`, the shared backend is unreachable from the development
-machine. Restore network access to that environment and reload; the live profile deliberately does
-not fall back to Tier 1 fixtures.
-
-::: warning
-Do not use `npm run serve:opencrane-ui:live` to prove a Tier 1 change. A successful live request can
-hide an incomplete mock binding; the provider-composition and network-tripwire tests exist to catch
-exactly that drift.
-:::
-
 ## Add a gateway-backed feature
 
 A **gateway** is the narrow state-layer interface through which a feature reads or changes data.
