@@ -145,7 +145,7 @@ export function __CreateSkillAuthoringValidationHandler(options: SkillAuthoringV
 			// 3. Release only the UID the server recorded, then wait until Kubernetes exposes its sole worker Pod.
 			await context.checkpoint({ stepName: "release-job" }, async function _ReleaseJob(): Promise<void>
 			{
-				await options.kubernetes.releaseJob(prepared.job, jobUid);
+				await options.kubernetes.releaseJob(prepared.job, jobUid, record.claim.expiresAt);
 			});
 			let pod: V1Pod | null = null;
 			while (pod === null)

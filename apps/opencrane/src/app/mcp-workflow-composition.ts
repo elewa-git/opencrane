@@ -90,7 +90,7 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 		{ taskName: OciImageValidationTaskNames.Import, queue: "control-plane" },
 		{ taskName: SkillAuthoringValidationTaskDeclaration.taskName, queue: "skill-authoring" },
 		{ taskName: ArtifactPreprocessTaskDeclaration.taskName, queue: "artifact-preprocessing" },
-		{ taskName: AgentRunTaskDeclaration.taskName, queue: "control-plane" },
+		{ taskName: AgentRunTaskDeclaration.taskName, queue: "agent-runs" },
 	]);
 	const runtime = _CreateAbsurdWorkflowEngine({ databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
