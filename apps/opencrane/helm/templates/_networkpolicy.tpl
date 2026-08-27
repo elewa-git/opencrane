@@ -1,6 +1,5 @@
 {{- define "opencrane.server.networkPolicy" -}}
-{{- $managedPlane := (index .Values "managedAgentRuntimePlane").managedAgentRuntime -}}
-{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
+{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") .Values.agentController.warmRuntime.managedNamespace -}}
 {{- if .Values.networkPolicy.enabled }}
 # Network policy for the OpenCrane server.
 #

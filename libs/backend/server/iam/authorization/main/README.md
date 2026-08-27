@@ -66,9 +66,6 @@ carries a concrete, currently authorized human approval subject.
   gated on current signed membership; returns only the intersection.
 - `__VerifyCapabilityProof`, `__ComputeEs256JwkThumbprint`, `__NormalizeDpopTargetUri` — verify the
   cryptographic proof an agent presents that it is that workload and is calling this exact endpoint.
-- `__ConsumeRuntimeBootstrap` — validates and atomically spends a one-time startup token that binds a
-  run to its pod and attempt, and accepts only the `opencrane-agent-runtime` projected-token audience,
-  so it cannot be reused or confused with a service-specific action token.
 - `__ExecuteCapabilityAction` — verifies the proof, reserves its unique id durably, then runs the
   effect exactly once (or returns the earlier result on an allowed idempotent retry).
 - `__CancelPendingRunApprovalAuthority` — closes pending approvals and only provider-free or

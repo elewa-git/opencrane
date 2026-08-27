@@ -23,12 +23,12 @@ organisation ingress
                   |
                   +---- agent-controller
                              |
-                             +-> personal runtime Job namespace
-                             +-> managed runtime Job namespace
+                             +-> personal warm runtime namespace
+                             +-> managed warm runtime namespace
                              +-> skill-authoring Job namespace
                              +-> tool-runner Job namespace
 
-runtime Jobs ----> LiteLLM (attempt model key)
+claimed runtime Pods ----> LiteLLM (attempt model key)
 opencrane server ----> OCI MCP executor Jobs (durable claim + Pod-bound companion)
 
 artifact-service <---- brokered bytes ---- artifact-preprocessor Job namespace
@@ -51,8 +51,8 @@ Cluster-wide ingress, certificate, DNS, and CloudNativePG controllers are extern
 | Memory gateway | `apps/memory-gateway` | none; authenticated read-only Cognee boundary |
 | Runtime controller | `apps/agent-controller` | database-fenced assignment claims |
 | OCI MCP executor companion | `apps/mcp-executor` | one durable discovery or tool-call command |
-| Personal run Job | `apps/agent-runtime` | none; one attempt |
-| Managed run Job | `apps/managed-agent-runtime` | none; one scheduled or triggered attempt |
+| Personal warm runtime | `apps/agent-runtime` | one-use Absurd claim for one attempt |
+| Managed warm runtime | `apps/agent-runtime` | one-use Absurd claim for one scheduled or triggered attempt |
 | Artifact bytes | `apps/artifact-service` | ArtifactStore behind server-issued leases |
 | Document extraction | `apps/artifact-preprocessor` | none; brokered input and output |
 | Malware scanning | `apps/artifact-scanner` | none; brokered quarantined bytes and fenced result only |
@@ -65,9 +65,8 @@ reusable behaviour and never own a deployment.
 ## Namespace classes
 
 - **Trusted server namespace** — API, controller, web, channel edge, and organisation service planes.
-- **Personal runtime namespace** — one restricted Job per personal run attempt.
-- **Managed runtime namespace** — one restricted Job per managed run attempt under a distinct
-  service-account class.
+- **Personal runtime namespace** — one fixed warm Deployment whose Pods are claimed once for personal runs.
+- **Managed runtime namespace** — one fixed warm Deployment whose Pods are claimed once for managed runs.
 - **OCI MCP executor namespace** — one restricted two-container Job per immutable MCP image
   discovery or tool call. The uploaded image receives no OpenCrane token; the fixed companion gets
   a short-lived Pod-bound token and reports one checked result.
@@ -77,13 +76,13 @@ reusable behaviour and never own a deployment.
 - **Artifact-scanner namespace** — an outbound-only scanner Deployment with broker-only quarantined
   byte flow, pinned offline definitions, and no database or ArtifactStore authority.
 
-Each Job namespace has a restricted pod-security label, default-deny networking, bounded resource
-quota, and a dedicated zero- or least-privilege service account.
+Each workload namespace has a restricted pod-security label, default-deny networking, bounded
+resource quota, and a dedicated zero- or least-privilege service account.
 
 ## Network direction
 
 Inbound public traffic terminates at organisation ingress. The channel proxy authenticates channel
-traffic and forwards only admitted, bounded requests. Runtime Jobs open their control stream
+traffic and forwards only admitted, bounded requests. Claimed warm runtimes open their control stream
 outward; they expose no public listener.
 
 NetworkPolicy permits only the named service path required by each workload class. Network reach is
@@ -93,7 +92,7 @@ assignment.
 Runtime model traffic reaches LiteLLM with a per-attempt virtual key. MCP discovery and tool calls
 instead cross a durable server-owned invocation fence: the server freezes an admitted OCI image
 digest, assigns the command to a class-specific executor Job, stores the checked result, and sends
-only that saved result to the runtime. Runtime Jobs receive no registry credential or Kubernetes
+only that saved result to the runtime. Runtime Pods receive no registry credential or Kubernetes
 mutation authority.
 
 Uploaded and generated conversation files remain hidden while quarantined. The scanner authenticates
@@ -117,8 +116,8 @@ fail-closed until their recoverable write authority is implemented and qualified
 PostgreSQL stores durable product and audit state. ArtifactStore stores content-addressed bytes.
 Cognee stores indexed organisation memory under OpenCrane-owned scope and provenance rules.
 
-Runtime, skill, tool, and preprocessing Jobs receive only bounded scratch. Restarting or deleting a
-Job cannot delete a conversation, run, artifact, skill, or organisation-memory record.
+Runtime Pods and skill, tool, and preprocessing Jobs receive only bounded scratch. Restarting or
+deleting a workload cannot delete a conversation, run, artifact, skill, or organisation-memory record.
 
 ## Deployment ownership
 

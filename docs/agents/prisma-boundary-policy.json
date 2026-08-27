@@ -85,22 +85,14 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-controller-authority.ts",
-        "adapter": "PrismaAgentRunWorkflowControllerRepository",
-        "contract": "AgentRunWorkflowControllerPersistenceRepository",
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-warm-runtime-authority.ts",
+        "adapter": "PrismaAgentRunWarmRuntimeRepository",
+        "contract": "AgentRunWarmRuntimePersistenceRepository",
         "contractImportPath": "./agent-run-workflow-controller-authority.types",
         "constructs": [
           {
             "adapter": "PrismaAgentRunWorkflowTaskReadRepository",
             "importPath": "./prisma-agent-run-workflow-task-read-repository"
-          },
-          {
-            "adapter": "PrismaAgentRunWorkflowAssignmentReleaseRepository",
-            "importPath": "./prisma-agent-run-workflow-assignment-release-repository"
-          },
-          {
-            "adapter": "PrismaAgentRunWorkflowTerminalCleanupRepository",
-            "importPath": "./prisma-agent-run-workflow-terminal-cleanup-repository"
           }
         ]
       },
@@ -108,32 +100,8 @@
         "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-task-read-repository.ts",
         "adapter": "PrismaAgentRunWorkflowTaskReadRepository",
         "contract": "AgentRunWorkflowTaskReadPersistenceRepository",
-        "contractImportPath": "./agent-run-workflow-controller-authority.types",
+        "contractImportPath": "./prisma-agent-run-workflow-task-read-repository.types",
         "constructs": []
-      },
-      {
-        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-assignment-release-repository.ts",
-        "adapter": "PrismaAgentRunWorkflowAssignmentReleaseRepository",
-        "contract": "AgentRunWorkflowAssignmentReleasePersistenceRepository",
-        "contractImportPath": "./agent-run-workflow-controller-authority.types",
-        "constructs": [
-          {
-            "adapter": "PrismaAgentRunWorkflowTaskReadRepository",
-            "importPath": "./prisma-agent-run-workflow-task-read-repository"
-          }
-        ]
-      },
-      {
-        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-terminal-cleanup-repository.ts",
-        "adapter": "PrismaAgentRunWorkflowTerminalCleanupRepository",
-        "contract": "AgentRunWorkflowTerminalCleanupPersistenceRepository",
-        "contractImportPath": "./agent-run-workflow-controller-authority.types",
-        "constructs": [
-          {
-            "adapter": "PrismaAgentRunWorkflowTaskReadRepository",
-            "importPath": "./prisma-agent-run-workflow-task-read-repository"
-          }
-        ]
       },
       {
         "path": "libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization.ts",
@@ -913,16 +881,23 @@
         ]
       },
       {
-        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-controller-unit-of-work.ts",
-        "adapter": "PrismaAgentRunWorkflowControllerUnitOfWork",
-        "contract": "AgentRunWorkflowControllerAuthority",
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-warm-runtime-authority.ts",
+        "adapter": "PrismaAgentRunWarmRuntimeUnitOfWork",
+        "contract": "AgentRunWarmRuntimeControllerAuthority",
         "contractImportPath": "@opencrane/backend/agents/execution/runs/workflows/contract",
         "constructs": [
           {
-            "adapter": "PrismaAgentRunWorkflowControllerRepository",
-            "importPath": "./prisma-agent-run-workflow-controller-authority"
+            "adapter": "PrismaAgentRunWarmRuntimeRepository",
+            "importPath": "<same-file>"
           }
         ]
+      },
+      {
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-warm-runtime-binding-authority.ts",
+        "adapter": "PrismaWarmRuntimeBindingUnitOfWork",
+        "contract": "WarmRuntimeBindingAuthority",
+        "contractImportPath": "./warm-runtime-binding.types",
+        "constructs": []
       },
       {
         "path": "libs/backend/server/infra/workflows/infra_absurd/src/qualification/prisma-workflow-engine-qualification-unit-of-work.ts",

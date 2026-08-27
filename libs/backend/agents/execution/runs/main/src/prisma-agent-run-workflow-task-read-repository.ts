@@ -8,7 +8,7 @@ import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workf
 
 import { __AgentRunWorkflowBootstrapReference } from "./agent-run-workflow-bootstrap-reference";
 import type { AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-workflow-controller-authority.types";
-import type { AgentRunWorkflowSnapshotIdentity } from "./prisma-agent-run-workflow-task-read-repository.types";
+import type { AgentRunWorkflowSnapshotIdentity, AgentRunWorkflowTaskReadPersistenceRepository } from "./prisma-agent-run-workflow-task-read-repository.types";
 
 /** Selects the saved task, current run, active service, and frozen snapshot for controller reads. */
 export const __AGENT_RUN_WORKFLOW_TASK_SELECT = {
@@ -40,7 +40,7 @@ export const __AGENT_RUN_WORKFLOW_TASK_SELECT = {
 type AgentRunWorkflowTaskRow = Prisma.AgentRunWorkflowTaskGetPayload<{ readonly select: typeof __AGENT_RUN_WORKFLOW_TASK_SELECT }>;
 
 /** Reads receipt-fenced task facts used by one warm runtime claim. */
-export class PrismaAgentRunWorkflowTaskReadRepository
+export class PrismaAgentRunWorkflowTaskReadRepository implements AgentRunWorkflowTaskReadPersistenceRepository
 {
 	/** Holds the transaction that reads one controller task. */
 	private readonly transaction: Prisma.TransactionClient;

@@ -201,7 +201,6 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillWorkloadBootstrap },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringInput },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringCompletion },
-		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeBootstrap },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeStream },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.conversationAssetOutputs },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.agentThreadParentDeliveries },

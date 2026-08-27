@@ -37,8 +37,6 @@ export interface InternalRuntimeComposition
 	readonly conversationReplay: Router | null;
 	/** Router that resolves a browser channel for a workload-authenticated caller, alongside the replay receiver. */
 	readonly channelTargetResolver: Router | null;
-	/** Runtime router that binds a workload proof key once. */
-	readonly runtimeBootstrap: Router;
 	/** Warm runtime router that finds and binds a ready claim from reviewed Pod identity. */
 	readonly warmRuntimeBinding: Router;
 	/** Runtime server-sent-event stream and candidate-ingest router. */
@@ -73,7 +71,7 @@ export type SkillWorkloadRuntimeComposition = Pick<
 >;
 
 /** The subset of routers built by the runtime-protocol composition step. */
-export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "warmRuntimeBinding" | "runtimeStream" | "warmRuntimeStream" | "conversationAssetOutputs" | "agentThreadParentDeliveries">;
+export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "warmRuntimeBinding" | "runtimeStream" | "warmRuntimeStream" | "conversationAssetOutputs" | "agentThreadParentDeliveries">;
 
 /** The subset of routers built by the optional worker and replay composition step. */
 export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessController" | "artifactPreprocessor" | "artifactScanner" | "channelTargetResolver" | "conversationReplay">;

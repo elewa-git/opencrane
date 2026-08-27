@@ -292,37 +292,6 @@ artifactScanner:
       cpu: 2000m
       memory: 1536Mi
 
-# -- Managed runtime-plane chart. It creates no long-lived workload: only the dedicated namespace,
-# connector-scoped identity, and default-deny policy used by controller-created managed Jobs.
-managedAgentRuntimePlane:
-  managedAgentRuntime:
-    # Empty derives `<release>-managed-runtime`; it must differ from the personal and server planes.
-    namespace: ""
-    # Empty binds destinations to the umbrella release namespace.
-    serverNamespace: ""
-    serviceAccountName: managed-agent-runtime-default
-    quota:
-      pods: "20"
-      jobs: "20"
-      secrets: "20"
-      requests:
-        cpu: "2"
-        memory: 4Gi
-      limits:
-        cpu: "20"
-        memory: 20Gi
-    egress:
-      runtimePodComponent: agent-runtime
-      channelProxyComponent: channel-proxy
-      artifactNamespace: ""
-      artifactServiceComponent: artifact-service
-      memoryGatewayComponent: opencrane-server
-      litellmComponent: litellm
-      serverInternalPort: 8081
-      channelProxyPort: 8080
-      artifactServicePort: 8080
-      litellmPort: 4000
-
 # -- Personal and managed runtime workload controller. Disabled until immutable runtime image
 # digests and exact Kubernetes API Service CIDRs are supplied; enabling it never starts a Job directly.
 agentController:
@@ -357,12 +326,10 @@ agentController:
   # implementation-defined, so portable installs should supply both the Service and endpoint paths.
   kubernetesApiServerEndpointCidrs: []
   kubernetesApiServerEndpointPort: 443
-  # -- Aggregate ceiling for the dedicated runtime namespace. Per-Job admission fixes the shape;
-  # this quota limits how many conforming Jobs a compromised controller can consume concurrently.
+  # -- Aggregate ceiling for each warm runtime namespace. The Deployment keeps one fixed Pod pool.
   runtimeQuota:
-    pods: 20
-    jobs: 20
-    secrets: 20
+    pods: 6
+    deployments: 1
     requests:
       cpu: "2"
       memory: 4Gi
@@ -376,17 +343,10 @@ agentController:
       repository: ghcr.io/elewa-git/opencrane-agent-runtime
       digest: ""
       pullPolicy: IfNotPresent
-    runtimeStreamUrl: ""
     # -- Runtime-only in-cluster LiteLLM endpoint. The default is this silo's Service FQDN so the
     #    runtime NetworkPolicy can allow precisely that workload and no arbitrary external model URL.
     litellmBaseUrl: ""
-    serviceAccountName: agent-runtime-default
-    projectedTokenTtlSeconds: 600
     scratchSize: 1Gi
-    activeDeadlineSeconds: 3600
-    # -- Delete the terminal Job/Pod immediately after its assignment-bound active deadline so
-    # runtime-local emptyDir scratch cannot persist beyond durable authority.
-    ttlSecondsAfterFinished: 0
     resources:
       requests:
         cpu: 100m
@@ -397,9 +357,12 @@ agentController:
   # -- Helm-owned generic Pods used once by an AgentRun and then deleted. Each pool keeps 2-5
   # already-started Pods; changing these fields changes the fixed deployment profile, not a run.
   warmRuntime:
+    # -- Empty derives `<release>-managed-runtime`; it must differ from personal and server namespaces.
+    managedNamespace: ""
     replicas: 2
     serviceAccountName: warm-runtime
     tokenAudience: opencrane-warm-runtime
+    projectedTokenTtlSeconds: 600
     bindingPort: 8090
     genericIdleSeconds: 900
     genericProfile: generic

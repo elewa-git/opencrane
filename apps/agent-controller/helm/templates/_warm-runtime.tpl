@@ -6,7 +6,7 @@
 {{- fail "agentController.warmRuntime.replicas must be between 2 and 5" -}}
 {{- end -}}
 {{- $personalNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
-{{- $managedNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") .Values.managedAgentRuntimePlane.managedAgentRuntime.namespace -}}
+{{- $managedNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $warm.managedNamespace -}}
 {{- $image := printf "%s@%s" .Values.agentController.runtimeProfile.image.repository .Values.agentController.runtimeProfile.image.digest -}}
 {{- $serverUrl := default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) .Values.agentController.openCraneInternalUrl -}}
 {{- $litellmUrl := printf "http://%s-litellm.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.litellm.service.port -}}
@@ -93,7 +93,7 @@ spec:
               - serviceAccountToken:
                   path: warm.token
                   audience: {{ $warm.tokenAudience }}
-                  expirationSeconds: {{ $.Values.agentController.runtimeProfile.projectedTokenTtlSeconds }}
+                  expirationSeconds: {{ $warm.projectedTokenTtlSeconds }}
         - name: scratch
           emptyDir: { sizeLimit: {{ $.Values.agentController.runtimeProfile.scratchSize }} }
 ---
@@ -186,6 +186,14 @@ spec:
   egress:
     - toEndpoints:
         - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
+    - toEndpoints:
+        - matchLabels:
             k8s:io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
             k8s:app.kubernetes.io/component: opencrane-server
       toPorts:
@@ -211,6 +219,14 @@ spec:
         - ports:
             - { port: {{ $warm.bindingPort | quote }}, protocol: TCP }
   egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: {{ $.Release.Namespace }}

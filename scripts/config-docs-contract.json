@@ -24,7 +24,6 @@
         { "path": "artifactService", "owner": "apps/artifact-service/helm" },
         { "path": "artifactPreprocessor", "owner": "apps/artifact-preprocessor/helm" },
         { "path": "artifactScanner", "owner": "apps/artifact-scanner/helm" },
-        { "path": "managedAgentRuntimePlane", "owner": "apps/managed-agent-runtime/helm" },
         { "path": "agentController", "owner": "apps/agent-controller/helm" },
         { "path": "clustertenantManager", "owner": "apps/opencrane/helm" },
         { "path": "litellm", "owner": "apps/_infra/litellm/helm" },

@@ -3,10 +3,9 @@ import type { PrismaClient } from "@prisma/client";
 
 import { _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKey } from "@opencrane/backend/server/gateways/model-routing";
 import { _RegisterInternalAgentRuntimeStream } from "@opencrane/backend/server/infra/agent-runtime-stream";
-import { PrismaAgentRunWarmRuntimeUnitOfWork, PrismaWarmRuntimeBindingAuthority, __CreateAgentRunWorkflowControllerRouter, __CreateWarmRuntimeBindingRouter, type AttemptModelKeyIssuerWithRevocation, type AttemptModelKeyMintRequest, type MintedAttemptModelKey } from "@opencrane/backend/agents/execution/runs";
+import { PrismaAgentRunWarmRuntimeUnitOfWork, PrismaWarmRuntimeBindingUnitOfWork, __CreateAgentRunWorkflowControllerRouter, __CreateWarmRuntimeBindingRouter, type AttemptModelKeyIssuerWithRevocation, type AttemptModelKeyMintRequest, type MintedAttemptModelKey } from "@opencrane/backend/agents/execution/runs";
 import { PrismaSkillWorkloadUnitOfWork, _CreateSkillWorkloadExecutionAuthority, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
 import { __CreateProductionRuntimeDispatchAuthority } from "@opencrane/backend/agents/execution/protocol";
-import { PrismaRuntimeBootstrapExchange, __CreateRuntimeBootstrapRouter } from "@opencrane/backend/server/iam/authorization";
 import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS } from "@opencrane/backend/conversations/projection";
 import { _CreateConversationReplayRepository, PrismaAgentThreadParentDeliveryUnitOfWork, __CreateAgentThreadParentDeliveryRouter, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
 import { PrismaChannelTargetAuthorityUnitOfWork } from "@opencrane/backend/server/agents/channel-targets";
@@ -136,12 +135,12 @@ function _CreateSkillWorkloadRuntimeComposition(prisma: PrismaClient, tokenRevie
 /**
  * Bind the personal and managed runtime protocol to one shared workload reviewer.
  *
- * Bootstrap and streaming must apply the same plane boundary. The durable dispatch authority stays
- * here because it owns the server-side interpretation of runtime candidates, never the runtime Job.
+ * Streaming applies the same plane boundary. The durable dispatch authority stays here because it
+ * owns the server-side interpretation of runtime candidates, never the runtime Pod.
  *
  * Every router here shares the one runtime reviewer, which is the point: whatever a running agent
- * sends the server — a bootstrap claim, a stream candidate, a generated file, or an Agent-thread
- * delivery to a parent group message — is admitted against the same two runtime namespaces. The
+ * sends the server — a stream candidate, a generated file, or an Agent-thread delivery to a parent
+ * group message — is admitted against the same two runtime namespaces. The
  * authorities behind them are built here rather than inside those libraries because they need this
  * process's Prisma client and logger, and because none of them may be reachable from a browser router.
  *
@@ -149,7 +148,7 @@ function _CreateSkillWorkloadRuntimeComposition(prisma: PrismaClient, tokenRevie
  * @param config - Frozen command time-to-live and recovery settings.
  * @param namespaces - Validated server, personal-runtime, and managed-runtime identity planes.
  * @param tokenReviewer - Reviewer constrained to the two runtime identity planes.
- * @returns The runtime bootstrap, stream, conversation-file output, and Agent-thread parent-delivery routers.
+ * @returns The runtime stream, conversation-file output, and Agent-thread parent-delivery routers.
  */
 function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateRuntimeTokenReviewer>, warmTokenReviewer: ReturnType<typeof _CreateWarmRuntimeTokenReviewer>): RuntimeProtocolComposition
 {
@@ -159,14 +158,7 @@ function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: Interna
 		commandTtlMilliseconds: config.commandTtlMilliseconds,
 	});
 	return {
-		warmRuntimeBinding: __CreateWarmRuntimeBindingRouter({ tokenReviewer: warmTokenReviewer, authority: new PrismaWarmRuntimeBindingAuthority(prisma, { assignmentTtlMilliseconds: config.assignmentTtlMilliseconds, issueAttemptModelKey: _IssueAttemptModelKey }), logger: _log }),
-		runtimeBootstrap: __CreateRuntimeBootstrapRouter({
-			tokenReviewer,
-			runtimeNamespaces: [namespaces.personalRuntimeNamespace, namespaces.managedRuntimeNamespace],
-			repository: new PrismaRuntimeBootstrapExchange(prisma),
-			clock: { nowEpochMs: function _nowEpochMs() { return Date.now(); } },
-			logger: _log,
-		}),
+		warmRuntimeBinding: __CreateWarmRuntimeBindingRouter({ tokenReviewer: warmTokenReviewer, authority: new PrismaWarmRuntimeBindingUnitOfWork(prisma, { assignmentTtlMilliseconds: config.assignmentTtlMilliseconds, issueAttemptModelKey: _IssueAttemptModelKey }), logger: _log }),
 		runtimeStream: _RegisterInternalAgentRuntimeStream({
 			tokenReviewer,
 			authority: runtimeDispatchAuthority,

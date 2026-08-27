@@ -238,9 +238,9 @@ for auxiliary_namespace in "${EXPECTED_AUX_NAMESPACES[@]}"; do
       "${RELEASE}-artifacts")
         assert_auxiliary_namespace_owner "$auxiliary_namespace" deployment "${RELEASE}-artifact-service" 'app\.kubernetes\.io/instance' "$RELEASE" ;;
       "${RELEASE}-runtime")
-        assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount agent-runtime-default 'app\.kubernetes\.io/instance' "$RELEASE" ;;
+        assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount warm-runtime 'app\.kubernetes\.io/component' warm-runtime ;;
       "${RELEASE}-managed-runtime")
-        assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount managed-agent-runtime-default 'app\.kubernetes\.io/component' managed-agent-runtime ;;
+        assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount warm-runtime 'app\.kubernetes\.io/component' warm-runtime ;;
       "${RELEASE}-artifact-preprocessing")
         assert_auxiliary_namespace_owner "$auxiliary_namespace" deployment "${RELEASE}-artifact-preprocessor" 'app\.kubernetes\.io/instance' "$RELEASE" ;;
       "${RELEASE}-skill-authoring")

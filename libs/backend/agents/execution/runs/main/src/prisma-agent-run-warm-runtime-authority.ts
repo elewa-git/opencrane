@@ -3,7 +3,7 @@ import { AgentRunState, AgentRunTerminalReason, Prisma, WarmRuntimeReservationSt
 import type { AgentRunWarmRuntimeActivationCommand, AgentRunWarmRuntimeControllerAuthority, AgentRunWarmRuntimeDeletionCommand, AgentRunWarmRuntimeReadinessCommand, AgentRunWarmRuntimeReservationCommand, AgentRunWorkflowControllerRecord, AgentRunWorkflowObservation, AgentRunTaskInput } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
-import type { AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-workflow-controller-authority.types";
+import type { AgentRunWarmRuntimePersistenceRepository, AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-workflow-controller-authority.types";
 import { __AgentRunWorkflowBootstrapClaimDigest, __AgentRunWorkflowBootstrapReferenceForTask, __AgentRunWorkflowRuntimeIdentity, __CanCreateOrObserveAgentRunWorkflowTask, __CurrentAgentRunWorkflowTask, PrismaAgentRunWorkflowTaskReadRepository } from "./prisma-agent-run-workflow-task-read-repository";
 
 /** Retries expected unique and serializable conflicts during concurrent reservations. */
@@ -13,7 +13,7 @@ const _SERIALIZABLE_ATTEMPTS = 3;
 type AgentRunWorkflowTaskRow = NonNullable<Awaited<ReturnType<PrismaAgentRunWorkflowTaskReadRepository["read"]>>>;
 
 /** Implements warm reservation transitions inside one caller-owned transaction. */
-class PrismaAgentRunWarmRuntimeRepository
+class PrismaAgentRunWarmRuntimeRepository implements AgentRunWarmRuntimePersistenceRepository
 {
 	/** Reads and writes through the transaction that owns the lifecycle decision. */
 	private readonly transaction: Prisma.TransactionClient;
@@ -27,7 +27,7 @@ class PrismaAgentRunWarmRuntimeRepository
 	{
 		this.transaction = transaction;
 		this.options = options;
-		this.taskReader = new PrismaAgentRunWorkflowTaskReadRepository(transaction);
+		this.taskReader = new PrismaAgentRunWorkflowTaskReadRepository(this.transaction);
 	}
 
 	/** Reloads server-approved facts and accepts a matching warm reservation on replay. */

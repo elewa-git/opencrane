@@ -51,7 +51,7 @@ does not grant permission to use a run.
 - `PrismaAgentRunRetryUnitOfWork` starts the next attempt after checking the current terminal state.
 - `PrismaAgentRunWarmRuntimeUnitOfWork` reserves a warm Pod and records activation, readiness,
   deletion, and workflow completion.
-- `PrismaWarmRuntimeBindingAuthority` binds the reviewed warm Pod to its saved reservation and returns
+- `PrismaWarmRuntimeBindingUnitOfWork` binds the reviewed warm Pod to its saved reservation and returns
   the short-lived model key in memory.
 - `__CreateWarmRuntimeBindingRouter` exposes the private warm-Pod binding route.
 - `__CreateAgentRunWorkflowControllerRouter` exposes the private controller operations used by the

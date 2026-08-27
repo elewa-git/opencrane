@@ -4,13 +4,11 @@
 
 ## What it owns
 
-The agent controller is the sole OpenCrane process allowed to create personal- and managed-agent
-workloads in a customer **silo**. Each silo has a server namespace plus separate runtime namespaces
-for untrusted personal-agent and connector-scoped managed-agent Jobs. The controller has no inbound
-listener. Durable workflow tasks ask OpenCrane for the current run authority, create a suspended Job
-only in the namespace bound to that workload profile, and report the Job's Kubernetes-issued
-identity back to OpenCrane. A separate durable claim then lets the task release that exact Job and
-register the unique first Pod.
+The agent controller owns the fixed personal and managed warm pools in a customer **silo**. Each pool
+is a Helm-owned Deployment in its own restricted namespace. The controller has no inbound listener.
+An Absurd task asks OpenCrane for one saved run claim, finds a ready generic Pod, activates only that
+Pod, and binds it to one run attempt. The Pod is discarded after use and its Deployment restores the
+spare.
 
 The same process also projects governed skill workloads into the authoring and tool-runner
 namespaces. Those Jobs are created suspended and their UID is committed to the durable skill record.
@@ -42,28 +40,26 @@ itself from becoming general Kubernetes workload launchers. OpenCrane decides *w
 only projects that decision into the restricted runtime namespace named by the selected profile's RoleBinding.
 
 ```
- OpenCrane internal API ........ durable run attempt + named profile
+ OpenCrane internal API ........ durable run claim + named warm profile
              │  outbound claim
              ▼
  ┌──────────────────────────────────┐
  │ agent-controller  ◄── HERE        │  one per silo; no listener
  └──────────────┬───────────────────┘
-                │ exact create, conditional release, exact Pod list
+                │ exact Pod read, profile activation, and discard
                 ▼
- Helm-owned personal or managed runtime floor → suspended agent-runtime Job
-                │ Job UID        │ first Pod UID
-                └────────────────┴───────► OpenCrane run authority
+ Helm-owned personal or managed Deployment → one-use claimed Pod
+                                              │ exact Pod UID
+                                              └──────► OpenCrane run authority
 ```
 
 **In this flow:** [OpenCrane server](../opencrane/README.md) ·
 [controller library](../../libs/backend/agents/runtime/controller/README.md) ·
 [agent runtime](../agent-runtime/README.md)
 
-Invariant: this app can never make an unassigned runtime executable. A fail-closed Kubernetes
-admission policy accepts only the pinned, suspended Job shape from this controller identity; every
-existing resource must match exactly, and unsuspension tests the assigned Job UID,
-its latest resource version, and its still-suspended state in one operation. It never chooses among
-multiple Pods, and OpenCrane registers the first Pod before bootstrap exchange can succeed.
+Invariant: this app can never assign one warm Pod twice. OpenCrane saves the reservation first, the
+controller activates only the exact ready Pod returned by that claim, and Kubernetes admission lets
+the controller change only the fixed generic profile into its fixed personal or managed profile.
 
 ## Public surface
 
@@ -76,14 +72,12 @@ skill and OCI MCP reconciliation loops, and drains workflows and telemetry on `S
 The process uses the same release-local OpenCrane database credential as the server so Absurd can
 claim tasks from the queues where server transactions admitted them. Its NetworkPolicy permits only
 the release-local CNPG pooler on TCP 5432. It exposes no Service, Ingress, public route or health
-listener. Its Kubernetes roles exist only in the dedicated workload namespaces and grant
-`get/create/patch` for Jobs, `list` for Pods, and `create` (only) for Secrets — the per-attempt
-LiteLLM key Secret, owned by its Job so it is garbage-collected with it. It cannot create policy,
-read/update/delete Secrets, mutate Pods, or get, replace, delete, or watch any Pod. The minted
-virtual key rides the claim response and is written straight into the Secret; the controller never
-holds the LiteLLM master key. Its ServiceAccount and Deployment remain in the server namespace, so
-compromising a runtime Pod does not place it beside the controller identity. The projected bootstrap
-reference is an opaque lookup key, not a credential, and the controller never logs it.
+listener. Its runtime roles permit only reading and activating the fixed warm Deployments and Pods.
+Separate roles keep `get/create/patch` for governed skill, OCI MCP, and artifact Jobs and `list` for
+their Pods. It cannot create policy or read workload credentials. The one-attempt model key stays in
+the Absurd claim response and is sent directly to the claimed Pod. The controller never receives the
+LiteLLM master key. Its ServiceAccount and Deployment remain in the server namespace, so
+compromising a runtime Pod does not place it beside the controller identity.
 
 ## Dependency direction
 
@@ -105,11 +99,9 @@ outside the app root.
 - `AGENT_CONTROLLER_REQUEST_TIMEOUT_MS` — 1–60 second hard cap independently applied to every
   OpenCrane and Kubernetes request; default 10 seconds. Process shutdown cancels either request type
   immediately, and each retry receives a fresh deadline.
-- `AGENT_CONTROLLER_PROFILES_JSON` — bounded immutable runtime profiles keyed by authority-owned name;
-  every profile carries its sole runtime namespace, identity class, and ServiceAccount. A claim whose
-  namespace does not exactly equal its selected profile is refused before Kubernetes I/O. The
-  personal profile name must be a DNS label and cannot use the reserved managed profile name
-  `managed-default`.
+- `AGENT_CONTROLLER_WARM_PROFILES_JSON` — the exact personal and managed Deployment, namespace,
+  ServiceAccount, image, and profile labels. A claim that names anything else is refused before
+  Kubernetes I/O.
 - `AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON` — exactly one immutable authoring and tool-runner
   profile, each using a class-bound ServiceAccount, projected-token audience, and fixed bootstrap
   file paths and same-silo acknowledgement URL.
@@ -123,15 +115,10 @@ The image runs as an unprivileged numeric user with a read-only root filesystem.
 separate projected tokens: one for OpenCrane and one for the Kubernetes API. Structured logs go to
 standard output, and OpenTelemetry spans cover every HTTP and Kubernetes input/output call. Enabling
 the chart requires immutable SHA-256 digests for both the controller and runtime images. Helm derives
-one personal `<release>-runtime` namespace by default. Its managed profile reads the namespace and
-ServiceAccount from the composer-owned `managedAgentRuntimePlane.managedAgentRuntime` values; that
-runtime plane owns the namespace and its network policy, while this chart grants the controller KSA only exact Job, Pod-list, and model-key
-Secret-create permissions there. Each profile namespace receives a separate fail-closed admission
-policy with its own ServiceAccount grammar and projected-token audience. The personal plane applies the Pod Security Standards restricted profile,
-an aggregate Job/Pod/CPU/memory quota, default-deny networking, fixed OpenCrane, same-silo LiteLLM,
-and DNS egress, and a ValidatingAdmissionPolicy that rejects sidecars, probes, unpinned images,
-privileged or host access, durable mounts, arbitrary Secret projections, and any update other than
-the exact one-time `suspend: true` to `false` release. Enabling this controller requires Kubernetes
+one personal `<release>-runtime` namespace and one managed `<release>-managed-runtime` namespace by
+default. This chart owns both namespaces, their warm Deployments, quotas, default-deny networking,
+fixed OpenCrane, same-silo LiteLLM and DNS egress, and the admission rule that permits only the exact
+generic-to-claimed profile change or discard. Enabling this controller requires Kubernetes
 1.30 or newer, where that admission API is stable, and the release-local LiteLLM mode: a shared
 LiteLLM endpoint is rejected because this runtime boundary deliberately permits only the same-silo
 Service and port.
@@ -142,12 +129,12 @@ Kubernetes intentionally leaves the ordering of that translation implementation-
 
 Runtime-profile CPU values use whole cores or millicores such as `1` or `100m`; memory values use
 `Ki`, `Mi`, or `Gi`. Helm rejects malformed or non-string quantities before it can install an
-admission policy that would deny every runtime Job.
+warm pool that cannot start.
 
-The k3d conformance gate executes both sides of this boundary on a real API server: invalid Job
-variants must be denied by admission, and a one-shot controller-identity Job must receive 200/204
-from the internal claim route using its projected token. That second probe proves server-side
-TokenReview remains reachable through the exact API-server egress rules.
+The k3d conformance gate executes both sides of this boundary on a real API server: invalid warm Pod
+changes must be denied, and the controller identity must receive the expected response from the
+internal claim route. That second probe proves server-side TokenReview remains reachable through the
+exact API-server egress rules.
 
 ## See also
 

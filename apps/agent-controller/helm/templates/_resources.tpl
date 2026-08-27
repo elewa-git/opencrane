@@ -55,32 +55,19 @@
 {{- $controllerName := "agent-controller" -}}
 {{- $runtimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
 {{- $runtimeNamespaceLabel := include "opencrane.agentController.runtimeNamespaceLabelValue" . -}}
-{{- $runtimeServiceAccount := default "agent-runtime-default" .Values.agentController.runtimeProfile.serviceAccountName -}}
-{{- if or (gt (len $runtimeServiceAccount) 63) (not (regexMatch "^agent-runtime-[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $runtimeServiceAccount)) -}}
-{{- fail "agentController.runtimeProfile.serviceAccountName must be a bounded agent-runtime-* identity" -}}
-{{- end -}}
-{{- $managedRuntimeValues := .Values.managedAgentRuntimePlane.managedAgentRuntime -}}
-{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedRuntimeValues.namespace -}}
+{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") .Values.agentController.warmRuntime.managedNamespace -}}
 {{- if or (gt (len $managedRuntimeNamespace) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $managedRuntimeNamespace)) (eq $managedRuntimeNamespace .Release.Namespace) (eq $managedRuntimeNamespace $runtimeNamespace) -}}
-{{- fail "managedAgentRuntimePlane.managedAgentRuntime.namespace must be a valid namespace distinct from the server and personal runtime namespaces" -}}
-{{- end -}}
-{{- $managedRuntimeServiceAccount := default "managed-agent-runtime-default" $managedRuntimeValues.serviceAccountName -}}
-{{- if or (gt (len $managedRuntimeServiceAccount) 63) (not (regexMatch "^managed-agent-runtime-[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $managedRuntimeServiceAccount)) -}}
-{{- fail "managedAgentRuntimePlane.managedAgentRuntime.serviceAccountName must be a bounded managed-agent-runtime-* identity" -}}
+{{- fail "agentController.warmRuntime.managedNamespace must be a valid namespace distinct from the server and personal runtime namespaces" -}}
 {{- end -}}
 {{- $openCraneInternalUrl := default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) .Values.agentController.openCraneInternalUrl -}}
-{{- $runtimeStreamUrl := default (printf "%s/api/internal/agent-runtime" $openCraneInternalUrl) .Values.agentController.runtimeProfile.runtimeStreamUrl -}}
 {{- $skillBootstrapUrl := printf "http://%s-opencrane-server.%s.svc.cluster.local:%v/api/internal/agent-runtime" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
-{{- $runtimeLiteLlmUrl := printf "http://%s-litellm.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.litellm.service.port -}}
 {{- $runtimeImage := printf "%s@%s" .Values.agentController.runtimeProfile.image.repository .Values.agentController.runtimeProfile.image.digest -}}
 {{- $personalRuntimeProfileName := .Values.agentController.runtimeProfile.name -}}
 {{- $managedRuntimeProfileName := "managed-default" -}}
 {{- if or (gt (len $personalRuntimeProfileName) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $personalRuntimeProfileName)) (eq $personalRuntimeProfileName $managedRuntimeProfileName) -}}
 {{- fail "agentController.runtimeProfile.name must be a valid personal profile name distinct from reserved managed-default" -}}
 {{- end -}}
-{{- $personalProfile := dict "name" $personalRuntimeProfileName "namespace" $runtimeNamespace "serviceAccountName" $runtimeServiceAccount "identityProfile" "personal" "tokenAudience" "opencrane-agent-runtime" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources -}}
-{{- $managedProfile := dict "name" $managedRuntimeProfileName "namespace" $managedRuntimeNamespace "serviceAccountName" $managedRuntimeServiceAccount "identityProfile" "managed" "tokenAudience" "opencrane-managed-agent-runtime" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources -}}
-{{- $runtimeProfiles := list $personalProfile $managedProfile -}}
+{{- $runtimeNamespaces := list $runtimeNamespace $managedRuntimeNamespace -}}
 {{- $authoringImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.authoring.image.repository .Values.agentController.skillWorkloadProfiles.authoring.image.digest -}}
 {{- $toolRunnerImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.toolRunner.image.repository .Values.agentController.skillWorkloadProfiles.toolRunner.image.digest -}}
 {{- $authoringNamespace := (index .Values "opencrane-skill-authoring").skillAuthoring.namespace -}}
@@ -102,10 +89,11 @@
 {{- $skillAdmissionName := printf "%s-skill-workloads" (include "opencrane.agentController.admissionName" .) -}}
 {{- $mcpAdmissionName := printf "%s-mcp-executor" (include "opencrane.agentController.admissionName" .) | trunc 63 | trimSuffix "-" -}}
 {{- $artifactAdmissionName := printf "%s-artifact-preprocessor" (include "opencrane.agentController.admissionName" .) | trunc 63 | trimSuffix "-" -}}
+{{- range $namespace := $runtimeNamespaces }}
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: {{ $runtimeNamespace }}
+  name: {{ $namespace }}
   labels:
     opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
     pod-security.kubernetes.io/enforce: restricted
@@ -115,6 +103,7 @@ metadata:
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/warn-version: latest
 ---
+{{- end }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -125,87 +114,34 @@ metadata:
     app.kubernetes.io/component: agent-controller
 automountServiceAccountToken: false
 ---
-# Runtime Jobs share one bounded identity class in their dedicated namespace. No RoleBinding grants
-# this ServiceAccount Kubernetes API access.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: {{ $runtimeServiceAccount }}
-  namespace: {{ $runtimeNamespace }}
-  labels:
-    {{- include "opencrane.labels" $ | nindent 4 }}
-    app.kubernetes.io/component: agent-runtime
-automountServiceAccountToken: false
----
-# Aggregate namespace ceiling: a compromised controller identity may request only the one admitted
-# Job shape, and this quota bounds how many of those shapes can consume cluster resources at once.
+{{- range $namespace := $runtimeNamespaces }}
+# Keep each fixed warm pool inside its deployment, Pod, CPU, and memory budget.
 apiVersion: v1
 kind: ResourceQuota
 metadata:
-  name: {{ include "opencrane.fullname" . }}-agent-runtime
-  namespace: {{ $runtimeNamespace }}
+  name: {{ include "opencrane.fullname" $ }}-warm-runtime
+  namespace: {{ $namespace }}
   labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
-    app.kubernetes.io/component: agent-runtime
+    {{- include "opencrane.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: warm-runtime
 spec:
   hard:
-    pods: {{ .Values.agentController.runtimeQuota.pods | quote }}
-    count/jobs.batch: {{ .Values.agentController.runtimeQuota.jobs | quote }}
-    count/secrets: {{ .Values.agentController.runtimeQuota.secrets | quote }}
-    requests.cpu: {{ .Values.agentController.runtimeQuota.requests.cpu | quote }}
-    requests.memory: {{ .Values.agentController.runtimeQuota.requests.memory | quote }}
-    limits.cpu: {{ .Values.agentController.runtimeQuota.limits.cpu | quote }}
-    limits.memory: {{ .Values.agentController.runtimeQuota.limits.memory | quote }}
----
-{{- range $profile := $runtimeProfiles }}
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ $controllerName }}
-  namespace: {{ $profile.namespace }}
-  labels:
-    {{- include "opencrane.labels" $ | nindent 4 }}
-    app.kubernetes.io/component: agent-controller
-rules:
-  - apiGroups: ["batch"]
-    resources: ["jobs"]
-    verbs: ["get", "create", "patch"]
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["list"]
-  # Attempt-scoped LiteLLM key Secrets are created (never read, updated, or deleted) in this dedicated
-  # runtime namespace. Each Secret is owned by its suspended Job and garbage-collected with it, so no
-  # get/list/update/delete verb is required.
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["create"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: {{ $controllerName }}
-  namespace: {{ $profile.namespace }}
-  labels:
-    {{- include "opencrane.labels" $ | nindent 4 }}
-    app.kubernetes.io/component: agent-controller
-subjects:
-  - kind: ServiceAccount
-    name: {{ $controllerName }}
-    namespace: {{ $.Release.Namespace }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: {{ $controllerName }}
+    pods: {{ $.Values.agentController.runtimeQuota.pods | quote }}
+    count/deployments.apps: {{ $.Values.agentController.runtimeQuota.deployments | quote }}
+    requests.cpu: {{ $.Values.agentController.runtimeQuota.requests.cpu | quote }}
+    requests.memory: {{ $.Values.agentController.runtimeQuota.requests.memory | quote }}
+    limits.cpu: {{ $.Values.agentController.runtimeQuota.limits.cpu | quote }}
+    limits.memory: {{ $.Values.agentController.runtimeQuota.limits.memory | quote }}
 ---
 {{- end }}
 # Cleanup is server-owned: the controller cannot delete or terminate active runtime Jobs.
 # The server performs UID-preconditioned deletion only after claiming the durable cleanup outbox row.
-{{- range $profile := $runtimeProfiles }}
+{{- range $namespace := $runtimeNamespaces }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "opencrane.fullname" $ }}-runtime-cleanup
-  namespace: {{ $profile.namespace }}
+  namespace: {{ $namespace }}
   labels:
     {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: opencrane-server
@@ -218,7 +154,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "opencrane.fullname" $ }}-runtime-cleanup
-  namespace: {{ $profile.namespace }}
+  namespace: {{ $namespace }}
   labels:
     {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: opencrane-server
@@ -607,10 +543,6 @@ spec:
               value: {{ .Values.clustertenantManager.workflows.pollIntervalMilliseconds | quote }}
             - name: AGENT_CONTROLLER_POLL_INTERVAL_MS
               value: {{ .Values.agentController.pollIntervalMs | quote }}
-            {{- $personalProfileEnv := dict "namespace" $runtimeNamespace "identityProfile" "personal" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "serverNamespace" .Release.Namespace "serviceAccountName" $runtimeServiceAccount "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources }}
-            {{- $managedProfileEnv := dict "namespace" $managedRuntimeNamespace "identityProfile" "managed" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "serverNamespace" .Release.Namespace "serviceAccountName" $managedRuntimeServiceAccount "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources }}
-            - name: AGENT_CONTROLLER_PROFILES_JSON
-              value: {{ dict .Values.agentController.runtimeProfile.name $personalProfileEnv $managedRuntimeProfileName $managedProfileEnv | toJson | quote }}
             {{- $warm := .Values.agentController.warmRuntime }}
             {{- $personalWarmProfile := dict "namespace" $runtimeNamespace "deploymentName" (printf "%s-personal-warm" (include "opencrane.fullname" .)) "serviceAccountName" $warm.serviceAccountName "genericProfile" $warm.genericProfile "claimedProfile" $warm.personalProfile "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "bindingPort" $warm.bindingPort "genericIdleSeconds" $warm.genericIdleSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "resources" .Values.agentController.runtimeProfile.resources }}
             {{- $managedWarmProfile := dict "namespace" $managedRuntimeNamespace "deploymentName" (printf "%s-managed-warm" (include "opencrane.fullname" .)) "serviceAccountName" $warm.serviceAccountName "genericProfile" $warm.genericProfile "claimedProfile" $warm.managedProfile "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "bindingPort" $warm.bindingPort "genericIdleSeconds" $warm.genericIdleSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "resources" .Values.agentController.runtimeProfile.resources }}
@@ -747,58 +679,59 @@ spec:
           port: {{ .Values.observability.otel.collector.otlpPort }}
     {{- end }}
 ---
-# Namespace-wide default deny. Only the fixed runtime policy below admits traffic for runtime Pods.
+{{- range $namespace := $runtimeNamespaces }}
+# Deny namespace traffic unless the fixed warm-runtime policy admits it.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "opencrane.fullname" . }}-agent-runtime-default-deny
-  namespace: {{ $runtimeNamespace }}
+  name: {{ include "opencrane.fullname" $ }}-warm-runtime-default-deny
+  namespace: {{ $namespace }}
   labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
-    app.kubernetes.io/component: agent-runtime
+    {{- include "opencrane.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: warm-runtime
 spec:
   podSelector: {}
   policyTypes: ["Ingress", "Egress"]
   ingress: []
   egress: []
 ---
-# Every runtime gets this egress allow-list as its minimum, and nothing may widen it; the controller has no NetworkPolicy permissions.
+# Warm Pods can resolve the two same-silo services they use and reach nothing else.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "opencrane.fullname" . }}-agent-runtime-egress
-  namespace: {{ $runtimeNamespace }}
+  name: {{ include "opencrane.fullname" $ }}-warm-runtime-egress
+  namespace: {{ $namespace }}
   labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
-    app.kubernetes.io/component: agent-runtime
+    {{- include "opencrane.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: warm-runtime
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/component: agent-runtime
+      app.kubernetes.io/component: warm-runtime
   policyTypes: ["Egress"]
   egress:
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
           podSelector:
             matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              {{- include "opencrane.selectorLabels" $ | nindent 14 }}
               app.kubernetes.io/component: opencrane-server
       ports:
         - protocol: TCP
-          port: {{ .Values.clustertenantManager.service.internalPort }}
+          port: {{ $.Values.clustertenantManager.service.internalPort }}
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
           podSelector:
             matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              {{- include "opencrane.selectorLabels" $ | nindent 14 }}
               app.kubernetes.io/component: litellm
       ports:
         - protocol: TCP
-          port: {{ .Values.litellm.service.port }}
+          port: {{ $.Values.litellm.service.port }}
     - to:
         - namespaceSelector:
             matchLabels:
@@ -812,6 +745,7 @@ spec:
         - protocol: TCP
           port: 53
 ---
+{{- end }}
 # The MCP controller may create only the fixed two-container envelope. The uploaded image is the
 # sole dynamic field and must remain an immutable registry digest; it receives no projected token.
 apiVersion: admissionregistration.k8s.io/v1
@@ -1152,240 +1086,6 @@ spec:
           operator: In
           values: ["skill-authoring", "tool-runner"]
 ---
-# The policy is cluster-scoped only because Kubernetes admission policies are cluster-scoped. Its
-# namespace selector binds it to one exact profile namespace; no controller RBAC covers a namespace
-# outside the two configured runtime profiles.
-{{- range $profile := $runtimeProfiles }}
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: {{ printf "%s-%s" (include "opencrane.agentController.admissionName" $) $profile.name | trunc 63 | trimSuffix "-" }}
-  labels:
-    {{- include "opencrane.labels" $ | nindent 4 }}
-    app.kubernetes.io/component: agent-runtime
-spec:
-  failurePolicy: Fail
-  matchConstraints:
-    matchPolicy: Exact
-    resourceRules:
-      - apiGroups: ["batch"]
-        apiVersions: ["v1"]
-        operations: ["CREATE", "UPDATE"]
-        resources: ["jobs"]
-        scope: "Namespaced"
-    namespaceSelector:
-      matchLabels:
-        kubernetes.io/metadata.name: {{ $profile.namespace | quote }}
-  validations:
-    - expression: >-
-        request.userInfo.username == {{ $controllerUsername | toJson }}
-      message: only this release's controller ServiceAccount may create or release runtime Jobs
-    - expression: >-
-        object.metadata.name.matches('^agent-runtime-a[1-9][0-9]*-[a-f0-9]{24}$') &&
-        object.metadata.namespace == {{ $profile.namespace | toJson }} &&
-        object.metadata.labels.size() >= 3 && object.metadata.labels.size() <= 7 &&
-        object.metadata.labels.all(k, k in [
-          'app.kubernetes.io/name', 'app.kubernetes.io/component', 'opencrane.ai/runtime-attempt',
-          'batch.kubernetes.io/controller-uid', 'batch.kubernetes.io/job-name',
-          'controller-uid', 'job-name']) &&
-        object.metadata.labels['app.kubernetes.io/name'] == 'opencrane-agent-runtime' &&
-        object.metadata.labels['app.kubernetes.io/component'] == 'agent-runtime' &&
-        object.metadata.labels['opencrane.ai/runtime-attempt'] == object.metadata.name &&
-        (!('batch.kubernetes.io/job-name' in object.metadata.labels) || object.metadata.labels['batch.kubernetes.io/job-name'] == object.metadata.name) &&
-        (!('job-name' in object.metadata.labels) || object.metadata.labels['job-name'] == object.metadata.name) &&
-        (!has(object.metadata.uid) || !('batch.kubernetes.io/controller-uid' in object.metadata.labels) || object.metadata.labels['batch.kubernetes.io/controller-uid'] == string(object.metadata.uid)) &&
-        (!has(object.metadata.uid) || !('controller-uid' in object.metadata.labels) || object.metadata.labels['controller-uid'] == string(object.metadata.uid)) &&
-        object.metadata.annotations.size() == 5 &&
-        object.metadata.annotations['opencrane.ai/run-id'].size() > 0 &&
-        object.metadata.annotations['opencrane.ai/run-attempt'].matches('^[1-9][0-9]*$') &&
-        object.metadata.annotations['opencrane.ai/agent-service-id'].size() > 0 &&
-        object.metadata.annotations['opencrane.ai/agent-revision-id'].size() > 0 &&
-        object.metadata.annotations['opencrane.ai/silo-id'].size() > 0 &&
-        (!has(object.metadata.ownerReferences) || object.metadata.ownerReferences.size() == 0) &&
-        (!has(object.metadata.finalizers) || object.metadata.finalizers.size() == 0) &&
-        (!has(object.metadata.generateName) || object.metadata.generateName == '')
-      message: runtime Job identity must exactly match one durable OpenCrane attempt
-    - expression: >-
-        object.spec.parallelism == 1 && object.spec.completions == 1 && object.spec.backoffLimit == 0 &&
-        object.spec.activeDeadlineSeconds > 0 &&
-        object.spec.activeDeadlineSeconds <= {{ $profile.activeDeadlineSeconds }} &&
-        object.spec.ttlSecondsAfterFinished == {{ $profile.ttlSecondsAfterFinished }} &&
-        (!has(object.spec.manualSelector) || object.spec.manualSelector == false) &&
-        (!has(object.spec.completionMode) || object.spec.completionMode == 'NonIndexed') &&
-        !has(object.spec.podFailurePolicy) && !has(object.spec.successPolicy) &&
-        !has(object.spec.backoffLimitPerIndex) && !has(object.spec.maxFailedIndexes) &&
-        object.spec.template.metadata.labels.size() >= 3 && object.spec.template.metadata.labels.size() <= 7 &&
-        object.spec.template.metadata.labels.all(k, k in [
-          'app.kubernetes.io/name', 'app.kubernetes.io/component', 'opencrane.ai/runtime-attempt',
-          'batch.kubernetes.io/controller-uid', 'batch.kubernetes.io/job-name',
-          'controller-uid', 'job-name']) &&
-        object.spec.template.metadata.labels['app.kubernetes.io/name'] == object.metadata.labels['app.kubernetes.io/name'] &&
-        object.spec.template.metadata.labels['app.kubernetes.io/component'] == object.metadata.labels['app.kubernetes.io/component'] &&
-        object.spec.template.metadata.labels['opencrane.ai/runtime-attempt'] == object.metadata.labels['opencrane.ai/runtime-attempt'] &&
-        (!('batch.kubernetes.io/job-name' in object.spec.template.metadata.labels) || object.spec.template.metadata.labels['batch.kubernetes.io/job-name'] == object.metadata.name) &&
-        (!('job-name' in object.spec.template.metadata.labels) || object.spec.template.metadata.labels['job-name'] == object.metadata.name) &&
-        (!has(object.metadata.uid) || !('batch.kubernetes.io/controller-uid' in object.spec.template.metadata.labels) || object.spec.template.metadata.labels['batch.kubernetes.io/controller-uid'] == string(object.metadata.uid)) &&
-        (!has(object.metadata.uid) || !('controller-uid' in object.spec.template.metadata.labels) || object.spec.template.metadata.labels['controller-uid'] == string(object.metadata.uid)) &&
-        object.spec.template.metadata.annotations.size() == 6 &&
-        object.spec.template.metadata.annotations['opencrane.ai/run-id'] == object.metadata.annotations['opencrane.ai/run-id'] &&
-        object.spec.template.metadata.annotations['opencrane.ai/run-attempt'] == object.metadata.annotations['opencrane.ai/run-attempt'] &&
-        object.spec.template.metadata.annotations['opencrane.ai/agent-service-id'] == object.metadata.annotations['opencrane.ai/agent-service-id'] &&
-        object.spec.template.metadata.annotations['opencrane.ai/agent-revision-id'] == object.metadata.annotations['opencrane.ai/agent-revision-id'] &&
-        object.spec.template.metadata.annotations['opencrane.ai/silo-id'] == object.metadata.annotations['opencrane.ai/silo-id'] &&
-        object.spec.template.metadata.annotations['opencrane.ai/bootstrap-reference'].matches('^bootstrap-v1_[a-f0-9]{64}$') &&
-        (!has(object.spec.template.metadata.name) || object.spec.template.metadata.name == '') &&
-        (!has(object.spec.template.metadata.generateName) || object.spec.template.metadata.generateName == '') &&
-        (!has(object.spec.template.metadata.namespace) || object.spec.template.metadata.namespace == '') &&
-        (!has(object.spec.template.metadata.ownerReferences) || object.spec.template.metadata.ownerReferences.size() == 0) &&
-        (!has(object.spec.template.metadata.finalizers) || object.spec.template.metadata.finalizers.size() == 0)
-      message: runtime Job lifecycle and authority annotations must match the immutable release profile
-    - expression: >-
-        !has(object.spec.selector) ||
-        ((!has(object.spec.selector.matchExpressions) || object.spec.selector.matchExpressions.size() == 0) &&
-          has(object.spec.selector.matchLabels) && object.spec.selector.matchLabels.size() > 0 &&
-          object.spec.selector.matchLabels.size() <= 4 &&
-          object.spec.selector.matchLabels.all(k, k in [
-            'batch.kubernetes.io/controller-uid', 'batch.kubernetes.io/job-name',
-            'controller-uid', 'job-name']) &&
-          (!('batch.kubernetes.io/job-name' in object.spec.selector.matchLabels) || object.spec.selector.matchLabels['batch.kubernetes.io/job-name'] == object.metadata.name) &&
-          (!('job-name' in object.spec.selector.matchLabels) || object.spec.selector.matchLabels['job-name'] == object.metadata.name) &&
-          (!has(object.metadata.uid) || !('batch.kubernetes.io/controller-uid' in object.spec.selector.matchLabels) || object.spec.selector.matchLabels['batch.kubernetes.io/controller-uid'] == string(object.metadata.uid)) &&
-          (!has(object.metadata.uid) || !('controller-uid' in object.spec.selector.matchLabels) || object.spec.selector.matchLabels['controller-uid'] == string(object.metadata.uid)))
-      message: only Kubernetes-owned Job selector labels may be defaulted by the API server
-    - expression: >-
-        object.spec.template.spec.serviceAccountName == {{ $profile.serviceAccountName | toJson }} &&
-        (!has(object.spec.template.spec.serviceAccount) || object.spec.template.spec.serviceAccount == {{ $profile.serviceAccountName | toJson }}) &&
-        object.spec.template.spec.automountServiceAccountToken == false &&
-        object.spec.template.spec.enableServiceLinks == false &&
-        object.spec.template.spec.restartPolicy == 'Never' &&
-        object.spec.template.spec.securityContext.runAsNonRoot == true &&
-        object.spec.template.spec.securityContext.runAsUser == 65532 &&
-        object.spec.template.spec.securityContext.runAsGroup == 65532 &&
-        object.spec.template.spec.securityContext.fsGroup == 65532 &&
-        object.spec.template.spec.securityContext.fsGroupChangePolicy == 'OnRootMismatch' &&
-        object.spec.template.spec.securityContext.seccompProfile.type == 'RuntimeDefault' &&
-        (!has(object.spec.template.spec.hostNetwork) || object.spec.template.spec.hostNetwork == false) &&
-        (!has(object.spec.template.spec.hostPID) || object.spec.template.spec.hostPID == false) &&
-        (!has(object.spec.template.spec.hostIPC) || object.spec.template.spec.hostIPC == false) &&
-        (!has(object.spec.template.spec.shareProcessNamespace) || object.spec.template.spec.shareProcessNamespace == false) &&
-        (!has(object.spec.template.spec.nodeName) || object.spec.template.spec.nodeName == '') &&
-        (!has(object.spec.template.spec.nodeSelector) || object.spec.template.spec.nodeSelector.size() == 0) &&
-        !has(object.spec.template.spec.affinity) &&
-        (!has(object.spec.template.spec.tolerations) || object.spec.template.spec.tolerations.size() == 0) &&
-        !has(object.spec.template.spec.hostAliases) &&
-        (!has(object.spec.template.spec.imagePullSecrets) || object.spec.template.spec.imagePullSecrets.size() == 0) &&
-        !has(object.spec.template.spec.runtimeClassName) && !has(object.spec.template.spec.priorityClassName) &&
-        (!has(object.spec.template.spec.schedulerName) || object.spec.template.spec.schedulerName == 'default-scheduler') &&
-        object.spec.template.spec.terminationGracePeriodSeconds == 0 &&
-        (!has(object.spec.template.spec.dnsPolicy) || object.spec.template.spec.dnsPolicy == 'ClusterFirst') &&
-        !has(object.spec.template.spec.dnsConfig)
-      message: runtime Pod identity and host isolation must match the restricted profile
-    - expression: >-
-        object.spec.template.spec.containers.size() == 1 &&
-        (!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.size() == 0) &&
-        (!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0) &&
-        object.spec.template.spec.containers[0].name == 'agent-runtime' &&
-        object.spec.template.spec.containers[0].image == {{ $profile.image | toJson }} &&
-        object.spec.template.spec.containers[0].imagePullPolicy == {{ $profile.imagePullPolicy | toJson }} &&
-        object.spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation == false &&
-        object.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem == true &&
-        object.spec.template.spec.containers[0].securityContext.capabilities.drop == ['ALL'] &&
-        (!has(object.spec.template.spec.containers[0].command) || object.spec.template.spec.containers[0].command.size() == 0) &&
-        (!has(object.spec.template.spec.containers[0].args) || object.spec.template.spec.containers[0].args.size() == 0) &&
-        !has(object.spec.template.spec.containers[0].lifecycle) &&
-        !has(object.spec.template.spec.containers[0].livenessProbe) &&
-        !has(object.spec.template.spec.containers[0].readinessProbe) &&
-        !has(object.spec.template.spec.containers[0].startupProbe) &&
-        !has(object.spec.template.spec.containers[0].envFrom) &&
-        (!has(object.spec.template.spec.containers[0].ports) || object.spec.template.spec.containers[0].ports.size() == 0) &&
-        object.spec.template.spec.containers[0].resources.requests.size() == 2 &&
-        object.spec.template.spec.containers[0].resources.limits.size() == 2 &&
-        quantity(object.spec.template.spec.containers[0].resources.requests.cpu).compareTo(quantity({{ $profile.resources.requests.cpu | toJson }})) == 0 &&
-        quantity(object.spec.template.spec.containers[0].resources.requests.memory).compareTo(quantity({{ $profile.resources.requests.memory | toJson }})) == 0 &&
-        quantity(object.spec.template.spec.containers[0].resources.limits.cpu).compareTo(quantity({{ $profile.resources.limits.cpu | toJson }})) == 0 &&
-        quantity(object.spec.template.spec.containers[0].resources.limits.memory).compareTo(quantity({{ $profile.resources.limits.memory | toJson }})) == 0
-      message: runtime image, container shape, security and resources are immutable
-    - expression: >-
-        object.spec.template.spec.containers[0].env.size() == 5 &&
-        object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_RUNTIME_STREAM_URL' &&
-        object.spec.template.spec.containers[0].env[0].value == {{ $profile.runtimeStreamUrl | toJson }} &&
-        object.spec.template.spec.containers[0].env[1].name == 'OPENCRANE_RUNTIME_TOKEN_PATH' &&
-        object.spec.template.spec.containers[0].env[1].value == '/var/run/opencrane/tokens/runtime.token' &&
-        object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_RUNTIME_LITELLM_BASE_URL' &&
-        object.spec.template.spec.containers[0].env[2].value == {{ $profile.litellmBaseUrl | toJson }} &&
-        object.spec.template.spec.containers[0].env[3].name == 'OPENCRANE_RUNTIME_LITELLM_KEY_PATH' &&
-        object.spec.template.spec.containers[0].env[3].value == '/var/run/opencrane/litellm/key' &&
-        object.spec.template.spec.containers[0].env[4].name == 'POD_UID' &&
-        object.spec.template.spec.containers[0].env[4].valueFrom.fieldRef.fieldPath == 'metadata.uid' &&
-        object.spec.template.spec.containers[0].volumeMounts.size() == 4 &&
-        object.spec.template.spec.containers[0].volumeMounts[0].name == 'runtime-token' &&
-        object.spec.template.spec.containers[0].volumeMounts[0].mountPath == '/var/run/opencrane/tokens' &&
-        object.spec.template.spec.containers[0].volumeMounts[0].readOnly == true &&
-        object.spec.template.spec.containers[0].volumeMounts[1].name == 'runtime-bootstrap' &&
-        object.spec.template.spec.containers[0].volumeMounts[1].mountPath == '/var/run/opencrane/bootstrap' &&
-        object.spec.template.spec.containers[0].volumeMounts[1].readOnly == true &&
-        object.spec.template.spec.containers[0].volumeMounts[2].name == 'litellm-key' &&
-        object.spec.template.spec.containers[0].volumeMounts[2].mountPath == '/var/run/opencrane/litellm' &&
-        object.spec.template.spec.containers[0].volumeMounts[2].readOnly == true &&
-        object.spec.template.spec.containers[0].volumeMounts[3].name == 'scratch' &&
-        object.spec.template.spec.containers[0].volumeMounts[3].mountPath == '/tmp' &&
-        (!has(object.spec.template.spec.containers[0].volumeMounts[3].readOnly) || object.spec.template.spec.containers[0].volumeMounts[3].readOnly == false)
-      message: runtime environment and mounts must contain only the fixed stream, virtual-key, and scratch interfaces
-    - expression: >-
-        object.spec.template.spec.volumes.size() == 4 &&
-        object.spec.template.spec.volumes[0].name == 'runtime-token' &&
-        object.spec.template.spec.volumes[0].projected.defaultMode == 288 &&
-        object.spec.template.spec.volumes[0].projected.sources.size() == 1 &&
-        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.path == 'runtime.token' &&
-        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == {{ $profile.tokenAudience | toJson }} &&
-        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.expirationSeconds == {{ $profile.projectedTokenTtlSeconds }} &&
-        object.spec.template.spec.volumes[1].name == 'runtime-bootstrap' &&
-        object.spec.template.spec.volumes[1].downwardAPI.defaultMode == 288 &&
-        object.spec.template.spec.volumes[1].downwardAPI.items.size() == 1 &&
-        object.spec.template.spec.volumes[1].downwardAPI.items[0].path == 'reference' &&
-        object.spec.template.spec.volumes[1].downwardAPI.items[0].fieldRef.fieldPath == "metadata.annotations['opencrane.ai/bootstrap-reference']" &&
-        object.spec.template.spec.volumes[2].name == 'litellm-key' &&
-        object.spec.template.spec.volumes[2].projected.defaultMode == 288 &&
-        object.spec.template.spec.volumes[2].projected.sources.size() == 1 &&
-         object.spec.template.spec.volumes[2].projected.sources[0].secret.name.matches('^litellm-key-[a-f0-9]{32}$') &&
-        object.spec.template.spec.volumes[2].projected.sources[0].secret.items.size() == 1 &&
-        object.spec.template.spec.volumes[2].projected.sources[0].secret.items[0].key == 'key' &&
-        object.spec.template.spec.volumes[2].projected.sources[0].secret.items[0].path == 'key' &&
-        object.spec.template.spec.volumes[3].name == 'scratch' &&
-        (!has(object.spec.template.spec.volumes[3].emptyDir.medium) || object.spec.template.spec.volumes[3].emptyDir.medium == '') &&
-        quantity(object.spec.template.spec.volumes[3].emptyDir.sizeLimit).compareTo(quantity({{ $profile.scratchSize | toJson }})) == 0
-      message: runtime volumes must be exactly one audience token, one reference, one virtual key, and bounded scratch
-    - expression: >-
-        (request.operation == 'CREATE' && object.spec.suspend == true) ||
-        (request.operation == 'UPDATE' && oldObject.spec.suspend == true && object.spec.suspend == false &&
-          object.metadata.name == oldObject.metadata.name &&
-          object.metadata.labels == oldObject.metadata.labels &&
-          object.metadata.annotations == oldObject.metadata.annotations &&
-          object.spec.parallelism == oldObject.spec.parallelism &&
-          object.spec.completions == oldObject.spec.completions &&
-          object.spec.backoffLimit == oldObject.spec.backoffLimit &&
-          object.spec.activeDeadlineSeconds > 0 &&
-          object.spec.activeDeadlineSeconds <= oldObject.spec.activeDeadlineSeconds &&
-          object.spec.ttlSecondsAfterFinished == oldObject.spec.ttlSecondsAfterFinished &&
-          object.spec.template == oldObject.spec.template)
-      message: create must be suspended and update may only release the exact stored Job once
----
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicyBinding
-metadata:
-  name: {{ printf "%s-%s" (include "opencrane.agentController.admissionName" $) $profile.name | trunc 63 | trimSuffix "-" }}
-  labels:
-    {{- include "opencrane.labels" $ | nindent 4 }}
-    app.kubernetes.io/component: agent-runtime
-spec:
-  policyName: {{ printf "%s-%s" (include "opencrane.agentController.admissionName" $) $profile.name | trunc 63 | trimSuffix "-" }}
-  validationActions: [Deny]
-  matchResources:
-    namespaceSelector:
-      matchLabels:
-        kubernetes.io/metadata.name: {{ $profile.namespace | quote }}
----
-{{- end }}
 {{ include "opencrane.agentController.warmRuntimeResources" . }}
 {{- end }}
 {{- end }}

@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import type { Es256PublicJwk } from "@opencrane/models/authorization";
 
-import { PrismaWarmRuntimeBindingAuthority } from "../prisma-warm-runtime-binding-authority";
+import { PrismaWarmRuntimeBindingUnitOfWork } from "../prisma-warm-runtime-binding-authority";
 
 /** Generate valid public proof evidence for one runtime process. */
 function _Proof(): { readonly proofPublicJwk: Es256PublicJwk; readonly proofKeyThumbprint: string }
@@ -50,14 +50,14 @@ function _Database(events: string[])
 	return { prisma: client as unknown as PrismaClient, reservation, assignment, bootstrap, get proofKey() { return proofKey; } };
 }
 
-describe("PrismaWarmRuntimeBindingAuthority", function _Suite()
+describe("PrismaWarmRuntimeBindingUnitOfWork", function _Suite()
 {
 	it("commits the exact Pod and proof key before it mints the transient model key", async function _BindsAfterReadiness()
 	{
 		const events: string[] = [];
 		const database = _Database(events);
 		const issueAttemptModelKey = Object.assign(vi.fn(async function _Issue() { events.push("mint"); return { key: "sk-attempt" }; }), { revokeAttemptKey: vi.fn() });
-		const authority = new PrismaWarmRuntimeBindingAuthority(database.prisma, { assignmentTtlMilliseconds: 60_000, issueAttemptModelKey });
+		const authority = new PrismaWarmRuntimeBindingUnitOfWork(database.prisma, { assignmentTtlMilliseconds: 60_000, issueAttemptModelKey });
 		const proof = _Proof();
 
 		await expect(authority.bind({ subject: "system:serviceaccount:runtime:warm-runtime", namespace: "runtime", serviceAccountName: WARM_RUNTIME_SERVICE_ACCOUNT_NAME, podUid: "pod-1" }, proof)).resolves.toMatchObject({ outcome: "bound", attemptModelKey: "sk-attempt" });
@@ -73,7 +73,7 @@ describe("PrismaWarmRuntimeBindingAuthority", function _Suite()
 	{
 		const database = _Database([]);
 		const issueAttemptModelKey = Object.assign(vi.fn(async function _Issue() { return { key: "sk-attempt" }; }), { revokeAttemptKey: vi.fn() });
-		const authority = new PrismaWarmRuntimeBindingAuthority(database.prisma, { assignmentTtlMilliseconds: 60_000, issueAttemptModelKey });
+		const authority = new PrismaWarmRuntimeBindingUnitOfWork(database.prisma, { assignmentTtlMilliseconds: 60_000, issueAttemptModelKey });
 		const identity = { subject: "system:serviceaccount:runtime:warm-runtime", namespace: "runtime", serviceAccountName: WARM_RUNTIME_SERVICE_ACCOUNT_NAME, podUid: "pod-1" };
 		const first = _Proof();
 
@@ -88,7 +88,7 @@ describe("PrismaWarmRuntimeBindingAuthority", function _Suite()
 		const database = _Database([]);
 		const transaction = vi.spyOn(database.prisma, "$transaction");
 		const issueAttemptModelKey = Object.assign(vi.fn(), { revokeAttemptKey: vi.fn() });
-		const authority = new PrismaWarmRuntimeBindingAuthority(database.prisma, { assignmentTtlMilliseconds: 60_000, issueAttemptModelKey });
+		const authority = new PrismaWarmRuntimeBindingUnitOfWork(database.prisma, { assignmentTtlMilliseconds: 60_000, issueAttemptModelKey });
 		const proof = _Proof();
 
 		await expect(authority.bind({ subject: "system:serviceaccount:runtime:warm-runtime", namespace: "runtime", serviceAccountName: WARM_RUNTIME_SERVICE_ACCOUNT_NAME, podUid: "pod-1" }, { ...proof, proofKeyThumbprint: "wrong" })).resolves.toEqual({ outcome: "conflict" });

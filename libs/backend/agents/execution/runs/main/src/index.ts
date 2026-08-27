@@ -20,7 +20,7 @@ export * from "./attempt-model-key.types";
 export { __CreateAgentRunWorkflowControllerRouter } from "./agent-run-workflow-controller.router";
 export type { AgentRunWorkflowControllerIdentity, AgentRunWorkflowControllerRouterDependencies, AgentRunWorkflowControllerRouterLogger, AgentRunWorkflowControllerTokenReviewer } from "./agent-run-workflow-controller.router.types";
 export { PrismaAgentRunWarmRuntimeUnitOfWork } from "./prisma-agent-run-warm-runtime-authority";
-export { PrismaWarmRuntimeBindingAuthority } from "./prisma-warm-runtime-binding-authority";
+export { PrismaWarmRuntimeBindingUnitOfWork } from "./prisma-warm-runtime-binding-authority";
 export { __CreateWarmRuntimeBindingRouter } from "./warm-runtime-binding.router";
 export type { WarmRuntimeBindingAuthority, WarmRuntimeBindingIdentity, WarmRuntimeBindingLogger, WarmRuntimeBindingResult, WarmRuntimeBindingRouterDependencies, WarmRuntimeBindingSubmission, WarmRuntimeBindingTokenReviewer } from "./warm-runtime-binding.types";
 export type { AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-workflow-controller-authority.types";

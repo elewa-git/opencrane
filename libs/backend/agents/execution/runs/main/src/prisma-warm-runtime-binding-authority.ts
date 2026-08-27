@@ -17,7 +17,7 @@ type WarmRuntimeDatabaseBindingResult =
 	| { readonly outcome: "bound" | "idempotent"; readonly receiptId: string; readonly runId: string; readonly attempt: number; readonly siloId: string; readonly modelRoute: unknown; readonly budgetPolicy: unknown };
 
 /** Implements the one-use warm Pod proof-key exchange. */
-export class PrismaWarmRuntimeBindingAuthority implements WarmRuntimeBindingAuthority
+export class PrismaWarmRuntimeBindingUnitOfWork implements WarmRuntimeBindingAuthority
 {
 	/** Opens short transactions against product authority. */
 	private readonly prisma: PrismaClient;

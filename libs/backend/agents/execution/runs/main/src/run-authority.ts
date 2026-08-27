@@ -1,7 +1,6 @@
 import type { AgentRun } from "@opencrane/models/agents";
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
 
-import type { AgentRunAuthorityRepository, RunWorkloadAssignment, RunWorkloadAssignmentDecision, RunWorkloadAssignmentExpectation, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
+import type { AgentRunAuthorityRepository, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
 
 /**
  * Returns whether a run has finished in a way a person can ask to run again.
@@ -20,89 +19,6 @@ function _isRetryable(run: AgentRun): boolean
  * `job` is the only value, because `agent-controller` creates a Kubernetes Job per attempt and
  * nothing else. Anything else is a claim about a workload the server never created.
  */
-function _isWorkloadKind(value: string): value is "job"
-{
-	return value === "job";
-}
-
-/**
- * Returns whether an audience and a ServiceAccount name come from the same runtime class.
- *
- * A personal audience needs an `agent-runtime-` ServiceAccount and a managed audience needs a
- * `managed-agent-runtime-` one. Checking the pair rather than each field on its own is what stops a
- * managed audience being presented with a personal runtime's ServiceAccount, which is a case the
- * "binds workload identity to the exact run and attempt" test asserts is denied.
- *
- * @see ___IsManagedAgentRuntimeServiceAccountName in `@opencrane/contracts` for why the two name
- * prefixes are kept from overlapping.
- */
-function _isRuntimeWorkloadIdentity(audience: string, serviceAccountName: string): boolean
-{
-	return (audience === AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE && ___IsAgentRuntimeServiceAccountName(serviceAccountName))
-		|| (audience === MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE && ___IsManagedAgentRuntimeServiceAccountName(serviceAccountName));
-}
-
-/**
- * Decides whether a runtime Pod's claim really is the run attempt the server created it for.
- *
- * You hit this when a runtime Pod presents its assignment and asks for execution material. Its
- * projected ServiceAccount token proves only that it is *some* runtime of that class; it says
- * nothing about which run, attempt, or user it may act for. So every coordinate is compared against
- * what the server already knows, and a Pod left over from an earlier attempt, or from another user's
- * run in the same namespace, is refused.
- *
- * Called by: nothing in production yet — today only `__tests__/run-authority.test.ts` exercises it,
- * and the package barrel does not re-export it, so the admission caller is still to be wired up.
- *
- * @param assignment - What the runtime Pod claims. Untrusted.
- * @param expectation - What the server knows, plus its current time. Trusted.
- * @returns `trusted` only when every field matches and the assignment has not expired — then, and
- * only then, may the caller hand over execution material. Any `denied` reason means hand over
- * nothing; the reason is for logs and tests and should not be told to the Pod, which would otherwise
- * learn which field to change.
- * @see RunWorkloadAssignmentDecision for what each denial reason means.
- * @see docs/adr/0008-target-agent-contracts-and-workload-identity.md, "Workload identity", which
- * requires the Pod UID, namespace, ServiceAccount, audience, run, attempt, revision, silo, and
- * subject to all be bound before execution material is released.
- */
-export function __ValidateRunWorkloadAssignment(assignment: RunWorkloadAssignment, expectation: RunWorkloadAssignmentExpectation): RunWorkloadAssignmentDecision
-{
-	// 1. Reject blank ids, non-positive attempts, and unknown workload kinds first. Two sides can
-	// agree on a blank string or a nonsense attempt, so equality alone would let that through.
-	const requiredIdentifiers = [assignment.runId, assignment.agentServiceId, assignment.agentRevisionId, assignment.siloId, assignment.audience, assignment.subjectId, assignment.serviceAccountName, assignment.namespace, assignment.workloadUid, assignment.podUid, expectation.runId, expectation.agentServiceId, expectation.agentRevisionId, expectation.siloId, expectation.audience, expectation.subjectId, expectation.serviceAccountName, expectation.namespace, expectation.workloadUid, expectation.podUid];
-	if (requiredIdentifiers.some(value => !value.trim())) return { outcome: "denied", reason: "invalid_assignment" };
-	if (!Number.isSafeInteger(assignment.attempt) || assignment.attempt < 1 || !Number.isSafeInteger(expectation.attempt) || expectation.attempt < 1)
-	{
-		return { outcome: "denied", reason: "invalid_attempt" };
-	}
-	if (!_isWorkloadKind(assignment.workloadKind) || !_isWorkloadKind(expectation.workloadKind)) return { outcome: "denied", reason: "invalid_workload_kind" };
-
-	// 2. Compare each field the server knows independently, one at a time, so the denial names the
-	// field that disagreed. All of them must match: any single mismatch means this Pod is not the one
-	// this attempt was created for.
-	if (assignment.runId !== expectation.runId) return { outcome: "denied", reason: "run_mismatch" };
-	if (assignment.agentServiceId !== expectation.agentServiceId) return { outcome: "denied", reason: "agent_service_mismatch" };
-	if (assignment.attempt !== expectation.attempt) return { outcome: "denied", reason: "attempt_mismatch" };
-	if (assignment.agentRevisionId !== expectation.agentRevisionId) return { outcome: "denied", reason: "revision_mismatch" };
-	if (assignment.siloId !== expectation.siloId) return { outcome: "denied", reason: "silo_mismatch" };
-	if (!_isRuntimeWorkloadIdentity(assignment.audience, assignment.serviceAccountName) || !_isRuntimeWorkloadIdentity(expectation.audience, expectation.serviceAccountName) || assignment.audience !== expectation.audience) return { outcome: "denied", reason: "projected_token_audience_mismatch" };
-	if (assignment.subjectId !== expectation.subjectId) return { outcome: "denied", reason: "subject_mismatch" };
-	if (assignment.serviceAccountName !== expectation.serviceAccountName) return { outcome: "denied", reason: "service_account_mismatch" };
-	if (assignment.namespace !== expectation.namespace) return { outcome: "denied", reason: "namespace_mismatch" };
-	if (assignment.workloadKind !== expectation.workloadKind) return { outcome: "denied", reason: "workload_kind_mismatch" };
-	if (assignment.workloadUid !== expectation.workloadUid) return { outcome: "denied", reason: "workload_uid_mismatch" };
-	if (assignment.podUid !== expectation.podUid) return { outcome: "denied", reason: "pod_mismatch" };
-
-	// 3. Refuse an assignment whose moment has passed, even though everything matched, so a claim
-	// captured earlier cannot be replayed later. An unusable clock value is treated as expired too,
-	// which fails closed rather than trusting an assignment whose age cannot be worked out.
-	if (!Number.isSafeInteger(expectation.nowEpochMs) || !Number.isSafeInteger(assignment.expiresAtEpochMs) || expectation.nowEpochMs >= assignment.expiresAtEpochMs)
-	{
-		return { outcome: "denied", reason: "expired" };
-	}
-	return { outcome: "trusted" };
-}
-
 /**
  * Runs a failed or cancelled run again, by raising its attempt counter instead of creating a second
  * run.

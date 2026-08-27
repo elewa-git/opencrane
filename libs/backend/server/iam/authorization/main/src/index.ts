@@ -9,8 +9,8 @@ export type { ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantSpec
 export { PrismaManagedAuthorizationGrantRepository } from "./prisma-managed-authorization-grant-repository";
 export { AuthorizationMembershipOutcomes } from "./effective-access.types";
 export type { AuthorizationGrantRepository, AuthorizationMembershipAuthority, AuthorizationMembershipDecision, AuthorizationMembershipRequirement, EffectiveCapabilityEvidence, ResolveEffectiveAccessCommand, ResolveEffectiveAccessResult } from "./effective-access.types";
-export { __ConsumeRuntimeBootstrap, __ExecuteCapabilityAction } from "./runtime-proof";
-export type { ActionReplayMode, CapabilityActionExecutor, CapabilityActionFailureResult, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, CapabilityActionReservationResult, CapabilityActionSuccessResult, ConsumeRuntimeBootstrapResult, ExecuteCapabilityActionCommand, ExecuteCapabilityActionResult, RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult, RuntimeBootstrapExpectation, RuntimeBootstrapFailureReason, RuntimeBootstrapRepository } from "./runtime-proof.types";
+export { __ExecuteCapabilityAction } from "./runtime-proof";
+export type { ActionReplayMode, CapabilityActionExecutor, CapabilityActionFailureResult, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, CapabilityActionReservationResult, CapabilityActionSuccessResult, ExecuteCapabilityActionCommand, ExecuteCapabilityActionResult } from "./runtime-proof.types";
 export { __CancelPendingRunApprovalAuthority } from "./run-approval-cancellation";
 export type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApprovalAuthorityResult } from "./run-approval-cancellation.types";
 export { __DecideDeferredToolRequest, __DeferToolRequest, __ExpireDeferredToolApprovalBatch } from "./deferred-tool-approval";
@@ -34,10 +34,7 @@ export type { AdmitPreparingToolInvocation, ToolInvocationAdmissionResult, ToolI
 export { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle";
 export { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
 export type { ToolInvocationLifecycleInput } from "./tool-invocation-lifecycle.types";
-export { PrismaRuntimeAuthorityRepository } from "./prisma-runtime-authority";
+export { PrismaRuntimeAuthorityRepository, PrismaRuntimeAuthorityUnitOfWork } from "./prisma-runtime-authority";
 export { PrismaAuthorizationGrantRepository } from "./prisma-authorization-grants";
 export { PrismaShareAuthorizationRepository } from "./prisma-share-authorization-repository";
 export type { CreateOrFindShareAuthorizationGrantResult, CreateShareAuthorizationGrant, ShareAuthorizationGrant, ShareAuthorizationRepository, ShareCapabilityCatalogRevision } from "./share-authorization-repository.types";
-export { __CreateRuntimeBootstrapRouter } from "./runtime-bootstrap.router";
-export { PrismaRuntimeBootstrapExchange } from "./prisma-runtime-bootstrap-exchange";
-export type { RuntimeBootstrapClock, RuntimeBootstrapExchangeRecord, RuntimeBootstrapExchangeRepository, RuntimeBootstrapLogger, RuntimeBootstrapReviewedIdentity, RuntimeBootstrapRouterDependencies, RuntimeBootstrapSubmission, RuntimeBootstrapTokenReviewer } from "./runtime-bootstrap.types";

@@ -1,6 +1,6 @@
 # Runtime dependencies for the personal-agent runtime.
 #
-# `cryptography` — a maintained P-256 (ES256) key generator for the one-use bootstrap exchange. The
+# `cryptography` — a maintained P-256 (ES256) key generator for the one-use warm binding. The
 # runtime generates a per-run keypair and binds its public half; the
 # standard library has no elliptic-curve key generation.
 #

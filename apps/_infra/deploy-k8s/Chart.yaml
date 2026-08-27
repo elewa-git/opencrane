@@ -51,11 +51,6 @@ dependencies:
   - name: opencrane-agent-controller
     version: ">=0.0.0-0"
     repository: "file://../../agent-controller/helm"
-  - name: opencrane-managed-agent-runtime
-    alias: managedAgentRuntimePlane
-    version: ">=0.0.0-0"
-    repository: "file://../../managed-agent-runtime/helm"
-    condition: agentController.enabled
   - name: opencrane-skill-authoring
     version: ">=0.0.0-0"
     repository: "file://../../skill-authoring/helm"
