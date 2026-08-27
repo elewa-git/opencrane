@@ -1,3 +1,5 @@
 export { SkillAuthoringValidationTaskDeclaration, SkillAuthoringValidationTaskNames } from "./skill-authoring-validation-task.types";
+export { __ParseSkillAuthoringValidationCompletionLoadRequest, __ParseSkillAuthoringValidationCompletionRequest, __ParseSkillAuthoringValidationPodBindRequest, __ParseSkillAuthoringValidationTaskReceipt, __ParseSkillAuthoringValidationWorkloadBindRequest } from "./skill-authoring-validation-controller-http";
 export type { SkillAuthoringValidationTaskInput } from "./skill-authoring-validation-task.types";
 export type { SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerAuthority, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationPodBindCommand, SkillAuthoringValidationWorkloadBindCommand } from "./skill-authoring-validation-controller.types";
+export type { SkillAuthoringValidationCompletionLoadRequest, SkillAuthoringValidationCompletionRequest, SkillAuthoringValidationPodBindRequest, SkillAuthoringValidationWorkloadBindRequest } from "./skill-authoring-validation-controller-http.types";
