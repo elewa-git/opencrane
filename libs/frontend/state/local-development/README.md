@@ -44,7 +44,9 @@ one disposable state owner keeps cross-route projections coherent.
 - `__ResolveLocalDevelopmentArchetype()` applies a named command selection, then a browser-saved
   preference, then the Commander fallback.
 - `mockScenario=happy-path|slow|retry|reconnecting|failed-run|access-changed` selects one
-  deterministic development behaviour; unknown values fall back to `happy-path`.
+  deterministic development behaviour; unknown values fall back to `happy-path`. Retry preserves
+  the first failed mutation for an exact resubmission, reconnecting holds the first stream until the
+  existing reconnect action replaces it, and access-changed revokes the routed stream projection.
 
 ## Select an archetype
 

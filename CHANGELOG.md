@@ -29,8 +29,8 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 - **Frontend developers can now exercise onboarding and chat locally without a backend or
   infrastructure stack.** Plain `npm run serve:opencrane-ui` starts one coherent browser-only
   profile for persona approval, first chat, conversations, Agent-run progress, files, approvals,
-  and child Agent threads, with deterministic slow, retry, reconnect, failed-run, and access-change
-  scenarios plus Angular and native-API tripwires for missed live bindings. Build-time profile
+  and child Agent threads, with deterministic slow, retry, failed-run, stable manual-reconnect, and
+  routed access-revocation scenarios plus Angular and native-API tripwires for missed live bindings. Build-time profile
   replacement keeps those fixtures out of production and omits backend-owned routes locally. Local
   onboarding can follow the reviewed Commander, Catalyst, Anchor, or Analyst Guardian path. Plain
   serve enters deterministic onboarding, while named archetype scripts save the chosen fixture and

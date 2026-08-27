@@ -112,7 +112,9 @@ saved deterministic path; it does not reproduce backend persona scoring. Clear t
 storage to remove that preference. Mock workflow progress still resets on reload.
 
 Use `?mockScenario=slow`, `retry`, `reconnecting`, `failed-run`, or `access-changed` to exercise a
-deterministic non-happy path. `happy-path` is the default. Component-level variants remain
+deterministic non-happy path. Retry becomes visible after the first message submission, reconnecting
+waits for the existing **Reconnect now** action, and access-changed immediately purges the selected
+conversation. `happy-path` is the default. Component-level variants remain
 independently available through `npm run storybook:ui` when the routed UI and Playwright pass are not
 needed.
 
