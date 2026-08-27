@@ -3,21 +3,9 @@ import { ExternalActionClaimKind, ExternalActionRecoveryMode, McpTaskState, Pris
 import type { JsonValue } from "@opencrane/util";
 
 import { __DigestCanonicalJson } from "./canonical-json-digest";
-import { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle";
-import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents } from "./tool-invocation-lifecycle.types";
+import { _ToolInvocationClaimKindFromPersistence, _ToolInvocationCompletionEvent, _ToolInvocationIsMcpTaskOwned, _ToolInvocationPlan, _ToolInvocationPreparationPolicyIsFixed, _ToolInvocationRecoveryKeyIsValid, _ToolInvocationRecoveryModeFromPersistence, _ToolInvocationSafeFailureCode, _ToolInvocationStateFromPersistence } from "./tool-invocation-persistence-policy";
 import { ToolInvocationAdmissionOutcomes, ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolResultDeliveryOutcomes, type ToolInvocationAdmissionResult, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationTransactionRepository, type ToolInvocationTransitionResult, type ToolResultDeliveryPayload } from "./tool-invocation.types";
-
-/** Convert Prisma's ToolInvocationState values into this package's own state enum. */
-const _STATE_FROM_PRISMA: Readonly<Record<ToolInvocationState, ToolInvocationStates>> = {
-	[ToolInvocationState.Preparing]: ToolInvocationStates.Preparing,
-	[ToolInvocationState.AwaitingApproval]: ToolInvocationStates.AwaitingApproval,
-	[ToolInvocationState.Ready]: ToolInvocationStates.Ready,
-	[ToolInvocationState.Claimed]: ToolInvocationStates.Claimed,
-	[ToolInvocationState.Reconciling]: ToolInvocationStates.Reconciling,
-	[ToolInvocationState.Succeeded]: ToolInvocationStates.Succeeded,
-	[ToolInvocationState.Failed]: ToolInvocationStates.Failed,
-	[ToolInvocationState.RecoveryRequired]: ToolInvocationStates.RecoveryRequired,
-};
 
 /** Map our recovery modes onto Prisma's generated enum. */
 const _RECOVERY_TO_PRISMA: Readonly<Record<ExternalActionRecoveryModes, ExternalActionRecoveryMode>> = {
@@ -26,30 +14,16 @@ const _RECOVERY_TO_PRISMA: Readonly<Record<ExternalActionRecoveryModes, External
 	[ExternalActionRecoveryModes.Manual]: ExternalActionRecoveryMode.Manual,
 };
 
-/** Convert a stored recovery-mode name back into this package's enum. */
-const _RECOVERY_FROM_PRISMA: Readonly<Record<ExternalActionRecoveryMode, ExternalActionRecoveryModes>> = {
-	[ExternalActionRecoveryMode.ProviderIdempotency]: ExternalActionRecoveryModes.ProviderIdempotency,
-	[ExternalActionRecoveryMode.Reconciliation]: ExternalActionRecoveryModes.Reconciliation,
-	[ExternalActionRecoveryMode.Manual]: ExternalActionRecoveryModes.Manual,
-};
-
 /** Convert this package's claim-kind enum into the name stored in the database. */
 const _CLAIM_TO_PRISMA: Readonly<Record<ExternalActionClaimKinds, ExternalActionClaimKind>> = {
 	[ExternalActionClaimKinds.Dispatch]: ExternalActionClaimKind.Dispatch,
 	[ExternalActionClaimKinds.Reconcile]: ExternalActionClaimKind.Reconcile,
 };
 
-/** Smallest persistence row shape the row-to-record helper accepts. */
+/** Stored row shape accepted by lifecycle planning. */
 type ToolInvocationRow = Prisma.ToolInvocationGetPayload<Record<string, never>>;
 
-/** Map a persisted claim kind back to the dependency-light vocabulary. */
-function _claimKind(kind: ExternalActionClaimKind | null): ExternalActionClaimKinds | null
-{
-	if (kind === null) return null;
-	return kind === ExternalActionClaimKind.Dispatch ? ExternalActionClaimKinds.Dispatch : ExternalActionClaimKinds.Reconcile;
-}
-
-/** Convert one ToolInvocation row into ToolInvocationRecord, so Prisma's generated types stay in this file. */
+/** Convert one ToolInvocation row into the package record without leaking generated types. */
 function _record(row: ToolInvocationRow): ToolInvocationRecord
 {
 	return {
@@ -69,35 +43,20 @@ function _record(row: ToolInvocationRow): ToolInvocationRecord
 		effectiveArgumentsDigest: row.effectiveArgumentsDigest,
 		requestFingerprint: row.requestFingerprint,
 		approvalRequired: row.approvalRequired,
-		recoveryMode: _RECOVERY_FROM_PRISMA[row.recoveryMode],
+		recoveryMode: _ToolInvocationRecoveryModeFromPersistence(row.recoveryMode),
 		recoveryKey: row.recoveryKey,
-		state: _STATE_FROM_PRISMA[row.state],
+		state: _ToolInvocationStateFromPersistence(row.state),
 		preparationAttempt: row.preparationAttempt,
 		retryDeadlineAt: row.retryDeadlineAt,
 		nextPreparationAttemptAt: row.nextPreparationAttemptAt,
 		claimAttempt: row.claimAttempt,
-		claimKind: _claimKind(row.claimKind),
+		claimKind: _ToolInvocationClaimKindFromPersistence(row.claimKind),
 		claimFence: row.claimFence,
 		claimExpiresAt: row.claimExpiresAt,
 		result: row.result as unknown as JsonValue | null,
 		failureCode: row.failureCode,
 		revision: row.revision,
 	};
-}
-
-/** Validate the immutable provider recovery key contract before persistence. */
-function _recoveryKeyIsValid(intent: ToolInvocationIntent): boolean
-{
-	if (intent.recoveryMode === ExternalActionRecoveryModes.Manual) return intent.recoveryKey === null;
-	return typeof intent.recoveryKey === "string" && intent.recoveryKey.length > 0 && intent.recoveryKey.length <= 256;
-}
-
-/** Require every caller to use the one approved provider-free preparation policy. */
-function _isFixedPreparationPolicy(policy: ToolInvocationPreparationPolicy): boolean
-{
-	return policy.attemptLimit === TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit
-		&& policy.retryWindowMilliseconds === TOOL_INVOCATION_PREPARATION_POLICY.retryWindowMilliseconds
-		&& policy.retryDelayMilliseconds === TOOL_INVOCATION_PREPARATION_POLICY.retryDelayMilliseconds;
 }
 
 /** Return the exact persistence state owned by one claim kind. */
@@ -112,53 +71,26 @@ function _resultInput(result: JsonValue): Prisma.InputJsonValue | typeof Prisma.
 	return result === null ? Prisma.JsonNull : result as Prisma.InputJsonValue;
 }
 
-/** Restrict durable failure codes to bounded, non-secret machine categories. */
-function _safeFailureCode(failureCode: string): string
-{
-	return /^[a-z][a-z0-9_]{0,63}$/.test(failureCode) ? failureCode : "external_action_failed";
-}
-
-/** Distinguish the new task owner from legacy test rows that predate the nullable field. */
-function _isMcpTaskOwned(invocation: { readonly mcpTaskId?: string | null }): boolean
-{
-	return typeof invocation.mcpTaskId === "string";
-}
-
-/** Ask the lifecycle table which database change this row's state allows for this event. */
-function _plan(row: ToolInvocationRow, event: ToolInvocationLifecycleEvents, now: Date): ToolInvocationLifecycleActions
-{
-	return __PlanToolInvocationLifecycle({
-		state: _STATE_FROM_PRISMA[row.state],
-		event,
-		recoveryMode: _RECOVERY_FROM_PRISMA[row.recoveryMode],
-		claimKind: _claimKind(row.claimKind),
-		preparationAttempt: row.preparationAttempt,
-		preparationAttemptLimit: TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit,
-		withinPreparationDeadline: row.retryDeadlineAt.getTime() > now.getTime(),
-	});
-}
-
 /** Map a planner-owned action onto its sole durable target state. */
 function _targetState(action: ToolInvocationLifecycleActions): ToolInvocationState | null
 {
-	if (action === ToolInvocationLifecycleActions.MarkReady || action === ToolInvocationLifecycleActions.Approve || action === ToolInvocationLifecycleActions.Redispatch || action === ToolInvocationLifecycleActions.RedispatchIdempotently) return ToolInvocationState.Ready;
-	if (action === ToolInvocationLifecycleActions.AwaitApproval) return ToolInvocationState.AwaitingApproval;
-	if (action === ToolInvocationLifecycleActions.RetryPreparation) return ToolInvocationState.Preparing;
-	if (action === ToolInvocationLifecycleActions.ClaimDispatch) return ToolInvocationState.Claimed;
-	if (action === ToolInvocationLifecycleActions.BeginReconciliation || action === ToolInvocationLifecycleActions.ClaimReconciliation || action === ToolInvocationLifecycleActions.RetryReconciliation) return ToolInvocationState.Reconciling;
-	if (action === ToolInvocationLifecycleActions.Succeed) return ToolInvocationState.Succeeded;
-	if (action === ToolInvocationLifecycleActions.Fail) return ToolInvocationState.Failed;
-	if (action === ToolInvocationLifecycleActions.RequireManualRecovery) return ToolInvocationState.RecoveryRequired;
+	if (action === ToolInvocationLifecycleActions.MarkReady || action === ToolInvocationLifecycleActions.Approve || action === ToolInvocationLifecycleActions.Redispatch || action === ToolInvocationLifecycleActions.RedispatchIdempotently)
+		return ToolInvocationState.Ready;
+	if (action === ToolInvocationLifecycleActions.AwaitApproval)
+		return ToolInvocationState.AwaitingApproval;
+	if (action === ToolInvocationLifecycleActions.RetryPreparation)
+		return ToolInvocationState.Preparing;
+	if (action === ToolInvocationLifecycleActions.ClaimDispatch)
+		return ToolInvocationState.Claimed;
+	if (action === ToolInvocationLifecycleActions.BeginReconciliation || action === ToolInvocationLifecycleActions.ClaimReconciliation || action === ToolInvocationLifecycleActions.RetryReconciliation)
+		return ToolInvocationState.Reconciling;
+	if (action === ToolInvocationLifecycleActions.Succeed)
+		return ToolInvocationState.Succeeded;
+	if (action === ToolInvocationLifecycleActions.Fail)
+		return ToolInvocationState.Failed;
+	if (action === ToolInvocationLifecycleActions.RequireManualRecovery)
+		return ToolInvocationState.RecoveryRequired;
 	return null;
-}
-
-/** Select the exact planner event for one claimed provider completion. */
-function _completionEvent(kind: ExternalActionClaimKinds, outcome: ToolResultDeliveryPayload["outcome"]): ToolInvocationLifecycleEvents
-{
-	if (kind === ExternalActionClaimKinds.Dispatch && outcome === "succeeded") return ToolInvocationLifecycleEvents.DispatchSucceeded;
-	if (kind === ExternalActionClaimKinds.Dispatch) return ToolInvocationLifecycleEvents.DispatchRejected;
-	if (outcome === "succeeded") return ToolInvocationLifecycleEvents.ReconcileSucceeded;
-	return ToolInvocationLifecycleEvents.ReconcileFailed;
 }
 
 /**
@@ -196,12 +128,15 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	/** Admit one candidate inside an existing caller-owned serializable transaction. */
 	static async admitInTransaction(transaction: Prisma.TransactionClient, intent: ToolInvocationIntent, now: Date, policy: ToolInvocationPreparationPolicy): Promise<ToolInvocationAdmissionResult>
 	{
-		if (!_recoveryKeyIsValid(intent) || !_isFixedPreparationPolicy(policy)) return { outcome: ToolInvocationAdmissionOutcomes.Conflict };
+		if (!_ToolInvocationRecoveryKeyIsValid(intent) || !_ToolInvocationPreparationPolicyIsFixed(policy))
+			return { outcome: ToolInvocationAdmissionOutcomes.Conflict };
 		const key = { runId: intent.runId, attempt: intent.attempt, candidateId: intent.requestIdentity.candidateId };
 		const existing = await transaction.toolInvocation.findUnique({ where: { runId_attempt_candidateId: key } });
-		if (existing !== null) return existing.requestFingerprint === intent.requestFingerprint ? { outcome: ToolInvocationAdmissionOutcomes.Idempotent, invocation: _record(existing) } : { outcome: ToolInvocationAdmissionOutcomes.Conflict };
+		if (existing !== null)
+			return existing.requestFingerprint === intent.requestFingerprint ? { outcome: ToolInvocationAdmissionOutcomes.Idempotent, invocation: _record(existing) } : { outcome: ToolInvocationAdmissionOutcomes.Conflict };
 		const fingerprintOwner = await transaction.toolInvocation.findUnique({ where: { requestFingerprint: intent.requestFingerprint } });
-		if (fingerprintOwner !== null) return { outcome: ToolInvocationAdmissionOutcomes.Conflict };
+		if (fingerprintOwner !== null)
+			return { outcome: ToolInvocationAdmissionOutcomes.Conflict };
 		const created = await transaction.toolInvocation.create({
 			data: {
 				siloId: intent.siloId,
@@ -281,11 +216,14 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	async markPrepared(invocationId: string, expectedRevision: number, now: Date): Promise<ToolInvocationRecord | null>
 	{
 		const invocation = await this._transaction.toolInvocation.findUnique({ where: { id: invocationId } });
-		if (invocation === null) return null;
-		if (invocation.runId === null || invocation.attempt === null) return _record(invocation);
+		if (invocation === null)
+			return null;
+		if (invocation.runId === null || invocation.attempt === null)
+			return _record(invocation);
 		const event = invocation.approvalRequired ? ToolInvocationLifecycleEvents.PreparedForApproval : ToolInvocationLifecycleEvents.Prepared;
-		const state = _targetState(_plan(invocation, event, now));
-		if (state === null) return _record(invocation);
+		const state = _targetState(_ToolInvocationPlan(invocation, event, now));
+		if (state === null)
+			return _record(invocation);
 		await this._transaction.toolInvocation.updateMany({
 			where: { id: invocationId, state: ToolInvocationState.Preparing, revision: expectedRevision, run: { is: { attempt: invocation.attempt, state: "Running" } } },
 			data: { state, preparationAttempt: { increment: 1 }, failureCode: null, nextPreparationAttemptAt: now, revision: { increment: 1 } },
@@ -297,20 +235,25 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	async recordPreparationFailure(invocationId: string, expectedRevision: number, now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationTransitionResult>
 	{
 		const invocation = await this._transaction.toolInvocation.findUnique({ where: { id: invocationId } });
-		if (invocation === null) return { changed: false, invocation: null };
-		if (invocation.runId === null || invocation.attempt === null) return { changed: false, invocation: _record(invocation) };
-		if (!_isFixedPreparationPolicy(policy)) return { changed: false, invocation: _record(invocation) };
-		const action = __PlanToolInvocationLifecycle({ state: _STATE_FROM_PRISMA[invocation.state], event: ToolInvocationLifecycleEvents.PreparationFailed, recoveryMode: _RECOVERY_FROM_PRISMA[invocation.recoveryMode], claimKind: _claimKind(invocation.claimKind), preparationAttempt: invocation.preparationAttempt, preparationAttemptLimit: policy.attemptLimit, withinPreparationDeadline: invocation.retryDeadlineAt.getTime() > now.getTime() });
+		if (invocation === null)
+			return { changed: false, invocation: null };
+		if (invocation.runId === null || invocation.attempt === null)
+			return { changed: false, invocation: _record(invocation) };
+		if (!_ToolInvocationPreparationPolicyIsFixed(policy))
+			return { changed: false, invocation: _record(invocation) };
+		const action = _ToolInvocationPlan(invocation, ToolInvocationLifecycleEvents.PreparationFailed, now);
 		const state = _targetState(action);
-		if (state !== ToolInvocationState.Preparing && state !== ToolInvocationState.Failed) return { changed: false, invocation: _record(invocation) };
-		const safeFailureCode = _safeFailureCode(failureCode);
+		if (state !== ToolInvocationState.Preparing && state !== ToolInvocationState.Failed)
+			return { changed: false, invocation: _record(invocation) };
+		const safeFailureCode = _ToolInvocationSafeFailureCode(failureCode);
 		const updated = await this._transaction.toolInvocation.updateMany({
 			where: { id: invocationId, state: ToolInvocationState.Preparing, revision: expectedRevision, run: { is: { attempt: invocation.attempt, state: "Running" } } },
 			data: state === ToolInvocationState.Failed
 				? { state, preparationAttempt: { increment: 1 }, failureCode: safeFailureCode, completedAt: now, revision: { increment: 1 } }
 				: { preparationAttempt: { increment: 1 }, failureCode: safeFailureCode, nextPreparationAttemptAt: new Date(now.getTime() + policy.retryDelayMilliseconds), revision: { increment: 1 } },
 		});
-		if (updated.count === 1 && state === ToolInvocationState.Failed) await this._createDelivery(invocationId, { toolInvocationId: invocation.toolInvocationId, outcome: "failed", failureCode: safeFailureCode }, now);
+		if (updated.count === 1 && state === ToolInvocationState.Failed)
+			await this._createDelivery(invocationId, { toolInvocationId: invocation.toolInvocationId, outcome: "failed", failureCode: safeFailureCode }, now);
 		return { changed: updated.count === 1, invocation: await this._winner(invocationId) };
 	}
 
@@ -324,9 +267,12 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	static async markApprovedInTransaction(transaction: Prisma.TransactionClient, invocationId: string, expectedArguments: JsonValue, expectedArgumentsDigest: string, effectiveArguments: JsonValue, effectiveArgumentsDigest: string): Promise<boolean>
 	{
 		const invocation = await transaction.toolInvocation.findUnique({ where: { id: invocationId } });
-		if (invocation === null || __DigestCanonicalJson(invocation.arguments as JsonValue) !== __DigestCanonicalJson(expectedArguments)) return false;
-		if (invocation.runId === null || invocation.attempt === null) return false;
-		if (_plan(invocation, ToolInvocationLifecycleEvents.Approved, invocation.createdAt) !== ToolInvocationLifecycleActions.Approve) return false;
+		if (invocation === null || __DigestCanonicalJson(invocation.arguments as JsonValue) !== __DigestCanonicalJson(expectedArguments))
+			return false;
+		if (invocation.runId === null || invocation.attempt === null)
+			return false;
+		if (_ToolInvocationPlan(invocation, ToolInvocationLifecycleEvents.Approved, invocation.createdAt) !== ToolInvocationLifecycleActions.Approve)
+			return false;
 		const updated = await transaction.toolInvocation.updateMany({
 			where: { id: invocationId, state: ToolInvocationState.AwaitingApproval, argumentsDigest: expectedArgumentsDigest, revision: invocation.revision, run: { is: { attempt: invocation.attempt, state: "WaitingForInput" } } },
 			data: { state: ToolInvocationState.Ready, effectiveArguments: effectiveArguments as Prisma.InputJsonValue, effectiveArgumentsDigest, failureCode: null, revision: { increment: 1 } },
@@ -344,15 +290,19 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	static async markApprovalRejectedInTransaction(transaction: Prisma.TransactionClient, invocationId: string, now: Date, failureCode: string): Promise<boolean>
 	{
 		const invocation = await transaction.toolInvocation.findUnique({ where: { id: invocationId } });
-		if (invocation === null) return false;
-		if (invocation.runId === null || invocation.attempt === null) return false;
-		if (_plan(invocation, ToolInvocationLifecycleEvents.ApprovalRejected, now) !== ToolInvocationLifecycleActions.Fail) return false;
-		const safeFailureCode = _safeFailureCode(failureCode);
+		if (invocation === null)
+			return false;
+		if (invocation.runId === null || invocation.attempt === null)
+			return false;
+		if (_ToolInvocationPlan(invocation, ToolInvocationLifecycleEvents.ApprovalRejected, now) !== ToolInvocationLifecycleActions.Fail)
+			return false;
+		const safeFailureCode = _ToolInvocationSafeFailureCode(failureCode);
 		const updated = await transaction.toolInvocation.updateMany({
 			where: { id: invocationId, state: ToolInvocationState.AwaitingApproval, revision: invocation.revision, run: { is: { attempt: invocation.attempt, state: "WaitingForInput" } } },
 			data: { state: ToolInvocationState.Failed, failureCode: safeFailureCode, completedAt: now, revision: { increment: 1 } },
 		});
-		if (updated.count !== 1) return false;
+		if (updated.count !== 1)
+			return false;
 		const payload = { toolInvocationId: invocation.toolInvocationId, outcome: "failed", failureCode: safeFailureCode } as const;
 		await transaction.toolResultDelivery.create({ data: { toolInvocationId: invocationId, state: ToolResultDeliveryState.Pending, payload, payloadDigest: __DigestCanonicalJson(payload), createdAt: now } });
 		return true;
@@ -362,37 +312,41 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	async claim(invocationId: string, kind: ExternalActionClaimKinds, now: Date, leaseMilliseconds: number): Promise<ToolInvocationClaimResult>
 	{
 		const current = await this._transaction.toolInvocation.findUnique({ where: { id: invocationId } });
-		if (current === null) return { outcome: ToolInvocationClaimOutcomes.Missing };
+		if (current === null)
+			return { outcome: ToolInvocationClaimOutcomes.Missing };
 		const event = kind === ExternalActionClaimKinds.Dispatch ? ToolInvocationLifecycleEvents.DispatchClaimed : ToolInvocationLifecycleEvents.ReconcileClaimed;
-		const action = _plan(current, event, now);
+		const action = _ToolInvocationPlan(current, event, now);
 		const expectedAction = kind === ExternalActionClaimKinds.Dispatch ? ToolInvocationLifecycleActions.ClaimDispatch : ToolInvocationLifecycleActions.ClaimReconciliation;
-		if (action !== expectedAction) return { outcome: ToolInvocationClaimOutcomes.Winner, invocation: _record(current) };
+		if (action !== expectedAction)
+			return { outcome: ToolInvocationClaimOutcomes.Winner, invocation: _record(current) };
 		const expectedState = current.state;
 		const nextFence = current.claimFence + 1;
 		const updated = await this._transaction.toolInvocation.updateMany({
-			where: { id: invocationId, state: expectedState, revision: current.revision, claimKind: null, claimExpiresAt: null, ...(_isMcpTaskOwned(current) ? { mcpTask: { is: { state: McpTaskState.Queued } } } : { run: { is: { attempt: current.attempt ?? -1, state: "Running" } } }) },
+			where: { id: invocationId, state: expectedState, revision: current.revision, claimKind: null, claimExpiresAt: null, ...(_ToolInvocationIsMcpTaskOwned(current) ? { mcpTask: { is: { state: McpTaskState.Queued } } } : { run: { is: { attempt: current.attempt ?? -1, state: "Running" } } }) },
 			data: { state: _claimedState(kind), claimAttempt: { increment: 1 }, claimKind: _CLAIM_TO_PRISMA[kind], claimFence: nextFence, claimExpiresAt: new Date(now.getTime() + leaseMilliseconds), revision: { increment: 1 } },
 		});
 		const winner = await this._winner(invocationId);
-		if (winner === null) return { outcome: ToolInvocationClaimOutcomes.Missing };
-		if (updated.count !== 1) return { outcome: ToolInvocationClaimOutcomes.Winner, invocation: winner };
+		if (winner === null)
+			return { outcome: ToolInvocationClaimOutcomes.Missing };
+		if (updated.count !== 1)
+			return { outcome: ToolInvocationClaimOutcomes.Winner, invocation: winner };
 		return { outcome: ToolInvocationClaimOutcomes.Claimed, claim: { invocationId, kind, fence: nextFence, revision: winner.revision }, invocation: winner };
 	}
 	/** Complete one exact claim and create its one-to-one result delivery. */
 	async complete(claim: ToolInvocationClaim, payload: ToolResultDeliveryPayload, now: Date): Promise<ToolInvocationCompletionResult>
 	{
-		const safePayload = payload.outcome === ToolResultDeliveryOutcomes.Succeeded ? payload : { ...payload, failureCode: _safeFailureCode(payload.failureCode) };
+		const safePayload = payload.outcome === ToolResultDeliveryOutcomes.Succeeded ? payload : { ...payload, failureCode: _ToolInvocationSafeFailureCode(payload.failureCode) };
 		const result = safePayload.outcome === ToolResultDeliveryOutcomes.Succeeded ? _resultInput(safePayload.result) : Prisma.DbNull;
 		const failureCode = safePayload.outcome === ToolResultDeliveryOutcomes.Failed ? safePayload.failureCode : null;
 		const before = await this._transaction.toolInvocation.findUnique({ where: { id: claim.invocationId } });
 		if (before === null)
 			return { outcome: ToolInvocationCompletionOutcomes.Missing };
-		const event = _completionEvent(claim.kind, safePayload.outcome);
-		const state = _targetState(_plan(before, event, now));
+		const event = _ToolInvocationCompletionEvent(claim.kind, safePayload.outcome);
+		const state = _targetState(_ToolInvocationPlan(before, event, now));
 		if (state !== ToolInvocationState.Succeeded && state !== ToolInvocationState.Failed)
 			return { outcome: ToolInvocationCompletionOutcomes.Winner, invocation: _record(before) };
 		const updated = await this._transaction.toolInvocation.updateMany({
-			where: { id: claim.invocationId, state: _claimedState(claim.kind), claimKind: _CLAIM_TO_PRISMA[claim.kind], claimFence: claim.fence, revision: claim.revision, ...(_isMcpTaskOwned(before) ? { mcpTask: { is: { state: McpTaskState.Running } } } : { run: { is: { attempt: before.attempt ?? -1, state: { in: ["Running", "Cancelling"] } } } }) },
+			where: { id: claim.invocationId, state: _claimedState(claim.kind), claimKind: _CLAIM_TO_PRISMA[claim.kind], claimFence: claim.fence, revision: claim.revision, ...(_ToolInvocationIsMcpTaskOwned(before) ? { mcpTask: { is: { state: McpTaskState.Running } } } : { run: { is: { attempt: before.attempt ?? -1, state: { in: ["Running", "Cancelling"] } } } }) },
 			data: { state, result, failureCode, claimKind: null, claimExpiresAt: null, completedAt: now, revision: { increment: 1 } },
 		});
 		const winner = await this._winner(claim.invocationId);
@@ -407,12 +361,14 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	async completeAmbiguous(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationTransitionResult>
 	{
 		const invocation = await this._transaction.toolInvocation.findUnique({ where: { id: claim.invocationId } });
-		if (invocation === null) return { changed: false, invocation: null };
+		if (invocation === null)
+			return { changed: false, invocation: null };
 		const event = claim.kind === ExternalActionClaimKinds.Dispatch ? ToolInvocationLifecycleEvents.DispatchAmbiguous : ToolInvocationLifecycleEvents.ReconcileInconclusive;
-		const target = _targetState(_plan(invocation, event, now));
-		if (target === null) return { changed: false, invocation: _record(invocation) };
+		const target = _targetState(_ToolInvocationPlan(invocation, event, now));
+		if (target === null)
+			return { changed: false, invocation: _record(invocation) };
 		const updated = await this._transaction.toolInvocation.updateMany({
-			where: { id: claim.invocationId, state: _claimedState(claim.kind), claimKind: _CLAIM_TO_PRISMA[claim.kind], claimFence: claim.fence, revision: claim.revision, ...(_isMcpTaskOwned(invocation) ? { mcpTask: { is: { state: McpTaskState.Running } } } : { run: { is: { attempt: invocation.attempt ?? -1, state: { in: ["Running", "Cancelling"] } } } }) },
+			where: { id: claim.invocationId, state: _claimedState(claim.kind), claimKind: _CLAIM_TO_PRISMA[claim.kind], claimFence: claim.fence, revision: claim.revision, ...(_ToolInvocationIsMcpTaskOwned(invocation) ? { mcpTask: { is: { state: McpTaskState.Running } } } : { run: { is: { attempt: invocation.attempt ?? -1, state: { in: ["Running", "Cancelling"] } } } }) },
 			data: { state: target, recoveryRequiredAt: target === ToolInvocationState.RecoveryRequired ? now : null, claimKind: null, claimExpiresAt: null, revision: { increment: 1 } },
 		});
 		return { changed: updated.count === 1, invocation: await this._winner(claim.invocationId) };
@@ -421,27 +377,32 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	async releaseClaimBeforeDispatch(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationTransitionResult>
 	{
 		const invocation = await this._transaction.toolInvocation.findUnique({ where: { id: claim.invocationId } });
-		if (invocation === null) return { changed: false, invocation: null };
+		if (invocation === null)
+			return { changed: false, invocation: null };
 		const event = claim.kind === ExternalActionClaimKinds.Dispatch ? ToolInvocationLifecycleEvents.DispatchProvenNotStarted : ToolInvocationLifecycleEvents.ReconcileProvenNotStarted;
-		const target = _targetState(_plan(invocation, event, now));
-		if (target === null) return { changed: false, invocation: _record(invocation) };
+		const target = _targetState(_ToolInvocationPlan(invocation, event, now));
+		if (target === null)
+			return { changed: false, invocation: _record(invocation) };
 		const recoveryRequiredAt = target === ToolInvocationState.RecoveryRequired ? now : null;
 		const completedAt = target === ToolInvocationState.Failed ? now : null;
 		const updated = await this._transaction.toolInvocation.updateMany({
 			where: { id: claim.invocationId, state: _claimedState(claim.kind), claimKind: _CLAIM_TO_PRISMA[claim.kind], claimFence: claim.fence, revision: claim.revision, run: { is: { attempt: invocation.attempt ?? -1, state: { in: ["Running", "Cancelling"] } } } },
 			data: { state: target, preparationAttempt: { increment: 1 }, failureCode: "external_action_start_event_failed", nextPreparationAttemptAt: now, recoveryRequiredAt, claimKind: null, claimExpiresAt: null, completedAt, revision: { increment: 1 } },
 		});
-		if (updated.count === 1 && target === ToolInvocationState.Failed) await this._createDelivery(claim.invocationId, { toolInvocationId: invocation.toolInvocationId, outcome: "failed", failureCode: "external_action_start_event_failed" }, now);
+		if (updated.count === 1 && target === ToolInvocationState.Failed)
+			await this._createDelivery(claim.invocationId, { toolInvocationId: invocation.toolInvocationId, outcome: "failed", failureCode: "external_action_start_event_failed" }, now);
 		return { changed: updated.count === 1, invocation: await this._winner(claim.invocationId) };
 	}
 	/** Apply the frozen strategy to one expired provider claim without repeating its effect. */
 	async recoverExpiredClaim(invocationId: string, now: Date): Promise<ToolInvocationTransitionResult>
 	{
 		const invocation = await this._transaction.toolInvocation.findUnique({ where: { id: invocationId } });
-		if (invocation === null || invocation.claimKind === null || invocation.claimExpiresAt === null || invocation.claimExpiresAt.getTime() > now.getTime()) return { changed: false, invocation: invocation === null ? null : _record(invocation) };
+		if (invocation === null || invocation.claimKind === null || invocation.claimExpiresAt === null || invocation.claimExpiresAt.getTime() > now.getTime())
+			return { changed: false, invocation: invocation === null ? null : _record(invocation) };
 		const event = invocation.claimKind === ExternalActionClaimKind.Dispatch ? ToolInvocationLifecycleEvents.DispatchClaimExpired : ToolInvocationLifecycleEvents.ReconcileClaimExpired;
-		const target = _targetState(_plan(invocation, event, now));
-		if (target === null) return { changed: false, invocation: _record(invocation) };
+		const target = _targetState(_ToolInvocationPlan(invocation, event, now));
+		if (target === null)
+			return { changed: false, invocation: _record(invocation) };
 		const updated = await this._transaction.toolInvocation.updateMany({
 			where: { id: invocationId, state: invocation.state, claimKind: invocation.claimKind, claimFence: invocation.claimFence, claimExpiresAt: { lte: now }, revision: invocation.revision, run: { is: { attempt: invocation.attempt ?? -1, state: { in: ["Running", "Cancelling"] } } } },
 			data: { state: target, recoveryRequiredAt: target === ToolInvocationState.RecoveryRequired ? now : null, claimKind: null, claimExpiresAt: null, revision: { increment: 1 } },
@@ -460,7 +421,8 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	private async _requiredWinner(invocationId: string): Promise<ToolInvocationRecord>
 	{
 		const winner = await this._winner(invocationId);
-		if (winner === null) throw new Error("tool invocation disappeared after a successful transition");
+		if (winner === null)
+			throw new Error("tool invocation disappeared after a successful transition");
 		return winner;
 	}
 
