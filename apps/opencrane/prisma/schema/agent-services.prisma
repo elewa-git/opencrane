@@ -77,7 +77,6 @@ model AgentRevision {
   sourceRevision         AgentRevision?                       @relation("AgentRevisionRestoreSource", fields: [sourceRevisionId], references: [id], onDelete: Restrict)
   restoredRevisions      AgentRevision[]                      @relation("AgentRevisionRestoreSource")
   skillAssignments       AgentRevisionSkillAssignment[]
-  integrationAssignments AgentRevisionIntegrationAssignment[]
   mcpToolAssignments      AgentRevisionMcpToolAssignment[]
   boundaryAttachments    AgentRevisionBoundaryAttachment[]
   runs                   AgentRun[]
@@ -119,22 +118,6 @@ model AgentRevisionSkillAssignment {
   @@id([agentRevisionId, skillId])
   @@unique([agentRevisionId, skillRevisionId])
   @@map("agent_revision_skill_assignments")
-}
-
-/// Legacy integration assignment retained only until the authorized cleanup applies the direct replacement.
-model AgentRevisionIntegrationAssignment {
-  agentRevisionId    String                      @map("agent_revision_id")
-  integrationId      String                      @map("integration_id")
-  siloId             String                      @map("silo_id")
-  custodyReferenceId String                      @map("custody_reference_id")
-  toolDefinitions    Json                        @map("tool_definitions")
-  agentRevision      AgentRevision               @relation(fields: [agentRevisionId], references: [id], onDelete: Restrict)
-  integration        Integration                 @relation(fields: [integrationId, siloId], references: [id, siloId], onDelete: Restrict)
-  custodyReference   IntegrationCustodyReference @relation(fields: [custodyReferenceId, integrationId, siloId], references: [id, integrationId, siloId], onDelete: Restrict)
-
-  @@id([agentRevisionId, integrationId])
-  @@index([integrationId, siloId])
-  @@map("agent_revision_integration_assignments")
 }
 
 /// Exact immutable MCP tool revision selected for one AgentRevision.

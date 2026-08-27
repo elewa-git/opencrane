@@ -187,7 +187,6 @@ model RunInputSnapshot {
   retiredMemoryFacts      Json      @default("[]") @map("memory_facts")
   identitySnapshot        Json      @map("identity_snapshot")
   modelRoute              Json      @map("model_route")
-  integrationAssignments  Json      @map("integration_assignments")
   mcpTools                Json      @map("mcp_tools")
   skillRevisionIds        String[]  @default([]) @map("skill_revision_ids")
   memoryQueryPolicy       Json      @map("memory_query_policy")

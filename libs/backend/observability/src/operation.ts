@@ -56,8 +56,8 @@ export function ___MarkActiveSpanFailed(): void
  * `fn` must START the I/O synchronously. Suppression applies for the duration of the call, so
  * work deferred to a later tick is no longer covered.
  *
- * Called by: `libs/backend/server/infra/memory-gateway-client/src/cognee-http.ts`,
- * `libs/backend/server/infra/obot-custody/src/obot-http.ts`, `apps/memory-gateway/src/server.ts`.
+ * Called by: the Cognee HTTP client, the MCP era probe, the MCP executor companion, and the
+ * memory-gateway proxy when their outbound URL must stay out of automatic HTTP spans.
  * @param fn - Callback that synchronously starts the sensitive I/O.
  * @returns Whatever `fn` returns, normally the I/O client's promise.
  */

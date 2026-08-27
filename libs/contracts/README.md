@@ -42,10 +42,10 @@ Invariant: the client's types are a faithful projection of the server's publishe
 after any API change so the two never silently diverge. `RunInputSnapshot` is the cross-domain
 record of one run's frozen persona, transcript, memory references, tools, budgets, model route and
 verified identity provenance; it carries only immutable coordinates and canonical JSON, never
-provider credentials or mutable source objects. Its integration assignments record an integration
-identifier plus each revision-reviewed tool name, description, exact input JSON Schema, and
-canonical schema digest; provider addressing and credentials remain entirely behind the
-server-owned action execution boundary and never enter the snapshot or runtime. The compiled model
+provider credentials or mutable source objects. Its `mcpTools` list records immutable MCP tool
+revision identifiers plus each saved name, description, exact input JSON Schema, and canonical
+schema digest. Registry and provider credentials remain entirely behind server-owned execution
+boundaries and never enter the snapshot or agent runtime. The compiled model
 route also freezes the model registry's generated-output allowlist; the runtime
 cannot infer image-generation authority from a prompt or provider response. Identity is
 explicitly tagged: a user run
@@ -87,7 +87,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - Hand-written DTOs/enums: hierarchical `Group` with nullable `parentId`, `ClusterTenant*`,
   `Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, memory-gateway constants, `ThirdPartySource*`, `RuntimeAssignment`,
-  `RunInputSnapshot`/`RunInputSnapshotIdentity`/`RunInputSnapshotIdentityKinds`/`RunInputSnapshotIntegrationAssignment`,
+  `RunInputSnapshot`/`RunInputSnapshotIdentity`/`RunInputSnapshotIdentityKinds`/`RunInputSnapshotMcpTool`,
   `TenantModelSet`, and domain-topology host builders.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
   must name before it can admit a run.

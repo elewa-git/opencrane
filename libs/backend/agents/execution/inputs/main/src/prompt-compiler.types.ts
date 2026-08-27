@@ -16,7 +16,7 @@ export interface PromptCompilerRepositories
 	/** Resolve ordered conversation turns for the exact message references, preserving snapshot order. */
 	loadMessages(messageIds: readonly string[]): Promise<readonly CompiledMessage[]>;
 	/**
-	 * Resolve the tool schemas exposed by immutable revision-selected integration assignments.
+	 * Resolve the tool schemas from the MCP tool revisions selected by the saved agent revision.
 	 *
 	 * The returned order is not significant: the compiler re-sorts tool definitions by name before
 	 * sealing the compiled output, so grant/repository iteration order can never change the compiled

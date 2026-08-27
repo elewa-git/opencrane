@@ -783,10 +783,8 @@ SELECT pg_temp.assert_true(
      FROM "agent_runs" WHERE "id" = 'run-cancel-invariant-proofkey')
 );
 
--- Cancelling -> Cancelled: no WorkloadAssignment ever existed, but the attempt-dispatch event was
--- claimed (a Kubernetes create may be in flight); an unresolved RunAttemptRequested blocks
--- finalisation (D4), and once resolved, cleanup is still required and must be published (D5,
--- unassigned orphan variant) before the run finalises (S2, orphan variant).
+-- A bound workflow task may already have created a Job even when no WorkloadAssignment was saved.
+-- Cancellation therefore requires confirmed cleanup before the run can become Cancelled.
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "trigger",
     "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
@@ -796,11 +794,11 @@ INSERT INTO "agent_runs" (
     'sha256:' || repeat('d2', 32), 'sha256:' || repeat('d2', 32)
 );
 
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
+INSERT INTO "agent_run_workflow_tasks" (
+    "run_id", "attempt", "silo_id", "task_key", "task_name", "task_id", "receipt_bound_at"
 ) VALUES (
-    'outbox-invariant-attempt', 'run-cancel-invariant-outbox', 1, 1, 'run.attempt_requested',
-    'run-cancel-invariant-outbox:attempt:1', '{"runId":"run-cancel-invariant-outbox","attempt":1}'
+    'run-cancel-invariant-outbox', 1, 'silo-1', 'agent-run:silo-1:run-cancel-invariant-outbox:attempt:1',
+    'opencrane.agent_run.execute', 'workflow-task-cancel-invariant-outbox', clock_timestamp()
 );
 
 UPDATE "agent_runs" SET "state" = 'cancelling' WHERE "id" = 'run-cancel-invariant-outbox';
@@ -823,28 +821,13 @@ INSERT INTO "run_outbox_events" (
 );
 
 SELECT pg_temp.expect_failure(
-    'Cancelled requires its attempt command resolved before it can finalise',
+    'Cancelled requires confirmed cleanup for its bound workflow task',
     $statement$
         UPDATE "agent_runs"
         SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
         WHERE "id" = 'run-cancel-invariant-outbox'
     $statement$,
-    'requires its attempt and release commands resolved'
-);
-
-UPDATE "run_outbox_events"
-SET "claimed_at" = clock_timestamp(), "delivery_count" = 1,
-    "failed_at" = clock_timestamp(), "failure_code" = 'RUN_CANCELLED'
-WHERE "id" = 'outbox-invariant-attempt';
-
-SELECT pg_temp.expect_failure(
-    'Cancelled requires a confirmed WorkloadCleanup once its attempt event had been claimed',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-invariant-outbox'
-    $statement$,
-    'requires a confirmed WorkloadCleanup'
+    'bound workflow task requires a confirmed WorkloadCleanup'
 );
 
 INSERT INTO "run_outbox_events" (
@@ -873,56 +856,9 @@ SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" 
 WHERE "id" = 'run-cancel-invariant-outbox';
 
 SELECT pg_temp.assert_true(
-    'Cancelled finalises once a claimed-but-unassigned attempt has its orphan WorkloadCleanup confirmed',
+    'Cancelled finalises once a bound workflow task has its orphan WorkloadCleanup confirmed',
     (SELECT "state" = 'cancelled' AND "finished_at" IS NOT NULL AND "terminal_reason" = 'user_cancelled'
      FROM "agent_runs" WHERE "id" = 'run-cancel-invariant-outbox')
-);
-
--- Cancelling -> Cancelled: an unresolved RunWorkloadReleaseRequested also blocks finalisation (D4),
--- independent of the RunAttemptRequested variant above; with no WorkloadAssignment ever created and
--- no claimed RunAttemptRequested, resolving it alone is sufficient (no WorkloadCleanup required).
-INSERT INTO "agent_runs" (
-    "id", "silo_id", "agent_service_id", "agent_revision_id", "trigger",
-    "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
-) VALUES (
-    'run-cancel-invariant-release', 'silo-1', 'svc-main', 'rev-published', 'interactive',
-    'request-cancel-invariant-release', 'run-cancel-invariant-release',
-    'sha256:' || repeat('d5', 32), 'sha256:' || repeat('d5', 32)
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES
-    ('outbox-invariant-release-cancellation', 'run-cancel-invariant-release', 1, 1, 'run.cancellation_requested',
-     'run-cancel-invariant-release:cancellation:1', '{"runId":"run-cancel-invariant-release","attempt":1}'),
-    ('outbox-invariant-release', 'run-cancel-invariant-release', 1, 2, 'run.workload_release_requested',
-     'run-cancel-invariant-release:release:1', '{"runId":"run-cancel-invariant-release","attempt":1}');
-
-UPDATE "agent_runs" SET "state" = 'cancelling' WHERE "id" = 'run-cancel-invariant-release';
-
-SELECT pg_temp.expect_failure(
-    'Cancelled requires its release command resolved before it can finalise',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-invariant-release'
-    $statement$,
-    'requires its attempt and release commands resolved'
-);
-
-UPDATE "run_outbox_events"
-SET "claimed_at" = clock_timestamp(), "delivery_count" = 1,
-    "failed_at" = clock_timestamp(), "failure_code" = 'RUN_CANCELLED'
-WHERE "id" = 'outbox-invariant-release';
-
-UPDATE "agent_runs"
-SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-WHERE "id" = 'run-cancel-invariant-release';
-
-SELECT pg_temp.assert_true(
-    'Cancelled finalises once its release command resolves with no assignment or claimed attempt outstanding',
-    (SELECT "state" = 'cancelled' AND "finished_at" IS NOT NULL AND "terminal_reason" = 'user_cancelled'
-     FROM "agent_runs" WHERE "id" = 'run-cancel-invariant-release')
 );
 
 INSERT INTO "agent_runs" (
@@ -1652,17 +1588,17 @@ INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", 
 INSERT INTO "run_input_snapshots" (
     "id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
     "effective_contract_digest", "conversation_id", "memory_facts", "identity_snapshot", "model_route",
-    "integration_assignments", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
+    "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
 )
 SELECT
     'snapshot-' || "id", "id", 1, "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest",
-    "conversation_id", '[]', '{}', '{}', '{}', '{}', '{}', 'sha256:' || repeat('0', 64), 'prompt-v1', "input_snapshot_digest"
+    "conversation_id", '[]', '{}', '{}', '[]', '{}', '{}', 'sha256:' || repeat('0', 64), 'prompt-v1', "input_snapshot_digest"
 FROM "agent_runs"
 WHERE "id" IN (
     'run-retry-retirement', 'run-retry-rollover', 'run-state', 'run-action',
     'run-cancel-accepted', 'run-cancel-queued', 'run-cancel-assigned', 'run-cancel-running', 'run-cancel-waiting',
     'run-cancel-event', 'run-cancel-bootstrap', 'run-cancel-proof',
-    'run-cancel-invariant-proofkey', 'run-cancel-invariant-outbox', 'run-cancel-invariant-release'
+    'run-cancel-invariant-proofkey', 'run-cancel-invariant-outbox'
 );
 SET CONSTRAINTS ALL IMMEDIATE;
 

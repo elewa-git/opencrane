@@ -27,7 +27,9 @@ clean target baseline remain, and every model/enum has exactly one owning domain
    `apps/opencrane/prisma/bootstrap/target-baseline.sql`, then prove it against a new empty database.
    Prisma's generated diff does not contain the hand-written triggers, partial/NULL-safe indexes,
    and authority constraints in the reviewed baseline. Regeneration must preserve and revalidate
-   those blocks explicitly. Add the next reviewed Prisma migration under
+   those blocks explicitly. Run `npm run db:regenerate-target-baseline -w @opencrane/server`; its
+   checked script restores the reviewed non-Prisma objects and fails if an expected insertion point
+   has changed. Add the next reviewed Prisma migration under
    `apps/opencrane/prisma/prisma-migrations/`; the deployment-owned Prisma Migrate Job runs the
    ledger, never server startup. Prove the migrated schema matches the clean target. Run
    `npm run test:authority-baseline -w @opencrane/server` as well: it fails closed when a

@@ -44,7 +44,7 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 	/** Loads one immutable revision whose parent service is in the caller's silo. */
 	async getRevision(agentRevisionId: string, siloId: string): Promise<AgentRevision | null>
 	{
-		const row = await this.prisma.agentRevision.findFirst({ where: { id: agentRevisionId, agentService: { is: { siloId } } }, include: { skillAssignments: true, integrationAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } });
+		const row = await this.prisma.agentRevision.findFirst({ where: { id: agentRevisionId, agentService: { is: { siloId } } }, include: { skillAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } });
 		return row === null ? null : _mapRevision(row);
 	}
 
@@ -58,7 +58,7 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${publication.agentServiceId} FOR UPDATE`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_revisions" WHERE "id" = ${publication.agentRevisionId} FOR UPDATE`);
 			const serviceRow = await transaction.agentService.findUnique({ where: { id: publication.agentServiceId } });
-			const revisionRow = await transaction.agentRevision.findUnique({ where: { id: publication.agentRevisionId }, include: { skillAssignments: true, integrationAssignments: true, mcpToolAssignments: { include: { toolRevision: { include: { serverRevision: { include: { server: true } } } } } }, boundaryAttachments: true } });
+			const revisionRow = await transaction.agentRevision.findUnique({ where: { id: publication.agentRevisionId }, include: { skillAssignments: true, mcpToolAssignments: { include: { toolRevision: { include: { serverRevision: { include: { server: true } } } } } }, boundaryAttachments: true } });
 			if (serviceRow === null || revisionRow === null || _serviceState(serviceRow.state) !== publication.expectedServiceState || serviceRow.activeRevisionId !== publication.expectedActiveRevisionId || revisionRow.agentServiceId !== publication.agentServiceId || revisionRow.state !== AgentRevisionState.Draft)
 			{
 				return { status: "conflict", currentActiveRevisionId: serviceRow?.activeRevisionId ?? null } as const;
@@ -75,7 +75,7 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 			}
 
 			// 2. Change both lifecycle coordinates inside the same transaction so neither can escape alone.
-			const publishedRow = await transaction.agentRevision.update({ where: { id: publication.agentRevisionId }, data: { state: AgentRevisionState.Published, publishedAt: new Date(publication.publishedAt) }, include: { skillAssignments: true, integrationAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } });
+			const publishedRow = await transaction.agentRevision.update({ where: { id: publication.agentRevisionId }, data: { state: AgentRevisionState.Published, publishedAt: new Date(publication.publishedAt) }, include: { skillAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } });
 			const activeRow = await transaction.agentService.update({ where: { id: publication.agentServiceId }, data: { state: AgentServiceState.Active, activeRevisionId: publication.agentRevisionId, updatedAt: new Date(publication.publishedAt) } });
 
 			// 3. Append authenticated decision evidence before commit; audit failure rolls back publication.

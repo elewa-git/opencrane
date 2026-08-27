@@ -42,8 +42,8 @@ export async function __CompileRunInput(snapshot: RunInputSnapshot, attempt: num
 /**
  * Add one first-party tool to an already compiled input and recompute its digest.
  *
- * Used for tools OpenCrane itself offers, which are not part of any integration assignment and so
- * are not in the snapshot. The digest is recomputed so the returned input stays self-consistent —
+ * Used for tools OpenCrane itself offers, which the saved agent revision does not select and so are
+ * not in the snapshot. The digest is recomputed so the returned input stays self-consistent —
  * appending without resealing would leave a digest that no longer matches the payload.
  *
  * Called by: `_CreateProductionRunInputCompiler`

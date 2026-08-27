@@ -128,7 +128,7 @@ records needed to compile a dispatch. It never persists a recall query or memory
 input. The model chooses a query through the approval-required `memory_recall` tool; safe transient
 content delivery is deferred to #601. The adapter seals the current fenced run attempt into the
 compiled input without mutating the stored snapshot and rejects any compiler result whose run or
-attempt disagrees with dispatch authority. It turns the snapshot's integration assignments directly
+attempt disagrees with dispatch authority. It turns the snapshot's immutable MCP tool revisions directly
 into approval-required tool descriptors. The dispatch adapter owns two Postgres models in
 `runtime.prisma`: `RuntimeCommandStream` (one per run
 attempt — the lease fence, the bound runtime instance, the next command sequence, and accepted
@@ -159,8 +159,8 @@ browser connection therefore cannot drop an instruction or force a model turn to
 ## Dependency direction
 
 Tagged `scope:execution-protocol` (`layer:backend`): it may depend on agent, execution-run,
-execution-input, and personal-configuration contracts, authentication, authorization, the
-integration authority, the three injected transport-port scopes, and shared contracts. Tool
+execution-input, and personal-configuration contracts, authentication, authorization, the MCP
+runtime authority, the three injected transport-port scopes, and shared contracts. Tool
 descriptors are projected only from the immutable snapshot; no decision or resume path consults a
 live catalogue. Candidate arguments and the schema digest are validated before admission, and the
 same frozen schema is propagated to deferred approval. The

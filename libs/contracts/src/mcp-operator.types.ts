@@ -8,9 +8,8 @@ import type { JsonValue } from "@opencrane/util";
  * org-admin governance + access-policy endpoints. This is the sole public MCP contract; there is
  * no parallel unsiloed registry or credential-inventory API.
  *
- * Custody contract: NO type here ever carries credential material. A connected
- * install reports only its {@link McpConnectionStatus}; the secret lives in the
- * gateway plane (Obot). Neither the agent runtime nor the browser receives a provider URL or secret.
+ * No type in this file carries submitted credentials. Installs expose connection status and form
+ * metadata, so an API response cannot echo a provider secret or registry credential.
  */
 
 /**
@@ -20,7 +19,7 @@ import type { JsonValue } from "@opencrane/util";
  * user installs the server: a single-user server starts at `NeedsCredential` and must collect
  * the fields in `credentialSchema`; a multi-user server is already usable via the org-wide key;
  * a remote-OAuth server needs an OAuth handshake instead of a form.
- * @see https://modelcontextprotocol.io/specification/2025-06-18
+ * @see https://modelcontextprotocol.io/specification/2026-07-28
  */
 export enum McpServerType
 {
@@ -61,7 +60,7 @@ export enum McpApprovalStatus
  */
 export enum McpConnectionStatus
 {
-  /** The server is installed but remains unusable until an external custody flow activates it. */
+  /** The install is saved but this API cannot use it until credential setup exists. */
   NeedsCredential = "needs-credential",
   /** The server is usable through an administrator-managed key; the caller supplies no credential. */
   SharedKey = "shared-key",

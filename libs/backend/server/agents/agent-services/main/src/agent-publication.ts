@@ -1,4 +1,4 @@
-import { __AreReviewedIntegrationToolDefinitionsValid, __DigestAgentRevisionContent, type AgentRevision } from "@opencrane/models/agents";
+import { __DigestAgentRevisionContent, type AgentRevision } from "@opencrane/models/agents";
 
 import type { AgentServicePublicationRepository, PublishAgentRevisionCommand, PublishAgentRevisionFailureReason, PublishAgentRevisionResult } from "./agent-publication.types";
 
@@ -24,7 +24,6 @@ function _isPublishableRevision(revision: AgentRevision): boolean
 		&& revision.budget.maxTokens > 0
 		&& Number.isSafeInteger(revision.budget.maxDurationMs)
 		&& revision.budget.maxDurationMs > 0
-		&& revision.integrationAssignments.every(function _Assignment(assignment): boolean { return __AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions); })
 		&& revision.mcpToolRevisionIds.every(_isPresent)
 		&& new Set(revision.mcpToolRevisionIds).size === revision.mcpToolRevisionIds.length
 		&& revision.digest === __DigestAgentRevisionContent(revision.agentServiceId, revision.revision, revision);

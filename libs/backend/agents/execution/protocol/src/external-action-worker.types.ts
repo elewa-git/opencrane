@@ -50,7 +50,7 @@ export type ExternalActionProviderOutcome =
  * The frozen input an external action is allowed to see.
  *
  * Deliberately nothing but the admitted snapshot. Every decision an action makes - which dataset to
- * recall from, which integration to resolve, which subject it acts as - must come from here, so a
+ * recall from, which MCP tool revision to invoke, which subject it acts as - must come from here, so a
  * runtime that has since changed its mind cannot widen what the action may do.
  *
  * @see ExternalActionExecutionContextLoader which produces it.

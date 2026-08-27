@@ -21,7 +21,6 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		artifactRevisionIds: [],
 		skillRevisionIds: [],
 		memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1", queryText: "private recall query", maxFacts: 8 },
-		integrationAssignments: [],
 		mcpTools: [],
 		modelRoute: { alias: "silo-default" },
 		budgetPolicy: {},

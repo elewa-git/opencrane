@@ -1489,8 +1489,7 @@
 		"libs/backend/agents/execution/runs/main/src/prisma-self-run-cancellation.router.ts",
 		"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
-		"libs/backend/server/iam/identity/main/src/auth/oidc.service.ts",
-		"libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts"
+		"libs/backend/server/iam/identity/main/src/auth/oidc.service.ts"
     ]
   },
   "rawProcedureCalls": [
@@ -1527,7 +1526,7 @@
       "operations": [
         "delegate"
       ],
-      "reason": "pre-policy dispatch repository gains one snapshot read for the release-claim obot flag; declaring the adapter needs a TransactionClient constructor refactor",
+      "reason": "Pre-policy dispatch reads the saved runtime claim from the run snapshot; declaring the adapter needs a TransactionClient constructor refactor.",
       "expiresOn": "2026-12-31"
     },
     {
@@ -1537,15 +1536,6 @@
         "delegate"
       ],
       "reason": "The approval lifecycle owns one existing caller-opened serializable transaction across the approval row, run pause, ToolInvocation transition, and result delivery; its ToolInvocation writes delegate to the declared transaction repository helpers while the remaining approval-row delegates stay here until the approval unit of work is extracted.",
-      "expiresOn": "2026-12-31"
-    },
-    {
-      "path": "libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts",
-      "owner": "integrations",
-      "operations": [
-        "delegate"
-      ],
-      "reason": "custody route pre-checks the active same-silo integration before any credential can reach Obot; the read belongs in a declared integrations repository later",
       "expiresOn": "2026-12-31"
     },
     {

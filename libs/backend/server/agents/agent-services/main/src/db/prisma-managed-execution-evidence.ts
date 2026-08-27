@@ -4,7 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { RunInputSnapshotIdentityKinds, type ManagedRunInputBoundaryAttachment } from "@opencrane/contracts";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import { __VerifyCurrentFleetMembershipEvidence, PrismaFleetMembershipAuthorityRepository } from "@opencrane/backend/server/iam/membership";
-import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type ReviewedIntegrationToolDefinition, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
+import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
 import { __ResolveEffectiveBoundaryAttachments } from "../boundary-attachment-authority";
@@ -78,7 +78,6 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 				budget: true,
 				boundaryAttachments: { select: { boundaryKind: true, boundaryGroupId: true, boundaryPrincipalId: true, boundaryCoverage: true } },
 				skillAssignments: { select: { skillId: true, skillRevisionId: true } },
-				integrationAssignments: { select: { integrationId: true, custodyReferenceId: true, toolDefinitions: true } },
 				mcpToolAssignments: { select: { toolRevisionId: true } },
 			},
 		});
@@ -135,7 +134,6 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 			modelDefinitionId: revision.modelDefinitionId,
 			budget: revision.budget,
 			skillAssignments: _CanonicalSkillAssignments(revision.skillAssignments),
-			integrationAssignments: _CanonicalIntegrationAssignments(revision.integrationAssignments),
 			mcpToolRevisionIds: revision.mcpToolAssignments.map(function _McpToolRevisionId(assignment): string { return assignment.toolRevisionId; }).sort(_CompareCanonicalCoordinate),
 		} as unknown as JsonValue);
 		return {
@@ -237,22 +235,4 @@ function _CanonicalAttachments(values: readonly RevisionBoundaryAttachment[]): r
 function _CanonicalSkillAssignments(values: readonly { skillId: string; skillRevisionId: string }[]): JsonValue
 {
 	return [...values].sort(function _BySkill(left, right): number { return _CompareCanonicalCoordinate(`${left.skillId}\u0000${left.skillRevisionId}`, `${right.skillId}\u0000${right.skillRevisionId}`); }) as JsonValue;
-}
-
-/** Rebuilds each integration assignment with only the fields that affect access — custody reference and reviewed tool definitions — and sorts both the tools by name and the integrations by id, so the capability digest does not depend on database row order. */
-function _CanonicalIntegrationAssignments(values: readonly { integrationId: string; custodyReferenceId: string; toolDefinitions: Prisma.JsonValue }[]): JsonValue
-{
-	return [...values]
-		.map(function _Copy(value)
-		{
-			const toolDefinitions = value.toolDefinitions as unknown as readonly ReviewedIntegrationToolDefinition[];
-			return {
-				integrationId: value.integrationId,
-				custodyReferenceId: value.custodyReferenceId,
-				toolDefinitions: [...toolDefinitions]
-					.map(function _Tool(tool) { return { name: tool.name, description: tool.description, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest }; })
-					.sort(function _ByTool(left, right): number { return _CompareCanonicalCoordinate(left.name, right.name); }),
-			};
-		})
-		.sort(function _ByIntegration(left, right): number { return _CompareCanonicalCoordinate(`${left.integrationId}\u0000${left.custodyReferenceId}`, `${right.integrationId}\u0000${right.custodyReferenceId}`); }) as JsonValue;
 }

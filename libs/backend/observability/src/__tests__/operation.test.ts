@@ -130,7 +130,7 @@ describe("___DoWithoutTrace", function _withoutTraceSuite()
 {
   it("suppresses automatic child spans without ending the surrounding operation", async function _suppressesChildSpans()
   {
-    const suppressed = await ___DoWithTrace("obot_mcp.tool.invoke", {}, async function _operation()
+    const suppressed = await ___DoWithTrace("mcp.tool.invoke", {}, async function _operation()
     {
       return ___DoWithoutTrace(function _sensitiveFetch()
       {

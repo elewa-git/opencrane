@@ -22,9 +22,8 @@ import type { RequestHandler } from "express";
  * an organisation after logging in is reported as an admin by `/auth/me` but still
  * rejected here until their session is refreshed.
  *
- * Called by: libs/backend/server/gateways/mcp/main/src/routes/mcp-operator.ts (8 routes),
- * libs/backend/server/gateways/providers/main/src/routes/provider-byok.ts (2 routes), and
- * libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts.
+ * Called by: the organization-admin routes in MCP operator, MCP OCI promotion, provider BYOK, and
+ * group management.
  *
  * @returns Middleware that calls `next()` for org admins and sends 403 to everyone else.
  */

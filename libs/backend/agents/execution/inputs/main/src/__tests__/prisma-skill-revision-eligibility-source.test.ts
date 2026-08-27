@@ -11,7 +11,7 @@ function _Transaction(rows: readonly unknown[])
 /** Builds the skill ids a tool policy would name for one run. */
 function _ToolPolicy(skillRevisionIds: readonly string[])
 {
-	return { modelRoute: {}, integrationAssignments: [], mcpTools: [], skillRevisionIds, artifactRevisionIds: [] };
+	return { modelRoute: {}, mcpTools: [], skillRevisionIds, artifactRevisionIds: [] };
 }
 
 describe("PrismaSkillRevisionEligibilitySource", function _describeEligibility()

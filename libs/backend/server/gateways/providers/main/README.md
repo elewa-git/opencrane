@@ -67,4 +67,4 @@ Owns `ProviderCredential` and `ModelDefinition` in
 ## See also
 
 - Parent index: [gateways](../../README.md)
-- Siblings: [model-routing](../../model-routing/main/README.md) · [mcp](../../mcp/main/README.md) · [integrations](../../integrations/main/README.md)
+- Siblings: [model-routing](../../model-routing/main/README.md) · [mcp](../../mcp/main/README.md)

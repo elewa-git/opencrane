@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { __DigestCanonicalJson, __OpenDeferredToolApproval, type OpenDeferredToolApprovalCommand } from "@opencrane/backend/server/iam/authorization";
 import type { Logger } from "@opencrane/backend/observability";
-import type { RunInputSnapshotToolDefinition } from "@opencrane/contracts";
+import type { RunInputSnapshotMcpTool } from "@opencrane/contracts";
 
 import type { ExternalActionApprovalOpener, ExternalActionExecutionContext, ExternalActionWorkerInvocation } from "./external-action-worker.types";
 
@@ -10,7 +10,7 @@ import type { ExternalActionApprovalOpener, ExternalActionExecutionContext, Exte
 interface FrozenApprovalTool
 {
 	/** Exact input schema presented to the approver and used to validate an approved call. */
-	readonly parametersSchema: RunInputSnapshotToolDefinition["parametersSchema"];
+	readonly parametersSchema: RunInputSnapshotMcpTool["inputSchema"];
 	/** Digest proving the schema matches the admitted immutable tool revision. */
 	readonly parametersSchemaDigest: string;
 }

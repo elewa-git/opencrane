@@ -39,22 +39,6 @@ export function __DigestAgentRevisionContent(agentServiceId: string, revision: n
 		{
 			return { skillId: skill.skillId, revisionId: skill.revisionId };
 		}),
-		integrationAssignments: content.integrationAssignments.map(function _MapIntegration(assignment)
-		{
-			return {
-				integrationId: assignment.integrationId,
-				custodyReferenceId: assignment.custodyReferenceId,
-				toolDefinitions: assignment.toolDefinitions.map(function _MapTool(definition): JsonValue
-				{
-					return {
-						name: definition.name,
-						description: definition.description,
-						parametersSchema: definition.parametersSchema,
-						parametersSchemaDigest: definition.parametersSchemaDigest,
-					};
-				}),
-			};
-		}),
 		mcpToolRevisionIds: [...content.mcpToolRevisionIds].sort(),
 		boundaryAttachments: content.boundaryAttachments.map(function _MapBoundary(attachment)
 		{

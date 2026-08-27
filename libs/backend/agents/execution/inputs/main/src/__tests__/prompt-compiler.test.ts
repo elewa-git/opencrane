@@ -36,7 +36,6 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		artifactRevisionIds: ["art-2", "art-1"],
 		skillRevisionIds: ["skill-1"],
 		memoryQueryPolicy: {},
-		integrationAssignments: [{ integrationId: "integration-b", toolDefinitions: [_snapshotTool("write")] }, { integrationId: "integration-a", toolDefinitions: [_snapshotTool("read")] }],
 		mcpTools: [_mcpTool("mcp-tool-revision-b", "write"), _mcpTool("mcp-tool-revision-a", "read")],
 		modelRoute: { alias: "silo-default" },
 		budgetPolicy: { maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 },

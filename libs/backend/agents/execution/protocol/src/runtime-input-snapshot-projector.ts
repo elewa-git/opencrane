@@ -1,7 +1,7 @@
 import type { RunInputSnapshot, RunInputSnapshotIdentity } from "@opencrane/contracts";
 
 /** Map one durable snapshot row into the immutable wire snapshot the runtime receives. */
-export function __ProjectRuntimeInputSnapshot(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; conversationId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryQueryPolicy: unknown; integrationAssignments: unknown; mcpTools: unknown; modelRoute: unknown; budgetPolicy: unknown; identitySnapshot: unknown; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
+export function __ProjectRuntimeInputSnapshot(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; conversationId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryQueryPolicy: unknown; mcpTools: unknown; modelRoute: unknown; budgetPolicy: unknown; identitySnapshot: unknown; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
 {
 	return {
 		runId: row.runId,
@@ -16,7 +16,6 @@ export function __ProjectRuntimeInputSnapshot(row: { runId: string; siloId: stri
 		artifactRevisionIds: row.artifactRevisionIds,
 		skillRevisionIds: row.skillRevisionIds,
 		memoryQueryPolicy: row.memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"],
-		integrationAssignments: row.integrationAssignments as RunInputSnapshot["integrationAssignments"],
 		mcpTools: row.mcpTools as RunInputSnapshot["mcpTools"],
 		modelRoute: row.modelRoute as RunInputSnapshot["modelRoute"],
 		budgetPolicy: row.budgetPolicy as RunInputSnapshot["budgetPolicy"],

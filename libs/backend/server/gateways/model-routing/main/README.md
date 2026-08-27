@@ -83,4 +83,4 @@ unverified alias; this package's catalogue is therefore the allowlist source for
 ## See also
 
 - Parent index: [gateways](../../README.md)
-- Siblings: [providers](../../providers/main/README.md) · [mcp](../../mcp/main/README.md) · [integrations](../../integrations/main/README.md)
+- Siblings: [providers](../../providers/main/README.md) · [mcp](../../mcp/main/README.md)

@@ -42,11 +42,10 @@ after effective-grant intersection is an assigned, same-silo, still-published, n
 whole assembly with a single precise reason; a duplicate request (same idempotency key) returns the
 previously admitted snapshot without recompiling anything.
 
-Third-party tools enter the snapshot as revision-selected integration assignments, each containing
-an integration identifier and exact reviewed definitions (name, description, input schema, and
-schema digest). Missing, malformed, or digest-mismatched schemas fail admission. The assembler never receives a custody
-credential or an old MCP grant: the later action boundary resolves the live custody reference and
-checks the same revision assignment again.
+MCP tools enter the snapshot as revision-selected immutable tool revisions. Each entry contains the
+saved tool identifier, name, description, input schema, and schema digest. Missing, malformed, or
+digest-mismatched schemas fail admission. The assembler never receives registry or provider
+credentials; execution consumes only the admitted OCI-backed MCP revision.
 
 Invariant: a run either commits with its one complete, digest-sealed input snapshot, or it does not
 exist — there is no partially assembled state, and no snapshot field originates from unverified

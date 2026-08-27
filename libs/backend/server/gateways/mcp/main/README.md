@@ -121,4 +121,4 @@ authorization package. `PrismaMcpOperatorUnitOfWork` is the public MCP database 
 ## See also
 
 - Parent index: [gateways](../../README.md)
-- Related packages: [integrations](../../integrations/main/README.md) · [providers](../../providers/main/README.md) · [model-routing](../../model-routing/main/README.md)
+- Related packages: [providers](../../providers/main/README.md) · [model-routing](../../model-routing/main/README.md)

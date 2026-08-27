@@ -1,38 +1,30 @@
-import { AgentRevisionState, ArtifactRevisionState, IntegrationCustodyState, IntegrationState, McpApprovalStatus, McpServerRevisionState, McpServerStatus, ModelRoutingScope, Prisma, SkillRevisionState, SkillState } from "@prisma/client";
+import { AgentRevisionState, ArtifactRevisionState, McpApprovalStatus, McpServerRevisionState, McpServerStatus, ModelRoutingScope, Prisma, SkillRevisionState, SkillState } from "@prisma/client";
 
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { BudgetPolicyInput, BudgetPolicySource, McpToolAdmissionClaimRepositoryFactory, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput, ToolPolicySource } from "./session-assembly.types";
 import { __AreRunInputSnapshotMcpToolsValid } from "./mcp-tool-snapshot.validator";
 
 /**
- * Re-checks a published revision's model route, integrations, skills, and artifacts.
+ * Re-checks a published revision's model route, selected MCP tool revisions, skills, and artifacts.
  *
- * Takes row locks before reading, in the same order revocation takes them: revision first, then
- * integration custody. Matching that order is what guarantees a revocation happening at the same
- * moment either completes before this read (and is seen) or waits until the snapshot commits —
- * never lands half-way through and leaves a snapshot naming a revoked integration.
+ * Locks the revision and updates its MCP admission claim before reading. The revision lock prevents
+ * publication changes during the read, while the claim makes concurrent MCP policy reads for this
+ * revision wait for each other.
  *
  * The model route it returns names a LiteLLM model alias and carries no provider credentials,
  * because the compiled input reaches the runtime as opaque data.
  *
- * The custody reference it checks is the stored credential handle for an integration; an expired or
- * not-ready one refuses the run rather than letting the runtime attempt a call it cannot authorise.
- *
  * @implements ToolPolicySource
- * @see https://modelcontextprotocol.io/specification/2025-06-18 - MCP, revision 2025-06-18 as
- * pinned by `_MCP_PROTOCOL_VERSION` in server/infra/obot-custody. The `toolDefinitions` this
- * validates are MCP tools reaching the model.
  * @see PrismaRevisionBudgetPolicySource - locks the same revision row in the same order.
  */
 export class PrismaRevisionToolPolicySource implements ToolPolicySource
 {
-	/** Builds the typed claim repository on the exact transaction passed to {@link load}. */
+	/** Builds the claim repository from the transaction passed to {@link load}. */
 	private readonly _createMcpClaim: McpToolAdmissionClaimRepositoryFactory;
 
-	/** Bind the source to the transaction-scoped MCP policy claim factory. */
+	/** Binds the source to the transaction-scoped MCP policy claim factory. */
 	constructor(createMcpClaim: McpToolAdmissionClaimRepositoryFactory)
 	{
 		this._createMcpClaim = createMcpClaim;
@@ -41,7 +33,7 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 	/** Loads the revision's tool policy, keeping only same-silo rows that are still usable inside the admission transaction. */
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ToolPolicyInput>>
 	{
-		// 1. Lock the policy rows in the same order revocation locks them, so a custody or revision change lands first and this snapshot sees it.
+		// 1. Lock the revision before updating its claim so every admission takes the locks in the same order.
 		await transaction.prisma.$queryRaw(Prisma.sql`
 			SELECT revision."id"
 			FROM "agent_revisions" revision
@@ -53,17 +45,8 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 			FOR UPDATE OF revision
 		`);
 		await this._createMcpClaim(transaction).touch(run.agentRevisionId, command.siloId, new Date(transaction.admittedAt));
-		await transaction.prisma.$queryRaw(Prisma.sql`
-			SELECT custody."id"
-			FROM "agent_revision_integration_assignments" assignment
-			JOIN "integrations" integration ON integration."id" = assignment."integration_id" AND integration."silo_id" = assignment."silo_id"
-			JOIN "integration_custody_references" custody ON custody."id" = assignment."custody_reference_id" AND custody."integration_id" = assignment."integration_id" AND custody."silo_id" = assignment."silo_id"
-			WHERE assignment."agent_revision_id" = ${run.agentRevisionId}
-			ORDER BY custody."id"
-			FOR UPDATE OF assignment, integration, custody
-		`);
 
-		// 2. Re-read the model, custody, and skill assignments only after the rows above are locked.
+		// 2. Read the model, MCP, and skill assignments only after the revision and claim locks are held.
 		const revision = await transaction.prisma.agentRevision.findFirst({
 			where: {
 				id: run.agentRevisionId,
@@ -71,19 +54,9 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 				state: AgentRevisionState.Published,
 				agentService: { is: { id: run.agentServiceId, siloId: command.siloId, state: "Active", activeRevisionId: run.agentRevisionId } },
 			},
-			include: { modelDefinition: true, integrationAssignments: { include: { integration: true, custodyReference: true } }, mcpToolAssignments: { include: { toolRevision: { include: { serverRevision: { include: { server: true } } } } } }, skillAssignments: true },
+			include: { modelDefinition: true, mcpToolAssignments: { include: { toolRevision: { include: { serverRevision: { include: { server: true } } } } } }, skillAssignments: true },
 		});
 		if (revision === null || !_IsModelAvailable(revision.modelDefinition, command.siloId)) return { outcome: "denied", reason: "tool_policy_unavailable" };
-		if (revision.integrationAssignments.some(function _IsIntegrationUnavailable(assignment): boolean
-		{
-			const toolDefinitions = assignment.toolDefinitions as unknown as readonly ReviewedIntegrationToolDefinition[];
-			return assignment.siloId !== command.siloId
-				|| assignment.integration.state !== IntegrationState.Active
-				|| assignment.custodyReference.state !== IntegrationCustodyState.Ready
-				|| assignment.custodyReference.expiresAt.getTime() <= transaction.admittedAtEpochMs
-				|| !Array.isArray(toolDefinitions)
-				|| !__AreReviewedIntegrationToolDefinitionsValid(toolDefinitions);
-		})) return { outcome: "denied", reason: "tool_policy_unavailable" };
 		const mcpTools = revision.mcpToolAssignments.map(function _McpTool(assignment)
 		{
 			return {
@@ -114,7 +87,6 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 			outcome: "loaded",
 			value: {
 				modelRoute: { alias: revision.modelDefinition.publicModelName, modelDefinitionId: revision.modelDefinition.id, litellmModelId: revision.modelDefinition.litellmModelId },
-				integrationAssignments: revision.integrationAssignments.map(function _IntegrationAssignment(assignment) { return { integrationId: assignment.integrationId, toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as unknown as readonly ReviewedIntegrationToolDefinition[] }; }),
 				mcpTools,
 				skillRevisionIds,
 				artifactRevisionIds,

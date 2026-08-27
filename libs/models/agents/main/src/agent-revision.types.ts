@@ -1,5 +1,3 @@
-import type { CanonicalJsonSha256Digest, JsonValue } from "@opencrane/util";
-
 import type { AgentRevisionId, AgentServiceId, PersonaRevisionId, UserId } from "./identifiers.types";
 import type { RevisionBoundaryAttachment } from "./boundary-attachment.types";
 
@@ -13,30 +11,6 @@ export interface SkillRevisionReference
 	readonly skillId: string;
 	/** Immutable selected skill revision. */
 	readonly revisionId: string;
-}
-
-/** One tool a reviewer approved, frozen into this revision so a later change to the integration catalogue cannot alter what the agent may call. */
-export interface ReviewedIntegrationToolDefinition
-{
-	/** Stable MCP tool name selected from the reviewed integration catalogue. */
-	readonly name: string;
-	/** Human-readable model guidance reviewed with the tool schema. */
-	readonly description: string;
-	/** JSON Schema that every argument must satisfy, both when the model proposes a call and when a person approves it. */
-	readonly parametersSchema: JsonValue;
-	/** Digest of the schema above. Recomputing it detects any change made after the revision was authored. */
-	readonly parametersSchemaDigest: CanonicalJsonSha256Digest;
-}
-
-/** Immutable reference to an integration assignment. */
-export interface IntegrationAssignmentReference
-{
-	/** Stable silo-scoped integration identifier. */
-	readonly integrationId: string;
-	/** Immutable opaque Obot custody reference selected for the revision. */
-	readonly custodyReferenceId: string;
-	/** Reviewed tool definitions exposed from the integration. */
-	readonly toolDefinitions: readonly ReviewedIntegrationToolDefinition[];
 }
 
 /** Immutable budget ceilings applied to a run. */
@@ -70,8 +44,6 @@ export interface AgentRevisionContent
 	readonly budget: AgentBudget;
 	/** Immutable skill revisions exposed to the runtime. */
 	readonly skills: readonly SkillRevisionReference[];
-	/** Immutable integration and tool assignments exposed to the runtime. */
-	readonly integrationAssignments: readonly IntegrationAssignmentReference[];
 	/** Exact immutable MCP tool revisions exposed to the runtime. */
 	readonly mcpToolRevisionIds: readonly string[];
 	/** Revision-scoped knowledge attachments authorised for the runtime. */
@@ -105,8 +77,6 @@ export interface AgentRevision
 	readonly modelDefinitionId: string;
 	/** Immutable skill revisions available to the runtime. */
 	readonly skills: readonly SkillRevisionReference[];
-	/** Immutable integration and tool assignments available to the runtime. */
-	readonly integrationAssignments: readonly IntegrationAssignmentReference[];
 	/** Exact immutable MCP tool revisions available to the runtime. */
 	readonly mcpToolRevisionIds: readonly string[];
 	/** Immutable knowledge boundary attachments authorised for the runtime. */

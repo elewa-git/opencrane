@@ -36,7 +36,6 @@ function _revision(): AgentRevision
 		personaRevisionId: "persona-1",
 		modelDefinitionId: "model-definition-1",
 		skills: [],
-		integrationAssignments: [],
 		mcpToolRevisionIds: [],
 		boundaryAttachments: [],
 		budget: { maxTurns: 10, maxTokens: 10000, maxDurationMs: 60000 },

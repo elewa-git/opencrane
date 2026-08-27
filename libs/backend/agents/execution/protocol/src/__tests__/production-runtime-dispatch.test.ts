@@ -23,7 +23,6 @@ function _PersonalSnapshot(): RunInputSnapshot
 		artifactRevisionIds: [],
 		skillRevisionIds: [],
 		memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-1", queryText: "private recall query", maxFacts: 8 },
-		integrationAssignments: [],
 		mcpTools: [],
 		modelRoute: { alias: "model-1" },
 		budgetPolicy: {},
