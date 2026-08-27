@@ -66,24 +66,16 @@ describe("OpenCrane UI local-development commands", function _Suite()
 		expect(_UI_ELEMENTS_PROJECT.targets["test-storybook-visual-workbench"].options.env).toEqual({ OPENCRANE_STORYBOOK_BASE_URL: "http://127.0.0.1:4401" });
 	});
 
-	it("keeps development-live on the single real-backend browser server", function _LiveServe()
+	it("keeps development-live internal for the Tier 2 coordinator", function _LiveServe()
 	{
-		const live = openCraneUiProject.targets.serve.configurations.live;
 		const liveBrowser = openCraneUiProject.targets["serve-browser"].configurations["development-live"];
-
-		expect(live.args).toBe("--uiConfiguration=development-live");
-		expect(live.commands).toEqual([
-			{
-				command: "nx run opencrane-ui:serve-browser:{args.uiConfiguration}",
-				forwardAllArgs: false
-			}
-		]);
 		expect(liveBrowser).toMatchObject({
 			host: "local-development.localhost",
 			port: 4200,
 			proxyConfig: "apps/opencrane-ui/proxy.dev-live.conf.json"
 		});
 		expect(liveProxy["/api/v1"].ws).toBe(true);
-		expect(_ROOT_PACKAGE.scripts["serve:opencrane-ui:live"]).toBe("nx serve opencrane-ui --configuration=live");
+		expect(openCraneUiProject.targets.serve.configurations).not.toHaveProperty("live");
+		expect(_ROOT_PACKAGE.scripts).not.toHaveProperty("serve:opencrane-ui:live");
 	});
 });

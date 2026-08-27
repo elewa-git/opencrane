@@ -116,11 +116,9 @@ deterministic non-happy path. `happy-path` is the default. Component-level varia
 independently available through `npm run storybook:ui` when the routed UI and Playwright pass are not
 needed.
 
-`npm run serve:opencrane-ui:live` is the explicit live-backend path. It uses the live gateway/route
-entry points and `proxy.dev-live.conf.json`; plain serve has no backend proxy. The live proxy targets
-`https://platform.dev.opencrane.ai`, so this profile requires network access and a valid session in
-that environment. A terminal `http proxy error` or `ETIMEDOUT` means the remote backend is
-unreachable; the live profile stays fail-closed instead of switching to local fixtures.
+Backend-connected local development belongs to Tier 2. Its coordinator starts the internal
+`development-live` browser target with the real gateway and route entry points; Tier 1 exposes no
+public live-backend command and never falls back to network access.
 
 ## See also
 

@@ -99,32 +99,6 @@ Use the standalone Storybook command when a task concerns only one component sta
 serve already includes Storybook and its Playwright visual pass; use the routed UI when the task also
 concerns navigation or interaction between stores and gateways.
 
-## Connect to the shared development backend
-
-When a frontend change genuinely needs the shared development backend, run the separate live profile:
-
-```bash
-npm run serve:opencrane-ui:live
-```
-
-That profile keeps the live providers and routes and enables the dedicated development proxy.
-Default development replaces those entry points at build time, so production and live-development
-bundles do not import the local fixtures. The command therefore requires a reachable backend and a
-valid live session.
-
-The proxy currently targets `https://platform.dev.opencrane.ai`. The command has started correctly
-when Nx prints the local URL. If the page remains blank while the terminal reports `http proxy
-error` or `ETIMEDOUT` for `/api/v1/auth/me`, the shared backend is unreachable from the development
-machine. Restore network access to that environment and reload; the live profile deliberately does
-not fall back to Tier 1 fixtures.
-
-::: warning
-Do not use `npm run serve:opencrane-ui:live` as the only proof for a Tier 1 change. A real backend can
-satisfy a request that should have used an in-browser Tier 1 gateway, hiding an incomplete mock
-binding. Run the default Tier 1 profile so the provider-composition and network-tripwire tests can
-catch that drift; use the live profile only for a separate backend integration check.
-:::
-
 ## Start the Tier 2 core profile
 
 Tier 2 requires the Docker CLI and a running Docker-compatible daemon. Docker Desktop provides both
@@ -140,14 +114,13 @@ live gateways:
 npm run dev:tier2
 ```
 
-Open `http://local-development.localhost:4200`. The coordinator runs the exact UI command
-`npx nx serve opencrane-ui --configuration=development-live`, but supplies a local session and
-backend composition so no OpenID Connect (OIDC) sign-in is required.
+Open `http://local-development.localhost:4200`. The coordinator runs the internal UI target
+`npx nx run opencrane-ui:serve-browser:development-live`, then supplies a local session and backend
+composition so no OpenID Connect (OIDC) sign-in is required.
 
-`development-live` is an Angular build configuration, not a standalone environment. It selects the
-real HTTP and WebSocket gateways plus the development proxy instead of Tier 1's in-browser gateway
-implementations. Running that Nx command by itself still requires a separately running backend and
-valid session; the Tier 2 coordinator starts and configures both for local development.
+`development-live` is an internal Angular build/browser configuration, not a public Tier 1 command.
+It selects the real HTTP and WebSocket gateways plus the development proxy instead of Tier 1's
+in-browser gateway implementations. The Tier 2 coordinator owns its backend, session, and lifecycle.
 
 Core supports onboarding, persisted conversations, direct and group messages, and run admission.
 It deliberately leaves Agent execution, models, memory, files, channels, integrations, Obot,
