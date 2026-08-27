@@ -290,6 +290,6 @@ export async function validateWorkspace(
 		);
 	validateUmbrella(repositoryRoot, manifest, previousManifest, errors);
 	validateDatabaseOperand(manifest, errors);
-	validateDatabase(repositoryRoot, manifest, previousManifest, changedFiles, errors);
+	validateDatabase(repositoryRoot, manifest, errors);
 	return errors;
 }

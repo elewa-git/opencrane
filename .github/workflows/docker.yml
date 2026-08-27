@@ -521,9 +521,8 @@ jobs:
           node-version: 24
           cache: npm
 
-      # The production deploy wrapper resolves and schema-validates the database transition before
-      # it mutates the cluster. The smoke job is a fresh checkout, so restore the same exact
-      # lockfile-bound runtime dependencies that the prepare and test jobs use.
+      # The production deploy wrapper checks that an upgrade starts from the release manifest's
+      # immediate predecessor. Restore node_modules because that check runs during the smoke deploy.
       - name: Restore node_modules
         id: node-modules
         uses: actions/cache@v4
