@@ -60,9 +60,10 @@ Build-time provider and route replacements keep local fixtures out of live bundl
 unsupported administration/settings/invitation routes unmounted in Tier 1. Plain serve also starts
 Storybook and its Playwright visual checks. The profile uses the reviewed production survey and one
 selectable Commander, Catalyst, Anchor, or Analyst Guardian first-session path without reproducing
-backend scoring; an explicit configuration persists the archetype in browser storage and an unset
-preference defaults to Commander. Allowlisted URL scenarios cover slow, retry, reconnecting,
-failed-run, and access-change paths.
+backend scoring. Plain serve enters deterministic onboarding, while named archetype scripts persist
+the fixture in browser storage and open its Agent conversation directly; an unset preference uses
+Commander. Allowlisted URL scenarios cover slow, retry, reconnecting, failed-run, and access-change
+paths.
 
 Tier 2 will branch from `local-dev-workflow` for a frontend plus real-backend Agent-chat profile.
 Tier 3 will branch from the latest completed tier for Kubernetes and full infrastructure validation.

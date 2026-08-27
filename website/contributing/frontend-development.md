@@ -18,7 +18,7 @@ npm run serve:opencrane-ui
 
 Open the local URL printed by Nx. The root route enters persona onboarding, and `/chats` opens the
 normal conversation workspace. Administration, settings, invitation, and live-login routes are not
-mounted in this profile; those URLs return to onboarding.
+mounted in this profile; those URLs return to onboarding when no named archetype profile is active.
 
 That single command also starts the interactive Storybook catalogue and runs the tagged Playwright
 visual checks against it. The three processes stay grouped under the Nx task, so UI work and its
@@ -43,23 +43,28 @@ locally before it can open a network transport.
 
 ## Select the local archetype
 
-The first plain serve uses the reviewed Commander/Guardian path. Select another reviewed Guardian
-path with an explicit Nx configuration:
+The first plain serve enters onboarding on the reviewed Commander/Guardian path. Tier 1 keeps this
+path deterministic rather than copying the backend scoring policy into the browser. Select another
+reviewed Guardian fixture and open its Agent conversation directly with a named script:
 
 ```bash
-npx nx serve opencrane-ui --configuration=development-catalyst
+npm run serve:opencrane-ui:catalyst
 ```
 
-The supported configurations are `development-commander`, `development-catalyst`,
-`development-anchor`, and `development-analyst`. Opening an explicit configuration saves the choice
-in browser local storage for that scheme, hostname, and port. Later plain serves reuse the saved
-choice; they do not overwrite it with Commander.
+The supported scripts are:
 
-To return to Commander, stop the explicit configuration, run the plain serve, and clear the site's
-local storage. Reloading an explicit configuration saves its archetype again. Select another explicit
-configuration to replace the choice. Clearing only the downloaded HTTP cache may leave local storage
-intact. This preference survives a
-reload, but the mock interview and conversations do not.
+- `npm run serve:opencrane-ui:commander`;
+- `npm run serve:opencrane-ui:catalyst`;
+- `npm run serve:opencrane-ui:anchor`; and
+- `npm run serve:opencrane-ui:analyst`.
+
+Each named script saves the choice in browser local storage for that scheme, hostname, and port.
+Later plain serves still enter onboarding but reuse the saved deterministic path; they do not
+overwrite it with Commander.
+
+To remove the saved choice, stop the named profile and clear the site's local storage. Select another
+named profile to replace it. Clearing only the downloaded HTTP cache may leave local storage intact.
+This preference survives a reload, but the mock interview and conversations do not.
 
 ## Select a deterministic scenario
 
@@ -100,7 +105,7 @@ When a frontend change genuinely needs the shared development backend, select th
 configuration:
 
 ```bash
-npx nx serve opencrane-ui --configuration=development-live
+npm run serve:opencrane-ui:live
 ```
 
 That configuration keeps the live provider and route entry points and enables the dedicated
@@ -108,8 +113,49 @@ development proxy. Default development replaces those entry points at build time
 and development-live bundles do not import the local fixtures. The live configuration therefore
 requires a reachable backend and a valid live session.
 
+The proxy currently targets `https://platform.dev.opencrane.ai`. The command has started correctly
+when Nx prints the local URL. If the page remains blank while the terminal reports `http proxy
+error` or `ETIMEDOUT` for `/api/v1/auth/me`, the shared backend is unreachable from the development
+machine. Restore network access to that environment and reload; the live profile deliberately does
+not fall back to Tier 1 fixtures.
+
 ::: warning
-Do not use `development-live` to prove a Tier 1 change. A successful live request can hide an
-incomplete mock binding; the provider-composition and network-tripwire tests exist to catch exactly
-that drift.
+Do not use `npm run serve:opencrane-ui:live` to prove a Tier 1 change. A successful live request can
+hide an incomplete mock binding; the provider-composition and network-tripwire tests exist to catch
+exactly that drift.
 :::
+
+## Add a gateway-backed feature
+
+A **gateway** is the narrow state-layer interface through which a feature reads or changes data.
+Keep the feature dependent on that interface so the live application and Tier 1 can supply different
+implementations without changing the page.
+
+```text
+feature store
+     │ injects a narrow gateway token
+     ▼
+state port
+     ├──→ live generated-client adapter ──→ OpenCrane API
+     └──→ Tier 1 in-memory adapter ───────→ LocalDevelopmentState
+```
+
+Add a gateway-backed feature in this order:
+
+1. Define the gateway interface and Angular injection token in the capability's
+   `libs/frontend/state/<capability>` package.
+2. Implement the live adapter with the generated OpenCrane client, then bind it in
+   [`provideOpenCraneUiLiveGateways()`](https://github.com/elewa-git/opencrane/blob/main/libs/frontend/state/gateways/src/lib/opencrane-ui-gateway-profile.provider.ts).
+3. If Tier 1 mounts the feature, add an in-memory adapter under
+   [`state/local-development`](https://github.com/elewa-git/opencrane/tree/main/libs/frontend/state/local-development)
+   and bind it in `provideLocalDevelopmentGateways()`. Reuse `LocalDevelopmentState` when the new
+   data must remain coherent with onboarding or conversations.
+4. If a coherent backend-free implementation is not available, leave the route out of
+   [`app.routes.local.ts`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane-ui/src/app/app.routes.local.ts)
+   instead of supplying a partial adapter.
+5. Test the state port, live adapter mapping, live provider binding, local provider binding, and
+   route availability.
+
+An omitted local binding fails visibly. Angular reports a missing provider, while a retained HTTP or
+generated-client path is rejected by the Tier 1 network tripwire before it reaches the network. Tier 1
+never silently borrows the live backend.

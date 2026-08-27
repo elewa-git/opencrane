@@ -32,10 +32,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   and child Agent threads, with deterministic slow, retry, reconnect, failed-run, and access-change
   scenarios plus Angular and native-API tripwires for missed live bindings. Build-time profile
   replacement keeps those fixtures out of production and omits backend-owned routes locally. Local
-  onboarding can follow the reviewed Commander, Catalyst, Anchor, or Analyst Guardian path; explicit
-  Nx configurations save the choice in browser storage while an unset profile defaults to Commander.
-  The same command starts Storybook and its Playwright visual pass, while the real-backend workflow
-  remains an isolated `development-live` configuration.
+  onboarding can follow the reviewed Commander, Catalyst, Anchor, or Analyst Guardian path. Plain
+  serve enters deterministic onboarding, while named archetype scripts save the chosen fixture and
+  open its Agent conversation directly. The same command starts Storybook and its Playwright visual
+  pass, while `serve:opencrane-ui:live` remains the isolated real-backend workflow.
 
 - **Org admins can now model departments, teams, and projects as one hierarchy of groups.** Groups
   expose an optional parent, direct membership, and explicit `External` or `Local` authority;

@@ -41,27 +41,27 @@ one disposable state owner keeps cross-route projections coherent.
   workspace, event stream, conversation assets, elicitation, and Agent-thread ports.
 - `LOCAL_DEVELOPMENT_ARCHETYPE` keeps every local projection on one reviewed Commander, Catalyst,
   Anchor, or Analyst path.
-- `__ResolveLocalDevelopmentArchetype()` applies an explicit command selection, then a browser-saved
+- `__ResolveLocalDevelopmentArchetype()` applies a named command selection, then a browser-saved
   preference, then the Commander fallback.
 - `mockScenario=happy-path|slow|retry|reconnecting|failed-run|access-changed` selects one
   deterministic development behaviour; unknown values fall back to `happy-path`.
 
 ## Select an archetype
 
-Plain `npx nx serve opencrane-ui` reuses the archetype saved for the current browser origin. When no
-valid preference exists, it starts with Commander. Open one explicit configuration to change and save
-the preference:
+Plain `npm run serve:opencrane-ui` opens onboarding and reuses the archetype saved for the current
+browser origin. When no valid preference exists, the deterministic onboarding path uses Commander.
+Run one named script to change and save the fixture, then open its Agent conversation directly:
 
-- `--configuration=development-commander`
-- `--configuration=development-catalyst`
-- `--configuration=development-anchor`
-- `--configuration=development-analyst`
+- `npm run serve:opencrane-ui:commander`
+- `npm run serve:opencrane-ui:catalyst`
+- `npm run serve:opencrane-ui:anchor`
+- `npm run serve:opencrane-ui:analyst`
 
-Subsequent plain serves keep that selection. To return to Commander, stop the explicit configuration,
-run the plain serve, and clear the site's local storage. Reloading an explicit archetype configuration
-would save that archetype again. Clearing only downloaded HTTP cache files may not remove local
-storage. A different scheme, hostname, or port has separate browser storage. Mock onboarding and chat
-progress remain disposable and reset when the page reloads.
+Subsequent plain serves enter onboarding with that saved deterministic path. Tier 1 does not copy the
+backend scoring policy into the browser, so the named scripts remain the way to select an archetype.
+Clear the site's local storage to remove the preference. Clearing only downloaded HTTP cache files
+may leave local storage intact. A different scheme, hostname, or port has separate browser storage.
+Mock onboarding and chat progress remain disposable and reset when the page reloads.
 
 ## Dependency direction
 

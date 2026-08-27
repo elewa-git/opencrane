@@ -46,7 +46,7 @@ Two threads run underneath every step of that journey:
 
 | Page | Covers |
 | --- | --- |
-| [Frontend development](/contributing/frontend-development) | The backend-free Tier 1 UI profile, deterministic scenarios, Storybook, and the explicit live-backend configuration |
+| [Frontend development](/contributing/frontend-development) | The backend-free Tier 1 UI profile, deterministic scenarios, gateway-extension pattern, Storybook, and the explicit live-backend configuration |
 | [The CI pipeline](/contributing/ci-pipeline) | The three workflows, what each `docker.yml` job gates, and the caching layers that keep it fast |
 | [Deploying](/contributing/deploying) | The script-only rule, the deploy chain, bootstrap prerequisites, and the warnings that save hours |
 | [Versions and migrations](/contributing/versions-and-migrations) | The repository train, the stamp rule, chart and database migrations, and how CI enforces them |
