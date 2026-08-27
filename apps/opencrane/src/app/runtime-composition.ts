@@ -1,18 +1,19 @@
 import * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 
-import { _IssueAttemptLiteLlmKey } from "@opencrane/backend/server/gateways/model-routing";
+import { _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKey } from "@opencrane/backend/server/gateways/model-routing";
 import { _RegisterInternalAgentRuntimeStream } from "@opencrane/backend/server/infra/agent-runtime-stream";
-import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AttemptModelKeyMintRequest, type MintedAttemptModelKey } from "@opencrane/backend/agents/execution/runs";
+import { PrismaAgentRunWorkflowControllerUnitOfWork, __CreateAgentRunWorkflowControllerRouter, type AttemptModelKeyIssuerWithRevocation, type AttemptModelKeyMintRequest, type MintedAttemptModelKey } from "@opencrane/backend/agents/execution/runs";
 import { PrismaSkillWorkloadUnitOfWork, _CreateSkillWorkloadExecutionAuthority, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
 import { __CreateProductionRuntimeDispatchAuthority } from "@opencrane/backend/agents/execution/protocol";
 import { PrismaRuntimeBootstrapExchange, __CreateRuntimeBootstrapRouter } from "@opencrane/backend/server/iam/authorization";
 import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS } from "@opencrane/backend/conversations/projection";
 import { _CreateConversationReplayRepository, PrismaAgentThreadParentDeliveryUnitOfWork, __CreateAgentThreadParentDeliveryRouter, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
 import { PrismaChannelTargetAuthorityUnitOfWork } from "@opencrane/backend/server/agents/channel-targets";
-import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __CreateArtifactPreprocessorRouter, __CreateArtifactScannerRouter } from "@opencrane/backend/server/agents/artifacts";
+import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __CreateArtifactPreprocessControllerRouter, __CreateArtifactPreprocessorRouter, __CreateArtifactScannerRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
 import { PrismaConversationAssetOutputRepository, __CreateConversationAssetOutputRouter } from "@opencrane/backend/server/conversation-assets";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory";
 import { _CreateArtifactScanSourceBroker } from "../infra/artifacts/artifact-scan-source-broker.factory";
@@ -22,25 +23,42 @@ import type { InternalRuntimeConfig } from "./config.types";
 import { _ProcessShutdownSignal } from "./process-shutdown";
 import { _log } from "./log";
 import type { ControllerRuntimeComposition, InternalRuntimeComposition, OptionalRuntimeComposition, RuntimeProtocolComposition, SkillWorkloadRuntimeComposition } from "./runtime-composition.types";
+import { _RUNTIME_ORPHAN_OBSERVATION_MARGIN_MILLISECONDS } from "./run-cancellation-composition";
+
+/** Rejects workflow admission only in isolated composition tests that do not supply the process engine. */
+const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "spawn"> = {
+	async spawn(): Promise<never>
+	{
+		throw new Error("workflow task admission is unavailable");
+	},
+};
 
 /**
  * Mint one attempt-scoped LiteLLM virtual key for a claimed run attempt.
  *
- * This binds the run-dispatch repository's injected issuer to the model-routing gateway, which holds
+ * This binds the workflow authority's injected issuer to the model-routing gateway, which holds
  * the LiteLLM master key. Keeping the call here (not in the `scope:execution-runs` library) is why the
  * master key never reaches the outbound-only controller: only the minted virtual key rides the claim
  * response. The per-silo server already targets its own silo LiteLLM, so `siloId` needs no routing.
  * @param request - Alias, single model alias, silo, budget, and expiry the key is bound to.
  * @returns The transient minted key value.
  */
-async function _IssueAttemptModelKey(request: AttemptModelKeyMintRequest): Promise<MintedAttemptModelKey>
-{
-	const minted = await _IssueAttemptLiteLlmKey({ keyAlias: request.keyAlias, modelAlias: request.modelAlias, maxBudgetUsd: request.maxBudgetUsd, expirySeconds: request.expirySeconds });
-	return { key: minted.key };
-}
+const _IssueAttemptModelKey: AttemptModelKeyIssuerWithRevocation = Object.assign(
+	async function _IssueAttemptModelKey(request: AttemptModelKeyMintRequest): Promise<MintedAttemptModelKey>
+	{
+		const minted = await _IssueAttemptLiteLlmKey({ keyAlias: request.keyAlias, modelAlias: request.modelAlias, maxBudgetUsd: request.maxBudgetUsd, expirySeconds: request.expirySeconds });
+		return { key: minted.key };
+	},
+	{
+		async revokeAttemptKey(request: { readonly keyAlias: string; readonly key: string }): Promise<void>
+		{
+			await _RevokeAttemptLiteLlmKey(request);
+		},
+	},
+);
 
 /**
- * Bind the two controller-only dispatch routers to one reviewed controller identity.
+ * Bind the AgentRun workflow and generic skill-workload routers to one reviewed controller identity.
  *
  * Both routers run in the trusted server namespace. Keeping their repositories together makes the
  * shared claim lease explicit without giving either controller endpoint runtime-stream authority.
@@ -49,23 +67,23 @@ async function _IssueAttemptModelKey(request: AttemptModelKeyMintRequest): Promi
  * @param config - Frozen leases, assignment limits, and outbox-retention settings.
  * @param namespaces - Validated server, personal-runtime, and managed-runtime identity planes.
  * @param tokenReviewer - Reviewer fixed to the sole agent-controller ServiceAccount.
- * @returns Controller dispatch routers with no runtime or worker routes.
+ * @returns Controller routers with no runtime or worker routes.
  */
 function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, skillWorkloadAuthority: ReturnType<typeof _CreateSkillWorkloadExecutionAuthority>): ControllerRuntimeComposition
 {
-	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, {
+	const agentRunWorkflowAuthority = new PrismaAgentRunWorkflowControllerUnitOfWork(prisma, {
 		personalRuntimeNamespace: namespaces.personalRuntimeNamespace,
 		managedRuntimeNamespace: namespaces.managedRuntimeNamespace,
-		claimLeaseMilliseconds: config.claimLeaseMilliseconds,
 		assignmentTtlMilliseconds: config.assignmentTtlMilliseconds,
-		publishedOutboxRetentionMilliseconds: config.publishedOutboxRetentionMilliseconds,
-		outboxPruneBatchSize: config.outboxPruneBatchSize,
-	}, _IssueAttemptModelKey);
+		releaseLeaseMilliseconds: config.claimLeaseMilliseconds,
+		orphanObservationMarginMilliseconds: _RUNTIME_ORPHAN_OBSERVATION_MARGIN_MILLISECONDS,
+		issueAttemptModelKey: _IssueAttemptModelKey,
+	});
 	return {
-		agentControllerRunDispatch: __CreateAgentControllerRunDispatchRouter({
+		agentRunWorkflowController: __CreateAgentRunWorkflowControllerRouter({
 			tokenReviewer,
 			namespace: namespaces.serverNamespace,
-			repository: runDispatchRepository,
+			authority: agentRunWorkflowAuthority,
 			logger: _log,
 		}),
 		skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({
@@ -170,7 +188,7 @@ function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: Interna
  * @param serverNamespace - Namespace containing the trusted server identity.
  * @returns Optional artifact-preprocessor and conversation-replay routers.
  */
-function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, serverNamespace: string): OptionalRuntimeComposition
+function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, serverNamespace: string, controllerTokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, workflowExecution: Pick<IWorkflowEngine, "spawn">): OptionalRuntimeComposition
 {
 	const artifactPreprocessorNamespace = config.artifactPreprocessorEnabled
 		? _ValidateIsolatedWorkloadNamespace(config.artifactPreprocessorNamespace, serverNamespace)
@@ -180,6 +198,15 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 		: null;
 	const artifactPreprocessRepository = _CreateArtifactPreprocessAuthority(prisma);
 	return {
+		artifactPreprocessController: artifactPreprocessorNamespace === null
+			? null
+			: __CreateArtifactPreprocessControllerRouter({
+				tokenReviewer: controllerTokenReviewer,
+				namespace: serverNamespace,
+				workerNamespace: artifactPreprocessorNamespace,
+				authority: artifactPreprocessRepository,
+				logger: _log,
+			}),
 		channelTargetResolver: config.channelTargets === null
 			? null
 			: _CreateChannelTargetResolver(prisma, authApi, config.channelTargets, serverNamespace),
@@ -235,7 +262,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
  * @param config - Frozen startup configuration shared with the internal body parser and workers.
  * @returns Routers composed from controller, skill-workload, runtime, and optional-worker plane authorities.
  */
-export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig): InternalRuntimeComposition
+export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflowExecution: Pick<IWorkflowEngine, "spawn"> = _UnavailableWorkflowExecution): InternalRuntimeComposition
 {
 	// 1. Validate all identity planes before constructing a router, so malformed coordinates fail
 	// startup rather than leaving a partially mounted internal API.
@@ -254,6 +281,6 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 		..._CreateControllerRuntimeComposition(prisma, config, namespaces, controllerTokenReviewer, skillWorkloadAuthority),
 		..._CreateSkillWorkloadRuntimeComposition(prisma, skillWorkloadTokenReviewer, skillWorkloadAuthority),
 		..._CreateRuntimeProtocolComposition(prisma, config, namespaces, runtimeTokenReviewer),
-		..._CreateOptionalRuntimeComposition(prisma, authApi, config, namespaces.serverNamespace),
+		..._CreateOptionalRuntimeComposition(prisma, authApi, config, namespaces.serverNamespace, controllerTokenReviewer, workflowExecution),
 	};
 }

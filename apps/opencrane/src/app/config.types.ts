@@ -22,7 +22,7 @@ export interface ChannelTargetRuntimeConfig
 	readonly trustedHost: string;
 }
 
-/** Settings read once at startup, used to compose workload identity, dispatch, and worker routes. */
+/** Settings read once at startup, used to compose workload identity, workflow-controller, and worker routes. */
 export interface InternalRuntimeConfig
 {
 	/** Whether the restricted artifact-scanner plane is enabled. */
@@ -60,12 +60,8 @@ export interface InternalRuntimeConfig
 	readonly memoryGatewayTokenPath: string;
 	/** Release-local private memory-gateway origin; the client validates its exact shape. */
 	readonly memoryGatewayUrl: string;
-	/** Maximum number of published runtime outbox rows deleted in one prune pass. */
-	readonly outboxPruneBatchSize: number;
 	/** Namespace reserved for personal-agent runtime Jobs. */
 	readonly personalRuntimeNamespace: string | undefined;
-	/** Retention period for delivered runtime outbox rows. */
-	readonly publishedOutboxRetentionMilliseconds: number;
 	/** Namespace containing the OpenCrane server and agent controller. */
 	readonly serverNamespace: string;
 	/** Silo that owns every OCI MCP runtime row served by this process. */

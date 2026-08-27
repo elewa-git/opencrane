@@ -7,6 +7,7 @@ import request from "supertest";
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, PublicHealthServiceNames, PublicHealthServiceStatuses, PublicHealthStatuses, RuntimeCandidateKinds, type RuntimeCandidate } from "@opencrane/contracts";
 import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _RateLimit } from "@opencrane/backend/server/infra/http";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import { _ReadProcessConfig } from "../app/config";
 import type { McpRuntimeComposition } from "../app/mcp-runtime-composition.types";
 
@@ -14,6 +15,12 @@ import type { McpRuntimeComposition } from "../app/mcp-runtime-composition.types
 function _McpRuntime(): McpRuntimeComposition
 {
 	return { authority: {} as McpRuntimeComposition["authority"], promotion: Router(), controller: Router(), companion: Router() };
+}
+
+/** Supply an inert guarded task admission port because these tests never admit a workflow. */
+function _WorkflowExecution(): Pick<IWorkflowEngine, "spawn">
+{
+	return { spawn: vi.fn() } as unknown as Pick<IWorkflowEngine, "spawn">;
 }
 
 /** Keep identity-route tests independent from mounted ArtifactStore credentials. */
@@ -93,7 +100,7 @@ async function _BuildRuntimeCandidateApp(username: string, audiences: string[] =
   } as unknown as AuthenticationV1Api;
   const app = express();
   app.use(express.json());
-  _RegisterInternalRoutes(app, prisma, authApi, _ReadProcessConfig().runtime, _McpRuntime());
+  _RegisterInternalRoutes(app, prisma, authApi, _ReadProcessConfig().runtime, _McpRuntime(), _WorkflowExecution());
   return app;
 }
 
@@ -193,10 +200,10 @@ describe("Control Plane", () =>
       const { _RegisterInternalRoutes } = await import("../app/routes");
       const app = express();
       vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "");
-      expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime()); }).toThrow(/different from POD_NAMESPACE/);
+		expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime(), _WorkflowExecution()); }).toThrow(/different from POD_NAMESPACE/);
 
       vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo");
-      expect(function _SameRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime()); }).toThrow(/different from POD_NAMESPACE/);
+		expect(function _SameRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime(), _WorkflowExecution()); }).toThrow(/different from POD_NAMESPACE/);
     });
 
     it("rejects a reviewed token when Kubernetes omits the runtime audience", async function _RuntimeAudienceMismatch()
@@ -218,7 +225,7 @@ describe("Control Plane", () =>
 			vi.stubEnv("CHANNEL_REPLAY_ENDPOINT", "http://opencrane-server.opencrane-silo.svc.cluster.local:8081/api/internal/conversation-replay");
 			const app = express();
 			app.use(express.json());
-			_RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime());
+			_RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime(), _WorkflowExecution());
 
 			const response = await request(app).post("/api/internal/channel-targets:resolve").set("authorization", "Bearer projected-token").send({ action: "events.read", trustedHost: "acme.example.com", conversationId: "conversation-1" });
 

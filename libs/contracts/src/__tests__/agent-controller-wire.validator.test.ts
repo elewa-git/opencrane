@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
 
-import { ___IsAgentControllerIdentifier, _AgentControllerBoundedIdentifierSchema, _AgentControllerMillisecondInstantSchema, _ParseAgentControllerCommand, _ParseAgentControllerModel } from "../agent-controller-wire.validator";
+import { ___IsAgentControllerIdentifier, ___IsEmptyAgentControllerCommand, _AgentControllerBoundedIdentifierSchema, _AgentControllerMillisecondInstantSchema, _ParseAgentControllerCommand, _ParseAgentControllerModel } from "../agent-controller-wire.validator";
 
 describe("agent-controller wire grammar", function _DescribeWireGrammar()
 {
@@ -10,6 +10,12 @@ describe("agent-controller wire grammar", function _DescribeWireGrammar()
 		expect(___IsAgentControllerIdentifier("run-1")).toBe(true);
 		expect(___IsAgentControllerIdentifier("")).toBe(false);
 		expect(___IsAgentControllerIdentifier("run\n1")).toBe(false);
+	});
+
+	it("accepts only an empty server-selected skill workload claim", function _ChecksEmptyClaim()
+	{
+		expect(___IsEmptyAgentControllerCommand({})).toBe(true);
+		expect(___IsEmptyAgentControllerCommand({ workloadId: "caller-selected" })).toBe(false);
 	});
 
 	it("requires canonical millisecond instants", function _RequiresCanonicalInstants()

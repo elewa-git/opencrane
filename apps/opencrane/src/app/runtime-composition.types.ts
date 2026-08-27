@@ -15,8 +15,8 @@ import type { Router } from "express";
  */
 export interface InternalRuntimeComposition
 {
-	/** Controller-only router for claiming and committing run attempts. */
-	readonly agentControllerRunDispatch: Router;
+	/** Controller-only router that serves one durable AgentRun workflow task. */
+	readonly agentRunWorkflowController: Router;
 	/** Controller-only router for governed skill workload dispatch. */
 	readonly skillWorkloadDispatch: Router;
 	/** Runtime router for one-use workload bootstrap claims. */
@@ -25,6 +25,8 @@ export interface InternalRuntimeComposition
 	readonly skillAuthoringInput: Router;
 	/** Runtime router for committing fenced skill-authoring completion. */
 	readonly skillAuthoringCompletion: Router;
+	/** Optional controller router for task-bound PDF preprocessing Jobs. */
+	readonly artifactPreprocessController: Router | null;
 	/** Optional preprocessor router, present only when the restricted worker plane is enabled. */
 	readonly artifactPreprocessor: Router | null;
 	/** Optional malware-scanner router, present only when its isolated worker plane is enabled. */
@@ -55,7 +57,7 @@ export interface InternalRuntimeComposition
 /** The subset of routers built by the controller-only composition step. */
 export type ControllerRuntimeComposition = Pick<
 	InternalRuntimeComposition,
-	"agentControllerRunDispatch" | "skillWorkloadDispatch"
+	"agentRunWorkflowController" | "skillWorkloadDispatch"
 >;
 
 /** The subset of routers built by the isolated skill-workload composition step. */
@@ -68,4 +70,4 @@ export type SkillWorkloadRuntimeComposition = Pick<
 export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream" | "conversationAssetOutputs" | "agentThreadParentDeliveries">;
 
 /** The subset of routers built by the optional worker and replay composition step. */
-export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessor" | "artifactScanner" | "channelTargetResolver" | "conversationReplay">;
+export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessController" | "artifactPreprocessor" | "artifactScanner" | "channelTargetResolver" | "conversationReplay">;

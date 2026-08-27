@@ -41,9 +41,7 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		memoryGatewayTimeoutMilliseconds: 30_000,
 		memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
 		memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
-		outboxPruneBatchSize: 100,
 		personalRuntimeNamespace: "personal-runtime",
-		publishedOutboxRetentionMilliseconds: 86_400_000,
 		serverNamespace: "opencrane-server",
 		siloId: "silo-1",
 	};

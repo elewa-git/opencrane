@@ -4,11 +4,11 @@ import { PrismaRunCancellationRepository, type RunCancellationRepository } from 
 
 import type { InternalRuntimeConfig } from "./config.types";
 
-/** How long a cleanup claim stays valid before another pass may reclaim it; the repair and cleanup passes share this value. */
+/** How long a cleanup claim stays valid before another cleanup pass may reclaim it. */
 const _RUNTIME_CLEANUP_CLAIM_LEASE_MILLISECONDS = 30_000;
 
-/** Extra time after a dispatch lease in which an in-flight Kubernetes Job create may still finish, so a Job that is not visible yet is not treated as an orphan. */
-const _RUNTIME_ORPHAN_OBSERVATION_MARGIN_MILLISECONDS = 10_000;
+/** Waits past a workflow task's possible Job creation before cleanup first treats an unbound Job as absent. */
+export const _RUNTIME_ORPHAN_OBSERVATION_MARGIN_MILLISECONDS = 10_000;
 
 /** Compose one cancellation authority shared by the public route and cleanup workers. */
 export function _CreateRunCancellationAuthority(prisma: PrismaClient, config: InternalRuntimeConfig): RunCancellationRepository

@@ -55,7 +55,7 @@ import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
  * @param obotCustody - Composed Obot custody authority (fail-closed adapter when Obot is off).
  * @param artifactScannerEnabled - Whether upload admission has a live scanner consumer.
  * @param organizationMembersRouter - Startup-selected standalone or Fleet member authority.
- * @param mcpWorkflows - Shared transaction and worker authority for saved MCP jobs.
+ * @param mcpWorkflows - Shared guarded workflow engine plus saved MCP task authorities.
  * @returns The configured public listener.
  */
 export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition): Express
@@ -79,7 +79,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunStatusRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunCancellationRouter(prisma, runCancellation, _log) },
 		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationsRouter(prisma, personalRunAdmission, _CreateConversationAttachmentAdmission, _log) },
+		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationsRouter(prisma, personalRunAdmission, mcpWorkflows.execution, _CreateConversationAttachmentAdmission, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: __CreateConversationAssetRouter({ resolveCaller: _ResolveConversationAssetCaller, authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled), logger: _log }) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfElicitationRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },
@@ -186,13 +186,14 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "emitEvent" | "spawn">): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn">): void
 {
 	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, workflowExecution);
 	const internalControllerRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentControllerRunDispatch },
+		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentRunWorkflowController },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillWorkloadDispatch },
 		{ method: "use", path: "/api/internal/agent-controller", handler: mcpRuntime.controller },
+		..._OptionalRoute("/api/internal/agent-controller", runtime.artifactPreprocessController),
 	];
 	const internalMcpExecutorRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/mcp-executor", handler: mcpRuntime.companion },

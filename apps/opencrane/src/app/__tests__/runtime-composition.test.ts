@@ -54,9 +54,7 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		memoryGatewayTimeoutMilliseconds: 30_000,
 		memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
 		memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
-		outboxPruneBatchSize: 100,
 		personalRuntimeNamespace: "personal-runtime",
-		publishedOutboxRetentionMilliseconds: 86_400_000,
 		serverNamespace: "opencrane-server",
 		siloId: "silo-1",
 	};
@@ -73,11 +71,12 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 	{
 		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig());
 
-		expect(composition.agentControllerRunDispatch).toEqual(expect.any(Function));
+		expect(composition.agentRunWorkflowController).toEqual(expect.any(Function));
 		expect(composition.skillWorkloadDispatch).toEqual(expect.any(Function));
 		expect(composition.skillWorkloadBootstrap).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringInput).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringCompletion).toEqual(expect.any(Function));
+		expect(composition.artifactPreprocessController).toBeNull();
 		expect(composition.runtimeBootstrap).toEqual(expect.any(Function));
 		expect(composition.runtimeStream).toEqual(expect.any(Function));
 		expect(composition.conversationAssetOutputs).toEqual(expect.any(Function));
@@ -118,6 +117,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config);
 
 		expect(composition.artifactPreprocessor).toEqual(expect.any(Function));
+		expect(composition.artifactPreprocessController).toEqual(expect.any(Function));
 		expect(composition.artifactScanner).toEqual(expect.any(Function));
 		expect(composition.channelTargetResolver).toEqual(expect.any(Function));
 		expect(composition.conversationReplay).toEqual(expect.any(Function));

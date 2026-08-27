@@ -49,7 +49,7 @@ describe("OpenCrane background workers", function _BackgroundWorkerSuite()
 			{} as PrismaClient,
 			{} as k8s.BatchV1Api,
 			{} as ManagedRunAdmissionPort,
-			{ repairNextExpiredRunAtomically: vi.fn() } as unknown as RunCancellationRepository,
+			{} as RunCancellationRepository,
 			{ schedulerEnabled: false, schedulerIntervalMilliseconds: 60_000 } as OpenCraneProcessConfig,
 			{ drain: externalDrain, runOnce: vi.fn().mockResolvedValue(false) } as unknown as ExternalActionWorker,
 			{ recoverExpiredInvocation } as never,
