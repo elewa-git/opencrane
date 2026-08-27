@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __CreateHttpAgentRunWorkflowControllerAuthority } from "../http-agent-run-workflow-controller-authority";
+import { __CreateHttpWarmAgentRunWorkflowControllerAuthority } from "../http-agent-run-workflow-controller-authority";
 import type { AgentRunWorkflowControllerFetch } from "../agent-run-workflow-http-authority.types";
 
 /** Creates a controller authority whose requests are answered by one local fetch double. */
 function _Authority(fetch: AgentRunWorkflowControllerFetch)
 {
-	return __CreateHttpAgentRunWorkflowControllerAuthority({ openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", serverServiceName: "opencrane-server", serverNamespace: "silo-a", tokenPath: "/token", requestTimeoutMilliseconds: 5_000, fetch, readToken: async function _ReadToken() { return "rotated-token"; } });
+	return __CreateHttpWarmAgentRunWorkflowControllerAuthority({ openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", serverServiceName: "opencrane-server", serverNamespace: "silo-a", tokenPath: "/token", requestTimeoutMilliseconds: 5_000, fetch, readToken: async function _ReadToken() { return "rotated-token"; } });
 }
 
 /** Returns the one task identity saved with the durable AgentRun admission. */
@@ -15,7 +15,7 @@ function _Task()
 	return { taskId: "task-1", taskName: "agent-runs.execute/v1" as const, idempotencyKey: "agent-run:silo-a:run-1:attempt:1" };
 }
 
-describe("AgentRun workflow controller HTTP authority", function _Suite()
+describe("warm AgentRun workflow controller HTTP authority", function _Suite()
 {
 	it("sends the saved task request and validates the returned server record", async function _LoadsRecord()
 	{

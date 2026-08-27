@@ -823,6 +823,83 @@ BEGIN
 END;
 $$;
 
+ALTER TABLE "workload_assignments" DROP CONSTRAINT IF EXISTS "workload_assignments_nonempty_check";
+ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_nonempty_check" CHECK (
+    btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("silo_id") <> '' AND
+    btrim("subject_id") <> '' AND "audience" IN ('opencrane-agent-runtime', 'opencrane-managed-agent-runtime') AND
+    btrim("service_account_name") <> '' AND btrim("namespace") <> '' AND btrim("workload_uid") <> '' AND
+    btrim("workload_profile") <> ''
+);
+
+ALTER TABLE "workload_assignments" DROP CONSTRAINT IF EXISTS "workload_assignments_state_check";
+ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_state_check" CHECK (
+    ("state" = 'pending_pod' AND "registered_at" IS NULL AND "revoked_at" IS NULL AND
+        (("workload_kind" = 'job' AND "pod_uid" IS NULL) OR
+         ("workload_kind" = 'deployment' AND "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '' AND "pod_uid" = "workload_uid"))) OR
+    ("state" = 'registered' AND "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '' AND "registered_at" IS NOT NULL AND "revoked_at" IS NULL) OR
+    ("state" = 'revoked' AND "revoked_at" IS NOT NULL)
+);
+
+CREATE OR REPLACE FUNCTION "enforce_workload_assignment_update"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    transition_time TIMESTAMP(3) := clock_timestamp();
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'pending_pod'
+            OR NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NOT NULL
+            OR NOT ((NEW."workload_kind" = 'job' AND NEW."pod_uid" IS NULL)
+                OR (NEW."workload_kind" = 'deployment' AND NEW."pod_uid" IS NOT NULL
+                    AND btrim(NEW."pod_uid") <> '' AND NEW."pod_uid" = NEW."workload_uid")) THEN
+            RAISE EXCEPTION 'a new WorkloadAssignment must begin pending_pod';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'WorkloadAssignment rows cannot be deleted'; END IF;
+    IF NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
+        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
+        OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
+        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
+        OR NEW."audience" IS DISTINCT FROM OLD."audience"
+        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name"
+        OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
+        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind"
+        OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
+        OR NEW."workload_profile" IS DISTINCT FROM OLD."workload_profile"
+        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'WorkloadAssignment identity is immutable';
+    END IF;
+    IF OLD."state" = 'revoked' OR NEW."state" = OLD."state"
+        OR (OLD."state" = 'registered' AND NEW."state" <> 'revoked')
+        OR (OLD."state" = 'pending_pod' AND NEW."state" NOT IN ('registered', 'revoked')) THEN
+        RAISE EXCEPTION 'invalid WorkloadAssignment state transition';
+    END IF;
+    IF OLD."state" = 'pending_pod' AND NEW."state" = 'registered' AND (
+        NEW."pod_uid" IS NULL OR NEW."registered_at" IS NULL OR NEW."revoked_at" IS NOT NULL
+        OR (OLD."workload_kind" = 'deployment' AND NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid")
+        OR NEW."registered_at" < OLD."created_at" OR NEW."registered_at" > transition_time
+    ) THEN
+        RAISE EXCEPTION 'registration must bind the current Pod and registration time';
+    END IF;
+    IF OLD."state" = 'pending_pod' AND NEW."state" = 'revoked' AND (
+        NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NULL
+        OR (OLD."workload_kind" = 'job' AND NEW."pod_uid" IS NOT NULL)
+        OR (OLD."workload_kind" = 'deployment' AND NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid")
+        OR NEW."revoked_at" < OLD."created_at" OR NEW."revoked_at" > transition_time
+    ) THEN
+        RAISE EXCEPTION 'an unregistered WorkloadAssignment must revoke without changing its Pod identity';
+    END IF;
+    IF OLD."state" = 'registered' AND (
+        NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid"
+        OR NEW."registered_at" IS DISTINCT FROM OLD."registered_at"
+        OR NEW."revoked_at" IS NULL OR NEW."revoked_at" < OLD."registered_at"
+        OR NEW."revoked_at" > transition_time
+    ) THEN
+        RAISE EXCEPTION 'registered WorkloadAssignment Pod UID is immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION "enforce_personal_configuration_change_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE profile_silo TEXT; profile_user TEXT; active_persona TEXT; conversation_silo TEXT; conversation_service TEXT; conversation_mode "ConversationMode";
         run_silo TEXT; run_conversation TEXT; run_service TEXT; run_user TEXT; service_silo TEXT; service_kind "AgentServiceKind"; active_agent TEXT;

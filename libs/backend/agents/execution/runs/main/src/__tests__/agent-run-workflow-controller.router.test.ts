@@ -19,13 +19,13 @@ function _Dependencies(): AgentRunWorkflowControllerRouterDependencies
 	return {
 		tokenReviewer: { __Review: vi.fn(async function _Review() { return { username: "system:serviceaccount:silo-a:agent-controller", namespace: "silo-a", serviceAccountName: "agent-controller", audiences: [AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE] }; }) },
 		namespace: "silo-a",
-		authority: {
+		warmAuthority: {
 			loadForTask: vi.fn(async function _Load() { return { siloId: "silo-a", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", workloadProfile: "personal-default", namespace: "silo-a-runtime", bootstrapReference: "bootstrap-v1_test", assignmentExpiresAt: "2099-01-01T00:00:00.000Z" }; }),
-			mintAttemptKey: vi.fn(),
-			revokeAttemptKey: vi.fn(),
-			bindAssignment: vi.fn(),
-			bindFirstPod: vi.fn(),
-			claimRelease: vi.fn(),
+			reserveWarmPod: vi.fn(),
+			recordWarmProfileActivation: vi.fn(),
+			recordWarmReadiness: vi.fn(),
+			requestWarmPodDeletion: vi.fn(),
+			recordWarmPodDeleted: vi.fn(),
 			terminalizeFailedTask: vi.fn(),
 			observe: vi.fn(),
 		},
@@ -45,7 +45,7 @@ describe("AgentRun workflow controller router", function _Suite()
 		const response = await request(app).post("/agent-run-workflows/load").set("authorization", "Bearer projected-token").send(_TaskRequest());
 		expect(response.status).toBe(200);
 		expect(response.body).toMatchObject({ runId: "run-1", workloadProfile: "personal-default" });
-		expect(dependencies.authority.loadForTask).toHaveBeenCalledWith(_TaskRequest().input, _TaskRequest().task);
+		expect(dependencies.warmAuthority.loadForTask).toHaveBeenCalledWith(_TaskRequest().input, _TaskRequest().task);
 	});
 
 	it("denies an unreviewed controller before it exposes task state", async function _DeniesUnreviewedController()
@@ -58,7 +58,7 @@ describe("AgentRun workflow controller router", function _Suite()
 
 		const response = await request(app).post("/agent-run-workflows/load").set("authorization", "Bearer rejected-token").send(_TaskRequest());
 		expect(response.status).toBe(401);
-		expect(dependencies.authority.loadForTask).not.toHaveBeenCalled();
+		expect(dependencies.warmAuthority.loadForTask).not.toHaveBeenCalled();
 	});
 
 	it("records a receipt-fenced terminal setup failure", async function _RecordsTerminalFailure()
@@ -70,6 +70,6 @@ describe("AgentRun workflow controller router", function _Suite()
 
 		const response = await request(app).post("/agent-run-workflows/terminal-failure").set("authorization", "Bearer projected-token").send(_TaskRequest());
 		expect(response.status).toBe(204);
-		expect(dependencies.authority.terminalizeFailedTask).toHaveBeenCalledWith(_TaskRequest().input, _TaskRequest().task);
+		expect(dependencies.warmAuthority.terminalizeFailedTask).toHaveBeenCalledWith(_TaskRequest().input, _TaskRequest().task);
 	});
 });

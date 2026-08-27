@@ -34,6 +34,7 @@ def execute_start_attempt(
     checkpoint_cipher: object | None = None,
     terminal_gate: "TerminalGate | None" = None,
     publish_output: Callable[[dict[str, object], str, dict[str, object]], None] | None = None,
+    attempt_model_key: str | None = None,
 ) -> None:
     """Execute one admitted ``start_attempt`` command.
 
@@ -101,7 +102,12 @@ def execute_start_attempt(
         attempt=coordinates["attempt"],
     ):
         try:
-            for neutral_event in event_source(compiled_input, cancel_event, steering_buffer):
+            source = (
+                event_source(compiled_input, cancel_event, steering_buffer, attempt_model_key=attempt_model_key)
+                if attempt_model_key is not None
+                else event_source(compiled_input, cancel_event, steering_buffer)
+            )
+            for neutral_event in source:
                 if cancel_event.is_set():
                     # Cancellation is checked again after the source yields so a racing provider
                     # response cannot become a late candidate.
@@ -162,6 +168,7 @@ def execute_resume_attempt(
     checkpoint_cipher: object | None = None,
     terminal_gate: "TerminalGate | None" = None,
     publish_output: Callable[[dict[str, object], str, dict[str, object]], None] | None = None,
+    attempt_model_key: str | None = None,
 ) -> None:
     """Execute one admitted ``resume_attempt`` with saved tool results.
 
@@ -266,12 +273,12 @@ def execute_resume_attempt(
         attempt=coordinates["attempt"],
     ):
         try:
-            for neutral_event in resume_event_source(
-                compiled_input,
-                model_resume_results,
-                cancel_event,
-                steering_buffer,
-            ):
+            source = (
+                resume_event_source(compiled_input, model_resume_results, cancel_event, steering_buffer, attempt_model_key=attempt_model_key)
+                if attempt_model_key is not None
+                else resume_event_source(compiled_input, model_resume_results, cancel_event, steering_buffer)
+            )
+            for neutral_event in source:
                 if cancel_event.is_set():
                     # A resume is subject to the same late-output suppression as a fresh attempt.
                     break

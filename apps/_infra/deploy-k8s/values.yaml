@@ -394,6 +394,17 @@ agentController:
       limits:
         cpu: 1000m
         memory: 1Gi
+  # -- Helm-owned generic Pods used once by an AgentRun and then deleted. Each pool keeps 2-5
+  # already-started Pods; changing these fields changes the fixed deployment profile, not a run.
+  warmRuntime:
+    replicas: 2
+    serviceAccountName: warm-runtime
+    tokenAudience: opencrane-warm-runtime
+    bindingPort: 8090
+    genericIdleSeconds: 900
+    genericProfile: generic
+    personalProfile: personal
+    managedProfile: managed
   skillWorkloadProfiles:
     authoring:
       image:

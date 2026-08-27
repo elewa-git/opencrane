@@ -2,9 +2,9 @@ import "./instrument";
 
 import * as k8s from "@kubernetes/client-node";
 
-import { __CreateAgentRunWorkflowHandler, __CreateHttpAgentRunWorkflowControllerAuthority } from "@opencrane/backend/agents/execution/runs/controller";
+import { __CreateHttpWarmAgentRunWorkflowControllerAuthority, __CreateWarmAgentRunWorkflowHandler } from "@opencrane/backend/agents/execution/runs/controller";
 import { AgentRunTaskDeclaration } from "@opencrane/backend/agents/execution/runs/workflows/contract";
-import { __CreateKubernetesAgentControllerStore } from "@opencrane/backend/agents/runtime/controller";
+import { __CreateWarmRuntimeKubernetesStore } from "@opencrane/backend/agents/runtime/controller";
 import { __CreateHttpMcpExecutorControllerAuthority, __CreateKubernetesMcpExecutorControllerStore, __RunMcpExecutorController } from "@opencrane/backend/agents/runtime/mcp-executor/controller";
 import { __CreateHttpSkillAuthoringValidationControllerAuthority, __CreateHttpSkillWorkloadControllerAuthority, __CreateKubernetesSkillWorkloadControllerStore, __CreateSkillAuthoringValidationHandler, __RunSkillWorkloadController } from "@opencrane/backend/agents/skills/controller";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
@@ -34,18 +34,12 @@ async function _Main(): Promise<void>
 		const kubeConfig = new k8s.KubeConfig();
 		kubeConfig.loadFromCluster();
 		const controllerAuthorityOptions = { openCraneInternalUrl: config.openCraneInternalUrl, serverServiceName: config.serverServiceName, serverNamespace: config.serverNamespace, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal };
-		const agentRunAuthority = __CreateHttpAgentRunWorkflowControllerAuthority(controllerAuthorityOptions);
+		const agentRunAuthority = __CreateHttpWarmAgentRunWorkflowControllerAuthority(controllerAuthorityOptions);
 		const skillWorkloadAuthority = __CreateHttpSkillWorkloadControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds });
 		const skillAuthoringAuthority = __CreateHttpSkillAuthoringValidationControllerAuthority(controllerAuthorityOptions);
 		const mcpExecutorAuthority = __CreateHttpMcpExecutorControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds });
 		const artifactAuthority = config.artifactPreprocessorProfile === undefined ? null : __CreateHttpArtifactPreprocessControllerAuthority(controllerAuthorityOptions);
-		const runtimeKubernetes = __CreateKubernetesAgentControllerStore({ batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
-		const agentRunKubernetes = {
-			ensureSuspendedJob: runtimeKubernetes.__EnsureSuspendedJob,
-			ensureAttemptKeySecret: runtimeKubernetes.__EnsureAttemptKeySecret,
-			releaseJob: runtimeKubernetes.__EnsureRuntimeJobReleased,
-			findFirstPod: runtimeKubernetes.__FindFirstRuntimePod,
-		};
+		const agentRunKubernetes = __CreateWarmRuntimeKubernetesStore({ appsApi: kubeConfig.makeApiClient(k8s.AppsV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
 		const skillKubernetes = __CreateKubernetesSkillWorkloadControllerStore({ batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
 		const mcpKubernetes = __CreateKubernetesMcpExecutorControllerStore({ batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
 		const artifactKubernetes = config.artifactPreprocessorProfile === undefined ? null : __CreateKubernetesGovernedJobControllerStore({ batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal, workloadLabelKey: "opencrane.ai/artifact-preprocessor", releaseTraceName: "agent_controller.artifact_preprocess_job.release" });
@@ -60,7 +54,7 @@ async function _Main(): Promise<void>
 		const runtime = _CreateAbsurdWorkflowEngine({ databasePoolSize: config.workflowDatabasePoolSize, databaseUrl: config.databaseUrl, log, pollIntervalMs: config.workflowPollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workflowWorkerConcurrency });
 		workflowRuntime = runtime;
 		const execution = __CreateWorkflowGuard({ execution: runtime, log, queueAuthority, siloId: config.siloId });
-		execution.register(__CreateAgentRunWorkflowHandler({ authority: agentRunAuthority, kubernetes: agentRunKubernetes, profiles: config.profiles, pollIntervalMilliseconds: config.pollIntervalMilliseconds }));
+		execution.register(__CreateWarmAgentRunWorkflowHandler({ authority: agentRunAuthority, kubernetes: agentRunKubernetes, profiles: config.warmRuntimeProfiles, pollIntervalMilliseconds: config.pollIntervalMilliseconds }));
 		execution.register(__CreateSkillAuthoringValidationHandler({ authority: skillAuthoringAuthority, kubernetes: skillKubernetes, profile: config.skillWorkloadProfiles.authoring, podWaitMilliseconds: config.pollIntervalMilliseconds }));
 		if (config.artifactPreprocessorProfile !== undefined && artifactAuthority !== null && artifactKubernetes !== null)
 		{
@@ -80,7 +74,7 @@ async function _Main(): Promise<void>
 		process.once("SIGTERM", function _sigterm() { _Shutdown("SIGTERM"); });
 		process.once("SIGINT", function _sigint() { _Shutdown("SIGINT"); });
 		await runtime.startWorkers({ workerName: "agent-controller" });
-		log.info({ profiles: Object.entries(config.profiles).map(function _profile([name, profile]) { return { name, namespace: profile.namespace }; }), artifactPreprocessingEnabled: config.artifactPreprocessorProfile !== undefined }, "agent controller started");
+		log.info({ profiles: Object.entries(config.warmRuntimeProfiles).map(function _Profile([name, profile]) { return { name, namespace: profile.namespace }; }), artifactPreprocessingEnabled: config.artifactPreprocessorProfile !== undefined }, "agent controller started");
 		await Promise.all([
 			__RunSkillWorkloadController({ authority: skillWorkloadAuthority, kubernetes: skillKubernetes, profiles: config.skillWorkloadProfiles, pollIntervalMilliseconds: config.pollIntervalMilliseconds, log }, shutdown.signal),
 			__RunMcpExecutorController({ authority: mcpExecutorAuthority, kubernetes: mcpKubernetes, profile: config.mcpExecutorProfile, pollIntervalMilliseconds: config.pollIntervalMilliseconds, log }, shutdown.signal),

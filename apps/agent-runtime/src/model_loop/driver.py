@@ -210,6 +210,7 @@ def pydantic_ai_event_source(
     compiled_input: dict[str, object],
     cancel_event: threading.Event,
     steering_buffer: list[str],
+    attempt_model_key: str | None = None,
 ) -> Iterator[dict[str, object]]:
     """Run a new compiled input and yield ordered framework-neutral events.
 
@@ -219,7 +220,7 @@ def pydantic_ai_event_source(
     """
     from pydantic_ai import Agent
 
-    agent, output_collector, output_base_url, output_attempt_key = _model_loop_components(compiled_input)
+    agent, output_collector, output_base_url, output_attempt_key = _model_loop_components(compiled_input, attempt_model_key)
 
     async def _collect() -> list[dict[str, object]]:
         """Collect one fresh framework run without leaking async objects out of this adapter."""
@@ -280,6 +281,7 @@ def pydantic_ai_resume_source(
     tool_results: object,
     cancel_event: threading.Event,
     steering_buffer: list[str],
+    attempt_model_key: str | None = None,
 ) -> Iterator[dict[str, object]]:
     """Resume from attempt-owned compiled context and control-plane-authorised tool results.
 
@@ -290,7 +292,7 @@ def pydantic_ai_resume_source(
     """
     from pydantic_ai import Agent, DeferredToolResults
 
-    agent, output_collector, output_base_url, output_attempt_key = _model_loop_components(compiled_input)
+    agent, output_collector, output_base_url, output_attempt_key = _model_loop_components(compiled_input, attempt_model_key)
     coordinates = _history_coordinates(compiled_input)
     message_history = load_model_history(*coordinates)
     # Stop if the messages are gone, which is what happens when the process has been replaced. Rebuilding
@@ -440,7 +442,7 @@ def apply_steering_to_request(model_request_node: object, steering: list[str]) -
         parts.extend({"content": text} for text in steering)
 
 
-def _model_loop_components(compiled_input: dict[str, object]) -> tuple[object, OpenAIGeneratedOutputCollector, str, str]:
+def _model_loop_components(compiled_input: dict[str, object], attempt_model_key: str | None = None) -> tuple[object, OpenAIGeneratedOutputCollector, str, str]:
     """Build attempt-private model and generated-output adapters from one frozen route.
 
     The model alias comes from the immutable input snapshot. The base URL is process configuration,
@@ -450,10 +452,15 @@ def _model_loop_components(compiled_input: dict[str, object]) -> tuple[object, O
     # Configuration chooses only the in-cluster proxy endpoint and key mount. The immutable compiled
     # snapshot remains the sole authority for the actual model alias and instructions.
     base_url = environment("OPENCRANE_RUNTIME_LITELLM_BASE_URL")
-    key_path = environment("OPENCRANE_RUNTIME_LITELLM_KEY_PATH", DEFAULT_LITELLM_KEY_PATH)
-    # Read the secret at point of use so it is neither retained in process configuration nor exposed in
-    # candidate/checkpoint state. The key is scoped to this attempt, never a LiteLLM master key.
-    attempt_key = read_attempt_litellm_key(key_path)
+    # A fresh Job reads its mounted attempt key at the model boundary. A claimed warm Pod receives
+    # the same scoped value only after its proof-key binding commits and keeps it in process memory.
+    if attempt_model_key is None:
+        key_path = environment("OPENCRANE_RUNTIME_LITELLM_KEY_PATH", DEFAULT_LITELLM_KEY_PATH)
+        attempt_key = read_attempt_litellm_key(key_path)
+    elif not attempt_model_key:
+        raise RuntimeError("warm runtime attempt model key is empty")
+    else:
+        attempt_key = attempt_model_key
     model_route = compiled_input.get("model")
     model_alias = model_route.get("modelAlias") if isinstance(model_route, dict) else None
     if not isinstance(model_alias, str) or not model_alias:

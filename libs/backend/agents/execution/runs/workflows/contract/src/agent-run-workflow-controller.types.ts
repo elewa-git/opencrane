@@ -11,7 +11,7 @@ import type { AgentRunTaskInput } from "./agent-run-task.types";
 export type AgentRunWorkflowObservation = "completed" | "failed" | "cancelled" | "running" | "stale";
 
 /**
- * Holds non-secret facts the server approves for one fixed runtime Job.
+ * Holds non-secret facts the server approves for one fixed warm runtime claim.
  *
  * The controller reloads this record instead of checkpointing it, so cancellation or retry takes
  * effect after a workflow restart. The values must still match the task input before Job creation.
@@ -28,92 +28,81 @@ export interface AgentRunWorkflowControllerRecord extends AgentRunTaskInput
 	readonly namespace: string;
 	/** Names the opaque bootstrap row the runtime may exchange after its Pod is bound. */
 	readonly bootstrapReference: string;
-	/** Limits the Job lifetime after it is released. */
+	/** Limits how long the warm runtime claim may remain usable. */
 	readonly assignmentExpiresAt: string;
 }
 
-/**
- * Holds the transient model key returned only while the controller creates the Job-owned Secret.
- *
- * The controller passes it straight to Kubernetes and never records it in workflow checkpoints or
- * logs. A replay mints a fresh key under the same alias and saves only its SHA-256 digest before
- * Kubernetes receives it. When the immutable Secret already exists, the handler uses that digest
- * to revoke the fresh unused key without reading or replacing the Secret.
- */
-export interface AgentRunWorkflowAttemptKey
+/** Carries one generic warm Pod that Kubernetes has already started. */
+export interface AgentRunWarmRuntimeReservationCommand
 {
-	/** Carries the model key value; callers must not save or log it. */
-	readonly key: string;
-	/** Names the transient key for revocation without revealing its value in traces or logs. */
-	readonly keyAlias: string;
-}
-
-/**
- * Records the immutable Job identity after Kubernetes creates or adopts the suspended Job.
- *
- * The server accepts this only for the task's current run and profile. A conflict means another
- * task or retry owns the assignment, so the controller must not repair or replace that Job.
- */
-export interface AgentRunWorkflowAssignmentCommand
-{
-	/** Names the immutable Job UID Kubernetes returned. */
-	readonly workloadUid: string;
-	/** Names the selected fixed runtime profile. */
+	/** Names the server-selected pool profile for this run. */
 	readonly workloadProfile: string;
-	/** Names the ServiceAccount the released Pod must use. */
+	/** Names the Helm-owned pool Deployment. */
+	readonly deploymentName: string;
+	/** Carries the immutable pool Deployment UID. */
+	readonly deploymentUid: string;
+	/** Names the generic Pod offered for reservation. */
+	readonly podName: string;
+	/** Carries the immutable Pod UID. */
+	readonly podUid: string;
+	/** Carries the Pod version that later profile activation must test. */
+	readonly podResourceVersion: string;
+	/** Names the deployment-owned generic network profile. */
+	readonly genericProfile: string;
+	/** Names the deployment-owned claimed network profile. */
+	readonly claimedProfile: string;
+	/** Names the credential-free warm runtime ServiceAccount. */
 	readonly serviceAccountName: string;
 }
 
-/**
- * Records the first Pod identity after the controller releases the recorded Job.
- *
- * A different Pod is a conflict, not a retry, because the runtime bootstrap exchange must bind to
- * exactly one Pod for each AgentRun attempt.
- */
-export interface AgentRunWorkflowPodCommand
+/** Records the conditional profile patch returned by Kubernetes. */
+export interface AgentRunWarmRuntimeActivationCommand
 {
-	/** Names the immutable Job UID already bound by the server. */
-	readonly workloadUid: string;
-	/** Names the immutable UID of the one Job-owned Pod. */
+	/** Names the reserved Pod. */
 	readonly podUid: string;
+	/** Carries the resource version returned after activation. */
+	readonly resourceVersion: string;
+	/** Names the claimed profile now projected on the Pod. */
+	readonly profile: string;
 }
 
-/**
- * Binds one server-fenced release permission to the Job the controller is about to unsuspend.
- *
- * Cancellation may refuse this claim after Job assignment. Its expiry limits the Kubernetes release
- * independently from the runtime assignment lifetime, so a delayed controller cannot extend work.
- */
-export interface AgentRunWorkflowReleaseClaim
+/** Records readiness proved through the selected network path. */
+export interface AgentRunWarmRuntimeReadinessCommand extends AgentRunWarmRuntimeActivationCommand
 {
-	/** Ends the release permission before the runtime assignment itself expires. */
-	readonly expiresAt: string;
+	/** Records when the controller completed the readiness probe. */
+	readonly observedAt: string;
 }
 
-/**
- * Defines the server operations the controller task may request for one saved attempt.
- *
- * The server owns task receipt checks, lifecycle state, bindings, and release fences. Null means
- * cancellation or retry won; conflict means the task must stop rather than act on another attempt.
- *
- * Called by: `__CreateAgentRunWorkflowHandler`.
- */
-export interface AgentRunWorkflowControllerAuthority
+/** Carries the exact used Pod identity for one-way deletion. */
+export interface AgentRunWarmRuntimeDeletionCommand
 {
-	/** Reloads current task-bound facts without caching them; null means cancellation or retry made this task stale. */
+	/** Names the used Pod. */
+	readonly podName: string;
+	/** Carries the immutable Pod UID used as a delete precondition. */
+	readonly podUid: string;
+	/** Carries the immutable owning Deployment UID. */
+	readonly deploymentUid: string;
+	/** Names the generic or claimed profile expected before deletion. */
+	readonly profile: string;
+}
+
+/** Defines the server operations used by the hard-cutoff warm AgentRun workflow. */
+export interface AgentRunWarmRuntimeControllerAuthority
+{
+	/** Reloads current task-bound facts before a handler reserves a generic Pod. */
 	loadForTask(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<AgentRunWorkflowControllerRecord | null>;
-	/** Mints a fresh transient attempt key for this task under its stable server-selected alias. */
-	mintAttemptKey(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<AgentRunWorkflowAttemptKey | null>;
-	/** Revokes a newly minted unused key only when its digest still matches this saved workflow task. */
-	revokeAttemptKey(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, attemptKey: AgentRunWorkflowAttemptKey): Promise<void>;
-	/** Binds the suspended Job UID before the controller can release it. */
-	bindAssignment(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWorkflowAssignmentCommand): Promise<"bound" | "idempotent" | "conflict">;
-	/** Binds the first exact Job-owned Pod before it may exchange the bootstrap reference. */
-	bindFirstPod(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWorkflowPodCommand): Promise<"bound" | "idempotent" | "conflict">;
-	/** Takes the server-fenced permission to unsuspend this already-bound Job, or null after cancellation. */
-	claimRelease(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, workloadUid: string): Promise<AgentRunWorkflowReleaseClaim | null>;
-	/** Fences this receipt, records setup failure, and queues exact cleanup for any Job it may have created. */
+	/** Reserves one generic Pod in the database, or rejects a candidate another task already won. */
+	reserveWarmPod(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeReservationCommand): Promise<"bound" | "idempotent" | "conflict">;
+	/** Saves the conditional Kubernetes profile activation for the reserved Pod. */
+	recordWarmProfileActivation(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeActivationCommand): Promise<"bound" | "idempotent" | "conflict">;
+	/** Saves readiness only after the controller probes the selected network path. */
+	recordWarmReadiness(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeReadinessCommand): Promise<"bound" | "idempotent" | "conflict">;
+	/** Records the one-way deletion command before Kubernetes mutation. */
+	requestWarmPodDeletion(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<"bound" | "idempotent" | "conflict">;
+	/** Records that the exact used Pod deletion request succeeded. */
+	recordWarmPodDeleted(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<"bound" | "idempotent" | "conflict">;
+	/** Fences this receipt and records a setup failure. */
 	terminalizeFailedTask(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<void>;
-	/** Reads the current terminal state without changing it. */
+	/** Reads current lifecycle state while the claimed Pod is running. */
 	observe(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<AgentRunWorkflowObservation>;
 }

@@ -1,12 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
-import { __ParseAgentRunWorkflowAttemptKey, __ParseAgentRunWorkflowBindingOutcome, __ParseAgentRunWorkflowControllerRecord, __ParseAgentRunWorkflowObservation, __ParseAgentRunWorkflowReleaseClaim, type AgentRunTaskInput, type AgentRunWorkflowAssignmentCommand, type AgentRunWorkflowAttemptKey, type AgentRunWorkflowControllerAuthority, type AgentRunWorkflowControllerRecord, type AgentRunWorkflowObservation, type AgentRunWorkflowPodCommand, type AgentRunWorkflowReleaseClaim } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import { __ParseAgentRunWorkflowBindingOutcome, __ParseAgentRunWorkflowControllerRecord, __ParseAgentRunWorkflowObservation, type AgentRunTaskInput, type AgentRunWarmRuntimeActivationCommand, type AgentRunWarmRuntimeControllerAuthority, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWarmRuntimeReadinessCommand, type AgentRunWarmRuntimeReservationCommand, type AgentRunWorkflowControllerRecord, type AgentRunWorkflowObservation } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
-import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
-import type { AgentRunWorkflowControllerFetch, AgentRunWorkflowControllerHttpAuthorityOptions, AgentRunWorkflowControllerTokenReader } from "./agent-run-workflow-http-authority.types";
+import type { AgentRunWorkflowControllerHttpAuthorityOptions, AgentRunWorkflowControllerTokenReader } from "./agent-run-workflow-http-authority.types";
 
 /** Limits an internal controller response before it reaches a task handler. */
 const _MAX_RESPONSE_BYTES = 16 * 1024;
@@ -111,140 +110,68 @@ async function _ReadJson<T>(response: Response, parser: (value: unknown) => T | 
 	return parsed;
 }
 
-/**
- * Creates the internal server authority used by the controller-hosted AgentRun workflow handler.
- *
- * The configured origin must name the same-silo OpenCrane Service before this adapter reads the
- * controller token. Each request carries the admitted task receipt, while response validators keep
- * a wrong run, profile, or terminal value from becoming controller work.
- *
- * Called by: `apps/agent-controller/src/index.ts` when it registers the AgentRun workflow handler.
- * @param options - Supplies the trusted server origin, rotating token, timeout, and test seams.
- * @returns The controller authority that reads and advances only the admitted task's lifecycle.
- */
-export function __CreateHttpAgentRunWorkflowControllerAuthority(options: AgentRunWorkflowControllerHttpAuthorityOptions): AgentRunWorkflowControllerAuthority
+/** Creates the controller HTTP adapter for the one-shot warm AgentRun lifecycle. */
+export function __CreateHttpWarmAgentRunWorkflowControllerAuthority(options: AgentRunWorkflowControllerHttpAuthorityOptions): AgentRunWarmRuntimeControllerAuthority
 {
 	const baseUrl = _BaseUrl(options.openCraneInternalUrl, options.serverServiceName, options.serverNamespace);
 	if (!isAbsolute(options.tokenPath) || !Number.isSafeInteger(options.requestTimeoutMilliseconds) || options.requestTimeoutMilliseconds < 1_000 || options.requestTimeoutMilliseconds > 60_000)
 	{
-		throw new Error("AgentRun workflow HTTP authority requires an absolute token path and 1-60s timeout");
+		throw new Error("warm AgentRun HTTP authority requires an absolute token path and 1-60s timeout");
 	}
-	const fetchRequest: AgentRunWorkflowControllerFetch = options.fetch ?? fetch;
+	const fetchRequest = options.fetch ?? fetch;
 	const readToken = options.readToken ?? _CreateTokenReader(options.tokenPath);
-
 	async function _Request(path: string, body: unknown): Promise<Response>
 	{
 		return await fetchRequest(new URL(path, baseUrl), { method: "POST", headers: _Headers(await readToken()), body: JSON.stringify(body), signal: _RequestSignal(options.shutdownSignal, options.requestTimeoutMilliseconds) });
 	}
-
-	return {
-		async loadForTask(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<AgentRunWorkflowControllerRecord | null>
-		{
-			return await ___DoWithTrace("agent_controller.agent_run_workflow.load", { runId: input.runId, attempt: input.attempt }, async function _Load(): Promise<AgentRunWorkflowControllerRecord | null>
-			{
-				const response = await _Request("/api/internal/agent-controller/agent-run-workflows/load", { input, task });
-				if (response.status === 409)
-				{
-					return null;
-				}
-				if (response.status !== 200)
-				{
-					throw new Error(`OpenCrane AgentRun workflow load failed with HTTP ${response.status}`);
-				}
-				return await _ReadJson(response, __ParseAgentRunWorkflowControllerRecord);
-			});
-		},
-		async mintAttemptKey(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<AgentRunWorkflowAttemptKey | null>
-		{
-			return await ___DoWithTrace("agent_controller.agent_run_workflow.mint_attempt_key", { runId: input.runId, attempt: input.attempt }, async function _Mint(): Promise<AgentRunWorkflowAttemptKey | null>
-			{
-				const response = await _Request("/api/internal/agent-controller/agent-run-workflows/mint-attempt-key", { input, task });
-				if (response.status === 409)
-				{
-					return null;
-				}
-				if (response.status !== 200)
-				{
-					throw new Error(`OpenCrane AgentRun workflow key mint failed with HTTP ${response.status}`);
-				}
-				return await _ReadJson(response, __ParseAgentRunWorkflowAttemptKey);
-			});
-		},
-		async revokeAttemptKey(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, attemptKey: AgentRunWorkflowAttemptKey): Promise<void>
-		{
-			return await ___DoWithTrace("agent_controller.agent_run_workflow.revoke_attempt_key", { runId: input.runId, attempt: input.attempt, keyAlias: attemptKey.keyAlias }, async function _Revoke(): Promise<void>
-			{
-				const response = await _Request("/api/internal/agent-controller/agent-run-workflows/revoke-attempt-key", { input, task, attemptKey });
-				if (response.status !== 204)
-				{
-					throw new Error(`OpenCrane AgentRun workflow key revocation failed with HTTP ${response.status}`);
-				}
-			});
-		},
-		async bindAssignment(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWorkflowAssignmentCommand): Promise<"bound" | "idempotent" | "conflict">
-		{
-			return await _BindingRequest("/api/internal/agent-controller/agent-run-workflows/assignment", input, task, command, fetchRequest, readToken, baseUrl, options);
-		},
-		async bindFirstPod(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWorkflowPodCommand): Promise<"bound" | "idempotent" | "conflict">
-		{
-			return await _BindingRequest("/api/internal/agent-controller/agent-run-workflows/first-pod", input, task, command, fetchRequest, readToken, baseUrl, options);
-		},
-		async claimRelease(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, workloadUid: string): Promise<AgentRunWorkflowReleaseClaim | null>
-		{
-			return await ___DoWithTrace("agent_controller.agent_run_workflow.release_claim", { runId: input.runId, attempt: input.attempt, workloadUid }, async function _ClaimRelease(): Promise<AgentRunWorkflowReleaseClaim | null>
-			{
-				const response = await _Request("/api/internal/agent-controller/agent-run-workflows/release-claim", { input, task, workloadUid });
-				if (response.status === 409)
-				{
-					return null;
-				}
-				if (response.status !== 200)
-				{
-					throw new Error(`OpenCrane AgentRun workflow release claim failed with HTTP ${response.status}`);
-				}
-				return await _ReadJson(response, __ParseAgentRunWorkflowReleaseClaim);
-			});
-		},
-		async terminalizeFailedTask(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<void>
-		{
-			return await ___DoWithTrace("agent_controller.agent_run_workflow.terminal_failure", { runId: input.runId, attempt: input.attempt }, async function _TerminalFailure(): Promise<void>
-			{
-				const response = await _Request("/api/internal/agent-controller/agent-run-workflows/terminal-failure", { input, task });
-				if (response.status !== 204)
-				{
-					throw new Error(`OpenCrane AgentRun workflow terminal failure failed with HTTP ${response.status}`);
-				}
-			});
-		},
-		async observe(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<AgentRunWorkflowObservation>
-		{
-			return await ___DoWithTrace("agent_controller.agent_run_workflow.observe", { runId: input.runId, attempt: input.attempt }, async function _Observe(): Promise<AgentRunWorkflowObservation>
-			{
-				const response = await _Request("/api/internal/agent-controller/agent-run-workflows/observe", { input, task });
-				if (response.status !== 200)
-				{
-					throw new Error(`OpenCrane AgentRun workflow observation failed with HTTP ${response.status}`);
-				}
-				return await _ReadJson(response, __ParseAgentRunWorkflowObservation);
-			});
-		},
-	};
-}
-
-/** Sends one binding command and maps an authority conflict to the handler's stop outcome. */
-async function _BindingRequest(commandPath: string, input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWorkflowAssignmentCommand | AgentRunWorkflowPodCommand, fetchRequest: AgentRunWorkflowControllerFetch, readToken: AgentRunWorkflowControllerTokenReader, baseUrl: URL, options: AgentRunWorkflowControllerHttpAuthorityOptions): Promise<"bound" | "idempotent" | "conflict">
-{
-	return await ___DoWithTrace("agent_controller.agent_run_workflow.binding", { runId: input.runId, attempt: input.attempt, workloadUid: command.workloadUid }, async function _Bind(): Promise<"bound" | "idempotent" | "conflict">
+	async function _Binding(path: string, input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeReservationCommand | AgentRunWarmRuntimeActivationCommand | AgentRunWarmRuntimeReadinessCommand | AgentRunWarmRuntimeDeletionCommand): Promise<"bound" | "idempotent" | "conflict">
 	{
-		const response = await fetchRequest(new URL(commandPath, baseUrl), { method: "PUT", headers: _Headers(await readToken()), body: JSON.stringify({ input, task, command }), signal: _RequestSignal(options.shutdownSignal, options.requestTimeoutMilliseconds) });
+		const response = await _Request(path, { input, task, command });
 		if (response.status === 409)
 		{
 			return "conflict";
 		}
 		if (response.status !== 200)
 		{
-			throw new Error(`OpenCrane AgentRun workflow binding failed with HTTP ${response.status}`);
+			throw new Error(`warm AgentRun binding failed with HTTP ${response.status}`);
 		}
 		return await _ReadJson(response, __ParseAgentRunWorkflowBindingOutcome);
-	});
+	}
+	return {
+		async loadForTask(input, task): Promise<AgentRunWorkflowControllerRecord | null>
+		{
+			const response = await _Request("/api/internal/agent-controller/agent-run-workflows/load", { input, task });
+			if (response.status === 409)
+			{
+				return null;
+			}
+			if (response.status !== 200)
+			{
+				throw new Error(`warm AgentRun load failed with HTTP ${response.status}`);
+			}
+			return await _ReadJson(response, __ParseAgentRunWorkflowControllerRecord);
+		},
+		async reserveWarmPod(input, task, command) { return await _Binding("/api/internal/agent-controller/agent-run-workflows/warm-reservation", input, task, command); },
+		async recordWarmProfileActivation(input, task, command) { return await _Binding("/api/internal/agent-controller/agent-run-workflows/warm-activation", input, task, command); },
+		async recordWarmReadiness(input, task, command) { return await _Binding("/api/internal/agent-controller/agent-run-workflows/warm-readiness", input, task, command); },
+		async requestWarmPodDeletion(input, task, command) { return await _Binding("/api/internal/agent-controller/agent-run-workflows/warm-delete-request", input, task, command); },
+		async recordWarmPodDeleted(input, task, command) { return await _Binding("/api/internal/agent-controller/agent-run-workflows/warm-deleted", input, task, command); },
+		async terminalizeFailedTask(input, task): Promise<void>
+		{
+			const response = await _Request("/api/internal/agent-controller/agent-run-workflows/terminal-failure", { input, task });
+			if (response.status !== 204)
+			{
+				throw new Error(`warm AgentRun terminal failure failed with HTTP ${response.status}`);
+			}
+		},
+		async observe(input, task): Promise<AgentRunWorkflowObservation>
+		{
+			const response = await _Request("/api/internal/agent-controller/agent-run-workflows/observe", { input, task });
+			if (response.status !== 200)
+			{
+				throw new Error(`warm AgentRun observation failed with HTTP ${response.status}`);
+			}
+			return await _ReadJson(response, __ParseAgentRunWorkflowObservation);
+		},
+	};
 }

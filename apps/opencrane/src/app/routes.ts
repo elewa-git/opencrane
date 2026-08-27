@@ -206,11 +206,15 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.conversationAssetOutputs },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.agentThreadParentDeliveries },
 	];
+	const internalWarmRuntimeRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.warmRuntimeBinding },
+		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.warmRuntimeStream },
+	];
 	const internalWorkerRoutes = _OptionalRoute("/api/internal/artifact-preprocessor", runtime.artifactPreprocessor);
 	const internalScannerRoutes = _OptionalRoute("/api/internal/artifact-scanner", runtime.artifactScanner);
 	const internalChannelTargetRoutes = _OptionalRoute("/api/internal/channel-targets:resolve", runtime.channelTargetResolver);
 	const internalReplayRoutes = _OptionalRoute("/api/internal/conversation-replay", runtime.conversationReplay);
-	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalMcpExecutorRoutes, internalWorkerRoutes, internalScannerRoutes, internalChannelTargetRoutes, internalReplayRoutes]);
+	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalWarmRuntimeRoutes, internalMcpExecutorRoutes, internalWorkerRoutes, internalScannerRoutes, internalChannelTargetRoutes, internalReplayRoutes]);
 }
 
 /** Return a one-entry route list for a router, or an empty list when the router is null. */

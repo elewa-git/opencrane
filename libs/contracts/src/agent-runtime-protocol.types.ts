@@ -21,6 +21,12 @@ export const AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE = "opencrane-agent-runtime";
  */
 export const MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE = "opencrane-managed-agent-runtime";
 
+/** Sole audience accepted from a Helm-owned warm runtime Pod. */
+export const WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE = "opencrane-warm-runtime";
+
+/** Fixed credential-free ServiceAccount used by both warm runtime pools. */
+export const WARM_RUNTIME_SERVICE_ACCOUNT_NAME = "warm-runtime";
+
 /**
  * Sole managed-agent workload profile deployed by the initial controller composition.
  *
@@ -61,6 +67,9 @@ export type AgentRuntimeProjectedTokenAudience = typeof AGENT_RUNTIME_PROJECTED_
 
 /** Exact audience literal for a managed (central) agent runtime's projected ServiceAccount token. */
 export type ManagedAgentRuntimeProjectedTokenAudience = typeof MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE;
+
+/** Exact audience literal for a warm runtime Pod's projected token. */
+export type WarmRuntimeProjectedTokenAudience = typeof WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE;
 
 /** Exact workload-profile literal accepted for managed agents by the initial composition. */
 export type ManagedAgentRuntimeProfileName = typeof MANAGED_AGENT_RUNTIME_PROFILE_NAME;

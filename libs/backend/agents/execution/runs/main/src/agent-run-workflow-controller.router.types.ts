@@ -1,4 +1,4 @@
-import type { AgentRunWorkflowControllerAuthority } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import type { AgentRunWarmRuntimeControllerAuthority } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 
 /** Describes the reviewed controller identity returned by Kubernetes TokenReview. */
 export interface AgentRunWorkflowControllerIdentity
@@ -34,8 +34,8 @@ export interface AgentRunWorkflowControllerRouterDependencies
 	readonly tokenReviewer: AgentRunWorkflowControllerTokenReviewer;
 	/** Fixes the namespace in which the controller identity must live. */
 	readonly namespace: string;
-	/** Owns receipt fencing, lifecycle state, key revocation, and workload bindings. */
-	readonly authority: AgentRunWorkflowControllerAuthority;
+	/** Owns the hard-cutoff warm reservation, readiness, and deletion lifecycle. */
+	readonly warmAuthority: AgentRunWarmRuntimeControllerAuthority;
 	/** Records safe server-side errors without request bodies or raw keys. */
 	readonly logger: AgentRunWorkflowControllerRouterLogger;
 }

@@ -4548,8 +4548,11 @@ DECLARE
     transition_time TIMESTAMP(3) := clock_timestamp();
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending_pod' OR NEW."pod_uid" IS NOT NULL
-            OR NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NOT NULL THEN
+        IF NEW."state" <> 'pending_pod'
+            OR NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NOT NULL
+            OR NOT ((NEW."workload_kind" = 'job' AND NEW."pod_uid" IS NULL)
+                OR (NEW."workload_kind" = 'deployment' AND NEW."pod_uid" IS NOT NULL
+                    AND btrim(NEW."pod_uid") <> '' AND NEW."pod_uid" = NEW."workload_uid")) THEN
             RAISE EXCEPTION 'a new WorkloadAssignment must begin pending_pod';
         END IF;
         RETURN NEW;
@@ -4575,12 +4578,15 @@ BEGIN
     END IF;
     IF OLD."state" = 'pending_pod' AND NEW."state" = 'registered' AND (
         NEW."pod_uid" IS NULL OR NEW."registered_at" IS NULL OR NEW."revoked_at" IS NOT NULL
+        OR (OLD."workload_kind" = 'deployment' AND NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid")
         OR NEW."registered_at" < OLD."created_at" OR NEW."registered_at" > transition_time
     ) THEN
         RAISE EXCEPTION 'registration must bind the current Pod and registration time';
     END IF;
     IF OLD."state" = 'pending_pod' AND NEW."state" = 'revoked' AND (
-        NEW."pod_uid" IS NOT NULL OR NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NULL
+        NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NULL
+        OR (OLD."workload_kind" = 'job' AND NEW."pod_uid" IS NOT NULL)
+        OR (OLD."workload_kind" = 'deployment' AND NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid")
         OR NEW."revoked_at" < OLD."created_at" OR NEW."revoked_at" > transition_time
     ) THEN
         RAISE EXCEPTION 'an unregistered WorkloadAssignment must revoke without Pod registration';
@@ -7111,12 +7117,14 @@ ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_posi
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_attempt_check" CHECK ("attempt" > 0);
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_nonempty_check" CHECK (
         btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("silo_id") <> '' AND
-        btrim("subject_id") <> '' AND "audience" = 'opencrane-agent-runtime' AND btrim("service_account_name") <> '' AND
+        btrim("subject_id") <> '' AND "audience" IN ('opencrane-agent-runtime', 'opencrane-managed-agent-runtime') AND btrim("service_account_name") <> '' AND
         btrim("namespace") <> '' AND btrim("workload_uid") <> '' AND btrim("workload_profile") <> ''
     );
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_expiry_check" CHECK ("expires_at" > "created_at");
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_state_check" CHECK (
-        ("state" = 'pending_pod' AND "pod_uid" IS NULL AND "registered_at" IS NULL AND "revoked_at" IS NULL) OR
+        ("state" = 'pending_pod' AND "registered_at" IS NULL AND "revoked_at" IS NULL AND
+            (("workload_kind" = 'job' AND "pod_uid" IS NULL) OR
+             ("workload_kind" = 'deployment' AND "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '' AND "pod_uid" = "workload_uid"))) OR
         ("state" = 'registered' AND "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '' AND "registered_at" IS NOT NULL AND "revoked_at" IS NULL) OR
         ("state" = 'revoked' AND "revoked_at" IS NOT NULL)
     );

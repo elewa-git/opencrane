@@ -19,7 +19,7 @@ from urllib.error import HTTPError, URLError
 # These aliases mark where the process is composed: the entrypoint chooses concrete implementations,
 # while ``run_forever`` receives callables so lifecycle policy can be tested without real identity,
 # network, or model infrastructure. Lower-level packages must not import this composition root.
-from .bootstrap.exchange import BootstrapDeniedError, perform_bootstrap as _perform_bootstrap
+from .bootstrap.exchange import BootstrapDeniedError, perform_bootstrap as _perform_bootstrap, perform_warm_binding as _perform_warm_binding
 from .bootstrap.proof import generate_proof_key
 from .config import (
     environment,
@@ -29,6 +29,7 @@ from .config import (
 from .constants import DEFAULT_BOOTSTRAP_PATH, DEFAULT_TOKEN_PATH
 from .observability import log
 from .transport.stream import open_stream as _open_stream
+from .warm_runtime import start_warm_readiness_server as _start_warm_readiness_server
 
 
 def retry_delay(attempt: int) -> float:
@@ -43,7 +44,9 @@ def retry_delay(attempt: int) -> float:
 def run_forever(
     open_stream: Callable[[str, str, str, str], int] = _open_stream,
     perform_bootstrap: Callable[[str, str, str, dict[str, object]], None] = _perform_bootstrap,
+    perform_warm_binding: Callable[[str, str, dict[str, object]], str] = _perform_warm_binding,
     generate_key: Callable[[], dict[str, object]] = generate_proof_key,
+    start_warm_readiness_server: Callable[[int, str, str], object] = _start_warm_readiness_server,
 ) -> None:
     """Perform one-use bootstrap, then supervise the Pod's outbound stream forever.
 
@@ -59,12 +62,9 @@ def run_forever(
     #
     # Keep this order deliberate. Resolve the endpoint, projected-file paths, and Pod coordinate
     # before constructing process identity; actual mounted-file reads remain at their point of use.
+    runtime_mode = environment("OPENCRANE_RUNTIME_MODE", "job")
     control_plane_url = environment("OPENCRANE_RUNTIME_STREAM_URL")
     token_path = environment("OPENCRANE_RUNTIME_TOKEN_PATH", DEFAULT_TOKEN_PATH)
-    bootstrap_reference_path = environment(
-        "OPENCRANE_RUNTIME_BOOTSTRAP_PATH",
-        DEFAULT_BOOTSTRAP_PATH,
-    )
     pod_uid = environment("POD_UID")
 
     # The instance id distinguishes this process lifetime from a replacement Pod or restarted
@@ -77,24 +77,44 @@ def run_forever(
     # accepted response impossible to reconcile with the evidence held by this process.
     proof_key = generate_key()
 
-    # The bootstrap reference is workload-selection evidence, not a general credential. Reading it
-    # once preserves the identity being bound; only the rotating workload token is refreshed.
-    bootstrap_reference = read_bootstrap_reference(bootstrap_reference_path)
+    bootstrap_reference = None
+    if runtime_mode == "job":
+        bootstrap_reference_path = environment(
+            "OPENCRANE_RUNTIME_BOOTSTRAP_PATH",
+            DEFAULT_BOOTSTRAP_PATH,
+        )
+        # The bootstrap reference is workload-selection evidence, not a general credential. Reading
+        # it once preserves the identity being bound; only the rotating workload token is refreshed.
+        bootstrap_reference = read_bootstrap_reference(bootstrap_reference_path)
+    elif runtime_mode == "warm":
+        readiness_port = int(environment("OPENCRANE_WARM_BINDING_PORT"))
+        claimed_profile = environment("OPENCRANE_WARM_PROFILE")
+        start_warm_readiness_server(readiness_port, pod_uid, claimed_profile)
+    else:
+        raise RuntimeError("OPENCRANE_RUNTIME_MODE must be job or warm")
     log("runtime_started", runtime_instance_id=runtime_instance_id)
 
     # Phase 1: bind public proof evidence exactly once. Transient failures retry the same reference
     # and evidence; a control-plane refusal is final and no command stream is opened.
     attempts = 0
+    attempt_model_key = None
     while True:
         try:
             # Token access stays inside the retry attempt so a kubelet rotation between attempts is
             # observed without persisting credential material in process configuration or logs.
-            perform_bootstrap(
-                control_plane_url,
-                read_projected_token(token_path),
-                bootstrap_reference,
-                proof_key,
-            )
+            if runtime_mode == "warm":
+                attempt_model_key = perform_warm_binding(
+                    control_plane_url,
+                    read_projected_token(token_path),
+                    proof_key,
+                )
+            else:
+                perform_bootstrap(
+                    control_plane_url,
+                    read_projected_token(token_path),
+                    bootstrap_reference,
+                    proof_key,
+                )
             break
         except BootstrapDeniedError as error:
             # A denial is an authority decision, not a connectivity condition. Retrying it would
@@ -129,12 +149,21 @@ def run_forever(
             # ``open_stream`` owns command dispatch and active-attempt cancellation for the lifetime
             # of this connection. It returns only after that connection's workers have been fenced,
             # so reconnecting here cannot intentionally keep an old stream's executor alive.
-            open_stream(
-                control_plane_url,
-                read_projected_token(token_path),
-                runtime_instance_id,
-                pod_uid,
-            )
+            if runtime_mode == "warm":
+                open_stream(
+                    control_plane_url,
+                    read_projected_token(token_path),
+                    runtime_instance_id,
+                    pod_uid,
+                    attempt_model_key=attempt_model_key,
+                )
+            else:
+                open_stream(
+                    control_plane_url,
+                    read_projected_token(token_path),
+                    runtime_instance_id,
+                    pod_uid,
+                )
             # EOF is not a successful terminal state: the Pod must keep its sole authority channel.
             # Back it off exactly like a transport exception so a peer returning immediate 200/EOF
             # cannot drive a hot reconnect loop.

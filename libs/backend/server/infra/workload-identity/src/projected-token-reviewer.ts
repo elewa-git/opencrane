@@ -1,6 +1,6 @@
 import * as k8s from "@kubernetes/client-node";
 
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, ReviewedSkillWorkloadIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity, SkillWorkloadTokenReviewer } from "./workload-identity.types";
@@ -234,6 +234,21 @@ export function _CreateRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi, co
 			return personal
 				? _ParseRuntimeSubject(status.user?.username ?? "", config.personalRuntimeNamespace, podUid, ___IsAgentRuntimeServiceAccountName)
 				: _ParseRuntimeSubject(status.user?.username ?? "", config.managedRuntimeNamespace, podUid, ___IsManagedAgentRuntimeServiceAccountName);
+		},
+	};
+}
+
+/** Build the Pod-bound reviewer used only by warm binding and warm command-stream routes. */
+export function _CreateWarmRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi, config: RuntimeTokenReviewerConfig): RuntimeTokenReviewer
+{
+	return {
+		async __Review(token: string): Promise<RuntimeWorkloadIdentity | null>
+		{
+			const status = await _ReviewProjectedToken(authApi, token, [WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE]);
+			const subject = _ParseServiceAccountSubject(status?.user?.username ?? "");
+			const podUid = _ReadReviewedPodUid(status?.user?.extra);
+			if (!subject || !podUid || subject.serviceAccountName !== WARM_RUNTIME_SERVICE_ACCOUNT_NAME || (subject.namespace !== config.personalRuntimeNamespace && subject.namespace !== config.managedRuntimeNamespace)) return null;
+			return { subject: status?.user?.username ?? "", ...subject, podUid };
 		},
 	};
 }

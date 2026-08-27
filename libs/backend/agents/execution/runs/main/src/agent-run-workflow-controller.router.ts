@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 
-import { __ParseAgentRunWorkflowAssignmentRequest, __ParseAgentRunWorkflowAttemptKeyRevocationRequest, __ParseAgentRunWorkflowPodRequest, __ParseAgentRunWorkflowReleaseClaimRequest, __ParseAgentRunWorkflowTaskRequest } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import { __ParseAgentRunWorkflowTaskRequest, type AgentRunTaskInput, type AgentRunWarmRuntimeActivationCommand, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWarmRuntimeReadinessCommand, type AgentRunWarmRuntimeReservationCommand } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
 import type { AgentRunWorkflowControllerIdentity, AgentRunWorkflowControllerRouterDependencies } from "./agent-run-workflow-controller.router.types";
@@ -35,7 +36,7 @@ export function __CreateAgentRunWorkflowControllerRouter(dependencies: AgentRunW
 				_RespondProblem(response, 400, "invalid_agent_run_task");
 				return;
 			}
-			const record = await dependencies.authority.loadForTask(command.input, command.task);
+			const record = await dependencies.warmAuthority.loadForTask(command.input, command.task);
 			if (record === null)
 			{
 				_RespondProblem(response, 409, "stale_or_unavailable_agent_run");
@@ -50,140 +51,11 @@ export function __CreateAgentRunWorkflowControllerRouter(dependencies: AgentRunW
 		}
 	});
 
-	router.post("/agent-run-workflows/mint-attempt-key", async function _MintAttemptKey(request: Request, response: Response): Promise<void>
-	{
-		try
-		{
-			if (!await _IsController(request, dependencies))
-			{
-				_RespondProblem(response, 401, "controller_identity_denied");
-				return;
-			}
-			const command = __ParseAgentRunWorkflowTaskRequest(request.body);
-			if (command === null)
-			{
-				_RespondProblem(response, 400, "invalid_agent_run_task");
-				return;
-			}
-			const attemptKey = await dependencies.authority.mintAttemptKey(command.input, command.task);
-			if (attemptKey === null)
-			{
-				_RespondProblem(response, 409, "stale_or_unavailable_agent_run");
-				return;
-			}
-			response.status(200).json(attemptKey);
-		}
-		catch (err)
-		{
-			_LogFailure(dependencies, err, "agent_controller.agent_run_workflow.mint_attempt_key");
-			_RespondProblem(response, 503, "agent_run_workflow_unavailable");
-		}
-	});
-
-	router.post("/agent-run-workflows/revoke-attempt-key", async function _RevokeAttemptKey(request: Request, response: Response): Promise<void>
-	{
-		try
-		{
-			if (!await _IsController(request, dependencies))
-			{
-				_RespondProblem(response, 401, "controller_identity_denied");
-				return;
-			}
-			const command = __ParseAgentRunWorkflowAttemptKeyRevocationRequest(request.body);
-			if (command === null)
-			{
-				_RespondProblem(response, 400, "invalid_agent_run_key_revocation");
-				return;
-			}
-			await dependencies.authority.revokeAttemptKey(command.input, command.task, command.attemptKey);
-			response.status(204).end();
-		}
-		catch (err)
-		{
-			_LogFailure(dependencies, err, "agent_controller.agent_run_workflow.revoke_attempt_key");
-			_RespondProblem(response, 503, "agent_run_workflow_unavailable");
-		}
-	});
-
-	router.put("/agent-run-workflows/assignment", async function _BindAssignment(request: Request, response: Response): Promise<void>
-	{
-		try
-		{
-			if (!await _IsController(request, dependencies))
-			{
-				_RespondProblem(response, 401, "controller_identity_denied");
-				return;
-			}
-			const command = __ParseAgentRunWorkflowAssignmentRequest(request.body);
-			if (command === null)
-			{
-				_RespondProblem(response, 400, "invalid_agent_run_assignment");
-				return;
-			}
-			const outcome = await dependencies.authority.bindAssignment(command.input, command.task, command.command);
-			_RespondBinding(response, outcome);
-		}
-		catch (err)
-		{
-			_LogFailure(dependencies, err, "agent_controller.agent_run_workflow.assignment");
-			_RespondProblem(response, 503, "agent_run_workflow_unavailable");
-		}
-	});
-
-	router.put("/agent-run-workflows/first-pod", async function _BindFirstPod(request: Request, response: Response): Promise<void>
-	{
-		try
-		{
-			if (!await _IsController(request, dependencies))
-			{
-				_RespondProblem(response, 401, "controller_identity_denied");
-				return;
-			}
-			const command = __ParseAgentRunWorkflowPodRequest(request.body);
-			if (command === null)
-			{
-				_RespondProblem(response, 400, "invalid_agent_run_first_pod");
-				return;
-			}
-			const outcome = await dependencies.authority.bindFirstPod(command.input, command.task, command.command);
-			_RespondBinding(response, outcome);
-		}
-		catch (err)
-		{
-			_LogFailure(dependencies, err, "agent_controller.agent_run_workflow.first_pod");
-			_RespondProblem(response, 503, "agent_run_workflow_unavailable");
-		}
-	});
-
-	router.post("/agent-run-workflows/release-claim", async function _ClaimRelease(request: Request, response: Response): Promise<void>
-	{
-		try
-		{
-			if (!await _IsController(request, dependencies))
-			{
-				_RespondProblem(response, 401, "controller_identity_denied");
-				return;
-			}
-			const command = __ParseAgentRunWorkflowReleaseClaimRequest(request.body);
-			if (command === null)
-			{
-				_RespondProblem(response, 400, "invalid_agent_run_release_claim");
-				return;
-			}
-			const claim = await dependencies.authority.claimRelease(command.input, command.task, command.workloadUid);
-			if (claim === null)
-			{
-				_RespondProblem(response, 409, "stale_or_unavailable_agent_run");
-				return;
-			}
-			response.status(200).json(claim);
-		}
-		catch (err)
-		{
-			_LogFailure(dependencies, err, "agent_controller.agent_run_workflow.release_claim");
-			_RespondProblem(response, 503, "agent_run_workflow_unavailable");
-		}
-	});
+	_RegisterWarmBinding(router, "/agent-run-workflows/warm-reservation", dependencies, _WarmReservation, "agent_controller.agent_run_workflow.warm_reservation", async function _Reserve(input, task, command) { return await dependencies.warmAuthority.reserveWarmPod(input, task, command); });
+	_RegisterWarmBinding(router, "/agent-run-workflows/warm-activation", dependencies, _WarmActivation, "agent_controller.agent_run_workflow.warm_activation", async function _Activation(input, task, command) { return await dependencies.warmAuthority.recordWarmProfileActivation(input, task, command); });
+	_RegisterWarmBinding(router, "/agent-run-workflows/warm-readiness", dependencies, _WarmReadiness, "agent_controller.agent_run_workflow.warm_readiness", async function _Readiness(input, task, command) { return await dependencies.warmAuthority.recordWarmReadiness(input, task, command); });
+	_RegisterWarmBinding(router, "/agent-run-workflows/warm-delete-request", dependencies, _WarmDeletion, "agent_controller.agent_run_workflow.warm_delete_request", async function _DeleteRequest(input, task, command) { return await dependencies.warmAuthority.requestWarmPodDeletion(input, task, command); });
+	_RegisterWarmBinding(router, "/agent-run-workflows/warm-deleted", dependencies, _WarmDeletion, "agent_controller.agent_run_workflow.warm_deleted", async function _Deleted(input, task, command) { return await dependencies.warmAuthority.recordWarmPodDeleted(input, task, command); });
 
 	router.post("/agent-run-workflows/terminal-failure", async function _TerminalFailure(request: Request, response: Response): Promise<void>
 	{
@@ -200,7 +72,7 @@ export function __CreateAgentRunWorkflowControllerRouter(dependencies: AgentRunW
 				_RespondProblem(response, 400, "invalid_agent_run_task");
 				return;
 			}
-			await dependencies.authority.terminalizeFailedTask(command.input, command.task);
+			await dependencies.warmAuthority.terminalizeFailedTask(command.input, command.task);
 			response.status(204).end();
 		}
 		catch (err)
@@ -225,7 +97,7 @@ export function __CreateAgentRunWorkflowControllerRouter(dependencies: AgentRunW
 				_RespondProblem(response, 400, "invalid_agent_run_task");
 				return;
 			}
-			response.status(200).json(await dependencies.authority.observe(command.input, command.task));
+			response.status(200).json(await dependencies.warmAuthority.observe(command.input, command.task));
 		}
 		catch (err)
 		{
@@ -235,6 +107,112 @@ export function __CreateAgentRunWorkflowControllerRouter(dependencies: AgentRunW
 	});
 
 	return router;
+}
+
+/** Names the common envelope returned after a warm command passes structural checks. */
+type WarmCommand<TCommand> = { readonly input: AgentRunTaskInput; readonly task: IWorkflowTaskReceipt; readonly command: TCommand };
+
+/** Parses the shared receipt and returns its untrusted command object. */
+function _WarmEnvelope(value: unknown): { readonly input: AgentRunTaskInput; readonly task: IWorkflowTaskReceipt; readonly command: Record<string, unknown> } | null
+{
+	if (typeof value !== "object" || value === null || Array.isArray(value))
+	{
+		return null;
+	}
+	const record = value as Record<string, unknown>;
+	const base = __ParseAgentRunWorkflowTaskRequest({ input: record["input"], task: record["task"] });
+	const command = record["command"];
+	if (base === null || typeof command !== "object" || command === null || Array.isArray(command))
+	{
+		return null;
+	}
+	return { ...base, command: command as Record<string, unknown> };
+}
+
+/** Returns a bounded non-empty string field. */
+function _WarmString(command: Record<string, unknown>, name: string): string | null
+{
+	const value = command[name];
+	return typeof value === "string" && value.trim().length > 0 && value.length <= 256 ? value : null;
+}
+
+/** Parses the candidate Pod and pool identity offered for reservation. */
+function _WarmReservation(value: unknown): WarmCommand<AgentRunWarmRuntimeReservationCommand> | null
+{
+	const envelope = _WarmEnvelope(value);
+	if (envelope === null)
+	{
+		return null;
+	}
+	const names = ["workloadProfile", "deploymentName", "deploymentUid", "podName", "podUid", "podResourceVersion", "genericProfile", "claimedProfile", "serviceAccountName"] as const;
+	const fields = Object.fromEntries(names.map(function _Field(name) { return [name, _WarmString(envelope.command, name)]; }));
+	if (Object.values(fields).some(function _Missing(field) { return field === null; }))
+	{
+		return null;
+	}
+	return { input: envelope.input, task: envelope.task, command: fields as unknown as AgentRunWarmRuntimeReservationCommand };
+}
+
+/** Parses the result of one conditional profile patch. */
+function _WarmActivation(value: unknown): WarmCommand<AgentRunWarmRuntimeActivationCommand> | null
+{
+	const envelope = _WarmEnvelope(value);
+	const podUid = envelope === null ? null : _WarmString(envelope.command, "podUid");
+	const resourceVersion = envelope === null ? null : _WarmString(envelope.command, "resourceVersion");
+	const profile = envelope === null ? null : _WarmString(envelope.command, "profile");
+	return envelope === null || podUid === null || resourceVersion === null || profile === null ? null : { input: envelope.input, task: envelope.task, command: { podUid, resourceVersion, profile } };
+}
+
+/** Parses readiness evidence for the activated Pod. */
+function _WarmReadiness(value: unknown): WarmCommand<AgentRunWarmRuntimeReadinessCommand> | null
+{
+	const activation = _WarmActivation(value);
+	const envelope = _WarmEnvelope(value);
+	const observedAt = envelope === null ? null : _WarmString(envelope.command, "observedAt");
+	if (activation === null || observedAt === null || Number.isNaN(new Date(observedAt).getTime()))
+	{
+		return null;
+	}
+	return { ...activation, command: { ...activation.command, observedAt } };
+}
+
+/** Parses the identity required for one-way exact Pod deletion. */
+function _WarmDeletion(value: unknown): WarmCommand<AgentRunWarmRuntimeDeletionCommand> | null
+{
+	const envelope = _WarmEnvelope(value);
+	const podName = envelope === null ? null : _WarmString(envelope.command, "podName");
+	const podUid = envelope === null ? null : _WarmString(envelope.command, "podUid");
+	const deploymentUid = envelope === null ? null : _WarmString(envelope.command, "deploymentUid");
+	const profile = envelope === null ? null : _WarmString(envelope.command, "profile");
+	return envelope === null || podName === null || podUid === null || deploymentUid === null || profile === null ? null : { input: envelope.input, task: envelope.task, command: { podName, podUid, deploymentUid, profile } };
+}
+
+/** Registers one authenticated warm command route with the common conflict response. */
+function _RegisterWarmBinding<TCommand>(router: Router, path: string, dependencies: AgentRunWorkflowControllerRouterDependencies, parse: (value: unknown) => WarmCommand<TCommand> | null, operation: string, execute: (input: WarmCommand<TCommand>["input"], task: WarmCommand<TCommand>["task"], command: TCommand) => Promise<"bound" | "idempotent" | "conflict">): void
+{
+	router.post(path, async function _WarmBinding(request: Request, response: Response): Promise<void>
+	{
+		try
+		{
+			if (!await _IsController(request, dependencies))
+			{
+				_RespondProblem(response, 401, "controller_identity_denied");
+				return;
+			}
+			const parsed = parse(request.body);
+			if (parsed === null)
+			{
+				_RespondProblem(response, 400, "invalid_warm_runtime_command");
+				return;
+			}
+			_RespondBinding(response, await execute(parsed.input, parsed.task, parsed.command));
+		}
+		catch (err)
+		{
+			_LogFailure(dependencies, err, operation);
+			_RespondProblem(response, 503, "warm_runtime_workflow_unavailable");
+		}
+	});
 }
 
 /** Checks the one controller ServiceAccount identity allowed to act for AgentRun tasks. */

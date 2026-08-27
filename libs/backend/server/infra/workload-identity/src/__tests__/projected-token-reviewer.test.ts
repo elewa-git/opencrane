@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
-import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateChannelProxyTokenReviewer, _CreateMcpExecutorTokenReviewer, _CreateMemoryGatewayServerTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "../projected-token-reviewer";
+import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateChannelProxyTokenReviewer, _CreateMcpExecutorTokenReviewer, _CreateMemoryGatewayServerTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _CreateWarmRuntimeTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "../projected-token-reviewer";
 
 /** Build a TokenReview API stub with one controlled Kubernetes response. */
 function _ReviewApi(status: object)
@@ -113,6 +113,28 @@ describe("projected Kubernetes workload identity", function _describeProjectedId
 
 		await expect(personal.__Review("token")).resolves.toEqual({ subject: "system:serviceaccount:runtime-ns:agent-runtime-default", namespace: "runtime-ns", serviceAccountName: "agent-runtime-default", podUid: "pod-uid-1" });
 		await expect(managed.__Review("token")).resolves.toEqual({ subject: "system:serviceaccount:managed-ns:managed-agent-runtime-default", namespace: "managed-ns", serviceAccountName: "managed-agent-runtime-default", podUid: "pod-uid-1" });
+	});
+
+	it("binds a warm runtime only through its dedicated audience and fixed account", async function _ReviewsWarmRuntime()
+	{
+		const config = { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-ns" };
+		const subject = `system:serviceaccount:runtime-ns:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`;
+		const api = _ReviewApi(_ValidStatus(WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, subject));
+		const reviewer = _CreateWarmRuntimeTokenReviewer(api as never, config);
+
+		await expect(reviewer.__Review("token")).resolves.toEqual({ subject, namespace: "runtime-ns", serviceAccountName: WARM_RUNTIME_SERVICE_ACCOUNT_NAME, podUid: "pod-uid-1" });
+		expect(api.createTokenReview).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ spec: expect.objectContaining({ token: "token", audiences: [WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE] }) }) }));
+	});
+
+	it.each([
+		["wrong audience", _ValidStatus(AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, `system:serviceaccount:runtime-ns:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`)],
+		["wrong namespace", _ValidStatus(WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, `system:serviceaccount:other:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`)],
+		["wrong account", _ValidStatus(WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, "system:serviceaccount:runtime-ns:agent-runtime-default")],
+		["missing Pod UID", _ValidStatus(WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, `system:serviceaccount:runtime-ns:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`, { user: { username: `system:serviceaccount:runtime-ns:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`, extra: {} } })],
+	])("rejects a warm runtime with %s", async function _RejectsWarmRuntime(_description, status)
+	{
+		const reviewer = _CreateWarmRuntimeTokenReviewer(_ReviewApi(status) as never, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-ns" });
+		await expect(reviewer.__Review("token")).resolves.toBeNull();
 	});
 
 	it.each([

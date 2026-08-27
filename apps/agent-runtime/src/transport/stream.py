@@ -83,6 +83,7 @@ def _launch_attempt_worker(
     control_plane_url: str,
     token: str,
     workers: _AttemptWorkerRegistry,
+    attempt_model_key: str | None = None,
 ) -> None:
     """Start one start/resume handler on its own thread with its cancellation signal, and keep it registered until it exits."""
     # Every start/resume gets fresh local gates even when it supersedes work for the same run. The
@@ -110,14 +111,14 @@ def _launch_attempt_worker(
     def _run() -> None:
         """Run the injected handler and release its signal even after an unexpected exception."""
         try:
-            handler(
-                command,
-                runtime_instance_id,
-                _post_candidate,
-                cancel_event=cancel_event,
-                terminal_gate=terminal_gate,
-                publish_output=_publish_output,
-            )
+            arguments = {
+                "cancel_event": cancel_event,
+                "terminal_gate": terminal_gate,
+                "publish_output": _publish_output,
+            }
+            if attempt_model_key is not None:
+                arguments["attempt_model_key"] = attempt_model_key
+            handler(command, runtime_instance_id, _post_candidate, **arguments)
         finally:
             workers.release(cancel_event)
 
@@ -169,6 +170,7 @@ def open_stream(
     handle_start: Callable[..., None] = execute_start_attempt,
     handle_resume: Callable[..., None] = execute_resume_attempt,
     handle_cancel: Callable[..., None] = execute_cancel_attempt,
+    attempt_model_key: str | None = None,
 ) -> int:
     """Open one authenticated stream and dispatch its supported command kinds.
 
@@ -227,6 +229,7 @@ def open_stream(
                         control_plane_url,
                         token,
                         workers,
+                        attempt_model_key,
                     )
                 elif kind == "resume_attempt":
                     # Resume receives a new command/fence and therefore a fresh local worker gate.
@@ -237,6 +240,7 @@ def open_stream(
                         control_plane_url,
                         token,
                         workers,
+                        attempt_model_key,
                     )
                 elif kind == "cancel_attempt":
                     # Cancellation must not wait behind model execution; signal the active worker on

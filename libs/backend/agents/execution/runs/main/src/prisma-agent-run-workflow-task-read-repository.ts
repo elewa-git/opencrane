@@ -6,10 +6,8 @@ import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED
 import { AgentRunTaskNames, type AgentRunTaskInput } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
-import { _BuildRunAttemptCredentialMintInputs } from "./run-attempt-credential-minting";
 import { __AgentRunWorkflowBootstrapReference } from "./agent-run-workflow-bootstrap-reference";
-import type { AttemptModelKeyMintRequest } from "./attempt-model-key.types";
-import type { AgentRunWorkflowControllerAuthorityOptions, AgentRunWorkflowTaskReadPersistenceRepository } from "./agent-run-workflow-controller-authority.types";
+import type { AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-workflow-controller-authority.types";
 import type { AgentRunWorkflowSnapshotIdentity } from "./prisma-agent-run-workflow-task-read-repository.types";
 
 /** Selects the saved task, current run, active service, and frozen snapshot for controller reads. */
@@ -21,10 +19,6 @@ export const __AGENT_RUN_WORKFLOW_TASK_SELECT = {
 	taskKey: true,
 	taskName: true,
 	assignmentExpiresAt: true,
-	releaseClaimedAt: true,
-	releaseExpiresAt: true,
-	releaseDeliveryCount: true,
-	attemptKeyDigest: true,
 	run: {
 		select: {
 			id: true,
@@ -45,19 +39,15 @@ export const __AGENT_RUN_WORKFLOW_TASK_SELECT = {
 /** Holds the durable task facts protected by the task receipt fence. */
 type AgentRunWorkflowTaskRow = Prisma.AgentRunWorkflowTaskGetPayload<{ readonly select: typeof __AGENT_RUN_WORKFLOW_TASK_SELECT }>;
 
-/** Reads receipt-fenced task facts and derives non-secret credentials after its transaction commits. */
-export class PrismaAgentRunWorkflowTaskReadRepository implements AgentRunWorkflowTaskReadPersistenceRepository
+/** Reads receipt-fenced task facts used by one warm runtime claim. */
+export class PrismaAgentRunWorkflowTaskReadRepository
 {
 	/** Holds the transaction that reads one controller task. */
 	private readonly transaction: Prisma.TransactionClient;
-	/** Holds server-selected task lifetimes. */
-	private readonly options: AgentRunWorkflowControllerAuthorityOptions;
-
 	/** Creates the task reader inside the caller-owned transaction. */
-	constructor(transaction: Prisma.TransactionClient, options: AgentRunWorkflowControllerAuthorityOptions)
+	constructor(transaction: Prisma.TransactionClient)
 	{
 		this.transaction = transaction;
-		this.options = options;
 	}
 
 	/** Reloads the exact saved task row, or returns null when a retry or another controller replaced it. */
@@ -71,45 +61,6 @@ export class PrismaAgentRunWorkflowTaskReadRepository implements AgentRunWorkflo
 		return task;
 	}
 
-	/** Builds the task's stable non-secret mint request without calling the issuer in this transaction. */
-	async loadAttemptKeyMintRequest(input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt): Promise<AttemptModelKeyMintRequest | null>
-	{
-		const task = await this.read(input, receipt);
-		if (task === null || __CurrentAgentRunWorkflowTask(task, input) === null || !__CanCreateOrObserveAgentRunWorkflowTask(task.run.state) || task.run.inputSnapshot === null)
-		{
-			return null;
-		}
-		const credentials = _BuildRunAttemptCredentialMintInputs({ modelRoute: task.run.inputSnapshot.modelRoute, budgetPolicy: task.run.inputSnapshot.budgetPolicy, runId: input.runId, attempt: input.attempt, siloId: input.siloId, assignmentTtlMilliseconds: this.options.assignmentTtlMilliseconds });
-		if (credentials === null)
-		{
-			return null;
-		}
-		return { keyAlias: credentials.keyAlias, modelAlias: credentials.modelAlias, siloId: input.siloId, maxBudgetUsd: credentials.maxBudgetUsd, expirySeconds: credentials.expirySeconds };
-	}
-
-	/** Saves only the non-secret digest of a raw key while this task still owns the attempt. */
-	async recordAttemptKeyDigest(input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt, keyDigest: string): Promise<boolean>
-	{
-		const task = await this.read(input, receipt);
-		if (task === null || __CurrentAgentRunWorkflowTask(task, input) === null || !__CanCreateOrObserveAgentRunWorkflowTask(task.run.state))
-		{
-			return false;
-		}
-		const updated = await this.transaction.agentRunWorkflowTask.updateMany({ where: { runId: input.runId, attempt: input.attempt, taskId: receipt.taskId, taskKey: receipt.idempotencyKey, taskName: AgentRunTaskNames.Execute }, data: { attemptKeyDigest: keyDigest } });
-		return updated.count === 1;
-	}
-
-	/** Proves one raw key belongs to this task before the caller sends it to the model gateway for revocation. */
-	async verifyAttemptKeyDigest(input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt, keyAlias: string, keyDigest: string): Promise<boolean>
-	{
-		const task = await this.read(input, receipt);
-		if (task === null || __CurrentAgentRunWorkflowTask(task, input) === null || !__CanCreateOrObserveAgentRunWorkflowTask(task.run.state) || task.attemptKeyDigest !== keyDigest)
-		{
-			return false;
-		}
-		const request = await this.loadAttemptKeyMintRequest(input, receipt);
-		return request !== null && request.keyAlias === keyAlias;
-	}
 }
 
 /** Builds the opaque bootstrap reference from immutable task and run identity. */
