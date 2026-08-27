@@ -24,7 +24,7 @@
     },
     "agent-runtime": {
       "root": "apps/agent-runtime",
-      "adaptedVersion": "0.9.3"
+      "adaptedVersion": "0.10.0"
     },
     "artifact-preprocessor": {
       "root": "apps/artifact-preprocessor",

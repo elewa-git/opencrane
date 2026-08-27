@@ -1,8 +1,7 @@
-import { AgUiRunWaitOperations, AgUiRunWaitReasons, AgUiRunWaitSources, type AgUiRunWaitStateEnvelope } from "@opencrane/contracts";
+import { AgUiRunWaitOperations, AgUiRunWaitReasons, AgUiRunWaitSources, ___ParseAgUiRunWaitState, type AgUiRunWaitStateEnvelope } from "@opencrane/contracts";
 
 import type { AgUiStreamState } from "../ag-ui-stream.types";
 import { AgUiRunStatuses, type AgUiRunWaitView } from "./run.types";
-import { _IsRunWaitState } from "./run-wait.validator";
 
 /** Stable display order prevents event arrival order from changing the visible categories. */
 const _REASON_ORDER: readonly AgUiRunWaitReasons[] = [AgUiRunWaitReasons.ExternalAction, AgUiRunWaitReasons.ParticipantInput, AgUiRunWaitReasons.Approval, AgUiRunWaitReasons.PersonalMemoryPermission, AgUiRunWaitReasons.RecoveryRequired];
@@ -10,11 +9,12 @@ const _REASON_ORDER: readonly AgUiRunWaitReasons[] = [AgUiRunWaitReasons.Externa
 /** Apply one strict wait mutation without inferring approval from an outside action. */
 export function _RunWaitState(state: AgUiStreamState, value: unknown, name: string): AgUiStreamState
 {
-	if (!_IsRunWaitState(value))
+	const envelope = ___ParseAgUiRunWaitState(value);
+	if (envelope === null)
 		throw new Error("AG-UI run wait state is invalid");
-	if (state.runId === null || state.runId !== value.runId)
+	if (state.runId === null || state.runId !== envelope.runId)
 		throw new Error("AG-UI run wait state does not match the active run");
-	const waits = _ApplyWaits(state.runWaits, value);
+	const waits = _ApplyWaits(state.runWaits, envelope);
 	const runWaitReasons = _REASON_ORDER.filter(function _Present(reason) { return [...waits.values()].some(function _Matches(wait) { return wait.reason === reason; }); });
 	const runStatus = runWaitReasons.length === 0 && state.runStatus === AgUiRunStatuses.Interrupted ? AgUiRunStatuses.Running : state.runStatus;
 	return { ...state, runStatus, runWaits: waits, runWaitReasons, customEvents: [...state.customEvents, name] };

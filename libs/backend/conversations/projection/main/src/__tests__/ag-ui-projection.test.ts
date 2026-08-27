@@ -1,7 +1,7 @@
 import { EventSchemas } from "@ag-ui/core";
 import { describe, expect, it } from "vitest";
 
-import { AG_UI_PROJECTION_VERSION, AG_UI_RUN_WAIT_STATE_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiRunWaitOperations, AgUiRunWaitReasons, AgUiRunWaitSources, AgUiToolRecoveryProviderOutcomes, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiSseRecord } from "@opencrane/contracts";
+import { AG_UI_PROJECTION_VERSION, AG_UI_RUN_WAIT_STATE_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiRunWaitOperations, AgUiRunWaitReasons, AgUiRunWaitSources, AgUiToolRecoveryProviderOutcomes, ___ParseAgUiRunWaitState, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiRunWaitStateEnvelope, type AgUiSseRecord } from "@opencrane/contracts";
 
 import { __ProjectAgUiEvents } from "../ag-ui-event-projector";
 import { __EncodeAgUiSseRecord } from "../ag-ui-sse-encoder";
@@ -15,9 +15,12 @@ function _Source(eventType: AgUiProjectionSourceEvent["eventType"], payload: AgU
 /** Select the minimum safe fields needed by one pinned-schema conformance fixture. */
 function _ConformancePayload(eventType: string): AgUiProjectionSourceEvent["payload"]
 {
-	if (eventType.startsWith("message.")) return { messageId: "message-1", delta: "hello" };
-	if (eventType === "tool.requested") return { toolCallId: "tool-1", toolCallName: "search" };
-	if (eventType === "tool.completed") return { toolCallId: "tool-1" };
+	if (eventType.startsWith("message."))
+		return { messageId: "message-1", delta: "hello" };
+	if (eventType === "tool.requested")
+		return { toolCallId: "tool-1", toolCallName: "search" };
+	if (eventType === "tool.completed")
+		return { toolCallId: "tool-1" };
 	return {};
 }
 
@@ -25,7 +28,8 @@ function _ConformancePayload(eventType: string): AgUiProjectionSourceEvent["payl
 function _ProjectOne(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
 	const [event] = __ProjectAgUiEvents(source);
-	if (event === undefined) throw new Error("projection fixture produced no AG-UI event");
+	if (event === undefined)
+		throw new Error("projection fixture produced no AG-UI event");
 	return event;
 }
 
@@ -33,6 +37,17 @@ function _ProjectOne(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 function _Record(source: AgUiProjectionSourceEvent): AgUiSseRecord
 {
 	return { ...(source.cursor === undefined ? {} : { id: source.cursor }), event: "ag-ui", data: _ProjectOne(source) };
+}
+
+/** Read one strict wait envelope from a projected custom event. */
+function _WaitEnvelope(event: AgUiProjectionEvent | undefined): AgUiRunWaitStateEnvelope
+{
+	if (event?.type !== "CUSTOM" || event.name !== AG_UI_RUN_WAIT_STATE_EVENT)
+		throw new Error("projection fixture produced no wait event");
+	const envelope = ___ParseAgUiRunWaitState(event.value);
+	if (envelope === null)
+		throw new Error("projection fixture produced an invalid wait event");
+	return envelope;
 }
 
 describe("AG-UI projection", function _Suite()
@@ -60,8 +75,19 @@ describe("AG-UI projection", function _Suite()
 		const requested = __ProjectAgUiEvents(_Source("tool.requested", { toolCallId: "tool-1", toolCallName: "search" }));
 		const completed = __ProjectAgUiEvents(_Source("tool.completed", { toolCallId: "tool-1" }));
 
-		expect(requested[1]).toEqual({ type: "CUSTOM", name: AG_UI_RUN_WAIT_STATE_EVENT, value: { version: AG_UI_RUN_WAIT_STATE_EVENT, runId: "run-3", source: AgUiRunWaitSources.Runtime, operation: AgUiRunWaitOperations.Add, waits: [{ id: "tool:tool-1", reason: AgUiRunWaitReasons.ExternalAction }] } });
-		expect(completed[1]).toEqual({ type: "CUSTOM", name: AG_UI_RUN_WAIT_STATE_EVENT, value: { version: AG_UI_RUN_WAIT_STATE_EVENT, runId: "run-3", source: AgUiRunWaitSources.Runtime, operation: AgUiRunWaitOperations.Remove, waits: [{ id: "tool:tool-1", reason: AgUiRunWaitReasons.ExternalAction }] } });
+		const requestedWait = _WaitEnvelope(requested[1]);
+		const completedWait = _WaitEnvelope(completed[1]);
+		expect(requestedWait).toMatchObject({ runId: "run-3", source: AgUiRunWaitSources.Runtime, operation: AgUiRunWaitOperations.Add, waits: [{ reason: AgUiRunWaitReasons.ExternalAction }] });
+		expect(requestedWait.waits[0]?.id).toMatch(/^tool:[a-f0-9]{64}$/u);
+		expect(completedWait).toMatchObject({ runId: "run-3", source: AgUiRunWaitSources.Runtime, operation: AgUiRunWaitOperations.Remove, waits: [{ id: requestedWait.waits[0]?.id, reason: AgUiRunWaitReasons.ExternalAction }] });
+	});
+
+	it("keeps wait identifiers bounded when the runtime uses its longest accepted tool-call id", function _BoundsToolWait()
+	{
+		const toolCallId = "x".repeat(256);
+		const wait = _WaitEnvelope(__ProjectAgUiEvents(_Source("tool.requested", { toolCallId, toolCallName: "search" }))[1]);
+		expect(wait.waits[0]?.id).toMatch(/^tool:[a-f0-9]{64}$/u);
+		expect(wait.waits[0]?.id.length).toBeLessThanOrEqual(256);
 	});
 
 	it("projects tool failure with safe coordinates and technical classification", function _ProjectsToolFailure()
@@ -75,7 +101,7 @@ describe("AG-UI projection", function _Suite()
 		const toolRecovery = { eventType: "tool.recovery_required" as const, expectedAttempt: 2, toolCallId: "tool-1", recoveryCategory: "manual_action_required" as const, preparationRetryCount: 1, preparationRetryLimit: 3 as const, providerOutcome: AgUiToolRecoveryProviderOutcomes.UnknownAfterDispatch };
 		const events = __ProjectAgUiEvents(_Source("tool.recovery_required", { toolRecovery }));
 		expect(events[0]).toEqual({ type: "CUSTOM", name: AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, value: { ...toolRecovery, runId: "run-3", occurredAt: "2026-07-23T00:00:00.000Z" } });
-		expect(events[2]).toEqual({ type: "CUSTOM", name: AG_UI_RUN_WAIT_STATE_EVENT, value: { version: AG_UI_RUN_WAIT_STATE_EVENT, runId: "run-3", source: AgUiRunWaitSources.Recovery, operation: AgUiRunWaitOperations.Add, waits: [{ id: "recovery:tool-1", reason: AgUiRunWaitReasons.RecoveryRequired }] } });
+		expect(_WaitEnvelope(events[2])).toMatchObject({ runId: "run-3", source: AgUiRunWaitSources.Recovery, operation: AgUiRunWaitOperations.Add, waits: [{ id: expect.stringMatching(/^recovery:[a-f0-9]{64}$/u), reason: AgUiRunWaitReasons.RecoveryRequired }] });
 	});
 
 	it("retains every unsupported or incomplete canonical event as a payload-free custom signal", function _ProjectsCustom()
@@ -103,7 +129,7 @@ describe("AG-UI projection", function _Suite()
 		expect(record.data).toEqual({ type: "RUN_FINISHED", threadId: "conversation-2", runId: "run-3", outcome: { type: "interrupt", interrupts: [source.payload.interrupt] } });
 		expect(__EncodeAgUiSseRecord(record)).not.toContain("id:");
 		const wait = __ProjectAgUiEvents(source)[1];
-		expect(wait).toEqual({ type: "CUSTOM", name: AG_UI_RUN_WAIT_STATE_EVENT, value: { version: AG_UI_RUN_WAIT_STATE_EVENT, runId: "run-3", source: AgUiRunWaitSources.Participant, operation: AgUiRunWaitOperations.Add, waits: [{ id: "interrupt:elicitation-1", reason: AgUiRunWaitReasons.Approval }] } });
+		expect(_WaitEnvelope(wait)).toMatchObject({ runId: "run-3", source: AgUiRunWaitSources.Participant, operation: AgUiRunWaitOperations.Add, waits: [{ id: expect.stringMatching(/^interrupt:[a-f0-9]{64}$/u), reason: AgUiRunWaitReasons.Approval }] });
 	});
 
 	it("keeps personal-memory permission distinct from ordinary participant input", function _ProjectsParticipantReasons()

@@ -3,6 +3,7 @@ export type * from "./client.types";
 export * from "./api-error.types";
 export * from "./api-error.validator";
 export * from "./ag-ui-projection.types";
+export * from "./ag-ui-projection.validator";
 export * from "./agent-thread-parent-delivery.types";
 export * from "./ag-ui-a2ui-envelope";
 export * from "@opencrane/models/agents";
