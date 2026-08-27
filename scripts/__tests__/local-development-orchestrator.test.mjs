@@ -20,6 +20,7 @@ function _Operations(calls, options = {})
 		ensureLocalLiteLLMDatabase() { calls.push("litellm-database"); },
 		loadLocalDevelopmentSecrets() { calls.push("secrets"); return { liteLLMMasterKey: "master-key" }; },
 		prepareLocalAgentRuntimeEnvironment() { calls.push("runtime-python"); },
+		prepareLocalProviderConfiguration() { calls.push("prepare-provider-configuration"); return { selectedModel: "openai/gpt-5.4-nano", selectedProvider: "openai" }; },
 		processHost,
 		releaseLocalDevelopmentLock() { calls.push("unlock"); },
 		removeOwnedContainer(name) { calls.push(`remove:${name}`); },
@@ -83,6 +84,7 @@ test("Alternative A prepares and validates LiteLLM after the application databas
 
 	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "local-llm", developmentProfile: "agent-local" }), _Operations(calls));
 	assert.equal(calls.includes("credentials:true"), true);
+	assert.ok(calls.indexOf("prepare-provider-configuration") < calls.indexOf("secrets"));
 	assert.ok(calls.indexOf("secrets") < calls.indexOf("runtime-python"));
 	assert.ok(calls.indexOf("seed") < calls.indexOf("litellm-database"));
 	assert.ok(calls.indexOf("litellm-database") < calls.indexOf("start-litellm"));
@@ -123,4 +125,20 @@ test("a suspend request during LiteLLM setup cleans both containers and releases
 	assert.deepEqual(processSignals, [{ processId: 0, signal: "SIGCONT" }]);
 	assert.deepEqual(calls.slice(-4), ["remove:opencrane-local-litellm", "stop:opencrane-local-postgres", "remove-credentials", "unlock"]);
 	assert.equal(processHost.listenerCount("SIGTSTP"), 0);
+});
+
+test("Alternative A keeps its persisted configuration when secret loading fails", async function _ConfigurationPersistenceOnFailure()
+{
+	const calls = [];
+	const failure = new Error("provider key is invalid");
+	const operations = _Operations(calls);
+	operations.loadLocalDevelopmentSecrets = function _FailSecretLoading()
+	{
+		calls.push("secrets");
+		throw failure;
+	};
+
+	await assert.rejects(runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "local-llm", developmentProfile: "agent-local" }), operations), failure);
+	assert.equal(calls.includes("prepare-provider-configuration"), true);
+	assert.equal(calls.at(-1), "unlock");
 });

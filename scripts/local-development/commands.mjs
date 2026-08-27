@@ -44,7 +44,16 @@ export function createPostgresRunCommand(configuration, secrets)
 	};
 }
 
-/** Returns the local LiteLLM container command for Alternative A, or no command for the other profiles. */
+/**
+ * Builds Alternative A's LiteLLM container command and returns no command for other profiles.
+ * The selected generated configuration is mounted read-only, while provider, proxy, and database
+ * credentials travel through the child environment instead of Docker command arguments.
+ *
+ * Called by: `startLocalLiteLLM` after the coordinator has selected a provider and model.
+ * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Selected Tier 2 composition and generated LiteLLM configuration path.
+ * @param {Record<string, string>} secrets - Provider, LiteLLM, and PostgreSQL credentials for the container environment.
+ * @returns {object | undefined} Docker command for Alternative A, or undefined when this profile has no local LiteLLM container.
+ */
 export function createLiteLLMRunCommand(configuration, secrets)
 {
 	if (configuration.alternative !== LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
@@ -70,7 +79,7 @@ export function createLiteLLMRunCommand(configuration, secrets)
 			"--env",
 			"LITELLM_MASTER_KEY",
 			"--env",
-			"OPENAI_API_KEY",
+			"OPENCRANE_LOCAL_PROVIDER_KEY",
 			"--env",
 			"DATABASE_URL",
 			_LITELLM_IMAGE,
@@ -81,7 +90,7 @@ export function createLiteLLMRunCommand(configuration, secrets)
 		],
 		environment: {
 			LITELLM_MASTER_KEY: secrets.liteLLMMasterKey,
-			OPENAI_API_KEY: secrets.providerKey,
+			OPENCRANE_LOCAL_PROVIDER_KEY: secrets.providerKey,
 			DATABASE_URL: `postgresql://opencrane:${secrets.postgresPassword}@${configuration.postgresContainerName}:5432/litellm`
 		}
 	};

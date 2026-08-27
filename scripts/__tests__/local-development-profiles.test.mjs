@@ -27,6 +27,40 @@ test("agent defaults to Alternative A", function _defaultAgentAlternative()
 
 	assert.equal(configuration.alternative, "local-llm");
 	assert.equal(configuration.developmentProfile, "agent-local");
+	assert.equal(configuration.provider, undefined);
+	assert.equal(configuration.model, undefined);
+	assert.equal(configuration.providerKeyPath, undefined);
+});
+
+test("Alternative A accepts an exact model for registry validation during setup", function _customModel()
+{
+	const parsed = parseLocalDevelopmentArguments([
+		"--profile",
+		"agent",
+		"--alternative",
+		"local-llm",
+		"--model",
+		"anthropic/claude-sonnet-4-5-20250929"
+	]);
+	const configuration = createLocalDevelopmentConfiguration(parsed, "/repo", {});
+
+	assert.equal(configuration.model, "anthropic/claude-sonnet-4-5-20250929");
+});
+
+test("Alternative A accepts an exact provider for registry validation during setup", function _CustomProvider()
+{
+	const parsed = parseLocalDevelopmentArguments([
+		"--profile",
+		"agent",
+		"--alternative",
+		"local-llm",
+		"--provider",
+		"anthropic"
+	]);
+	const configuration = createLocalDevelopmentConfiguration(parsed, "/repo", {});
+
+	assert.equal(configuration.provider, "anthropic");
+	assert.equal(configuration.model, undefined);
 });
 
 test("named alternatives can print help without runtime-specific settings", function _AlternativeHelp()
@@ -121,6 +155,59 @@ test("core and non-remote alternatives reject remote model options", function _r
 			"https://litellm.example.test"
 		]);
 	}, /only to Alternative B/);
+});
+
+test("provider and model selection apply only to Alternative A", function _RejectUnusedLocalSelection()
+{
+	assert.throws(function _coreProvider()
+	{
+		parseLocalDevelopmentArguments(["--provider", "openai"]);
+	}, /only to --profile agent/);
+	assert.throws(function _coreModel()
+	{
+		parseLocalDevelopmentArguments(["--model", "openai/gpt-5.4-nano"]);
+	}, /only to --profile agent/);
+	assert.throws(function _remoteModel()
+	{
+		parseLocalDevelopmentArguments([
+			"--profile",
+			"agent",
+			"--alternative",
+			"remote-llm",
+			"--remote-litellm-endpoint",
+			"https://litellm.example.test",
+			"--remote-litellm-master-key-file",
+			"/secure/remote.key",
+			"--model",
+			"openai/gpt-5.4-nano"
+		]);
+	}, /only to Alternative A/);
+	assert.throws(function _remoteProvider()
+	{
+		parseLocalDevelopmentArguments([
+			"--profile",
+			"agent",
+			"--alternative",
+			"remote-llm",
+			"--remote-litellm-endpoint",
+			"https://litellm.example.test",
+			"--remote-litellm-master-key-file",
+			"/secure/remote.key",
+			"--provider",
+			"openai"
+		]);
+	}, /only to Alternative A/);
+	assert.throws(function _simulatedModel()
+	{
+		parseLocalDevelopmentArguments([
+			"--profile",
+			"agent",
+			"--alternative",
+			"simulated-llm",
+			"--model",
+			"openai/gpt-5.4-nano"
+		]);
+	}, /only to Alternative A/);
 });
 
 test("local service ports are validated before orchestration", function _portValidation()

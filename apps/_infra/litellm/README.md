@@ -46,11 +46,18 @@ An app entrypoint (`type:app`, `scope:litellm`); composed by the silo chart, imp
   provider keys and must never be rotated, or those keys become unreadable.
 - `litellm.image.*`, `.podAnnotations`, `.service.port` — image, restart, and port controls.
 
-Tier 2 Alternative A reuses the pinned image with
-[`local-development/config.yaml`](local-development/config.yaml), mounted read-only into a labelled
-loopback container. It reads `keys/.openai-key`, while the coordinator generates a different local
-LiteLLM master key. Alternative B uses an explicit remote HTTPS LiteLLM origin and admin-key file;
-Alternative C starts no LiteLLM process and reads no provider or model credential.
+Tier 2 Alternative A reuses the pinned image in a labelled loopback container. The coordinator reads
+the reviewed model/provider contract from
+[`@opencrane/models/local-development`](../../../libs/models/local-development/main/provider-contract.json),
+discovers matching owner-only provider-key files, and generates one secret-free ignored YAML for the
+selected model under `local-development/` when it is first used. Matching generated files persist
+across runs and retain the provider-neutral `auto` alias. Only the selected configuration is mounted
+read-only and only its provider key enters the container environment. The coordinator generates a
+separate local LiteLLM master key. Every reviewed provider uses the hidden
+`keys/.<provider>-key` convention. `--provider` chooses a reviewed provider and its `defaultModel`;
+`--model` can select another exact reviewed model owned by that provider.
+Alternative B uses an explicit remote HTTPS LiteLLM origin and admin-key file; Alternative C starts
+no LiteLLM process and reads no provider or model credential.
 
 ## See also
 

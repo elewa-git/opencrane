@@ -18,7 +18,7 @@ npm run serve:opencrane-ui
 
 Open the local URL printed by Nx. The root route enters persona onboarding, and `/chats` opens the
 normal conversation workspace. Administration, settings, invitation, and live-login routes are not
-mounted in this profile; those URLs return to onboarding.
+mounted in this profile; those URLs return to onboarding when no named archetype profile is active.
 
 That single command also starts the interactive Storybook catalogue and runs the tagged Playwright
 visual checks against it. The three processes stay grouped under the Nx task, so UI work and its
@@ -43,23 +43,28 @@ locally before it can open a network transport.
 
 ## Select the local archetype
 
-The first plain serve uses the reviewed Commander/Guardian path. Select another reviewed Guardian
-path with an explicit Nx configuration:
+The first plain serve enters onboarding on the reviewed Commander/Guardian path. Tier 1 keeps this
+path deterministic rather than copying the backend scoring policy into the browser. Select another
+reviewed Guardian fixture and open its Agent conversation directly with a named script:
 
 ```bash
-npx nx serve opencrane-ui --configuration=development-catalyst
+npm run serve:opencrane-ui:catalyst
 ```
 
-The supported configurations are `development-commander`, `development-catalyst`,
-`development-anchor`, and `development-analyst`. Opening an explicit configuration saves the choice
-in browser local storage for that scheme, hostname, and port. Later plain serves reuse the saved
-choice; they do not overwrite it with Commander.
+The supported scripts are:
 
-To return to Commander, stop the explicit configuration, run the plain serve, and clear the site's
-local storage. Reloading an explicit configuration saves its archetype again. Select another explicit
-configuration to replace the choice. Clearing only the downloaded HTTP cache may leave local storage
-intact. This preference survives a
-reload, but the mock interview and conversations do not.
+- `npm run serve:opencrane-ui:commander`;
+- `npm run serve:opencrane-ui:catalyst`;
+- `npm run serve:opencrane-ui:anchor`; and
+- `npm run serve:opencrane-ui:analyst`.
+
+Each named script saves the choice in browser local storage for that scheme, hostname, and port.
+Later plain serves still enter onboarding but reuse the saved deterministic path; they do not
+overwrite it with Commander.
+
+To remove the saved choice, stop the named profile and clear the site's local storage. Select another
+named profile to replace it. Clearing only the downloaded HTTP cache may leave local storage intact.
+This preference survives a reload, but the mock interview and conversations do not.
 
 ## Select a deterministic scenario
 
@@ -94,6 +99,32 @@ Use the standalone Storybook command when a task concerns only one component sta
 serve already includes Storybook and its Playwright visual pass; use the routed UI when the task also
 concerns navigation or interaction between stores and gateways.
 
+## Connect to the shared development backend
+
+When a frontend change genuinely needs the shared development backend, run the separate live profile:
+
+```bash
+npm run serve:opencrane-ui:live
+```
+
+That profile keeps the live providers and routes and enables the dedicated development proxy.
+Default development replaces those entry points at build time, so production and live-development
+bundles do not import the local fixtures. The command therefore requires a reachable backend and a
+valid live session.
+
+The proxy currently targets `https://platform.dev.opencrane.ai`. The command has started correctly
+when Nx prints the local URL. If the page remains blank while the terminal reports `http proxy
+error` or `ETIMEDOUT` for `/api/v1/auth/me`, the shared backend is unreachable from the development
+machine. Restore network access to that environment and reload; the live profile deliberately does
+not fall back to Tier 1 fixtures.
+
+::: warning
+Do not use `npm run serve:opencrane-ui:live` as the only proof for a Tier 1 change. A real backend can
+satisfy a request that should have used an in-browser Tier 1 gateway, hiding an incomplete mock
+binding. Run the default Tier 1 profile so the provider-composition and network-tripwire tests can
+catch that drift; use the live profile only for a separate backend integration check.
+:::
+
 ## Start the Tier 2 core profile
 
 Tier 2 requires the Docker CLI and a running Docker-compatible daemon. Docker Desktop provides both
@@ -112,6 +143,11 @@ npm run dev:tier2
 Open `http://local-development.localhost:4200`. The coordinator runs the exact UI command
 `npx nx serve opencrane-ui --configuration=development-live`, but supplies a local session and
 backend composition so no OpenID Connect (OIDC) sign-in is required.
+
+`development-live` is an Angular build configuration, not a standalone environment. It selects the
+real HTTP and WebSocket gateways plus the development proxy instead of Tier 1's in-browser gateway
+implementations. Running that Nx command by itself still requires a separately running backend and
+valid session; the Tier 2 coordinator starts and configures both for local development.
 
 Core supports onboarding, persisted conversations, direct and group messages, and run admission.
 It deliberately leaves Agent execution, models, memory, files, channels, integrations, Obot,
@@ -135,25 +171,145 @@ bootstrap, authenticated runtime stream, candidate validation, and PostgreSQL pe
 
 | Alternative | Command | Model access and credentials |
 | --- | --- | --- |
-| A — local LiteLLM | `npm run dev:tier2:agent:local-llm` | Starts the pinned local LiteLLM container and the local Agent runner. Reads the provider key from `keys/.openai-key`, creates a separate owner-only local master-key file, and stores attempt-scoped virtual keys in a separate `litellm` database within the Tier 2 PostgreSQL container. |
+| A — local LiteLLM | `npm run dev:tier2:agent:local-llm` | Starts the pinned local LiteLLM container and the local Agent runner. Selects a reviewed provider/model from conventional owner-only key files, creates a separate owner-only local master-key file, and stores attempt-scoped virtual keys in a separate `litellm` database within the Tier 2 PostgreSQL container. |
 | B — remote LiteLLM | `npm run dev:tier2:agent:remote-llm -- --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path` | Connects the local Agent runner to an explicit remote HTTPS LiteLLM proxy using an owner-only admin-key file. It never falls back to Alternative A's local master key or provider key. |
 | C — simulated model | `npm run dev:tier2:agent:simulated-llm` | Runs the local Agent runner with deterministic model events after normal run admission. It starts no LiteLLM process and reads no model or provider credential. |
 
-Alternative B's endpoint and key path above are placeholders. Replace both with the real proxy URL
-and the absolute path of an existing file containing its admin key. The key file must be readable
-only by its owner; for example, set mode `600` on macOS or Linux. The coordinator now checks that
-file and the remote `auto` model before preparing the Python environment, so invalid remote settings
-fail without installing Agent dependencies.
+### Select a local model
+
+Alternative A recognizes these provider/model pairs from the reviewed
+[local-provider registry](https://github.com/elewa-git/opencrane/blob/main/libs/models/local-development/main/provider-contract.json):
+
+- Anthropic: `anthropic/claude-sonnet-4-5-20250929` with `keys/.anthropic-key`
+- Gemini: `gemini/gemini-2.5-flash` with `keys/.gemini-key`
+- Mistral: `mistral/mistral-small-latest` with `keys/.mistral-key`
+- OpenAI: `openai/gpt-5.4-nano` with `keys/.openai-key`
+
+Create the matching owner-only key file. The file contains only the upstream provider key:
+
+```bash
+mkdir -p keys
+(umask 077 && touch keys/.anthropic-key)
+chmod 600 keys/.anthropic-key
+${EDITOR:-vi} keys/.anthropic-key
+
+npm run dev:tier2:agent:local-llm -- \
+  --provider anthropic
+```
+
+The `--` forwards `--provider` through npm. An explicit provider uses its reviewed `defaultModel`.
+To choose another model owned by that provider, pass both options:
+
+```bash
+npm run dev:tier2:agent:local-llm -- \
+  --provider anthropic \
+  --model anthropic/claude-sonnet-4-5-20250929
+```
+
+You may also pass `--model` alone; its exact registry entry selects the owning provider. When both
+options are present, startup rejects a model owned by a different provider. The registry—not the
+text before `/` in an arbitrary model name—derives `keys/.<provider>-key`, so an unreviewed provider
+or model fails before a credential is read. The coordinator also rejects a selected key that is
+missing, empty, linked, not a regular file, or accessible by group or other users.
+
+When both `--provider` and `--model` are omitted, the coordinator lists recognized key files, sorts
+their filenames, and chooses the first provider. Because every provider file is hidden, ordinary
+lexical order applies directly: for example, `keys/.anthropic-key` sorts before
+`keys/.openai-key`. The coordinator uses that provider's `defaultModel` from the registry.
+Unreviewed provider names do not participate, and the choice is recalculated on every run from the
+current `keys/` directory.
+
+At startup, Alternative A resolves only the selected provider/model and writes its secret-free
+LiteLLM configuration under `apps/_infra/litellm/local-development/` if that generated file does not
+already exist. Each file maps OpenCrane's stable `auto` alias to one exact reviewed model. The
+coordinator reuses matching generated files on later runs, mounts only the selected file, and reads
+and supplies only its matching key. Generated `*.generated.yaml` files are ignored by Git and remain
+after shutdown so switching among previously used models does not regenerate them.
+
+Adding a provider or model still requires review: extend the registry and the model-selection tests
+together. Merely adding `keys/.<new-provider>-key` does not admit an unreviewed provider.
+
+### Configure a remote LiteLLM proxy
+
+Alternative B's endpoint and key path above are placeholders. Ask the proxy operator for:
+
+- an HTTPS origin such as `https://litellm.dev.example.com`, without credentials, a path, query, or
+  fragment; and
+- an organisation-scoped LiteLLM admin key that can read `GET /model/info` and mint an
+  attempt-scoped key through `POST /key/generate`.
+
+The proxy must expose a model alias named `auto`. Use a dedicated proxy or an admin credential
+scoped to this OpenCrane organisation; a fleet-wide key can mint credentials outside this local
+development boundary. OpenCrane limits each runtime key it mints to one model alias, budget, and
+expiry, but those limits do not replace isolation enforced by the remote proxy.
+
+Create an owner-readable key file without placing the key in the command itself:
+
+```bash
+mkdir -p keys
+(umask 077 && touch keys/.remote-litellm-admin-key)
+chmod 600 keys/.remote-litellm-admin-key
+${EDITOR:-vi} keys/.remote-litellm-admin-key
+```
+
+Put the admin key alone in that file, without quotes. Then replace the example hostname and run:
+
+```bash
+npm run dev:tier2:agent:remote-llm -- \
+  --remote-litellm-endpoint https://litellm.dev.example.com \
+  --remote-litellm-master-key-file "$PWD/keys/.remote-litellm-admin-key"
+```
+
+The `--` after the npm script forwards the two options to the Tier 2 coordinator. The coordinator
+checks the endpoint, key permissions, admin-key access, and `auto` alias before it prepares Python or
+starts a local container.
+
+### Smoke-test the remote proxy
+
+Use this endpoint-only check when you want to confirm the placeholders before starting Tier 2. It
+reads the key inside Node, sends it only in the HTTPS authorization header, and never prints it:
+
+```bash
+export REMOTE_LITELLM_ENDPOINT=https://litellm.dev.example.com
+export REMOTE_LITELLM_ADMIN_KEY_FILE="$PWD/keys/.remote-litellm-admin-key"
+
+node --input-type=module <<'NODE'
+import { readFile } from "node:fs/promises";
+
+const endpoint = process.env.REMOTE_LITELLM_ENDPOINT.replace(/\/$/, "");
+const key = (await readFile(process.env.REMOTE_LITELLM_ADMIN_KEY_FILE, "utf8")).trim();
+const response = await fetch(`${endpoint}/model/info`, {
+  headers: { authorization: `Bearer ${key}` }
+});
+
+if (!response.ok)
+{
+  throw new Error(`LiteLLM returned HTTP ${response.status}`);
+}
+
+const body = await response.json();
+if (!body.data?.some(model => model.model_name === "auto"))
+{
+  throw new Error("LiteLLM does not expose the required auto model alias");
+}
+
+console.log("Remote LiteLLM authentication and auto alias are ready.");
+NODE
+```
+
+An HTTP `401` or `403` means the key is wrong or lacks admin access. A connection error points to
+DNS, VPN, firewall, or certificate trust. An `auto` error means the proxy operator must add that
+alias before Agent chat can mint a restricted runtime key.
+
+For a short end-to-end check, start the remote profile command, open
+`http://local-development.localhost:4200`, enter an Agent conversation, and send one small prompt.
+A completed response proves the server minted an attempt key, the local runtime reached the remote
+proxy, and the authenticated runtime and conversation streams returned the result. Press `Ctrl+C`
+once and wait for cleanup when the check finishes.
 
 The runtime receives an attempt-scoped LiteLLM key in A/B, never the provider key or LiteLLM
 master key. The controller and each runtime attempt also use separate private bearer files; the
 runtime bearer is signed for that attempt's generated process identity.
-
-Alternative B cannot prove that a remote LiteLLM administrator has isolated organisations behind
-the supplied admin key. Use an admin credential scoped to this OpenCrane organisation or a dedicated
-proxy. Do not provide a fleet-wide master key that can mint keys across organisations. OpenCrane
-limits every minted runtime key to one model alias, budget, and expiry, but those limits do not
-replace remote LiteLLM team or tenant isolation.
 
 ::: info
 The coordinator keeps the named PostgreSQL volume between runs. Press `Ctrl+C` and wait for the
@@ -164,14 +320,9 @@ baseline changes; it removes only resources carrying the OpenCrane local-develop
 :::
 
 The lock deliberately rejects a second Tier 2 coordinator because profiles share listener ports,
-the PostgreSQL volume, and the fixed local identity. With an older coordinator that is already
-suspended, run `fg`, then press `Ctrl+C` and wait for it to exit; closing the terminal is unnecessary.
-
-::: warning
-Do not use `development-live` to prove a Tier 1 change. A successful live request can hide an
-incomplete mock binding; the provider-composition and network-tripwire tests exist to catch exactly
-that drift.
-:::
+the PostgreSQL volume, and the fixed local identity. Press `Ctrl+C` once and wait for cleanup before
+starting another profile. `Ctrl+Z` now requests the same cleanup instead of suspending the command,
+so no `fg` sequence or repeated signal is required.
 
 ## Start the Tier 3 full-silo profile
 
@@ -235,3 +386,38 @@ Tier 3 is a disposable k3d qualification. It does not prove public DNS, producti
 cloud workload identity, backup and restore, or a real-tenant upgrade. Those remain remote deploy
 and release evidence.
 :::
+
+## Add a gateway-backed feature
+
+A **gateway** is the narrow state-layer interface through which a feature reads or changes data.
+Keep the feature dependent on that interface so the live application and Tier 1 can supply different
+implementations without changing the page.
+
+```text
+feature store
+     │ injects a narrow gateway token
+     ▼
+state port
+     ├──→ live generated-client adapter ──→ OpenCrane API
+     └──→ Tier 1 in-memory adapter ───────→ LocalDevelopmentState
+```
+
+Add a gateway-backed feature in this order:
+
+1. Define the gateway interface and Angular injection token in the capability's
+   `libs/frontend/state/<capability>` package.
+2. Implement the live adapter with the generated OpenCrane client, then bind it in
+   [`provideOpenCraneUiLiveGateways()`](https://github.com/elewa-git/opencrane/blob/main/libs/frontend/state/gateways/src/lib/opencrane-ui-gateway-profile.provider.ts).
+3. If Tier 1 mounts the feature, add an in-memory adapter under
+   [`state/local-development`](https://github.com/elewa-git/opencrane/tree/main/libs/frontend/state/local-development)
+   and bind it in `provideLocalDevelopmentGateways()`. Reuse `LocalDevelopmentState` when the new
+   data must remain coherent with onboarding or conversations.
+4. If a coherent backend-free implementation is not available, leave the route out of
+   [`app.routes.local.ts`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane-ui/src/app/app.routes.local.ts)
+   instead of supplying a partial adapter.
+5. Test the state port, live adapter mapping, live provider binding, local provider binding, and
+   route availability.
+
+An omitted local binding fails visibly. Angular reports a missing provider, while a retained HTTP or
+generated-client path is rejected by the Tier 1 network tripwire before it reaches the network. Tier 1
+never silently borrows the live backend.

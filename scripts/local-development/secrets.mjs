@@ -4,6 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import { LOCAL_DEVELOPMENT_ALTERNATIVES } from "./profiles.mjs";
 
+/**
+ * Reads a credential after `lstat` confirms the path is a regular file with no group or other access.
+ * This check rejects a configured provider path that already points at another managed credential.
+ * @param {string} filePath - Credential file to inspect and read.
+ * @param {string} label - Credential name included in validation errors.
+ * @returns {string} The trimmed, non-empty credential.
+ * @throws When the path is missing, linked, not a regular private file, empty, or unreadable.
+ */
 function _readRequiredSecret(filePath, label)
 {
 	let secret;
@@ -11,8 +19,7 @@ function _readRequiredSecret(filePath, label)
 
 	try
 	{
-		statistics = fs.statSync(filePath);
-		secret = fs.readFileSync(filePath, "utf8").trim();
+		statistics = fs.lstatSync(filePath);
 	}
 	catch (error)
 	{
@@ -24,6 +31,11 @@ function _readRequiredSecret(filePath, label)
 		throw error;
 	}
 
+	if (statistics.isSymbolicLink())
+	{
+		throw new Error(`${label} path must not be a symbolic link: ${filePath}`);
+	}
+
 	if (!statistics.isFile())
 	{
 		throw new Error(`${label} path is not a regular file: ${filePath}`);
@@ -33,6 +45,8 @@ function _readRequiredSecret(filePath, label)
 	{
 		throw new Error(`${label} file must not be accessible by group or other users: ${filePath}`);
 	}
+
+	secret = fs.readFileSync(filePath, "utf8").trim();
 
 	if (!secret)
 	{
@@ -58,7 +72,15 @@ export function readOrCreateLocalSecret(filePath, label, prefix, randomBytes = c
 
 /**
  * Loads the credentials required by the selected profile without reading keys used by other alternatives.
- * Alternative B also rejects reusing the local LiteLLM or provider-key file as its remote admin key.
+ * Local mode rejects pairwise reuse because the provider, LiteLLM proxy, and PostgreSQL database
+ * authenticate different boundaries. Alternative B also refuses the local LiteLLM master-key and
+ * configured provider-key paths as its remote admin-key source.
+ *
+ * Called by: `runLocalDevelopmentSession` before it creates commands or starts child processes.
+ * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Selected Tier 2 profile and credential paths.
+ * @param {(size: number) => Buffer} randomBytes - Entropy source used when a managed local secret is absent.
+ * @returns The credentials used by the selected profile.
+ * @throws When a required credential file fails validation or when two boundaries reuse one credential.
  */
 export function loadLocalDevelopmentSecrets(configuration, randomBytes = crypto.randomBytes)
 {
@@ -72,12 +94,23 @@ export function loadLocalDevelopmentSecrets(configuration, randomBytes = crypto.
 
 	if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
 	{
-		const providerKey = _readRequiredSecret(configuration.providerKeyPath, "OpenAI provider key");
+		const providerKey = _readRequiredSecret(configuration.providerKeyPath, "Selected local provider key");
+
+		if (providerKey === postgresPassword)
+		{
+			throw new Error("The selected local provider key and local PostgreSQL password must be different secrets");
+		}
+
 		const liteLLMMasterKey = readOrCreateLocalSecret(configuration.localLiteLLMMasterKeyPath, "Local LiteLLM master key", "sk-local-", randomBytes);
 
 		if (providerKey === liteLLMMasterKey)
 		{
-			throw new Error("The OpenAI provider key and LiteLLM master key must be different secrets");
+			throw new Error("The selected local provider key and LiteLLM master key must be different secrets");
+		}
+
+		if (liteLLMMasterKey === postgresPassword)
+		{
+			throw new Error("The local LiteLLM master key and PostgreSQL password must be different secrets");
 		}
 
 		return {
@@ -92,9 +125,9 @@ export function loadLocalDevelopmentSecrets(configuration, randomBytes = crypto.
 		throw new Error("Alternative B requires a remote admin key file separate from the generated local LiteLLM key");
 	}
 
-	if (path.resolve(configuration.remoteLiteLLMMasterKeyPath) === path.resolve(configuration.providerKeyPath))
+	if (configuration.reviewedProviderKeyPaths.some(providerKeyPath => path.resolve(configuration.remoteLiteLLMMasterKeyPath) === path.resolve(providerKeyPath)))
 	{
-		throw new Error("Alternative B requires a remote admin key file separate from the OpenAI provider key");
+		throw new Error("Alternative B requires a remote admin key file separate from every reviewed local provider key");
 	}
 
 	return {

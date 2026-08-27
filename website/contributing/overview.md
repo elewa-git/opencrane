@@ -46,7 +46,7 @@ Two threads run underneath every step of that journey:
 
 | Page | Covers |
 | --- | --- |
-| [Local development tiers](/contributing/frontend-development) | Tier 1 browser-only work, Tier 2 real-backend profiles, and Tier 3 full-silo k3d qualification in Codespaces |
+| [Local development tiers](/contributing/frontend-development) | Tier 1 browser-only work with gateway and Storybook checks, Tier 2 real-backend Agent profiles, and Tier 3 full-silo k3d qualification in Codespaces |
 | [The CI pipeline](/contributing/ci-pipeline) | The three workflows, what each `docker.yml` job gates, and the caching layers that keep it fast |
 | [Deploying](/contributing/deploying) | The script-only rule, the deploy chain, bootstrap prerequisites, and the warnings that save hours |
 | [Versions and migrations](/contributing/versions-and-migrations) | The repository train, the stamp rule, chart and database migrations, and how CI enforces them |

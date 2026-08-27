@@ -32,10 +32,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   and child Agent threads, with deterministic slow, retry, reconnect, failed-run, and access-change
   scenarios plus Angular and native-API tripwires for missed live bindings. Build-time profile
   replacement keeps those fixtures out of production and omits backend-owned routes locally. Local
-  onboarding can follow the reviewed Commander, Catalyst, Anchor, or Analyst Guardian path; explicit
-  Nx configurations save the choice in browser storage while an unset profile defaults to Commander.
-  The same command starts Storybook and its Playwright visual pass, while the real-backend workflow
-  remains an isolated `development-live` configuration.
+  onboarding can follow the reviewed Commander, Catalyst, Anchor, or Analyst Guardian path. Plain
+  serve enters deterministic onboarding, while named archetype scripts save the chosen fixture and
+  open its Agent conversation directly. The same command starts Storybook and its Playwright visual
+  pass, while `serve:opencrane-ui:live` remains the isolated real-backend workflow.
 
 - **Org admins can now model departments, teams, and projects as one hierarchy of groups.** Groups
   expose an optional parent, direct membership, and explicit `External` or `Local` authority;
@@ -64,7 +64,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   admission, controller assignment, runtime authentication, streaming, candidate validation, and
   persistence. Developers can choose a local LiteLLM proxy, an explicit shared HTTPS LiteLLM proxy,
   or credential-free deterministic model output while Cognee, memory, Obot, artifacts, channels,
-  and Kubernetes remain explicitly disabled.
+  and Kubernetes remain explicitly disabled. The local proxy discovers reviewed
+  provider credentials using `keys/.<provider>-key`:
+  `--provider` selects a reviewed provider and its default model, while `--model` selects an exact
+  reviewed model and its owner. Omitting both deterministically uses the default for the first
+  recognized filename in sorted order. A selected model's secret-free configuration is generated
+  once under the ignored local LiteLLM development directory and reused on later runs; only that
+  configuration and provider key are supplied to LiteLLM.
 
 - **Infrastructure developers can now retain and inspect a complete local Kubernetes silo after
   qualification.** `npm run dev:tier3` runs the same full-storage k3d smoke that protects `develop`,
