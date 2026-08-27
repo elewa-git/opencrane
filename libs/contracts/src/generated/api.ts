@@ -228,6 +228,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mcp/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start one durable OCI-backed MCP tool call */
+        post: operations["submitMcpTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one caller-owned durable MCP task */
+        get: operations["getMcpTask"];
+        put?: never;
+        post?: never;
+        /** Cancel one MCP task before provider dispatch starts */
+        delete: operations["cancelMcpTask"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/tasks/{id}/input": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume one waiting MCP task with its exact input response */
+        post: operations["submitMcpTaskInput"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/resource-shares": {
         parameters: {
             query?: never;
@@ -1733,6 +1785,63 @@ export interface components {
              */
             failureCode?: "artifact_mismatch" | "bundle_too_large" | "malformed_zip_package" | "not_oci_image_layout" | "invalid_layout" | "invalid_index" | "invalid_image_manifest" | "validation_failed" | "registry_import_failed" | null;
         };
+        /** @description One saved question that must be answered before the MCP tool may run. */
+        McpTaskInputRequest: {
+            /** @description Stable request identifier repeated by the response. */
+            requestId: string;
+            /** @description Plain-language question shown to the caller. */
+            message: string;
+            /** @description Top-level tool argument filled by the accepted response. */
+            argumentName: string;
+        };
+        /** @description One caller response bound to the exact saved input request. */
+        McpTaskInputResponse: {
+            /** @description Identifier of the saved request being answered. */
+            requestId: string;
+            /** @description JSON value inserted into the exact top-level tool argument. */
+            value: unknown;
+        };
+        /** @description One idempotent asynchronous call of a discovered tool on an installed OCI-backed MCP server. */
+        McpTaskSubmission: {
+            /** @description Caller key that makes retries select the same durable task. */
+            idempotencyKey: string;
+            /** @description Exact Ready MCP server revision selected from the installed catalogue. */
+            serverRevisionId: string;
+            /** @description Exact discovered tool revision on the selected server revision. */
+            toolRevisionId: string;
+            /** @description Tool arguments checked against the discovered immutable JSON Schema before execution. */
+            arguments: unknown;
+            inputRequest?: components["schemas"]["McpTaskInputRequest"];
+        };
+        /** @description Caller-visible durable state for one OCI-backed MCP tool call. Arguments, workflow receipts, and executor identifiers are never returned. */
+        McpTask: {
+            /** @description Stable task identifier. */
+            id: string;
+            /** @description Immutable OCI-backed MCP server revision. */
+            serverRevisionId: string;
+            /** @description Immutable discovered tool revision. */
+            toolRevisionId: string;
+            /** @description Tool name frozen during MCP discovery. */
+            toolName: string;
+            /**
+             * @description Only MCP protocol version accepted by the runtime.
+             * @enum {string}
+             */
+            protocolVersion: "2026-07-28";
+            /**
+             * @description Durable task state visible across process restarts.
+             * @enum {string}
+             */
+            state: "working" | "input_required" | "queued" | "running" | "completed" | "cancelled" | "failed" | "recovery_required";
+            /** @description Saved question still associated with the task, or null. */
+            inputRequest: components["schemas"]["McpTaskInputRequest"] | null;
+            /** @description Accepted response, or null before the caller answers. */
+            inputResponse: components["schemas"]["McpTaskInputResponse"] | null;
+            /** @description Checked MCP result after success, otherwise null. */
+            result: unknown;
+            /** @description Bounded machine-readable failure or recovery code. */
+            failureCode: string | null;
+        };
         /** @description A direct file, chat, or dataset share. Each recipient relation is backed by an explicit authorization grant. */
         ResourceShare: {
             /** @description Stable share identifier used to manage recipients. */
@@ -2885,6 +2994,226 @@ export interface operations {
             };
             /** @description Caller is not an organisation admin. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    submitMcpTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpTaskSubmission"];
+            };
+        };
+        responses: {
+            /** @description MCP task and Absurd workflow receipt saved together. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpTask"];
+                };
+            };
+            /** @description MCP task fields are invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Authenticated principal is unavailable. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The idempotency key conflicts or the selected installed tool is unavailable. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMcpTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved MCP task state, result, or failure. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpTask"];
+                };
+            };
+            /** @description MCP task identifier is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Authenticated principal is unavailable. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description MCP task not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    cancelMcpTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description MCP task cancelled before provider dispatch. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpTask"];
+                };
+            };
+            /** @description MCP task identifier is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Authenticated principal is unavailable. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description MCP task not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Provider dispatch already started, so cancellation cannot claim success. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    submitMcpTaskInput: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpTaskInputResponse"];
+            };
+        };
+        responses: {
+            /** @description Input saved and the same durable task resumed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpTask"];
+                };
+            };
+            /** @description MCP task input is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Authenticated principal is unavailable. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description MCP task not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The response does not match the waiting request or conflicts with a saved response. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

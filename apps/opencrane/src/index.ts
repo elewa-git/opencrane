@@ -57,7 +57,7 @@ async function _Main(): Promise<void>
 
 	// 4. Compose the class-specific MCP authority before the generic external-action worker.
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
-	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime);
+	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime, workflows);
 	const externalActions = _CreateExternalActionWorker(prisma, mcpRuntime.authority, _log);
 
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.

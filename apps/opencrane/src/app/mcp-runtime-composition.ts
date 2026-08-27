@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { MCP_EXECUTOR_PROFILE_NAME, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { PrismaToolInvocationLifecycleEventUnitOfWork, PrismaToolInvocationRunRecoveryAuthority, PrismaToolRecoveryEventReporter } from "@opencrane/backend/agents/execution/runs";
-import { __CreateMcpOciServerPromotionRouter, __CreateMcpRuntimeCompanionRouter, __CreateMcpRuntimeControllerRouter, PrismaMcpRuntimeUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
+import { __CreateMcpOciServerPromotionRouter, __CreateMcpRuntimeCompanionRouter, __CreateMcpRuntimeControllerRouter, __CreateMcpTaskWorkflow, PrismaMcpRuntimeUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
 import { __CreatePrismaMcpToolInvocationParticipantFactory } from "@opencrane/backend/server/iam/authorization";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { _CreateAgentControllerTokenReviewer, _CreateMcpExecutorTokenReviewer, _ValidateIsolatedWorkloadNamespace } from "@opencrane/backend/server/infra/workload-identity";
@@ -11,9 +11,13 @@ import { _CreateAgentControllerTokenReviewer, _CreateMcpExecutorTokenReviewer, _
 import type { InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
 import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
+import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
+
+/** Polling cadence for durable public task completion after runtime admission. */
+const _MCP_TASK_STATUS_POLL_MILLISECONDS = 250;
 
 /** Compose the sole database and HTTP authority for OCI-backed MCP execution. */
-export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig): McpRuntimeComposition
+export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflows: McpWorkflowComposition): McpRuntimeComposition
 {
 	const executorNamespace = _ValidateIsolatedWorkloadNamespace(config.mcpExecutorNamespace, config.serverNamespace);
 	const participantFactory = __CreatePrismaMcpToolInvocationParticipantFactory(
@@ -33,8 +37,10 @@ export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: k8s.
 			log: _log,
 		},
 	});
+	const taskWorkflow = __CreateMcpTaskWorkflow({ execution: workflows.execution, unitOfWork: workflows.unitOfWork, runtime: authority, statusPollMilliseconds: _MCP_TASK_STATUS_POLL_MILLISECONDS });
 	return {
 		authority,
+		taskWorkflow,
 		promotion: __CreateMcpOciServerPromotionRouter({
 			authority,
 			resolveCaller: async function _ResolveCaller(request)

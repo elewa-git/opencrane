@@ -205,10 +205,11 @@ model ApprovalRequest {
 model ToolInvocation {
   id                       String                           @id @default(cuid())
   siloId                   String                           @map("silo_id")
-  runId                    String                           @map("run_id")
-  attempt                  Int
-  agentServiceId           String                           @map("agent_service_id")
-  agentRevisionId          String                           @map("agent_revision_id")
+  runId                    String?                          @map("run_id")
+  attempt                  Int?
+  agentServiceId           String?                          @map("agent_service_id")
+  agentRevisionId          String?                          @map("agent_revision_id")
+  mcpTaskId                String?                          @unique @map("mcp_task_id")
   subjectId                String                           @map("subject_id")
   runtimeInstanceId        String                           @map("runtime_instance_id")
   commandId                String                           @map("command_id")
@@ -239,7 +240,8 @@ model ToolInvocation {
   createdAt                DateTime                         @default(now()) @map("created_at")
   updatedAt                DateTime                         @updatedAt @map("updated_at")
   completedAt              DateTime?                        @map("completed_at")
-  run                      AgentRun                         @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
+  run                      AgentRun?                        @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
+  mcpTask                  McpTask?                         @relation(fields: [mcpTaskId], references: [id], onDelete: Restrict)
   approvalRequests         ApprovalRequest[]
   resultDelivery           ToolResultDelivery?
   skillWorkload            SkillWorkload?

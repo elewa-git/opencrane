@@ -16,7 +16,15 @@ export type { OciImageLayoutArtifactResolver } from "./oci-image-validation/oci-
 export { __CreateOciImageValidationWorkflow } from "./oci-image-validation/oci-image-validation";
 export { OciImageValidationTaskNames } from "./oci-image-validation/oci-image-validation.types";
 export type { OciImageValidationWorkflow } from "./oci-image-validation/oci-image-validation.types";
+export { __CreateMcpTaskWorkflow, __McpTaskWorkflowKey } from "./mcp-tasks/mcp-task";
+export { cancelMcpTask, getMcpTask, submitMcpTask, submitMcpTaskInput } from "./mcp-tasks/mcp-task-submission";
+export { McpTaskCancellationOutcomes, McpTaskEvents, McpTaskInputSubmissionOutcomes, McpTaskStates, McpTaskTaskNames } from "./mcp-tasks/mcp-task.types";
+export type { McpTaskAdmission, McpTaskCaller, McpTaskCancellationResult, McpTaskInputRequest, McpTaskInputResponse, McpTaskInputSubmissionResult, McpTaskRecord, McpTaskSubmissionCommand, McpTaskWorkflow, McpTaskWorkflowInput, McpTaskWorkflowOptions, McpTaskWorkflowResult } from "./mcp-tasks/mcp-task.types";
+export { PrismaMcpTaskToolInvocationLifecycleRepository } from "./mcp-tasks/prisma-mcp-task-tool-invocation-lifecycle";
 export * from "./routes/mcp-operator";
+export { _CreateMcpCallerResolver } from "./routes/mcp-caller";
+export type { McpCallerResolver } from "./routes/mcp-caller.types";
+export { mcpTaskRouter } from "./routes/mcp-task";
 export { __CreateMcpOciServerPromotionRouter } from "./runtime/mcp-oci-server-promotion.router";
 export { __CreateMcpRuntimeCompanionRouter } from "./runtime/mcp-runtime-companion.router";
 export { __CreateMcpRuntimeControllerRouter } from "./runtime/mcp-runtime-controller.router";

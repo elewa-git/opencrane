@@ -27,6 +27,19 @@ export interface McpToolInvocationTransactionParticipant
 	completeAmbiguous(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationRecord | null>;
 }
 
+/** MCP-task lifecycle writes that share the ToolInvocation transaction without entering AgentRun state. */
+export interface McpTaskToolInvocationLifecycleParticipant
+{
+	/** Move the exact queued task to running when its provider claim commits. */
+	markClaimed(invocation: ToolInvocationRecord, now: Date): Promise<boolean>;
+	/** Save the checked task result with the successful ToolInvocation transition. */
+	completeSucceeded(invocation: ToolInvocationRecord, result: JsonValue, now: Date): Promise<boolean>;
+	/** Save the bounded task failure with the failed ToolInvocation transition. */
+	completeFailed(invocation: ToolInvocationRecord, failureCode: string, now: Date): Promise<boolean>;
+	/** Make an uncertain task outcome visible as manual recovery required. */
+	completeAmbiguous(invocation: ToolInvocationRecord, now: Date): Promise<boolean>;
+}
+
 /**
  * Builds an authorization-owned MCP participant against a transaction another package opened.
  *
@@ -36,5 +49,5 @@ export interface McpToolInvocationTransactionParticipant
 export interface McpToolInvocationTransactionParticipantFactory
 {
 	/** Bind the authorization operations and event writers to the supplied Prisma transaction. */
-	__ForTransaction(transaction: unknown): McpToolInvocationTransactionParticipant;
+	__ForTransaction(transaction: unknown, mcpTasks?: McpTaskToolInvocationLifecycleParticipant): McpToolInvocationTransactionParticipant;
 }

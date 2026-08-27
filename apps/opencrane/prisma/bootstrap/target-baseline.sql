@@ -149,6 +149,9 @@ CREATE TYPE "McpExecutorWorkloadState" AS ENUM ('pending', 'assigned', 'released
 CREATE TYPE "McpExecutorCommandState" AS ENUM ('pending', 'claimed', 'succeeded', 'failed', 'recovery_required');
 
 -- CreateEnum
+CREATE TYPE "McpTaskState" AS ENUM ('working', 'input_required', 'queued', 'running', 'completed', 'cancelled', 'failed', 'recovery_required');
+
+-- CreateEnum
 CREATE TYPE "McpServerStatus" AS ENUM ('active', 'degraded', 'draft');
 
 -- CreateEnum
@@ -231,6 +234,9 @@ CREATE TYPE "WorkloadAssignmentState" AS ENUM ('pending_pod', 'registered', 'rev
 
 -- CreateEnum
 CREATE TYPE "WorkloadKind" AS ENUM ('job', 'deployment');
+
+-- CreateEnum
+CREATE TYPE "WarmRuntimeReservationState" AS ENUM ('reserved', 'profile_activating', 'ready', 'claimed', 'delete_requested', 'deleted');
 
 -- CreateEnum
 CREATE TYPE "RunOutboxEventKind" AS ENUM ('run.accepted', 'run.workload_cleanup_requested', 'run.cancellation_requested', 'run.resume_requested');
@@ -642,10 +648,11 @@ CREATE TABLE "approval_requests" (
 CREATE TABLE "tool_invocations" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "agent_revision_id" TEXT NOT NULL,
+    "run_id" TEXT,
+    "attempt" INTEGER,
+    "agent_service_id" TEXT,
+    "agent_revision_id" TEXT,
+    "mcp_task_id" TEXT,
     "subject_id" TEXT NOT NULL,
     "runtime_instance_id" TEXT NOT NULL,
     "command_id" TEXT NOT NULL,
@@ -1199,6 +1206,42 @@ CREATE TABLE "mcp_tool_revisions" (
 );
 
 -- CreateTable
+CREATE TABLE "mcp_task_claims" (
+    "silo_id" TEXT NOT NULL,
+    "identity_digest" TEXT NOT NULL,
+    "touched_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_task_claims_pkey" PRIMARY KEY ("silo_id","identity_digest")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_tasks" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "request_key_digest" TEXT NOT NULL,
+    "call_digest" TEXT NOT NULL,
+    "server_revision_id" TEXT NOT NULL,
+    "tool_revision_id" TEXT NOT NULL,
+    "protocol_version" TEXT NOT NULL,
+    "arguments" JSONB NOT NULL,
+    "task_id" TEXT,
+    "task_name" TEXT,
+    "task_key" TEXT,
+    "state" "McpTaskState" NOT NULL DEFAULT 'working',
+    "input_request" JSONB,
+    "input_response" JSONB,
+    "result" JSONB,
+    "failure_code" TEXT,
+    "cancel_requested_at" TIMESTAMP(3),
+    "completed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_tasks_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "mcp_runtime_executions" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -1743,6 +1786,33 @@ CREATE TABLE "agent_runs" (
     "cost_currency" TEXT,
 
     CONSTRAINT "agent_runs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "warm_runtime_reservations" (
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "namespace" TEXT NOT NULL,
+    "deployment_name" TEXT NOT NULL,
+    "deployment_uid" TEXT NOT NULL,
+    "pod_name" TEXT NOT NULL,
+    "pod_uid" TEXT NOT NULL,
+    "pod_resource_version" TEXT NOT NULL,
+    "generic_profile" TEXT NOT NULL,
+    "claimed_profile" TEXT NOT NULL,
+    "service_account_name" TEXT NOT NULL,
+    "state" "WarmRuntimeReservationState" NOT NULL DEFAULT 'reserved',
+    "proof_key_thumbprint" TEXT,
+    "reserved_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "profile_activated_at" TIMESTAMP(3),
+    "readiness_observed_at" TIMESTAMP(3),
+    "bound_at" TIMESTAMP(3),
+    "idle_deadline" TIMESTAMP(3) NOT NULL,
+    "delete_requested_at" TIMESTAMP(3),
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "warm_runtime_reservations_pkey" PRIMARY KEY ("run_id","attempt")
 );
 
 -- CreateTable
@@ -2445,6 +2515,9 @@ CREATE INDEX "approval_requests_subject_id_idx" ON "approval_requests"("subject_
 CREATE UNIQUE INDEX "approval_requests_run_id_attempt_action_digest_key" ON "approval_requests"("run_id", "attempt", "action_digest");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "tool_invocations_mcp_task_id_key" ON "tool_invocations"("mcp_task_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "tool_invocations_request_fingerprint_key" ON "tool_invocations"("request_fingerprint");
 
 -- CreateIndex
@@ -2762,6 +2835,18 @@ CREATE UNIQUE INDEX "mcp_tool_revisions_server_revision_id_name_key" ON "mcp_too
 CREATE UNIQUE INDEX "mcp_tool_revisions_id_silo_id_key" ON "mcp_tool_revisions"("id", "silo_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "mcp_tasks_task_id_key" ON "mcp_tasks"("task_id");
+
+-- CreateIndex
+CREATE INDEX "mcp_tasks_silo_id_principal_id_state_created_at_idx" ON "mcp_tasks"("silo_id", "principal_id", "state", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_tasks_silo_id_request_key_digest_key" ON "mcp_tasks"("silo_id", "request_key_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_tasks_silo_id_task_key_key" ON "mcp_tasks"("silo_id", "task_key");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "mcp_runtime_executions_tool_invocation_id_key" ON "mcp_runtime_executions"("tool_invocation_id");
 
 -- CreateIndex
@@ -3015,6 +3100,15 @@ CREATE UNIQUE INDEX "agent_runs_thread_authority_key" ON "agent_runs"("id", "con
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_run_snapshot_identity_key" ON "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
+
+-- CreateIndex
+CREATE INDEX "warm_runtime_reservations_state_idle_deadline_idx" ON "warm_runtime_reservations"("state", "idle_deadline");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "warm_runtime_reservations_namespace_pod_uid_key" ON "warm_runtime_reservations"("namespace", "pod_uid");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "warm_runtime_reservations_namespace_deployment_uid_pod_name_key" ON "warm_runtime_reservations"("namespace", "deployment_uid", "pod_name");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_run_workflow_tasks_task_id_key" ON "agent_run_workflow_tasks"("task_id");
@@ -3403,6 +3497,9 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_catalog_id_cat
 ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_run_id_agent_service_id_agent_revision_id_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_mcp_task_id_fkey" FOREIGN KEY ("mcp_task_id") REFERENCES "mcp_tasks"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "tool_result_deliveries" ADD CONSTRAINT "tool_result_deliveries_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3589,6 +3686,12 @@ ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_oci_imag
 ALTER TABLE "mcp_tool_revisions" ADD CONSTRAINT "mcp_tool_revisions_server_revision_id_silo_id_fkey" FOREIGN KEY ("server_revision_id", "silo_id") REFERENCES "mcp_server_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_server_revision_id_silo_id_fkey" FOREIGN KEY ("server_revision_id", "silo_id") REFERENCES "mcp_server_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_tool_revision_id_silo_id_fkey" FOREIGN KEY ("tool_revision_id", "silo_id") REFERENCES "mcp_tool_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_server_revision_id_silo_id_fkey" FOREIGN KEY ("server_revision_id", "silo_id") REFERENCES "mcp_server_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3704,6 +3807,9 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_silo_id_fke
 
 -- AddForeignKey
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "warm_runtime_reservations" ADD CONSTRAINT "warm_runtime_reservations_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "agent_run_workflow_tasks" ADD CONSTRAINT "agent_run_workflow_tasks_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -7089,8 +7195,11 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check
 		("state" = 'cancelled' AND "decided_at" IS NOT NULL AND "decided_by" IS NULL AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL)
     );
 ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_identity_check" CHECK (
-        btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("run_id") <> '' AND "attempt" > 0 AND
-        btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("subject_id") <> '' AND
+        btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND
+        (("mcp_task_id" IS NULL AND btrim("run_id") <> '' AND "attempt" > 0 AND
+          btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '') OR
+         (btrim("mcp_task_id") <> '' AND "run_id" IS NULL AND "attempt" IS NULL AND
+          "agent_service_id" IS NULL AND "agent_revision_id" IS NULL AND NOT "approval_required")) AND
         btrim("runtime_instance_id") <> '' AND btrim("command_id") <> '' AND btrim("candidate_id") <> '' AND
         btrim("tool_revision_id") <> '' AND btrim("tool_invocation_id") <> '' AND
         jsonb_typeof("arguments") = 'object' AND "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND

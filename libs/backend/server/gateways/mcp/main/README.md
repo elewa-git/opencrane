@@ -53,6 +53,29 @@ digest-pinned reference. It does not treat a valid layout as evidence that the i
 server: that evidence must come from the actual `server/discover` exchange after a governed runtime
 starts the imported image.
 
+An installed server can then run a tool through a public task. The task keeps its state, input,
+result, and failure in the database, so a server restart does not repeat the tool call.
+
+```
+ caller sends POST /mcp/tasks with one server revision and tool revision
+        │
+        ▼
+ database transaction
+   ├── save the MCP task
+   └── save its Absurd workflow job
+        │
+        ├── input needed ──► save the question ──► wait for POST /tasks/{id}/input
+        │
+        ▼
+ save one ToolInvocation owned by this task
+        │
+        ▼
+ existing OCI MCP executor runs the immutable image
+   ├── checked result ─────► task completed
+   ├── definite failure ───► task failed
+   └── uncertain outcome ──► recovery required; never run it again automatically
+```
+
 The draft server and its background job use one database transaction. Either both are saved, or
 neither is saved. A repeated registration request returns the same draft and the same job.
 
@@ -81,6 +104,8 @@ labels an install connected before a real connection exists.
 - `registerRemoteServer` — saves a draft server and its protocol-check job together.
 - `__CreateMcpEraProbeWorkflow` — registers the saved background job that checks the server.
 - `__CreateOciImageValidationWorkflow` — registers the saved OCI image admission job.
+- `mcpTaskRouter` and `__CreateMcpTaskWorkflow` — save, read, resume, cancel, and execute
+  caller-owned MCP tasks through the existing OCI runtime.
 - `__CreateMcpOciServerPromotionRouter` — promotes an imported image into a draft server revision and
   its first discovery execution for an authenticated organisation administrator.
 - `__CreateMcpRuntimeControllerRouter` — exposes the five TokenReview-protected claim, assignment,
@@ -100,10 +125,10 @@ The application supplies the database transaction and starts the Absurd worker. 
 a Prisma client. `PrismaMcpOperatorUnitOfWork` checks access, changes installs or server state, admits
 background jobs, and records audit entries in one database transaction.
 
-This package does not create Kubernetes workloads, run uploaded images, or call MCP tools. It governs
-which servers are available, promotes imported images, issues database-fenced runtime work, and
-accepts results only from the TokenReview-bound controller or companion Pod. The agent controller
-owns Kubernetes mutation, while the isolated companion performs the actual MCP exchange.
+This package does not create Kubernetes workloads itself. It governs which servers are available,
+promotes imported images, saves public tool tasks, issues database-fenced runtime work, and accepts
+results only from the TokenReview-bound controller or companion Pod. The agent controller owns
+Kubernetes changes, while the isolated companion performs the actual MCP exchange.
 
 ## Dependency direction
 
@@ -113,7 +138,7 @@ an Absurd package directly.
 
 ## Data and persistence
 
-This package owns the public behavior around `McpServer`, `McpServerInstall`, and
+This package owns the public behavior around `McpServer`, `McpServerInstall`, `McpTask`, and
 `OciImageValidation` in
 `apps/opencrane/prisma/schema/mcp.prisma`. General `AuthorizationGrant` rows remain owned by the
 authorization package. `PrismaMcpOperatorUnitOfWork` is the public MCP database boundary.

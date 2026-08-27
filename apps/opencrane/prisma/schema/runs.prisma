@@ -37,6 +37,15 @@ enum WorkloadKind {
   Deployment @map("deployment")
 }
 
+enum WarmRuntimeReservationState {
+  Reserved          @map("reserved")
+  ProfileActivating @map("profile_activating")
+  Ready             @map("ready")
+  Claimed           @map("claimed")
+  DeleteRequested   @map("delete_requested")
+  Deleted           @map("deleted")
+}
+
 enum RunOutboxEventKind {
   RunAccepted                 @map("run.accepted")
   RunWorkloadCleanupRequested @map("run.workload_cleanup_requested")
@@ -94,6 +103,7 @@ model AgentRun {
   agentThreadDeliveries    AgentThreadParentDelivery[]
   conversationAssets       ConversationAsset[]
   conversationAssetTickets ConversationAssetOutputTicket[]
+  warmRuntimeReservation   WarmRuntimeReservation?
 
   @@unique([siloId, requestIdempotencyKey])
   @@unique([id, agentServiceId, agentRevisionId])
@@ -108,6 +118,41 @@ model AgentRun {
   @@index([conversationId, acceptedAt])
   @@index([rootRunId])
   @@map("agent_runs")
+}
+
+/// One-use reservation of a Helm-owned generic warm Pod for one admitted AgentRun attempt.
+///
+/// The row is the database authority for the Pod binding. Kubernetes labels project the selected
+/// profile but never grant run authority. A used Pod reaches `Deleted`; it never becomes generic.
+model WarmRuntimeReservation {
+  runId                String                      @map("run_id")
+  attempt              Int
+  siloId               String                      @map("silo_id")
+  namespace            String
+  deploymentName       String                      @map("deployment_name")
+  deploymentUid        String                      @map("deployment_uid")
+  podName               String                      @map("pod_name")
+  podUid                String                      @map("pod_uid")
+  podResourceVersion    String                      @map("pod_resource_version")
+  genericProfile       String                      @map("generic_profile")
+  claimedProfile       String                      @map("claimed_profile")
+  serviceAccountName   String                      @map("service_account_name")
+  state                 WarmRuntimeReservationState @default(Reserved)
+  proofKeyThumbprint    String?                     @map("proof_key_thumbprint")
+  reservedAt            DateTime                    @default(now()) @map("reserved_at")
+  profileActivatedAt    DateTime?                   @map("profile_activated_at")
+  readinessObservedAt   DateTime?                   @map("readiness_observed_at")
+  boundAt               DateTime?                   @map("bound_at")
+  idleDeadline          DateTime                    @map("idle_deadline")
+  deleteRequestedAt     DateTime?                   @map("delete_requested_at")
+  deletedAt             DateTime?                   @map("deleted_at")
+  run                    AgentRun                    @relation(fields: [runId, attempt], references: [id, attempt], onDelete: Restrict)
+
+  @@id([runId, attempt])
+  @@unique([namespace, podUid])
+  @@unique([namespace, deploymentUid, podName])
+  @@index([state, idleDeadline])
+  @@map("warm_runtime_reservations")
 }
 
 /// One controller workflow task for one AgentRun attempt.

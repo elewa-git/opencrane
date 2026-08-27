@@ -5,6 +5,7 @@ import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/w
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
+import { PrismaMcpTaskToolInvocationLifecycleRepository } from "../mcp-tasks/prisma-mcp-task-tool-invocation-lifecycle";
 import { PrismaMcpRuntimeCatalogRepository } from "./prisma-mcp-runtime-catalog-repository";
 import { PrismaMcpRuntimeCompanionRepository } from "./prisma-mcp-runtime-companion-repository";
 import { PrismaMcpRuntimeControllerRepository } from "./prisma-mcp-runtime-controller-repository";
@@ -109,7 +110,8 @@ export class PrismaMcpRuntimeUnitOfWork implements McpRuntimeAuthority
 					return await prisma.$transaction(async function _Transaction(transaction): Promise<Result>
 					{
 						// 1. Bind authorization and every MCP repository to the same transaction.
-						const toolInvocations = dependencies.toolInvocations.__ForTransaction(transaction);
+						const mcpTasks = new PrismaMcpTaskToolInvocationLifecycleRepository(transaction);
+						const toolInvocations = dependencies.toolInvocations.__ForTransaction(transaction, mcpTasks);
 						const repositories = {
 							catalog: new PrismaMcpRuntimeCatalogRepository(transaction, toolInvocations, dependencies.options),
 							controller: new PrismaMcpRuntimeControllerRepository(transaction, dependencies.options),

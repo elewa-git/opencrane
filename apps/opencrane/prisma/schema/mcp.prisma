@@ -76,6 +76,27 @@ enum McpExecutorCommandState {
   RecoveryRequired @map("recovery_required")
 }
 
+/// Records the caller-visible state of one durable MCP task. Absurd owns workflow attempts while
+/// this row owns input, cancellation, the exact ToolInvocation, and its terminal projection.
+enum McpTaskState {
+  /// The task is saved but has not yet admitted its exact tool invocation.
+  Working          @map("working")
+  /// The workflow is waiting for the caller to answer the saved input request.
+  InputRequired    @map("input_required")
+  /// The exact ToolInvocation and MCP executor work are durably admitted.
+  Queued           @map("queued")
+  /// The MCP companion holds the provider-effect claim for this task.
+  Running          @map("running")
+  /// The checked MCP result is saved. This state is terminal.
+  Completed        @map("completed")
+  /// Cancellation won before provider dispatch. This state is terminal.
+  Cancelled        @map("cancelled")
+  /// A definite terminal failure is saved. This state is terminal.
+  Failed           @map("failed")
+  /// Provider outcome is uncertain and operator recovery is required. This state is terminal.
+  RecoveryRequired @map("recovery_required")
+}
+
 enum McpServerStatus {
   Active   @map("active")
   Degraded @map("degraded")
@@ -225,6 +246,7 @@ model McpServerRevision {
   validation           OciImageValidation     @relation(fields: [ociImageValidationId, siloId], references: [id, siloId], onDelete: Restrict)
   tools                McpToolRevision[]
   executions           McpRuntimeExecution[]
+  tasks                McpTask[]
 
   @@unique([mcpServerId, revision])
   @@unique([ociImageValidationId, siloId])
@@ -246,11 +268,55 @@ model McpToolRevision {
   createdAt             DateTime          @default(now()) @map("created_at")
   serverRevision        McpServerRevision @relation(fields: [serverRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
   agentRevisionAssignments AgentRevisionMcpToolAssignment[]
+  tasks                 McpTask[]
 
   @@unique([serverRevisionId, name])
   @@unique([id, siloId])
   @@index([siloId, name])
   @@map("mcp_tool_revisions")
+}
+
+/// Serializes submissions that reuse one caller-owned MCP task idempotency key.
+model McpTaskClaim {
+  siloId         String   @map("silo_id")
+  identityDigest String   @map("identity_digest")
+  touchedAt      DateTime @updatedAt @map("touched_at")
+
+  @@id([siloId, identityDigest])
+  @@map("mcp_task_claims")
+}
+
+/// One authenticated asynchronous call of an exact tool on an immutable OCI MCP revision.
+model McpTask {
+  id                  String            @id @default(cuid())
+  siloId              String            @map("silo_id")
+  principalId         String            @map("principal_id")
+  requestKeyDigest    String            @map("request_key_digest")
+  callDigest          String            @map("call_digest")
+  serverRevisionId    String            @map("server_revision_id")
+  toolRevisionId      String            @map("tool_revision_id")
+  protocolVersion     String            @map("protocol_version")
+  arguments           Json
+  taskId              String?           @unique @map("task_id")
+  taskName            String?           @map("task_name")
+  taskKey             String?           @map("task_key")
+  state               McpTaskState      @default(Working)
+  inputRequest        Json?             @map("input_request")
+  inputResponse       Json?             @map("input_response")
+  result              Json?
+  failureCode         String?           @map("failure_code")
+  cancelRequestedAt   DateTime?         @map("cancel_requested_at")
+  completedAt         DateTime?         @map("completed_at")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  serverRevision      McpServerRevision @relation(fields: [serverRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
+  toolRevision        McpToolRevision   @relation(fields: [toolRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
+  toolInvocation      ToolInvocation?
+
+  @@unique([siloId, requestKeyDigest])
+  @@unique([siloId, taskKey])
+  @@index([siloId, principalId, state, createdAt])
+  @@map("mcp_tasks")
 }
 
 /// Durable claim, Kubernetes assignment, Pod identity, and terminal fence for one MCP executor Job.

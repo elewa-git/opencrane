@@ -736,6 +736,20 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/server/gateways/mcp/main/src/mcp-tasks/prisma-mcp-task-repository.ts",
+        "adapter": "PrismaMcpTaskRepository",
+        "contract": "McpTaskRepository",
+        "contractImportPath": "./mcp-task-repository.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/gateways/mcp/main/src/mcp-tasks/prisma-mcp-task-tool-invocation-lifecycle.ts",
+        "adapter": "PrismaMcpTaskToolInvocationLifecycleRepository",
+        "contract": "McpTaskToolInvocationLifecycleParticipant",
+        "contractImportPath": "@opencrane/backend/server/iam/authorization",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/server/gateways/mcp/main/src/runtime/prisma-mcp-runtime-catalog-repository.ts",
         "adapter": "PrismaMcpRuntimeCatalogRepository",
         "contract": "McpRuntimeCatalogRepository",
@@ -1452,6 +1466,10 @@
             "importPath": "../oci-image-validation/prisma-oci-image-validation-repository"
           },
           {
+            "adapter": "PrismaMcpTaskRepository",
+            "importPath": "../mcp-tasks/prisma-mcp-task-repository"
+          },
+          {
             "adapter": "PrismaAuthorizationGrantRepository",
             "importPath": "@opencrane/backend/server/iam/authorization"
           },
@@ -1482,6 +1500,10 @@
           {
             "adapter": "PrismaMcpRuntimeCompanionRepository",
             "importPath": "./prisma-mcp-runtime-companion-repository"
+          },
+          {
+            "adapter": "PrismaMcpTaskToolInvocationLifecycleRepository",
+            "importPath": "../mcp-tasks/prisma-mcp-task-tool-invocation-lifecycle"
           }
         ]
       }

@@ -16,6 +16,7 @@ ALTER TABLE "conversation_asset_output_tickets" DROP CONSTRAINT IF EXISTS "conve
 ALTER TABLE "conversation_assets" DROP CONSTRAINT IF EXISTS "conversation_assets_conversation_id_run_id_run_event_sequence_fkey";
 ALTER TABLE "run_input_snapshots" DROP CONSTRAINT IF EXISTS "run_input_snapshots_run_input_check";
 ALTER TABLE "artifact_preprocess_jobs" DROP CONSTRAINT IF EXISTS "artifact_preprocess_jobs_identity_check";
+ALTER TABLE "tool_invocations" DROP CONSTRAINT IF EXISTS "tool_invocations_identity_check";
 DROP INDEX IF EXISTS "artifact_preprocess_jobs_state_next_attempt_at_claim_expires_at_idx";
 DROP INDEX IF EXISTS "artifact_preprocess_jobs_source_revision_id_pipeline_version_key";
 DROP INDEX IF EXISTS "organization_invitations_silo_id_last_resend_idempotency_key_key";
@@ -81,6 +82,9 @@ CREATE TYPE "McpExecutorWorkloadState" AS ENUM ('pending', 'assigned', 'released
 CREATE TYPE "McpExecutorCommandState" AS ENUM ('pending', 'claimed', 'succeeded', 'failed', 'recovery_required');
 
 -- CreateEnum
+CREATE TYPE "McpTaskState" AS ENUM ('working', 'input_required', 'queued', 'running', 'completed', 'cancelled', 'failed', 'recovery_required');
+
+-- CreateEnum
 CREATE TYPE "SkillAuthoringValidationState" AS ENUM ('pending', 'running', 'succeeded', 'failed', 'cancelled');
 
 -- CreateEnum
@@ -88,6 +92,9 @@ CREATE TYPE "SkillAuthoringValidationCompletionOutcome" AS ENUM ('succeeded', 'f
 
 -- CreateEnum
 CREATE TYPE "SkillAuthoringValidationWorkloadClass" AS ENUM ('skill_authoring_validation');
+
+-- CreateEnum
+CREATE TYPE "WarmRuntimeReservationState" AS ENUM ('reserved', 'profile_activating', 'ready', 'claimed', 'delete_requested', 'deleted');
 
 -- AlterEnum
 ALTER TYPE "McpServerTransport" ADD VALUE 'oci-image';
@@ -129,6 +136,13 @@ ADD COLUMN     "workload_uid" TEXT;
 ALTER TABLE "run_input_snapshots" DROP COLUMN "integration_assignments",
 ADD COLUMN     "mcp_tools" JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE "run_input_snapshots" ALTER COLUMN "mcp_tools" DROP DEFAULT;
+
+-- Let one ToolInvocation belong to either an AgentRun or an MCP task, never both.
+ALTER TABLE "tool_invocations" ALTER COLUMN "run_id" DROP NOT NULL,
+ALTER COLUMN "attempt" DROP NOT NULL,
+ALTER COLUMN "agent_service_id" DROP NOT NULL,
+ALTER COLUMN "agent_revision_id" DROP NOT NULL,
+ADD COLUMN "mcp_task_id" TEXT;
 
 -- Carry Prisma's nullable 0.10.0 column shape into upgraded databases.
 ALTER TABLE "model_definitions" ALTER COLUMN "generated_output_capabilities" DROP NOT NULL;
@@ -242,6 +256,42 @@ CREATE TABLE "mcp_tool_revisions" (
 );
 
 -- CreateTable
+CREATE TABLE "mcp_task_claims" (
+    "silo_id" TEXT NOT NULL,
+    "identity_digest" TEXT NOT NULL,
+    "touched_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_task_claims_pkey" PRIMARY KEY ("silo_id","identity_digest")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_tasks" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "request_key_digest" TEXT NOT NULL,
+    "call_digest" TEXT NOT NULL,
+    "server_revision_id" TEXT NOT NULL,
+    "tool_revision_id" TEXT NOT NULL,
+    "protocol_version" TEXT NOT NULL,
+    "arguments" JSONB NOT NULL,
+    "task_id" TEXT,
+    "task_name" TEXT,
+    "task_key" TEXT,
+    "state" "McpTaskState" NOT NULL DEFAULT 'working',
+    "input_request" JSONB,
+    "input_response" JSONB,
+    "result" JSONB,
+    "failure_code" TEXT,
+    "cancel_requested_at" TIMESTAMP(3),
+    "completed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_tasks_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "mcp_runtime_executions" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -293,6 +343,33 @@ CREATE TABLE "agent_run_workflow_tasks" (
     "attempt_key_digest" TEXT,
 
     CONSTRAINT "agent_run_workflow_tasks_pkey" PRIMARY KEY ("run_id","attempt")
+);
+
+-- CreateTable
+CREATE TABLE "warm_runtime_reservations" (
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "namespace" TEXT NOT NULL,
+    "deployment_name" TEXT NOT NULL,
+    "deployment_uid" TEXT NOT NULL,
+    "pod_name" TEXT NOT NULL,
+    "pod_uid" TEXT NOT NULL,
+    "pod_resource_version" TEXT NOT NULL,
+    "generic_profile" TEXT NOT NULL,
+    "claimed_profile" TEXT NOT NULL,
+    "service_account_name" TEXT NOT NULL,
+    "state" "WarmRuntimeReservationState" NOT NULL DEFAULT 'reserved',
+    "proof_key_thumbprint" TEXT,
+    "reserved_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "profile_activated_at" TIMESTAMP(3),
+    "readiness_observed_at" TIMESTAMP(3),
+    "bound_at" TIMESTAMP(3),
+    "idle_deadline" TIMESTAMP(3) NOT NULL,
+    "delete_requested_at" TIMESTAMP(3),
+    "deleted_at" TIMESTAMP(3),
+
+    CONSTRAINT "warm_runtime_reservations_pkey" PRIMARY KEY ("run_id","attempt")
 );
 
 -- Create the Absurd queues before carrying unstarted AgentRuns into the new worker path.
@@ -447,6 +524,21 @@ CREATE UNIQUE INDEX "mcp_tool_revisions_server_revision_id_name_key" ON "mcp_too
 CREATE UNIQUE INDEX "mcp_tool_revisions_id_silo_id_key" ON "mcp_tool_revisions"("id", "silo_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "mcp_tasks_task_id_key" ON "mcp_tasks"("task_id");
+
+-- CreateIndex
+CREATE INDEX "mcp_tasks_silo_id_principal_id_state_created_at_idx" ON "mcp_tasks"("silo_id", "principal_id", "state", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_tasks_silo_id_request_key_digest_key" ON "mcp_tasks"("silo_id", "request_key_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_tasks_silo_id_task_key_key" ON "mcp_tasks"("silo_id", "task_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tool_invocations_mcp_task_id_key" ON "tool_invocations"("mcp_task_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "mcp_runtime_executions_tool_invocation_id_key" ON "mcp_runtime_executions"("tool_invocation_id");
 
 -- CreateIndex
@@ -478,6 +570,15 @@ CREATE UNIQUE INDEX "agent_run_workflow_tasks_task_id_key" ON "agent_run_workflo
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_run_workflow_tasks_silo_id_task_key_key" ON "agent_run_workflow_tasks"("silo_id", "task_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "warm_runtime_reservations_namespace_pod_uid_key" ON "warm_runtime_reservations"("namespace", "pod_uid");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "warm_runtime_reservations_namespace_deployment_uid_pod_name_key" ON "warm_runtime_reservations"("namespace", "deployment_uid", "pod_name");
+
+-- CreateIndex
+CREATE INDEX "warm_runtime_reservations_state_idle_deadline_idx" ON "warm_runtime_reservations"("state", "idle_deadline");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "skill_authoring_validations_task_id_key" ON "skill_authoring_validations"("task_id");
@@ -570,6 +671,43 @@ ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_oci_imag
 ALTER TABLE "mcp_tool_revisions" ADD CONSTRAINT "mcp_tool_revisions_server_revision_id_silo_id_fkey" FOREIGN KEY ("server_revision_id", "silo_id") REFERENCES "mcp_server_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_server_revision_id_silo_id_fkey" FOREIGN KEY ("server_revision_id", "silo_id") REFERENCES "mcp_server_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_tool_revision_id_silo_id_fkey" FOREIGN KEY ("tool_revision_id", "silo_id") REFERENCES "mcp_tool_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_mcp_task_id_fkey" FOREIGN KEY ("mcp_task_id") REFERENCES "mcp_tasks"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Preserve the existing ToolInvocation checks while requiring exactly one durable owner.
+ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_identity_check" CHECK (
+        btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND
+        (("mcp_task_id" IS NULL AND btrim("run_id") <> '' AND "attempt" > 0 AND
+          btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '') OR
+         (btrim("mcp_task_id") <> '' AND "run_id" IS NULL AND "attempt" IS NULL AND
+          "agent_service_id" IS NULL AND "agent_revision_id" IS NULL AND NOT "approval_required")) AND
+        btrim("runtime_instance_id") <> '' AND btrim("command_id") <> '' AND btrim("candidate_id") <> '' AND
+        btrim("tool_revision_id") <> '' AND btrim("tool_invocation_id") <> '' AND
+        jsonb_typeof("arguments") = 'object' AND "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+        jsonb_typeof("effective_arguments") = 'object' AND "effective_arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+        "request_fingerprint" ~ '^sha256:[0-9a-f]{64}$' AND jsonb_typeof("request_identity") = 'object' AND
+        (("recovery_mode" = 'manual' AND "recovery_key" IS NULL) OR
+         ("recovery_mode" IN ('provider_idempotency', 'reconciliation') AND btrim("recovery_key") <> '' AND length("recovery_key") <= 256)) AND
+        "preparation_attempt" BETWEEN 0 AND 3 AND "retry_deadline_at" > "created_at" AND
+        "next_preparation_attempt_at" >= "created_at" AND "claim_attempt" >= 0 AND "claim_fence" >= 0 AND "revision" >= 0 AND
+        (("state" = 'claimed' AND "claim_kind" = 'dispatch' AND "claim_expires_at" IS NOT NULL) OR
+         ("state" = 'reconciling' AND (("claim_kind" IS NULL AND "claim_expires_at" IS NULL) OR
+                                      ("claim_kind" = 'reconcile' AND "claim_expires_at" IS NOT NULL))) OR
+         ("state" NOT IN ('claimed', 'reconciling') AND "claim_kind" IS NULL AND "claim_expires_at" IS NULL)) AND
+        (("state" = 'recovery_required' AND "recovery_required_at" IS NOT NULL) OR
+         ("state" <> 'recovery_required' AND "recovery_required_at" IS NULL)) AND
+        (("state" = 'succeeded' AND "completed_at" IS NOT NULL AND "result" IS NOT NULL AND "failure_code" IS NULL) OR
+         ("state" = 'failed' AND "completed_at" IS NOT NULL AND "result" IS NULL AND btrim("failure_code") <> '') OR
+         ("state" NOT IN ('succeeded', 'failed') AND "completed_at" IS NULL AND "result" IS NULL)) AND
+        ("state" <> 'awaiting_approval' OR "approval_required")
+    );
+
+-- AddForeignKey
 ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_server_revision_id_silo_id_fkey" FOREIGN KEY ("server_revision_id", "silo_id") REFERENCES "mcp_server_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -577,6 +715,9 @@ ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_tool
 
 -- AddForeignKey
 ALTER TABLE "agent_run_workflow_tasks" ADD CONSTRAINT "agent_run_workflow_tasks_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "warm_runtime_reservations" ADD CONSTRAINT "warm_runtime_reservations_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "skill_authoring_validations" ADD CONSTRAINT "skill_authoring_validations_skill_revision_id_fkey" FOREIGN KEY ("skill_revision_id") REFERENCES "skill_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
