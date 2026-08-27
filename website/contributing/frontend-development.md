@@ -78,13 +78,18 @@ Available values are:
 
 - `happy-path` — immediate successful onboarding and chat operations;
 - `slow` — short delays that keep loading and busy states visible;
-- `retry` — the first mutable operation in each flow fails once;
-- `reconnecting` — the conversation stream reports a reconnect before becoming live;
+- `retry` — open `/chats/conversation-agent?mockScenario=retry`, type a message, and send it. The
+  first submission shows an error and retains the draft; sending the same draft again succeeds;
+- `reconnecting` — open `/chats/conversation-agent?mockScenario=reconnecting`. The first stream
+  remains at **Reconnecting** until **Reconnect now** is selected, then its replacement becomes live;
 - `failed-run` — the Agent run fails so retry controls can be exercised;
-- `access-changed` — a visible conversation or child thread becomes unavailable.
+- `access-changed` — open `/chats/conversation-agent?mockScenario=access-changed`. The stream revokes
+  the visible projection and the page moves to **Access changed**.
 
 An unknown value safely falls back to `happy-path`. Scenario selection is development configuration;
-it does not add controls to the product UI.
+it does not add controls to the product UI. The initial `retry` view deliberately looks like the
+happy path until a mutable operation is attempted; `reconnecting` and `access-changed` are visible
+immediately.
 
 ## Work on isolated visual states
 
