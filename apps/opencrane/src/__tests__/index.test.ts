@@ -14,7 +14,7 @@ import type { McpRuntimeComposition } from "../app/mcp-runtime-composition.types
 /** Supply inert MCP adapters because these tests own the older runtime identity routes. */
 function _McpRuntime(): McpRuntimeComposition
 {
-	return { authority: {} as McpRuntimeComposition["authority"], promotion: Router(), controller: Router(), companion: Router() };
+	return { authority: {} as McpRuntimeComposition["authority"], promotion: Router(), controller: Router(), companion: Router(), taskWorkflow: {} as McpRuntimeComposition["taskWorkflow"] };
 }
 
 /** Supply an inert guarded task admission port because these tests never admit a workflow. */

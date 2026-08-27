@@ -51,7 +51,7 @@ function _RuntimeConfig(): InternalRuntimeConfig
 /** Supply inert MCP routers because this test owns only the internal body parser. */
 function _McpRuntime(): McpRuntimeComposition
 {
-	return { authority: {} as McpRuntimeComposition["authority"], promotion: Router(), controller: Router(), companion: Router() };
+	return { authority: {} as McpRuntimeComposition["authority"], promotion: Router(), controller: Router(), companion: Router(), taskWorkflow: {} as McpRuntimeComposition["taskWorkflow"] };
 }
 
 /** Continue the request through the session-middleware seam without adding authentication state. */
