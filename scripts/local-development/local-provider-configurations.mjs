@@ -58,7 +58,7 @@ function _readExistingConfiguration(configurationPath, expectedConfiguration)
  * secret-loading step, and only this selected configuration is mounted into LiteLLM.
  *
  * Called by: `runLocalDevelopmentSession` after repository validation and before secret loading.
- * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Tier 2 local-LLM configuration and optional default-model selection.
+ * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Tier 2 local-LLM configuration and optional provider/model selection.
  * @returns The selected provider/model and its exact configuration and credential paths.
  * @throws When selection fails or the persistent configuration boundary is unsafe or stale.
  */
@@ -77,7 +77,7 @@ export function prepareLocalProviderConfiguration(configuration)
 	}
 	else
 	{
-		// The pinned non-root LiteLLM container needs read access, and this file contains no credential.
+		// The generated file contains no credential, and the container's non-root user needs read access.
 		fs.writeFileSync(liteLLMConfigPath, expectedConfiguration, { encoding: "utf8", mode: 0o644, flag: "wx" });
 	}
 

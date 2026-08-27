@@ -76,9 +76,9 @@ export function readLocalProviderRegistry(registryPath)
 }
 
 /**
- * Derives the credential filename for a provider admitted by the reviewed registry.
- * OpenAI keeps its hidden legacy filename, while every other provider follows `<provider>-key`;
- * both selection and remote-key separation use this function so they cannot disagree on a path.
+ * Derives the hidden credential filename for a provider admitted by the reviewed registry.
+ * Every provider follows `.<provider>-key`; both selection and remote-key separation use this
+ * function so they cannot disagree on a path.
  *
  * Called by: `resolveLocalProviderSelection` and `getReviewedLocalProviderKeyPaths`.
  * @param {{ name: string }} provider - Reviewed provider whose credential path is being built.
@@ -86,7 +86,7 @@ export function readLocalProviderRegistry(registryPath)
  */
 export function createLocalProviderKeyFileName(provider)
 {
-	return provider.name === "openai" ? ".openai-key" : `${provider.name}-key`;
+	return `.${provider.name}-key`;
 }
 
 /**

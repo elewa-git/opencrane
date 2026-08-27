@@ -61,6 +61,7 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 	return {
 		profile: parsed.profile,
 		alternative: parsed.alternative,
+		provider: parsed.provider,
 		model: parsed.model,
 		remoteLiteLLMEndpoint: parsed.remoteLiteLLMEndpoint,
 		reset: parsed.reset,

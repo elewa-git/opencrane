@@ -63,7 +63,7 @@ test("Alternative A derives an owner-only provider-key file from the selected mo
 {
 	const repositoryRoot = _temporaryRepository();
 	t.after(function _cleanup() { fs.rmSync(repositoryRoot, { recursive: true, force: true }); });
-	fs.writeFileSync(path.join(repositoryRoot, "keys/anthropic-key"), "custom-provider-secret\n", { mode: 0o600 });
+	fs.writeFileSync(path.join(repositoryRoot, "keys/.anthropic-key"), "custom-provider-secret\n", { mode: 0o600 });
 	const configuration = _prepareLocalConfiguration(repositoryRoot, [
 		"--profile",
 		"agent",
@@ -73,14 +73,14 @@ test("Alternative A derives an owner-only provider-key file from the selected mo
 	const secrets = loadLocalDevelopmentSecrets(configuration, function _fixedBytes() { return Buffer.alloc(32, 4); });
 
 	assert.equal(secrets.providerKey, "custom-provider-secret");
-	assert.equal(configuration.providerKeyPath, path.join(repositoryRoot, "keys/anthropic-key"));
+	assert.equal(configuration.providerKeyPath, path.join(repositoryRoot, "keys/.anthropic-key"));
 });
 
 test("Alternative A reads only the selected provider credential", function _SelectedProviderOnly(t)
 {
 	const repositoryRoot = _temporaryRepository();
 	t.after(function _cleanup() { fs.rmSync(repositoryRoot, { recursive: true, force: true }); });
-	fs.writeFileSync(path.join(repositoryRoot, "keys/anthropic-key"), "selected-secret\n", { mode: 0o600 });
+	fs.writeFileSync(path.join(repositoryRoot, "keys/.anthropic-key"), "selected-secret\n", { mode: 0o600 });
 	fs.writeFileSync(path.join(repositoryRoot, "keys/.openai-key"), "unselected-broad-secret\n", { mode: 0o644 });
 	const configuration = _prepareLocalConfiguration(repositoryRoot, [
 		"--profile",

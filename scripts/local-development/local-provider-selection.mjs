@@ -21,14 +21,28 @@ function _sortByKeyFile(left, right)
 	return 0;
 }
 
-function _selectProvider(providers, configuredProviders, requestedModel)
+function _findProviderByName(providers, requestedProvider)
+{
+	if (!requestedProvider)
+	{
+		return undefined;
+	}
+
+	const provider = providers.find(candidate => candidate.name === requestedProvider);
+
+	if (!provider)
+	{
+		throw new Error(`Provider ${requestedProvider} is not listed in the reviewed local model registry`);
+	}
+
+	return provider;
+}
+
+function _findProviderByModel(providers, requestedModel)
 {
 	if (!requestedModel)
 	{
-		return {
-			provider: configuredProviders[0],
-			model: configuredProviders[0].defaultModel
-		};
+		return undefined;
 	}
 
 	const provider = providers.find(candidate => candidate.models.includes(requestedModel));
@@ -38,26 +52,43 @@ function _selectProvider(providers, configuredProviders, requestedModel)
 		throw new Error(`Model ${requestedModel} is not listed in the reviewed local model registry`);
 	}
 
+	return provider;
+}
+
+function _selectProvider(providers, configuredProviders, requestedProvider, requestedModel)
+{
+	const namedProvider = _findProviderByName(providers, requestedProvider);
+	const modelProvider = _findProviderByModel(providers, requestedModel);
+
+	if (namedProvider && modelProvider && namedProvider.name !== modelProvider.name)
+	{
+		throw new Error(`Model ${requestedModel} does not belong to provider ${requestedProvider}`);
+	}
+
+	const provider = namedProvider ?? modelProvider ?? configuredProviders[0];
+
 	if (!configuredProviders.some(candidate => candidate.name === provider.name))
 	{
-		throw new Error(`Model ${requestedModel} requires the missing key file keys/${createLocalProviderKeyFileName(provider)}`);
+		throw new Error(`Provider ${provider.name} requires the missing key file keys/${createLocalProviderKeyFileName(provider)}`);
 	}
 
 	return {
 		provider,
-		model: requestedModel
+		model: requestedModel ?? provider.defaultModel
 	};
 }
 
 /**
- * Matches conventional key filenames to reviewed providers and resolves one deterministic model.
- * Hidden and unreviewed files never participate. A recognized symlink remains selected so secret
- * loading can reject that exact path instead of silently falling through to a later credential.
+ * Matches conventional key filenames to reviewed providers and resolves the model for this run.
+ * An explicit provider uses its `defaultModel` unless the caller also selects one of its models;
+ * a model supplied without a provider selects its owner. When neither is supplied, the first
+ * recognized key filename selects the provider and that provider's `defaultModel`. A recognized
+ * symlink remains selected so secret loading rejects it instead of falling through to another key.
  *
  * Called by: `prepareLocalProviderConfiguration` before any provider key is read.
- * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Registry, key-directory, and optional model selection.
+ * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Registry, key-directory, and optional provider/model selection.
  * @returns The selected reviewed provider, its model, and its conventional key path.
- * @throws When the key directory is missing, no recognized key exists, or model selection fails.
+ * @throws When the key directory is missing, no recognized key exists, or the requested provider and model are invalid or disagree.
  */
 export function resolveLocalProviderSelection(configuration)
 {
@@ -89,7 +120,7 @@ export function resolveLocalProviderSelection(configuration)
 		throw new Error(`Alternative A requires one reviewed provider key in keys/: ${expectedNames}`);
 	}
 
-	const selection = _selectProvider(providers, configuredProviders, configuration.model);
+	const selection = _selectProvider(providers, configuredProviders, configuration.provider, configuration.model);
 
 	return {
 		selectedProvider: selection.provider,

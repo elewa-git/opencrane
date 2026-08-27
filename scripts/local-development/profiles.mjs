@@ -80,12 +80,12 @@ function _validateRemoteEndpoint(endpoint)
 /**
  * Parses Tier 2 arguments and rejects options that do not apply to the selected profile.
  * Agent defaults to `local-llm`; `remote-llm` requires an HTTPS origin and key-file path before the
- * coordinator can start, while core refuses every Agent alternative. Alternative A accepts an
- * exact model from the reviewed registry and derives its provider-key path.
+ * coordinator can start, while core refuses every Agent alternative. Alternative A accepts a
+ * reviewed provider, an exact model, or both, then derives the provider-key path during setup.
  *
  * Called by: `scripts/local-development.mjs` before configuration or process orchestration.
  * @param {string[]} argumentsList - Command-line arguments after the local-development script name.
- * @returns The validated profile, alternative, remote settings, and coordinator flags. A help request returns before profile-specific requirements are checked.
+ * @returns The validated profile, alternative, local provider/model selection, remote settings, and coordinator flags. A help request returns before profile-specific requirements are checked.
  * @throws When an option is unknown, incomplete, or incompatible with the selected profile.
  */
 export function parseLocalDevelopmentArguments(argumentsList)
@@ -93,6 +93,7 @@ export function parseLocalDevelopmentArguments(argumentsList)
 	const parsed = {
 		profile: LOCAL_DEVELOPMENT_PROFILES.Core,
 		alternative: undefined,
+		provider: undefined,
 		model: undefined,
 		remoteLiteLLMEndpoint: undefined,
 		remoteLiteLLMMasterKeyFile: undefined,
@@ -112,6 +113,10 @@ export function parseLocalDevelopmentArguments(argumentsList)
 				break;
 			case "--alternative":
 				parsed.alternative = _readOptionValue(argumentsList, index, argument);
+				index += 1;
+				break;
+			case "--provider":
+				parsed.provider = _readOptionValue(argumentsList, index, argument);
 				index += 1;
 				break;
 			case "--model":
@@ -146,7 +151,7 @@ export function parseLocalDevelopmentArguments(argumentsList)
 
 	if (parsed.profile === LOCAL_DEVELOPMENT_PROFILES.Core)
 	{
-		if (parsed.alternative || parsed.model || parsed.remoteLiteLLMEndpoint || parsed.remoteLiteLLMMasterKeyFile)
+		if (parsed.alternative || parsed.provider || parsed.model || parsed.remoteLiteLLMEndpoint || parsed.remoteLiteLLMMasterKeyFile)
 		{
 			throw new Error("LiteLLM alternatives and provider settings apply only to --profile agent");
 		}
@@ -157,9 +162,9 @@ export function parseLocalDevelopmentArguments(argumentsList)
 	parsed.alternative ??= LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM;
 	_assertKnownAlternative(parsed.alternative);
 
-	if (parsed.model && parsed.alternative !== LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
+	if ((parsed.provider || parsed.model) && parsed.alternative !== LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
 	{
-		throw new Error("--model applies only to Alternative A (local-llm)");
+		throw new Error("--provider and --model apply only to Alternative A (local-llm)");
 	}
 
 	if (parsed.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.RemoteLiteLLM)

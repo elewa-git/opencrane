@@ -13,6 +13,7 @@ Usage:
   npm run dev:tier2
   npm run dev:tier2:agent
   npm run dev:tier2:agent:local-llm
+  npm run dev:tier2:agent:local-llm -- --provider anthropic
   npm run dev:tier2:agent:local-llm -- --model anthropic/claude-sonnet-4-5-20250929
   npm run dev:tier2:agent:remote-llm -- --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path
   npm run dev:tier2:agent:simulated-llm
@@ -27,8 +28,10 @@ Agent alternatives:
   simulated-llm  Simulated model mode without LiteLLM or provider credentials
 
 Alternative A:
+  --provider <reviewed-provider>
   --model <reviewed-provider/model>
-  The registry derives keys/.openai-key for OpenAI or keys/<provider>-key for other providers.
+  A provider uses its defaultModel unless --model selects another model that it owns.
+  The registry derives the hidden credential path keys/.<provider>-key.
 
 Alternative B:
   --remote-litellm-endpoint https://litellm.example.test
