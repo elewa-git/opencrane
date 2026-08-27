@@ -391,7 +391,7 @@ test("the minimum Codespaces path reclaims image storage without slowing CI impo
 	assert.match(imageStorage, /df -Pk "\$docker_root"/u);
 	assert.match(imageStorage, /available_kib[\s\S]*?_SMOKE_REQUIRED_DOCKER_FREE_GIB/u);
 	assert.match(imageStorage, /for image in "\$\{SMOKE_IMAGES\[@\]\}"; do[\s\S]*?k3d image import "\$image"[\s\S]*?docker image rm "\$image"/u);
-	assert.match(imageStorage, /done[\s\S]*?docker image prune --force[\s\S]*?docker buildx prune --all --force --min-free-space[\s\S]*?_require_smoke_docker_free_space/u);
+	assert.match(imageStorage, /done[\s\S]*?docker image prune --force \|\| return \$\?\n  docker buildx prune --all --force \|\| return \$\?\n  _require_smoke_docker_free_space/u);
 	assert.match(imageStorage, /if \[\[ "\$SMOKE_HOST_PROFILE" == "recommended" \]\]; then[\s\S]*?k3d image import "\$\{SMOKE_IMAGES\[@\]\}"/u);
 });
 
