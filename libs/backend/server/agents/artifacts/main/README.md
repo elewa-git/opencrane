@@ -44,8 +44,9 @@ relations before minting a short-lived lease from catalogue-owned facts:
                          five-minute-maximum signed read lease
 ```
 
-Published PDFs also create one durable preprocessing job in the same transaction. A dedicated
-worker receives only a fenced attempt and the source length. OpenCrane brokers the PDF to it,
+Published PDFs also create one durable preprocessing job and admit its workflow task in the same
+transaction. The workflow controller claims that exact task, binds one Kubernetes Job and its
+first Pod, and gives the dedicated worker only the fenced delivery and source length. OpenCrane brokers the PDF to it,
 accepts the bounded text response, and keeps every storage lease and promotion receipt inside the
 trusted server process:
 
@@ -68,14 +69,16 @@ result instead of creating a duplicate. A stale, replayed, or already-consumed r
 Read leases contain only facts reloaded from the catalogue; caller-provided digests, byte counts,
 media types, storage paths, and URLs never become read authority.
 
-Preprocessing uses the same rule. The database owns claim expiry, retry ceilings, output identity,
-and source lineage. A typed read-only Prisma view performs the database-owned `SKIP LOCKED`
-selection, and a second view supplies the database clock used by serializable delegate updates.
-Source issuance revalidates the exact fenced job and caps signed authority to the earlier of the
-claim deadline or the 30-second retry quiet period. An expired or early-failed attempt therefore
-cannot overlap a reclaimed one. Incomplete generated artifacts have no current revision and remain
-absent from the user catalogue. The isolated worker never receives a content address, ArtifactStore
-endpoint, signed lease, or promotion receipt.
+Preprocessing uses the same rule. The database owns the admitted task receipt, claim expiry,
+delivery count, output identity, and source lineage. The controller authority issues one
+`RuntimeWorkloadClaim`, saves an immutable Job UID and first Pod UID under its fence, and stores only
+a hash of the bootstrap reference. A database-clock view supplies the time used by serializable
+delegate updates. Source issuance revalidates the exact fenced delivery and caps signed authority
+to the earlier of the claim deadline or the 30-second retry quiet period. The worker's verified
+output publishes the derived revision and writes a completion inbox digest; only the workflow
+controller consumes that digest and marks the job complete. Incomplete generated artifacts have no
+current revision and remain absent from the user catalogue. The isolated worker never receives a
+content address, ArtifactStore endpoint, signed lease, or promotion receipt.
 
 Only an in-flight preprocessing job holds its source and output metadata in place. A completed or
 terminally failed job remains immutable audit evidence, but it does not indefinitely prevent an
@@ -90,11 +93,11 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
 - `_CreateArtifactUploadAuthority` — app-only composition for the two short publication
   transactions on either side of byte-store promotion.
 - `_CreateArtifactPreprocessAuthority` and `__CreateArtifactPreprocessorRouter` — durable job
-  fencing and the TokenReview-protected broker-only worker protocol. Each lifecycle transition has
-  its own private transaction; no transaction crosses TokenReview, byte brokering, or promotion.
+  fencing and the TokenReview-protected broker-only worker protocol. The worker does not select
+  work; it serves a task-bound controller delivery. Each lifecycle transition has its own private
+  transaction; no transaction crosses TokenReview, byte brokering, or promotion.
 - `__CreateArtifactPreprocessControllerRouter` — validates the separate agent-controller identity,
   task receipt, Job binding, and first-Pod binding before delegating to the task-bound authority.
-  It is not mounted until that authority replaces the current polling lifecycle.
 - `PrismaArtifactScanUnitOfWork` and `__CreateArtifactScannerRouter` — quarantine publication,
   bounded retries, and the TokenReview-protected scanner protocol. App composition supplies a
   conversation-lifecycle repository factory; the unit of work binds it and the scan repository to
@@ -103,9 +106,9 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
   lease issuance; it never acquires publication or preprocessing locks.
 - `ArtifactPreprocessSourceLeaseIssuer` — the narrow durable port that lets app composition issue
   source-read facts without depending on the Prisma adapter.
-- `__ClaimArtifactPreprocessJob`, `__IssueArtifactPreprocessOutputLease`,
-  `__CompleteArtifactPreprocessJob`, and `__FailArtifactPreprocessJob` — server-owned preprocessing
-  lifecycle operations; output leases remain internal projections rather than worker DTOs.
+- `__IssueArtifactPreprocessOutputLease`, `__CompleteArtifactPreprocessJob`, and
+  `__FailArtifactPreprocessJob` — server-owned worker transitions; output leases and completion
+  evidence remain internal projections rather than worker DTOs.
 - `__CreatePersonalArtifactCatalogueRouter` — serves `GET /api/v1/me/assets`, a bounded list of
   non-deleted asset metadata owned by the signed-in caller in the trusted host silo.
 - `_CreatePersonalArtifactCatalogueRouter` — the ready-to-mount Prisma composition that maps the
@@ -162,8 +165,8 @@ Owns `Artifact`, `ArtifactRevision`, `ArtifactRevisionParent`, `ArtifactUploadLe
 `ArtifactPreprocessJob`, `ArtifactScanJob`, and `ArtifactOutboxEvent` in
 `apps/opencrane/prisma/schema/artifacts.prisma`. A companion SQL authority test in
 `tests/artifact-authority.sql` proves job fencing, exact output binding, lease finalization, and
-immutable source lineage. Production TypeScript uses only typed Prisma delegates; PostgreSQL-specific
-clock and nonblocking claim semantics remain in the reviewed clean target baseline.
+immutable source lineage. Production TypeScript uses only typed Prisma delegates; the
+PostgreSQL-specific database clock remains in the reviewed clean target baseline.
 
 ## See also
 

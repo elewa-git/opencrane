@@ -1,40 +1,6 @@
 import type { ArtifactPromotionReceiptClaims, ArtifactReadLeaseClaims, ArtifactWriteLeaseClaims } from "@opencrane/backend/artifacts/authorization";
+import type { ArtifactPreprocessControllerAuthority } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
-
-/**
- * Everything the server knows about one claimed PDF conversion job.
- *
- * The database picks the job and this describes it. There are no output fields here: the output
- * artifact and its write lease are created later, by `issueOutputLeaseAtomically`, after the
- * server has seen and hashed the submitted text. Note what is missing on purpose - no storage
- * location and no storage credential. The PDF worker never learns where the bytes live and never
- * holds a capability against storage; it reads and writes through OpenCrane, which brokers both
- * directions.
- *
- * Only `jobId`, `attempt`, `claimFence`, and derived source limits ever reach the worker; see
- * `ArtifactPreprocessorJobClaim` in libs/contracts for the trimmed shape sent over HTTP.
- *
- * @see {@link ArtifactPreprocessRepository.claimNextAtomically} which produces this.
- */
-export interface ArtifactPreprocessClaimProjection
-{
-	/** Durable preprocessing job identifier. */
-	readonly jobId: string;
-	/** Monotonic attempt number allocated under the current claim. */
-	readonly attempt: number;
-	/** New random value generated for this claim. Every later worker call must send it back; a call carrying an older fence is rejected as stale, which is how a worker whose claim expired cannot still report a result. */
-	readonly claimFence: string;
-	/** Database-clock instant after which this claim is dead: source reads, output submissions, and failure reports are all rejected, and the next poller may reclaim the job. */
-	readonly claimExpiresAt: Date;
-	/** Source artifact silo selected from catalogue state. */
-	readonly siloId: string;
-	/** Logical source artifact selected from catalogue state. */
-	readonly sourceArtifactId: string;
-	/** Immutable PDF source revision identifier. */
-	readonly sourceRevisionId: string;
-	/** Size of the source PDF in bytes, so the worker can refuse a file above its configured ceiling before downloading it. */
-	readonly sourceByteLength: number;
-}
 
 /**
  * A signed-ready read permission for the source PDF, plus the facts to check the download against.
@@ -123,15 +89,6 @@ export interface ArtifactPreprocessCompletionRequest extends ArtifactPreprocesso
 }
 
 /**
- * What a claim attempt returned: either a job now fenced to this worker, or nothing to do.
- *
- * `none` is the normal idle answer and the router turns it into HTTP 204, which tells the worker
- * to keep polling. `claimed` means the job row is already marked Claimed with a fresh fence and
- * expiry, so the worker owns it until that expiry passes.
- */
-export type ClaimNextArtifactPreprocessJobResult = { readonly status: "claimed"; readonly claim: ArtifactPreprocessClaimProjection } | { readonly status: "none" };
-
-/**
  * What happened when the server tried to reserve write authority for the submitted text.
  *
  * `issued` gives back the lease to sign and spend. `completed` means this exact output was
@@ -155,13 +112,13 @@ export type IssueArtifactPreprocessOutputLeaseResult = { readonly status: "issue
 export type CompleteArtifactPreprocessJobResult = { readonly status: "completed" } | { readonly status: "conflict"; readonly reason: "claim_not_found" | "stale_claim" | "invalid_receipt" | "receipt_consumed" };
 
 /**
- * What the server decided after a worker reported its attempt failed.
+ * What the server decided after a worker reported its delivery failed.
  *
  * The worker does not choose. `retryable` means the job was parked with a wait before it can be
- * claimed again, growing with the attempt number. `terminal` means the attempt limit is reached
+ * claimed again, growing with the delivery count. `terminal` means the delivery limit is reached
  * and the job will not run again. `conflict` means the report was ignored because the job is
  * missing (`claim_not_found`) or the attempt, fence, or expiry no longer match (`stale_claim`);
- * either way the worker should stop and poll for new work.
+ * either way the worker must stop handling that delivery.
  */
 export type FailArtifactPreprocessJobResult = { readonly status: "retryable" | "terminal" } | { readonly status: "conflict"; readonly reason: "claim_not_found" | "stale_claim" };
 
@@ -192,10 +149,10 @@ export interface ArtifactPreprocessSourceLeaseIssuer
 /**
  * The complete set of database operations in the PDF-to-text job lifecycle.
  *
- * Every method runs in its own serializable transaction: claim, then issue a read lease, then
- * issue a write lease, then complete or fail. Each one re-checks the attempt and fence, so no
- * caller has to hold a transaction open across worker HTTP calls, and a worker that went quiet
- * cannot come back and change a job another attempt has taken over.
+ * Every method runs in its own serializable transaction. The workflow controller issues the
+ * delivery and binds the Job and first Pod; the worker then uses that fence to read, publish, or
+ * fail. Each transition re-checks the delivery and fence, so no caller holds a transaction open
+ * across worker HTTP calls and a stale worker cannot change a later delivery.
  *
  * Implemented by `_ArtifactPreprocessAuthority` (adds the transaction per call) over
  * `PrismaArtifactPreprocessRepository` (runs the SQL inside one). Build it with
@@ -205,19 +162,8 @@ export interface ArtifactPreprocessSourceLeaseIssuer
  * passes it to the router; `_CreateArtifactPreprocessOutputBroker` in
  * apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts uses it for output and completion.
  */
-export interface ArtifactPreprocessRepository extends ArtifactPreprocessSourceLeaseIssuer
+export interface ArtifactPreprocessRepository extends ArtifactPreprocessControllerAuthority, ArtifactPreprocessSourceLeaseIssuer
 {
-	/**
-	 * Takes the next job that is ready to run and fences it to this caller.
-	 *
-	 * Also recovers jobs whose claim expired, and creates the hidden output artifact row the first
-	 * time a job is claimed, so later steps have somewhere to attach the text revision.
-	 *
-	 * @returns `claimed` with the job's source facts, or `none` when nothing is ready.
-	 * @throws Error when a stored source byte count is too large to represent exactly in
-	 *   JavaScript, because passing it on would silently truncate the size the worker enforces.
-	 */
-	claimNextAtomically(): Promise<ClaimNextArtifactPreprocessJobResult>;
 	/**
 	 * Reserves write permission for text the server has already received and hashed.
 	 *
@@ -230,7 +176,8 @@ export interface ArtifactPreprocessRepository extends ArtifactPreprocessSourceLe
 	issueOutputLeaseAtomically(request: ArtifactPreprocessOutputLeaseRequest): Promise<IssueArtifactPreprocessOutputLeaseResult>;
 	/**
 	 * Commits the converted revision: spends the lease, publishes the revision, points the output
-	 * artifact at it, records that it came from the source revision, and closes the job.
+	 * artifact at it, records that it came from the source revision, and saves the controller's
+	 * completion inbox entry. The workflow controller remains the only terminal writer.
 	 *
 	 * @param request - The claim, the reserved revision id, the verified receipt, and its digest.
 	 * @returns `completed` on success or on a repeat of the same completion, else `conflict`.
@@ -321,7 +268,7 @@ export interface ArtifactPreprocessSourceBroker
 	 *
 	 * @param command - The job id, attempt, and fence the worker presented.
 	 * @returns The stream and its checked metadata, or null when the claim is no longer current,
-	 *   which the router reports as HTTP 409 so the worker abandons the job and polls again.
+	 *   which the router reports as HTTP 409 so the worker abandons the delivery.
 	 * @throws When the artifact service is unreachable or answers badly; the router logs it and
 	 *   answers 503, or destroys the response if headers were already sent.
 	 */
@@ -352,7 +299,7 @@ export interface ArtifactPreprocessOutputBroker
 	 *   router reports as HTTP 409.
 	 * @throws When the body exceeds the configured ceiling, or the artifact service is unreachable
 	 *   or returns a receipt that does not verify. The router logs it and answers 503; the job
-	 *   stays claimed until its expiry, then becomes retryable.
+	 *   stays claimed until the workflow controller redelivers or terminalizes it.
 	 */
 	publish(command: ArtifactPreprocessorClaimCommand, bytes: AsyncIterable<Uint8Array>): Promise<"completed" | "conflict">;
 }

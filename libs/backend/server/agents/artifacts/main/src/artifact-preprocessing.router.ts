@@ -4,7 +4,7 @@ import { Router, type Request, type Response } from "express";
 
 import { ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, type ArtifactPreprocessorClaimCommand, type ArtifactPreprocessorFailureCode, type ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
 
-import { __ClaimArtifactPreprocessJob, __FailArtifactPreprocessJob } from "./artifact-preprocessing";
+import { __FailArtifactPreprocessJob } from "./artifact-preprocessing";
 import type { ArtifactPreprocessorRouterDependencies, ReviewedArtifactPreprocessorIdentity } from "./artifact-preprocessing.types";
 
 /**
@@ -16,10 +16,10 @@ import type { ArtifactPreprocessorRouterDependencies, ReviewedArtifactPreprocess
  * bytes are brokered through OpenCrane, so storage endpoints, leases, and receipts never reach the
  * worker namespace.
  *
- * Four routes, in the order a worker uses them: `POST /jobs:claim` takes work (204 when idle),
+ * Three routes serve work already assigned by the workflow controller:
  * `POST /jobs/:jobId/source` streams the PDF, `PUT /jobs/:jobId/output` submits the text, and
- * `PUT /jobs/:jobId/failure` reports a failed attempt. A 409 on any of the last three means the
- * claim is no longer current and the worker must drop the job and poll again.
+ * `PUT /jobs/:jobId/failure` reports a failed delivery. A 409 means the delivery is no longer
+ * current and the worker must stop handling it.
  *
  * A failure report may use only three codes: `source_read_failed`, `conversion_failed`, and
  * `output_submission_failed`. The set is closed on purpose. The worker holds the untrusted PDF,
@@ -40,30 +40,6 @@ import type { ArtifactPreprocessorRouterDependencies, ReviewedArtifactPreprocess
 export function __CreateArtifactPreprocessorRouter(dependencies: ArtifactPreprocessorRouterDependencies): Router
 {
 	const router = Router();
-
-	router.post("/jobs:claim", async function _Claim(request: Request, response: Response): Promise<void>
-	{
-		try
-		{
-			if (!await _IsPreprocessor(request, dependencies) || !_IsEmptyObject(request.body))
-			{
-				_RespondProblem(response, 401, "preprocessor_identity_denied");
-				return;
-			}
-			const claim = await __ClaimArtifactPreprocessJob(dependencies.repository);
-			if (claim === null)
-			{
-				response.status(204).end();
-				return;
-			}
-			response.status(200).json(claim);
-		}
-		catch (err)
-		{
-			dependencies.logger.error({ err, operation: "artifact_preprocessor.claim" }, "Artifact preprocessor claim failed");
-			_RespondProblem(response, 503, "preprocess_authority_unavailable");
-		}
-	});
 
 	router.post("/jobs/:jobId/source", async function _Source(request: Request, response: Response): Promise<void>
 	{
@@ -96,8 +72,14 @@ export function __CreateArtifactPreprocessorRouter(dependencies: ArtifactPreproc
 		catch (err)
 		{
 			dependencies.logger.error({ err, operation: "artifact_preprocessor.source" }, "Artifact preprocessor source broker failed");
-			if (!response.headersSent) _RespondProblem(response, 503, "preprocess_source_unavailable");
-			else response.destroy();
+			if (!response.headersSent)
+			{
+				_RespondProblem(response, 503, "preprocess_source_unavailable");
+			}
+			else
+			{
+				response.destroy();
+			}
 		}
 	});
 
@@ -172,7 +154,10 @@ export function __CreateArtifactPreprocessorRouter(dependencies: ArtifactPreproc
 async function _IsPreprocessor(request: Request, dependencies: ArtifactPreprocessorRouterDependencies): Promise<boolean>
 {
 	const token = _BearerValue(request.header("authorization"));
-	if (token === null) return false;
+	if (token === null)
+	{
+		return false;
+	}
 	const identity = await dependencies.tokenReviewer.__Review(token);
 	return identity !== null && _IdentityMatches(identity, dependencies.namespace);
 }
@@ -192,18 +177,18 @@ function _BearerValue(value: string | undefined): string | null
 	return value === undefined ? null : /^Bearer ([^\s,]+)$/u.exec(value)?.[1] ?? null;
 }
 
-/** Require the claim request body to be `{}`, so a worker cannot ask for a particular job. */
-function _IsEmptyObject(value: unknown): boolean
-{
-	return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0;
-}
-
 /** Read the job id, attempt, and fence from the body, rejecting any extra field so a worker cannot smuggle in a value the server owns. */
 function _ParseClaimCommand(jobId: unknown, value: unknown): ArtifactPreprocessorClaimCommand | null
 {
-	if (typeof jobId !== "string" || jobId.length === 0 || value === null || typeof value !== "object" || Array.isArray(value)) return null;
+	if (typeof jobId !== "string" || jobId.length === 0 || value === null || typeof value !== "object" || Array.isArray(value))
+	{
+		return null;
+	}
 	const body = value as Record<string, unknown>;
-	if (Object.keys(body).length !== 3 || !["jobId", "attempt", "claimFence"].every(function _Has(key): boolean { return key in body; })) return null;
+	if (Object.keys(body).length !== 3 || !["jobId", "attempt", "claimFence"].every(function _Has(key): boolean { return key in body; }))
+	{
+		return null;
+	}
 	return body["jobId"] === jobId && Number.isSafeInteger(body["attempt"]) && (body["attempt"] as number) > 0 && typeof body["claimFence"] === "string" && body["claimFence"].length > 0
 		? { jobId, attempt: body["attempt"] as number, claimFence: body["claimFence"] }
 		: null;
@@ -221,9 +206,15 @@ function _ParseClaimHeaders(jobId: unknown, attempt: string | undefined, claimFe
 /** Read the failure code plus the job id, attempt, and fence, rejecting anything else. */
 function _ParseFailure(jobId: unknown, value: unknown): ArtifactPreprocessorFailureCommand | null
 {
-	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+	if (value === null || typeof value !== "object" || Array.isArray(value))
+	{
+		return null;
+	}
 	const body = value as Record<string, unknown>;
-	if (Object.keys(body).length !== 4 || typeof body["failureCode"] !== "string" || !_IsFailureCode(body["failureCode"])) return null;
+	if (Object.keys(body).length !== 4 || typeof body["failureCode"] !== "string" || !_IsFailureCode(body["failureCode"]))
+	{
+		return null;
+	}
 	const claim = _ParseClaimCommand(jobId, { jobId: body["jobId"], attempt: body["attempt"], claimFence: body["claimFence"] });
 	return claim === null ? null : { ...claim, failureCode: body["failureCode"] };
 }
@@ -245,7 +236,10 @@ async function _WriteBytes(response: Response, bytes: AsyncIterable<Uint8Array>)
 {
 	for await (const chunk of bytes)
 	{
-		if (!response.write(chunk)) await once(response, "drain");
+		if (!response.write(chunk))
+		{
+			await once(response, "drain");
+		}
 	}
 	response.end();
 }

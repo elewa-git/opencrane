@@ -1,8 +1,22 @@
+import { createHash } from "node:crypto";
+
 import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { IWorkflowEngine, IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { ArtifactPreprocessWorkflowAdmissionError } from "./artifact-preprocess-workflow-admission.types";
 import type { ArtifactPreprocessWorkflowAdmission, ArtifactPreprocessWorkflowAdmissionTransaction, ArtifactPreprocessWorkflowRecord } from "./artifact-preprocess-workflow-admission.types";
+
+/**
+ * Builds the stable task key for one immutable PDF source revision.
+ *
+ * Called by: artifact publication and scan transactions before they admit the conversion task.
+ * @param record - Immutable source revision and owning silo saved with the preprocessing job.
+ * @returns The deterministic workflow idempotency key for this conversion.
+ */
+export function __ArtifactPreprocessWorkflowTaskKey(record: Pick<ArtifactPreprocessWorkflowRecord, "siloId" | "sourceRevisionId">): string
+{
+	return `workflows:artifact-preprocess:${createHash("sha256").update(`${record.siloId}\u0000${record.sourceRevisionId}`).digest("hex")}`;
+}
 
 /** Reject a task receipt that cannot be the exact record's saved preprocessing task. */
 function _Receipt(record: ArtifactPreprocessWorkflowRecord, receipt: IWorkflowTaskReceipt): IWorkflowTaskReceipt

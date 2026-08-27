@@ -1,5 +1,5 @@
 export { __FinalizeArtifactRevision } from "./artifact-finalization";
-export { __ClaimArtifactPreprocessJob, __CompleteArtifactPreprocessJob, __FailArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease } from "./artifact-preprocessing";
+export { __CompleteArtifactPreprocessJob, __FailArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease } from "./artifact-preprocessing";
 export { __CreateArtifactPreprocessorRouter } from "./artifact-preprocessing.router";
 export { __CreateArtifactPreprocessControllerRouter } from "./artifact-preprocess-controller.router";
 export { __AdmitArtifactPreprocessWorkflow, __ArtifactPreprocessWorkflowTaskKey } from "./artifact-preprocess-workflow-admission";

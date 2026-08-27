@@ -7,7 +7,7 @@ import { __AdmitArtifactPreprocessWorkflow, ArtifactPreprocessWorkflowAdmissionE
 /** Returns immutable task facts for one published PDF. */
 function _Record()
 {
-	return { preprocessJobId: "job-1", siloId: "silo-1", taskKey: "artifact-preprocess:job-1" };
+	return { preprocessJobId: "job-1", siloId: "silo-1", sourceRevisionId: "revision-1", taskKey: "artifact-preprocess:job-1" };
 }
 
 describe("artifact preprocess workflow admission", function _DescribeArtifactPreprocessWorkflowAdmission()

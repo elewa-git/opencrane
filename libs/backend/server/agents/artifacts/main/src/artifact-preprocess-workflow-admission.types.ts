@@ -7,6 +7,8 @@ export interface ArtifactPreprocessWorkflowRecord
 	readonly preprocessJobId: string;
 	/** Silo that owns the source PDF and its saved task. */
 	readonly siloId: string;
+	/** Immutable published PDF revision converted by this task. */
+	readonly sourceRevisionId: string;
 	/** Deterministic key that lets retried admission reuse the same saved task. */
 	readonly taskKey: string;
 }
