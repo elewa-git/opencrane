@@ -15,9 +15,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
-- **Database migrations now run directly from their reviewed SQL.** They no longer require a backup,
-  source-schema check, application write pause, or automatic recovery. Deferred migration hardening
-  is tracked in #699.
+- **Database upgrades now run through Prisma Migrate in a dedicated Job.** The forward 0.9.3 to
+  0.10.0 path accepts the exact released predecessor, applies the saved Prisma ledger once, and no
+  longer requires a backup, application write pause, or automatic recovery. Deferred migration
+  hardening is tracked in #699.
 
 - **Invited users can now complete standalone registration after the first Owner has claimed the
   silo.** A verified invited identity keeps its OIDC session long enough to accept its signed link,
@@ -42,10 +43,15 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   first attempt through one parameterized, policy-bound database procedure call in the caller's
   existing transaction.
 
-- **Operators can now upgrade an existing database to the workflow-task foundation without leaving a
-  superuser credential available.** The direct migration Job prepares `pg_cron`, uses the generated
-  credential solely to install that reviewed prerequisite, and then removes the credential before the
-  ordinary application rollout continues.
+- **Users can install and run MCP servers from an OCI Image Layout ZIP.** OpenCrane accepts only MCP
+  `2026-07-28`, imports the package to an immutable image digest, and executes each discovery or tool
+  call in an isolated MCP-specific Kubernetes Job with a durable claim, bounded identity, and retry
+  and cleanup ownership.
+
+- **Artifact processing, skill work, and agent runs can now survive worker or server restarts.** Their
+  Absurd workflows claim saved work, fence every delivery, retry recoverable failures, preserve
+  completion evidence, and clean up expired or replaced workload and output leases without returning
+  to SQL polling.
 
 - **Users and operators can now see the availability of every user-visible service through
   unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,
@@ -54,11 +60,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   but remains `ready: true` with HTTP 200 while the database is available; database loss or an
   unreadable report fails closed as `ready: false` with HTTP 503.
 
-- **Operators can now identify a release composition and run a reviewed database migration Job.**
-  Immutable release manifests bind the repository train to its application, Helm chart, and database
-  image; the deploy path publishes the verified migration bytes and runs the bounded transactional
-  Job before the ordinary application rollout. The `0.7.0` to `0.8.0` SQL path still stops with
-  `OC708` when populated persona data requires a reviewed manual mapping.
+- **Operators can now identify and migrate the complete 0.10.0 workflow release as one composition.**
+  Its immutable release manifest binds the application, chart, database, OCI MCP executor, and Prisma
+  migrator versions, while fresh installations continue to use the reviewed target baseline.
 
 - **Operators can now retire one standalone silo without deleting an active tenant or foreign
   resources.** The app-owned teardown requires an exact cluster context, release composition,
@@ -143,10 +147,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 - **Approved agent tool calls now execute through a recoverable server-owned action boundary.**
   Runtimes submit attempt-fenced candidates without receiving provider addresses or credentials;
-  OpenCrane validates the frozen tool grant, applies any approved argument edits, and invokes the
-  allow-listed Obot MCP tool from server custody. Definite results resume the run exactly once,
-  internal preparation retries are bounded, and an uncertain provider outcome stops visibly for
-  recovery instead of sending the action again.
+  OpenCrane validates the frozen tool grant, applies any approved argument edits, and assigns the
+  admitted OCI image to the MCP executor. Definite results resume the run exactly once, internal
+  preparation retries are bounded, and an uncertain provider outcome stops visibly for recovery
+  instead of sending the action again.
 
 - **Personal-agent runs can recall organisation and personal memory through a locked-down memory
   gateway.** A dedicated `memory-gateway` app is the only process allowed to reach the silo's
@@ -302,6 +306,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   functions and triggers in the schema baseline, reached only through typed Prisma delegates.
 
 ### Removed
+
+- **Operators no longer deploy or maintain Obot or MCPB alongside the supported MCP runtime.** The
+  Obot workload, integration authority, MCPB upload and validation surfaces, and replaced SQL
+  pollers, locks, and outbox kinds are removed after their OCI and Absurd owners take over.
 
 - **Operators can now run the OpenCrane stack without the bundled Langfuse data plane.** The
   Langfuse workloads, database and credentials, LiteLLM callback, metrics proxy, and unused
