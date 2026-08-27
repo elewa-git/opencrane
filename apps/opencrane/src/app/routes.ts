@@ -187,6 +187,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, workflowExecution);
 	const internalControllerRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentRunWorkflowController },
+		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillAuthoringValidationController },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillWorkloadDispatch },
 		{ method: "use", path: "/api/internal/agent-controller", handler: mcpRuntime.controller },
 		..._OptionalRoute("/api/internal/agent-controller", runtime.artifactPreprocessController),

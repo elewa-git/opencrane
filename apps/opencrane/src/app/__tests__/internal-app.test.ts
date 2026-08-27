@@ -43,6 +43,7 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
 		personalRuntimeNamespace: "personal-runtime",
 		serverNamespace: "opencrane-server",
+		skillAuthoringNamespace: "skill-authoring",
 		siloId: "silo-1",
 	};
 }

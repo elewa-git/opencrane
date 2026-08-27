@@ -11,6 +11,7 @@ import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS } from "@
 import { _CreateConversationReplayRepository, PrismaAgentThreadParentDeliveryUnitOfWork, __CreateAgentThreadParentDeliveryRouter, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
 import { PrismaChannelTargetAuthorityUnitOfWork } from "@opencrane/backend/server/agents/channel-targets";
 import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __CreateArtifactPreprocessControllerRouter, __CreateArtifactPreprocessorRouter, __CreateArtifactScannerRouter } from "@opencrane/backend/server/agents/artifacts";
+import { PrismaSkillAuthoringValidationControllerUnitOfWork, __CreateSkillAuthoringValidationControllerRouter } from "@opencrane/backend/server/agents/skills";
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
 import { PrismaConversationAssetOutputRepository, __CreateConversationAssetOutputRouter } from "@opencrane/backend/server/conversation-assets";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
@@ -71,6 +72,7 @@ const _IssueAttemptModelKey: AttemptModelKeyIssuerWithRevocation = Object.assign
  */
 function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, skillWorkloadAuthority: ReturnType<typeof _CreateSkillWorkloadExecutionAuthority>): ControllerRuntimeComposition
 {
+	const authoringNamespace = _ValidateIsolatedWorkloadNamespace(config.skillAuthoringNamespace, namespaces.serverNamespace);
 	const agentRunWorkflowAuthority = new PrismaAgentRunWorkflowControllerUnitOfWork(prisma, {
 		personalRuntimeNamespace: namespaces.personalRuntimeNamespace,
 		managedRuntimeNamespace: namespaces.managedRuntimeNamespace,
@@ -84,6 +86,13 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
 			tokenReviewer,
 			namespace: namespaces.serverNamespace,
 			authority: agentRunWorkflowAuthority,
+			logger: _log,
+		}),
+		skillAuthoringValidationController: __CreateSkillAuthoringValidationControllerRouter({
+			tokenReviewer,
+			namespace: namespaces.serverNamespace,
+			authoringNamespace,
+			authority: new PrismaSkillAuthoringValidationControllerUnitOfWork(prisma),
 			logger: _log,
 		}),
 		skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({

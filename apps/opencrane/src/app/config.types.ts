@@ -62,6 +62,8 @@ export interface InternalRuntimeConfig
 	readonly memoryGatewayUrl: string;
 	/** Namespace reserved for personal-agent runtime Jobs. */
 	readonly personalRuntimeNamespace: string | undefined;
+	/** Namespace reserved for skill-authoring validation Jobs. */
+	readonly skillAuthoringNamespace: string;
 	/** Namespace containing the OpenCrane server and agent controller. */
 	readonly serverNamespace: string;
 	/** Silo that owns every OCI MCP runtime row served by this process. */

@@ -56,6 +56,7 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
 		personalRuntimeNamespace: "personal-runtime",
 		serverNamespace: "opencrane-server",
+		skillAuthoringNamespace: "skill-authoring",
 		siloId: "silo-1",
 	};
 }
@@ -72,6 +73,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig());
 
 		expect(composition.agentRunWorkflowController).toEqual(expect.any(Function));
+		expect(composition.skillAuthoringValidationController).toEqual(expect.any(Function));
 		expect(composition.skillWorkloadDispatch).toEqual(expect.any(Function));
 		expect(composition.skillWorkloadBootstrap).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringInput).toEqual(expect.any(Function));

@@ -19,6 +19,8 @@ export interface InternalRuntimeComposition
 	readonly agentRunWorkflowController: Router;
 	/** Controller-only router for governed skill workload dispatch. */
 	readonly skillWorkloadDispatch: Router;
+	/** Controller-only router for one admitted skill-authoring validation workflow. */
+	readonly skillAuthoringValidationController: Router;
 	/** Runtime router for one-use workload bootstrap claims. */
 	readonly skillWorkloadBootstrap: Router;
 	/** Runtime router for reading fenced skill-authoring input. */
@@ -57,7 +59,7 @@ export interface InternalRuntimeComposition
 /** The subset of routers built by the controller-only composition step. */
 export type ControllerRuntimeComposition = Pick<
 	InternalRuntimeComposition,
-	"agentRunWorkflowController" | "skillWorkloadDispatch"
+	"agentRunWorkflowController" | "skillAuthoringValidationController" | "skillWorkloadDispatch"
 >;
 
 /** The subset of routers built by the isolated skill-workload composition step. */

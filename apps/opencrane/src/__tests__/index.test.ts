@@ -135,6 +135,7 @@ describe("Control Plane", () =>
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_REPOSITORY", "opencrane/mcp-images");
 		vi.stubEnv("OPENCRANE_SILO_ID", "opencrane-silo");
 		vi.stubEnv("OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS", "86400000");
+		vi.stubEnv("SKILL_AUTHORING_NAMESPACE", "opencrane-skill-authoring");
   });
 
   afterEach(function _RestoreEnvironment()

@@ -237,6 +237,7 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			memoryGatewayTokenPath: _readRequiredAbsolutePath("MEMORY_GATEWAY_TOKEN_PATH"),
 			memoryGatewayUrl: _readRequired("MEMORY_GATEWAY_URL"),
 			personalRuntimeNamespace: process.env.AGENT_RUNTIME_PERSONAL_NAMESPACE?.trim(),
+			skillAuthoringNamespace: _readRequired("SKILL_AUTHORING_NAMESPACE"),
 				serverNamespace: process.env.POD_NAMESPACE?.trim() || "default",
 				siloId: _readRequired("OPENCRANE_SILO_ID"),
 		},

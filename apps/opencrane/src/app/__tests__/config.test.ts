@@ -29,6 +29,7 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_REPOSITORY", "opencrane/mcp-images");
 		vi.stubEnv("OPENCRANE_SILO_ID", "silo-test");
 		vi.stubEnv("MCP_EXECUTOR_NAMESPACE", "mcp-executors");
+		vi.stubEnv("SKILL_AUTHORING_NAMESPACE", "skill-authoring");
 	});
 
 	afterEach(function _restoreEnvironment()
@@ -68,6 +69,7 @@ describe("opencrane process config", function _ProcessConfigSuite()
 				memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
 				memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
 				personalRuntimeNamespace: "personal-runs",
+				skillAuthoringNamespace: "skill-authoring",
 				siloId: "silo-test",
 			},
 			schedulerEnabled: true,
