@@ -87,8 +87,10 @@ Kubernetes identity review, and optional infrastructure with local-only adapters
 
 - `src/app/config.ts` reads one startup snapshot for listener and worker configuration, including
   the all-or-nothing standalone first-owner contract and HTTPS-only Fleet membership receiver.
-- `src/app/initial-model-bootstrap.ts` makes the deployment-supplied provider key available through
-  the existing provider-custody and LiteLLM-registration authority before the listeners start.
+- `src/app/initial-model-bootstrap.ts` makes the deployment-supplied provider key and exact selected
+  model available through the existing provider-custody, LiteLLM-registration, and routing-default
+  authority before the listeners start. It consumes the key once, removes the environment copy,
+  and blanks the startup snapshot on both success and failure.
 - `src/app/kubernetes-clients.ts` constructs the exact Kubernetes clients the process needs.
 - `src/app/public-app.ts` builds the browser-session-authenticated API.
 - The neutral [membership](../../libs/backend/server/iam/membership/main/README.md) package owns
@@ -202,7 +204,7 @@ are:
 | `OIDC_*` | Production organisation sign-in, callbacks, and server-side session protection | required outside Tier 3 |
 | `OPENCRANE_AUTH_MODE`, `OPENCRANE_TIER3_*_SECRET_PATH` | Select the dev-only fixed Tier 3 identity and its file-mounted, per-run proxy/session secrets | OIDC mode |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
-| `OPENCRANE_INITIAL_MODEL_*` | Optional first provider key; the server persists its custody reference and requires LiteLLM registration before readiness | disabled |
+| `OPENCRANE_INITIAL_MODEL_*` | Optional first provider, exact model, and key; the server persists only its custody reference and requires that exact LiteLLM model before readiness | disabled |
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL`, `CHANNEL_PROXY_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
 | `OBOT_GATEWAY_URL`, `OBOT_SERVICE_TOKEN_PATH`, `OBOT_TIMEOUT_SECONDS` | Release-local credential custody and server-side external tool execution | disabled together |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |

@@ -106,8 +106,10 @@ export interface InitialModelBootstrapConfig
 {
 	/** Supported upstream provider whose catalogue LiteLLM will register. */
 	readonly provider: string;
-	/** Raw upstream API key read from the mounted Secret and never logged or returned. */
-	readonly apiKey: string;
+	/** Exact reviewed model that must become the first routable Global default. */
+	readonly model: string;
+	/** Raw upstream API key consumed and blanked by the one-time bootstrap before startup continues. */
+	apiKey: string;
 }
 
 /**

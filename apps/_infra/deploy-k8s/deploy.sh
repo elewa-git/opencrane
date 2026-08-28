@@ -20,6 +20,7 @@
 #       --acme-email operator@example.com \
 #       --first-user-email owner@example.com \
 #       --initial-model-provider openai \
+#       --initial-model openai/gpt-5.4-nano \
 #       # OPENCRANE_INITIAL_MODEL_API_KEY is required in the environment \
 #       --postgres-credentials-secret opencrane-postgres-bootstrap \
 #       --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
@@ -32,8 +33,8 @@
 #
 # --base-domain, --cluster-tenant, --acme-email, and --first-user-email are required. The first
 # user must sign in with this exact verified OIDC email to claim the standalone silo's first owner.
-# `--initial-model-provider` plus
-# OPENCRANE_INITIAL_MODEL_API_KEY seed the first routable model through LiteLLM. The silo is installed into namespace
+# `--initial-model-provider` and `--initial-model` plus
+# OPENCRANE_INITIAL_MODEL_API_KEY seed the first exact routable model through LiteLLM. The silo is installed into namespace
 # `opencrane-<cluster-tenant>` unless --namespace overrides it.
 # Fresh silo deploys require `--opencrane-ui-digest` and `--cognee-digest`. An upgrade may omit
 # either only to retain the exact digest already recorded by the release. Tags are accepted only by
@@ -43,6 +44,11 @@
 # Secrets already present in the target namespace.
 # =============================================================================
 set -euo pipefail
+
+# Capture the provider key before any prerequisite child runs, then expose it only to the core
+# installer that publishes the fixed custody Secret.
+INITIAL_MODEL_API_KEY="${OPENCRANE_INITIAL_MODEL_API_KEY:-}"
+unset OPENCRANE_INITIAL_MODEL_API_KEY
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The release-specific wrapper and its platform engine have one deployment owner.
@@ -71,6 +77,7 @@ while [[ $# -gt 0 ]]; do
     --oidc-issuer-url) OIDC_ISSUER_URL="$2"; PASSTHROUGH+=(--oidc-issuer-url "$2"); shift 2 ;;
     --oidc-client-id)  OIDC_CLIENT_ID="$2"; PASSTHROUGH+=(--oidc-client-id "$2"); shift 2 ;;
     --initial-model-provider) PASSTHROUGH+=(--initial-model-provider "$2"); shift 2 ;;
+    --initial-model) PASSTHROUGH+=(--initial-model "$2"); shift 2 ;;
     -h|--help)         grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)                 PASSTHROUGH+=("$1"); shift ;;
   esac
@@ -139,4 +146,4 @@ PROFILE_SET=(
   --set-string "clustertenantManager.firstUser.clusterTenant=${CLUSTER_TENANT}"
 )
 echo -e "\033[0;32m[silo]\033[0m Profile: silo for ClusterTenant '$CLUSTER_TENANT' in namespace '$NAMESPACE' on $BASE_DOMAIN"
-exec "$CORE" "${PROFILE_SET[@]}" "${PASSTHROUGH[@]}"
+OPENCRANE_INITIAL_MODEL_API_KEY="$INITIAL_MODEL_API_KEY" exec "$CORE" "${PROFILE_SET[@]}" "${PASSTHROUGH[@]}"

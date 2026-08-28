@@ -418,6 +418,27 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/server/gateways/model-routing/main/src/core/prisma-provider-credential-projection-repository.ts",
+        "adapter": "PrismaGlobalProviderCredentialProjectionRepository",
+        "contract": "GlobalProviderCredentialProjectionRepository",
+        "contractImportPath": "./provider-credential-projection-repository.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/gateways/model-routing/main/src/core/prisma-provider-model-evidence-repository.ts",
+        "adapter": "PrismaProviderModelEvidenceRepository",
+        "contract": "ProviderModelEvidenceRepository",
+        "contractImportPath": "./provider-model-evidence-repository.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/gateways/model-routing/main/src/core/prisma-global-model-routing-default-repository.ts",
+        "adapter": "PrismaGlobalModelRoutingDefaultRepository",
+        "contract": "GlobalModelRoutingDefaultRepository",
+        "contractImportPath": "./global-model-routing-default-repository.types",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/server/agents/scheduling/main/src/prisma-schedule-tick-repositories.ts",
         "adapter": "PrismaEnabledScheduleSnapshotRepository",
         "contract": "EnabledScheduleSnapshotRepository",
@@ -1303,6 +1324,7 @@
       }
     ],
     "compositions": [
+      "libs/backend/server/gateways/model-routing/main/src/core/provision-byok-key.ts",
       "libs/backend/server/agents/agent-services/main/src/db/prisma-boundary-grant.factory.ts",
       "libs/backend/server/agents/agent-services/main/src/db/prisma-managed-agent-service-principal.factory.ts",
       "apps/opencrane/src/app/routes.ts",
@@ -1359,15 +1381,6 @@
       ],
       "reason": "The existing combined lifecycle contract needs its transaction-scoped delegate operations extracted into a dedicated repository before the next managed-agent definition-plane change.",
       "expiresOn": "2026-12-31"
-    },
-    {
-      "path": "libs/backend/server/gateways/model-routing/main/src/core/provision-byok-key.ts",
-      "owner": "model-routing",
-      "operations": [
-        "delegate"
-      ],
-      "reason": "The existing provider-custody core reconciles its Global ProviderCredential, ModelDefinition, and first ModelRoutingDefault projections while boot-time LiteLLM registration is made fail-closed; split this legacy mixed adapter into declared repositories with its next provider-custody authority change.",
-      "expiresOn": "2026-09-30"
     },
     {
       "path": "libs/backend/agents/execution/inputs/main/src/personal-memory-scope-source.ts",

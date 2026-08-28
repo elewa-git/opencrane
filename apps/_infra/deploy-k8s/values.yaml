@@ -478,6 +478,7 @@ clustertenantManager:
   # becoming ready. Keep both fields empty for a deliberately model-unconfigured install.
   initialModel:
     provider: ""
+    model: ""
     existingSecret: ""
     apiKeySecretKey: apiKey
   # -- One verified OIDC email may claim this standalone silo's first active Owner membership.

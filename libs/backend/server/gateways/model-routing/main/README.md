@@ -52,7 +52,9 @@ traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`
   adapter that turn the configured effective default into one stable, tenant-accessible
   `ModelDefinition` identifier.
 - `_ProvisionByokKey`, `_DeprovisionByokKey`, `_RegisterLiteLlmModel`, `_UpsertLiteLlmCredential`,
-  `_DeleteLiteLlmCredential` — the LiteLLM provisioning helpers reused by the provider gateway.
+  `_DeleteLiteLlmCredential` — the LiteLLM provisioning helpers reused by the provider gateway and
+  strict deployment bootstrap. The bootstrap may add one registry-reviewed model beyond the static
+  class catalogue and selects it only when no operator default already exists.
   `_RequireLiteLlmModelName` and `_RequireLiteLlmModelDeployment` qualify live startup inventory
   without rewriting immutable model-definition evidence.
 - `_EstimateSavings`, `_ReplayEstimate`, `_DoublyRobustEstimate`, `_OpeEstimateWithCi` — the pure

@@ -1,6 +1,8 @@
 import type * as k8s from "@kubernetes/client-node";
 import type { Logger } from "pino";
-import type { PrismaClient, ProviderCredential as PrismaProviderCredential } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
+
+import type { GlobalProviderCredentialProjection } from "./provider-credential-projection-repository.types";
 
 /**
  * Everything `_ProvisionByokKey` needs to set a provider's raw BYOK key.
@@ -22,6 +24,14 @@ export interface ProvisionByokKeyOptions
   operatorNamespace: string;
   /** Provider identifier, such as `openai`. */
   provider: string;
+  /**
+   * Exact model selected by the reviewed deployment coordinator for first-install bootstrap.
+   *
+   * When present, it must use this provider's LiteLLM namespace and `requireLiveModels` must be
+   * true. The provisioning authority registers it even when it is newer than the static BYOK
+   * class catalogue, then selects it only when no Global default already exists.
+   */
+  selectedModel?: string;
   /** Raw upstream API key, which must never be logged or echoed. */
   apiKey: string;
   /** Scoped logger for best-effort registration warnings. */
@@ -71,5 +81,5 @@ export interface ProvisionByokKeyResult
   /** True when LiteLLM's `/credentials` accepted the key (false means Secret-only / env baseline). */
   litellmRegistered: boolean;
   /** The upserted Global ProviderCredential row. */
-  row: PrismaProviderCredential;
+  row: GlobalProviderCredentialProjection;
 }

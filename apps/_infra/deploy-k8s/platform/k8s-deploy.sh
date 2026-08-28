@@ -26,7 +26,7 @@
 #                            [--platform-operator-seed-email EMAIL]
 #                            [--platform-operator-groups CSV]
 #                            [--first-user-email EMAIL]
-#                            [--initial-model-provider PROVIDER]
+#                            [--initial-model-provider PROVIDER] [--initial-model MODEL]
 #                            [--preflight] [--multi-ct] [--verify] [--verify-insecure]
 #                            --postgres-credentials-secret NAME
 #                            [--postgres-owner OWNER]
@@ -67,7 +67,7 @@
 # nobody (fail-closed). Also accepted via the OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL
 # env var. Never commit a real owner email into the repo.
 #
-# `--initial-model-provider` pairs with the required environment-only
+# `--initial-model-provider` and `--initial-model` pair with the required environment-only
 # OPENCRANE_INITIAL_MODEL_API_KEY. The installer writes that raw key directly to the release-local
 # provider-custody Secret; the server then registers it with LiteLLM's encrypted credentials API
 # and seeds the provider model catalogue before it becomes ready. Never pass the API key as a flag.
@@ -200,7 +200,10 @@ FIRST_USER_EMAIL="${OPENCRANE_FIRST_USER_EMAIL:-}"
 # durable bootstrap once an IdP group exists. Empty → unset (fail-closed).
 PLATFORM_OPERATOR_GROUPS="${OPENCRANE_PLATFORM_OPERATOR_GROUPS:-}"
 INITIAL_MODEL_PROVIDER="${OPENCRANE_INITIAL_MODEL_PROVIDER:-}"
+INITIAL_MODEL_NAME="${OPENCRANE_INITIAL_MODEL_NAME:-}"
 INITIAL_MODEL_API_KEY="${OPENCRANE_INITIAL_MODEL_API_KEY:-}"
+# Keep the captured key in this installer shell only; child tools must not inherit it.
+unset OPENCRANE_INITIAL_MODEL_API_KEY
 # CloudNativePG is an external cluster prerequisite. OpenCrane never installs or upgrades
 # the operator. The credentials Secret is also external: this deploy flow only validates and
 # references it, so database passwords never pass through shell generation or repair paths.
@@ -271,6 +274,7 @@ while [[ $# -gt 0 ]]; do
     --platform-operator-groups)     PLATFORM_OPERATOR_GROUPS="$2"; shift 2 ;;
     --first-user-email)             FIRST_USER_EMAIL="$2"; shift 2 ;;
     --initial-model-provider)       INITIAL_MODEL_PROVIDER="$2"; shift 2 ;;
+    --initial-model)                INITIAL_MODEL_NAME="$2"; shift 2 ;;
     --preflight)        PREFLIGHT="1"; shift ;;
     --multi-ct)         MULTI_CT="1"; shift ;;
     --verify)           VERIFY="1"; shift ;;
@@ -502,7 +506,7 @@ _require_expandable_artifact_storage() {
 }
 _require_expandable_artifact_storage
 
-validate_initial_model_provider "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_API_KEY" || exit 1
+validate_initial_model_provider "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_NAME" "$INITIAL_MODEL_API_KEY" || exit 1
 
 _gen_secret() { openssl rand -hex 16 2>/dev/null || head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32; }
 _read_secret() { kubectl get secret "$1" -n "$NAMESPACE" -o jsonpath="{.data.$2}" 2>/dev/null | base64 -d || true; }
@@ -787,6 +791,7 @@ kubectl create secret generic opencrane-litellm -n "$NAMESPACE" \
   --dry-run=client -o yaml | kubectl apply -f -
 ensure_provider_key_secrets "$NAMESPACE"
 publish_initial_model_provider_secret "$NAMESPACE" "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_API_KEY"
+INITIAL_MODEL_API_KEY=""
 publish_tier3_development_auth_secret "$NAMESPACE"
 # OIDC secret. The chart references clustertenantManager.oidc.existingSecret for the client + session
 # secrets; previously this installer set only the issuer/clientId/redirect and ASSUMED the
@@ -968,7 +973,7 @@ fi
 if [[ -n "$FIRST_USER_EMAIL" ]]; then
   helm_args+=(--set-string "clustertenantManager.firstUser.email=$FIRST_USER_EMAIL")
 fi
-append_initial_model_provider_helm_args "$INITIAL_MODEL_PROVIDER"
+append_initial_model_provider_helm_args "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_NAME"
 [[ -n "$VALUES_FILE" ]] && helm_args+=(--values "$VALUES_FILE")
 # macOS Bash 3.2 aborts under `set -u` when it expands an empty array here.
 # Check its length before expansion so a deploy without --set still reaches Helm.

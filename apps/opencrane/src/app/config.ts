@@ -91,27 +91,29 @@ function _readArtifactPreprocessorBodyLimit(): number
 }
 
 /**
- * Read the optional initial provider credential injected only by the silo deployment contract.
- * The pair is all-or-nothing so an operator cannot accidentally start with a provider name but no
- * key (or expose a key without a declared LiteLLM provider).
+ * Read the optional initial provider/model credential injected only by the silo deployment contract.
+ * The tuple is all-or-nothing so an operator cannot accidentally start with an incomplete routing
+ * default or expose a key without a declared LiteLLM provider and model.
  */
 function _readInitialModelBootstrap(): InitialModelBootstrapConfig | null
 {
 	const provider = process.env.OPENCRANE_INITIAL_MODEL_PROVIDER?.trim().toLowerCase() ?? "";
+	const model = process.env.OPENCRANE_INITIAL_MODEL_NAME?.trim() ?? "";
 	const apiKey = process.env.OPENCRANE_INITIAL_MODEL_API_KEY?.trim() ?? "";
-	if (!provider && !apiKey)
+	delete process.env.OPENCRANE_INITIAL_MODEL_API_KEY;
+	if (!provider && !model && !apiKey)
 	{
 		return null;
 	}
-	if (!provider || !apiKey)
+	if (!provider || !model || !apiKey)
 	{
-		throw new Error("OPENCRANE_INITIAL_MODEL_PROVIDER and OPENCRANE_INITIAL_MODEL_API_KEY must be configured together");
+		throw new Error("OPENCRANE_INITIAL_MODEL_PROVIDER, OPENCRANE_INITIAL_MODEL_NAME, and OPENCRANE_INITIAL_MODEL_API_KEY must be configured together");
 	}
 	if (!Object.values(ByokProvider).includes(provider as ByokProvider))
 	{
 		throw new Error(`OPENCRANE_INITIAL_MODEL_PROVIDER '${provider}' is unsupported`);
 	}
-	return { provider, apiKey };
+	return { provider, model, apiKey };
 }
 
 /** Read the email and ClusterTenant that let one verified OIDC user claim this standalone silo's owner slot; both must be set or neither. */

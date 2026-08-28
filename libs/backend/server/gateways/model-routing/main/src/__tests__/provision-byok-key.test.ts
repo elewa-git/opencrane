@@ -93,6 +93,7 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     expect(flagship).toMatchObject({ isDefault: true });
     expect(seeded.filter(function d(m) { return m.isDefault; })).toHaveLength(1);
     expect(Array.from(routingDefaults.values())).toEqual([expect.objectContaining({ scope: "Global", clusterTenant: null, defaultModel: "openai/gpt-5.5" })]);
+    expect(JSON.stringify({ credentials: Array.from(creds.values()), models: seeded, routingDefaults: Array.from(routingDefaults.values()) })).not.toContain("sk-test-123");
     await expect(new PrismaDefaultModelDefinitionResolverRepository(prisma as unknown as Prisma.TransactionClient).resolve("silo-a")).resolves.toEqual({ status: DefaultModelDefinitionResolutionStatuses.Resolved, modelDefinitionId: flagship?.id });
   });
 
@@ -103,6 +104,144 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     await _ProvisionByokKey({ prisma: _mockPrisma(new Map(), new Map(), routingDefaults), coreApi: _mockCoreApi(new Map()), operatorNamespace: _NS, provider: "openai", apiKey: "sk-test-123", log: _log });
 
     expect(Array.from(routingDefaults.values())).toEqual([{ id: "routing-global", scope: "Global", clusterTenant: null, defaultModel: "operator/model" }]);
+  });
+
+  it("strict bootstrap registers an exact reviewed model and selects it as the first Global default", async function _SelectsExactBootstrapModel()
+  {
+    const models = new Map<string, Row>();
+    const routingDefaults = new Map<string, Row>();
+    const prisma = _mockPrisma(new Map(), models, routingDefaults);
+    process.env.LITELLM_ENDPOINT = "http://litellm:4000";
+    process.env.LITELLM_MASTER_KEY = "sk-master";
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async function _fetch(url: string, init?: RequestInit)
+    {
+      if (url.endsWith("/credentials"))
+      {
+        return new Response("{}", { status: 200 });
+      }
+      if (url.endsWith("/model/info"))
+      {
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      }
+      if (url.endsWith("/model/new"))
+      {
+        const body = JSON.parse(String(init?.body)) as { model_name: string };
+        return new Response(JSON.stringify({ model_id: `live-${body.model_name}` }), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    }));
+    try
+    {
+      await _ProvisionByokKey({ prisma, coreApi: _mockCoreApi(new Map()), operatorNamespace: _NS, provider: "openai", selectedModel: "openai/gpt-6-preview", apiKey: "sk-test", log: _log, requireLiveModels: true });
+      const selected = Array.from(models.values()).find(function _Selected(row) { return row.publicModelName === "openai/gpt-6-preview"; });
+      expect(selected).toMatchObject({ upstreamModel: "openai/gpt-6-preview", litellmModelId: "live-openai/gpt-6-preview", isDefault: true });
+      expect(Array.from(routingDefaults.values())).toEqual([expect.objectContaining({ scope: "Global", clusterTenant: null, defaultModel: "openai/gpt-6-preview" })]);
+      expect(Array.from(models.values()).some(function _PreservedCatalogue(row) { return row.publicModelName === "openai/gpt-5.5"; })).toBe(true);
+    }
+    finally
+    {
+      vi.unstubAllGlobals();
+      delete process.env.LITELLM_ENDPOINT;
+      delete process.env.LITELLM_MASTER_KEY;
+    }
+  });
+
+  it("rejects a selected model outside the provider LiteLLM namespace before custody writes", async function _RejectsSelectedModelProviderMismatch()
+  {
+    const secrets = new Map<string, k8s.V1Secret>();
+    const credentials = new Map<string, Row>();
+    const models = new Map<string, Row>();
+    await expect(_ProvisionByokKey({ prisma: _mockPrisma(credentials, models), coreApi: _mockCoreApi(secrets), operatorNamespace: _NS, provider: "glm", selectedModel: "glm/glm-4.7", apiKey: "secret-not-persisted", log: _log, requireLiveModels: true })).rejects.toThrow(/namespace 'zai'/);
+    expect(secrets.size).toBe(0);
+    expect(credentials.size).toBe(0);
+    expect(models.size).toBe(0);
+  });
+
+  it("strict bootstrap fails when the exact selected model cannot be registered live", async function _RejectsSelectedModelLiveFailure()
+  {
+    const models = new Map<string, Row>();
+    process.env.LITELLM_ENDPOINT = "http://litellm:4000";
+    process.env.LITELLM_MASTER_KEY = "sk-master";
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async function _fetch(url: string, init?: RequestInit)
+    {
+      if (url.endsWith("/credentials"))
+      {
+        return new Response("{}", { status: 200 });
+      }
+      if (url.endsWith("/model/new"))
+      {
+        const body = JSON.parse(String(init?.body)) as { model_name: string };
+        if (body.model_name === "openai/gpt-6-preview")
+        {
+          return new Response("unavailable", { status: 503 });
+        }
+        return new Response(JSON.stringify({ model_id: `live-${body.model_name}` }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    }));
+    try
+    {
+      await expect(_ProvisionByokKey({ prisma: _mockPrisma(new Map(), models), coreApi: _mockCoreApi(new Map()), operatorNamespace: _NS, provider: "openai", selectedModel: "openai/gpt-6-preview", apiKey: "sk-test", log: _log, requireLiveModels: true })).rejects.toThrow(/gpt-6-preview.*HTTP 503/);
+      expect(Array.from(models.values()).some(function _Selected(row) { return row.publicModelName === "openai/gpt-6-preview"; })).toBe(false);
+    }
+    finally
+    {
+      vi.unstubAllGlobals();
+      delete process.env.LITELLM_ENDPOINT;
+      delete process.env.LITELLM_MASTER_KEY;
+    }
+  });
+
+  it("strict bootstrap preserves a referenced selected deployment and an operator routing default", async function _PreservesSelectedModelEvidence()
+  {
+    const credentials = new Map<string, Row>([["cred-1", { id: "cred-1", scope: "Global", clusterTenant: null, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" }]]);
+    const selected = { id: "model-selected", scope: "Global", clusterTenant: null, publicModelName: "openai/gpt-6-preview", upstreamModel: "openai/gpt-6-preview", litellmModelId: "live-selected", apiBase: null, isDefault: false, providerCredentialId: "cred-1" };
+    const models = new Map<string, Row>([["model-selected", selected]]);
+    const routingDefaults = new Map<string, Row>([["routing-global", { id: "routing-global", scope: "Global", clusterTenant: null, defaultModel: "operator/model" }]]);
+    const prisma = _mockPrisma(credentials, models, routingDefaults, new Set(["model-selected"]));
+    process.env.LITELLM_ENDPOINT = "http://litellm:4000";
+    process.env.LITELLM_MASTER_KEY = "sk-master";
+    const fetchMock = vi.fn().mockImplementation(async function _fetch(url: string, init?: RequestInit)
+    {
+      if (url.endsWith("/credentials"))
+      {
+        return new Response("{}", { status: 200 });
+      }
+      if (url.endsWith("/model/info"))
+      {
+        const data = Array.from(models.values()).map(function _Inventory(row) { return { model_name: row.publicModelName, model_info: { id: row.litellmModelId } }; });
+        data.push({ model_name: "openai/text-embedding-3-large", model_info: { id: "embedding" } });
+        data.push({ model_name: "auto-embedding", model_info: { id: "auto-embedding" } });
+        return new Response(JSON.stringify({ data }), { status: 200 });
+      }
+      if (url.endsWith("/model/new"))
+      {
+        const body = JSON.parse(String(init?.body)) as { model_name: string };
+        return new Response(JSON.stringify({ model_id: `live-${body.model_name}` }), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try
+    {
+      await _ProvisionByokKey({ prisma, coreApi: _mockCoreApi(new Map()), operatorNamespace: _NS, provider: "openai", selectedModel: "openai/gpt-6-preview", apiKey: "sk-test", log: _log, requireLiveModels: true });
+      expect(models.get("model-selected")).toMatchObject({ litellmModelId: "live-selected", upstreamModel: "openai/gpt-6-preview" });
+      expect(Array.from(routingDefaults.values())).toEqual([{ id: "routing-global", scope: "Global", clusterTenant: null, defaultModel: "operator/model" }]);
+      expect(fetchMock.mock.calls.filter(function _ReRegisteredSelected(call)
+      {
+        if (!(call[0] as string).endsWith("/model/new"))
+        {
+          return false;
+        }
+        return JSON.parse(String((call[1] as RequestInit).body)).model_name === "openai/gpt-6-preview";
+      })).toHaveLength(0);
+    }
+    finally
+    {
+      vi.unstubAllGlobals();
+      delete process.env.LITELLM_ENDPOINT;
+      delete process.env.LITELLM_MASTER_KEY;
+    }
   });
 
   it("rejects an ambiguous legacy catalogue default before publishing routing authority", async function _RejectsAmbiguousCatalogueDefault()

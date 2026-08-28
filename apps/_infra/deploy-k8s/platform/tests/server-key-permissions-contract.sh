@@ -202,6 +202,7 @@ fi
 
 initial_model_rendered="$(helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set-string clustertenantManager.initialModel.provider=openai \
+  --set-string clustertenantManager.initialModel.model=openai/gpt-5.4-nano \
   --set-string clustertenantManager.initialModel.existingSecret=byok-provider-key-openai)"
 initial_model_manifest="$(printf '%s\n' "$initial_model_rendered" | awk '
   function flush_document() {
@@ -230,6 +231,8 @@ initial_model_manifest="$(printf '%s\n' "$initial_model_rendered" | awk '
   }
 ')"
 grep -Fq '            - name: OPENCRANE_INITIAL_MODEL_PROVIDER' <<<"$initial_model_manifest"
+grep -Fq '            - name: OPENCRANE_INITIAL_MODEL_NAME' <<<"$initial_model_manifest"
+grep -Fq '              value: "openai/gpt-5.4-nano"' <<<"$initial_model_manifest"
 grep -Fq '              value: "openai"' <<<"$initial_model_manifest"
 grep -Fq '            - name: OPENCRANE_INITIAL_MODEL_API_KEY' <<<"$initial_model_manifest"
 grep -Fq '                  name: byok-provider-key-openai' <<<"$initial_model_manifest"

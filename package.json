@@ -17,6 +17,8 @@
     "dev:tier2:agent:remote-llm": "node scripts/local-development.mjs --profile agent --alternative remote-llm",
     "dev:tier2:agent:simulated-llm": "node scripts/local-development.mjs --profile agent --alternative simulated-llm",
     "dev:tier3": "node scripts/tier3-development.mjs",
+    "dev:tier3:infra": "node scripts/tier3-development.mjs --profile infrastructure",
+    "dev:tier3:agent": "node scripts/tier3-development.mjs --profile agent",
     "test": "nx run-many -t test",
     "lint": "nx run-many -t lint",
     "lint:boundaries": "eslint .",

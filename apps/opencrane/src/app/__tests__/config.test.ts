@@ -108,13 +108,15 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		expect(_ReadProcessConfig().obot).toEqual({ gatewayUrl: "http://oc-mcp-gateway.silo.svc.cluster.local:8080", serviceTokenPath: "/var/run/opencrane/obot/token", requestTimeoutMilliseconds: 30_000 });
 	});
 
-	it("reads the initial model credential only when its provider and key are both present", function _ReadInitialModelBootstrap()
+	it("reads the initial model bootstrap only when its provider, model, and key are all present", function _ReadInitialModelBootstrap()
 	{
 		expect(_ReadProcessConfig().initialModelBootstrap).toBeNull();
 
 		vi.stubEnv("OPENCRANE_INITIAL_MODEL_PROVIDER", "OPENAI");
+		vi.stubEnv("OPENCRANE_INITIAL_MODEL_NAME", "openai/gpt-5.4-nano");
 		vi.stubEnv("OPENCRANE_INITIAL_MODEL_API_KEY", "sk-test");
-		expect(_ReadProcessConfig().initialModelBootstrap).toEqual({ provider: "openai", apiKey: "sk-test" });
+		expect(_ReadProcessConfig().initialModelBootstrap).toEqual({ provider: "openai", model: "openai/gpt-5.4-nano", apiKey: "sk-test" });
+		expect(process.env.OPENCRANE_INITIAL_MODEL_API_KEY).toBeUndefined();
 	});
 
 	it("reads the all-or-nothing standalone first-owner admission contract", function _ReadStandaloneFirstUserAdmission()
@@ -218,11 +220,12 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		expect(function _ReadPublicOriginWithPath() { _ReadOrganizationMembershipConfig(); }).toThrow(/credential-free HTTPS origin/);
 	});
 
-	it("rejects a partial or unsupported initial model credential", function _RejectInvalidInitialModelBootstrap()
+	it("rejects a partial or unsupported initial model bootstrap", function _RejectInvalidInitialModelBootstrap()
 	{
 		vi.stubEnv("OPENCRANE_INITIAL_MODEL_PROVIDER", "openai");
 		expect(function _readPartialInitialModel() { _ReadProcessConfig(); }).toThrow(/configured together/);
 
+		vi.stubEnv("OPENCRANE_INITIAL_MODEL_NAME", "openai/gpt-5.4-nano");
 		vi.stubEnv("OPENCRANE_INITIAL_MODEL_API_KEY", "sk-test");
 		vi.stubEnv("OPENCRANE_INITIAL_MODEL_PROVIDER", "unknown");
 		expect(function _readUnsupportedInitialModel() { _ReadProcessConfig(); }).toThrow(/unsupported/);

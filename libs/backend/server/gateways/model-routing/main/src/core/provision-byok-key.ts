@@ -1,15 +1,13 @@
 import { Buffer } from "node:buffer";
 
 import * as k8s from "@kubernetes/client-node";
-import type { Logger } from "pino";
-import { Prisma, type ModelDefinition as PrismaModelDefinition, type PrismaClient, type ProviderCredential as PrismaProviderCredential } from "@prisma/client";
-
-import { ModelRoutingScope } from "@opencrane/contracts";
+import type { Prisma } from "@prisma/client";
 import { _DeleteLiteLlmCredential, _UpsertLiteLlmCredential } from "./litellm-credential-registration";
-import { _RequireLiteLlmModelDeployment } from "./litellm-model-inventory";
-import { _RegisterLiteLlmModel } from "./litellm-model-registration";
 import { _BYOK_PROVIDER_CATALOG } from "./byok-default-models";
-import type { ByokProviderCatalog } from "./byok-default-models.types";
+import { PrismaGlobalModelRoutingDefaultRepository } from "./prisma-global-model-routing-default-repository";
+import { PrismaGlobalProviderCredentialProjectionRepository } from "./prisma-provider-credential-projection-repository";
+import { PrismaProviderModelEvidenceRepository } from "./prisma-provider-model-evidence-repository";
+import { _EnsureProviderModels, _ValidateBootstrapModel } from "./provider-model-bootstrap";
 import { _EnsureProviderEmbeddingModels } from "./provider-embedding-models";
 import type { DeprovisionByokKeyOptions, ProvisionByokKeyOptions, ProvisionByokKeyResult } from "./provision-byok-key.types";
 
@@ -22,17 +20,11 @@ export { _AUTO_EMBEDDING_MODEL_NAME } from "./provider-embedding-models";
  *
  * Setting a key, in order: write the raw key to a Kubernetes Secret (the durable copy), push it to
  * LiteLLM's `/credentials` (best-effort), write the Global `ProviderCredential` row, then seed the
- * models bound to it. NOTE: the row this file writes is always Global (`scope: "Global"`,
+ * models bound to it. A strict deployment bootstrap may additionally select one reviewed model
+ * newer than the static class catalogue. NOTE: the row this file writes is always Global (`scope: "Global"`,
  * `clusterTenant: null`) — the ClusterTenant-scoped variant is written through
  * `providerCredentialsRouter`, not here.
  */
-
-/**
- * Public model name of the stable "auto" selection. Backed by the cheapest catalogued model today
- * (LiteLLM has no capability-aware routing); the AIR router can re-point it later without
- * callers/skills re-selecting. See `_ensureProviderModels` step 3.
- */
-const _AUTO_MODEL_NAME = "auto";
 
 /**
  * Build the name of the Kubernetes Secret that holds a provider's raw BYOK key.
@@ -73,10 +65,11 @@ export function _byokCredentialName(provider: string): string
 /**
  * Set or refresh a provider's raw BYOK key, then get the platform ready to route on it.
  *
- * Five steps, in this order for a reason: write the key to its Kubernetes Secret first (that
+ * Five stages run in this order for a reason: write the key to its Kubernetes Secret first (that
  * Secret is the durable copy and survives a LiteLLM database reset), push it to LiteLLM's
- * `/credentials`, record the `ProviderCredential` row, register every model class for the
- * provider, and finally register the provider's embedding model.
+ * `/credentials`, record the `ProviderCredential` row, seed the provider model catalogue plus an
+ * exact reviewed bootstrap model when supplied, and finally register the provider's embedding
+ * model.
  *
  * Steps 2, 4 and 5 are best-effort by default: if LiteLLM is unconfigured or down, the key is
  * still set and the platform converges on a later call. `requireLiveModels` flips that — see
@@ -93,6 +86,7 @@ export function _byokCredentialName(provider: string): string
  * @param opts.coreApi           - Kubernetes Core V1 API for the Secret write.
  * @param opts.operatorNamespace - The operator's own namespace (where the silo's keys live).
  * @param opts.provider          - The provider the key is for (e.g. `openai`).
+ * @param opts.selectedModel     - Exact reviewed first-install model, including its LiteLLM namespace.
  * @param opts.apiKey            - The raw upstream key (never logged or echoed).
  * @param opts.log               - Scoped logger for the best-effort model-seed warning.
  * @param opts.requireLiveModels - When true, a failed model or embedding registration throws
@@ -108,8 +102,9 @@ export function _byokCredentialName(provider: string): string
  */
 export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<ProvisionByokKeyResult>
 {
-  const { prisma, coreApi, operatorNamespace, provider, apiKey, log, requireLiveModels = false } = opts;
+  const { prisma, coreApi, operatorNamespace, provider, selectedModel, apiKey, log, requireLiveModels = false } = opts;
   const catalog = _BYOK_PROVIDER_CATALOG[provider];
+  _ValidateBootstrapModel(provider, catalog, selectedModel, requireLiveModels);
 
   // 1. Persist the raw key to its k8s Secret first — the durable source of truth.
   await _applyProviderKeySecret(coreApi, operatorNamespace, provider, apiKey);
@@ -122,13 +117,26 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
   // 3. Record the credential reference (litellmCredentialName set only when LiteLLM accepted it).
   const secretRef = _byokSecretName(provider);
   const litellmCredentialName = litellmRegistered ? credentialName : null;
-  const row = await _upsertCredentialRow(prisma, provider, secretRef, litellmCredentialName);
+  const projectionPrisma: Prisma.TransactionClient = prisma;
+  const credentialProjection = new PrismaGlobalProviderCredentialProjectionRepository(projectionPrisma);
+  const projectionCommand = {
+    provider,
+    secretRef,
+    litellmCredentialName,
+  };
+  const row = await credentialProjection.upsertGlobal(projectionCommand);
 
   // 4. Best-effort: register EVERY model class for the provider, all bound to this one credential,
   //    so LiteLLM can switch across tiers on the single key. Never fail the set if this trips.
   try
   {
-    await _ensureProviderModels(prisma, catalog, row.id, litellmCredentialName, requireLiveModels);
+    const models = new PrismaProviderModelEvidenceRepository(projectionPrisma);
+    const routingDefaults = new PrismaGlobalModelRoutingDefaultRepository(projectionPrisma);
+    const repositories = {
+      models,
+      routingDefaults,
+    };
+    await _EnsureProviderModels(repositories, catalog, row.id, litellmCredentialName, requireLiveModels, selectedModel);
   }
   catch (err)
   {
@@ -176,7 +184,9 @@ export async function _DeprovisionByokKey(opts: DeprovisionByokKeyOptions): Prom
 {
   await _clearProviderKeySecret(opts.coreApi, opts.operatorNamespace, opts.provider);
   await _DeleteLiteLlmCredential(_byokCredentialName(opts.provider));
-  await opts.prisma.providerCredential.deleteMany({ where: { scope: "Global", clusterTenant: null, provider: opts.provider } });
+  const projectionPrisma: Prisma.TransactionClient = opts.prisma;
+  const credentialProjection = new PrismaGlobalProviderCredentialProjectionRepository(projectionPrisma);
+  await credentialProjection.deleteGlobal(opts.provider);
 }
 
 /**
@@ -253,177 +263,4 @@ function _k8sStatus(err: unknown): number | undefined
   if (typeof e.code === "number") { return e.code; }
   if (e.body && typeof e.body.code === "number") { return e.body.code; }
   return undefined;
-}
-
-/**
- * Upsert the Global-scoped {@link PrismaProviderCredential} row for a provider. findFirst →
- * update | create (not Prisma `upsert`) because the compound unique `[scope, clusterTenant, provider]`
- * carries a null `clusterTenant`. A concurrent create trips P2002 on the second writer; that is
- * caught and converged into an update so two simultaneous sets never 500.
- */
-async function _upsertCredentialRow(prisma: PrismaClient, provider: string, secretRef: string, litellmCredentialName: string | null): Promise<PrismaProviderCredential>
-{
-  const where = { scope: "Global" as const, clusterTenant: null, provider };
-  const existing = await prisma.providerCredential.findFirst({ where });
-  if (existing)
-  {
-    return prisma.providerCredential.update({ where: { id: existing.id }, data: { secretRef, litellmCredentialName } });
-  }
-  try
-  {
-    return await prisma.providerCredential.create({ data: { ...where, secretRef, litellmCredentialName } });
-  }
-  catch (err)
-  {
-    // A concurrent create won the race — converge by updating the row it inserted.
-    if ((err as { code?: unknown }).code !== "P2002")
-    {
-      throw err;
-    }
-    const raced = await prisma.providerCredential.findFirst({ where });
-    if (!raced)
-    {
-      throw err;
-    }
-    return prisma.providerCredential.update({ where: { id: raced.id }, data: { secretRef, litellmCredentialName } });
-  }
-}
-
-/**
- * Make sure every model class in a provider's catalogue has a Global `ModelDefinition` row, and —
- * at boot — a live LiteLLM deployment behind it.
- *
- * Three things happen. Each class gets its row created or re-pointed at this credential. The
- * first-ever default is preserved, so setting up a second provider never steals the default from
- * the first. And the stable `auto` alias is pointed at the provider's cheapest class.
- *
- * When `requireLiveModels` is true (the boot path), a referenced or non-placeholder definition
- * must retain its exact LiteLLM deployment registration. An unreferenced placeholder may be
- * registered and updated before any agent revision freezes it as execution evidence.
- *
- * @param catalog - The provider's catalogue; undefined for an uncatalogued provider, which is a
- *                  no-op — the key is still set, it just seeds no models.
- * @throws Whatever `_RegisterLiteLlmModel` throws under `requireLiveModels`; `_ProvisionByokKey`
- *         re-throws it at boot and only logs a warning otherwise.
- */
-async function _ensureProviderModels(prisma: PrismaClient, catalog: ByokProviderCatalog | undefined, providerCredentialId: string, litellmCredentialName: string | null, requireLiveModels: boolean): Promise<void>
-{
-  if (!catalog)
-  {
-    return;
-  }
-
-  // 1. Reconcile each provider class to one Global model row and, at startup, its live deployment.
-  let defaultModelId: string | null = null;
-  for (const entry of catalog.models)
-  {
-    let model = await prisma.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, publicModelName: entry.slug } });
-    if (model)
-    {
-      if (model.providerCredentialId !== providerCredentialId)
-      {
-        if (requireLiveModels)
-        {
-          throw new Error(`Existing model '${entry.slug}' is bound to a different provider credential`);
-        }
-        model = await _updateModelDefinition(prisma, model.id, { providerCredentialId });
-      }
-      if (requireLiveModels)
-      {
-        model = await _qualifyOrReconcileModelDefinition(prisma, model, entry.slug, litellmCredentialName);
-      }
-    }
-    else
-    {
-      const litellmModelId = await _RegisterLiteLlmModel({ publicModelName: entry.slug, upstreamModel: entry.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration: requireLiveModels });
-      model = await prisma.modelDefinition.create({ data: { scope: "Global", clusterTenant: null, publicModelName: entry.slug, litellmModelId, upstreamModel: entry.slug, apiBase: null, isDefault: false, providerCredentialId } });
-    }
-    if (entry.className === catalog.defaultClass)
-    {
-      defaultModelId = model.id;
-    }
-  }
-
-  // 2. Preserve the first selected default and publish its public name through the routing
-  // authority that onboarding and later run admission consume.
-  if (defaultModelId)
-  {
-    const selectedDefaults = await prisma.modelDefinition.findMany({ where: { scope: "Global", clusterTenant: null, isDefault: true }, orderBy: { id: "asc" }, take: 2 });
-    if (selectedDefaults.length > 1) throw new Error("Global model catalogue contains more than one default");
-    let selectedDefault = selectedDefaults[0] ?? null;
-    if (!selectedDefault)
-    {
-      selectedDefault = await _updateModelDefinition(prisma, defaultModelId, { isDefault: true });
-    }
-    await _ensureGlobalRoutingDefault(prisma, selectedDefault.publicModelName);
-  }
-
-  // 3. Reconcile the stable auto alias to the cheapest provider class without changing caller input.
-  const cheapest = catalog.models.find((model) => model.className === "fast") ?? catalog.models[catalog.models.length - 1];
-  if (!cheapest)
-  {
-    return;
-  }
-  const existingAuto = await prisma.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, publicModelName: _AUTO_MODEL_NAME } });
-  if (!existingAuto)
-  {
-    const litellmModelId = await _RegisterLiteLlmModel({ publicModelName: _AUTO_MODEL_NAME, upstreamModel: cheapest.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration: requireLiveModels });
-    await prisma.modelDefinition.create({ data: { scope: "Global", clusterTenant: null, publicModelName: _AUTO_MODEL_NAME, litellmModelId, upstreamModel: cheapest.slug, apiBase: null, isDefault: false, providerCredentialId } });
-    return;
-  }
-  if (requireLiveModels)
-  {
-    await _qualifyOrReconcileModelDefinition(prisma, existingAuto, cheapest.slug, litellmCredentialName);
-  }
-}
-
-/**
- * Verifies a referenced definition or repairs one unreferenced placeholder definition.
- *
- * Called by: strict initial-provider bootstrap for catalogue models and the stable auto alias.
- *
- * @param prisma - Model and revision authority.
- * @param model - Existing definition whose deployment must be live before startup continues.
- * @param upstreamModel - Upstream model used only when a mutable placeholder needs registration.
- * @param litellmCredentialName - Dynamic LiteLLM credential bound to a repaired deployment.
- * @returns The unchanged qualified definition, or the repaired unreferenced definition.
- * @throws When referenced evidence is absent from LiteLLM or any qualification step fails.
- */
-async function _qualifyOrReconcileModelDefinition(prisma: PrismaClient, model: PrismaModelDefinition, upstreamModel: string, litellmCredentialName: string | null): Promise<PrismaModelDefinition>
-{
-  const referenced = await prisma.agentRevision.findFirst({ where: { modelDefinitionId: model.id }, select: { id: true } });
-  if (referenced || !model.litellmModelId.startsWith("placeholder:"))
-  {
-    await _RequireLiteLlmModelDeployment(model.publicModelName, model.litellmModelId);
-    return model;
-  }
-  const litellmModelId = await _RegisterLiteLlmModel({ publicModelName: model.publicModelName, upstreamModel, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: model.apiBase, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration: true });
-  return _updateModelDefinition(prisma, model.id, { litellmModelId });
-}
-
-/**
- * Seeds the first Global routing default without replacing an operator's configured row.
- *
- * The partial database index admits one row whose tenant is null. A concurrent provider setup may
- * still win between the read and create, so this helper accepts only a confirmed `P2002` winner.
- */
-async function _ensureGlobalRoutingDefault(prisma: PrismaClient, publicModelName: string): Promise<void>
-{
-  const where = { scope: "Global" as const, clusterTenant: null };
-  if (await prisma.modelRoutingDefault.findFirst({ where })) return;
-  try
-  {
-    await prisma.modelRoutingDefault.create({ data: { ...where, defaultModel: publicModelName } });
-  }
-  catch (error)
-  {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-    if (!await prisma.modelRoutingDefault.findFirst({ where })) throw error;
-  }
-}
-
-/** Apply a narrow mutable ModelDefinition reconciliation patch through the existing Prisma authority. */
-async function _updateModelDefinition(prisma: PrismaClient, id: string, data: { providerCredentialId?: string; litellmModelId?: string; isDefault?: boolean })
-{
-  return prisma.modelDefinition.update({ where: { id }, data });
 }

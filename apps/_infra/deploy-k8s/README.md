@@ -80,9 +80,11 @@ install core (`platform/k8s-deploy.sh`). It requires a base domain, a ClusterTen
 (server, Obot, LiteLLM, and database administration), and the reviewed single-page application (SPA)
 `--opencrane-ui-digest`. The named email is non-secret and only selects the verified OIDC identity
 that can claim the silo's one subject-bound Owner row at first login; deployment never writes a user
-row directly. A new silo can also pass `--initial-model-provider` with
+row directly. A new silo can also pass `--initial-model-provider` and `--initial-model` with
 `OPENCRANE_INITIAL_MODEL_API_KEY` in its environment; the key never enters Helm values and is
-registered through the release-local LiteLLM before the server becomes ready.
+registered through the release-local LiteLLM before the server becomes ready. The named model must
+belong to that provider and becomes the first exact Global routing default without replacing a
+default already chosen by an operator.
 
 `Entrypoint: teardown.sh` — retires one exact standalone silo after checking the kubectl context,
 tenant, namespace, exact chart identities from `releases/<version>.json`, retained CloudNativePG
@@ -138,9 +140,10 @@ package imports it.
   exists, because a `sub` is scoped to its original OIDC issuer. Later upgrades must restate that
   same `--oidc-issuer-url`; they may not use chart `--values` or `--reset-values`, which could
   replace or erase the binding.
-- `--initial-model-provider` plus `OPENCRANE_INITIAL_MODEL_API_KEY` — optional bootstrap of the first
-  supported model provider. The engine writes the key to the release-local provider-custody Secret;
-  the server then registers its encrypted LiteLLM credential and catalogue before accepting work.
+- `--initial-model-provider` and `--initial-model` plus `OPENCRANE_INITIAL_MODEL_API_KEY` — optional
+  bootstrap of the first supported model provider and exact default model. The engine writes the key
+  to the release-local provider-custody Secret; the server then registers its encrypted LiteLLM
+  credential and requires the selected live model before accepting work.
 - `--opencrane-ui-digest` — required Open Container Initiative (OCI) `sha256:` identity of the reviewed SPA build. The engine
   renders `repository@digest`, waits for the SPA rollout, and refuses success if the Deployment or
   ready Pods do not show that image. `OPENCRANE_ALLOW_TAG_FLOAT=1` is only for a disposable local

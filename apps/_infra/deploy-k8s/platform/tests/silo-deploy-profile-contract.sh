@@ -172,14 +172,22 @@ cp "$DEPLOY_SCRIPT" "$wrapper_test_dir/deploy.sh"
 cat >"$wrapper_test_dir/platform/k8s-deploy.sh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$@" >"$WRAPPER_ARGS_FILE"
+printf '%s' "${OPENCRANE_INITIAL_MODEL_API_KEY:-}" >"$WRAPPER_CORE_KEY_FILE"
 EOF
 cat >"$wrapper_test_dir/bin/kubectl" <<'EOF'
 #!/usr/bin/env bash
+if [[ -n "${OPENCRANE_INITIAL_MODEL_API_KEY:-}" ]]; then
+  printf 'provider key leaked to wrapper prerequisite\n' >>"$WRAPPER_KEY_LEAK_FILE"
+fi
 exit 0
 EOF
 chmod +x "$wrapper_test_dir/platform/k8s-deploy.sh" "$wrapper_test_dir/bin/kubectl"
 wrapper_args_file="$wrapper_test_dir/args"
+wrapper_core_key_file="$wrapper_test_dir/core-key"
+wrapper_key_leak_file="$wrapper_test_dir/key-leak"
 PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
+  WRAPPER_CORE_KEY_FILE="$wrapper_core_key_file" WRAPPER_KEY_LEAK_FILE="$wrapper_key_leak_file" \
+  OPENCRANE_INITIAL_MODEL_API_KEY="provider-secret" \
   bash "$wrapper_test_dir/deploy.sh" \
     --base-domain dev.opencrane.ai \
     --cluster-tenant testv4 \
@@ -187,10 +195,14 @@ PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
     --first-user-email owner@example.com \
     --oidc-issuer-url https://issuer.example.com/ \
     --oidc-client-id test-client \
-    --initial-model-provider openai >/dev/null
+    --initial-model-provider openai \
+    --initial-model openai/gpt-5.4-nano >/dev/null
 wrapper_args="$(tr '\n' ' ' <"$wrapper_args_file")"
 [[ "$wrapper_args" == *"--namespace opencrane-testv4 --release opencrane-testv4"* ]]
+[[ "$(<"$wrapper_core_key_file")" == "provider-secret" ]]
+[[ ! -s "$wrapper_key_leak_file" ]]
 if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
+  WRAPPER_CORE_KEY_FILE="$wrapper_core_key_file" WRAPPER_KEY_LEAK_FILE="$wrapper_key_leak_file" \
   bash "$wrapper_test_dir/deploy.sh" \
     --base-domain dev.opencrane.ai \
     --cluster-tenant testv4 \
@@ -199,7 +211,8 @@ if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
     --first-user-email owner@example.com \
     --oidc-issuer-url https://issuer.example.com/ \
     --oidc-client-id test-client \
-    --initial-model-provider openai >/dev/null 2>&1; then
+    --initial-model-provider openai \
+    --initial-model openai/gpt-5.4-nano >/dev/null 2>&1; then
   echo "silo wrapper accepted a release name outside its ClusterTenant boundary" >&2
   exit 1
 fi

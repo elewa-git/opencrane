@@ -35,8 +35,8 @@
 {{- if and (eq $membership.mode "fleet") (or (lt (int $fleetMembership.billingGatewayProjectedTokenTtlSeconds) 600) (gt (int $fleetMembership.billingGatewayProjectedTokenTtlSeconds) 3600)) -}}
 {{- fail "clustertenantManager.membership.fleet.billingGatewayProjectedTokenTtlSeconds must be from 600 through 3600" -}}
 {{- end -}}
-{{- if ne (empty $initialModel.provider) (empty $initialModel.existingSecret) -}}
-{{- fail "clustertenantManager.initialModel.provider and existingSecret must be configured together" -}}
+{{- if or (ne (empty $initialModel.provider) (empty $initialModel.model)) (ne (empty $initialModel.provider) (empty $initialModel.existingSecret)) -}}
+{{- fail "clustertenantManager.initialModel.provider, model, and existingSecret must be configured together" -}}
 {{- end -}}
 {{- if and $initialModel.provider (empty $initialModel.apiKeySecretKey) -}}
 {{- fail "clustertenantManager.initialModel.apiKeySecretKey is required when an initial model is configured" -}}
@@ -304,6 +304,8 @@ spec:
             # this process consumes it only to register LiteLLM's encrypted credential and catalog.
             - name: OPENCRANE_INITIAL_MODEL_PROVIDER
               value: {{ .provider | quote }}
+            - name: OPENCRANE_INITIAL_MODEL_NAME
+              value: {{ .model | quote }}
             - name: OPENCRANE_INITIAL_MODEL_API_KEY
               valueFrom:
                 secretKeyRef:

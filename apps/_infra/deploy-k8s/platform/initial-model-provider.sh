@@ -6,18 +6,29 @@
 validate_initial_model_provider()
 {
   local provider="$1"
-  local api_key="$2"
-  if [[ -z "$provider" && -z "$api_key" ]]; then
+  local model="$2"
+  local api_key="$3"
+  if [[ -z "$provider" && -z "$model" && -z "$api_key" ]]; then
     return 0
   fi
-  if [[ -z "$provider" || -z "$api_key" ]]; then
-    printf '%s\n' '--initial-model-provider and OPENCRANE_INITIAL_MODEL_API_KEY must be configured together. The API key is environment-only to keep it out of command history and Helm values.' >&2
+  if [[ -z "$provider" || -z "$model" || -z "$api_key" ]]; then
+    printf '%s\n' '--initial-model-provider, --initial-model, and OPENCRANE_INITIAL_MODEL_API_KEY must be configured together. The API key is environment-only to keep it out of command history and Helm values.' >&2
     return 1
   fi
   case "$provider" in
     openai|anthropic|gemini|mistral|deepseek|glm) ;;
     *) printf "Invalid --initial-model-provider '%s'. Supported providers: openai, anthropic, gemini, mistral, deepseek, glm.\n" "$provider" >&2; return 1 ;;
   esac
+  if [[ ! "$model" =~ ^[a-z0-9][a-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._:/-]*$ ]]; then
+    printf "Invalid --initial-model '%s'. Use one reviewed provider-prefixed model name.\n" "$model" >&2
+    return 1
+  fi
+  local model_provider="$provider"
+  [[ "$provider" == "glm" ]] && model_provider="zai"
+  if [[ "$model" != "$model_provider/"* ]]; then
+    printf "Initial model '%s' does not belong to provider '%s'.\n" "$model" "$provider" >&2
+    return 1
+  fi
 }
 
 ensure_provider_key_secrets()
@@ -55,11 +66,13 @@ publish_initial_model_provider_secret()
 append_initial_model_provider_helm_args()
 {
   local provider="$1"
+  local model="$2"
   if [[ -z "$provider" ]]; then
     return 0
   fi
   helm_args+=(
     --set-string "clustertenantManager.initialModel.provider=$provider"
+    --set-string "clustertenantManager.initialModel.model=$model"
     --set-string "clustertenantManager.initialModel.existingSecret=byok-provider-key-${provider}"
   )
 }

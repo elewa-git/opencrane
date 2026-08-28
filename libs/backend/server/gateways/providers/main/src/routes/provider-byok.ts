@@ -9,6 +9,7 @@ import { _DeprovisionByokKey, _ProvisionByokKey } from "@opencrane/backend/serve
 
 /** The providers a raw BYOK key may be set for; mirrors the {@link ByokProvider} contract union. */
 const _BYOK_PROVIDERS = Object.values(ByokProvider) as readonly string[];
+type ProviderStatusProjection = Pick<PrismaProviderCredential, "litellmCredentialName" | "updatedAt">;
 
 /**
  * Build the read-only status for one provider from its credential row, or from the absence of one.
@@ -23,7 +24,7 @@ const _BYOK_PROVIDERS = Object.values(ByokProvider) as readonly string[];
  * @returns The status DTO: provider, whether a key is set, whether LiteLLM took it, and when it
  *          last changed.
  */
-function _toStatus(provider: string, row: PrismaProviderCredential | undefined): ProviderKeyStatus
+function _toStatus(provider: string, row: ProviderStatusProjection | undefined): ProviderKeyStatus
 {
   return {
     provider: provider as ByokProvider,

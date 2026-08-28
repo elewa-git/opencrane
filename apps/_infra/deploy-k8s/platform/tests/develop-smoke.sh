@@ -25,6 +25,11 @@ SMOKE_BASE_SHA="${SMOKE_BASE_SHA:-}"
 SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
 SMOKE_HOST_PROFILE="${SMOKE_HOST_PROFILE:-recommended}"
+INITIAL_MODEL_PROVIDER="${OPENCRANE_INITIAL_MODEL_PROVIDER:-}"
+INITIAL_MODEL_NAME="${OPENCRANE_INITIAL_MODEL_NAME:-}"
+TIER3_PROVIDER_API_KEY="${OPENCRANE_TIER3_PROVIDER_API_KEY:-}"
+# The raw key must not reach image builds, controller installers, diagnostics, or the browser proxy.
+unset OPENCRANE_INITIAL_MODEL_API_KEY OPENCRANE_INITIAL_MODEL_NAME OPENCRANE_INITIAL_MODEL_PROVIDER OPENCRANE_TIER3_PROVIDER_API_KEY
 KEY_DIR=""
 CSI_DIR=""
 IMAGE_PREPARATION_PID=""
@@ -69,6 +74,8 @@ _retry()
 }
 
 source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh"
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/initial-model-provider.sh"
+validate_initial_model_provider "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_NAME" "$TIER3_PROVIDER_API_KEY"
 
 _diagnostics()
 {
@@ -370,13 +377,15 @@ _assert_ingress_health()
   local response=""
   until response="$(curl --connect-timeout 2 --max-time 5 --fail --silent --show-error --insecure \
     --resolve "${CONTROL_PLANE_HOST}:8443:127.0.0.1" "$health_url" 2>/dev/null)" \
-    && jq -e '
+    && jq -e --argjson modelsRequired "$([[ -n "$INITIAL_MODEL_PROVIDER" ]] && printf true || printf false)" '
       .ready == true
       and (.services | keys == ["api", "channels", "database", "files", "integrations", "memory", "models"])
       and ([.services | to_entries[] | select(.key != "models") | .value]
         | all(. == "available" or . == "disabled"))
-      and (.services.models == "available" or .services.models == "unavailable")
-      and (.status == "ok" or (.status == "degraded" and .services.models != "available"))
+      and (if $modelsRequired then .services.models == "available"
+        else (.services.models == "available" or .services.models == "unavailable") end)
+      and (if $modelsRequired then .status == "ok"
+        else (.status == "ok" or (.status == "degraded" and .services.models != "available")) end)
     ' >/dev/null <<<"$response"; do
     if [[ $(date +%s) -ge "$deadline" ]]; then
       echo "[develop-smoke] Timed out waiting for the complete public health report at $health_url; last response: $response" >&2
@@ -477,9 +486,7 @@ export OPENCRANE_TIER3_SESSION_SECRET
 # production deploy path still requires a UI digest; this explicit escape keeps the smoke honest.
 export OPENCRANE_ALLOW_TAG_FLOAT=1
 export TIMEOUT_SECONDS
-# Exercise the production wrapper's required contact and first-owner inputs. The disposable `.test`
-# host cannot complete public ACME, so the final --set flags deliberately restore its local issuer.
-"$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh" \
+deploy_arguments=(
   --base-domain "$BASE_DOMAIN" \
   --cluster-tenant "$CLUSTER_TENANT" \
   --acme-email "$SMOKE_ACME_EMAIL" \
@@ -498,7 +505,17 @@ export TIMEOUT_SECONDS
   --postgres-values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-postgres-values.yaml" \
   --values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-values.yaml" \
   --set "certManager.mode=selfSigned" \
-  --set "certManager.issuerName=opencrane-develop-smoke-issuer"
+  --set "certManager.issuerName=opencrane-develop-smoke-issuer")
+if [[ -n "$INITIAL_MODEL_PROVIDER" ]]; then
+  deploy_arguments+=(--initial-model-provider "$INITIAL_MODEL_PROVIDER" --initial-model "$INITIAL_MODEL_NAME")
+fi
+
+# Exercise the production wrapper's required contact and first-owner inputs. The disposable `.test`
+# host cannot complete public ACME, so the final --set flags deliberately restore its local issuer.
+# Scope the raw provider key to this one installer process; it never reaches build or proxy children.
+OPENCRANE_INITIAL_MODEL_API_KEY="$TIER3_PROVIDER_API_KEY" \
+  "$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh" "${deploy_arguments[@]}"
+TIER3_PROVIDER_API_KEY=""
 
 echo "[develop-smoke] Waiting for every enabled workload and certificate"
 kubectl wait --for=condition=available deployment --all -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"

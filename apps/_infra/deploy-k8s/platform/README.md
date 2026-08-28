@@ -50,7 +50,8 @@ the pinned expandable hostpath CSI driver and exercise expansion. Set `KEEP_CLUS
 diagnosis. Backup/restore and production storage, DNS, and transport remain separate live
 qualifications.
 
-`npm run dev:tier3` is the contributor entrypoint around this smoke. Its minimum-host default uses
+`npm run dev:tier3:infra` (also available as `npm run dev:tier3`) is the credential-free contributor
+entrypoint around this smoke. Its minimum-host default uses
 fast local-path storage, allows 600 seconds for loaded Codespaces machines, reclaims host package and
 Docker image-build caches, retains the cluster, and starts a loopback proxy that validates the
 Codespaces origin before presenting one fixed `.test` Host and forwarded authority to the real
@@ -60,6 +61,12 @@ session. On a recommended
 host, use `SMOKE_HOST_PROFILE=recommended npm run dev:tier3 -- --storage-mode full` to preserve
 dependencies and caches, batch the import, and prove storage expansion. Use `--smoke-only` when
 browser access is unnecessary.
+
+`npm run dev:tier3:agent` resolves an exact provider/model through the same reviewed registry as
+Tier 2, reads only its owner-only `keys/.<provider>-key` file (or one purpose-specific Codespaces
+environment secret), and requires model health before opening the proxy. The smoke unsets the raw
+key before builds and scopes it to the release installer; `initial-model-provider.sh` publishes it
+only to the fixed provider-custody Secret while Helm receives the non-secret provider/model names.
 
 Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads
