@@ -14,6 +14,8 @@ import { createTier3SessionConfiguration, parseTier3Arguments } from "../tier3-d
 import { runTier3Development } from "../tier3-development.mjs";
 import { readTier3IngressCertificate } from "../tier3-ingress-certificate.mjs";
 
+const _PROXY_SECRET = "tier3-proxy-secret-with-at-least-32-bytes";
+
 test("Tier 3 defaults to the minimum-host storage profile and the Codespaces proxy", function _defaults()
 {
 	assert.deepEqual(parseTier3Arguments([]), {
@@ -43,12 +45,16 @@ test("Tier 3 rejects ambiguous storage and port values", function _rejectsInvali
 
 test("Tier 3 always keeps the smoke cluster and applies the selected storage mode", function _keepsCluster()
 {
-	assert.deepEqual(createTier3SessionConfiguration({
+	const configuration = createTier3SessionConfiguration({
 		BASE_DOMAIN: "local.test",
 		CLUSTER_TENANT: "qa",
 		KEEP_CLUSTER: "0",
 		PATH: "/usr/bin"
-	}, "fast"), {
+	}, "fast");
+	assert.match(configuration.proxySecret, /^[A-Za-z0-9_-]{43}$/u);
+	assert.match(configuration.smokeEnvironment.OPENCRANE_TIER3_SESSION_SECRET, /^[A-Za-z0-9_-]{43}$/u);
+	assert.notEqual(configuration.proxySecret, configuration.smokeEnvironment.OPENCRANE_TIER3_SESSION_SECRET);
+	assert.deepEqual({ ...configuration, proxySecret: "generated", smokeEnvironment: { ...configuration.smokeEnvironment, OPENCRANE_TIER3_PROXY_SECRET: "generated", OPENCRANE_TIER3_SESSION_SECRET: "generated" } }, {
 		ingressCertificate: {
 			certificateName: "opencrane-qa-clustertenant-tls",
 			namespace: "opencrane-develop-smoke",
@@ -57,13 +63,26 @@ test("Tier 3 always keeps the smoke cluster and applies the selected storage mod
 			BASE_DOMAIN: "local.test",
 			CLUSTER_TENANT: "qa",
 			KEEP_CLUSTER: "1",
+			OPENCRANE_TIER3_DEVELOPMENT_AUTH: "1",
+			OPENCRANE_TIER3_PROXY_SECRET: "generated",
+			OPENCRANE_TIER3_SESSION_SECRET: "generated",
 			PATH: "/usr/bin",
 			SMOKE_HOST_PROFILE: "minimum",
 			SMOKE_STORAGE_MODE: "fast",
 			TIMEOUT_SECONDS: "600"
 		},
+		proxySecret: "generated",
 		upstreamHost: "qa.local.test"
 	});
+});
+
+test("Tier 3 rotates independent proxy and session secrets on every run", function _rotatesSecrets()
+{
+	const first = createTier3SessionConfiguration({}, "fast");
+	const second = createTier3SessionConfiguration({}, "fast");
+	assert.notEqual(first.proxySecret, first.smokeEnvironment.OPENCRANE_TIER3_SESSION_SECRET);
+	assert.notEqual(first.proxySecret, second.proxySecret);
+	assert.notEqual(first.smokeEnvironment.OPENCRANE_TIER3_SESSION_SECRET, second.smokeEnvironment.OPENCRANE_TIER3_SESSION_SECRET);
 });
 
 test("Tier 3 preserves explicit smoke resource overrides", function _preservesResourceOverrides()
@@ -82,9 +101,11 @@ test("Tier 3 qualifies smoke before it starts and waits on the matching ingress 
 	const events = [];
 	const server = {};
 	const certificate = "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n";
+	let runProxySecret;
 	await runTier3Development({ proxyPort: 4300, smokeOnly: false, storageMode: "fast" }, {
 		createProxy(options)
 		{
+			assert.equal(options.proxySecret, runProxySecret);
 			events.push(["create-proxy", options.upstreamHost, options.upstreamCertificate]);
 			return server;
 		},
@@ -92,9 +113,9 @@ test("Tier 3 qualifies smoke before it starts and waits on the matching ingress 
 		{
 			events.push(["listen", receivedServer, port]);
 		},
-		parentEnvironment: {},
 		runSmoke(environment)
 		{
+			runProxySecret = environment.OPENCRANE_TIER3_PROXY_SECRET;
 			events.push(["smoke", environment.KEEP_CLUSTER, environment.SMOKE_STORAGE_MODE, environment.SMOKE_HOST_PROFILE, environment.TIMEOUT_SECONDS]);
 		},
 		readIngressCertificate(identity)
@@ -164,7 +185,7 @@ test("the HTTPS browser proxy fails closed without the smoke ingress certificate
 {
 	assert.throws(function _create()
 	{
-		createTier3BrowserProxy({ upstreamHost: "smoke.develop-smoke.opencrane.test" });
+		createTier3BrowserProxy({ proxySecret: _PROXY_SECRET, upstreamHost: "smoke.develop-smoke.opencrane.test" });
 	}, /requires its smoke-issued certificate/u);
 });
 
@@ -182,8 +203,8 @@ test("the HTTPS browser proxy trusts only the supplied smoke certificate", async
 	const upstreamAddress = upstream.address();
 	const upstreamOrigin = `https://127.0.0.1:${upstreamAddress.port}`;
 	const upstreamHost = "smoke.develop-smoke.opencrane.test";
-	const trustedProxy = createTier3BrowserProxy({ upstreamCertificate: trustedFixture.certificate, upstreamHost, upstreamOrigin });
-	const untrustedProxy = createTier3BrowserProxy({ upstreamCertificate: untrustedFixture.certificate, upstreamHost, upstreamOrigin });
+	const trustedProxy = createTier3BrowserProxy({ proxySecret: _PROXY_SECRET, upstreamCertificate: trustedFixture.certificate, upstreamHost, upstreamOrigin });
+	const untrustedProxy = createTier3BrowserProxy({ proxySecret: _PROXY_SECRET, upstreamCertificate: untrustedFixture.certificate, upstreamHost, upstreamOrigin });
 	await Promise.all([_Listen(trustedProxy), _Listen(untrustedProxy)]);
 
 	const trustedAddress = trustedProxy.address();
@@ -214,7 +235,7 @@ test("Tier 3 smoke-only sessions do not create a browser proxy", async function 
 	assert.equal(smokeRuns, 1);
 });
 
-test("the browser proxy replaces only the ingress routing host", async function _proxiesIngress()
+test("the browser proxy presents one fixed upstream authority without leaking proof to ordinary reads", async function _proxiesIngress()
 {
 	const received = {};
 	const upstream = http.createServer(function _capture(request, response)
@@ -222,12 +243,15 @@ test("the browser proxy replaces only the ingress routing host", async function 
 		received.host = request.headers.host;
 		received.path = request.url;
 		received.forwardedHost = request.headers["x-forwarded-host"];
+		received.forwardedProtocol = request.headers["x-forwarded-proto"];
+		received.proxySecret = request.headers["x-opencrane-tier3-proxy-secret"];
 		response.writeHead(200, { "content-type": "application/json" });
 		response.end(JSON.stringify({ ok: true }));
 	});
 	await _Listen(upstream);
 	const upstreamAddress = upstream.address();
 	const proxy = createTier3BrowserProxy({
+		proxySecret: _PROXY_SECRET,
 		upstreamOrigin: `http://127.0.0.1:${upstreamAddress.port}`,
 		upstreamHost: "smoke.develop-smoke.opencrane.test"
 	});
@@ -235,31 +259,120 @@ test("the browser proxy replaces only the ingress routing host", async function 
 	const proxyAddress = proxy.address();
 	const result = await _Get(`http://127.0.0.1:${proxyAddress.port}/api/healthz`, {
 		host: "example-4200.app.github.dev",
-		"x-forwarded-host": "example-4200.app.github.dev"
+		"x-forwarded-host": "forged.example",
+		"x-forwarded-proto": "https",
+		"x-opencrane-tier3-proxy-secret": "browser-forgery"
 	});
 
 	assert.equal(result.statusCode, 200);
 	assert.deepEqual(JSON.parse(result.body), { ok: true });
 	assert.deepEqual(received, {
-		forwardedHost: "example-4200.app.github.dev",
+		forwardedHost: "smoke.develop-smoke.opencrane.test",
+		forwardedProtocol: "https",
 		host: "smoke.develop-smoke.opencrane.test",
-		path: "/api/healthz"
+		path: "/api/healthz",
+		proxySecret: undefined
 	});
+	await Promise.all([_Close(proxy), _Close(upstream)]);
+});
+
+test("the browser proxy adds proof only to exact Tier 3 login reads", async function _ScopesProof()
+{
+	const requests = [];
+	const upstream = http.createServer(function _capture(request, response)
+	{
+		requests.push({ method: request.method, path: request.url, proof: request.headers["x-opencrane-tier3-proxy-secret"] });
+		response.end("ok");
+	});
+	await _Listen(upstream);
+	const upstreamAddress = upstream.address();
+	const proxy = createTier3BrowserProxy({
+		proxySecret: _PROXY_SECRET,
+		upstreamOrigin: `http://127.0.0.1:${upstreamAddress.port}`,
+		upstreamHost: "smoke.develop-smoke.opencrane.test"
+	});
+	await _Listen(proxy);
+	const proxyAddress = proxy.address();
+	const origin = `http://127.0.0.1:${proxyAddress.port}`;
+	for (const path of [
+		"/api/v1/auth/login?returnTo=%2Fonboarding",
+		"/api/v1/auth/reauthenticate?returnTo=%2Fchat",
+		"/api/v1/auth/me",
+		"/api/v1/auth/logout",
+		"/api/v1/auth/login/extra",
+		"/gateway"
+	])
+	{
+		await _Get(`${origin}${path}`, { "x-opencrane-tier3-proxy-secret": "browser-forgery" });
+	}
+
+	assert.deepEqual(requests, [
+		{ method: "GET", path: "/api/v1/auth/login?returnTo=%2Fonboarding", proof: _PROXY_SECRET },
+		{ method: "GET", path: "/api/v1/auth/reauthenticate?returnTo=%2Fchat", proof: _PROXY_SECRET },
+		{ method: "GET", path: "/api/v1/auth/me", proof: undefined },
+		{ method: "GET", path: "/api/v1/auth/logout", proof: undefined },
+		{ method: "GET", path: "/api/v1/auth/login/extra", proof: undefined },
+		{ method: "GET", path: "/gateway", proof: undefined }
+	]);
+	await Promise.all([_Close(proxy), _Close(upstream)]);
+});
+
+test("the browser proxy validates browser mutations before presenting the fixed upstream origin", async function _RejectsForeignOrigin()
+{
+	let upstreamRequests = 0;
+	let receivedHeaders;
+	const upstream = http.createServer(function _capture(request, response)
+	{
+		upstreamRequests += 1;
+		receivedHeaders = request.headers;
+		response.end("ok");
+	});
+	await _Listen(upstream);
+	const upstreamAddress = upstream.address();
+	const proxy = createTier3BrowserProxy({
+		proxySecret: _PROXY_SECRET,
+		upstreamOrigin: `http://127.0.0.1:${upstreamAddress.port}`,
+		upstreamHost: "smoke.develop-smoke.opencrane.test"
+	});
+	await _Listen(proxy);
+	const proxyAddress = proxy.address();
+	const url = `http://127.0.0.1:${proxyAddress.port}/api/v1/state`;
+	const allowed = await _Request(url, "POST", {
+		host: "example-4200.app.github.dev",
+		origin: "https://example-4200.app.github.dev",
+		"x-forwarded-proto": "https"
+	});
+	const denied = await _Request(url, "POST", {
+		host: "example-4200.app.github.dev",
+		origin: "https://attacker.example",
+		"x-forwarded-proto": "https"
+	});
+	assert.equal(allowed.statusCode, 200);
+	assert.equal(denied.statusCode, 403);
+	assert.equal(upstreamRequests, 1);
+	assert.equal(receivedHeaders.host, "smoke.develop-smoke.opencrane.test");
+	assert.equal(receivedHeaders.origin, "https://smoke.develop-smoke.opencrane.test");
+	assert.equal(receivedHeaders["x-forwarded-host"], "smoke.develop-smoke.opencrane.test");
+	assert.equal(receivedHeaders["x-forwarded-proto"], "https");
+	assert.equal(receivedHeaders["x-opencrane-tier3-proxy-secret"], undefined);
 	await Promise.all([_Close(proxy), _Close(upstream)]);
 });
 
 test("the browser proxy closes active WebSocket tunnels during shutdown", { timeout: 2_000 }, async function _closesUpgrades()
 {
 	let upstreamPeer;
+	let upstreamHeaders;
 	const upstream = http.createServer();
-	upstream.on("upgrade", function _accept(_request, socket)
+	upstream.on("upgrade", function _accept(request, socket)
 	{
 		upstreamPeer = socket;
+		upstreamHeaders = request.headers;
 		socket.write("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n");
 	});
 	await _Listen(upstream);
 	const upstreamAddress = upstream.address();
 	const proxy = createTier3BrowserProxy({
+		proxySecret: _PROXY_SECRET,
 		upstreamOrigin: `http://127.0.0.1:${upstreamAddress.port}`,
 		upstreamHost: "smoke.develop-smoke.opencrane.test"
 	});
@@ -270,13 +383,18 @@ test("the browser proxy closes active WebSocket tunnels during shutdown", { time
 	{
 		client.once("error", reject);
 		client.once("data", resolve);
-		client.write("GET /gateway HTTP/1.1\r\nHost: example.test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n");
+		client.write("GET /gateway HTTP/1.1\r\nHost: example.test\r\nOrigin: http://example.test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n");
 	});
 
 	const clientClosed = new Promise(function _closed(resolve) { client.once("close", resolve); });
 	await closeTier3BrowserProxy(proxy);
 	await clientClosed;
 	assert.equal(client.destroyed, true);
+	assert.equal(upstreamHeaders.host, "smoke.develop-smoke.opencrane.test");
+	assert.equal(upstreamHeaders.origin, "https://smoke.develop-smoke.opencrane.test");
+	assert.equal(upstreamHeaders["x-forwarded-host"], "smoke.develop-smoke.opencrane.test");
+	assert.equal(upstreamHeaders["x-forwarded-proto"], "https");
+	assert.equal(upstreamHeaders["x-opencrane-tier3-proxy-secret"], undefined);
 	upstreamPeer.destroy();
 	await _Close(upstream);
 });
@@ -296,6 +414,7 @@ test("the browser proxy aborts WebSocket handshakes during shutdown", { timeout:
 	await _Listen(upstream);
 	const upstreamAddress = upstream.address();
 	const proxy = createTier3BrowserProxy({
+		proxySecret: _PROXY_SECRET,
 		upstreamOrigin: `http://127.0.0.1:${upstreamAddress.port}`,
 		upstreamHost: "smoke.develop-smoke.opencrane.test"
 	});
@@ -303,7 +422,7 @@ test("the browser proxy aborts WebSocket handshakes during shutdown", { timeout:
 	const proxyAddress = proxy.address();
 	const client = net.createConnection(proxyAddress.port, "127.0.0.1");
 	client.once("error", function _ignoreReset() {});
-	client.write("GET /gateway HTTP/1.1\r\nHost: example.test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n");
+	client.write("GET /gateway HTTP/1.1\r\nHost: example.test\r\nOrigin: http://example.test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n");
 	await upgradeAccepted;
 	const clientClosed = new Promise(function _closed(resolve) { client.once("close", resolve); });
 
@@ -429,6 +548,21 @@ function _Get(url, headers)
 			});
 		});
 		request.once("error", reject);
+	});
+}
+
+function _Request(url, method, headers)
+{
+	return new Promise(function _request(resolve, reject)
+	{
+		const request = http.request(url, { headers, method }, function _response(response)
+		{
+			const chunks = [];
+			response.on("data", function _data(chunk) { chunks.push(chunk); });
+			response.on("end", function _end() { resolve({ body: Buffer.concat(chunks).toString("utf8"), statusCode: response.statusCode }); });
+		});
+		request.once("error", reject);
+		request.end();
 	});
 }
 

@@ -10,6 +10,7 @@ for contract in \
   provision-contract.sh \
   kubernetes-api-helm-args-contract.sh \
   initial-model-provider-helm-args-contract.sh \
+  tier3-development-auth-contract.sh \
   pooler-deploy-contract.sh \
   database-migration-deploy-contract.sh \
   database-superuser-access-contract.sh \

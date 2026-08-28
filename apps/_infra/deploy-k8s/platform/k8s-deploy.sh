@@ -110,6 +110,7 @@ if [[ ! -f "$COGNEE_IMAGE_POLICY" ]]; then
 fi
 source "$COGNEE_IMAGE_POLICY"
 source "$SCRIPT_DIR/initial-model-provider.sh"
+source "$SCRIPT_DIR/tier3-development-auth.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
 source "$SCRIPT_DIR/database-pg-cron-preflight.sh"
 source "$SCRIPT_DIR/database-superuser-access.sh"
@@ -297,6 +298,7 @@ while [[ $# -gt 0 ]]; do
     *)               err "Unknown flag: $1"; exit 1 ;;
   esac
 done
+validate_tier3_development_auth || exit 2
 for c in kubectl helm jq; do command -v "$c" >/dev/null 2>&1 || { err "Missing required command: $c"; exit 1; }; done
 if [[ ! "$TIMEOUT" =~ ^[1-9][0-9]{0,3}$ ]] || (( TIMEOUT > 3600 )); then
   err "TIMEOUT_SECONDS must be an integer from 1 through 3600."
@@ -785,6 +787,7 @@ kubectl create secret generic opencrane-litellm -n "$NAMESPACE" \
   --dry-run=client -o yaml | kubectl apply -f -
 ensure_provider_key_secrets "$NAMESPACE"
 publish_initial_model_provider_secret "$NAMESPACE" "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_API_KEY"
+publish_tier3_development_auth_secret "$NAMESPACE"
 # OIDC secret. The chart references clustertenantManager.oidc.existingSecret for the client + session
 # secrets; previously this installer set only the issuer/clientId/redirect and ASSUMED the
 # Secret already existed, so a fresh OIDC install rendered a UI that crash-looped on a missing
@@ -895,7 +898,9 @@ _guard_standalone_first_user_issuer() {
     exit 1
   fi
 }
-_guard_standalone_first_user_issuer
+if [[ "$TIER3_DEVELOPMENT_AUTH" != "1" ]]; then
+  _guard_standalone_first_user_issuer
+fi
 
 ensure_registry_pull_secret "$NAMESPACE" "$REGISTRY_PULL_SECRET" "$REGISTRY_PULL_CONFIG_FILE"
 
@@ -951,6 +956,7 @@ fi
 # Point the chart at the Secret created above (client + session secret) instead of leaving
 # its inline values empty — keeps secrets out of Helm values + the rendered manifest.
 [[ -n "$OIDC_ISSUER_URL" ]]   && helm_args+=(--set-string "clustertenantManager.oidc.existingSecret=$OIDC_SECRET_NAME")
+append_tier3_development_auth_helm_args
 # Platform-operator bootstrap (seed email and/or IdP group mapping). Set only when non-empty.
 if [[ -n "$PLATFORM_OPERATOR_SEED_EMAIL" ]]; then
   helm_args+=(--set-string "clustertenantManager.oidc.platformOperatorSeedEmail=$PLATFORM_OPERATOR_SEED_EMAIL")

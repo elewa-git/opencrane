@@ -15,6 +15,7 @@ cluster does not match the assumptions needed to do that job safely.
 | `Chart.yaml`, `templates/` | Gives all workloads the same naming, access-control, database, identity, and monitoring conventions. The parent release reuses these Helm helpers; they do not install anything on their own. |
 | `k8s-deploy.sh` | Installs or upgrades a silo from reviewed application images. It checks the live database first, applies the matching database and application changes, restarts services when their connection details change, and waits until the intended workloads are actually ready. An optional verification step also checks pods, DNS, and public health. |
 | `invitation-signing-secret.sh` | Keeps invitation links valid across routine upgrades. It creates the silo's signing key once, checks that the saved key is usable, and reuses it instead of silently rotating it. |
+| `tier3-development-auth.sh` | Validates the disposable `.test` authentication contract, publishes its independent proxy and session secrets without exposing them in process arguments, and appends only non-secret Helm settings. |
 | `qualified-release-image-policy.sh` | Keeps the channel proxy, memory gateway, and artifact service on one reviewed build while allowing the server to use its own reviewed build when needed. It verifies that all four images are available before Helm changes the cluster. |
 | `control-plane-image-policy.sh` | Ensures the browser application is the exact reviewed build. Public deployments must use an immutable image digest; only disposable local test clusters may use a locally imported tag. |
 | `cluster-tenant-crd-policy.sh` | Protects the cluster-wide tenant definition from conflicting ownership. It checks whether the definition is missing, owned by this release, safely shared, or conflicting before Helm proceeds. |
@@ -51,8 +52,11 @@ qualifications.
 
 `npm run dev:tier3` is the contributor entrypoint around this smoke. Its minimum-host default uses
 fast local-path storage, allows 600 seconds for loaded Codespaces machines, reclaims host package and
-Docker image-build caches, retains the cluster, and starts a loopback proxy that sends the smoke host
-through the real ingress while Codespaces keeps its browser-facing forwarded host. On a recommended
+Docker image-build caches, retains the cluster, and starts a loopback proxy that validates the
+Codespaces origin before presenting one fixed `.test` Host and forwarded authority to the real
+ingress. The proxy adds its fresh per-run proof only to exact login and reauthentication reads; the
+server then projects the configured Principal and Owner before it creates an independently signed
+session. On a recommended
 host, use `SMOKE_HOST_PROFILE=recommended npm run dev:tier3 -- --storage-mode full` to preserve
 dependencies and caches, batch the import, and prove storage expansion. Use `--smoke-only` when
 browser access is unnecessary.

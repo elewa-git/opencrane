@@ -166,9 +166,12 @@ package imports it.
   requests use fast local-path storage; storage-sensitive changes, manual k3d qualification, and
   every `develop` push also prove pinned expandable storage. Neither tier substitutes for
   backup/recovery or production qualification.
-- `npm run dev:tier3` runs that smoke with full storage qualification and `KEEP_CLUSTER=1`, then
-  exposes its real ingress through a loopback browser proxy. The cluster remains available for
-  kubectl diagnosis until the developer deletes the named `opencrane-develop-smoke` cluster.
+- `npm run dev:tier3` defaults to the 32 GB minimum-host path: it resets the disposable cluster,
+  reclaims reproducible dependencies and build caches, imports images sequentially, and exposes the
+  real ingress through a loopback browser proxy with a fresh fixed-identity login. The successful
+  cluster stays available for diagnosis, and the next run resets it automatically. Recommended
+  8-core/32-GB/64-GB machines can retain dependencies and caches with
+  `SMOKE_HOST_PROFILE=recommended npm run dev:tier3 -- --storage-mode full`.
 
 ## Sub-docs (the deep detail)
 

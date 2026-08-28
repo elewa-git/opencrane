@@ -48,7 +48,7 @@ export async function runTier3Development(options, operations = {})
 	}
 
 	const upstreamCertificate = await readIngressCertificate(configuration.ingressCertificate);
-	const server = createProxy({ upstreamCertificate, upstreamHost: configuration.upstreamHost });
+	const server = createProxy({ proxySecret: configuration.proxySecret, upstreamCertificate, upstreamHost: configuration.upstreamHost });
 	await listenProxy(server, options.proxyPort);
 
 	writeOutput(`\nTier 3 is ready on http://127.0.0.1:${options.proxyPort}.\n`);

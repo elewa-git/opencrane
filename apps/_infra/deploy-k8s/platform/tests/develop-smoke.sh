@@ -468,10 +468,11 @@ kubectl create secret generic opencrane-fleet-membership-verification \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo "[develop-smoke] Installing the current silo through its app-owned deploy entrypoint"
-export OIDC_ISSUER_URL="https://issuer.opencrane.test"
-export OIDC_CLIENT_ID="develop-smoke"
-export OPENCRANE_OIDC_CLIENT_SECRET="$(_random_secret)"
-export OPENCRANE_OIDC_SESSION_SECRET="$(_random_secret)"
+OPENCRANE_TIER3_PROXY_SECRET="${OPENCRANE_TIER3_PROXY_SECRET:-$(_random_secret)}"
+OPENCRANE_TIER3_SESSION_SECRET="${OPENCRANE_TIER3_SESSION_SECRET:-$(_random_secret)}"
+export OPENCRANE_TIER3_DEVELOPMENT_AUTH=1
+export OPENCRANE_TIER3_PROXY_SECRET
+export OPENCRANE_TIER3_SESSION_SECRET
 # The disposable k3d image is imported by a local tag, not published to an OCI registry. The
 # production deploy path still requires a UI digest; this explicit escape keeps the smoke honest.
 export OPENCRANE_ALLOW_TAG_FLOAT=1

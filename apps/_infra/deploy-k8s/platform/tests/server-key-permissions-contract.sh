@@ -68,6 +68,102 @@ grep -Fq '            - name: AGENT_RUNTIME_PERSONAL_NAMESPACE' <<<"$server_mani
 grep -Fq '              value: "opencrane-silo-runtime"' <<<"$server_manifest"
 grep -Fq '            - name: AGENT_RUNTIME_MANAGED_NAMESPACE' <<<"$server_manifest"
 grep -Fq '              value: "opencrane-silo-managed-runtime"' <<<"$server_manifest"
+if grep -Eq 'OPENCRANE_TIER3_|tier3-development-auth' <<<"$server_manifest"; then
+  echo "default server renders Tier 3 development authentication material" >&2
+  exit 1
+fi
+
+tier3_rendered="$(helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set-string global.environment=dev \
+  --set-string ingress.domain=develop-smoke.opencrane.test \
+  --set-string clustertenantManager.firstUser.email=owner@develop-smoke.opencrane.test \
+  --set-string clustertenantManager.firstUser.clusterTenant=smoke \
+  --set clustertenantManager.tier3DevelopmentAuthentication.enabled=true \
+  --set-string clustertenantManager.tier3DevelopmentAuthentication.existingSecret=opencrane-tier3-development-auth)"
+tier3_server_manifest="$(printf '%s\n' "$tier3_rendered" | awk '
+  function flush_document() {
+    if (is_deployment && is_server) {
+      printf "%s", document
+    }
+    document = ""
+    is_deployment = 0
+    is_server = 0
+  }
+  /^---$/ {
+    flush_document()
+    next
+  }
+  {
+    document = document $0 ORS
+  }
+  /^kind: Deployment$/ {
+    is_deployment = 1
+  }
+  /^  name: opencrane-silo-opencrane-server$/ {
+    is_server = 1
+  }
+  END {
+    flush_document()
+  }
+')"
+grep -Fq '            - name: OPENCRANE_AUTH_MODE' <<<"$tier3_server_manifest"
+grep -Fq '              value: tier3-development' <<<"$tier3_server_manifest"
+grep -Fq '            - name: OPENCRANE_TIER3_PROXY_SECRET_PATH' <<<"$tier3_server_manifest"
+grep -Fq '              value: /var/run/opencrane/tier3-auth/proxy-secret' <<<"$tier3_server_manifest"
+grep -Fq '            - name: OPENCRANE_TIER3_SESSION_SECRET_PATH' <<<"$tier3_server_manifest"
+grep -Fq '              value: /var/run/opencrane/tier3-auth/session-secret' <<<"$tier3_server_manifest"
+grep -Fq '            - name: tier3-development-auth' <<<"$tier3_server_manifest"
+grep -Fq '              mountPath: /var/run/opencrane/tier3-auth' <<<"$tier3_server_manifest"
+tier3_volume="$(grep -A 12 '        - name: tier3-development-auth' <<<"$tier3_server_manifest")"
+grep -Fq '            secretName: "opencrane-tier3-development-auth"' <<<"$tier3_volume"
+grep -Fq '            defaultMode: 0440' <<<"$tier3_volume"
+grep -Fq '              - key: proxy-secret' <<<"$tier3_volume"
+grep -Fq '                path: proxy-secret' <<<"$tier3_volume"
+grep -Fq '              - key: session-secret' <<<"$tier3_volume"
+grep -Fq '                path: session-secret' <<<"$tier3_volume"
+if grep -Eq 'OIDC_(ISSUER_URL|CLIENT_ID|REDIRECT_URI|CLIENT_SECRET|SESSION_SECRET)' <<<"$tier3_server_manifest"; then
+  echo "Tier 3 server renders OIDC configuration" >&2
+  exit 1
+fi
+if helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set-string global.environment=prod \
+  --set-string ingress.domain=develop-smoke.opencrane.test \
+  --set-string clustertenantManager.firstUser.email=owner@develop-smoke.opencrane.test \
+  --set-string clustertenantManager.firstUser.clusterTenant=smoke \
+  --set clustertenantManager.tier3DevelopmentAuthentication.enabled=true \
+  --set-string clustertenantManager.tier3DevelopmentAuthentication.existingSecret=opencrane-tier3-development-auth >/dev/null 2>&1; then
+  echo "Tier 3 development authentication rendered outside the dev environment" >&2
+  exit 1
+fi
+if helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set-string global.environment=dev \
+  --set-string ingress.domain=develop-smoke.opencrane.test \
+  --set-string clustertenantManager.firstUser.email=owner@develop-smoke.opencrane.test \
+  --set-string clustertenantManager.firstUser.clusterTenant=smoke \
+  --set clustertenantManager.tier3DevelopmentAuthentication.enabled=true \
+  --set-string clustertenantManager.tier3DevelopmentAuthentication.existingSecret=opencrane-tier3-development-auth \
+  --set-string clustertenantManager.oidc.issuerUrl=https://issuer.example.test >/dev/null 2>&1; then
+  echo "Tier 3 development authentication rendered alongside OIDC" >&2
+  exit 1
+fi
+if helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set-string global.environment=dev \
+  --set-string ingress.domain=develop-smoke.opencrane.test \
+  --set clustertenantManager.tier3DevelopmentAuthentication.enabled=true \
+  --set-string clustertenantManager.tier3DevelopmentAuthentication.existingSecret=opencrane-tier3-development-auth >/dev/null 2>&1; then
+  echo "Tier 3 development authentication rendered without its fixed first user" >&2
+  exit 1
+fi
+if helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set-string global.environment=dev \
+  --set-string ingress.domain=example.com \
+  --set-string clustertenantManager.firstUser.email=owner@example.com \
+  --set-string clustertenantManager.firstUser.clusterTenant=smoke \
+  --set clustertenantManager.tier3DevelopmentAuthentication.enabled=true \
+  --set-string clustertenantManager.tier3DevelopmentAuthentication.existingSecret=opencrane-tier3-development-auth >/dev/null 2>&1; then
+  echo "Tier 3 development authentication rendered on a public ingress domain" >&2
+  exit 1
+fi
 
 # The server must identify its silo and receive bounded worker and MCP-check settings before it
 # starts the Absurd worker.

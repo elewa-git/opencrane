@@ -485,6 +485,11 @@ clustertenantManager:
   firstUser:
     email: ""
     clusterTenant: ""
+  # -- Develop-smoke selects this disposable Tier 3 browser authentication. Production and remote
+  # environments use OIDC and must leave it disabled with an empty Secret name.
+  tier3DevelopmentAuthentication:
+    enabled: false
+    existingSecret: ""
   # -- Explicit membership issuer model. A standalone silo has no Fleet prerequisite and starts
   # without a verification-key mount. It deliberately denies run admission until a local issuer
   # produces signed revisions; it never treats an unsigned OIDC session as membership.

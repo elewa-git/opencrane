@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 const _DEFAULT_PROXY_PORT = 4200;
 /** Gives a loaded minimum-size Codespace the same workload-readiness budget as remote CI. */
 const _DEFAULT_TIMEOUT_SECONDS = "600";
@@ -100,7 +102,7 @@ export function parseTier3Arguments(argumentsList)
  *
  * @param {NodeJS.ProcessEnv} parentEnvironment - Developer tool and optional smoke overrides.
  * @param {"fast" | "full"} storageMode - Storage path the smoke must qualify.
- * @returns {{ ingressCertificate: { certificateName: string, namespace: string }, smokeEnvironment: NodeJS.ProcessEnv, upstreamHost: string }} The retained smoke inputs and ingress identity they create.
+ * @returns {{ ingressCertificate: { certificateName: string, namespace: string }, proxySecret: string, smokeEnvironment: NodeJS.ProcessEnv, upstreamHost: string }} Fresh authentication and retained smoke inputs for this run.
  */
 export function createTier3SessionConfiguration(parentEnvironment, storageMode)
 {
@@ -108,6 +110,8 @@ export function createTier3SessionConfiguration(parentEnvironment, storageMode)
 	const baseDomain = parentEnvironment.BASE_DOMAIN || "develop-smoke.opencrane.test";
 	const namespace = parentEnvironment.NAMESPACE || "opencrane-develop-smoke";
 	const releaseName = parentEnvironment.RELEASE_NAME || `opencrane-${clusterTenant}`;
+	const proxySecret = randomBytes(32).toString("base64url");
+	const sessionSecret = randomBytes(32).toString("base64url");
 
 	return {
 		ingressCertificate: {
@@ -117,10 +121,14 @@ export function createTier3SessionConfiguration(parentEnvironment, storageMode)
 		smokeEnvironment: {
 			...parentEnvironment,
 			KEEP_CLUSTER: "1",
+			OPENCRANE_TIER3_DEVELOPMENT_AUTH: "1",
+			OPENCRANE_TIER3_PROXY_SECRET: proxySecret,
+			OPENCRANE_TIER3_SESSION_SECRET: sessionSecret,
 			SMOKE_HOST_PROFILE: parentEnvironment.SMOKE_HOST_PROFILE || "minimum",
 			SMOKE_STORAGE_MODE: storageMode,
 			TIMEOUT_SECONDS: parentEnvironment.TIMEOUT_SECONDS || _DEFAULT_TIMEOUT_SECONDS
 		},
+		proxySecret,
 		upstreamHost: `${clusterTenant}.${baseDomain}`
 	};
 }
