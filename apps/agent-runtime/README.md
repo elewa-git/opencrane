@@ -49,6 +49,14 @@ external services, and saves durable state. The runtime never calls an external 
 - It stores only replaceable encrypted local checkpoint data. The server remains the source of
   truth.
 
+## Public surface
+
+- `GET /healthz` reports that the process is alive.
+- `GET /readyz` reports whether an unclaimed warm Pod is ready or a claimed Pod has the expected
+  network profile.
+- The runtime opens the private outbound command stream configured by
+  `OPENCRANE_RUNTIME_STREAM_URL`; it does not expose a public network service.
+
 ## Boundary
 
 The process cannot choose a run, user, agent revision, model, tool, permission, or credential. It
