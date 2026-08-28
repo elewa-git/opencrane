@@ -1,4 +1,7 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
+import rateLimit from "express-rate-limit";
+
+import { _sanitizeReturnTo } from "@opencrane/backend/server/infra/auth";
 
 import type { Tier3DevelopmentAuthService } from "./development-auth.service";
 
@@ -7,7 +10,8 @@ import type { Tier3DevelopmentAuthService } from "./development-auth.service";
  *
  * Login stays public because proxy proof creates the first session. Reauthentication requires an
  * existing session, the callback returns 503 because this mode has no OIDC redirect, and logout
- * destroys the local session without returning an upstream URL.
+ * destroys the local session without returning an upstream URL. Login and reauthentication share
+ * a 30-request-per-minute IP limit because both rotate sessions and can perform durable admission.
  *
  * Called by: `_CreateTier3DevelopmentAuthentication` when startup selects `tier3-development`.
  * @param authService - Verifies proxy proof, admits the installed identity, and manages its session.
@@ -16,6 +20,13 @@ import type { Tier3DevelopmentAuthService } from "./development-auth.service";
 export function ___Tier3DevelopmentAuthRouter(authService: Tier3DevelopmentAuthService): Router
 {
 	const router = Router();
+	const authenticationRateLimit = rateLimit({
+		legacyHeaders: false,
+		limit: 30,
+		standardHeaders: true,
+		validate: { trustProxy: false },
+		windowMs: 60_000,
+	});
 	router.get("/me", async function _ReadSession(request, response, next): Promise<void>
 	{
 		try
@@ -27,7 +38,7 @@ export function ___Tier3DevelopmentAuthRouter(authService: Tier3DevelopmentAuthS
 			next(error);
 		}
 	});
-	router.get("/login", async function _Login(request, response, next): Promise<void>
+	router.get("/login", authenticationRateLimit, async function _Login(request, response, next): Promise<void>
 	{
 		try
 		{
@@ -43,14 +54,14 @@ export function ___Tier3DevelopmentAuthRouter(authService: Tier3DevelopmentAuthS
 				response.status(403).json({ error: "Tier 3 proxy proof required", code: "TIER3_PROXY_PROOF_REQUIRED" });
 				return;
 			}
-			response.redirect(302, target);
+			_RedirectToLocalPath(response, target);
 		}
 		catch (error)
 		{
 			next(error);
 		}
 	});
-	router.get("/reauthenticate", async function _Reauthenticate(request, response, next): Promise<void>
+	router.get("/reauthenticate", authenticationRateLimit, async function _Reauthenticate(request, response, next): Promise<void>
 	{
 		try
 		{
@@ -66,7 +77,7 @@ export function ___Tier3DevelopmentAuthRouter(authService: Tier3DevelopmentAuthS
 				response.status(403).json({ error: "Tier 3 proxy proof required", code: "TIER3_PROXY_PROOF_REQUIRED" });
 				return;
 			}
-			response.redirect(302, target);
+			_RedirectToLocalPath(response, target);
 		}
 		catch (error)
 		{
@@ -90,4 +101,11 @@ export function ___Tier3DevelopmentAuthRouter(authService: Tier3DevelopmentAuthS
 		}
 	});
 	return router;
+}
+
+/** Sanitizes the service result again so a replacement cannot emit an external `Location`. */
+function _RedirectToLocalPath(response: Response, target: string): void
+{
+	const location = _sanitizeReturnTo(target);
+	response.status(302).set("Location", location).end();
 }

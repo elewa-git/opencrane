@@ -1,4 +1,5 @@
 import express from "express";
+import rateLimit from "express-rate-limit";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
@@ -21,6 +22,7 @@ function _App(user: Record<string, unknown> | null, admit: ReturnType<typeof vi.
 			request.session = { authUser: user } as never;
 		next();
 	});
+	app.use(rateLimit());
 	app.use(___DevelopmentAuthMiddleware({ admit } as never, _AUTHORITY, { warn } as never));
 	app.get("/protected", function _Protected(request, response)
 	{

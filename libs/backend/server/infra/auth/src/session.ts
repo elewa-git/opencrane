@@ -51,22 +51,22 @@ export function _buildCurrentUrl(req: Request): URL
 }
 
 /**
- * Reduce a post-login return target to something safe to redirect to.
+ * Reduces a post-login return target to something safe to redirect to.
  *
- * Only a path starting with a single `/` is kept. Anything else — an absolute URL, a
- * protocol-relative `//evil.example`, or nothing at all — becomes `/`. Without this, an
- * attacker could hand a user a login link that bounced them to another site after a real
- * login, which is what makes it a phishing tool.
+ * Only a path starting with a single `/` and containing no backslash or ASCII control character
+ * is kept. Browsers can normalize backslashes into authority separators and strip controls before
+ * navigation, so those inputs are unsafe even when the raw string does not start with `//`.
  *
- * Called by: `OidcAuthServiceBase.buildLoginUrl` and `completeLogin` in ./oidc-service.ts
- * — the value is sanitised on the way in AND on the way out of the session.
+ * Called by: `OidcAuthServiceBase`, `Tier3DevelopmentAuthService`, and the Tier 3 router. The
+ * services sanitize browser input, and the router checks the service result again before writing
+ * the `Location` header.
  *
- * @param returnTo - The requested return path, straight from the query string.
+ * @param returnTo - Candidate return path from browser input or an authentication service.
  * @returns A local path safe to redirect to; `/` when the input was not one.
  */
 export function _sanitizeReturnTo(returnTo: string | undefined): string
 {
-  if (!returnTo || !returnTo.startsWith("/") || returnTo.startsWith("//"))
+  if (!returnTo || !returnTo.startsWith("/") || returnTo.startsWith("//") || /[\\\u0000-\u001F\u007F]/u.test(returnTo))
   {
     return "/";
   }

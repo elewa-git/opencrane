@@ -151,6 +151,39 @@ describe("Tier 3 development authentication", function _Suite()
 		expect(service.login).not.toHaveBeenCalled();
 	});
 
+	it("keeps a service-provided redirect on this origin", async function _LocalRedirect(): Promise<void>
+	{
+		const service = {
+			getStatus: vi.fn(),
+			login: vi.fn().mockResolvedValue("https://attacker.example/collect"),
+			logout: vi.fn(),
+		};
+		const response = await request(_App(service)).get("/api/v1/auth/login");
+		expect(response.status).toBe(302);
+		expect(response.headers.location).toBe("/");
+		service.login.mockResolvedValue("/\\attacker.example/collect");
+		const backslashResponse = await request(_App(service)).get("/api/v1/auth/login");
+		expect(backslashResponse.headers.location).toBe("/");
+	});
+
+	it("limits repeated login admission attempts by client address", async function _RateLimitsLogin(): Promise<void>
+	{
+		const service = {
+			getStatus: vi.fn(),
+			login: vi.fn().mockResolvedValue("/"),
+			logout: vi.fn(),
+		};
+		const app = _App(service);
+
+		for (let attempt = 0; attempt < 30; attempt += 1)
+		{
+			await request(app).get("/api/v1/auth/login").expect(302);
+		}
+
+		await request(app).get("/api/v1/auth/login").expect(429);
+		expect(service.login).toHaveBeenCalledTimes(30);
+	});
+
 	it("establishes a signed session when a proved login crosses the session middleware and router", async function _SessionLogin(): Promise<void>
 	{
 		const fixture = _Fixture();
