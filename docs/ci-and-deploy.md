@@ -223,7 +223,9 @@ The one thing an agent must never see in plain text is credentials. The conventi
   - `keys/initial-model-api-key` — the provider API key that seeds the first routable model.
     The deploy reads it as an environment variable, never as a flag:
     `OPENCRANE_INITIAL_MODEL_API_KEY="$(cat keys/initial-model-api-key)"` alongside
-    `--initial-model-provider <openai|anthropic|gemini|mistral|deepseek|glm>`.
+    `--initial-model-provider <openai|anthropic|gemini|mistral|deepseek|glm>` and
+    `--initial-model <provider/model>`. The exact model must belong to the selected provider and
+    becomes the initial live routing default on a fresh silo.
   - `keys/zitadel-pat` — the Zitadel service-user PAT for organisation management once the
     mode-scoped credential lands (tracked in the silo org-role issues); standalone silos get a
     full-org credential, fleet-mode silos a claims-only one.

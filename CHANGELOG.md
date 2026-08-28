@@ -81,7 +81,11 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   and image storage and rebuilds sequentially within 32 GB; the recommended profile retains reusable
   dependencies and caches for faster repeated builds. The repository devcontainer supplies
   Docker-in-Docker and the CI-aligned Node, Helm, k3d, and kubectl toolchain, with dependency
-  installation available to Codespaces prebuilds.
+  installation available to Codespaces prebuilds. Contributors can select the separate
+  `dev:tier3:agent` profile to complete personal-agent onboarding against an exact reviewed
+  provider/model. Its provider key remains outside Git, build environments, Helm values, and logs;
+  the release installer publishes only the fixed custody Secret, and startup waits for the selected
+  model to become the first live routing default.
 
 - **Users and operators can now see the availability of every user-visible service through
   unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,

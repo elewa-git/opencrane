@@ -21,7 +21,7 @@ file, named for what it is:
 
 | File | Contents | Consumed as |
 | --- | --- | --- |
-| `keys/initial-model-api-key` | The provider API key that seeds the first routable model | `OPENCRANE_INITIAL_MODEL_API_KEY="$(cat keys/initial-model-api-key)"`, alongside `--initial-model-provider <openai\|anthropic\|gemini\|mistral\|deepseek\|glm>` |
+| `keys/initial-model-api-key` | The provider API key that seeds the first exact routable model | `OPENCRANE_INITIAL_MODEL_API_KEY="$(cat keys/initial-model-api-key)"`, alongside `--initial-model-provider <openai\|anthropic\|gemini\|mistral\|deepseek\|glm>` and `--initial-model <provider/model>` |
 | `keys/zitadel-pat` | The Zitadel service-user PAT for organisation management, once the mode-scoped credential lands 🔶 | Standalone silos get a full-org credential; fleet-mode silos get a claims-only one |
 
 ::: warning
@@ -35,7 +35,9 @@ currently wired flag.
 The agent reads a key file straight into the environment of the one command that needs it, and
 never echoes it, logs it, or passes it as a command argument — the same rule the deploy scripts
 themselves follow. `OPENCRANE_INITIAL_MODEL_API_KEY` is environment-only precisely to keep the
-key out of command history and Helm values.
+key out of command history and Helm values. The required `--initial-model` value is non-secret;
+the installer validates that it belongs to the selected provider and makes that exact model the
+initial live routing default on a fresh silo.
 
 Everything else an agent needs is already non-secret: cluster context, base domain, tenant name,
 image digests from the release manifest, and the deploy ledger for cross-run memory.

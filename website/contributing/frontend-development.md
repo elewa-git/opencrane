@@ -309,8 +309,12 @@ work that needs the complete silo. Open the repository in its devcontainer, pref
 Codespace, then run:
 
 ```bash
-npm run dev:tier3
+npm run dev:tier3:infra
 ```
+
+This credential-free profile (also available as `npm run dev:tier3`) qualifies infrastructure and
+login without reading a provider key. It cannot finish personal-agent onboarding because the silo
+has no default model. Use the agent profile below for complete onboarding and Agent chat.
 
 The devcontainer uses Docker-in-Docker and pins the smoke toolchain to Node 24, Helm v4.1.4, k3d
 v5.8.3, and kubectl v1.30.10. It enforces a 4-core, 16 GB memory, 32 GB storage minimum so Codespaces
@@ -361,6 +365,40 @@ browser-supplied proof with a fresh per-run secret; the server then projects the
 into its durable Principal and standalone Owner records before issuing a bounded signed session.
 Starting Tier 3 again rotates both the proxy proof and the session key, invalidating sessions from
 the preceding disposable cluster.
+
+### Enable complete onboarding
+
+The provider-backed profile resolves provider and model selection through the same reviewed
+registry as Tier 2, then requires the exact model to become live before opening the proxy:
+
+```bash
+mkdir -p keys
+(umask 077 && touch keys/.openai-key)
+chmod 600 keys/.openai-key
+${EDITOR:-vi} keys/.openai-key
+
+npm run dev:tier3:agent -- --provider openai
+```
+
+Put only the raw upstream key in `.openai-key`; one trailing newline is fine. The coordinator
+rejects missing, empty, linked, or group/world-accessible key files. File permissions do not set
+provider-side spending or request limits, so issue a short-lived development key from a
+budget/rate-limited provider project and rotate it after testing.
+
+With no provider or model option, the profile chooses the first recognised key filename in sorted
+order and uses that provider's `defaultModel`. A provider selects its default; a model selects its
+owning provider; both options must agree. A registry model under an already supported provider may
+change without a backend class-catalogue edit. A new provider still requires review of the fixed
+Kubernetes Secret and role-based access control (RBAC) custody boundary.
+
+For a personal Codespace, create the account-specific
+[Codespaces secret](https://docs.github.com/en/codespaces/managing-your-codespaces/managing-your-account-specific-secrets-for-github-codespaces)
+`OPENCRANE_TIER3_PROVIDER_API_KEY`, grant only `elewa-git/opencrane` access, and stop/restart the
+Codespace. The environment-key path requires `--provider`. The smoke removes that value from image
+build and proxy environments and exposes it only to the release installer that publishes the fixed
+provider-custody Secret. The server consumes it once, removes the environment copy, and blanks the
+startup snapshot on either success or failure. User-level secrets are runtime-only and are not
+available to prebuilds.
 
 ::: warning
 Keep the forwarded Tier 3 port private. Its login identity is deliberately selected by the local
