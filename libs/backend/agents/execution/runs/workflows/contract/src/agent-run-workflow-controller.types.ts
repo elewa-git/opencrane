@@ -91,7 +91,16 @@ export interface AgentRunWarmRuntimeDeletionCommand
 /** Reports whether exact Pod deletion finished, must be retried, or lost its authority fence. */
 export type AgentRunWarmRuntimeDeletionOutcome = "bound" | "idempotent" | "deferred" | "conflict";
 
-/** Reports whether cancellation finalized without a Pod or found a committed warm reservation. */
+/**
+ * Reports how the workflow must continue when cancellation reaches an attempt with no loaded Pod.
+ *
+ * `bound` and `idempotent` mean cancellation is final. `deferred` tells the handler to retry while
+ * a provider claim settles. `reservation_exists` sends the handler through the saved Pod deletion
+ * path. `conflict` means the task receipt lost its authority fence and must stop terminally.
+ *
+ * Called by: `_FinalizeUnreservedCancellation` in the warm AgentRun workflow handler and the
+ * controller-only HTTP adapter that transports the server decision.
+ */
 export type AgentRunWarmRuntimeUnreservedCancellationOutcome = AgentRunWarmRuntimeDeletionOutcome | "reservation_exists";
 
 /** Defines the server operations used by the hard-cutoff warm AgentRun workflow. */

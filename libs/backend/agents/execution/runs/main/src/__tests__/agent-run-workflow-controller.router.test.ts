@@ -73,4 +73,18 @@ describe("AgentRun workflow controller router", function _Suite()
 		expect(response.status).toBe(204);
 		expect(dependencies.warmAuthority.terminalizeFailedTask).toHaveBeenCalledWith(_TaskRequest().input, _TaskRequest().task);
 	});
+
+	it("returns the authenticated pre-reservation cancellation decision", async function _ReturnsUnreservedCancellation()
+	{
+		const dependencies = _Dependencies();
+		(dependencies.warmAuthority.finalizeCancellationWithoutWarmReservation as ReturnType<typeof vi.fn>).mockResolvedValueOnce("reservation_exists");
+		const app = express();
+		app.use(express.json());
+		app.use(__CreateAgentRunWorkflowControllerRouter(dependencies));
+
+		const response = await request(app).post("/agent-run-workflows/warm-unreserved-cancellation").set("authorization", "Bearer projected-token").send(_TaskRequest());
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual({ outcome: "reservation_exists" });
+		expect(dependencies.warmAuthority.finalizeCancellationWithoutWarmReservation).toHaveBeenCalledWith(_TaskRequest().input, _TaskRequest().task);
+	});
 });

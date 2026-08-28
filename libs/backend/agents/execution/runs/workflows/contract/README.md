@@ -45,6 +45,9 @@ it would expose data in the durable task record; that data must stay behind the 
 - `AgentRunWarmRuntimeActivationCommand` and `AgentRunWarmRuntimeReadinessCommand` — record the exact
   profile change and readiness proof.
 - `AgentRunWarmRuntimeDeletionCommand` — names the exact used Pod that must be deleted.
+- `AgentRunWarmRuntimeUnreservedCancellationOutcome` and
+  `__ParseAgentRunWorkflowUnreservedCancellationOutcome` — tell the handler whether cancellation
+  finished without a Pod, must wait, or must continue through the saved Pod deletion path.
 - `AgentRunWorkflowObservation` — tells the handler whether it must wait or return a terminal result.
 - `AgentRunWarmRuntimeControllerAuthority` — defines the server operations that save these steps.
 

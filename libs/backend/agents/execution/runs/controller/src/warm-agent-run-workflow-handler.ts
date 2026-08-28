@@ -54,7 +54,7 @@ async function _Retry<TResult>(operation: () => Promise<TResult>): Promise<TResu
 	}
 }
 
-/** Reserves the first candidate that wins the database uniqueness fence. */
+/** Finalizes cancellation only when the server proves that this attempt never reserved a warm Pod. */
 async function _FinalizeUnreservedCancellation(options: WarmAgentRunWorkflowHandlerOptions, context: IWorkflowTaskContext, input: AgentRunTaskInput): Promise<AgentRunTaskResult | null>
 {
 	const outcome = await _Retry(async function _Finalize() { return await options.authority.finalizeCancellationWithoutWarmReservation(input, context.task); });

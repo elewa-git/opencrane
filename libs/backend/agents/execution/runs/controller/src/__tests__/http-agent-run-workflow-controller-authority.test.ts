@@ -50,4 +50,17 @@ describe("warm AgentRun workflow controller HTTP authority", function _Suite()
 		await expect(authority.terminalizeFailedTask({ siloId: "silo-a", runId: "run-1", attempt: 1 }, _Task())).resolves.toBeUndefined();
 		expect(fetch.mock.calls[0]?.[1]?.body).toBe(JSON.stringify({ input: { siloId: "silo-a", runId: "run-1", attempt: 1 }, task: _Task() }));
 	});
+
+	it("maps the pre-reservation cancellation response from the exact internal route", async function _MapsUnreservedCancellation()
+	{
+		const fetch = vi.fn(async function _Fetch(input: string | URL | Request, _init?: RequestInit)
+		{
+			expect(String(input)).toBe("http://opencrane-server.silo-a.svc.cluster.local:3001/api/internal/agent-controller/agent-run-workflows/warm-unreserved-cancellation");
+			return new Response(JSON.stringify({ outcome: "reservation_exists" }), { status: 200 });
+		});
+		const authority = _Authority(fetch);
+
+		await expect(authority.finalizeCancellationWithoutWarmReservation({ siloId: "silo-a", runId: "run-1", attempt: 1 }, _Task())).resolves.toBe("reservation_exists");
+		expect(fetch.mock.calls[0]?.[1]?.body).toBe(JSON.stringify({ input: { siloId: "silo-a", runId: "run-1", attempt: 1 }, task: _Task() }));
+	});
 });
