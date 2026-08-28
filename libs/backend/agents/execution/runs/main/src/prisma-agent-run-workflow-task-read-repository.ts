@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState, AgentServiceKind, AgentServiceState, WorkloadKind, type Prisma, type WorkloadAssignment } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
 import { AgentRunTaskNames, type AgentRunTaskInput } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -123,13 +123,13 @@ export function __CanCreateOrObserveAgentRunWorkflowTask(state: AgentRunState): 
 }
 
 /** Selects the fixed namespace and token audience for the server-approved workload class. */
-export function __AgentRunWorkflowRuntimeIdentity(kind: AgentServiceKind, options: AgentRunWorkflowControllerAuthorityOptions): { readonly namespace: string; readonly audience: string; readonly isServiceAccount: (value: string) => boolean }
+export function __AgentRunWorkflowRuntimeIdentity(kind: AgentServiceKind, options: AgentRunWorkflowControllerAuthorityOptions): { readonly namespace: string; readonly audience: string }
 {
 	if (kind === AgentServiceKind.Managed)
 	{
-		return { namespace: options.managedRuntimeNamespace, audience: MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, isServiceAccount: ___IsManagedAgentRuntimeServiceAccountName };
+		return { namespace: options.managedRuntimeNamespace, audience: MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE };
 	}
-	return { namespace: options.personalRuntimeNamespace, audience: AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, isServiceAccount: ___IsAgentRuntimeServiceAccountName };
+	return { namespace: options.personalRuntimeNamespace, audience: AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE };
 }
 
 /** Checks that controller input still names the exact current run attempt. */

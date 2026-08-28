@@ -79,7 +79,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		expect(composition.skillAuthoringInput).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringCompletion).toEqual(expect.any(Function));
 		expect(composition.artifactPreprocessController).toBeNull();
-		expect(composition.runtimeStream).toEqual(expect.any(Function));
+		expect(composition).not.toHaveProperty("runtimeStream");
 		expect(composition.conversationAssetOutputs).toEqual(expect.any(Function));
 		expect(composition.agentThreadParentDeliveries).toEqual(expect.any(Function));
 		expect(composition.artifactPreprocessor).toBeNull();

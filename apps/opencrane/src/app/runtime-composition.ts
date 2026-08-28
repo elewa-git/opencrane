@@ -11,7 +11,7 @@ import { _CreateConversationReplayRepository, PrismaAgentThreadParentDeliveryUni
 import { PrismaChannelTargetAuthorityUnitOfWork } from "@opencrane/backend/server/agents/channel-targets";
 import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __CreateArtifactPreprocessControllerRouter, __CreateArtifactPreprocessorRouter, __CreateArtifactScannerRouter } from "@opencrane/backend/server/agents/artifacts";
 import { PrismaSkillAuthoringValidationControllerUnitOfWork, __CreateSkillAuthoringValidationControllerRouter } from "@opencrane/backend/server/agents/skills";
-import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _CreateWarmRuntimeTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
+import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateSkillWorkloadTokenReviewer, _CreateWarmRuntimeTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
 import { PrismaConversationAssetOutputRepository, __CreateConversationAssetOutputRouter } from "@opencrane/backend/server/conversation-assets";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -133,12 +133,12 @@ function _CreateSkillWorkloadRuntimeComposition(prisma: PrismaClient, tokenRevie
 }
 
 /**
- * Bind the personal and managed runtime protocol to one shared workload reviewer.
+ * Bind the personal and managed warm-runtime protocol to one shared workload reviewer.
  *
  * Streaming applies the same plane boundary. The durable dispatch authority stays here because it
  * owns the server-side interpretation of runtime candidates, never the runtime Pod.
  *
- * Every router here shares the one runtime reviewer, which is the point: whatever a running agent
+ * Every router here shares the one warm-runtime reviewer, which is the point: whatever a running agent
  * sends the server — a stream candidate, a generated file, or an Agent-thread delivery to a parent
  * group message — is admitted against the same two runtime namespaces. The
  * authorities behind them are built here rather than inside those libraries because they need this
@@ -147,10 +147,10 @@ function _CreateSkillWorkloadRuntimeComposition(prisma: PrismaClient, tokenRevie
  * @param prisma - The main product database client.
  * @param config - Frozen command time-to-live and recovery settings.
  * @param namespaces - Validated server, personal-runtime, and managed-runtime identity planes.
- * @param tokenReviewer - Reviewer constrained to the two runtime identity planes.
- * @returns The runtime stream, conversation-file output, and Agent-thread parent-delivery routers.
+ * @param tokenReviewer - Reviewer constrained to the two warm-runtime identity planes.
+ * @returns The warm-runtime stream, conversation-file output, and Agent-thread parent-delivery routers.
  */
-function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateRuntimeTokenReviewer>, warmTokenReviewer: ReturnType<typeof _CreateWarmRuntimeTokenReviewer>): RuntimeProtocolComposition
+function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateWarmRuntimeTokenReviewer>): RuntimeProtocolComposition
 {
 	const runtimeDispatchAuthority = __CreateProductionRuntimeDispatchAuthority(prisma, {
 		personalRuntimeNamespace: namespaces.personalRuntimeNamespace,
@@ -158,16 +158,9 @@ function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: Interna
 		commandTtlMilliseconds: config.commandTtlMilliseconds,
 	});
 	return {
-		warmRuntimeBinding: __CreateWarmRuntimeBindingRouter({ tokenReviewer: warmTokenReviewer, authority: new PrismaWarmRuntimeBindingUnitOfWork(prisma, { assignmentTtlMilliseconds: config.assignmentTtlMilliseconds, issueAttemptModelKey: _IssueAttemptModelKey }), logger: _log }),
-		runtimeStream: _RegisterInternalAgentRuntimeStream({
-			tokenReviewer,
-			authority: runtimeDispatchAuthority,
-			maxBodyBytes: 64 * 1024,
-			heartbeatMilliseconds: 15_000,
-			commandRecoveryMilliseconds: config.commandRecoveryMilliseconds,
-		}),
+		warmRuntimeBinding: __CreateWarmRuntimeBindingRouter({ tokenReviewer, authority: new PrismaWarmRuntimeBindingUnitOfWork(prisma, { assignmentTtlMilliseconds: config.assignmentTtlMilliseconds, issueAttemptModelKey: _IssueAttemptModelKey }), logger: _log }),
 		warmRuntimeStream: _RegisterInternalAgentRuntimeStream({
-			tokenReviewer: warmTokenReviewer,
+			tokenReviewer,
 			authority: runtimeDispatchAuthority,
 			maxBodyBytes: 64 * 1024,
 			heartbeatMilliseconds: 15_000,
@@ -278,7 +271,6 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	// cannot silently reinterpret a controller, skill workload, or runtime identity.
 	const controllerTokenReviewer = _CreateAgentControllerTokenReviewer(authApi, namespaces.serverNamespace);
 	const skillWorkloadTokenReviewer = _CreateSkillWorkloadTokenReviewer(authApi);
-	const runtimeTokenReviewer = _CreateRuntimeTokenReviewer(authApi, namespaces);
 	const warmRuntimeTokenReviewer = _CreateWarmRuntimeTokenReviewer(authApi, namespaces);
 	const skillWorkloadUnitOfWork = new PrismaSkillWorkloadUnitOfWork(prisma, config.claimLeaseMilliseconds);
 	const skillWorkloadAuthority = _CreateSkillWorkloadExecutionAuthority(skillWorkloadUnitOfWork);
@@ -287,7 +279,7 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	return {
 		..._CreateControllerRuntimeComposition(prisma, config, namespaces, controllerTokenReviewer, skillWorkloadAuthority),
 		..._CreateSkillWorkloadRuntimeComposition(prisma, skillWorkloadTokenReviewer, skillWorkloadAuthority),
-		..._CreateRuntimeProtocolComposition(prisma, config, namespaces, runtimeTokenReviewer, warmRuntimeTokenReviewer),
+		..._CreateRuntimeProtocolComposition(prisma, config, namespaces, warmRuntimeTokenReviewer),
 		..._CreateOptionalRuntimeComposition(prisma, authApi, config, namespaces.serverNamespace, controllerTokenReviewer, workflowExecution),
 	};
 }

@@ -11,10 +11,10 @@ import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeElicitationUnitOfW
 import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types";
 
 /** Workload identity of the registered runtime Pod under test. */
-const _identity: RuntimeStreamWorkloadIdentity = { subject: "system:serviceaccount:runtime-ns:agent-runtime-personal", namespace: "runtime-ns", serviceAccountName: "agent-runtime-personal", podUid: "pod-1" };
+const _identity: RuntimeStreamWorkloadIdentity = { subject: "system:serviceaccount:runtime-ns:warm-runtime", namespace: "runtime-ns", serviceAccountName: "warm-runtime", podUid: "pod-1" };
 
 /** Workload identity of a registered managed-runtime Pod. */
-const _managedIdentity: RuntimeStreamWorkloadIdentity = { subject: "system:serviceaccount:managed-runtime-ns:managed-agent-runtime-default", namespace: "managed-runtime-ns", serviceAccountName: "managed-agent-runtime-default", podUid: "pod-1" };
+const _managedIdentity: RuntimeStreamWorkloadIdentity = { subject: "system:serviceaccount:managed-runtime-ns:warm-runtime", namespace: "managed-runtime-ns", serviceAccountName: "warm-runtime", podUid: "pod-1" };
 
 /** Fixed stream-open message from the connecting runtime instance. */
 const _open = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", podUid: "pod-1" } as const;
@@ -129,7 +129,7 @@ function _fakePrisma(options: FakeOptions)
 	const workloadIdentity = options.managed ? _managedIdentity : _identity;
 	const subjectId = options.managed ? "agent-service:svc-1" : "user-1";
 	const audience = options.managed ? "opencrane-managed-agent-runtime" : "opencrane-agent-runtime";
-	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId, audience, serviceAccountName: workloadIdentity.serviceAccountName, namespace: workloadIdentity.namespace, workloadKind: "Job", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.podUid === undefined ? "pod-1" : options.podUid, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
+	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId, audience, serviceAccountName: workloadIdentity.serviceAccountName, namespace: workloadIdentity.namespace, workloadKind: "Deployment", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.podUid === undefined ? "pod-1" : options.podUid, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
 	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
 	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, conversationId: options.conversationId ?? null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: options.managed ? { kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", effectiveBoundaryAttachmentDigest: `sha256:${"a".repeat(64)}`, fleetMembershipRevision: 3 } : { kind: "user", executionSubjectId: "user-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
 	const transactionOptions: unknown[] = [];

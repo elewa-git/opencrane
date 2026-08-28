@@ -80,7 +80,7 @@ export interface RuntimeWorkloadIdentity
  * Kept this narrow on purpose — the transport gets an identity or nothing, and never sees
  * the TokenReview response, so it cannot start interpreting Kubernetes results itself.
  *
- * Implemented by: {@link _CreateRuntimeTokenReviewer} in ./projected-token-reviewer.ts.
+ * Implemented by: `_CreateWarmRuntimeTokenReviewer` in projected-token-reviewer.ts.
  * Called by: `_RegisterInternalAgentRuntimeStream` in
  * libs/backend/server/infra/agent-runtime-stream, on both of its routes.
  *

@@ -174,8 +174,8 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
  * single-use channel context token. Being on the internal listener is not the protection — a router
  * mounted here without its own check would be open to every workload in the cluster.
  *
- * The runtime routers all share the `/api/internal/agent-runtime` base path and each declares its own
- * subpath, so `_MountRouteAreas` keeps them in list order rather than giving each a distinct mount.
+ * Skill workloads retain the `/api/internal/agent-runtime` base path. Warm runtime binding, command
+ * streaming, generated assets, and parent deliveries share `/api/internal/warm-runtime`.
  *
  * Called by: internal-app.ts, which builds the workload-facing Express listener.
  *
@@ -201,13 +201,12 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillWorkloadBootstrap },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringInput },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringCompletion },
-		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeStream },
-		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.conversationAssetOutputs },
-		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.agentThreadParentDeliveries },
 	];
 	const internalWarmRuntimeRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.warmRuntimeBinding },
 		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.warmRuntimeStream },
+		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.conversationAssetOutputs },
+		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.agentThreadParentDeliveries },
 	];
 	const internalWorkerRoutes = _OptionalRoute("/api/internal/artifact-preprocessor", runtime.artifactPreprocessor);
 	const internalScannerRoutes = _OptionalRoute("/api/internal/artifact-scanner", runtime.artifactScanner);

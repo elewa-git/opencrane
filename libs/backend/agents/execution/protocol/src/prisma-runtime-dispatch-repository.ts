@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState as PrismaAgentRunState, Prisma, RuntimeSteeringRequestState, WorkloadAssignmentState, WorkloadKind } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, WARM_RUNTIME_SERVICE_ACCOUNT_NAME, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type RuntimeAssignmentIdentity } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, WARM_RUNTIME_SERVICE_ACCOUNT_NAME, type RuntimeAssignmentIdentity } from "@opencrane/contracts";
 
 import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector";
 import type { RuntimeDispatchAuthorityConfig, RuntimeDispatchContext, RuntimeStreamBindingRepository, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types";
@@ -134,11 +134,11 @@ function _RuntimePlaneMatches(identity: RuntimeAssignmentIdentity, assignment: {
 	{
 		return assignment.namespace === config.managedRuntimeNamespace
 			&& assignment.audience === MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE
-			&& (warm || (assignment.workloadKind === WorkloadKind.Job && ___IsManagedAgentRuntimeServiceAccountName(assignment.serviceAccountName)));
+			&& warm;
 	}
 	return assignment.namespace === config.personalRuntimeNamespace
 		&& assignment.audience === AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE
-		&& (warm || (assignment.workloadKind === WorkloadKind.Job && ___IsAgentRuntimeServiceAccountName(assignment.serviceAccountName)));
+		&& warm;
 }
 
 /** Maps a stored run state to the protocol vocabulary. */

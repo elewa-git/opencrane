@@ -35,30 +35,6 @@ export const WARM_RUNTIME_SERVICE_ACCOUNT_NAME = "warm-runtime";
  */
 export const MANAGED_AGENT_RUNTIME_PROFILE_NAME = "managed-default";
 
-/**
- * Return whether a ServiceAccount name is a personal-agent runtime name.
- * @param value - Kubernetes ServiceAccount name to validate.
- * @returns True only for a valid personal-runtime-prefixed DNS label.
- */
-export function ___IsAgentRuntimeServiceAccountName(value: string): boolean
-{
-	return value.length <= 63 && /^agent-runtime-[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
-}
-
-/**
- * Return whether a ServiceAccount belongs to the bounded managed (central) agent runtime identity
- * class. This is a NARROWER class than {@link ___IsAgentRuntimeServiceAccountName}: the
- * `managed-agent-runtime-` prefix never overlaps the personal `agent-runtime-` prefix, so a name
- * that satisfies one validator is rejected by the other and the connector-scoped identity of a
- * central agent can never be confused with a personal runtime's.
- * @param value - Kubernetes ServiceAccount name to validate.
- * @returns True only for a valid managed-runtime-prefixed DNS label.
- */
-export function ___IsManagedAgentRuntimeServiceAccountName(value: string): boolean
-{
-	return value.length <= 63 && /^managed-agent-runtime-[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
-}
-
 /** Exact protocol version literal carried by every runtime frame. */
 export type AgentRuntimeProtocolVersion = typeof AGENT_RUNTIME_PROTOCOL_V1;
 

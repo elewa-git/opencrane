@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
-import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateChannelProxyTokenReviewer, _CreateMcpExecutorTokenReviewer, _CreateMemoryGatewayServerTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _CreateWarmRuntimeTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "../projected-token-reviewer";
+import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateChannelProxyTokenReviewer, _CreateMcpExecutorTokenReviewer, _CreateMemoryGatewayServerTokenReviewer, _CreateSkillWorkloadTokenReviewer, _CreateWarmRuntimeTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "../projected-token-reviewer";
 
 /** Build a TokenReview API stub with one controlled Kubernetes response. */
 function _ReviewApi(status: object)
@@ -105,16 +105,6 @@ describe("projected Kubernetes workload identity", function _describeProjectedId
 		await expect(reviewer.__Review("token", "skill-audience")).resolves.toEqual({ namespace: "skills-ns", serviceAccountName: "skill-authoring-1", podUid: "pod-uid-1" });
 	});
 
-	it("binds personal and managed runtimes to distinct namespace and account grammars", async function _reviewsRuntimeClasses()
-	{
-		const config = { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-ns" };
-		const personal = _CreateRuntimeTokenReviewer(_ReviewApi(_ValidStatus(AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, "system:serviceaccount:runtime-ns:agent-runtime-default")) as never, config);
-		const managed = _CreateRuntimeTokenReviewer(_ReviewApi(_ValidStatus(MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, "system:serviceaccount:managed-ns:managed-agent-runtime-default")) as never, config);
-
-		await expect(personal.__Review("token")).resolves.toEqual({ subject: "system:serviceaccount:runtime-ns:agent-runtime-default", namespace: "runtime-ns", serviceAccountName: "agent-runtime-default", podUid: "pod-uid-1" });
-		await expect(managed.__Review("token")).resolves.toEqual({ subject: "system:serviceaccount:managed-ns:managed-agent-runtime-default", namespace: "managed-ns", serviceAccountName: "managed-agent-runtime-default", podUid: "pod-uid-1" });
-	});
-
 	it("binds a warm runtime only through its dedicated audience and fixed account", async function _ReviewsWarmRuntime()
 	{
 		const config = { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-ns" };
@@ -127,25 +117,13 @@ describe("projected Kubernetes workload identity", function _describeProjectedId
 	});
 
 	it.each([
-		["wrong audience", _ValidStatus(AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, `system:serviceaccount:runtime-ns:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`)],
+		["wrong audience", _ValidStatus("opencrane-agent-runtime", `system:serviceaccount:runtime-ns:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`)],
 		["wrong namespace", _ValidStatus(WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, `system:serviceaccount:other:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`)],
 		["wrong account", _ValidStatus(WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, "system:serviceaccount:runtime-ns:agent-runtime-default")],
 		["missing Pod UID", _ValidStatus(WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, `system:serviceaccount:runtime-ns:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`, { user: { username: `system:serviceaccount:runtime-ns:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`, extra: {} } })],
 	])("rejects a warm runtime with %s", async function _RejectsWarmRuntime(_description, status)
 	{
 		const reviewer = _CreateWarmRuntimeTokenReviewer(_ReviewApi(status) as never, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-ns" });
-		await expect(reviewer.__Review("token")).resolves.toBeNull();
-	});
-
-	it.each([
-		["unauthenticated", _ValidStatus(AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, "system:serviceaccount:runtime-ns:agent-runtime-default", { authenticated: false })],
-		["wrong namespace", _ValidStatus(AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, "system:serviceaccount:other:agent-runtime-default")],
-		["wrong account grammar", _ValidStatus(AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, "system:serviceaccount:runtime-ns:other")],
-		["missing Pod UID", _ValidStatus(AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, "system:serviceaccount:runtime-ns:agent-runtime-default", { user: { username: "system:serviceaccount:runtime-ns:agent-runtime-default", extra: {} } })],
-		["ambiguous audience", _ValidStatus(AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, "system:serviceaccount:runtime-ns:agent-runtime-default", { audiences: [AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE] })],
-	])("rejects a %s runtime review", async function _rejectsRuntime(_description, status)
-	{
-		const reviewer = _CreateRuntimeTokenReviewer(_ReviewApi(status) as never, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-ns" });
 		await expect(reviewer.__Review("token")).resolves.toBeNull();
 	});
 

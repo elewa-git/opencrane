@@ -1,6 +1,6 @@
 import * as k8s from "@kubernetes/client-node";
 
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, ReviewedSkillWorkloadIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity, SkillWorkloadTokenReviewer } from "./workload-identity.types";
@@ -194,48 +194,6 @@ function _ParseRuntimeSubject(subject: string, expectedNamespace: string, podUid
 	const parsed = _ParseServiceAccountSubject(subject);
 	if (!parsed || parsed.namespace !== expectedNamespace || !isServiceAccountName(parsed.serviceAccountName) || !podUid) return null;
 	return { subject, ...parsed, podUid };
-}
-
-/**
- * Build the reviewer the runtime stream transport uses to authenticate agent runtimes.
- *
- * It submits the token for BOTH runtime audiences at once and then requires exactly one of
- * them to have been accepted. A token accepted for both, or for neither, is rejected: the
- * audience is what distinguishes a personal runtime from a managed one, and that choice
- * then decides which namespace and which ServiceAccount naming rule must match. Allowing
- * both would let one class of runtime be checked against the other's rules.
- *
- * After that, the ServiceAccount subject must parse, its namespace must equal the
- * configured namespace for that class, its name must satisfy that class's naming rule, and
- * the token must carry a bound Pod UID. Any failure returns null.
- *
- * Called by: apps/opencrane/src/app/runtime-composition.ts; the result is
- * passed to both the runtime bootstrap router and the runtime stream transport.
- *
- * @param authApi - Kubernetes client used only to submit TokenReviews.
- * @param config  - The two validated runtime namespaces; see
- *                  {@link _ValidateRuntimeIdentityNamespaces}.
- * @returns A reviewer that returns a verified identity or null; it never explains why.
- * @see https://kubernetes.io/docs/reference/access-authn-authz/authentication/ — TokenReview,
- *      token audiences, and the extra fields that carry the bound Pod UID.
- */
-export function _CreateRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi, config: RuntimeTokenReviewerConfig): RuntimeTokenReviewer
-{
-	return {
-		async __Review(token: string): Promise<RuntimeWorkloadIdentity | null>
-		{
-			const audiences = [AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE];
-			const status = await _ReviewProjectedToken(authApi, token, audiences);
-			if (!status) return null;
-			const personal = status.audiences?.includes(AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE) === true;
-			const managed = status.audiences?.includes(MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE) === true;
-			if (personal === managed) return null;
-			const podUid = _ReadReviewedPodUid(status.user?.extra);
-			return personal
-				? _ParseRuntimeSubject(status.user?.username ?? "", config.personalRuntimeNamespace, podUid, ___IsAgentRuntimeServiceAccountName)
-				: _ParseRuntimeSubject(status.user?.username ?? "", config.managedRuntimeNamespace, podUid, ___IsManagedAgentRuntimeServiceAccountName);
-		},
-	};
 }
 
 /** Build the Pod-bound reviewer used only by warm binding and warm command-stream routes. */
