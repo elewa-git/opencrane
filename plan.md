@@ -80,7 +80,10 @@ Docker-in-Docker and the CI-aligned Node 24, Helm v4.1.4, k3d v5.8.3, and kubect
 enforces a 4-core/16-GB/32-GB minimum and recommends an 8-core/32-GB/64-GB host. The minimum profile
 skips or removes the unused host dependency tree, uses local-path storage, clears disposable caches,
 and releases each Docker-side image after k3d accepts it. The recommended profile installs workspace dependencies
-for a repository prebuild and can opt into batch imports plus storage expansion. Smoke-only mode
+for a repository prebuild and can opt into batch imports plus storage expansion. The private
+Codespaces proxy authenticates login with fresh per-run proof; the server admits one fixed
+development Principal and Owner before issuing a bounded signed session, without contacting OIDC.
+Smoke-only mode
 remains explicit; production DNS, certificates, cloud identity, backup/restore, and real-tenant
 upgrades remain remote qualification.
 

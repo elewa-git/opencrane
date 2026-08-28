@@ -78,6 +78,13 @@ and prove storage expansion:
 SMOKE_HOST_PROFILE=recommended npm run dev:tier3 -- --storage-mode full
 ```
 
+Every minimum-host rerun starts by resetting the named disposable cluster and its run-owned Docker
+image storage, then performs the bounded sequential build-and-import flow again. The preceding
+successful cluster remains available for browsing and `kubectl` diagnosis only until that next run;
+you do not need to delete it manually first. This clean rebuild trades speed for predictable free
+space on a 32-GB disk. Use the recommended profile above when repeated builds should retain the
+workspace dependencies and reusable caches.
+
 The contributor command allows 600 seconds for workload readiness unless `TIMEOUT_SECONDS` supplies
 another reviewed value.
 
@@ -86,6 +93,13 @@ port labelled **OpenCrane Tier 3** and keep its visibility private. The local pr
 browser's `*.app.github.dev` origin while sending the smoke's `.test` host to ingress, so the SPA,
 `/api`, `/gateway`, and WebSocket routes all use the real chart routing. Port-forwarding only the
 SPA service is not enough: its nginx container deliberately does not proxy application routes.
+
+Click **Login** to establish the installation-selected `Tier 3 Developer` identity; Tier 3 does not
+contact an external OpenID Connect provider. The loopback proxy replaces any browser-supplied proof
+with a fresh per-run secret, and the server admits the exact fixed identity into the durable
+Principal and standalone Owner records before it signs a bounded browser session. The next Tier 3
+run rotates both the proxy proof and session key, so sessions from an earlier disposable cluster no
+longer authenticate.
 
 The minimum-host command already uses fast local-path storage. Select full storage explicitly when
 the change concerns storage expansion:

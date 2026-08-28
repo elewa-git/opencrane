@@ -73,11 +73,15 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   configuration and provider key are supplied to LiteLLM.
 
 - **Infrastructure developers can now retain and inspect a complete local Kubernetes silo after
-  qualification.** `npm run dev:tier3` runs the same full-storage k3d smoke that protects `develop`,
+  qualification.** `npm run dev:tier3` runs the same full-silo k3d smoke that protects `develop`,
   leaves the qualified cluster available for kubectl diagnosis, and exposes the real ingress through
-  a Codespaces-compatible loopback proxy. The repository devcontainer supplies Docker-in-Docker and
-  the CI-aligned Node, Helm, k3d, and kubectl toolchain, with dependency installation available to
-  Codespaces prebuilds.
+  a Codespaces-compatible loopback proxy. Login establishes a fixed development identity through a
+  fresh per-run proxy proof, durable Principal and Owner admission, and a bounded signed session,
+  without requiring an external OIDC provider. The minimum-host profile resets disposable cluster
+  and image storage and rebuilds sequentially within 32 GB; the recommended profile retains reusable
+  dependencies and caches for faster repeated builds. The repository devcontainer supplies
+  Docker-in-Docker and the CI-aligned Node, Helm, k3d, and kubectl toolchain, with dependency
+  installation available to Codespaces prebuilds.
 
 - **Users and operators can now see the availability of every user-visible service through
   unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,

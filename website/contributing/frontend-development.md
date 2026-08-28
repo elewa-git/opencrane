@@ -335,6 +335,13 @@ and qualify storage expansion:
 SMOKE_HOST_PROFILE=recommended npm run dev:tier3 -- --storage-mode full
 ```
 
+Each minimum-host rerun resets the named disposable cluster and its run-owned Docker image storage,
+then repeats the bounded sequential build and import. The previous successful cluster stays
+available for browsing and `kubectl` diagnosis only until that next run, so there is no need to
+delete it manually before rerunning. This clean rebuild is slower but keeps disk use predictable on
+the 32 GB machine. Use the recommended profile when repeated builds should retain workspace
+dependencies and reusable caches.
+
 The contributor command also allows 600 seconds for workload readiness on a loaded Codespace.
 
 The command runs the same current-silo smoke that protects `develop`, with `KEEP_CLUSTER=1`. It
@@ -347,6 +354,18 @@ visibility private. A loopback proxy on port 4200 keeps the forwarded `*.app.git
 origin but sends the smoke's `.test` host to the k3d ingress. That preserves the SPA, `/api`,
 `/gateway`, and WebSocket routing. A direct port-forward to the SPA service would load static files
 but fail application routes because the SPA container deliberately has no reverse proxy.
+
+Click **Login** to establish the installation-selected `Tier 3 Developer` identity. This disposable
+profile does not contact an external OpenID Connect provider. The loopback proxy overwrites any
+browser-supplied proof with a fresh per-run secret; the server then projects the exact fixed identity
+into its durable Principal and standalone Owner records before issuing a bounded signed session.
+Starting Tier 3 again rotates both the proxy proof and the session key, invalidating sessions from
+the preceding disposable cluster.
+
+::: warning
+Keep the forwarded Tier 3 port private. Its login identity is deliberately selected by the local
+development installation and is not an organisation sign-in mechanism.
+:::
 
 The minimum-host command uses fast local-path storage. Select full storage when the change concerns
 storage expansion:
