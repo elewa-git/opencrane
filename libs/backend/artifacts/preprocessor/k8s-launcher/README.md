@@ -22,7 +22,9 @@ agent controller is the only process that may submit the Job it produces.
 
 **In this flow:** [controller](../controller/README.md).
 
-The Job is suspended when created. The controller records its Kubernetes UID before releasing it.
+The Job is suspended when created. The controller records its Kubernetes UID before releasing it,
+then the durable workflow deletes that exact UID after completion. Kubernetes does not own a timer
+for this cleanup.
 The worker receives an audience-bound token and an opaque bootstrap reference in separate read-only
 files. It can use them only with the OpenCrane internal broker; it never receives database or
 artifact-store credentials.

@@ -8,7 +8,7 @@ import type { ArtifactPreprocessorRouterDependencies } from "../artifact-preproc
 /** Fixed isolated namespace used by every reviewed test identity. */
 const _NAMESPACE = "opencrane-artifact-preprocessing";
 
-/** Build broker-only router dependencies with a successfully reviewed worker identity. */
+/** Builds broker-only router dependencies with a successfully reviewed worker identity. */
 function _Dependencies(overrides: Partial<ArtifactPreprocessorRouterDependencies> = {}): ArtifactPreprocessorRouterDependencies
 {
 	return {
@@ -21,7 +21,7 @@ function _Dependencies(overrides: Partial<ArtifactPreprocessorRouterDependencies
 			claimForTask: vi.fn(),
 			bindWorkload: vi.fn(),
 			bindFirstPod: vi.fn(),
-			loadCompletion: vi.fn(),
+			loadOutcome: vi.fn(),
 			complete: vi.fn(),
 			issueSourceLeaseAtomically: vi.fn(),
 			issueOutputLeaseAtomically: vi.fn(),
@@ -102,7 +102,7 @@ async function* _Bytes(value: string): AsyncGenerator<Uint8Array>
 	yield Buffer.from(value);
 }
 
-/** Collect one test-only submitted stream so its exact bytes can be asserted. */
+/** Collects one test-only submitted stream so its exact bytes can be asserted. */
 async function _Collect(bytes: AsyncIterable<Uint8Array> | undefined): Promise<Buffer>
 {
 	if (bytes === undefined)

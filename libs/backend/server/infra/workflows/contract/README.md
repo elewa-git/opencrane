@@ -73,11 +73,13 @@ and workers instead of keeping an old path beside the replacement.
 
 ## Public surface
 
-- `IWorkflowEngine` — declares or registers a task, starts it, sends it information, or stops it.
+- `IWorkflowEngine` — declares or registers a task, starts it, sends it information, or stops it;
+  product repositories can send an event through their existing database transaction.
 - `IWorkflowTaskDeclaration` — permits transaction-bound admission when another process owns the handler.
 - `IWorkflowTaskQueueAuthority` — chooses the approved queue, a named list of work for a worker, for each task.
 - `IWorkflowWorkerRuntime` — starts workers and lets them finish their current work before stopping.
-- `IWorkflowTaskContext` — lets a running task save progress, wait, or start and wait for another task.
+- `IWorkflowTaskContext` — lets a running task save progress, wait at a named replay point, or start
+  and wait for another task.
 - `IWorkflowTaskRetryPolicy` — sets the total attempt limit and the delay before each later attempt.
 - Task, event, receipt, worker-lifecycle, and error types — describe the information passed between these steps.
 

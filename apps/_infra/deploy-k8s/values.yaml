@@ -249,7 +249,6 @@ artifactPreprocessor:
   projectedTokenTtlSeconds: 600
   scratchSize: 128Mi
   activeDeadlineSeconds: 300
-  ttlSecondsAfterFinished: 0
   requestTimeoutMs: 10000
   maximumSourceBytes: 33554432
   maximumOutputBytes: 16777216

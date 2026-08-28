@@ -36,7 +36,7 @@ describe("Prisma artifact units of work", function _Suite()
 	{
 		const transaction = _Transaction();
 		const prisma = _Prisma(transaction);
-		const result = await new PrismaArtifactPreprocessUnitOfWork(prisma as never).run(async function _Observe(repository)
+		const result = await new PrismaArtifactPreprocessUnitOfWork(prisma as never, { emitEventInTransaction: vi.fn() }).run(async function _Observe(repository)
 		{
 			return repository !== null;
 		});
@@ -51,7 +51,7 @@ describe("Prisma artifact units of work", function _Suite()
 		const prisma = _Prisma(transaction);
 		prisma.$transaction.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError("serialization conflict", { code: "P2034", clientVersion: "test" }));
 
-		await expect(new PrismaArtifactPreprocessUnitOfWork(prisma as never).run(async function _Observe()
+		await expect(new PrismaArtifactPreprocessUnitOfWork(prisma as never, { emitEventInTransaction: vi.fn() }).run(async function _Observe()
 		{
 			return "completed";
 		})).resolves.toBe("completed");

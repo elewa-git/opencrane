@@ -18,9 +18,9 @@ function _McpRuntime(): McpRuntimeComposition
 }
 
 /** Supply an inert guarded task admission port because these tests never admit a workflow. */
-function _WorkflowExecution(): Pick<IWorkflowEngine, "spawn">
+function _WorkflowExecution(): Pick<IWorkflowEngine, "emitEventInTransaction" | "spawn">
 {
-	return { spawn: vi.fn() } as unknown as Pick<IWorkflowEngine, "spawn">;
+	return { emitEventInTransaction: vi.fn(), spawn: vi.fn() } as unknown as Pick<IWorkflowEngine, "emitEventInTransaction" | "spawn">;
 }
 
 /** Keep identity-route tests independent from mounted ArtifactStore credentials. */

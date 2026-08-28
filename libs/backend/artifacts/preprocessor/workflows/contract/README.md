@@ -25,10 +25,12 @@ server owns PDF and output data. The controller owns starting the one isolated w
 - `ArtifactPreprocessTaskInput` carries the silo and saved preprocessing job identifiers.
 - `ArtifactPreprocessPipelineVersions` and `ArtifactPreprocessTaskNames` keep the supported PDF
   pipeline and its task name aligned.
-- `ArtifactPreprocessControllerAuthority` and its record/bind/completion types describe the private
-  controller exchange. The server issues and persists the claim, bindings, and completion; the
-  controller supplies fenced Job and Pod identities, then reloads server-owned completion evidence
-  before it asks the server to make the job terminal.
+- `ArtifactPreprocessControllerAuthority` and its record, binding, and outcome types describe the
+  private controller exchange. The server issues the claim, saves Job and Pod bindings, and records
+  each completion or failure. The controller reloads that saved outcome before UID-fenced cleanup;
+  a retryable outcome also carries the database-owned time for the next delivery.
+- `ArtifactPreprocessOutcomeKinds` and `__ArtifactPreprocessOutcomeEventName` keep the saved outcome
+  and its delivery-scoped workflow wake-up aligned without placing completion data in the event.
 - `__ParseArtifactPreprocessTaskReceipt`, `__ParseArtifactPreprocessWorkloadBindRequest`, and
   `__ParseArtifactPreprocessPodBindRequest` reject malformed controller JSON before the server
   calls its authority. They check the saved task, bootstrap reference, delivery fence, and worker

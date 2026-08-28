@@ -6,6 +6,7 @@ import { __NormalizeWorkflowTaskRetryPolicy, WorkflowError, WorkflowTaskNotDecla
 import type { IWorkflowEngine, IWorkflowTaskDeclaration, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskReceipt, IWorkflowTaskRetryPolicy, IWorkflowTaskSpawn, IWorkflowTransaction, IWorkflowWorkerRuntime, IWorkflowWorkers, IWorkflowWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _TaskScopedIdempotencyKey, WorkflowTaskAdmission } from "./workflow-task-admission";
+import { WorkflowTaskEventAdmission } from "./workflow-task-event-admission";
 import type { IAbsurdWorkflowEngineOptions } from "./absurd-workflow-engine.types";
 import { _AbsurdTaskContext, _AbsurdTaskEventName } from "./absurd-task-context";
 import { _AbsurdTerminalTaskFailure } from "./absurd-terminal-task-failure";
@@ -336,6 +337,15 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		{
 			throw new AbsurdWorkflowError("emit event", error);
 		}
+	}
+
+	/** Delivers a task event through the same transaction that persisted its product outcome. */
+	async emitEventInTransaction<TPayload>(transaction: IWorkflowTransaction, task: IWorkflowTaskReceipt, event: IWorkflowTaskEvent<TPayload>): Promise<IWorkflowTaskEventReceipt>
+	{
+		const eventName = _RequiredString("event.eventName", event.eventName);
+		const admission = new WorkflowTaskEventAdmission(this.queueForTask(task.taskName));
+		await admission.emit(transaction.client, _AbsurdTaskEventName(task.taskId, eventName), event.payload);
+		return { task, eventName };
 	}
 
 	/** Cancels an incomplete task through the reviewed queue that owns its task definition. */

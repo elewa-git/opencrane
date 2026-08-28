@@ -41,6 +41,16 @@ export interface GovernedJobControllerStore
 	 * @throws When more than one Pod matches or the returned Pod differs from the assigned Job.
 	 */
 	findFirstPod(expectedJob: V1Job, workloadUid: string, serviceAccountName: string): Promise<V1Pod | null>;
+	/**
+	 * Deletes the Job identified by the saved UID after its class-specific durable owner has made
+	 * completion terminal. A missing Job is an idempotent success, but a replacement UID is not.
+	 *
+	 * @param expectedJob - The complete Job manifest whose deterministic coordinates are deleted.
+	 * @param workloadUid - The Kubernetes Job UID saved by the durable assignment.
+	 * @returns Nothing after Kubernetes accepts the UID-fenced deletion or reports the Job missing.
+	 * @throws When Kubernetes rejects the deletion or the saved UID no longer owns the Job name.
+	 */
+	deleteJob(expectedJob: V1Job, workloadUid: string): Promise<void>;
 }
 
 /**
@@ -59,6 +69,8 @@ export interface GovernedJobControllerBatchApi
 	readNamespacedJob(request: { readonly namespace: string; readonly name: string }, options?: ConfigurationOptions): Promise<V1Job>;
 	/** Applies the patch that tests the saved UID and resource version before releasing the Job. */
 	patchNamespacedJob(request: { readonly namespace: string; readonly name: string; readonly body: readonly { readonly op: "test" | "replace"; readonly path: "/metadata/uid" | "/metadata/resourceVersion" | "/spec/activeDeadlineSeconds" | "/spec/suspend"; readonly value: string | number | boolean }[] }, options?: ConfigurationOptions): Promise<V1Job>;
+	/** Deletes the named Job only while its immutable UID still matches the durable assignment. */
+	deleteNamespacedJob(request: { readonly namespace: string; readonly name: string; readonly body: { readonly preconditions: { readonly uid: string } } }, options?: ConfigurationOptions): Promise<unknown>;
 }
 
 /**

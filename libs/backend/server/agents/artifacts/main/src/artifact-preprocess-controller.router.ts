@@ -112,7 +112,7 @@ export function __CreateArtifactPreprocessControllerRouter(dependencies: Artifac
 		}
 	});
 
-	router.post("/artifact-preprocess-jobs/:preprocessJobId/completion/load", async function _LoadCompletion(request: Request, response: Response): Promise<void>
+	router.post("/artifact-preprocess-jobs/:preprocessJobId/outcome/load", async function _LoadOutcome(request: Request, response: Response): Promise<void>
 	{
 		try
 		{
@@ -124,24 +124,24 @@ export function __CreateArtifactPreprocessControllerRouter(dependencies: Artifac
 			}
 			// 2. Return only the completion that the admitted task and event digest identify together.
 			const preprocessJobId = _PreprocessJobId(request);
-			const completionDigest = _CompletionDigest(request.body);
-			const task = completionDigest === null ? null : __ParseArtifactPreprocessTaskReceipt((request.body as Record<string, unknown>)["task"]);
-			if (preprocessJobId === null || completionDigest === null || task === null)
+			const deliveryCount = _DeliveryCount(request.body);
+			const task = deliveryCount === null ? null : __ParseArtifactPreprocessTaskReceipt((request.body as Record<string, unknown>)["task"]);
+			if (preprocessJobId === null || deliveryCount === null || task === null)
 			{
-				_RespondProblem(response, 400, "invalid_completion_load");
+				_RespondProblem(response, 400, "invalid_outcome_load");
 				return;
 			}
-			const completion = await dependencies.authority.loadCompletion(preprocessJobId, completionDigest, task);
-			if (completion === null)
+			const outcome = await dependencies.authority.loadOutcome(preprocessJobId, deliveryCount, task);
+			if (outcome === null)
 			{
-				_RespondProblem(response, 409, "stale_or_unavailable_completion");
+				_RespondProblem(response, 409, "stale_or_unavailable_outcome");
 				return;
 			}
-			response.status(200).json(completion);
+			response.status(200).json(outcome);
 		}
 		catch (err)
 		{
-			_LogFailure(dependencies, err, "agent_controller.artifact_preprocess.completion_load");
+			_LogFailure(dependencies, err, "agent_controller.artifact_preprocess.outcome_load");
 			_RespondProblem(response, 503, "artifact_preprocess_unavailable");
 		}
 	});
@@ -185,15 +185,15 @@ function _PreprocessJobId(request: Request): string | null
 	return typeof value === "string" && value.length > 0 && value.length <= 128 ? value : null;
 }
 
-/** Reads the completion digest from a strict controller load request. */
-function _CompletionDigest(value: unknown): string | null
+/** Reads the delivery count from a strict controller outcome request. */
+function _DeliveryCount(value: unknown): number | null
 {
 	if (value === null || typeof value !== "object" || Array.isArray(value))
 	{
 		return null;
 	}
 	const body = value as Record<string, unknown>;
-	return Object.keys(body).length === 2 && typeof body["completionDigest"] === "string" && /^sha256:[a-f0-9]{64}$/u.test(body["completionDigest"]) ? body["completionDigest"] : null;
+	return Object.keys(body).length === 2 && typeof body["deliveryCount"] === "number" && Number.isSafeInteger(body["deliveryCount"]) && body["deliveryCount"] > 0 ? body["deliveryCount"] : null;
 }
 
 /** Reads the completion identity from a strict controller terminal-write request. */

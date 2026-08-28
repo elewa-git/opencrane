@@ -92,6 +92,12 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		return { task, eventName: event.eventName };
 	}
 
+	/** Model transaction-bound delivery with the same in-memory event queue used by ordinary emits. */
+	emitEventInTransaction<TPayload>(_transaction: IWorkflowTransaction, task: IWorkflowTaskReceipt, event: IWorkflowTaskEvent<TPayload>): Promise<IWorkflowTaskEventReceipt>
+	{
+		return this.emitEvent(task, event);
+	}
+
 	/** Cancel an incomplete task and reject any event wait that would otherwise keep it alive. */
 	async cancel(task: IWorkflowTaskReceipt): Promise<IWorkflowTaskReceipt>
 	{
@@ -215,7 +221,7 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 			{
 				return self._AwaitChild<TResult>(task);
 			},
-			async sleepUntil(instant: Date): Promise<void>
+			async sleepUntil(instant: Date, _stepName?: string): Promise<void>
 			{
 				self._AssertNotCancelled(record);
 				if (instant.getTime() > Date.now())

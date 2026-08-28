@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { __IssueArtifactPreprocessOutputLease } from "../artifact-preprocessing";
 import type { ArtifactPreprocessRepository } from "../artifact-preprocessing.types";
 
-/** Build a complete repository mock while allowing focused method overrides. */
+/** Builds a complete repository mock while allowing focused method overrides. */
 function _Repository(overrides: Partial<ArtifactPreprocessRepository> = {}): ArtifactPreprocessRepository
 {
 	return {
@@ -11,7 +11,7 @@ function _Repository(overrides: Partial<ArtifactPreprocessRepository> = {}): Art
 		claimForTask: vi.fn(),
 		bindWorkload: vi.fn(),
 		bindFirstPod: vi.fn(),
-		loadCompletion: vi.fn(),
+		loadOutcome: vi.fn(),
 		complete: vi.fn(),
 		issueSourceLeaseAtomically: vi.fn(),
 		issueOutputLeaseAtomically: vi.fn(),

@@ -37,6 +37,14 @@ export interface ArtifactPreprocessKubernetesStore
 	 * @returns The first matching Pod, or `null` while Kubernetes has not created one.
 	 */
 	findFirstPod(expected: V1Job, jobUid: string, serviceAccountName: string): Promise<V1Pod | null>;
+	/**
+	 * Deletes the exact completed Job through its saved immutable UID.
+	 *
+	 * @param expected - Same hardened Job manifest used for creation and release.
+	 * @param jobUid - Immutable UID accepted by the server for this workflow claim.
+	 * @returns Nothing after deletion or when Kubernetes already reports the Job missing.
+	 */
+	deleteJob(expected: V1Job, jobUid: string): Promise<void>;
 }
 
 /**

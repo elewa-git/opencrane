@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { __BuildArtifactPreprocessorJob } from "../index";
 
-/** Return one bounded deployment-owned PDF worker profile. */
+/** Returns one bounded deployment-owned PDF worker profile. */
 function _Profile()
 {
-	return { image: `ghcr.io/opencrane/artifact-preprocessor@sha256:${"a".repeat(64)}`, imagePullPolicy: "IfNotPresent" as const, serverNamespace: "opencrane", serverServiceName: "opencrane-server", namespace: "opencrane-artifact-preprocessor", serviceAccountName: "artifact-preprocessor", tokenAudience: "opencrane-artifact-preprocessor", openCraneInternalUrl: "http://opencrane-server.opencrane.svc.cluster.local:8081", tokenPath: "/var/run/opencrane/tokens/opencrane.token", bootstrapReferencePath: "/var/run/opencrane/bootstrap/reference", scratchSize: "128Mi", activeDeadlineSeconds: 300, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "100m", memory: "128Mi" }, limits: { cpu: "1", memory: "512Mi" } } };
+	return { image: `ghcr.io/opencrane/artifact-preprocessor@sha256:${"a".repeat(64)}`, imagePullPolicy: "IfNotPresent" as const, serverNamespace: "opencrane", serverServiceName: "opencrane-server", namespace: "opencrane-artifact-preprocessor", serviceAccountName: "artifact-preprocessor", tokenAudience: "opencrane-artifact-preprocessor", openCraneInternalUrl: "http://opencrane-server.opencrane.svc.cluster.local:8081", tokenPath: "/var/run/opencrane/tokens/opencrane.token", bootstrapReferencePath: "/var/run/opencrane/bootstrap/reference", scratchSize: "128Mi", activeDeadlineSeconds: 300, resources: { requests: { cpu: "100m", memory: "128Mi" }, limits: { cpu: "1", memory: "512Mi" } } };
 }
 
-/** Return controller-owned opaque coordinates for one preprocessing task. */
+/** Returns controller-owned opaque coordinates for one preprocessing task. */
 function _Assignment()
 {
 	return { preprocessJobId: "preprocess-1", siloId: "silo-1", namespace: "opencrane-artifact-preprocessor", bootstrapReference: `artifact-preprocess-bootstrap-v1_${"b".repeat(64)}` };
@@ -20,7 +20,7 @@ describe("artifact preprocessing Job builder", function _DescribeArtifactPreproc
 	{
 		const job = __BuildArtifactPreprocessorJob(_Assignment(), _Profile());
 		expect(job).toMatchObject({ apiVersion: "batch/v1", kind: "Job" });
-		expect(job.spec).toMatchObject({ suspend: true, backoffLimit: 0, completions: 1, parallelism: 1, ttlSecondsAfterFinished: 0 });
+		expect(job.spec).toMatchObject({ suspend: true, backoffLimit: 0, completions: 1, parallelism: 1 });
 		expect(job.spec?.template.spec).toMatchObject({ serviceAccountName: "artifact-preprocessor", automountServiceAccountToken: false, restartPolicy: "Never" });
 		expect(job.spec?.template.spec?.containers[0]?.securityContext).toMatchObject({ allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } });
 		expect(JSON.stringify(job)).not.toContain("preprocess-1");

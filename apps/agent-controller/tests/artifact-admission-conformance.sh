@@ -58,7 +58,6 @@ spec:
   completions: 1
   backoffLimit: 0
   activeDeadlineSeconds: 300
-  ttlSecondsAfterFinished: 0
   template:
     metadata:
       labels:
@@ -160,7 +159,7 @@ _expect_create_denied "unsuspended create" "$CONTROLLER_USER"
 
 echo "[artifact-admission] verifying only the exact one-time unsuspend update is accepted"
 kubectl create --as "$CONTROLLER_USER" --filename "$BASE_JOB" >/dev/null
-if kubectl patch job "$JOB_NAME" --namespace "$ARTIFACT_NAMESPACE" --as "$CONTROLLER_USER" --type json --patch '[{"op":"replace","path":"/spec/ttlSecondsAfterFinished","value":1},{"op":"replace","path":"/spec/suspend","value":false}]' >/dev/null 2>&1; then
+if kubectl patch job "$JOB_NAME" --namespace "$ARTIFACT_NAMESPACE" --as "$CONTROLLER_USER" --type json --patch '[{"op":"replace","path":"/spec/backoffLimit","value":1},{"op":"replace","path":"/spec/suspend","value":false}]' >/dev/null 2>&1; then
   echo "[artifact-admission] release plus an unrelated Job mutation was accepted" >&2
   exit 1
 fi

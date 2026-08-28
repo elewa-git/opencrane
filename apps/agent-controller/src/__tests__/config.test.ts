@@ -31,7 +31,7 @@ function _McpExecutorProfileJson(): string
 /** Return the Helm-equivalent optional artifact preprocessing profile. */
 function _ArtifactPreprocessorProfileJson(serverNamespace = "silo-a"): string
 {
-	return JSON.stringify({ image: `ghcr.io/elewa-git/opencrane-artifact-preprocessor@sha256:${"d".repeat(64)}`, imagePullPolicy: "IfNotPresent", serverNamespace, serverServiceName: "opencrane-server", namespace: "opencrane-artifact-preprocessing", serviceAccountName: "artifact-preprocessor", tokenAudience: "opencrane-artifact-preprocessor", openCraneInternalUrl: `http://opencrane-server.${serverNamespace}.svc.cluster.local:3001`, tokenPath: "/var/run/opencrane/tokens/opencrane.token", bootstrapReferencePath: "/var/run/opencrane/bootstrap/reference", scratchSize: "128Mi", activeDeadlineSeconds: 300, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "100m", memory: "128Mi" }, limits: { cpu: "1000m", memory: "512Mi" } } });
+	return JSON.stringify({ image: `ghcr.io/elewa-git/opencrane-artifact-preprocessor@sha256:${"d".repeat(64)}`, imagePullPolicy: "IfNotPresent", serverNamespace, serverServiceName: "opencrane-server", namespace: "opencrane-artifact-preprocessing", serviceAccountName: "artifact-preprocessor", tokenAudience: "opencrane-artifact-preprocessor", openCraneInternalUrl: `http://opencrane-server.${serverNamespace}.svc.cluster.local:3001`, tokenPath: "/var/run/opencrane/tokens/opencrane.token", bootstrapReferencePath: "/var/run/opencrane/bootstrap/reference", scratchSize: "128Mi", activeDeadlineSeconds: 300, resources: { requests: { cpu: "100m", memory: "128Mi" }, limits: { cpu: "1000m", memory: "512Mi" } } });
 }
 
 /** Return the minimal complete process environment. */

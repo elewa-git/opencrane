@@ -24,10 +24,11 @@ OpenCrane companion, ServiceAccount, endpoint, lifetime, and resources. The cont
 Job UID before release and records the first Pod UID before the companion may claim work.
 
 When artifact preprocessing is enabled, the same durable worker creates and releases the fixed PDF
-conversion Job in its isolated namespace. The optional Role grants only Job get/create/patch and Pod
-list there; the profile fixes the immutable image, worker identity, same-silo broker endpoint,
-deadline, scratch volume, and resources. Fail-closed admission binds those verbs to the exact
-suspended Job envelope and permits only its one-time release.
+conversion Job in its isolated namespace. The optional Role grants only Job get/create/patch/delete
+and Pod list there; the profile fixes the immutable image, worker identity, same-silo broker
+endpoint, deadline, scratch volume, and resources. Fail-closed admission binds creation and release
+to the exact suspended Job envelope. After durable completion, the Absurd task deletes only the Job
+UID that OpenCrane saved; a failed delete is retried and an already missing Job is complete.
 
 Each released skill Job receives an audience-bound projected token and opaque bootstrap reference
 through separate read-only files. Helm fixes the acknowledgement URL to the same-silo OpenCrane
@@ -73,8 +74,9 @@ The process uses the same release-local OpenCrane database credential as the ser
 claim tasks from the queues where server transactions admitted them. Its NetworkPolicy permits only
 the release-local CNPG pooler on TCP 5432. It exposes no Service, Ingress, public route or health
 listener. Its runtime roles permit only reading and activating the fixed warm Deployments and Pods.
-Separate roles keep `get/create/patch` for governed skill, OCI MCP, and artifact Jobs and `list` for
-their Pods. It cannot create policy or read workload credentials. The one-attempt model key stays in
+Separate roles keep `get/create/patch` for governed skill and OCI MCP Jobs, add UID-fenced `delete`
+only for artifact Jobs, and keep `list` for their Pods. The controller cannot create policy or read
+workload credentials. The one-attempt model key stays in
 the Absurd claim response and is sent directly to the claimed Pod. The controller never receives the
 LiteLLM master key. Its ServiceAccount and Deployment remain in the server namespace, so
 compromising a runtime Pod does not place it beside the controller identity.

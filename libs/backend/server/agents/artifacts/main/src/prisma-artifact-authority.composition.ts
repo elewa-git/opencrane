@@ -45,9 +45,9 @@ export function _CreateArtifactUploadAuthority(prisma: PrismaClient, workflow: P
  * @returns The repository the router and both brokers use. Unlike the upload authority, it lets
  *   an exhausted database collision reach the caller, which the router answers as HTTP 503.
  */
-export function _CreateArtifactPreprocessAuthority(prisma: PrismaClient): ArtifactPreprocessRepository & ArtifactPreprocessControllerAuthority
+export function _CreateArtifactPreprocessAuthority(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "emitEventInTransaction">): ArtifactPreprocessRepository & ArtifactPreprocessControllerAuthority
 {
-	return new _ArtifactPreprocessAuthority(new PrismaArtifactPreprocessUnitOfWork(prisma));
+	return new _ArtifactPreprocessAuthority(new PrismaArtifactPreprocessUnitOfWork(prisma, workflow));
 }
 
 /**

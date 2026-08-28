@@ -1634,6 +1634,15 @@
       "method": "$queryRaw",
       "sqlTemplate": "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)",
       "reason": "Task admission owns the one parameterized vendor procedure call that shares the caller's product transaction."
+    },
+    {
+      "path": "libs/backend/server/infra/workflows/infra_absurd/src/workflow-task-event-admission.ts",
+      "adapter": "WorkflowTaskEventAdmission",
+      "contract": "IWorkflowTaskEventAdmission",
+      "contractImportPath": "./workflow-task-event-admission.types",
+      "method": "$queryRaw",
+      "sqlTemplate": "SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb)",
+      "reason": "Task event admission owns the one parameterized vendor procedure call that shares a persisted product outcome's transaction."
     }
   ],
   "exemptions": [

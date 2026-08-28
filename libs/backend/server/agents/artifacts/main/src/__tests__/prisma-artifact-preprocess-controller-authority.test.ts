@@ -128,9 +128,25 @@ describe("Prisma artifact preprocessing controller authority", function _Describ
 		const harness = _Harness(_Job({ state: ArtifactPreprocessJobState.Claimed, claimFence: "claim-1", profileName: "pdf-preprocessor", claimedAt: _NOW, deliveryCount: 1, claimExpiresAt: new Date(_NOW.getTime() + 60_000), workloadUid: "job-uid-1", firstPodUid: "pod-uid-1", completionDigest: digest }));
 		const completion = { preprocessJobId: "preprocess-1", completionDigest: digest };
 
-		await expect(harness.authority.loadCompletion("preprocess-1", digest, _Task())).resolves.toEqual(completion);
+		await expect(harness.authority.loadOutcome("preprocess-1", 1, _Task())).resolves.toEqual({ kind: "completed", preprocessJobId: "preprocess-1", deliveryCount: 1, completionDigest: digest });
 		await expect(harness.authority.complete("preprocess-1", completion, _Task())).resolves.toBe("completed");
 		await expect(harness.authority.complete("preprocess-1", completion, _Task())).resolves.toBe("idempotent");
 		expect(harness.job()).toMatchObject({ state: ArtifactPreprocessJobState.Completed, completionConsumedAt: _NOW, completedAt: _NOW });
+	});
+
+	it("returns the retry time only for the exact failed delivery", async function _LoadsRetryableOutcome()
+	{
+		const retryAt = new Date(_NOW.getTime() + 30_000);
+		const harness = _Harness(_Job({ state: ArtifactPreprocessJobState.RetryableFailed, deliveryCount: 2, nextAttemptAt: retryAt }));
+
+		await expect(harness.authority.loadOutcome("preprocess-1", 2, _Task())).resolves.toEqual({ kind: "retryable_failed", preprocessJobId: "preprocess-1", deliveryCount: 2, retryAt: retryAt.toISOString() });
+		await expect(harness.authority.loadOutcome("preprocess-1", 1, _Task())).resolves.toBeNull();
+	});
+
+	it("returns terminal failure without inventing another delivery", async function _LoadsTerminalOutcome()
+	{
+		const harness = _Harness(_Job({ state: ArtifactPreprocessJobState.TerminalFailed, deliveryCount: 3 }));
+
+		await expect(harness.authority.loadOutcome("preprocess-1", 3, _Task())).resolves.toEqual({ kind: "terminal_failed", preprocessJobId: "preprocess-1", deliveryCount: 3 });
 	});
 });

@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 
 import { ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState, ArtifactUploadLeaseState, type Prisma } from "@prisma/client";
 
-import { ArtifactPreprocessPipelineVersions } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
-import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerRecord, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
-import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
+import { __ArtifactPreprocessOutcomeEventName, ArtifactPreprocessPipelineVersions, ArtifactPreprocessTaskNames } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { IWorkflowEngine, IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
@@ -44,12 +44,15 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 	private readonly transaction: Prisma.TransactionClient;
 	/** Task-fenced controller lifecycle bound to the same private transaction. */
 	private readonly controller: PrismaArtifactPreprocessControllerRepository;
+	/** Transaction-bound event writer that wakes the controller only when the product outcome commits. */
+	private readonly workflow: Pick<IWorkflowEngine, "emitEventInTransaction">;
 
 	/** Creates the repository for one already-open preprocessing transaction. */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, workflow: Pick<IWorkflowEngine, "emitEventInTransaction">)
 	{
 		this.transaction = transaction;
 		this.controller = new PrismaArtifactPreprocessControllerRepository(this.transaction);
+		this.workflow = workflow;
 	}
 
 	/** Issues or reloads the controller claim for one exact admitted task. */
@@ -70,10 +73,10 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 		return this.controller.bindFirstPod(preprocessJobId, task, command);
 	}
 
-	/** Loads the completion inbox through the exact workflow receipt boundary. */
-	loadCompletion(preprocessJobId: string, completionDigest: string, task: IWorkflowTaskReceipt): Promise<ArtifactPreprocessCompletion | null>
+	/** Loads the persisted delivery outcome through the exact workflow receipt boundary. */
+	loadOutcome(preprocessJobId: string, deliveryCount: number, task: IWorkflowTaskReceipt): Promise<ArtifactPreprocessOutcome | null>
 	{
-		return this.controller.loadCompletion(preprocessJobId, completionDigest, task);
+		return this.controller.loadOutcome(preprocessJobId, deliveryCount, task);
 	}
 
 	/** Makes a recorded completion terminal once and reports exact replays idempotently. */
@@ -211,6 +214,7 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			}
 			if (job.completionDigest === request.receiptDigest)
 			{
+				await this._EmitOutcome(job);
 				return { status: "completed" };
 			}
 			if (job.state !== ArtifactPreprocessJobState.Claimed || job.claimExpiresAt === null || job.claimExpiresAt <= now)
@@ -230,6 +234,7 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			await transaction.artifactOutboxEvent.create({ data: { artifactId: job.derivedArtifact.id, revisionId: request.derivedRevisionId, kind: "RevisionPublished", idempotencyKey: `artifact-preprocess:${job.id}:${job.deliveryCount}:revision`, payload: { contentAddress: request.promotion.contentAddress, byteLength: request.promotion.byteLength, mediaType: "text/plain" } } });
 			await transaction.artifactUploadLease.update({ where: { id: job.outputLease.id }, data: { state: ArtifactUploadLeaseState.Finalized, finalizedAt: now } });
 			await transaction.artifactPreprocessJob.update({ where: { id: job.id }, data: { derivedRevisionId: request.derivedRevisionId, completionDigest: request.receiptDigest } });
+			await this._EmitOutcome(job);
 			return { status: "completed" };
 		}
 	}
@@ -257,8 +262,21 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 				where: { id: job.id },
 				data: { state, outputLeaseId: null, failureCode: command.failureCode, nextAttemptAt },
 			});
+			await this._EmitOutcome(job);
 			return { status: terminal ? "terminal" : "retryable" };
 		}
+	}
+
+	/** Emits the delivery-scoped wake-up through this repository's caller-owned transaction. */
+	private async _EmitOutcome(job: { readonly id: string; readonly deliveryCount: number; readonly taskId: string | null; readonly taskName: string | null; readonly taskKey: string | null }): Promise<void>
+	{
+		if (job.taskId === null || job.taskName !== ArtifactPreprocessTaskNames.Convert || job.taskKey === null)
+		{
+			throw new Error("Artifact preprocessing outcome has no admitted workflow task receipt.");
+		}
+		const task = { taskId: job.taskId, taskName: job.taskName, idempotencyKey: job.taskKey };
+		const signal = { preprocessJobId: job.id, deliveryCount: job.deliveryCount };
+		await this.workflow.emitEventInTransaction({ client: this.transaction }, task, { eventName: __ArtifactPreprocessOutcomeEventName(job.deliveryCount), payload: signal });
 	}
 
 	/** Reads one database-owned wall-clock sample through the read-only Prisma view. */
@@ -279,7 +297,7 @@ function _IsSafeByteLength(value: bigint): boolean
 	return value >= 0n && value <= BigInt(Number.MAX_SAFE_INTEGER);
 }
 
-/** Build the write-lease claims for the converted text, including the revision id derived from the lease id. */
+/** Builds the write-lease claims for the converted text, including the revision id derived from the lease id. */
 function _OutputLeaseProjection(jobId: string, attempt: number, claimFence: string, artifactId: string, leaseId: string, siloId: string, expiresAt: Date, contentAddress: string, byteLength: number): ArtifactPreprocessOutputLeaseProjection
 {
 	return { jobId, attempt, claimFence, derivedRevisionId: _DerivedRevisionId(leaseId), writeLease: { leaseId, siloId, artifactId, action: "artifact.write" as const, expiresAtEpochSeconds: Math.floor(expiresAt.getTime() / 1_000), expectedContentAddress: contentAddress, expectedByteLength: byteLength, mediaType: "text/plain" } };
@@ -297,7 +315,7 @@ function _MatchesPromotion(request: ArtifactPreprocessCompletionRequest, lease: 
 		&& lease.mediaType === "text/plain";
 }
 
-/** Build the output revision id from its lease id, so completion can prove the receipt belongs to the same lease this attempt was given. */
+/** Builds the output revision id from its lease id, so completion can prove the receipt belongs to the same lease this attempt was given. */
 function _DerivedRevisionId(leaseId: string): string
 {
 	return `artifact-preprocess:${leaseId}`;

@@ -1,6 +1,8 @@
 import type { RuntimeWorkloadBinding, RuntimeWorkloadClaim } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
+import type { ArtifactPreprocessOutcome } from "./artifact-preprocess-outcome.types";
+
 /**
  * Carries the server-owned task facts a controller needs to bind one PDF Job.
  *
@@ -85,18 +87,18 @@ export interface ArtifactPreprocessControllerAuthority
 	 */
 	bindFirstPod(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessPodBindCommand): Promise<"bound" | "idempotent" | "conflict">;
 	/**
-	 * Loads completion evidence after the controller receives its wake-up event.
+	 * Loads the saved worker outcome after the controller receives its wake-up event.
 	 *
 	 * Called by: `__CreateArtifactPreprocessHandler` and `__CreateArtifactPreprocessControllerRouter`.
-	 * A `null` result tells the handler that the matching inbox entry is no longer available, so it
-	 * must not complete the PDF job.
+	 * A `null` result tells the handler that the requested delivery has no matching outcome, so it
+	 * must leave the Kubernetes Job in place and retry the observation.
 	 *
 	 * @param preprocessJobId - Saved PDF preprocessing job requested by the controller task.
-	 * @param completionDigest - Digest carried by the controller's completion event.
+	 * @param deliveryCount - Claimed worker delivery carried by the controller event.
 	 * @param task - Receipt that identifies the admitted controller task.
-	 * @returns The matching completion evidence, or `null` when the server cannot supply it.
+	 * @returns The matching completion, retryable failure, or terminal failure; otherwise `null`.
 	 */
-	loadCompletion(preprocessJobId: string, completionDigest: string, task: IWorkflowTaskReceipt): Promise<ArtifactPreprocessCompletion | null>;
+	loadOutcome(preprocessJobId: string, deliveryCount: number, task: IWorkflowTaskReceipt): Promise<ArtifactPreprocessOutcome | null>;
 	/**
 	 * Applies completion evidence the controller loaded from this authority.
 	 *
@@ -105,7 +107,7 @@ export interface ArtifactPreprocessControllerAuthority
 	 * and `conflict` makes the handler stop.
 	 *
 	 * @param preprocessJobId - Saved PDF preprocessing job requested by the controller task.
-	 * @param completion - Completion evidence returned by {@link loadCompletion}.
+	 * @param completion - Completion evidence returned by {@link loadOutcome}.
 	 * @param task - Receipt that identifies the admitted controller task.
 	 * @returns Whether the completion was applied, had already been applied, or conflicts.
 	 */

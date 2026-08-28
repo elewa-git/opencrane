@@ -79,6 +79,9 @@ grep -Fq 'pod-security.kubernetes.io/enforce: restricted' "$RUNTIME_NAMESPACE"
 grep -Fq 'pod-security.kubernetes.io/enforce: restricted' "$MANAGED_RUNTIME_NAMESPACE"
 grep -Fq 'pod-security.kubernetes.io/enforce-version: latest' "$RUNTIME_NAMESPACE"
 grep -Fq 'name: warm-runtime' "$MANIFEST"
+grep -A1 -F 'name: OPENCRANE_RUNTIME_STREAM_URL' "$MANIFEST" | grep -F '/api/internal/warm-runtime' >/dev/null
+grep -Fq 'audience: opencrane-warm-runtime' "$MANIFEST"
+grep -Fq 'path: warm.token' "$MANIFEST"
 test -s "$RUNTIME_QUOTA"
 test -s "$MANAGED_RUNTIME_QUOTA"
 grep -Fq 'pods: "6"' "$RUNTIME_QUOTA"
@@ -131,16 +134,16 @@ if grep -A16 -F 'name: agent-controller-mcp-executor' "$MANIFEST" | grep -Eq 're
   exit 1
 fi
 
-# Artifact preprocessing is optional. When enabled, its isolated namespace grants only the same
-# suspended-Job release and exact-Pod discovery operations used by the shared governed store.
+# Artifact preprocessing is optional. When enabled, its isolated namespace grants only the shared
+# governed store's suspended-Job release, exact-Pod discovery, and UID-fenced cleanup operations.
 test -s "$ARTIFACT_ROLE"
 grep -Fq 'namespace: oc-opencrane-artifact-preprocessing' "$ARTIFACT_ROLE"
 grep -Fq 'resources: ["jobs"]' "$ARTIFACT_ROLE"
-grep -Fq 'verbs: ["get", "create", "patch"]' "$ARTIFACT_ROLE"
+grep -Fq 'verbs: ["get", "create", "patch", "delete"]' "$ARTIFACT_ROLE"
 grep -Fq 'resources: ["pods"]' "$ARTIFACT_ROLE"
 grep -Fq 'verbs: ["list"]' "$ARTIFACT_ROLE"
-if grep -Eq 'resources: \["secrets"\]|"(delete|update|watch)"' "$ARTIFACT_ROLE"; then
-  echo "artifact preprocessing Role exceeds fenced Job release and Pod discovery authority" >&2
+if grep -Eq 'resources: \["secrets"\]|"(update|watch)"' "$ARTIFACT_ROLE"; then
+  echo "artifact preprocessing Role exceeds fenced Job release, Pod discovery, and cleanup authority" >&2
   exit 1
 fi
 test -s "$ARTIFACT_BINDING"
@@ -174,7 +177,6 @@ grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$MANIFE
 grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"image\":\"ghcr.io/elewa-git/opencrane-artifact-preprocessor@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"serverServiceName\":\"oc-opencrane-opencrane-server\"' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"activeDeadlineSeconds\":300' >/dev/null
-grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"ttlSecondsAfterFinished\":0' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://oc-opencrane-opencrane-server.server-ns.svc.cluster.local:8081' >/dev/null
 if grep -A1 -F 'name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://override.example:8081' >/dev/null; then
   echo "artifact worker broker must not inherit the mutable runtime endpoint override" >&2

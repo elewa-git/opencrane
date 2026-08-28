@@ -3,8 +3,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { ArtifactKind, ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState, Prisma } from "@prisma/client";
 
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
-import { ArtifactPreprocessPipelineVersions, ArtifactPreprocessTaskNames } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
-import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessControllerRecord, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { ArtifactPreprocessOutcomeKinds, ArtifactPreprocessPipelineVersions, ArtifactPreprocessTaskNames } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { __CreateArtifactPreprocessBootstrapReference, __HashArtifactPreprocessBootstrapReference, __IsArtifactPreprocessBootstrapReference, type ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 
@@ -260,12 +260,28 @@ export class PrismaArtifactPreprocessControllerRepository implements ArtifactPre
 		};
 	}
 
-	/** Loads only the completion inbox entry owned by the admitted task receipt. */
-	async loadCompletion(preprocessJobId: string, completionDigest: string, task: IWorkflowTaskReceipt): Promise<ArtifactPreprocessCompletion | null>
+	/** Loads only the persisted delivery outcome owned by the admitted task receipt. */
+	async loadOutcome(preprocessJobId: string, deliveryCount: number, task: IWorkflowTaskReceipt): Promise<ArtifactPreprocessOutcome | null>
 	{
 		const job = await this._Job(preprocessJobId);
-		return job !== null && _TaskMatches(job, task) && _IsCompletionDigest(completionDigest) && job.completionDigest === completionDigest
-			? { preprocessJobId, completionDigest }
+		if (job === null || !_TaskMatches(job, task) || job.deliveryCount !== deliveryCount)
+		{
+			return null;
+		}
+		if ((job.state === ArtifactPreprocessJobState.Claimed || job.state === ArtifactPreprocessJobState.Completed) && job.completionDigest !== null && _IsCompletionDigest(job.completionDigest))
+		{
+			return { kind: ArtifactPreprocessOutcomeKinds.Completed, preprocessJobId, deliveryCount, completionDigest: job.completionDigest };
+		}
+		if (job.state === ArtifactPreprocessJobState.RetryableFailed)
+		{
+			if (job.nextAttemptAt === null)
+			{
+				throw new Error("Retryable artifact preprocessing outcome has no next-attempt time.");
+			}
+			return { kind: ArtifactPreprocessOutcomeKinds.RetryableFailed, preprocessJobId, deliveryCount, retryAt: job.nextAttemptAt.toISOString() };
+		}
+		return job.state === ArtifactPreprocessJobState.TerminalFailed
+			? { kind: ArtifactPreprocessOutcomeKinds.TerminalFailed, preprocessJobId, deliveryCount }
 			: null;
 	}
 

@@ -41,8 +41,6 @@ export interface ArtifactPreprocessorJobProfile
 	readonly scratchSize: string;
 	/** Maximum wall-clock lifetime of the one-shot Job. */
 	readonly activeDeadlineSeconds: number;
-	/** Delay before Kubernetes removes the finished Job. Must be zero. */
-	readonly ttlSecondsAfterFinished: number;
 	/** CPU and memory requests and limits. */
 	readonly resources: V1ResourceRequirements;
 }

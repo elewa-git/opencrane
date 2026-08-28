@@ -173,11 +173,14 @@ export function _CreateSkillAuthoringArtifactReader(prisma: PrismaClient, enviro
 	return _CreatePublishedArtifactReader(prisma, environment);
 }
 
-/** Build the server-side output broker that owns hashing, promotion, receipt verification, and completion. */
-export function _CreateArtifactPreprocessOutputBroker(prisma: PrismaClient, maximumOutputBytes: number, environment: NodeJS.ProcessEnv = process.env): ArtifactPreprocessOutputBroker
+/** Builds the server-side output broker that owns hashing, promotion, receipt verification, and completion. */
+export function _CreateArtifactPreprocessOutputBroker(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "emitEventInTransaction">, maximumOutputBytes: number, environment: NodeJS.ProcessEnv = process.env): ArtifactPreprocessOutputBroker
 {
-	if (!Number.isSafeInteger(maximumOutputBytes) || maximumOutputBytes <= 0) throw new Error("maximumOutputBytes must be a positive safe integer");
-	const jobs = _CreateArtifactPreprocessAuthority(prisma);
+	if (!Number.isSafeInteger(maximumOutputBytes) || maximumOutputBytes <= 0)
+	{
+		throw new Error("maximumOutputBytes must be a positive safe integer");
+	}
+	const jobs = _CreateArtifactPreprocessAuthority(prisma, workflow);
 	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
 	const promotionPort = _CreateArtifactServicePromotionPort(serviceUrl);
 	const leasePrivateKey = _ReadArtifactMountedPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH");

@@ -1,5 +1,6 @@
 import { RuntimeWorkloadClaimClasses, type RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
-import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerRecord } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { ArtifactPreprocessOutcomeKinds } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { z, type ZodType } from "zod";
 
 /** Check the canonical UTC timestamp carried by one database-issued workload claim. */
@@ -67,25 +68,30 @@ export function _ParseArtifactPreprocessBindOutcome(value: unknown, preprocessJo
 }
 
 /**
- * Validates completion evidence against the job and digest the controller requested.
+ * Validates a persisted outcome against the job and delivery the controller requested.
  *
  * Called by: `__CreateHttpArtifactPreprocessControllerAuthority`. A mismatch throws before the
- * workflow handler can apply completion evidence for another controller event.
+ * workflow handler can act on another controller delivery's outcome.
  *
  * @param value - Untrusted JSON response body.
  * @param preprocessJobId - Job identity in the authority request URL.
- * @param completionDigest - Digest selected by the controller's completion event.
- * @returns Completion evidence that matches both requested identities.
- * @throws Error when the response is malformed or selects another job or digest.
+ * @param deliveryCount - Delivery selected by the controller's private event.
+ * @returns Persisted outcome that matches both requested identities.
+ * @throws Error when the response is malformed or selects another job or delivery.
  */
-export function _ParseArtifactPreprocessCompletion(value: unknown, preprocessJobId: string, completionDigest: string): ArtifactPreprocessCompletion
+export function _ParseArtifactPreprocessOutcome(value: unknown, preprocessJobId: string, deliveryCount: number): ArtifactPreprocessOutcome
 {
-	const completion = z.object({ preprocessJobId: z.string().min(1).max(128), completionDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u) }).strict().parse(value);
-	if (completion.preprocessJobId !== preprocessJobId || completion.completionDigest !== completionDigest)
+	const signal = { preprocessJobId: z.string().min(1).max(128), deliveryCount: z.number().int().min(1) };
+	const outcome = z.discriminatedUnion("kind", [
+		z.object({ ...signal, kind: z.literal(ArtifactPreprocessOutcomeKinds.Completed), completionDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u) }).strict(),
+		z.object({ ...signal, kind: z.literal(ArtifactPreprocessOutcomeKinds.RetryableFailed), retryAt: z.string().datetime({ offset: true }) }).strict(),
+		z.object({ ...signal, kind: z.literal(ArtifactPreprocessOutcomeKinds.TerminalFailed) }).strict(),
+	]).parse(value);
+	if (outcome.preprocessJobId !== preprocessJobId || outcome.deliveryCount !== deliveryCount)
 	{
-		throw new Error("OpenCrane artifact preprocessing completion response selected another job");
+		throw new Error("OpenCrane artifact preprocessing outcome response selected another delivery");
 	}
-	return completion;
+	return outcome;
 }
 
 /** Validates the fenced binding shape for controller HTTP boundaries. */

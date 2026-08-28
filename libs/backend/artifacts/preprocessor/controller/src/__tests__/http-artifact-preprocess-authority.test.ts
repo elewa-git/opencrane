@@ -4,13 +4,13 @@ import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/w
 
 import { __CreateHttpArtifactPreprocessControllerAuthority } from "../http-artifact-preprocess-authority";
 
-/** Return the task receipt that identifies one admitted PDF preprocessing workflow. */
+/** Returns the task receipt that identifies one admitted PDF preprocessing workflow. */
 function _Task()
 {
 	return { taskId: "task-1", taskName: "artifacts.preprocess.pdf-to-text/v1", idempotencyKey: "artifact-preprocess:preprocess-1" };
 }
 
-/** Return the only server record a controller may use to create one PDF preprocessing Job. */
+/** Returns the only server record a controller may use to create one PDF preprocessing Job. */
 function _Record()
 {
 	return {
@@ -30,7 +30,7 @@ function _Record()
 	};
 }
 
-/** Build one HTTP authority with a controlled token reader and fetch exchange. */
+/** Builds one HTTP authority with a controlled token reader and fetch exchange. */
 function _Authority(response: Response)
 {
 	const fetch = vi.fn().mockResolvedValue(response);
@@ -97,12 +97,11 @@ describe("artifact preprocessing controller HTTP authority", function _DescribeA
 		await expect(conflict.authority.bindFirstPod("preprocess-1", _Task(), { binding: { ...command.binding, firstPodUid: "pod-uid-1" } })).resolves.toBe("conflict");
 	});
 
-	it("rejects completion evidence whose digest does not match the event the task received", async function _RejectsMismatchedCompletionDigest()
+	it("rejects a persisted outcome for another delivery", async function _RejectsMismatchedOutcome()
 	{
-		const requestedDigest = `sha256:${"a".repeat(64)}`;
 		const returnedDigest = `sha256:${"b".repeat(64)}`;
-		const { authority } = _Authority(new Response(JSON.stringify({ preprocessJobId: "preprocess-1", completionDigest: returnedDigest }), { status: 200, headers: { "content-type": "application/json" } }));
+		const { authority } = _Authority(new Response(JSON.stringify({ kind: "completed", preprocessJobId: "preprocess-1", deliveryCount: 2, completionDigest: returnedDigest }), { status: 200, headers: { "content-type": "application/json" } }));
 
-		await expect(authority.loadCompletion("preprocess-1", requestedDigest, _Task())).rejects.toThrow(/completion response selected another job/);
+		await expect(authority.loadOutcome("preprocess-1", 1, _Task())).rejects.toThrow(/outcome response selected another delivery/);
 	});
 });

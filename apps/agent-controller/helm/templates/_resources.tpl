@@ -251,7 +251,7 @@ metadata:
 rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
-    verbs: ["get", "create", "patch"]
+    verbs: ["get", "create", "patch", "delete"]
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["list"]
@@ -320,7 +320,6 @@ spec:
         object.spec.parallelism == 1 && object.spec.completions == 1 && object.spec.backoffLimit == 0 &&
         object.spec.activeDeadlineSeconds > 0 &&
         object.spec.activeDeadlineSeconds <= {{ $artifactValues.activeDeadlineSeconds }} &&
-        object.spec.ttlSecondsAfterFinished == {{ $artifactValues.ttlSecondsAfterFinished }} &&
         (!has(object.spec.manualSelector) || object.spec.manualSelector == false) &&
         (!has(object.spec.completionMode) || object.spec.completionMode == 'NonIndexed') &&
         !has(object.spec.podFailurePolicy) && !has(object.spec.successPolicy) &&
@@ -461,7 +460,6 @@ spec:
           object.spec.backoffLimit == oldObject.spec.backoffLimit &&
           object.spec.activeDeadlineSeconds > 0 &&
           object.spec.activeDeadlineSeconds <= oldObject.spec.activeDeadlineSeconds &&
-          object.spec.ttlSecondsAfterFinished == oldObject.spec.ttlSecondsAfterFinished &&
           object.spec.template == oldObject.spec.template)
       message: artifact preprocessing create must be suspended and update may only release the exact stored Job once
 ---
@@ -554,7 +552,7 @@ spec:
               value: {{ dict "companionImage" $mcpCompanionImage "imagePullPolicy" $mcpExecutorValues.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $mcpExecutorNamespace "serviceAccountName" $mcpExecutorValues.serviceAccountName "opencraneInternalUrl" $mcpInternalUrl "projectedTokenTtlSeconds" $mcpExecutorValues.projectedTokenTtlSeconds "scratchSize" $mcpExecutorValues.scratchSize "activeDeadlineSeconds" $mcpExecutorValues.activeDeadlineSeconds "serverResources" $mcpExecutorValues.serverResources "companionResources" $mcpExecutorValues.companionResources | toJson | quote }}
             {{- if $artifactValues.enabled }}
             - name: AGENT_CONTROLLER_ARTIFACT_PREPROCESSOR_PROFILE_JSON
-              value: {{ dict "image" $artifactImage "imagePullPolicy" $artifactValues.image.pullPolicy "serverNamespace" .Release.Namespace "serverServiceName" $serverServiceName "namespace" $artifactNamespace "serviceAccountName" "artifact-preprocessor" "tokenAudience" "opencrane-artifact-preprocessor" "openCraneInternalUrl" $artifactInternalUrl "tokenPath" "/var/run/opencrane/tokens/opencrane.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" $artifactValues.scratchSize "activeDeadlineSeconds" $artifactValues.activeDeadlineSeconds "ttlSecondsAfterFinished" $artifactValues.ttlSecondsAfterFinished "resources" $artifactValues.resources | toJson | quote }}
+              value: {{ dict "image" $artifactImage "imagePullPolicy" $artifactValues.image.pullPolicy "serverNamespace" .Release.Namespace "serverServiceName" $serverServiceName "namespace" $artifactNamespace "serviceAccountName" "artifact-preprocessor" "tokenAudience" "opencrane-artifact-preprocessor" "openCraneInternalUrl" $artifactInternalUrl "tokenPath" "/var/run/opencrane/tokens/opencrane.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" $artifactValues.scratchSize "activeDeadlineSeconds" $artifactValues.activeDeadlineSeconds "resources" $artifactValues.resources | toJson | quote }}
             {{- end }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "agent-controller") | nindent 12 }}
           volumeMounts:

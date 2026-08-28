@@ -34,7 +34,9 @@ Only this package imports `absurd-sdk`. It owns no product data, recurrence, que
 policy; those stay above the engine adapter. The server gives it the same approved queue list as the
 workflow guard, so it cannot choose another queue. Workers use the SDK. Starting a saved job uses the
 database transaction supplied by the product change and the parameterised `absurd.spawn_task`
-function.
+function. Product repositories may also emit a task event through that transaction with the fixed
+`absurd.emit_event` procedure. Absurd keeps the first payload for one task-scoped event name, so a
+replayed product write cannot replace the event that already woke the task.
 Each declared or registered job also supplies its total attempt limit and retry delay. The adapter
 stores those limits with the Absurd task, including when the task is started inside a product database transaction.
 A retryable error lets Absurd schedule the next attempt. A terminal error is saved as failed before

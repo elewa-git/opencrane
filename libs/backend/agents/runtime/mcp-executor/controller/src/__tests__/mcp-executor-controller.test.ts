@@ -29,7 +29,7 @@ describe("MCP executor controller", function _DescribeController()
 	it("records the Kubernetes Job UID before any release", async function _AssignsSuspendedJob()
 	{
 		const authority = { __Claim: vi.fn().mockResolvedValue(_Claim()), __CommitAssignment: vi.fn().mockResolvedValue("assigned"), __ClaimRelease: vi.fn(), __CommitRelease: vi.fn(), __RegisterFirstPod: vi.fn() } satisfies McpExecutorControllerAuthority;
-		const kubernetes = { ensureSuspendedJob: vi.fn().mockResolvedValue({ metadata: { uid: "job-uid-1" } }), releaseJob: vi.fn(), findFirstPod: vi.fn() };
+		const kubernetes = { ensureSuspendedJob: vi.fn().mockResolvedValue({ metadata: { uid: "job-uid-1" } }), releaseJob: vi.fn(), findFirstPod: vi.fn(), deleteJob: vi.fn() };
 
 		await expect(__ReconcileNextMcpExecutorWorkload(_Options(authority, kubernetes), new AbortController().signal)).resolves.toMatchObject({ outcome: "assigned", workloadUid: "job-uid-1" });
 		expect(authority.__CommitAssignment).toHaveBeenCalledWith(expect.objectContaining({ claimId: "claim-1", deliveryCount: 1, workloadUid: "job-uid-1" }), expect.any(AbortSignal));
@@ -41,7 +41,7 @@ describe("MCP executor controller", function _DescribeController()
 		const expiredAssignment = { ..._Claim(), claim: { ..._Claim().claim, expiresAt: "2026-08-26T00:01:00.000Z" } };
 		const release = { ...expiredAssignment, workloadUid: "job-uid-1", releaseClaimedAt: "2026-08-26T00:00:10.000Z", releaseDeliveryCount: 2, releaseExpiresAt: "2099-08-26T00:02:00.000Z" };
 		const authority = { __Claim: vi.fn(), __CommitAssignment: vi.fn(), __ClaimRelease: vi.fn().mockResolvedValue(release), __CommitRelease: vi.fn().mockResolvedValue("released"), __RegisterFirstPod: vi.fn().mockResolvedValue("registered") } satisfies McpExecutorControllerAuthority;
-		const kubernetes = { ensureSuspendedJob: vi.fn(), releaseJob: vi.fn().mockResolvedValue(undefined), findFirstPod: vi.fn().mockResolvedValue({ metadata: { uid: "pod-uid-1" } }) };
+		const kubernetes = { ensureSuspendedJob: vi.fn(), releaseJob: vi.fn().mockResolvedValue(undefined), findFirstPod: vi.fn().mockResolvedValue({ metadata: { uid: "pod-uid-1" } }), deleteJob: vi.fn() };
 
 		await expect(__ReconcileNextMcpExecutorRelease(_Options(authority, kubernetes), new AbortController().signal)).resolves.toMatchObject({ outcome: "registered", podUid: "pod-uid-1" });
 		expect(kubernetes.releaseJob).toHaveBeenCalledWith(expect.anything(), "job-uid-1", release.releaseExpiresAt);
@@ -51,7 +51,7 @@ describe("MCP executor controller", function _DescribeController()
 	it("does not invent a Pod while Kubernetes has not exposed one", async function _WaitsForPod()
 	{
 		const authority = { __Claim: vi.fn(), __CommitAssignment: vi.fn(), __ClaimRelease: vi.fn().mockResolvedValue({ ..._Claim(), workloadUid: "job-uid-1", releaseClaimedAt: "2026-08-26T00:00:10.000Z", releaseDeliveryCount: 2, releaseExpiresAt: "2099-08-26T00:02:00.000Z" }), __CommitRelease: vi.fn().mockResolvedValue("idempotent"), __RegisterFirstPod: vi.fn() } satisfies McpExecutorControllerAuthority;
-		const kubernetes = { ensureSuspendedJob: vi.fn(), releaseJob: vi.fn().mockResolvedValue(undefined), findFirstPod: vi.fn().mockResolvedValue(null) };
+		const kubernetes = { ensureSuspendedJob: vi.fn(), releaseJob: vi.fn().mockResolvedValue(undefined), findFirstPod: vi.fn().mockResolvedValue(null), deleteJob: vi.fn() };
 
 		await expect(__ReconcileNextMcpExecutorRelease(_Options(authority, kubernetes), new AbortController().signal)).resolves.toMatchObject({ outcome: "pending-pod" });
 		expect(authority.__RegisterFirstPod).not.toHaveBeenCalled();

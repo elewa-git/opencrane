@@ -214,5 +214,22 @@ export function __CreateKubernetesGovernedJobControllerStore(options: GovernedJo
 			_AssertExactPod(listed.items[0], expectedJob, workloadUid, serviceAccountName);
 			return listed.items[0];
 		},
+		async deleteJob(expectedJob: V1Job, workloadUid: string): Promise<void>
+		{
+			const { name, namespace } = _Coordinates(expectedJob);
+			await ___DoWithTrace(`${options.releaseTraceName}.delete`, { name, namespace, workloadUid }, async function _DeleteJob(): Promise<void>
+			{
+				try
+				{
+					await options.batchApi.deleteNamespacedJob({ namespace, name, body: { preconditions: { uid: workloadUid } } }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds));
+				}
+				catch (error)
+				{
+					if (_StatusCode(error) === 404)
+						return;
+					throw error;
+				}
+			});
+		},
 	};
 }

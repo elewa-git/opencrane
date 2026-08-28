@@ -33,7 +33,7 @@ function _Authority(overrides: Partial<SkillWorkloadControllerAuthority>): Skill
 /** Build a Kubernetes adapter whose unused methods throw if a test calls them. */
 function _Kubernetes(overrides: Partial<GovernedJobControllerStore>): GovernedJobControllerStore
 {
-	return { async ensureSuspendedJob() { throw new Error("unexpected Job"); }, async releaseJob() { throw new Error("unexpected Job release"); }, async findFirstPod() { throw new Error("unexpected Pod lookup"); }, ...overrides };
+	return { async ensureSuspendedJob() { throw new Error("unexpected Job"); }, async releaseJob() { throw new Error("unexpected Job release"); }, async findFirstPod() { throw new Error("unexpected Pod lookup"); }, async deleteJob() { throw new Error("unexpected Job deletion"); }, ...overrides };
 }
 
 /** Compose reconciler options from focused fake ports. */

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { __CreateKubernetesGovernedJobControllerStore } from "../governed-job-controller";
 import type { GovernedJobControllerBatchApi, GovernedJobControllerCoreApi } from "../governed-job-controller.types";
 
-/** Return one complete suspended Job owned by the test workload class. */
+/** Returns one complete suspended Job owned by the test workload class. */
 function _ExpectedJob(): V1Job
 {
 	const labels = { "app.kubernetes.io/name": "test-worker", "opencrane.ai/test-workload": "workload-a" };
@@ -17,7 +17,7 @@ function _PersistedJob(expected: V1Job): V1Job
 	return { ...structuredClone(expected), metadata: { ...expected.metadata, uid: "job-uid-1", resourceVersion: "7" } };
 }
 
-/** Build the exact first Pod Kubernetes generated for one Job. */
+/** Builds the exact first Pod Kubernetes generated for one Job. */
 function _FirstPod(job: V1Job): V1Pod
 {
 	const name = job.metadata?.name ?? "";
@@ -38,7 +38,7 @@ describe("governed Kubernetes Job controller store", function _DescribeGovernedJ
 		const expected = _ExpectedJob();
 		const created = _PersistedJob(expected);
 		const createNamespacedJob = vi.fn().mockResolvedValue(created);
-		const store = _Store({ createNamespacedJob, readNamespacedJob: vi.fn(), patchNamespacedJob: vi.fn() }, { listNamespacedPod: vi.fn() });
+		const store = _Store({ createNamespacedJob, readNamespacedJob: vi.fn(), patchNamespacedJob: vi.fn(), deleteNamespacedJob: vi.fn() }, { listNamespacedPod: vi.fn() });
 
 		await expect(store.ensureSuspendedJob(expected)).resolves.toEqual(created);
 		expect(createNamespacedJob).toHaveBeenCalledWith({ namespace: "test-workloads", body: expected }, expect.any(Object));
@@ -50,7 +50,7 @@ describe("governed Kubernetes Job controller store", function _DescribeGovernedJ
 		const current = _PersistedJob(expected);
 		const createNamespacedJob = vi.fn().mockRejectedValue({ statusCode: 409 });
 		const readNamespacedJob = vi.fn().mockResolvedValue(current);
-		const store = _Store({ createNamespacedJob, readNamespacedJob, patchNamespacedJob: vi.fn() }, { listNamespacedPod: vi.fn() });
+		const store = _Store({ createNamespacedJob, readNamespacedJob, patchNamespacedJob: vi.fn(), deleteNamespacedJob: vi.fn() }, { listNamespacedPod: vi.fn() });
 
 		await expect(store.ensureSuspendedJob(expected)).resolves.toEqual(current);
 		readNamespacedJob.mockResolvedValue({ ...current, spec: { ...current.spec!, template: { ...current.spec!.template, spec: { ...current.spec!.template.spec!, containers: [{ name: "worker", image: `example.test/other@sha256:${"b".repeat(64)}` }] } } } });
@@ -63,7 +63,7 @@ describe("governed Kubernetes Job controller store", function _DescribeGovernedJ
 		const current = _PersistedJob(expected);
 		const released = { ...current, spec: { ...current.spec!, suspend: false } };
 		const patchNamespacedJob = vi.fn().mockResolvedValue(released);
-		const store = _Store({ createNamespacedJob: vi.fn(), readNamespacedJob: vi.fn().mockResolvedValue(current), patchNamespacedJob }, { listNamespacedPod: vi.fn() });
+		const store = _Store({ createNamespacedJob: vi.fn(), readNamespacedJob: vi.fn().mockResolvedValue(current), patchNamespacedJob, deleteNamespacedJob: vi.fn() }, { listNamespacedPod: vi.fn() });
 
 		await expect(store.releaseJob(expected, "job-uid-1", "2999-01-01T00:00:00.000Z")).resolves.toEqual(released);
 		expect(patchNamespacedJob).toHaveBeenCalledWith(expect.objectContaining({ body: expect.arrayContaining([{ op: "test", path: "/metadata/uid", value: "job-uid-1" }, { op: "test", path: "/metadata/resourceVersion", value: "7" }]) }), expect.any(Object));
@@ -74,11 +74,23 @@ describe("governed Kubernetes Job controller store", function _DescribeGovernedJ
 		const job = _PersistedJob(_ExpectedJob());
 		const pod = _FirstPod(job);
 		const listNamespacedPod = vi.fn().mockResolvedValue({ items: [pod] });
-		const store = _Store({ createNamespacedJob: vi.fn(), readNamespacedJob: vi.fn(), patchNamespacedJob: vi.fn() }, { listNamespacedPod });
+		const store = _Store({ createNamespacedJob: vi.fn(), readNamespacedJob: vi.fn(), patchNamespacedJob: vi.fn(), deleteNamespacedJob: vi.fn() }, { listNamespacedPod });
 
 		await expect(store.findFirstPod(job, "job-uid-1", "test-worker")).resolves.toEqual(pod);
 		expect(listNamespacedPod).toHaveBeenCalledWith(expect.objectContaining({ labelSelector: "batch.kubernetes.io/controller-uid=job-uid-1,opencrane.ai/test-workload=workload-a" }), expect.any(Object));
 		listNamespacedPod.mockResolvedValue({ items: [pod, pod] });
 		await expect(store.findFirstPod(job, "job-uid-1", "test-worker")).rejects.toThrow(/multiple Pods/);
+	});
+
+	it("deletes only the saved Job UID and treats an already missing Job as complete", async function _DeletesExactJob()
+	{
+		const deleteNamespacedJob = vi.fn().mockResolvedValueOnce({}).mockRejectedValueOnce({ statusCode: 404 });
+		const store = _Store({ createNamespacedJob: vi.fn(), readNamespacedJob: vi.fn(), patchNamespacedJob: vi.fn(), deleteNamespacedJob }, { listNamespacedPod: vi.fn() });
+		const expected = _ExpectedJob();
+
+		await expect(store.deleteJob(expected, "job-uid-1")).resolves.toBeUndefined();
+		await expect(store.deleteJob(expected, "job-uid-1")).resolves.toBeUndefined();
+
+		expect(deleteNamespacedJob).toHaveBeenCalledWith({ namespace: "test-workloads", name: "workload-a", body: { preconditions: { uid: "job-uid-1" } } }, expect.any(Object));
 	});
 });

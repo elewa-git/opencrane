@@ -1,12 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
-import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessControllerRecord, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
-import { _ParseArtifactPreprocessBindOutcome, _ParseArtifactPreprocessCompletion, _ParseArtifactPreprocessControllerRecord } from "./artifact-preprocess-http-response";
+import { _ParseArtifactPreprocessBindOutcome, _ParseArtifactPreprocessControllerRecord, _ParseArtifactPreprocessOutcome } from "./artifact-preprocess-http-response";
 import type { ArtifactPreprocessControllerFetch, ArtifactPreprocessControllerHttpAuthorityOptions, ArtifactPreprocessControllerTokenReader } from "./controller-http.types";
 
 /** Bound one controller-only response before the adapter parses it. */
@@ -193,21 +193,21 @@ export function __CreateHttpArtifactPreprocessControllerAuthority(options: Artif
 				return await _ReadAndValidateJson(response, function _Validate(value: unknown): "bound" | "idempotent" { return _ParseArtifactPreprocessBindOutcome(value, acceptedPreprocessJobId); });
 			});
 		},
-		async loadCompletion(preprocessJobId: string, completionDigest: string, task: IWorkflowTaskReceipt): Promise<ArtifactPreprocessCompletion | null>
+		async loadOutcome(preprocessJobId: string, deliveryCount: number, task: IWorkflowTaskReceipt): Promise<ArtifactPreprocessOutcome | null>
 		{
 			const acceptedPreprocessJobId = _PreprocessJobId(preprocessJobId);
-			return await ___DoWithTrace("agent_controller.artifact_preprocess.completion_load", { preprocessJobId: acceptedPreprocessJobId }, async function _LoadCompletion(): Promise<ArtifactPreprocessCompletion | null>
+			return await ___DoWithTrace("agent_controller.artifact_preprocess.outcome_load", { preprocessJobId: acceptedPreprocessJobId, deliveryCount }, async function _LoadOutcome(): Promise<ArtifactPreprocessOutcome | null>
 			{
-				const response = await _Request(`/api/internal/agent-controller/artifact-preprocess-jobs/${encodeURIComponent(acceptedPreprocessJobId)}/completion/load`, "POST", { task, completionDigest });
+				const response = await _Request(`/api/internal/agent-controller/artifact-preprocess-jobs/${encodeURIComponent(acceptedPreprocessJobId)}/outcome/load`, "POST", { task, deliveryCount });
 				if (response.status === 409)
 				{
 					return null;
 				}
 				if (response.status !== 200)
 				{
-					throw new Error(`OpenCrane artifact preprocessing completion load failed with HTTP ${response.status}`);
+					throw new Error(`OpenCrane artifact preprocessing outcome load failed with HTTP ${response.status}`);
 				}
-				return await _ReadAndValidateJson(response, function _Validate(value: unknown): ArtifactPreprocessCompletion { return _ParseArtifactPreprocessCompletion(value, acceptedPreprocessJobId, completionDigest); });
+				return await _ReadAndValidateJson(response, function _Validate(value: unknown): ArtifactPreprocessOutcome { return _ParseArtifactPreprocessOutcome(value, acceptedPreprocessJobId, deliveryCount); });
 			});
 		},
 		async complete(preprocessJobId: string, completion: ArtifactPreprocessCompletion, task: IWorkflowTaskReceipt): Promise<"completed" | "idempotent" | "conflict">

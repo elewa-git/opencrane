@@ -160,6 +160,14 @@ class WorkflowGuard implements IWorkflowEngine
 		return await this.execution.emitEvent(task, event);
 	}
 
+	/** Deliver a reviewed event inside the transaction that persisted its product outcome. */
+	async emitEventInTransaction<TPayload>(transaction: IWorkflowTransaction, task: IWorkflowTaskReceipt, event: IWorkflowTaskEvent<TPayload>): Promise<IWorkflowTaskEventReceipt>
+	{
+		this._RequireTaskPolicy(task.taskName);
+		_AssertPersistableWorkflowPayload(event.payload);
+		return await this.execution.emitEventInTransaction(transaction, task, event);
+	}
+
 	/** Cancel a reviewed task without revealing its task identifier to logs or traces. */
 	async cancel(task: IWorkflowTaskReceipt): Promise<IWorkflowTaskReceipt>
 	{
@@ -327,9 +335,9 @@ class _WorkflowTaskContext implements IWorkflowTaskContext
 	}
 
 	/** Suspends through the workflow engine instead of keeping a timer in this process. */
-	async sleepUntil(instant: Date): Promise<void>
+	async sleepUntil(instant: Date, stepName?: string): Promise<void>
 	{
-		await this.context.sleepUntil(instant);
+		await this.context.sleepUntil(instant, stepName);
 	}
 }
 

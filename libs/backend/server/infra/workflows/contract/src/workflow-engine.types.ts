@@ -210,8 +210,8 @@ export interface IWorkflowTaskContext
 	spawnChild<TInput>(task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>;
 	/** Wait for a child task receipt and return the result produced by its handler. */
 	awaitChild<TResult>(task: IWorkflowTaskReceipt): Promise<TResult>;
-	/** Suspend this task until the supplied instant rather than holding a process timer. */
-	sleepUntil(instant: Date): Promise<void>;
+	/** Suspend this task at a named replay point until the supplied instant rather than holding a process timer. */
+	sleepUntil(instant: Date, stepName?: string): Promise<void>;
 }
 
 /**
@@ -240,6 +240,20 @@ export interface IWorkflowEngine
 	spawn<TInput>(transaction: IWorkflowTransaction, task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>;
 	/** Deliver an application event to one admitted task. */
 	emitEvent<TPayload>(task: IWorkflowTaskReceipt, event: IWorkflowTaskEvent<TPayload>): Promise<IWorkflowTaskEventReceipt>;
+	/**
+	 * Deliver an event through the database transaction that saved the product outcome.
+	 *
+	 * Use this when a worker outcome must wake a waiting task without leaving a crash window between
+	 * the product write and event delivery. A replay uses the same task-scoped event name, and the
+	 * engine's immutable event store keeps the first committed payload.
+	 * Called by: product repositories that already own a transaction, including artifact preprocessing.
+	 *
+	 * @param transaction - Caller-owned database transaction that will commit or roll back the outcome.
+	 * @param task - Admitted task that owns the private event name.
+	 * @param event - Event name and small application payload delivered to that task.
+	 * @returns Receipt for the accepted task event.
+	 */
+	emitEventInTransaction<TPayload>(transaction: IWorkflowTransaction, task: IWorkflowTaskReceipt, event: IWorkflowTaskEvent<TPayload>): Promise<IWorkflowTaskEventReceipt>;
 	/** Cancel an incomplete task and prevent later handler work from being admitted. */
 	cancel(task: IWorkflowTaskReceipt): Promise<IWorkflowTaskReceipt>;
 }

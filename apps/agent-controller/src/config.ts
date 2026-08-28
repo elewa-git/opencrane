@@ -62,7 +62,7 @@ function _ValidateArtifactProfile(value: unknown): ArtifactPreprocessorJobProfil
 	{
 		throw new Error("artifact preprocessing controller profile must be one object");
 	}
-	const expectedKeys = ["image", "imagePullPolicy", "serverNamespace", "serverServiceName", "namespace", "serviceAccountName", "tokenAudience", "openCraneInternalUrl", "tokenPath", "bootstrapReferencePath", "scratchSize", "activeDeadlineSeconds", "ttlSecondsAfterFinished", "resources"];
+	const expectedKeys = ["image", "imagePullPolicy", "serverNamespace", "serverServiceName", "namespace", "serviceAccountName", "tokenAudience", "openCraneInternalUrl", "tokenPath", "bootstrapReferencePath", "scratchSize", "activeDeadlineSeconds", "resources"];
 	if (Object.keys(value).length !== expectedKeys.length || !expectedKeys.every(function _HasKey(key): boolean { return Object.hasOwn(value, key); }))
 	{
 		throw new Error("artifact preprocessing controller profile must contain only its deployment-owned fields");
