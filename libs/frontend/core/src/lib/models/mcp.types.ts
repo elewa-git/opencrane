@@ -9,7 +9,7 @@
 /**
  * How a user connects their identity to an MCP server — drives the Connect UX.
  *
- * Mirrors the Obot server-type taxonomy in the OpenCrane spec.
+ * Mirrors the server-type values in the OpenCrane MCP API.
  */
 export enum McpServerType
 {

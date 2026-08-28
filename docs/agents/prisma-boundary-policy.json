@@ -646,6 +646,18 @@
 		"constructs": []
 	  },
 	  {
+		"path": "libs/backend/server/iam/authorization/main/src/prisma-mcp-unused-tool-invocation-repository.ts",
+		"adapter": "PrismaMcpUnusedToolInvocationRepository",
+		"contract": "McpUnusedToolInvocationRepository",
+		"contractImportPath": "./mcp-tool-invocation-participant.types",
+		"constructs": [
+		  {
+			"adapter": "PrismaToolInvocationRepository",
+			"importPath": "./prisma-tool-invocation-repository"
+		  }
+		]
+	  },
+	  {
 		"path": "libs/backend/server/iam/authorization/main/src/prisma-tool-invocation-elicitation-repository.ts",
 		"adapter": "PrismaToolInvocationElicitationRepository",
 		"contract": "ToolInvocationElicitationRepository",
@@ -762,6 +774,13 @@
         "adapter": "PrismaMcpTaskToolInvocationLifecycleRepository",
         "contract": "McpTaskToolInvocationLifecycleParticipant",
         "contractImportPath": "@opencrane/backend/server/iam/authorization",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/gateways/mcp/main/src/mcp-tasks/prisma-mcp-task-workflow-exhaustion-repository.ts",
+        "adapter": "PrismaMcpTaskWorkflowExhaustionRepository",
+        "contract": "McpTaskWorkflowExhaustionRepository",
+        "contractImportPath": "./mcp-task.types",
         "constructs": []
       },
       {
@@ -1399,6 +1418,10 @@
 		  {
 			"adapter": "PrismaToolInvocationRepository",
 			"importPath": "./prisma-tool-invocation-repository"
+		  },
+		  {
+			"adapter": "PrismaMcpUnusedToolInvocationRepository",
+			"importPath": "./prisma-mcp-unused-tool-invocation-repository"
 		  }
 		]
 	  },
@@ -1586,6 +1609,10 @@
           {
             "adapter": "PrismaMcpTaskToolInvocationLifecycleRepository",
             "importPath": "../mcp-tasks/prisma-mcp-task-tool-invocation-lifecycle"
+          },
+          {
+            "adapter": "PrismaMcpTaskWorkflowExhaustionRepository",
+            "importPath": "../mcp-tasks/prisma-mcp-task-workflow-exhaustion-repository"
           }
         ]
       }

@@ -3,11 +3,11 @@ import { Router, type Request, type Response } from "express";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import type { ReviewedFixedServiceAccountIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
-import { __ParseMcpRuntimeAssignment, __ParseMcpRuntimePodRegistrationCommand, __ParseMcpRuntimeReleaseCommand } from "./mcp-runtime-wire";
+import { __ParseMcpRuntimeAssignment, __ParseMcpRuntimeCleanupCommand, __ParseMcpRuntimePodRegistrationCommand, __ParseMcpRuntimeReleaseCommand } from "./mcp-runtime-wire";
 import type { McpRuntimeControllerRouterDependencies } from "./mcp-runtime.types";
 
 /**
- * Build the five controller-only routes for MCP executor assignment and release.
+ * Build the seven controller-only routes for MCP executor assignment, release, and cleanup.
  *
  * This router is mounted on the private listener and is not behind browser authentication. Every
  * handler therefore reviews the projected token before parsing request data, then rechecks all
@@ -146,6 +146,68 @@ export function __CreateMcpRuntimeControllerRouter(dependencies: McpRuntimeContr
 		}
 	});
 
+	router.post("/mcp-executor\\:cleanup-claim", async function _CleanupClaim(request: Request, response: Response): Promise<void>
+	{
+		try
+		{
+			if (!await _Controller(request, dependencies))
+			{
+				_Problem(response, 401, "controller_identity_denied");
+				return;
+			}
+			if (!_EmptyCommand(request.body))
+			{
+				_Problem(response, 400, "invalid_mcp_runtime_cleanup_claim");
+				return;
+			}
+			const claim = await dependencies.authority.claimNextCleanup();
+			if (claim === null)
+			{
+				response.status(204).end();
+				return;
+			}
+			response.status(200).json(claim);
+		}
+		catch (err)
+		{
+			_Failure(response, dependencies, err, "agent_controller.mcp_executor_cleanup_claim", "Agent-controller MCP executor cleanup claim failed");
+		}
+	});
+
+	router.put("/mcp-executor/:claimId/cleanup", async function _Cleanup(request: Request, response: Response): Promise<void>
+	{
+		try
+		{
+			if (!await _Controller(request, dependencies))
+			{
+				_Problem(response, 401, "controller_identity_denied");
+				return;
+			}
+			const claimId = request.params["claimId"];
+			if (!_Coordinate(claimId))
+			{
+				_Problem(response, 400, "invalid_mcp_runtime_cleanup");
+				return;
+			}
+			let command;
+			try
+			{
+				command = __ParseMcpRuntimeCleanupCommand(request.body);
+			}
+			catch
+			{
+				_Problem(response, 400, "invalid_mcp_runtime_cleanup");
+				return;
+			}
+			const outcome = await dependencies.authority.commitCleanup(claimId, command);
+			_WriteOutcome(response, outcome);
+		}
+		catch (err)
+		{
+			_Failure(response, dependencies, err, "agent_controller.mcp_executor_cleanup", "Agent-controller MCP executor cleanup failed");
+		}
+	});
+
 	router.put("/mcp-executor/:claimId/pod-registration", async function _PodRegistration(request: Request, response: Response): Promise<void>
 	{
 		try
@@ -221,7 +283,7 @@ function _Coordinate(value: unknown): value is string
 }
 
 /** Preserve the controller client's exact one-field outcome response. */
-function _WriteOutcome(response: Response, outcome: "assigned" | "released" | "registered" | "idempotent" | "conflict"): void
+function _WriteOutcome(response: Response, outcome: "assigned" | "released" | "registered" | "cleaned" | "idempotent" | "conflict"): void
 {
 	if (outcome === "conflict")
 	{

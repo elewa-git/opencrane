@@ -70,10 +70,16 @@ result, and failure in the database, so a server restart does not repeat the too
  save one ToolInvocation owned by this task
         │
         ▼
- existing OCI MCP executor runs the immutable image
+existing OCI MCP executor runs the immutable image
    ├── checked result ─────► task completed
    ├── definite failure ───► task failed
+   ├── retries used up before the call starts ──► task failed; queued work closed
+   ├── retries used up after the call starts ───► recovery required; claimed work closed under its saved fence
    └── uncertain outcome ──► recovery required; never run it again automatically
+        │
+        ▼
+ terminal execution ──► controller deletes the exact saved Kubernetes Job UID
+                    └──► database records cleanup; outages are retried
 ```
 
 The draft server and its background job use one database transaction. Either both are saved, or
@@ -108,8 +114,8 @@ labels an install connected before a real connection exists.
   caller-owned MCP tasks through the existing OCI runtime.
 - `__CreateMcpOciServerPromotionRouter` — promotes an imported image into a draft server revision and
   its first discovery execution for an authenticated organisation administrator.
-- `__CreateMcpRuntimeControllerRouter` — exposes the five TokenReview-protected claim, assignment,
-  release, and Pod-registration routes used by the agent controller.
+- `__CreateMcpRuntimeControllerRouter` — exposes the seven TokenReview-protected claim, assignment,
+  release, Pod-registration, and terminal-cleanup routes used by the agent controller.
 - `__CreateMcpRuntimeCompanionRouter` — exposes the three TokenReview-protected claim, completion,
   and failure routes used by one exact MCP companion Pod.
 - `PrismaMcpRuntimeAuthority` — owns the database transactions and delivery fences behind those

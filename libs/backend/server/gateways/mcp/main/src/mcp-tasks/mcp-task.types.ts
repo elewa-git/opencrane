@@ -2,7 +2,6 @@ import type { IWorkflowEngine, IWorkflowTaskReceipt, IWorkflowTransaction } from
 import type { JsonValue } from "@opencrane/util";
 
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
-import type { McpRuntimeAuthority } from "../runtime/mcp-runtime.types";
 
 /** Public lifecycle values saved for one asynchronous OCI-backed MCP tool call. */
 export enum McpTaskStates
@@ -165,10 +164,43 @@ export interface McpTaskWorkflowOptions
 	readonly execution: IWorkflowEngine;
 	/** Product transaction owner for task state and ToolInvocation admission. */
 	readonly unitOfWork: McpOperatorUnitOfWork;
-	/** Existing OCI MCP runtime authority that admits the exact ToolInvocation. */
-	readonly runtime: Pick<McpRuntimeAuthority, "admitInvocation">;
+	/** Existing OCI MCP runtime authority that admits work and closes exhausted attempts. */
+	readonly runtime: McpTaskWorkflowRuntime;
 	/** Durable wait between runtime status reads. */
 	readonly statusPollMilliseconds: number;
+}
+
+/**
+ * Lets the public MCP task workflow admit provider work and close its linked rows after retries end.
+ *
+ * Normal attempts call {@link admitInvocation}. The final retryable attempt calls
+ * {@link recordWorkflowExhaustion}; a returned task result is safe to expose, while `null` means
+ * the saved rows no longer match the observed fences and the workflow must not invent a result.
+ *
+ * Called by: {@link __CreateMcpTaskWorkflow}.
+ */
+export interface McpTaskWorkflowRuntime
+{
+	/** Admit the authorization-owned invocation; `not_ready` and `not_mcp` make the task fail without provider dispatch. */
+	admitInvocation(toolInvocationRowId: string): Promise<"admitted" | "idempotent" | "not_ready" | "not_mcp">;
+	/** Return the saved terminal task after closing linked work, or `null` when a changed fence prevents that transition. */
+	recordWorkflowExhaustion(input: McpTaskWorkflowInput): Promise<McpTaskWorkflowResult | null>;
+}
+
+/**
+ * Closes an exhausted MCP task, its ToolInvocation, and its runtime execution in one database transaction.
+ *
+ * Work that never reached provider dispatch becomes `Failed`. Work with a saved dispatch claim
+ * becomes `RecoveryRequired` because the provider outcome is unknown. An already terminal task is
+ * returned unchanged, and `null` tells the transaction owner that a row or fence no longer matches.
+ *
+ * Implemented by: {@link PrismaMcpTaskWorkflowExhaustionRepository}.
+ * Called by: {@link PrismaMcpRuntimeUnitOfWork.recordWorkflowExhaustion}.
+ */
+export interface McpTaskWorkflowExhaustionRepository
+{
+	/** Return a saved terminal result after every linked write succeeds, or `null` without claiming success. */
+	record(input: McpTaskWorkflowInput): Promise<McpTaskWorkflowResult | null>;
 }
 
 /** Stable outcomes returned when a caller submits task input. */

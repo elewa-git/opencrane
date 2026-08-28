@@ -9,6 +9,9 @@ import type { McpTaskAdmission, McpTaskInputResponse, McpTaskRecord, McpTaskWork
 /** Terminal task states the Absurd handler may return. */
 const _TERMINAL_STATES = new Set<McpTaskStates>([McpTaskStates.Completed, McpTaskStates.Cancelled, McpTaskStates.Failed, McpTaskStates.RecoveryRequired]);
 
+/** Total engine attempts allowed before the runtime closes the linked product work. */
+const _MAXIMUM_ATTEMPTS = 5;
+
 /** Turn unknown database failures into declared workflow retries. */
 async function _Retryable<TResult>(operation: () => Promise<TResult>): Promise<TResult>
 {
@@ -155,6 +158,17 @@ async function _Run(context: IWorkflowTaskContext, options: McpTaskWorkflowOptio
 	return _AwaitTerminal(context, options, input);
 }
 
+/** Save a caller-visible terminal state when the workflow engine has no attempt left. */
+async function _RecordWorkflowExhaustion(options: McpTaskWorkflowOptions, input: McpTaskWorkflowInput): Promise<McpTaskWorkflowResult>
+{
+	const terminal = await options.runtime.recordWorkflowExhaustion(input);
+	if (terminal === null)
+	{
+		throw new WorkflowTaskTerminalError("MCP task workflow exhaustion could not be saved");
+	}
+	return terminal;
+}
+
 /** Derive the stable workflow key from opaque task coordinates. */
 export function __McpTaskWorkflowKey(input: McpTaskWorkflowInput): string
 {
@@ -169,10 +183,21 @@ export function __CreateMcpTaskWorkflow(options: McpTaskWorkflowOptions): McpTas
 		throw new Error("MCP task polling must be between 100 and 60000 milliseconds");
 	options.execution.register({
 		taskName: McpTaskTaskNames.Call,
-		retryPolicy: { maximumAttempts: 5, backoff: { kind: WorkflowTaskRetryBackoffKinds.Exponential, initialDelaySeconds: 1, multiplier: 2, maximumDelaySeconds: 30 } },
+		retryPolicy: { maximumAttempts: _MAXIMUM_ATTEMPTS, backoff: { kind: WorkflowTaskRetryBackoffKinds.Exponential, initialDelaySeconds: 1, multiplier: 2, maximumDelaySeconds: 30 } },
 		async run(context: IWorkflowTaskContext, input: McpTaskWorkflowInput): Promise<McpTaskWorkflowResult>
 		{
-			return _Run(context, options, input);
+			try
+			{
+				return await _Run(context, options, input);
+			}
+			catch (error)
+			{
+				if (!(error instanceof WorkflowTaskRetryableError) || context.attempt < _MAXIMUM_ATTEMPTS)
+				{
+					throw error;
+				}
+				return _RecordWorkflowExhaustion(options, input);
+			}
 		},
 	});
 	return {

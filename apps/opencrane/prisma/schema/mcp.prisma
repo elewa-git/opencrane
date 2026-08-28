@@ -348,6 +348,10 @@ model McpRuntimeExecution {
   terminalOutcome             String?                  @map("terminal_outcome")
   terminalPayloadDigest       String?                  @map("terminal_payload_digest")
   completedAt                 DateTime?                @map("completed_at")
+  cleanupClaimedAt            DateTime?                @map("cleanup_claimed_at")
+  cleanupDeliveryCount        Int                      @default(0) @map("cleanup_delivery_count")
+  cleanupExpiresAt            DateTime?                @map("cleanup_expires_at")
+  cleanupCompletedAt          DateTime?                @map("cleanup_completed_at")
   createdAt                   DateTime                 @default(now()) @map("created_at")
   updatedAt                   DateTime                 @updatedAt @map("updated_at")
   serverRevision              McpServerRevision        @relation(fields: [serverRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
@@ -356,6 +360,7 @@ model McpRuntimeExecution {
   @@index([workloadState, claimExpiresAt, createdAt])
   @@index([workloadState, releaseExpiresAt, createdAt])
   @@index([commandState, companionClaimExpiresAt])
+  @@index([workloadState, cleanupExpiresAt, createdAt])
   @@index([serverRevisionId, kind])
   @@map("mcp_runtime_executions")
 }

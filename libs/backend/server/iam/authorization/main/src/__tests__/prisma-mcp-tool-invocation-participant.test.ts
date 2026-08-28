@@ -61,7 +61,7 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 		const succeeded = _Row({ runId: null, attempt: null, mcpTaskId: "mcp-task-1", state: ToolInvocationState.Succeeded, claimKind: null, claimFence: 1, claimAttempt: 1, claimExpiresAt: null, result: { ok: true }, revision: 6, completedAt: new Date("2026-08-26T10:00:02.000Z") });
 		const create = vi.fn();
 		const completeSucceeded = vi.fn().mockResolvedValue(true);
-		const mcpTasks = { markClaimed: vi.fn(), completeSucceeded, completeFailed: vi.fn(), completeAmbiguous: vi.fn() };
+		const mcpTasks = { markClaimed: vi.fn(), completeUnusedBeforeDispatch: vi.fn(), completeSucceeded, completeFailed: vi.fn(), completeAmbiguous: vi.fn() };
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(claimed).mockResolvedValueOnce(claimed).mockResolvedValueOnce(succeeded).mockResolvedValueOnce(succeeded), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, toolResultDelivery: { create } } as unknown as Prisma.TransactionClient;
 		const { participant, appendLifecycle } = _Participant(transaction, vi.fn().mockResolvedValue(true), mcpTasks);
 		const claim = { invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 1, revision: 5 } as const;
@@ -78,7 +78,7 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 		const failed = _Row({ runId: null, attempt: null, mcpTaskId: "mcp-task-1", state: ToolInvocationState.Failed, claimKind: null, claimFence: 1, claimAttempt: 1, claimExpiresAt: null, failureCode: "provider_rejected", revision: 6, completedAt: new Date("2026-08-26T10:00:02.000Z") });
 		const create = vi.fn();
 		const completeFailed = vi.fn().mockResolvedValue(true);
-		const mcpTasks = { markClaimed: vi.fn(), completeSucceeded: vi.fn(), completeFailed, completeAmbiguous: vi.fn() };
+		const mcpTasks = { markClaimed: vi.fn(), completeUnusedBeforeDispatch: vi.fn(), completeSucceeded: vi.fn(), completeFailed, completeAmbiguous: vi.fn() };
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(claimed).mockResolvedValueOnce(claimed).mockResolvedValueOnce(failed).mockResolvedValueOnce(failed), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, toolResultDelivery: { create } } as unknown as Prisma.TransactionClient;
 		const { participant, appendLifecycle } = _Participant(transaction, vi.fn().mockResolvedValue(true), mcpTasks);
 		const claim = { invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 1, revision: 5 } as const;
@@ -86,6 +86,20 @@ describe("Prisma MCP ToolInvocation transaction participant", function _Suite()
 		await expect(participant.completeFailed(claim, "provider_rejected", new Date("2026-08-26T10:00:02.000Z"))).resolves.toEqual(expect.objectContaining({ outcome: "completed" }));
 		expect(completeFailed).toHaveBeenCalledWith(expect.objectContaining({ mcpTaskId: "mcp-task-1" }), "provider_rejected", new Date("2026-08-26T10:00:02.000Z"));
 		expect(create).not.toHaveBeenCalled();
+		expect(appendLifecycle).not.toHaveBeenCalled();
+	});
+
+	it("closes exact Ready MCP task work without creating an AgentRun delivery", async function _CompletesUnusedTaskWork()
+	{
+		const ready = _Row({ runId: null, attempt: null, mcpTaskId: "mcp-task-1" });
+		const failed = _Row({ runId: null, attempt: null, mcpTaskId: "mcp-task-1", state: ToolInvocationState.Failed, failureCode: "workflow_attempts_exhausted", revision: 5, completedAt: new Date("2026-08-26T10:00:02.000Z") });
+		const completeUnusedBeforeDispatch = vi.fn().mockResolvedValue(true);
+		const mcpTasks = { markClaimed: vi.fn(), completeUnusedBeforeDispatch, completeSucceeded: vi.fn(), completeFailed: vi.fn(), completeAmbiguous: vi.fn() };
+		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(ready).mockResolvedValueOnce(failed), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, toolResultDelivery: { create: vi.fn() } } as unknown as Prisma.TransactionClient;
+		const { participant, appendLifecycle } = _Participant(transaction, vi.fn().mockResolvedValue(true), mcpTasks);
+
+		await expect(participant.completeUnusedBeforeDispatch("invocation-row-1", 4, "workflow_attempts_exhausted", new Date("2026-08-26T10:00:02.000Z"))).resolves.toEqual({ changed: true, invocation: expect.objectContaining({ state: ToolInvocationStates.Failed }) });
+		expect(completeUnusedBeforeDispatch).toHaveBeenCalledWith(expect.objectContaining({ mcpTaskId: "mcp-task-1", revision: 5 }), "workflow_attempts_exhausted", new Date("2026-08-26T10:00:02.000Z"));
 		expect(appendLifecycle).not.toHaveBeenCalled();
 	});
 });

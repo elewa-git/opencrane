@@ -3,10 +3,11 @@ import { type Prisma } from "@prisma/client";
 import type { JsonValue } from "@opencrane/util";
 
 import { PrismaToolInvocationRepository } from "./prisma-tool-invocation-repository";
+import { PrismaMcpUnusedToolInvocationRepository } from "./prisma-mcp-unused-tool-invocation-repository";
 import { TOOL_INVOCATION_PREPARATION_POLICY, ExternalActionClaimKinds, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
 import { ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults } from "./tool-invocation.types";
 import type { McpTaskToolInvocationLifecycleParticipant, McpToolInvocationTransactionParticipant, McpToolInvocationTransactionParticipantFactory } from "./mcp-tool-invocation-participant.types";
-import type { ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationLifecycleEvent, ToolInvocationLifecycleEventSink, ToolInvocationRecord, ToolInvocationRecoveryEvent, ToolInvocationRecoveryEventSink, ToolInvocationRunRecoveryAuthority, ToolInvocationRunRecoveryEnterResult, ToolResultDeliveryPayload } from "./tool-invocation.types";
+import type { ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationLifecycleEvent, ToolInvocationLifecycleEventSink, ToolInvocationRecord, ToolInvocationRecoveryEvent, ToolInvocationRecoveryEventSink, ToolInvocationRunRecoveryAuthority, ToolInvocationRunRecoveryEnterResult, ToolInvocationTransitionResult, ToolResultDeliveryPayload } from "./tool-invocation.types";
 
 /** Failure code stored when the companion cannot prove what the MCP server did. */
 const _AMBIGUOUS_FAILURE_CODE = "external_action_provider_outcome_ambiguous";
@@ -77,6 +78,8 @@ export class PrismaMcpToolInvocationParticipantUnitOfWork implements McpToolInvo
 {
 	/** Writes ToolInvocation rows inside the caller's transaction. */
 	private readonly _repository: PrismaToolInvocationRepository;
+	/** Closes task-owned Ready work under its exact revision. */
+	private readonly _unusedInvocations: PrismaMcpUnusedToolInvocationRepository;
 	/** Writes run timeline entries inside the caller's transaction. */
 	private readonly _lifecycleEvents: ToolInvocationLifecycleEventSink;
 	/** Writes recovery entries inside the caller's transaction. */
@@ -93,6 +96,7 @@ export class PrismaMcpToolInvocationParticipantUnitOfWork implements McpToolInvo
 	{
 		this._transaction = transaction;
 		this._repository = new PrismaToolInvocationRepository(this._transaction);
+		this._unusedInvocations = new PrismaMcpUnusedToolInvocationRepository(this._transaction);
 		this._lifecycleEvents = lifecycleEvents;
 		this._recoveryEvents = recoveryEvents;
 		this._runRecovery = runRecovery;
@@ -115,6 +119,17 @@ export class PrismaMcpToolInvocationParticipantUnitOfWork implements McpToolInvo
 				throw new Error("MCP task claim requires its durable task projection");
 		}
 		return claimed;
+	}
+
+	/** Close Ready task work only after its workflow proves dispatch never started. */
+	async completeUnusedBeforeDispatch(invocationId: string, expectedRevision: number, failureCode: string, now: Date): Promise<ToolInvocationTransitionResult>
+	{
+		const transition = await this._unusedInvocations.complete(invocationId, expectedRevision, failureCode, now);
+		if (!transition.changed || transition.invocation === null)
+			return transition;
+		if (this._mcpTasks === null || !await this._mcpTasks.completeUnusedBeforeDispatch(transition.invocation, failureCode, now))
+			throw new Error("unused MCP invocation requires its durable task projection");
+		return transition;
 	}
 
 	/** Save a checked success and its event without leaving the caller's transaction. */

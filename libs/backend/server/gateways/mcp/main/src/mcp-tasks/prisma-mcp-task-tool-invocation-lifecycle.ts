@@ -24,6 +24,17 @@ export class PrismaMcpTaskToolInvocationLifecycleRepository implements McpTaskTo
 		return updated.count === 1;
 	}
 
+	/** Save a definite failure for the exact queued task whose Ready invocation closed unused. */
+	async completeUnusedBeforeDispatch(invocation: ToolInvocationRecord, failureCode: string, now: Date): Promise<boolean>
+	{
+		if (invocation.mcpTaskId === null)
+			return false;
+		if (invocation.failureCode !== failureCode)
+			return false;
+		const updated = await this._transaction.mcpTask.updateMany({ where: { id: invocation.mcpTaskId, toolInvocation: { is: { id: invocation.id } }, state: McpTaskState.Queued }, data: { state: McpTaskState.Failed, result: Prisma.DbNull, failureCode, completedAt: now } });
+		return updated.count === 1;
+	}
+
 	/** Save the checked MCP result only for the matching running task. */
 	async completeSucceeded(invocation: ToolInvocationRecord, result: JsonValue, now: Date): Promise<boolean>
 	{

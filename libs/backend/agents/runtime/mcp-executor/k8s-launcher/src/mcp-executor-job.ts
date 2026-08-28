@@ -110,14 +110,14 @@ function _AssertAssignment(assignment: McpExecutorJobAssignment, profile: McpExe
 function _McpExecutorJobName(assignment: McpExecutorJobAssignment): string
 {
 	const claim = assignment.claim;
-	const digest = createHash("sha256").update(`${claim.siloId}\u0000${claim.claimId}\u0000${claim.deliveryCount}`).digest("hex").slice(0, 24);
+	const digest = createHash("sha256").update(`${claim.siloId}\u0000${claim.claimId}`).digest("hex").slice(0, 24);
 	return `mcp-exec-${digest}`;
 }
 
 /** Builds metadata that the controller can compare without placing the imported image in annotations. */
 function _Annotations(assignment: McpExecutorJobAssignment): Record<string, string>
 {
-	return { "opencrane.ai/mcp-claim-id": assignment.claim.claimId, "opencrane.ai/silo-id": assignment.claim.siloId, "opencrane.ai/mcp-delivery-count": String(assignment.claim.deliveryCount), "opencrane.ai/mcp-profile": assignment.claim.profileName, "opencrane.ai/mcp-execution-reference": assignment.claim.executionReference };
+	return { "opencrane.ai/mcp-claim-id": assignment.claim.claimId, "opencrane.ai/silo-id": assignment.claim.siloId, "opencrane.ai/mcp-profile": assignment.claim.profileName, "opencrane.ai/mcp-execution-reference": assignment.claim.executionReference };
 }
 
 /** Builds the uploaded MCP server as a restartable init container without authority mounts. */
@@ -143,7 +143,8 @@ function _Volumes(profile: McpExecutorJobProfile): V1Volume[]
  *
  * The uploaded server runs as a restartable init container, so the companion controls the Job's
  * lifetime. Only the companion receives the projected token and claim reference. The controller
- * must record this Job's UID before release, and Kubernetes deletes it after completion.
+ * must record this Job's UID before release. The controller deletes that UID after the database
+ * records a terminal execution.
  *
  * @param assignment - Database claim, imported image digest, and selected namespace.
  * @param profile - Fixed companion, identity, endpoint, and limits from deployment configuration.
@@ -162,6 +163,6 @@ export function __BuildSuspendedMcpExecutorJob(assignment: McpExecutorJobAssignm
 	const labels = { "app.kubernetes.io/name": "opencrane-mcp-executor", "app.kubernetes.io/component": "mcp-executor", "opencrane.ai/mcp-workload": name };
 	const annotations = _Annotations(assignment);
 
-	// 3. Keep the Job suspended until the controller records its UID, with no retries or retained files.
-	return { apiVersion: "batch/v1", kind: "Job", metadata: { name, namespace: assignment.namespace, labels, annotations }, spec: { suspend: true, backoffLimit: 0, completions: 1, parallelism: 1, activeDeadlineSeconds: profile.activeDeadlineSeconds, ttlSecondsAfterFinished: 0, template: { metadata: { labels: { ...labels }, annotations: { ...annotations } }, spec: { serviceAccountName: profile.serviceAccountName, automountServiceAccountToken: false, enableServiceLinks: false, restartPolicy: "Never", terminationGracePeriodSeconds: 0, securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: "RuntimeDefault" } }, initContainers: [_ServerContainer(assignment, profile)], containers: [_CompanionContainer(profile)], volumes: _Volumes(profile) } } } };
+	// 3. Keep the Job suspended until the controller records its UID, with no Kubernetes retries.
+	return { apiVersion: "batch/v1", kind: "Job", metadata: { name, namespace: assignment.namespace, labels, annotations }, spec: { suspend: true, backoffLimit: 0, completions: 1, parallelism: 1, activeDeadlineSeconds: profile.activeDeadlineSeconds, template: { metadata: { labels: { ...labels }, annotations: { ...annotations } }, spec: { serviceAccountName: profile.serviceAccountName, automountServiceAccountToken: false, enableServiceLinks: false, restartPolicy: "Never", terminationGracePeriodSeconds: 0, securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: "RuntimeDefault" } }, initContainers: [_ServerContainer(assignment, profile)], containers: [_CompanionContainer(profile)], volumes: _Volumes(profile) } } } };
 }

@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { RuntimeWorkloadClaimClasses, type RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { McpExecutorControllerAuthority, McpExecutorControllerClaim, McpExecutorControllerFetch, McpExecutorControllerHttpAuthorityOptions, McpExecutorControllerReleaseClaim, McpExecutorControllerTokenReader, McpExecutorPodRegistrationCommand, McpExecutorReleaseCommand } from "./mcp-executor-controller.types";
+import type { McpExecutorCleanupCommand, McpExecutorControllerAuthority, McpExecutorControllerClaim, McpExecutorControllerCleanupClaim, McpExecutorControllerFetch, McpExecutorControllerHttpAuthorityOptions, McpExecutorControllerReleaseClaim, McpExecutorControllerTokenReader, McpExecutorPodRegistrationCommand, McpExecutorReleaseCommand } from "./mcp-executor-controller.types";
 
 /** Largest server response this controller accepts. */
 const _MAX_RESPONSE_BYTES = 32 * 1024;
@@ -44,6 +44,18 @@ function _ReleaseClaim(value: unknown): McpExecutorControllerReleaseClaim
 	if (Object.keys(record).length !== 6 || !_IsCoordinate(record["workloadUid"]) || !_IsInstant(record["releaseClaimedAt"]) || !Number.isSafeInteger(record["releaseDeliveryCount"]) || Number(record["releaseDeliveryCount"]) < 1 || !_IsInstant(record["releaseExpiresAt"]))
 		throw new Error("OpenCrane MCP executor release claim was invalid");
 	return { ...base, workloadUid: record["workloadUid"], releaseClaimedAt: record["releaseClaimedAt"], releaseDeliveryCount: record["releaseDeliveryCount"] as number, releaseExpiresAt: record["releaseExpiresAt"] };
+}
+
+/** Parses a cleanup claim and keeps its assignment and cleanup fences. */
+function _CleanupClaim(value: unknown): McpExecutorControllerCleanupClaim
+{
+	if (typeof value !== "object" || value === null || Array.isArray(value))
+		throw new Error("OpenCrane MCP executor cleanup claim was invalid");
+	const record = value as Record<string, unknown>;
+	const base = _Claim({ claim: record["claim"], registryReference: record["registryReference"] });
+	if (Object.keys(record).length !== 5 || !_IsCoordinate(record["workloadUid"]) || !_IsInstant(record["cleanupClaimedAt"]) || !Number.isSafeInteger(record["cleanupDeliveryCount"]) || Number(record["cleanupDeliveryCount"]) < 1)
+		throw new Error("OpenCrane MCP executor cleanup claim was invalid");
+	return { ...base, workloadUid: record["workloadUid"], cleanupClaimedAt: record["cleanupClaimedAt"], cleanupDeliveryCount: record["cleanupDeliveryCount"] as number };
 }
 
 /** Reads and parses a bounded JSON response. */
@@ -167,6 +179,24 @@ export function __CreateHttpMcpExecutorControllerAuthority(options: McpExecutorC
 			if (response.status !== 200)
 				throw new Error(`OpenCrane MCP executor release failed with HTTP ${response.status}`);
 			return await _Outcome(response, ["released", "idempotent"]) as "released" | "idempotent";
+		},
+		async __ClaimCleanup(signal: AbortSignal): Promise<McpExecutorControllerCleanupClaim | null>
+		{
+			const response = await _Request("/api/internal/agent-controller/mcp-executor:cleanup-claim", "POST", {}, signal);
+			if (response.status === 204)
+				return null;
+			if (response.status !== 200)
+				throw new Error(`OpenCrane MCP executor cleanup claim failed with HTTP ${response.status}`);
+			return _CleanupClaim(await _Json(response));
+		},
+		async __CommitCleanup(claimId: string, command: McpExecutorCleanupCommand, signal: AbortSignal): Promise<"cleaned" | "idempotent" | "conflict">
+		{
+			const response = await _Request(`/api/internal/agent-controller/mcp-executor/${encodeURIComponent(claimId)}/cleanup`, "PUT", command, signal);
+			if (response.status === 409)
+				return "conflict";
+			if (response.status !== 200)
+				throw new Error(`OpenCrane MCP executor cleanup failed with HTTP ${response.status}`);
+			return await _Outcome(response, ["cleaned", "idempotent"]) as "cleaned" | "idempotent";
 		},
 		async __RegisterFirstPod(claimId: string, command: McpExecutorPodRegistrationCommand, signal: AbortSignal): Promise<"registered" | "idempotent" | "conflict">
 		{

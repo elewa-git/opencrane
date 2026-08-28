@@ -1,6 +1,6 @@
 import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 
-import type { McpOciServerPromotionCommand, McpRuntimePodRegistrationCommand, McpRuntimeReleaseCommand } from "./mcp-runtime.types";
+import type { McpOciServerPromotionCommand, McpRuntimeCleanupCommand, McpRuntimePodRegistrationCommand, McpRuntimeReleaseCommand } from "./mcp-runtime.types";
 
 /** Parse the bounded administrator fields accepted by OCI server promotion. */
 export function __ParseMcpOciServerPromotionCommand(value: unknown): McpOciServerPromotionCommand
@@ -25,6 +25,14 @@ export function __ParseMcpRuntimeReleaseCommand(value: unknown): McpRuntimeRelea
 	if (!_Exact(value, ["releaseClaimedAt", "releaseDeliveryCount", "workloadUid"]) || !_Instant(value["releaseClaimedAt"]) || !_PositiveInteger(value["releaseDeliveryCount"]) || !_Coordinate(value["workloadUid"], 256))
 		throw new Error("MCP runtime release has an invalid shape");
 	return value as unknown as McpRuntimeReleaseCommand;
+}
+
+/** Parse one cleanup fence without accepting a caller-selected silo, image, or profile. */
+export function __ParseMcpRuntimeCleanupCommand(value: unknown): McpRuntimeCleanupCommand
+{
+	if (!_Exact(value, ["cleanupClaimedAt", "cleanupDeliveryCount", "workloadUid"]) || !_Instant(value["cleanupClaimedAt"]) || !_PositiveInteger(value["cleanupDeliveryCount"]) || !_Coordinate(value["workloadUid"], 256))
+		throw new Error("MCP runtime cleanup has an invalid shape");
+	return value as unknown as McpRuntimeCleanupCommand;
 }
 
 /** Parse first-Pod evidence carried under the current release fence. */

@@ -1270,6 +1270,10 @@ CREATE TABLE "mcp_runtime_executions" (
     "terminal_outcome" TEXT,
     "terminal_payload_digest" TEXT,
     "completed_at" TIMESTAMP(3),
+    "cleanup_claimed_at" TIMESTAMP(3),
+    "cleanup_delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "cleanup_expires_at" TIMESTAMP(3),
+    "cleanup_completed_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -2869,6 +2873,9 @@ CREATE INDEX "mcp_runtime_executions_workload_state_release_expires_at_cr_idx" O
 
 -- CreateIndex
 CREATE INDEX "mcp_runtime_executions_command_state_companion_claim_expire_idx" ON "mcp_runtime_executions"("command_state", "companion_claim_expires_at");
+
+-- CreateIndex
+CREATE INDEX "mcp_runtime_executions_workload_state_cleanup_expires_at_cr_idx" ON "mcp_runtime_executions"("workload_state", "cleanup_expires_at", "created_at");
 
 -- CreateIndex
 CREATE INDEX "mcp_runtime_executions_server_revision_id_kind_idx" ON "mcp_runtime_executions"("server_revision_id", "kind");
