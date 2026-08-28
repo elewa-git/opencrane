@@ -61,4 +61,23 @@ describe("warm AgentRun workflow handler", function _WarmAgentRunHandler()
 		expect(calls).not.toContain("terminalized");
 		expect(kubernetes.deletePod).toHaveBeenCalledWith(expect.objectContaining({ profile: "personal" }), expect.anything());
 	});
+
+	it("waits after Pod deletion until provider output no longer defers cancellation", async function _WaitsForOutputLease()
+	{
+		const calls: string[] = [];
+		const authority = _Authority(calls);
+		let records = 0;
+		authority.recordWarmPodDeleted = vi.fn(async function _Record()
+		{
+			records += 1;
+			return records === 1 ? "deferred" : "bound";
+		});
+		const sleepUntil = vi.fn();
+		const handler = __CreateWarmAgentRunWorkflowHandler({ authority, kubernetes: _Kubernetes(calls), profiles: _Profiles(), pollIntervalMilliseconds: 100 });
+
+		await handler.run({ checkpoint: async function _Checkpoint(_options: unknown, operation: () => Promise<unknown>) { return await operation(); }, sleepUntil, task: { taskId: "task-1", taskName: "agent-runs.execute/v1", idempotencyKey: "agent-run:silo-a:run-1:attempt:1" } } as never, { siloId: "silo-a", runId: "run-1", attempt: 1 });
+
+		expect(authority.recordWarmPodDeleted).toHaveBeenCalledTimes(2);
+		expect(sleepUntil).toHaveBeenCalledTimes(1);
+	});
 });

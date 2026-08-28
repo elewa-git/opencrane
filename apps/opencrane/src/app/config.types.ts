@@ -45,7 +45,7 @@ export interface InternalRuntimeConfig
 	readonly commandTtlMilliseconds: number;
 	/** Delay before recovering an unacknowledged runtime command. */
 	readonly commandRecoveryMilliseconds: number;
-	/** Namespace reserved for managed-agent runtime Jobs. */
+	/** Namespace containing the managed-agent warm Pod pool. */
 	readonly managedRuntimeNamespace: string | undefined;
 	/** Lease held by one Pod-bound companion command claim. */
 	readonly mcpCompanionClaimLeaseMilliseconds: number;
@@ -53,14 +53,13 @@ export interface InternalRuntimeConfig
 	readonly mcpControllerClaimLeaseMilliseconds: number;
 	/** Namespace reserved for OCI MCP executor Jobs. */
 	readonly mcpExecutorNamespace: string | undefined;
-	/** Class-specific profile selected for every OCI MCP executor claim. */
 	/** Hard timeout applied to every memory-gateway HTTP exchange. */
 	readonly memoryGatewayTimeoutMilliseconds: number;
 	/** Absolute path of the projected audience-bound memory-gateway caller token. */
 	readonly memoryGatewayTokenPath: string;
 	/** Release-local private memory-gateway origin; the client validates its exact shape. */
 	readonly memoryGatewayUrl: string;
-	/** Namespace reserved for personal-agent runtime Jobs. */
+	/** Namespace containing the personal-agent warm Pod pool. */
 	readonly personalRuntimeNamespace: string | undefined;
 	/** Namespace reserved for skill-authoring validation Jobs. */
 	readonly skillAuthoringNamespace: string;

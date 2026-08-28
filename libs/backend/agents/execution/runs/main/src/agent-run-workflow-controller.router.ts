@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import { __ParseAgentRunWorkflowTaskRequest, type AgentRunTaskInput, type AgentRunWarmRuntimeActivationCommand, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWarmRuntimeReadinessCommand, type AgentRunWarmRuntimeReservationCommand } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import { __ParseAgentRunWorkflowTaskRequest, type AgentRunTaskInput, type AgentRunWarmRuntimeActivationCommand, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWarmRuntimeDeletionOutcome, type AgentRunWarmRuntimeReadinessCommand, type AgentRunWarmRuntimeReservationCommand } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
@@ -188,7 +188,7 @@ function _WarmDeletion(value: unknown): WarmCommand<AgentRunWarmRuntimeDeletionC
 }
 
 /** Registers one authenticated warm command route with the common conflict response. */
-function _RegisterWarmBinding<TCommand>(router: Router, path: string, dependencies: AgentRunWorkflowControllerRouterDependencies, parse: (value: unknown) => WarmCommand<TCommand> | null, operation: string, execute: (input: WarmCommand<TCommand>["input"], task: WarmCommand<TCommand>["task"], command: TCommand) => Promise<"bound" | "idempotent" | "conflict">): void
+function _RegisterWarmBinding<TCommand>(router: Router, path: string, dependencies: AgentRunWorkflowControllerRouterDependencies, parse: (value: unknown) => WarmCommand<TCommand> | null, operation: string, execute: (input: WarmCommand<TCommand>["input"], task: WarmCommand<TCommand>["task"], command: TCommand) => Promise<AgentRunWarmRuntimeDeletionOutcome>): void
 {
 	router.post(path, async function _WarmBinding(request: Request, response: Response): Promise<void>
 	{
@@ -247,7 +247,7 @@ function _BearerValue(value: string | undefined): string | null
 }
 
 /** Returns a binding result, or a conflict that stops a stale controller task. */
-function _RespondBinding(response: Response, outcome: "bound" | "idempotent" | "conflict"): void
+function _RespondBinding(response: Response, outcome: AgentRunWarmRuntimeDeletionOutcome): void
 {
 	if (outcome === "conflict")
 	{

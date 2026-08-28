@@ -120,12 +120,20 @@ async function _Delete(options: WarmAgentRunWorkflowHandlerOptions, context: IWo
 	await context.checkpoint({ stepName: "delete-used-warm-pod" }, async function _DeleteCheckpoint(): Promise<void>
 	{
 		await _Retry(async function _DeletePod() { await options.kubernetes.deletePod({ namespace: profile.namespace, podName: candidate.podName, podUid: candidate.podUid, deploymentUid: candidate.deploymentUid, profile: command.profile }, profile); });
+	});
+	while (true)
+	{
 		const recorded = await _Retry(async function _Record() { return await options.authority.recordWarmPodDeleted(input, context.task, command); });
 		if (recorded === "conflict")
 		{
 			throw new WorkflowTaskTerminalError("warm AgentRun deletion could not be recorded");
 		}
-	});
+		if (recorded !== "deferred")
+		{
+			return;
+		}
+		await _Wait(context, options.pollIntervalMilliseconds);
+	}
 }
 
 /** Runs one complete warm claim and never returns its Pod to the generic pool. */

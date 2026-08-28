@@ -86,6 +86,9 @@ export interface AgentRunWarmRuntimeDeletionCommand
 	readonly profile: string;
 }
 
+/** Reports whether exact Pod deletion finished, must be retried, or lost its authority fence. */
+export type AgentRunWarmRuntimeDeletionOutcome = "bound" | "idempotent" | "deferred" | "conflict";
+
 /** Defines the server operations used by the hard-cutoff warm AgentRun workflow. */
 export interface AgentRunWarmRuntimeControllerAuthority
 {
@@ -100,7 +103,7 @@ export interface AgentRunWarmRuntimeControllerAuthority
 	/** Records the one-way deletion command before Kubernetes mutation. */
 	requestWarmPodDeletion(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<"bound" | "idempotent" | "conflict">;
 	/** Records that the exact used Pod deletion request succeeded. */
-	recordWarmPodDeleted(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<"bound" | "idempotent" | "conflict">;
+	recordWarmPodDeleted(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<AgentRunWarmRuntimeDeletionOutcome>;
 	/** Fences this receipt and records a setup failure. */
 	terminalizeFailedTask(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<void>;
 	/** Reads current lifecycle state while the claimed Pod is running. */

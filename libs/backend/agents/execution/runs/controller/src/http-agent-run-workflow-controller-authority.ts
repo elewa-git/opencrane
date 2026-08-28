@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
-import { __ParseAgentRunWorkflowBindingOutcome, __ParseAgentRunWorkflowControllerRecord, __ParseAgentRunWorkflowObservation, type AgentRunTaskInput, type AgentRunWarmRuntimeActivationCommand, type AgentRunWarmRuntimeControllerAuthority, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWarmRuntimeReadinessCommand, type AgentRunWarmRuntimeReservationCommand, type AgentRunWorkflowControllerRecord, type AgentRunWorkflowObservation } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import { __ParseAgentRunWorkflowBindingOutcome, __ParseAgentRunWorkflowControllerRecord, __ParseAgentRunWorkflowDeletionOutcome, __ParseAgentRunWorkflowObservation, type AgentRunTaskInput, type AgentRunWarmRuntimeActivationCommand, type AgentRunWarmRuntimeControllerAuthority, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWarmRuntimeDeletionOutcome, type AgentRunWarmRuntimeReadinessCommand, type AgentRunWarmRuntimeReservationCommand, type AgentRunWorkflowControllerRecord, type AgentRunWorkflowObservation } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
@@ -137,6 +137,19 @@ export function __CreateHttpWarmAgentRunWorkflowControllerAuthority(options: Age
 		}
 		return await _ReadJson(response, __ParseAgentRunWorkflowBindingOutcome);
 	}
+	async function _Deletion(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<AgentRunWarmRuntimeDeletionOutcome>
+	{
+		const response = await _Request("/api/internal/agent-controller/agent-run-workflows/warm-deleted", { input, task, command });
+		if (response.status === 409)
+		{
+			return "conflict";
+		}
+		if (response.status !== 200)
+		{
+			throw new Error(`warm AgentRun deletion failed with HTTP ${response.status}`);
+		}
+		return await _ReadJson(response, __ParseAgentRunWorkflowDeletionOutcome);
+	}
 	return {
 		async loadForTask(input, task): Promise<AgentRunWorkflowControllerRecord | null>
 		{
@@ -155,7 +168,7 @@ export function __CreateHttpWarmAgentRunWorkflowControllerAuthority(options: Age
 		async recordWarmProfileActivation(input, task, command) { return await _Binding("/api/internal/agent-controller/agent-run-workflows/warm-activation", input, task, command); },
 		async recordWarmReadiness(input, task, command) { return await _Binding("/api/internal/agent-controller/agent-run-workflows/warm-readiness", input, task, command); },
 		async requestWarmPodDeletion(input, task, command) { return await _Binding("/api/internal/agent-controller/agent-run-workflows/warm-delete-request", input, task, command); },
-		async recordWarmPodDeleted(input, task, command) { return await _Binding("/api/internal/agent-controller/agent-run-workflows/warm-deleted", input, task, command); },
+		async recordWarmPodDeleted(input, task, command) { return await _Deletion(input, task, command); },
 		async terminalizeFailedTask(input, task): Promise<void>
 		{
 			const response = await _Request("/api/internal/agent-controller/agent-run-workflows/terminal-failure", { input, task });

@@ -1,9 +1,12 @@
 import { AgentRunState, AgentRunTerminalReason, Prisma, WarmRuntimeReservationState, WorkloadAssignmentState, WorkloadKind, type PrismaClient } from "@prisma/client";
 
-import type { AgentRunWarmRuntimeActivationCommand, AgentRunWarmRuntimeControllerAuthority, AgentRunWarmRuntimeDeletionCommand, AgentRunWarmRuntimeReadinessCommand, AgentRunWarmRuntimeReservationCommand, AgentRunWorkflowControllerRecord, AgentRunWorkflowObservation, AgentRunTaskInput } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import type { AgentRunWarmRuntimeActivationCommand, AgentRunWarmRuntimeControllerAuthority, AgentRunWarmRuntimeDeletionCommand, AgentRunWarmRuntimeDeletionOutcome, AgentRunWarmRuntimeReadinessCommand, AgentRunWarmRuntimeReservationCommand, AgentRunWorkflowControllerRecord, AgentRunWorkflowObservation, AgentRunTaskInput } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import { __CancelPendingRunApprovalAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
+import { RunEventTypes } from "@opencrane/models/agents";
 
 import type { AgentRunWarmRuntimePersistenceRepository, AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-workflow-controller-authority.types";
+import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository";
 import { __AgentRunWorkflowBootstrapClaimDigest, __AgentRunWorkflowBootstrapReferenceForTask, __AgentRunWorkflowRuntimeIdentity, __CanCreateOrObserveAgentRunWorkflowTask, __CurrentAgentRunWorkflowTask, PrismaAgentRunWorkflowTaskReadRepository } from "./prisma-agent-run-workflow-task-read-repository";
 
 /** Retries expected unique and serializable conflicts during concurrent reservations. */
@@ -139,26 +142,41 @@ class PrismaAgentRunWarmRuntimeRepository implements AgentRunWarmRuntimePersiste
 	}
 
 	/** Records successful deletion and revokes assignment and proof-key authority. */
-	async recordWarmPodDeleted(input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<"bound" | "idempotent" | "conflict">
+	async recordWarmPodDeleted(input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<AgentRunWarmRuntimeDeletionOutcome>
 	{
-		const reservation = await this._Reservation(input, receipt);
+		const task = await this.taskReader.read(input, receipt);
+		if (task === null)
+		{
+			return "conflict";
+		}
+		const reservation = await this.transaction.warmRuntimeReservation.findUnique({ where: { runId_attempt: { runId: input.runId, attempt: input.attempt } } });
 		if (reservation === null || !_DeletionMatches(reservation, command))
 		{
 			return "conflict";
 		}
-		if (reservation.deletedAt !== null)
-		{
-			return "idempotent";
-		}
+		const wasDeleted = reservation.deletedAt !== null;
 		const now = new Date();
-		const updated = await this.transaction.warmRuntimeReservation.updateMany({ where: { runId: input.runId, attempt: input.attempt, state: WarmRuntimeReservationState.DeleteRequested }, data: { state: WarmRuntimeReservationState.Deleted, deletedAt: now } });
-		if (updated.count !== 1)
+		if (!wasDeleted)
 		{
-			return "conflict";
+			const updated = await this.transaction.warmRuntimeReservation.updateMany({ where: { runId: input.runId, attempt: input.attempt, state: WarmRuntimeReservationState.DeleteRequested }, data: { state: WarmRuntimeReservationState.Deleted, deletedAt: now } });
+			if (updated.count !== 1)
+			{
+				return "conflict";
+			}
+			await this.transaction.workloadAssignment.updateMany({ where: { runId: input.runId, attempt: input.attempt, workloadUid: command.podUid }, data: { state: WorkloadAssignmentState.Revoked, revokedAt: now } });
+			await this.transaction.runProofKey.updateMany({ where: { runId: input.runId, attempt: input.attempt, revokedAt: null }, data: { revokedAt: now } });
 		}
-		await this.transaction.workloadAssignment.updateMany({ where: { runId: input.runId, attempt: input.attempt, workloadUid: command.podUid }, data: { state: WorkloadAssignmentState.Revoked, revokedAt: now } });
-		await this.transaction.runProofKey.updateMany({ where: { runId: input.runId, attempt: input.attempt, revokedAt: null }, data: { revokedAt: now } });
-		return "bound";
+		if (task.run.state === AgentRunState.Cancelling)
+		{
+			const cancellation = await __CancelPendingRunApprovalAuthority(this.transaction, { runId: input.runId, attempt: input.attempt, now });
+			if (cancellation.activeClaimCount > 0)
+			{
+				return "deferred";
+			}
+			await this._FinalizeCancelledRun(task.run, now);
+			return "bound";
+		}
+		return wasDeleted ? "idempotent" : "bound";
 	}
 
 	/** Records a workflow setup failure without writing the retired Job cleanup outbox. */
@@ -205,6 +223,22 @@ class PrismaAgentRunWarmRuntimeRepository implements AgentRunWarmRuntimePersiste
 		}
 		return await this.transaction.warmRuntimeReservation.findUnique({ where: { runId_attempt: { runId: input.runId, attempt: input.attempt } } });
 	}
+
+	/** Finalizes cancellation only after no provider output lease remains active. */
+	private async _FinalizeCancelledRun(run: AgentRunWorkflowTaskRow["run"], now: Date): Promise<void>
+	{
+		const finalized = await this.transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: AgentRunState.Cancelling }, data: { state: AgentRunState.Cancelled, terminalReason: AgentRunTerminalReason.UserCancelled, finishedAt: now } });
+		if (finalized.count !== 1)
+		{
+			throw new Error("warm runtime cancellation lost its final state fence");
+		}
+		await __DeliverChildRunCompletionInTransaction(this.transaction, { childRunId: run.id });
+		if (run.conversationId !== null)
+		{
+			const maximum = await this.transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
+			await this.transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: RunEventTypes.RunCancelled, payload: { terminalReason: "user_cancelled" }, occurredAt: now } });
+		}
+	}
 }
 
 /** Opens serializable transactions for the one-shot warm AgentRun lifecycle. */
@@ -233,7 +267,7 @@ export class PrismaAgentRunWarmRuntimeUnitOfWork implements AgentRunWarmRuntimeC
 	/** Saves deletion intent. */
 	async requestWarmPodDeletion(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<"bound" | "idempotent" | "conflict"> { return await this._Run(async function _Request(repository) { return await repository.requestWarmPodDeletion(input, task, command); }); }
 	/** Saves successful deletion. */
-	async recordWarmPodDeleted(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<"bound" | "idempotent" | "conflict"> { return await this._Run(async function _Record(repository) { return await repository.recordWarmPodDeleted(input, task, command); }); }
+	async recordWarmPodDeleted(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<AgentRunWarmRuntimeDeletionOutcome> { return await this._Run(async function _Record(repository) { return await repository.recordWarmPodDeleted(input, task, command); }); }
 	/** Records setup failure. */
 	async terminalizeFailedTask(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<void> { await this._Run(async function _Fail(repository) { await repository.terminalizeFailedTask(input, task); }); }
 	/** Reads current run state. */

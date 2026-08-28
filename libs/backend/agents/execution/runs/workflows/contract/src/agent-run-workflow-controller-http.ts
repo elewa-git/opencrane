@@ -4,7 +4,7 @@ import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workf
 
 import { AgentRunTaskNames } from "./agent-run-task.types";
 import type { AgentRunWorkflowTaskRequest } from "./agent-run-workflow-controller-http.types";
-import type { AgentRunWorkflowControllerRecord, AgentRunWorkflowObservation } from "./agent-run-workflow-controller.types";
+import type { AgentRunWarmRuntimeDeletionOutcome, AgentRunWorkflowControllerRecord, AgentRunWorkflowObservation } from "./agent-run-workflow-controller.types";
 
 /** Defines the exact durable receipt a controller may send back for an AgentRun task. */
 const _TaskReceiptSchema: ZodType<IWorkflowTaskReceipt> = z.object({ taskId: z.string().min(1).max(128), taskName: z.literal(AgentRunTaskNames.Execute), idempotencyKey: z.string().min(1).max(512) }).strict();
@@ -54,6 +54,12 @@ export function __ParseAgentRunWorkflowControllerRecord(value: unknown): AgentRu
 export function __ParseAgentRunWorkflowBindingOutcome(value: unknown): "bound" | "idempotent" | null
 {
 	return _Parse(z.object({ outcome: z.enum(["bound", "idempotent"]) }).strict(), value)?.outcome ?? null;
+}
+
+/** Parses a deletion result, including a safe wait for active provider output. */
+export function __ParseAgentRunWorkflowDeletionOutcome(value: unknown): AgentRunWarmRuntimeDeletionOutcome | null
+{
+	return _Parse(z.object({ outcome: z.enum(["bound", "idempotent", "deferred", "conflict"]) }).strict(), value)?.outcome ?? null;
 }
 
 /** Parses the task observation returned by the server. */

@@ -11,7 +11,7 @@ import type { AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-wor
 import type { AgentRunWorkflowSnapshotIdentity, AgentRunWorkflowTaskReadPersistenceRepository } from "./prisma-agent-run-workflow-task-read-repository.types";
 
 /** Selects the saved task, current run, active service, and frozen snapshot for controller reads. */
-export const __AGENT_RUN_WORKFLOW_TASK_SELECT = {
+const __AGENT_RUN_WORKFLOW_TASK_SELECT = {
 	runId: true,
 	attempt: true,
 	siloId: true,
@@ -81,7 +81,7 @@ export function __AgentRunWorkflowBootstrapClaimDigest(reference: string, assign
 }
 
 /** Confirms that this task, receipt, run, and attempt still name one durable controller operation. */
-export function __AgentRunWorkflowTaskMatches(task: AgentRunWorkflowTaskRow, input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt): boolean
+function __AgentRunWorkflowTaskMatches(task: AgentRunWorkflowTaskRow, input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt): boolean
 {
 	return task.runId === input.runId && task.attempt === input.attempt && task.siloId === input.siloId && task.taskId === receipt.taskId && task.taskName === AgentRunTaskNames.Execute && receipt.taskName === AgentRunTaskNames.Execute && task.taskKey === receipt.idempotencyKey;
 }
