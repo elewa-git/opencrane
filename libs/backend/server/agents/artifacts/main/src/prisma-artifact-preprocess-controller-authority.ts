@@ -3,10 +3,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { ArtifactKind, ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState, Prisma } from "@prisma/client";
 
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
-import { ArtifactPreprocessOutcomeKinds, ArtifactPreprocessPipelineVersions, ArtifactPreprocessTaskNames } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
-import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { ArtifactPreprocessOutcomeKinds, ArtifactPreprocessPipelineVersions, ArtifactPreprocessRecoveryReasons, ArtifactPreprocessTaskNames } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessPodBindCommand, ArtifactPreprocessRecoveryCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { __CreateArtifactPreprocessBootstrapReference, __HashArtifactPreprocessBootstrapReference, __IsArtifactPreprocessBootstrapReference, type ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
+
+import { _ArtifactPreprocessFailureTransition } from "./artifact-preprocess-retry-policy";
 
 /** Selects the one isolated Job profile allowed to process published PDFs. */
 const _PROFILE_NAME = "pdf-preprocessor";
@@ -102,7 +104,7 @@ function _Record(job: _PreprocessJob): ArtifactPreprocessControllerRecord | null
 }
 
 /** Checks one Job or Pod binding against the current server-owned delivery. */
-function _BindingMatches(job: _PreprocessJob, task: IWorkflowTaskReceipt, command: ArtifactPreprocessWorkloadBindCommand | ArtifactPreprocessPodBindCommand): boolean
+function _BindingMatches(job: _PreprocessJob, task: IWorkflowTaskReceipt, command: ArtifactPreprocessWorkloadBindCommand | ArtifactPreprocessPodBindCommand | ArtifactPreprocessRecoveryCommand): boolean
 {
 	const binding = command.binding;
 	return _TaskMatches(job, task)
@@ -130,7 +132,6 @@ export class PrismaArtifactPreprocessControllerRepository implements ArtifactPre
 {
 	/** Holds the caller-owned transaction for exactly one authority operation. */
 	private readonly transaction: Prisma.TransactionClient;
-
 	/** Uses the transaction opened by the artifact preprocessing unit of work. */
 	constructor(transaction: Prisma.TransactionClient)
 	{
@@ -227,6 +228,47 @@ export class PrismaArtifactPreprocessControllerRepository implements ArtifactPre
 			data: { firstPodUid: command.binding.firstPodUid },
 		});
 		return changed.count === 1 ? "bound" : "conflict";
+	}
+
+	/** Persists bounded retry or terminal failure after the controller observes a dead exact Job. */
+	async recordUnreportedFailure(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessRecoveryCommand): Promise<ArtifactPreprocessOutcome | null>
+	{
+		const job = await this._Job(preprocessJobId);
+		const acceptedReason = command.reason === ArtifactPreprocessRecoveryReasons.JobTerminalWithoutOutcome || command.reason === ArtifactPreprocessRecoveryReasons.JobMissingWithoutOutcome;
+		if (!acceptedReason || job === null || command.binding.firstPodUid === undefined || !_BindingMatches(job, task, command) || job.workloadUid !== command.binding.workloadUid || job.firstPodUid !== command.binding.firstPodUid)
+		{
+			return null;
+		}
+		const saved = await this.loadOutcome(preprocessJobId, command.binding.deliveryCount, task);
+		if (saved !== null)
+		{
+			return saved;
+		}
+		if (job.state !== ArtifactPreprocessJobState.Claimed)
+		{
+			return null;
+		}
+		const now = await this._DatabaseNow();
+		const transition = _ArtifactPreprocessFailureTransition(job.deliveryCount, now);
+		const state = transition.terminal ? ArtifactPreprocessJobState.TerminalFailed : ArtifactPreprocessJobState.RetryableFailed;
+		const changed = await this.transaction.artifactPreprocessJob.updateMany({
+			where: { id: job.id, state: ArtifactPreprocessJobState.Claimed, taskId: job.taskId, taskName: job.taskName, taskKey: job.taskKey, claimFence: job.claimFence, claimedAt: job.claimedAt, deliveryCount: job.deliveryCount, claimExpiresAt: job.claimExpiresAt, profileName: job.profileName, workloadUid: job.workloadUid, firstPodUid: job.firstPodUid },
+			data: { state, outputLeaseId: null, failureCode: command.reason, nextAttemptAt: transition.nextAttemptAt },
+		});
+		if (changed.count !== 1)
+		{
+			return null;
+		}
+		const signal = { preprocessJobId: job.id, deliveryCount: job.deliveryCount };
+		if (transition.terminal)
+		{
+			return { kind: ArtifactPreprocessOutcomeKinds.TerminalFailed, ...signal };
+		}
+		if (transition.nextAttemptAt === null)
+		{
+			throw new Error("Retryable artifact preprocessing recovery has no next-attempt time.");
+		}
+		return { kind: ArtifactPreprocessOutcomeKinds.RetryableFailed, ...signal, retryAt: transition.nextAttemptAt.toISOString() };
 	}
 
 	/** Exchanges a mounted reference for its active, fully bound worker delivery. */

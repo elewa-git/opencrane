@@ -4,7 +4,7 @@ import { Observable, type ConfigurationOptions, type ObservableMiddleware, type 
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { GovernedJobControllerStore, GovernedJobControllerStoreOptions } from "./governed-job-controller.types";
+import type { GovernedJobControllerStore, GovernedJobControllerStoreOptions, GovernedJobObservation } from "./governed-job-controller.types";
 
 const _SERVER_METADATA_FIELDS = ["creationTimestamp", "generation", "managedFields", "resourceVersion", "selfLink", "uid"] as const;
 /** Kubernetes owner-reference kind for one Batch Job. */
@@ -144,6 +144,24 @@ function _AssertExactPod(pod: V1Pod, expectedJob: V1Job, workloadUid: string, se
 		throw new Error("refusing to register a Pod that differs from the assigned governed Job");
 }
 
+/** Map one exact released Job to the narrow recovery state its durable owner may consume. */
+function _JobObservation(job: V1Job): GovernedJobObservation
+{
+	if (job.spec?.suspend !== false)
+	{
+		throw new Error("refusing to observe a governed Job that has not been released");
+	}
+	const terminalConditions = (job.status?.conditions ?? []).filter(function _TerminalCondition(condition): boolean
+	{
+		return condition.status === "True" && (condition.type === "Complete" || condition.type === "Failed");
+	});
+	if (terminalConditions.length > 1)
+	{
+		throw new Error("governed Job has ambiguous terminal conditions");
+	}
+	return terminalConditions.length === 1 ? "terminal" : "running";
+}
+
 /**
  * Creates the only shared implementation of exact governed Job adoption, release, and Pod lookup.
  *
@@ -213,6 +231,24 @@ export function __CreateKubernetesGovernedJobControllerStore(options: GovernedJo
 				throw new Error("refusing to choose among multiple Pods for one governed Job");
 			_AssertExactPod(listed.items[0], expectedJob, workloadUid, serviceAccountName);
 			return listed.items[0];
+		},
+		async observeJob(expectedJob: V1Job, workloadUid: string): Promise<GovernedJobObservation>
+		{
+			const { name, namespace } = _Coordinates(expectedJob);
+			try
+			{
+				const current = await options.batchApi.readNamespacedJob({ namespace, name }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds));
+				_AssertExactAssignedJob(current, expectedJob, workloadUid);
+				return _JobObservation(current);
+			}
+			catch (error)
+			{
+				if (_StatusCode(error) === 404)
+				{
+					return "missing";
+				}
+				throw error;
+			}
 		},
 		async deleteJob(expectedJob: V1Job, workloadUid: string): Promise<void>
 		{

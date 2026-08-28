@@ -6,7 +6,7 @@
 
 This package contains the Kubernetes mechanics that every class-specific governed Job may share:
 create or adopt one exact suspended Job, release only its saved immutable UID, accept only its
-single exact first Pod, and delete only that saved UID. The skill, OCI MCP, and artifact controllers
+single exact first Pod, observe its verified lifecycle, and delete only that saved UID. The skill, OCI MCP, and artifact controllers
 supply different Job manifests, profiles, labels, and database claims while using the same checks.
 Only a class-specific durable owner decides when deletion is allowed.
 
@@ -17,7 +17,7 @@ class-specific expected Job + saved UID
 ┌──────────────────────────────────┐
 │ governed Job controller ◄── HERE │
 └──────────────────────────────────┘
-        │ exact Job release + first Pod + UID-fenced delete
+        │ exact Job release + first Pod + lifecycle observation + UID-fenced delete
         ▼
 class-specific server authority records the binding
 ```
@@ -25,8 +25,8 @@ class-specific server authority records the binding
 ## Public surface
 
 - `__CreateKubernetesGovernedJobControllerStore` creates the exact Job adapter.
-- `GovernedJobControllerStore` exposes suspended creation, fenced release, first-Pod lookup, and
-  UID-fenced idempotent deletion.
+- `GovernedJobControllerStore` exposes suspended creation, fenced release, first-Pod lookup,
+  exact lifecycle observation, and UID-fenced idempotent deletion.
 - The Batch and Core API types expose only the Kubernetes calls this adapter needs.
 
 ## Boundary

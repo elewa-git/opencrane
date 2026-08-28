@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __ParseArtifactPreprocessWorkloadBindRequest, ArtifactPreprocessTaskNames } from "../index";
+import { __ParseArtifactPreprocessRecoveryRequest, __ParseArtifactPreprocessWorkloadBindRequest, ArtifactPreprocessRecoveryReasons, ArtifactPreprocessTaskNames } from "../index";
 
 /** Returns the saved task receipt that may bind the selected PDF preprocessing Job. */
 function _Task()
@@ -21,5 +21,15 @@ describe("artifact preprocessing controller HTTP contract", function _DescribeAr
 		const request = { task: _Task(), binding: _Binding(), bootstrapReference: "not-a-bootstrap-reference", namespace: "opencrane-artifact-preprocessor" };
 
 		expect(__ParseArtifactPreprocessWorkloadBindRequest(request, "opencrane-artifact-preprocessor")).toBeNull();
+	});
+
+	it("requires the exact first Pod and a controller-owned recovery reason", function _ParsesRecovery()
+	{
+		const binding = { ..._Binding(), firstPodUid: "pod-uid-1" };
+		const request = { task: _Task(), binding, reason: ArtifactPreprocessRecoveryReasons.JobTerminalWithoutOutcome };
+
+		expect(__ParseArtifactPreprocessRecoveryRequest(request)).toEqual({ task: _Task(), command: { binding, reason: ArtifactPreprocessRecoveryReasons.JobTerminalWithoutOutcome } });
+		expect(__ParseArtifactPreprocessRecoveryRequest({ ...request, binding: _Binding() })).toBeNull();
+		expect(__ParseArtifactPreprocessRecoveryRequest({ ...request, reason: "conversion_failed" })).toBeNull();
 	});
 });

@@ -82,6 +82,30 @@ describe("governed Kubernetes Job controller store", function _DescribeGovernedJ
 		await expect(store.findFirstPod(job, "job-uid-1", "test-worker")).rejects.toThrow(/multiple Pods/);
 	});
 
+	it("observes only the exact released Job and treats only HTTP 404 as missing", async function _ObservesExactJob()
+	{
+		const expected = _ExpectedJob();
+		const running = { ..._PersistedJob(expected), spec: { ...expected.spec!, suspend: false }, status: { conditions: [] } };
+		const readNamespacedJob = vi.fn().mockResolvedValueOnce(running).mockResolvedValueOnce({ ...running, status: { conditions: [{ type: "Failed", status: "True" }] } }).mockRejectedValueOnce({ statusCode: 404 });
+		const store = _Store({ createNamespacedJob: vi.fn(), readNamespacedJob, patchNamespacedJob: vi.fn(), deleteNamespacedJob: vi.fn() }, { listNamespacedPod: vi.fn() });
+
+		await expect(store.observeJob(expected, "job-uid-1")).resolves.toBe("running");
+		await expect(store.observeJob(expected, "job-uid-1")).resolves.toBe("terminal");
+		await expect(store.observeJob(expected, "job-uid-1")).resolves.toBe("missing");
+	});
+
+	it("rejects a suspended or ambiguously terminal Job observation", async function _RejectsAmbiguousObservation()
+	{
+		const expected = _ExpectedJob();
+		const suspended = _PersistedJob(expected);
+		const ambiguous = { ...suspended, spec: { ...suspended.spec!, suspend: false }, status: { conditions: [{ type: "Failed", status: "True" }, { type: "Complete", status: "True" }] } };
+		const readNamespacedJob = vi.fn().mockResolvedValueOnce(suspended).mockResolvedValueOnce(ambiguous);
+		const store = _Store({ createNamespacedJob: vi.fn(), readNamespacedJob, patchNamespacedJob: vi.fn(), deleteNamespacedJob: vi.fn() }, { listNamespacedPod: vi.fn() });
+
+		await expect(store.observeJob(expected, "job-uid-1")).rejects.toThrow(/not been released/);
+		await expect(store.observeJob(expected, "job-uid-1")).rejects.toThrow(/ambiguous/);
+	});
+
 	it("deletes only the saved Job UID and treats an already missing Job as complete", async function _DeletesExactJob()
 	{
 		const deleteNamespacedJob = vi.fn().mockResolvedValueOnce({}).mockRejectedValueOnce({ statusCode: 404 });

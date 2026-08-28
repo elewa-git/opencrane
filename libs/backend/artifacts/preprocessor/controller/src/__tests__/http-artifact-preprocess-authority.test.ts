@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
+import { ArtifactPreprocessRecoveryReasons } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 
 import { __CreateHttpArtifactPreprocessControllerAuthority } from "../http-artifact-preprocess-authority";
 
@@ -103,5 +104,17 @@ describe("artifact preprocessing controller HTTP authority", function _DescribeA
 		const { authority } = _Authority(new Response(JSON.stringify({ kind: "completed", preprocessJobId: "preprocess-1", deliveryCount: 2, completionDigest: returnedDigest }), { status: 200, headers: { "content-type": "application/json" } }));
 
 		await expect(authority.loadOutcome("preprocess-1", 1, _Task())).rejects.toThrow(/outcome response selected another delivery/);
+	});
+
+	it("sends the exact controller recovery binding and reason", async function _RecordsRecoveryFailure()
+	{
+		const outcome = { kind: "terminal_failed", preprocessJobId: "preprocess-1", deliveryCount: 1 };
+		const { authority, fetch } = _Authority(new Response(JSON.stringify(outcome), { status: 200, headers: { "content-type": "application/json" } }));
+		const command = { binding: { claimId: "claim-1", claimedAt: "2026-08-25T10:00:00.000Z", deliveryCount: 1, profileName: "pdf-preprocessor", workloadUid: "job-uid-1", firstPodUid: "pod-uid-1" }, reason: ArtifactPreprocessRecoveryReasons.JobTerminalWithoutOutcome };
+
+		await expect(authority.recordUnreportedFailure("preprocess-1", _Task(), command)).resolves.toEqual(outcome);
+
+		expect(fetch.mock.calls[0]?.[0]).toMatchObject({ pathname: "/api/internal/agent-controller/artifact-preprocess-jobs/preprocess-1/recovery/failure" });
+		expect(JSON.parse(String((fetch.mock.calls[0]?.[1] as RequestInit).body))).toEqual({ task: _Task(), ...command });
 	});
 });

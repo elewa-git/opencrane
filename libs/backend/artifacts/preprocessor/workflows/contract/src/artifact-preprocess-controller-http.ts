@@ -3,8 +3,9 @@ import { __IsArtifactPreprocessBootstrapReference } from "@opencrane/contracts";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { z, type ZodType } from "zod";
 
-import type { ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "./artifact-preprocess-controller.types";
-import type { ArtifactPreprocessPodBindRequest, ArtifactPreprocessWorkloadBindRequest } from "./artifact-preprocess-controller-http.types";
+import { ArtifactPreprocessRecoveryReasons } from "./artifact-preprocess-controller.types";
+import type { ArtifactPreprocessPodBindCommand, ArtifactPreprocessRecoveryCommand, ArtifactPreprocessWorkloadBindCommand } from "./artifact-preprocess-controller.types";
+import type { ArtifactPreprocessPodBindRequest, ArtifactPreprocessRecoveryRequest, ArtifactPreprocessWorkloadBindRequest } from "./artifact-preprocess-controller-http.types";
 import { ArtifactPreprocessTaskNames } from "./artifact-preprocess-task.types";
 
 /** Checks the UTC timestamp format that fences a controller delivery. */
@@ -36,6 +37,9 @@ const _WorkloadBindBodySchema = z.object({ task: _TaskReceiptSchema, binding: _B
 
 /** Defines a first-Pod bind body. */
 const _PodBindBodySchema = z.object({ task: _TaskReceiptSchema, binding: _BindingSchema }).strict();
+
+/** Defines a recovery body with the complete saved binding and one controller-owned reason. */
+const _RecoveryBodySchema = z.object({ task: _TaskReceiptSchema, binding: _BindingSchema, reason: z.enum([ArtifactPreprocessRecoveryReasons.JobTerminalWithoutOutcome, ArtifactPreprocessRecoveryReasons.JobMissingWithoutOutcome]) }).strict();
 
 /** Parses strict JSON without exposing schema details through the private controller API. */
 function _Parse<T>(schema: ZodType<T>, value: unknown): T | null
@@ -83,6 +87,26 @@ export function __ParseArtifactPreprocessPodBindRequest(value: unknown): Artifac
 		return null;
 	}
 	const command: ArtifactPreprocessPodBindCommand = { binding: parsed.binding };
+	return { task: parsed.task, command };
+}
+
+/**
+ * Parses a controller recovery request with the complete Job and first-Pod fence.
+ *
+ * Called by: `__CreateArtifactPreprocessControllerRouter` before it records an unreported Job
+ * failure. A missing first-Pod UID is rejected because recovery begins only after Pod binding.
+ *
+ * @param value - Untrusted JSON request body.
+ * @returns The task receipt and recovery command, or `null` when the body is incomplete.
+ */
+export function __ParseArtifactPreprocessRecoveryRequest(value: unknown): ArtifactPreprocessRecoveryRequest | null
+{
+	const parsed = _Parse(_RecoveryBodySchema, value);
+	if (parsed === null || parsed.binding.firstPodUid === undefined)
+	{
+		return null;
+	}
+	const command: ArtifactPreprocessRecoveryCommand = { binding: parsed.binding, reason: parsed.reason };
 	return { task: parsed.task, command };
 }
 

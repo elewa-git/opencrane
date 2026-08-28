@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { ArtifactPreprocessOutcomeKinds, ArtifactPreprocessTaskNames, type ArtifactPreprocessControllerAuthority, type ArtifactPreprocessOutcome } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { ArtifactPreprocessOutcomeKinds, ArtifactPreprocessRecoveryReasons, ArtifactPreprocessTaskNames, type ArtifactPreprocessControllerAuthority, type ArtifactPreprocessOutcome } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 
 import { __CreateArtifactPreprocessControllerRouter } from "../artifact-preprocess-controller.router";
@@ -29,7 +29,7 @@ function _Binding()
 /** Builds an internal Express app with a configurable artifact controller authority. */
 function _App(overrides: Partial<ArtifactPreprocessControllerRouterDependencies> = {})
 {
-	const authority: ArtifactPreprocessControllerAuthority = { claimForTask: vi.fn().mockResolvedValue(_Record()), bindWorkload: vi.fn().mockResolvedValue("bound"), bindFirstPod: vi.fn().mockResolvedValue("bound"), loadOutcome: vi.fn(), complete: vi.fn() };
+	const authority: ArtifactPreprocessControllerAuthority = { claimForTask: vi.fn().mockResolvedValue(_Record()), bindWorkload: vi.fn().mockResolvedValue("bound"), bindFirstPod: vi.fn().mockResolvedValue("bound"), recordUnreportedFailure: vi.fn(), loadOutcome: vi.fn(), complete: vi.fn() };
 	const dependencies: ArtifactPreprocessControllerRouterDependencies = {
 		namespace: "opencrane",
 		workerNamespace: "opencrane-artifact-preprocessor",
@@ -102,11 +102,27 @@ describe("agent-controller artifact preprocessing router", function _DescribeArt
 		expect(dependencies.authority.loadOutcome).toHaveBeenCalledWith("preprocess-1", 1, _Task());
 	});
 
+	it("records only a complete fenced controller recovery failure", async function _RecordsRecoveryFailure()
+	{
+		const outcome: ArtifactPreprocessOutcome = { kind: ArtifactPreprocessOutcomeKinds.RetryableFailed, preprocessJobId: "preprocess-1", deliveryCount: 1, retryAt: "2026-08-25T10:00:30.000Z" };
+		const { app, dependencies } = _App();
+		vi.mocked(dependencies.authority.recordUnreportedFailure).mockResolvedValue(outcome);
+		const binding = { ..._Binding(), firstPodUid: "pod-uid-1" };
+		const body = { task: _Task(), binding, reason: ArtifactPreprocessRecoveryReasons.JobMissingWithoutOutcome };
+		const response = await request(app).post("/artifact-preprocess-jobs/preprocess-1/recovery/failure").set("authorization", "Bearer projected-token").send(body);
+		const incomplete = await request(app).post("/artifact-preprocess-jobs/preprocess-1/recovery/failure").set("authorization", "Bearer projected-token").send({ ...body, binding: _Binding() });
+
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual(outcome);
+		expect(incomplete.status).toBe(400);
+		expect(dependencies.authority.recordUnreportedFailure).toHaveBeenCalledWith("preprocess-1", _Task(), { binding, reason: ArtifactPreprocessRecoveryReasons.JobMissingWithoutOutcome });
+	});
+
 	it("logs an unavailable authority operation without the projected bearer token", async function _LogsFailure()
 	{
 		const failure = new Error("database unavailable");
 		const logger = { error: vi.fn() };
-		const authority: ArtifactPreprocessControllerAuthority = { claimForTask: vi.fn().mockRejectedValue(failure), bindWorkload: vi.fn(), bindFirstPod: vi.fn(), loadOutcome: vi.fn(), complete: vi.fn() };
+		const authority: ArtifactPreprocessControllerAuthority = { claimForTask: vi.fn().mockRejectedValue(failure), bindWorkload: vi.fn(), bindFirstPod: vi.fn(), recordUnreportedFailure: vi.fn(), loadOutcome: vi.fn(), complete: vi.fn() };
 		const { app } = _App({ authority, logger });
 		const response = await request(app).post("/artifact-preprocess-jobs/preprocess-1/claim").set("authorization", "Bearer secret-projected-token").send(_Task());
 

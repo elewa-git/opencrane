@@ -1,6 +1,7 @@
 import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
 import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessTaskInput } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { GovernedJobObservation } from "@opencrane/backend/agents/runtime/workloads/k8s-controller";
 import type { ArtifactPreprocessorJobProfile } from "@opencrane/backend/artifacts/preprocessor/k8s-launcher";
 import type { IWorkflowTaskContext, IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -37,6 +38,8 @@ export interface ArtifactPreprocessKubernetesStore
 	 * @returns The first matching Pod, or `null` while Kubernetes has not created one.
 	 */
 	findFirstPod(expected: V1Job, jobUid: string, serviceAccountName: string): Promise<V1Pod | null>;
+	/** Returns the verified lifecycle state of the exact released Job. */
+	observeJob(expected: V1Job, jobUid: string): Promise<GovernedJobObservation>;
 	/**
 	 * Deletes the exact completed Job through its saved immutable UID.
 	 *
@@ -79,8 +82,8 @@ export interface ArtifactPreprocessTaskResult
 	readonly completionDigest: string;
 }
 
-/** Narrows the workflow operations the controller handler needs for durable steps, Pod waits, and completion events. */
-export type ArtifactPreprocessTaskContext = Pick<IWorkflowTaskContext, "checkpoint" | "sleepUntil" | "task" | "waitForEvent">;
+/** Narrows the workflow operations the controller handler needs for durable steps and recovery sleeps. */
+export type ArtifactPreprocessTaskContext = Pick<IWorkflowTaskContext, "checkpoint" | "sleepUntil" | "task">;
 
 /** Re-exports the completion identity shared by the controller task result and authority calls. */
 export type { ArtifactPreprocessCompletion };

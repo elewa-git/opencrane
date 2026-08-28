@@ -76,7 +76,9 @@ a hash of the bootstrap reference. A database-clock view supplies the time used 
 delegate updates. Source issuance revalidates the exact fenced delivery and caps signed authority
 to the earlier of the claim deadline or the 30-second retry quiet period. The worker's verified
 output publishes the derived revision and writes a completion inbox digest; only the workflow
-controller consumes that digest and marks the job complete. Incomplete generated artifacts have no
+controller consumes that digest and marks the job complete. If an exact bound Job becomes terminal
+or disappears without a worker report, the authenticated controller records the recovery failure
+through the same bounded retry policy. The controller reloads that saved outcome on its one-second recovery heartbeat. Incomplete generated artifacts have no
 current revision and remain absent from the user catalogue. The isolated worker never receives a
 content address, ArtifactStore endpoint, signed lease, or promotion receipt.
 
@@ -97,7 +99,8 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
   work; it serves a task-bound controller delivery. Each lifecycle transition has its own private
   transaction; no transaction crosses TokenReview, byte brokering, or promotion.
 - `__CreateArtifactPreprocessControllerRouter` — validates the separate agent-controller identity,
-  task receipt, Job binding, and first-Pod binding before delegating to the task-bound authority.
+  task receipt, Job binding, first-Pod binding, and exact recovery failure before delegating to the
+  task-bound authority.
 - `PrismaArtifactScanUnitOfWork` and `__CreateArtifactScannerRouter` — quarantine publication,
   bounded retries, and the TokenReview-protected scanner protocol. App composition supplies a
   conversation-lifecycle repository factory; the unit of work binds it and the scan repository to

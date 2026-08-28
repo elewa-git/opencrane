@@ -1,6 +1,6 @@
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
-import type { ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "./artifact-preprocess-controller.types";
+import type { ArtifactPreprocessPodBindCommand, ArtifactPreprocessRecoveryCommand, ArtifactPreprocessWorkloadBindCommand } from "./artifact-preprocess-controller.types";
 
 /**
  * Carries the parsed task receipt and Job evidence from one controller bind request.
@@ -28,4 +28,23 @@ export interface ArtifactPreprocessPodBindRequest
 	readonly task: IWorkflowTaskReceipt;
 	/** Carries the delivery fence and first Pod UID. */
 	readonly command: ArtifactPreprocessPodBindCommand;
+}
+
+/**
+ * Carries a controller recovery request after the private HTTP parser verifies every binding field.
+ *
+ * The parser accepts this request only when it contains the admitted task, the bound Job and first
+ * Pod identities, and a known recovery reason. `__CreateArtifactPreprocessControllerRouter` passes
+ * the result to the server authority; an invalid body remains `null` and cannot change product
+ * state.
+ *
+ * Called by: `__ParseArtifactPreprocessRecoveryRequest`, then
+ * `__CreateArtifactPreprocessControllerRouter`.
+ */
+export interface ArtifactPreprocessRecoveryRequest
+{
+	/** Identifies the admitted workflow task that the server must match to the failed delivery. */
+	readonly task: IWorkflowTaskReceipt;
+	/** Carries the binding and recovery reason that the server must verify before saving failure. */
+	readonly command: ArtifactPreprocessRecoveryCommand;
 }

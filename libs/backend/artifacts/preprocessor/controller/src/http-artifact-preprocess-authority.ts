@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
-import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessPodBindCommand, ArtifactPreprocessRecoveryCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
@@ -208,6 +208,23 @@ export function __CreateHttpArtifactPreprocessControllerAuthority(options: Artif
 					throw new Error(`OpenCrane artifact preprocessing outcome load failed with HTTP ${response.status}`);
 				}
 				return await _ReadAndValidateJson(response, function _Validate(value: unknown): ArtifactPreprocessOutcome { return _ParseArtifactPreprocessOutcome(value, acceptedPreprocessJobId, deliveryCount); });
+			});
+		},
+		async recordUnreportedFailure(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessRecoveryCommand): Promise<ArtifactPreprocessOutcome | null>
+		{
+			const acceptedPreprocessJobId = _PreprocessJobId(preprocessJobId);
+			return await ___DoWithTrace("agent_controller.artifact_preprocess.recovery_failure", { preprocessJobId: acceptedPreprocessJobId, deliveryCount: command.binding.deliveryCount, reason: command.reason }, async function _RecordRecoveryFailure(): Promise<ArtifactPreprocessOutcome | null>
+			{
+				const response = await _Request(`/api/internal/agent-controller/artifact-preprocess-jobs/${encodeURIComponent(acceptedPreprocessJobId)}/recovery/failure`, "POST", { task, ...command });
+				if (response.status === 409)
+				{
+					return null;
+				}
+				if (response.status !== 200)
+				{
+					throw new Error(`OpenCrane artifact preprocessing recovery failure write failed with HTTP ${response.status}`);
+				}
+				return await _ReadAndValidateJson(response, function _Validate(value: unknown): ArtifactPreprocessOutcome { return _ParseArtifactPreprocessOutcome(value, acceptedPreprocessJobId, command.binding.deliveryCount); });
 			});
 		},
 		async complete(preprocessJobId: string, completion: ArtifactPreprocessCompletion, task: IWorkflowTaskReceipt): Promise<"completed" | "idempotent" | "conflict">

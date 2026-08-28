@@ -11,6 +11,7 @@ function _Repository(overrides: Partial<ArtifactPreprocessRepository> = {}): Art
 		claimForTask: vi.fn(),
 		bindWorkload: vi.fn(),
 		bindFirstPod: vi.fn(),
+		recordUnreportedFailure: vi.fn(),
 		loadOutcome: vi.fn(),
 		complete: vi.fn(),
 		issueSourceLeaseAtomically: vi.fn(),

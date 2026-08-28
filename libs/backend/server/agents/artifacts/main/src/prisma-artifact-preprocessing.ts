@@ -2,23 +2,18 @@ import { randomUUID } from "node:crypto";
 
 import { ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState, ArtifactUploadLeaseState, type Prisma } from "@prisma/client";
 
-import { __ArtifactPreprocessOutcomeEventName, ArtifactPreprocessPipelineVersions, ArtifactPreprocessTaskNames } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
-import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
-import type { IWorkflowEngine, IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
+import { ArtifactPreprocessPipelineVersions } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessPodBindCommand, ArtifactPreprocessRecoveryCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
 import type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ArtifactPreprocessSourceLeaseProjection, CompleteArtifactPreprocessJobResult, FailArtifactPreprocessJobResult, IssueArtifactPreprocessOutputLeaseResult } from "./artifact-preprocessing.types";
+import { _ARTIFACT_PREPROCESS_RETRY_DELAY_MILLISECONDS, _ArtifactPreprocessFailureTransition } from "./artifact-preprocess-retry-policy";
 import { PrismaArtifactPreprocessControllerRepository } from "./prisma-artifact-preprocess-controller-authority";
 
-/** Total attempts a job gets. A failure reported on attempt 3 is marked TerminalFailed and the job never runs again. */
-const _MAX_ATTEMPTS = 3;
-
-/** Base delay applied before an eligible failed job may be reclaimed. */
-const _RETRY_DELAY_MILLISECONDS = 30_000;
-
-/** How long a source-read permission lasts. Deliberately equal to the shortest wait before a failed job can be reclaimed, so a lease from one attempt has expired by the time the next attempt starts.  */
-const _SOURCE_READ_LEASE_MILLISECONDS = _RETRY_DELAY_MILLISECONDS;
+/** How long a source-read permission lasts so it expires before any later delivery can be claimed. */
+const _SOURCE_READ_LEASE_MILLISECONDS = _ARTIFACT_PREPROCESS_RETRY_DELAY_MILLISECONDS;
 
 /** Fixed source pipeline admitted by the dedicated worker. */
 const _PDF_TO_TEXT_PIPELINE_VERSION = ArtifactPreprocessPipelineVersions.PdfToText;
@@ -44,15 +39,11 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 	private readonly transaction: Prisma.TransactionClient;
 	/** Task-fenced controller lifecycle bound to the same private transaction. */
 	private readonly controller: PrismaArtifactPreprocessControllerRepository;
-	/** Transaction-bound event writer that wakes the controller only when the product outcome commits. */
-	private readonly workflow: Pick<IWorkflowEngine, "emitEventInTransaction">;
-
 	/** Creates the repository for one already-open preprocessing transaction. */
-	constructor(transaction: Prisma.TransactionClient, workflow: Pick<IWorkflowEngine, "emitEventInTransaction">)
+	constructor(transaction: Prisma.TransactionClient)
 	{
 		this.transaction = transaction;
 		this.controller = new PrismaArtifactPreprocessControllerRepository(this.transaction);
-		this.workflow = workflow;
 	}
 
 	/** Issues or reloads the controller claim for one exact admitted task. */
@@ -71,6 +62,12 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 	bindFirstPod(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessPodBindCommand): Promise<"bound" | "idempotent" | "conflict">
 	{
 		return this.controller.bindFirstPod(preprocessJobId, task, command);
+	}
+
+	/** Persists controller-observed Job failure through the same task and delivery fence. */
+	recordUnreportedFailure(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessRecoveryCommand): Promise<ArtifactPreprocessOutcome | null>
+	{
+		return this.controller.recordUnreportedFailure(preprocessJobId, task, command);
 	}
 
 	/** Loads the persisted delivery outcome through the exact workflow receipt boundary. */
@@ -214,7 +211,6 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			}
 			if (job.completionDigest === request.receiptDigest)
 			{
-				await this._EmitOutcome(job);
 				return { status: "completed" };
 			}
 			if (job.state !== ArtifactPreprocessJobState.Claimed || job.claimExpiresAt === null || job.claimExpiresAt <= now)
@@ -234,7 +230,6 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			await transaction.artifactOutboxEvent.create({ data: { artifactId: job.derivedArtifact.id, revisionId: request.derivedRevisionId, kind: "RevisionPublished", idempotencyKey: `artifact-preprocess:${job.id}:${job.deliveryCount}:revision`, payload: { contentAddress: request.promotion.contentAddress, byteLength: request.promotion.byteLength, mediaType: "text/plain" } } });
 			await transaction.artifactUploadLease.update({ where: { id: job.outputLease.id }, data: { state: ArtifactUploadLeaseState.Finalized, finalizedAt: now } });
 			await transaction.artifactPreprocessJob.update({ where: { id: job.id }, data: { derivedRevisionId: request.derivedRevisionId, completionDigest: request.receiptDigest } });
-			await this._EmitOutcome(job);
 			return { status: "completed" };
 		}
 	}
@@ -255,28 +250,14 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 				return { status: "conflict", reason: "stale_claim" };
 			}
 
-			const terminal = job.deliveryCount >= _MAX_ATTEMPTS;
-			const state = terminal ? ArtifactPreprocessJobState.TerminalFailed : ArtifactPreprocessJobState.RetryableFailed;
-			const nextAttemptAt = terminal ? null : new Date(now.getTime() + _RETRY_DELAY_MILLISECONDS * job.deliveryCount);
+			const transition = _ArtifactPreprocessFailureTransition(job.deliveryCount, now);
+			const state = transition.terminal ? ArtifactPreprocessJobState.TerminalFailed : ArtifactPreprocessJobState.RetryableFailed;
 			await transaction.artifactPreprocessJob.update({
 				where: { id: job.id },
-				data: { state, outputLeaseId: null, failureCode: command.failureCode, nextAttemptAt },
+				data: { state, outputLeaseId: null, failureCode: command.failureCode, nextAttemptAt: transition.nextAttemptAt },
 			});
-			await this._EmitOutcome(job);
-			return { status: terminal ? "terminal" : "retryable" };
+			return { status: transition.terminal ? "terminal" : "retryable" };
 		}
-	}
-
-	/** Emits the delivery-scoped wake-up through this repository's caller-owned transaction. */
-	private async _EmitOutcome(job: { readonly id: string; readonly deliveryCount: number; readonly taskId: string | null; readonly taskName: string | null; readonly taskKey: string | null }): Promise<void>
-	{
-		if (job.taskId === null || job.taskName !== ArtifactPreprocessTaskNames.Convert || job.taskKey === null)
-		{
-			throw new Error("Artifact preprocessing outcome has no admitted workflow task receipt.");
-		}
-		const task = { taskId: job.taskId, taskName: job.taskName, idempotencyKey: job.taskKey };
-		const signal = { preprocessJobId: job.id, deliveryCount: job.deliveryCount };
-		await this.workflow.emitEventInTransaction({ client: this.transaction }, task, { eventName: __ArtifactPreprocessOutcomeEventName(job.deliveryCount), payload: signal });
 	}
 
 	/** Reads one database-owned wall-clock sample through the read-only Prisma view. */

@@ -1,11 +1,11 @@
 import { z, type ZodType } from "zod";
 
 /**
- * Names the durable worker outcomes that can wake one PDF preprocessing delivery.
+ * Names the durable worker outcomes stored for one PDF preprocessing delivery.
  *
  * The worker never selects workflow retry behavior directly. The server persists one of these
- * states, emits a small wake-up signal in the same database transaction, and the controller reloads
- * this persisted outcome before it deletes the exact Kubernetes Job.
+ * states, and the controller reloads this persisted outcome on its one-second recovery heartbeat
+ * before it deletes the exact Kubernetes Job.
  *
  * These values cross the private controller HTTP boundary and reflect states stored in
  * `artifact_preprocess_jobs`. Renaming one therefore requires a forward database and protocol
@@ -21,8 +21,8 @@ export enum ArtifactPreprocessOutcomeKinds
 	TerminalFailed = "terminal_failed",
 }
 
-/** Minimal identity carried by an Absurd event; the controller reloads the actual outcome. */
-export interface ArtifactPreprocessOutcomeSignal
+/** Identifies the exact saved artifact preprocessing delivery. */
+interface _ArtifactPreprocessOutcomeIdentity
 {
 	/** Saved PDF preprocessing job whose persisted state changed. */
 	readonly preprocessJobId: string;
@@ -36,7 +36,7 @@ export interface ArtifactPreprocessOutcomeSignal
  * Called by: the controller HTTP decoder and artifact workflow handler after the server commits the
  * generated text and completion digest.
  */
-export interface ArtifactPreprocessCompletedOutcome extends ArtifactPreprocessOutcomeSignal
+export interface ArtifactPreprocessCompletedOutcome extends _ArtifactPreprocessOutcomeIdentity
 {
 	/** Confirms that publication and completion evidence committed. */
 	readonly kind: ArtifactPreprocessOutcomeKinds.Completed;
@@ -49,7 +49,7 @@ export interface ArtifactPreprocessCompletedOutcome extends ArtifactPreprocessOu
  *
  * Called by: the controller HTTP decoder and artifact workflow handler before a durable retry sleep.
  */
-export interface ArtifactPreprocessRetryableFailedOutcome extends ArtifactPreprocessOutcomeSignal
+export interface ArtifactPreprocessRetryableFailedOutcome extends _ArtifactPreprocessOutcomeIdentity
 {
 	/** Confirms that the server accepted this delivery but another delivery may run later. */
 	readonly kind: ArtifactPreprocessOutcomeKinds.RetryableFailed;
@@ -62,7 +62,7 @@ export interface ArtifactPreprocessRetryableFailedOutcome extends ArtifactPrepro
  *
  * Called by: the controller HTTP decoder and artifact workflow handler before terminal task failure.
  */
-export interface ArtifactPreprocessTerminalFailedOutcome extends ArtifactPreprocessOutcomeSignal
+export interface ArtifactPreprocessTerminalFailedOutcome extends _ArtifactPreprocessOutcomeIdentity
 {
 	/** Confirms that the server stopped this preprocessing job without permitting another delivery. */
 	readonly kind: ArtifactPreprocessOutcomeKinds.TerminalFailed;
@@ -91,14 +91,4 @@ const _ArtifactPreprocessOutcomeSchema: ZodType<ArtifactPreprocessOutcome> = z.d
 export function __ParseArtifactPreprocessOutcome(value: unknown): ArtifactPreprocessOutcome
 {
 	return _ArtifactPreprocessOutcomeSchema.parse(value);
-}
-
-/** Builds the delivery-scoped event name required by Absurd's first-emission-wins event store. */
-export function __ArtifactPreprocessOutcomeEventName(deliveryCount: number): string
-{
-	if (!Number.isSafeInteger(deliveryCount) || deliveryCount < 1)
-	{
-		throw new Error("Artifact preprocessing outcome requires a positive delivery count.");
-	}
-	return `artifact-preprocess-outcome:${deliveryCount}`;
 }

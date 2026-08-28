@@ -1,7 +1,7 @@
 import { ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { ArtifactPreprocessTaskNames } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { ArtifactPreprocessRecoveryReasons, ArtifactPreprocessTaskNames } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { __CreateArtifactPreprocessBootstrapReference } from "@opencrane/contracts";
 
 import { PrismaArtifactPreprocessControllerRepository } from "../prisma-artifact-preprocess-controller-authority";
@@ -148,5 +148,16 @@ describe("Prisma artifact preprocessing controller authority", function _Describ
 		const harness = _Harness(_Job({ state: ArtifactPreprocessJobState.TerminalFailed, deliveryCount: 3 }));
 
 		await expect(harness.authority.loadOutcome("preprocess-1", 3, _Task())).resolves.toEqual({ kind: "terminal_failed", preprocessJobId: "preprocess-1", deliveryCount: 3 });
+	});
+
+	it("records an unreported Job failure after claim expiry with the exact saved binding", async function _RecoversExpiredJob()
+	{
+		const claimedAt = new Date(_NOW.getTime() - 120_000);
+		const harness = _Harness(_Job({ state: ArtifactPreprocessJobState.Claimed, claimFence: "claim-1", profileName: "pdf-preprocessor", claimedAt, deliveryCount: 1, claimExpiresAt: new Date(_NOW.getTime() - 60_000), workloadUid: "job-uid-1", firstPodUid: "pod-uid-1" }));
+		const command = { binding: { claimId: "claim-1", claimedAt: claimedAt.toISOString(), deliveryCount: 1, profileName: "pdf-preprocessor", workloadUid: "job-uid-1", firstPodUid: "pod-uid-1" }, reason: ArtifactPreprocessRecoveryReasons.JobTerminalWithoutOutcome };
+
+		await expect(harness.authority.recordUnreportedFailure("preprocess-1", _Task(), command)).resolves.toEqual({ kind: "retryable_failed", preprocessJobId: "preprocess-1", deliveryCount: 1, retryAt: new Date(_NOW.getTime() + 30_000).toISOString() });
+
+		expect(harness.job()).toMatchObject({ state: ArtifactPreprocessJobState.RetryableFailed, failureCode: ArtifactPreprocessRecoveryReasons.JobTerminalWithoutOutcome });
 	});
 });

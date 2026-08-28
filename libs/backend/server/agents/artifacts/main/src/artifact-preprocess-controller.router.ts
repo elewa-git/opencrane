@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import { __ParseArtifactPreprocessPodBindRequest, __ParseArtifactPreprocessTaskReceipt, __ParseArtifactPreprocessWorkloadBindRequest } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { __ParseArtifactPreprocessPodBindRequest, __ParseArtifactPreprocessRecoveryRequest, __ParseArtifactPreprocessTaskReceipt, __ParseArtifactPreprocessWorkloadBindRequest } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { ArtifactPreprocessCompletion } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
@@ -122,7 +122,7 @@ export function __CreateArtifactPreprocessControllerRouter(dependencies: Artifac
 				_RespondProblem(response, 401, "controller_identity_denied");
 				return;
 			}
-			// 2. Return only the completion that the admitted task and event digest identify together.
+			// 2. Return only the completion that the admitted task and requested delivery identify together.
 			const preprocessJobId = _PreprocessJobId(request);
 			const deliveryCount = _DeliveryCount(request.body);
 			const task = deliveryCount === null ? null : __ParseArtifactPreprocessTaskReceipt((request.body as Record<string, unknown>)["task"]);
@@ -142,6 +142,37 @@ export function __CreateArtifactPreprocessControllerRouter(dependencies: Artifac
 		catch (err)
 		{
 			_LogFailure(dependencies, err, "agent_controller.artifact_preprocess.outcome_load");
+			_RespondProblem(response, 503, "artifact_preprocess_unavailable");
+		}
+	});
+
+	router.post("/artifact-preprocess-jobs/:preprocessJobId/recovery/failure", async function _RecordRecoveryFailure(request: Request, response: Response): Promise<void>
+	{
+		try
+		{
+			if (!await _IsController(request, dependencies))
+			{
+				_RespondProblem(response, 401, "controller_identity_denied");
+				return;
+			}
+			const preprocessJobId = _PreprocessJobId(request);
+			const requestBody = __ParseArtifactPreprocessRecoveryRequest(request.body);
+			if (preprocessJobId === null || requestBody === null)
+			{
+				_RespondProblem(response, 400, "invalid_recovery_failure");
+				return;
+			}
+			const outcome = await dependencies.authority.recordUnreportedFailure(preprocessJobId, requestBody.task, requestBody.command);
+			if (outcome === null)
+			{
+				_RespondProblem(response, 409, "stale_or_conflicting_preprocess_job");
+				return;
+			}
+			response.status(200).json(outcome);
+		}
+		catch (err)
+		{
+			_LogFailure(dependencies, err, "agent_controller.artifact_preprocess.recovery_failure");
 			_RespondProblem(response, 503, "artifact_preprocess_unavailable");
 		}
 	});

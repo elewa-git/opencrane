@@ -56,36 +56,30 @@ describe("Prisma artifact preprocessing", function _Suite()
 			artifactOutboxEvent: { create: vi.fn().mockResolvedValue({}) },
 		};
 
-		const emitEventInTransaction = vi.fn().mockResolvedValue({});
-		await expect(new PrismaArtifactPreprocessRepository(transaction as never, { emitEventInTransaction }).completeAtomically(request)).resolves.toEqual({ status: "completed" });
+		await expect(new PrismaArtifactPreprocessRepository(transaction as never).completeAtomically(request)).resolves.toEqual({ status: "completed" });
 		expect(transaction.artifactPreprocessJob.update).toHaveBeenCalledWith({ where: { id: "job-1" }, data: { derivedRevisionId: "artifact-preprocess:lease-1", completionDigest: request.receiptDigest } });
 		expect(transaction.artifactPreprocessJob.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: expect.anything(), completedAt: expect.anything() }) }));
-		expect(emitEventInTransaction).toHaveBeenCalledWith({ client: transaction }, { taskId: "task-1", taskName: "artifacts.preprocess.pdf-to-text/v1", idempotencyKey: "preprocess-task-1" }, { eventName: "artifact-preprocess-outcome:1", payload: { preprocessJobId: "job-1", deliveryCount: 1 } });
 	});
 
-	it("commits a retryable failure and its delivery wake-up through the same transaction", async function _EmitsRetryableFailure()
+	it("commits a retryable failure and its next-attempt time through the same transaction", async function _SavesRetryableFailure()
 	{
 		const job = _FailureJob(1);
 		const transaction = { artifactAuthorityClock: { findUnique: vi.fn().mockResolvedValue({ now: _DATABASE_NOW }) }, artifactPreprocessJob: { findUnique: vi.fn().mockResolvedValue(job), update: vi.fn().mockResolvedValue({}) } };
-		const emitEventInTransaction = vi.fn().mockResolvedValue({});
-		const repository = new PrismaArtifactPreprocessRepository(transaction as never, { emitEventInTransaction });
+		const repository = new PrismaArtifactPreprocessRepository(transaction as never);
 
 		await expect(repository.failAtomically({ jobId: "job-1", attempt: 1, claimFence: "claim-1", failureCode: "conversion_failed" })).resolves.toEqual({ status: "retryable" });
 
 		expect(transaction.artifactPreprocessJob.update).toHaveBeenCalledWith({ where: { id: "job-1" }, data: { state: ArtifactPreprocessJobState.RetryableFailed, outputLeaseId: null, failureCode: "conversion_failed", nextAttemptAt: new Date(_DATABASE_NOW.getTime() + 30_000) } });
-		expect(emitEventInTransaction).toHaveBeenCalledWith({ client: transaction }, expect.objectContaining({ taskId: "task-1" }), { eventName: "artifact-preprocess-outcome:1", payload: { preprocessJobId: "job-1", deliveryCount: 1 } });
 	});
 
-	it("commits terminal failure and wakes the controller without scheduling another delivery", async function _EmitsTerminalFailure()
+	it("commits terminal failure without scheduling another delivery", async function _SavesTerminalFailure()
 	{
 		const job = _FailureJob(3);
 		const transaction = { artifactAuthorityClock: { findUnique: vi.fn().mockResolvedValue({ now: _DATABASE_NOW }) }, artifactPreprocessJob: { findUnique: vi.fn().mockResolvedValue(job), update: vi.fn().mockResolvedValue({}) } };
-		const emitEventInTransaction = vi.fn().mockResolvedValue({});
-		const repository = new PrismaArtifactPreprocessRepository(transaction as never, { emitEventInTransaction });
+		const repository = new PrismaArtifactPreprocessRepository(transaction as never);
 
 		await expect(repository.failAtomically({ jobId: "job-1", attempt: 3, claimFence: "claim-3", failureCode: "conversion_failed" })).resolves.toEqual({ status: "terminal" });
 
 		expect(transaction.artifactPreprocessJob.update).toHaveBeenCalledWith({ where: { id: "job-1" }, data: { state: ArtifactPreprocessJobState.TerminalFailed, outputLeaseId: null, failureCode: "conversion_failed", nextAttemptAt: null } });
-		expect(emitEventInTransaction).toHaveBeenCalledWith({ client: transaction }, expect.objectContaining({ taskId: "task-1" }), { eventName: "artifact-preprocess-outcome:3", payload: { preprocessJobId: "job-1", deliveryCount: 3 } });
 	});
 });

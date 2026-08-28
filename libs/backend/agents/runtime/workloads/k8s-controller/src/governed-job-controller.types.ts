@@ -42,6 +42,16 @@ export interface GovernedJobControllerStore
 	 */
 	findFirstPod(expectedJob: V1Job, workloadUid: string, serviceAccountName: string): Promise<V1Pod | null>;
 	/**
+	 * Observes the exact released Job after its first Pod has been bound.
+	 *
+	 * @param expectedJob - Complete Job manifest used for the saved assignment.
+	 * @param workloadUid - Immutable Job UID saved by the durable owner.
+	 * @returns The state that tells the caller whether to wait or save failure before cleanup.
+	 * @throws When a present Job is suspended, differs from the assignment, or has ambiguous terminal conditions.
+	 * @see GovernedJobObservation for what the caller must do with each state.
+	 */
+	observeJob(expectedJob: V1Job, workloadUid: string): Promise<GovernedJobObservation>;
+	/**
 	 * Deletes the Job identified by the saved UID after its class-specific durable owner has made
 	 * completion terminal. A missing Job is an idempotent success, but a replacement UID is not.
 	 *
@@ -52,6 +62,20 @@ export interface GovernedJobControllerStore
 	 */
 	deleteJob(expectedJob: V1Job, workloadUid: string): Promise<void>;
 }
+
+/**
+ * Tells a workload workflow what it may do after the store verifies the released Kubernetes Job.
+ *
+ * `running` means the Job still exists without a true `Complete` or `Failed` condition, so the
+ * caller must leave it in place and check again later. `terminal` means exactly one of those
+ * conditions is true; the caller must save the missing product outcome before it deletes the Job.
+ * `missing` means Kubernetes returned HTTP 404; the caller must still save the missing product
+ * outcome, while later deletion may finish as an idempotent success.
+ *
+ * The store returns this value in memory and does not persist it. Called by:
+ * `ArtifactPreprocessKubernetesStore.observeJob` during the one-second recovery heartbeat.
+ */
+export type GovernedJobObservation = "running" | "terminal" | "missing";
 
 /**
  * Limits the Kubernetes Batch client to the calls needed for suspended creation and fenced release.

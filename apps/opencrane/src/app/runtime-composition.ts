@@ -25,14 +25,10 @@ import { _log } from "./log";
 import type { ControllerRuntimeComposition, InternalRuntimeComposition, OptionalRuntimeComposition, RuntimeProtocolComposition, SkillWorkloadRuntimeComposition } from "./runtime-composition.types";
 
 /** Rejects workflow admission only in isolated composition tests that do not supply the process engine. */
-const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "emitEventInTransaction" | "spawn"> = {
+const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "spawn"> = {
 	async spawn(): Promise<never>
 	{
 		throw new Error("workflow task admission is unavailable");
-	},
-	async emitEventInTransaction(): Promise<never>
-	{
-		throw new Error("workflow task event admission is unavailable");
 	},
 };
 
@@ -191,7 +187,7 @@ function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: Interna
  * @param serverNamespace - Namespace containing the trusted server identity.
  * @returns Optional artifact-preprocessor and conversation-replay routers.
  */
-function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, serverNamespace: string, controllerTokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, workflowExecution: Pick<IWorkflowEngine, "emitEventInTransaction" | "spawn">): OptionalRuntimeComposition
+function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, serverNamespace: string, controllerTokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, workflowExecution: Pick<IWorkflowEngine, "spawn">): OptionalRuntimeComposition
 {
 	const artifactPreprocessorNamespace = config.artifactPreprocessorEnabled
 		? _ValidateIsolatedWorkloadNamespace(config.artifactPreprocessorNamespace, serverNamespace)
@@ -199,7 +195,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 	const artifactScannerNamespace = config.artifactScannerEnabled
 		? _ValidateIsolatedWorkloadNamespace(config.artifactScannerNamespace, serverNamespace)
 		: null;
-	const artifactPreprocessRepository = _CreateArtifactPreprocessAuthority(prisma, workflowExecution);
+	const artifactPreprocessRepository = _CreateArtifactPreprocessAuthority(prisma);
 	return {
 		artifactPreprocessController: artifactPreprocessorNamespace === null
 			? null
@@ -231,7 +227,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 				namespace: artifactPreprocessorNamespace,
 				repository: artifactPreprocessRepository,
 				sourceBroker: _CreateArtifactPreprocessSourceBroker(artifactPreprocessRepository),
-				outputBroker: _CreateArtifactPreprocessOutputBroker(prisma, workflowExecution, config.artifactPreprocessorMaximumOutputBytes),
+				outputBroker: _CreateArtifactPreprocessOutputBroker(prisma, config.artifactPreprocessorMaximumOutputBytes),
 				logger: _log,
 			}),
 		artifactScanner: artifactScannerNamespace === null
@@ -265,7 +261,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
  * @param config - Frozen startup configuration shared with the internal body parser and workers.
  * @returns Routers composed from controller, skill-workload, runtime, and optional-worker plane authorities.
  */
-export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflowExecution: Pick<IWorkflowEngine, "emitEventInTransaction" | "spawn"> = _UnavailableWorkflowExecution): InternalRuntimeComposition
+export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflowExecution: Pick<IWorkflowEngine, "spawn"> = _UnavailableWorkflowExecution): InternalRuntimeComposition
 {
 	// 1. Validate all identity planes before constructing a router, so malformed coordinates fail
 	// startup rather than leaving a partially mounted internal API.

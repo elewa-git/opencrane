@@ -7,7 +7,8 @@
 This package holds the controller-side definition of the saved PDF conversion task. A workflow is
 saved work that can continue after a restart. The handler asks the server for one claim, creates or
 adopts a suspended Job, records its Kubernetes Job and Pod IDs through the server authority, then
-releases only that recorded Job and deletes its exact UID after a saved worker outcome.
+releases only that recorded Job. A named one-second recovery heartbeat reloads product state and
+observes the exact Job until a saved outcome authorizes deletion of that UID.
 
 ```
  saved PDF task ──► controller ◄── server claim + binding authority
@@ -22,7 +23,8 @@ releases only that recorded Job and deletes its exact UID after a saved worker o
 
 The agent-controller registers this handler when the deployment enables PDF preprocessing. Its tests
 verify that OpenCrane records the Job and first Pod before release, reloads a committed success or
-failure, and then asks Kubernetes to delete only the saved Job UID. A retryable worker failure sleeps
+failure, and then asks Kubernetes to delete only the saved Job UID. If the worker dies first, the
+heartbeat records a fenced retryable or terminal outcome before cleanup. A retryable failure sleeps
 until the server's database-owned retry time before it claims the next delivery. An ambiguous delete
 response replays the same UID-fenced cleanup, and an already missing Job counts as cleaned up.
 
@@ -47,8 +49,9 @@ server owns product state and the broker; deployment config owns the Job profile
 ## Dependency direction
 
 Tagged `scope:artifact-preprocessor-controller` and `layer:backend`, it may use the PDF Job builder,
-the workflow contracts, and the shared runtime workload-claim contract only. An application
-composition must provide its server and Kubernetes adapters; this package does not provide either.
+the workflow contracts, the shared runtime workload-claim contract, and the governed Kubernetes
+controller contract only. An application composition must provide its server and Kubernetes
+adapters; this package does not provide either.
 
 ## See also
 

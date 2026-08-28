@@ -1,13 +1,14 @@
 import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
+import type { GovernedJobObservation } from "@opencrane/backend/agents/runtime/workloads/k8s-controller";
 import { __CreateArtifactPreprocessBootstrapReference } from "@opencrane/contracts";
 import { __BuildArtifactPreprocessorJob } from "@opencrane/backend/artifacts/preprocessor/k8s-launcher";
-import { __ArtifactPreprocessOutcomeEventName, ArtifactPreprocessOutcomeKinds, ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
-import type { ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessOutcomeSignal, ArtifactPreprocessTaskInput } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { ArtifactPreprocessOutcomeKinds, ArtifactPreprocessRecoveryReasons, ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessTaskInput } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
-import { WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
-import type { IWorkflowTaskDefinition, IWorkflowTaskEvent } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskCancelledError, WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { ArtifactPreprocessCompletion, ArtifactPreprocessHandlerOptions, ArtifactPreprocessTaskContext, ArtifactPreprocessTaskResult } from "./artifact-preprocess-handler.types";
 
@@ -22,21 +23,25 @@ class _ArtifactPreprocessPodNotReadyError extends Error
 	}
 }
 
-/** Reads a delivery identity from the private event and rejects another preprocessing job's event. */
-function _OutcomeSignal(event: IWorkflowTaskEvent<unknown>, preprocessJobId: string, deliveryCount: number): ArtifactPreprocessOutcomeSignal
+/** Reports a live Job without saving the absence of a worker outcome in a workflow checkpoint. */
+class _ArtifactPreprocessOutcomeNotReadyError extends Error
 {
-	const value = event.payload;
-	if (typeof value !== "object" || value === null || Array.isArray(value))
+	/** Creates the private control-flow signal caught by the recovery heartbeat. */
+	constructor()
 	{
-		throw new WorkflowTaskTerminalError("PDF preprocessing outcome event does not match its job.");
+		super("PDF preprocessing Job is still running without an outcome.");
+		this.name = "ArtifactPreprocessOutcomeNotReadyError";
 	}
-	const payload = value as Readonly<Record<string, unknown>>;
-	if (payload["preprocessJobId"] !== preprocessJobId || payload["deliveryCount"] !== deliveryCount)
-	{
-		throw new WorkflowTaskTerminalError("PDF preprocessing outcome event does not match its job.");
-	}
-	return { preprocessJobId, deliveryCount };
 }
+
+/** Fixed recovery heartbeat for a bound worker whose process may die before reporting an outcome. */
+const _RECOVERY_HEARTBEAT_MILLISECONDS = 1_000;
+
+/** Maps each state that requires recovery to the failure reason the server saves before cleanup. */
+const _RECOVERY_REASON_BY_OBSERVATION: Readonly<Record<Exclude<GovernedJobObservation, "running">, ArtifactPreprocessRecoveryReasons>> = {
+	missing: ArtifactPreprocessRecoveryReasons.JobMissingWithoutOutcome,
+	terminal: ArtifactPreprocessRecoveryReasons.JobTerminalWithoutOutcome,
+};
 
 /** Requires the immutable UID Kubernetes assigned to a Job before it may be released. */
 function _JobUid(job: V1Job): string
@@ -129,7 +134,7 @@ async function _RetryExternal<TResult>(operation: () => Promise<TResult>): Promi
 	}
 	catch (error)
 	{
-		if (error instanceof WorkflowTaskTerminalError || error instanceof WorkflowTaskRetryableError)
+		if (error instanceof WorkflowTaskCancelledError || error instanceof WorkflowTaskTerminalError || error instanceof WorkflowTaskRetryableError)
 		{
 			throw error;
 		}
@@ -247,21 +252,53 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 					}
 				});
 
-				// 4. Wait for a delivery-scoped wake-up, then reload the persisted outcome before cleanup.
-				const event: IWorkflowTaskEvent<unknown> = await context.waitForEvent<unknown>(__ArtifactPreprocessOutcomeEventName(record.claim.deliveryCount));
-				const signal = _OutcomeSignal(event, record.preprocessJobId, record.claim.deliveryCount);
-				const outcome = await context.checkpoint({ stepName: _CheckpointName(cycle, "load-preprocess-outcome") }, async function _LoadOutcome(): Promise<ArtifactPreprocessOutcome>
+				// 4. Reload product state every second so a dead worker cannot leave this task suspended forever.
+				let outcome: ArtifactPreprocessOutcome | null = null;
+				let recoveryObservation = 1;
+				while (outcome === null)
 				{
-					const loaded = await _RetryExternal(async function _LoadOutcomeFromServer()
+					try
 					{
-						return await options.authority.loadOutcome(signal.preprocessJobId, signal.deliveryCount, context.task);
-					});
-					if (loaded === null)
-					{
-						throw new WorkflowTaskRetryableError("PDF preprocessing outcome is not visible yet.");
+						outcome = await context.checkpoint({ stepName: _CheckpointName(cycle, `recover-outcome-${recoveryObservation}`) }, async function _RecoverOutcome(): Promise<ArtifactPreprocessOutcome>
+						{
+							const loaded = await _RetryExternal(async function _LoadOutcomeFromServer()
+							{
+								return await options.authority.loadOutcome(record.preprocessJobId, record.claim.deliveryCount, context.task);
+							});
+							if (loaded !== null)
+							{
+								return loaded;
+							}
+							const observation = await _RetryExternal(async function _ObserveJob()
+							{
+								return await options.kubernetes.observeJob(prepared.job, binding.workloadUid);
+							});
+							if (observation === "running")
+							{
+								throw new _ArtifactPreprocessOutcomeNotReadyError();
+							}
+							const reason = _RECOVERY_REASON_BY_OBSERVATION[observation];
+							const recovered = await _RetryExternal(async function _RecordUnreportedFailure()
+							{
+								return await options.authority.recordUnreportedFailure(record.preprocessJobId, context.task, { binding: { ...binding, firstPodUid: _PodUid(pod) }, reason });
+							});
+							if (recovered === null)
+							{
+								throw new WorkflowTaskTerminalError("PDF preprocessing recovery no longer matches its saved Job.");
+							}
+							return recovered;
+						});
 					}
-					return loaded;
-				});
+					catch (error)
+					{
+						if (!(error instanceof _ArtifactPreprocessOutcomeNotReadyError))
+						{
+							throw error;
+						}
+						await context.sleepUntil(new Date(Date.now() + _RECOVERY_HEARTBEAT_MILLISECONDS), _CheckpointName(cycle, `wait-for-outcome-${recoveryObservation}`));
+						recoveryObservation += 1;
+					}
+				}
 				if (outcome.kind === ArtifactPreprocessOutcomeKinds.Completed)
 				{
 					await context.checkpoint({ stepName: _CheckpointName(cycle, "complete-preprocess") }, async function _CompletePreprocess(): Promise<void>

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
-import { __ArtifactPreprocessOutcomeEventName, ArtifactPreprocessOutcomeKinds, ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { ArtifactPreprocessOutcomeKinds, ArtifactPreprocessRecoveryReasons, ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { ArtifactPreprocessOutcome } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { WorkflowTaskCancelledError, WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -40,14 +40,12 @@ function _Completed(deliveryCount: number): ArtifactPreprocessOutcome
 	return { kind: ArtifactPreprocessOutcomeKinds.Completed, preprocessJobId: "preprocess-1", deliveryCount, completionDigest: `sha256:${"c".repeat(64)}` };
 }
 
-/** Returns one task context that caches checkpoints and private events like a replaying workflow engine. */
+/** Returns one task context that caches checkpoints and durable sleeps like a replaying workflow engine. */
 function _Context()
 {
 	const checkpoints: string[] = [];
 	const sleeps: { readonly instant: Date; readonly stepName?: string }[] = [];
-	const waitedEvents: string[] = [];
 	const checkpointValues = new Map<string, unknown>();
-	const eventValues = new Map<string, unknown>();
 	const context: ArtifactPreprocessTaskContext = {
 		task: { taskId: "task-1", taskName: ArtifactPreprocessTaskDeclaration.taskName, idempotencyKey: "artifact-preprocess:preprocess-1" },
 		async checkpoint(step, operation)
@@ -65,19 +63,8 @@ function _Context()
 		{
 			sleeps.push({ instant, stepName });
 		},
-		async waitForEvent<TPayload>(eventName: string)
-		{
-			waitedEvents.push(eventName);
-			if (!eventValues.has(eventName))
-			{
-				const match = /:([1-9][0-9]*)$/u.exec(eventName);
-				const deliveryCount = Number(match?.[1]);
-				eventValues.set(eventName, { preprocessJobId: "preprocess-1", deliveryCount });
-			}
-			return { eventName, payload: eventValues.get(eventName) as TPayload };
-		},
 	};
-	return { context, checkpoints, sleeps, waitedEvents };
+	return { context, checkpoints, sleeps };
 }
 
 /** Returns the server and Kubernetes ports for one claimed PDF preprocessing task. */
@@ -88,12 +75,14 @@ function _Options(overrides: Partial<ArtifactPreprocessHandlerOptions> = {})
 		bindWorkload: vi.fn().mockResolvedValue("bound"),
 		bindFirstPod: vi.fn().mockResolvedValue("bound"),
 		loadOutcome: vi.fn().mockResolvedValue(_Completed(1)),
+		recordUnreportedFailure: vi.fn(),
 		complete: vi.fn().mockResolvedValue("completed"),
 	};
 	const kubernetes = {
 		ensureSuspendedJob: vi.fn().mockResolvedValue({ metadata: { uid: "job-uid-1" } }),
 		releaseJob: vi.fn().mockResolvedValue({ metadata: { uid: "job-uid-1" } }),
 		findFirstPod: vi.fn().mockResolvedValue({ metadata: { uid: "pod-uid-1" } }),
+		observeJob: vi.fn().mockResolvedValue("running"),
 		deleteJob: vi.fn().mockResolvedValue(undefined),
 	};
 	return {
@@ -108,32 +97,30 @@ describe("artifact preprocessing workflow handler", function _DescribeArtifactPr
 	it("binds one suspended Job and its first Pod before cleanup follows persisted completion", async function _BindsJobAndPod()
 	{
 		const { options, authority, kubernetes } = _Options();
-		const { context, checkpoints, waitedEvents } = _Context();
+		const { context, checkpoints } = _Context();
 		expect(__CreateArtifactPreprocessHandler(options)).toMatchObject(ArtifactPreprocessTaskDeclaration);
 
 		const result = await __CreateArtifactPreprocessHandler(options).run(context as never, { siloId: "silo-1", preprocessJobId: "preprocess-1" });
 
 		expect(result).toEqual({ preprocessJobId: "preprocess-1", completionDigest: `sha256:${"c".repeat(64)}` });
-		expect(checkpoints).toEqual(["delivery-1:claim-preprocess", "delivery-1:ensure-suspended-job", "delivery-1:bind-workload", "delivery-1:release-job", "delivery-1:observe-first-pod", "delivery-1:bind-first-pod", "delivery-1:load-preprocess-outcome", "delivery-1:complete-preprocess", "delivery-1:delete-outcome-job"]);
-		expect(waitedEvents).toEqual([__ArtifactPreprocessOutcomeEventName(1)]);
+		expect(checkpoints).toEqual(["delivery-1:claim-preprocess", "delivery-1:ensure-suspended-job", "delivery-1:bind-workload", "delivery-1:release-job", "delivery-1:observe-first-pod", "delivery-1:bind-first-pod", "delivery-1:recover-outcome-1", "delivery-1:complete-preprocess", "delivery-1:delete-outcome-job"]);
 		expect(authority.bindWorkload).toHaveBeenCalledWith("preprocess-1", context.task, expect.objectContaining({ bootstrapReference: expect.any(String), namespace: "opencrane-artifact-preprocessor", binding: expect.objectContaining({ claimId: "claim-1", workloadUid: "job-uid-1" }) }));
 		expect(kubernetes.deleteJob).toHaveBeenCalledWith(expect.any(Object), "job-uid-1");
 	});
 
-	it("uses separate checkpoints, event names, and UIDs for the next delivery after a retryable outcome", async function _RunsNextDelivery()
+	it("uses separate checkpoints and UIDs for the next delivery after a retryable outcome", async function _RunsNextDelivery()
 	{
 		const { options, authority, kubernetes } = _Options();
 		authority.claimForTask.mockResolvedValueOnce(_Record(1)).mockResolvedValueOnce(_Record(2));
 		authority.loadOutcome.mockResolvedValueOnce({ kind: ArtifactPreprocessOutcomeKinds.RetryableFailed, preprocessJobId: "preprocess-1", deliveryCount: 1, retryAt: new Date(0).toISOString() }).mockResolvedValueOnce(_Completed(2));
 		kubernetes.ensureSuspendedJob.mockResolvedValueOnce({ metadata: { uid: "job-uid-1" } }).mockResolvedValueOnce({ metadata: { uid: "job-uid-2" } });
 		kubernetes.findFirstPod.mockResolvedValueOnce({ metadata: { uid: "pod-uid-1" } }).mockResolvedValueOnce({ metadata: { uid: "pod-uid-2" } });
-		const { context, checkpoints, sleeps, waitedEvents } = _Context();
+		const { context, checkpoints, sleeps } = _Context();
 
 		await expect(__CreateArtifactPreprocessHandler(options).run(context as never, { siloId: "silo-1", preprocessJobId: "preprocess-1" })).resolves.toEqual({ preprocessJobId: "preprocess-1", completionDigest: `sha256:${"c".repeat(64)}` });
 
 		expect(authority.claimForTask).toHaveBeenCalledTimes(2);
 		expect(checkpoints).toContain("delivery-2:claim-preprocess");
-		expect(waitedEvents).toEqual([__ArtifactPreprocessOutcomeEventName(1), __ArtifactPreprocessOutcomeEventName(2)]);
 		expect(kubernetes.deleteJob).toHaveBeenNthCalledWith(1, expect.any(Object), "job-uid-1");
 		expect(kubernetes.deleteJob).toHaveBeenNthCalledWith(2, expect.any(Object), "job-uid-2");
 		expect(sleeps).toContainEqual({ instant: new Date(0), stepName: "delivery-1:wait-for-retry" });
@@ -203,13 +190,42 @@ describe("artifact preprocessing workflow handler", function _DescribeArtifactPr
 
 	it("does not claim cleanup after raw workflow cancellation", async function _LeavesCancelledTask()
 	{
-		const { options, kubernetes } = _Options();
+		const { options, authority, kubernetes } = _Options();
 		const { context } = _Context();
-		context.waitForEvent = vi.fn().mockRejectedValue(new WorkflowTaskCancelledError("task-1"));
+		authority.loadOutcome.mockRejectedValue(new WorkflowTaskCancelledError("task-1"));
 
 		await expect(__CreateArtifactPreprocessHandler(options).run(context as never, { siloId: "silo-1", preprocessJobId: "preprocess-1" })).rejects.toBeInstanceOf(WorkflowTaskCancelledError);
 
 		expect(kubernetes.deleteJob).not.toHaveBeenCalled();
+	});
+
+	it("uses a one-second durable heartbeat while the exact Job is still running", async function _WaitsForOutcome()
+	{
+		const { options, authority, kubernetes } = _Options();
+		authority.loadOutcome.mockResolvedValueOnce(null).mockResolvedValueOnce(_Completed(1));
+		const { context, sleeps } = _Context();
+
+		await __CreateArtifactPreprocessHandler(options).run(context as never, { siloId: "silo-1", preprocessJobId: "preprocess-1" });
+
+		expect(kubernetes.observeJob).toHaveBeenCalledWith(expect.any(Object), "job-uid-1");
+		expect(sleeps).toHaveLength(1);
+		expect(sleeps[0]?.stepName).toBe("delivery-1:wait-for-outcome-1");
+		expect(sleeps[0]?.instant.getTime()).toBeGreaterThan(Date.now());
+	});
+
+	it("persists a controller recovery outcome before deleting a terminal Job", async function _RecoversTerminalJob()
+	{
+		const { options, authority, kubernetes } = _Options();
+		const recovered = { kind: ArtifactPreprocessOutcomeKinds.TerminalFailed, preprocessJobId: "preprocess-1", deliveryCount: 1 } as const;
+		authority.loadOutcome.mockResolvedValue(null);
+		authority.recordUnreportedFailure.mockResolvedValue(recovered);
+		kubernetes.observeJob.mockResolvedValue("terminal");
+		const { context } = _Context();
+
+		await expect(__CreateArtifactPreprocessHandler(options).run(context as never, { siloId: "silo-1", preprocessJobId: "preprocess-1" })).rejects.toBeInstanceOf(WorkflowTaskTerminalError);
+
+		expect(authority.recordUnreportedFailure).toHaveBeenCalledWith("preprocess-1", context.task, { binding: expect.objectContaining({ workloadUid: "job-uid-1", firstPodUid: "pod-uid-1" }), reason: ArtifactPreprocessRecoveryReasons.JobTerminalWithoutOutcome });
+		expect(kubernetes.deleteJob).toHaveBeenCalledWith(expect.any(Object), "job-uid-1");
 	});
 
 	it("uses a named durable sleep while the released Job has no Pod", async function _SleepsForPod()

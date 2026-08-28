@@ -4,6 +4,23 @@ import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workf
 import type { ArtifactPreprocessOutcome } from "./artifact-preprocess-outcome.types";
 
 /**
+ * Explains why the controller began recovery before the server had saved a worker outcome.
+ *
+ * The controller selects one after it reloads product state and observes the bound Kubernetes
+ * Job. The private HTTP parser rejects every other value, and the server stores the accepted value
+ * in `artifact_preprocess_jobs.failure_code`. These reasons do not decide whether processing will
+ * retry; the server applies the saved delivery count to make that decision. Renaming a value
+ * therefore requires a forward database and private-controller protocol migration.
+ */
+export enum ArtifactPreprocessRecoveryReasons
+{
+	/** The bound Job ended without an outcome, so the controller must ask the server to record one. */
+	JobTerminalWithoutOutcome = "job_terminal_without_outcome",
+	/** Kubernetes returned HTTP 404 without an outcome, so the controller must ask the server to record one. */
+	JobMissingWithoutOutcome = "job_missing_without_outcome",
+}
+
+/**
  * Carries the server-owned task facts a controller needs to bind one PDF Job.
  *
  * The server selects the preprocessing job and issues the claim. The controller returns fenced Job
@@ -38,10 +55,29 @@ export interface ArtifactPreprocessPodBindCommand
 }
 
 /**
- * Identifies the server-owned completion evidence that wakes a controller task.
+ * Reports that the bound artifact Job ended or disappeared before its worker saved an outcome.
  *
- * The event carries this small identity, then the controller reloads the matching inbox entry
- * before it asks the authority to make the PDF job terminal.
+ * The handler sends this command only after the first Pod is bound. The server checks the workflow
+ * task, claim, delivery, profile, Job UID, and Pod UID before it saves a retryable or terminal
+ * failure. A non-null response lets the handler proceed to UID-checked Job cleanup; `null` means the
+ * saved delivery no longer matches and cleanup must stop.
+ *
+ * Called by: `__CreateArtifactPreprocessHandler` through
+ * `ArtifactPreprocessControllerAuthority.recordUnreportedFailure`.
+ */
+export interface ArtifactPreprocessRecoveryCommand
+{
+	/** Carries the claim, delivery, profile, Job UID, and first-Pod UID that the server must verify. */
+	readonly binding: RuntimeWorkloadBinding;
+	/** Explains whether Kubernetes reported the bound Job as terminal or missing. */
+	readonly reason: ArtifactPreprocessRecoveryReasons;
+}
+
+/**
+ * Identifies the server-owned completion evidence reloaded by a controller task.
+ *
+ * The controller reloads this identity from the matching inbox entry before it asks the authority
+ * to make the PDF job terminal.
  */
 export interface ArtifactPreprocessCompletion
 {
@@ -87,14 +123,24 @@ export interface ArtifactPreprocessControllerAuthority
 	 */
 	bindFirstPod(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessPodBindCommand): Promise<"bound" | "idempotent" | "conflict">;
 	/**
-	 * Loads the saved worker outcome after the controller receives its wake-up event.
+	 * Persists a failed delivery when the exact bound Kubernetes Job ends without a worker outcome.
+	 *
+	 * @param preprocessJobId - Saved PDF preprocessing job that owns the delivery.
+	 * @param task - Receipt that identifies the admitted controller task.
+	 * @param command - Complete saved binding and controller-owned observation reason.
+	 * @returns The saved retryable or terminal outcome that permits cleanup, or `null` when the
+	 * fence conflicts and cleanup must stop.
+	 */
+	recordUnreportedFailure(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessRecoveryCommand): Promise<ArtifactPreprocessOutcome | null>;
+	/**
+	 * Loads the saved worker outcome during the controller's one-second recovery heartbeat.
 	 *
 	 * Called by: `__CreateArtifactPreprocessHandler` and `__CreateArtifactPreprocessControllerRouter`.
 	 * A `null` result tells the handler that the requested delivery has no matching outcome, so it
 	 * must leave the Kubernetes Job in place and retry the observation.
 	 *
 	 * @param preprocessJobId - Saved PDF preprocessing job requested by the controller task.
-	 * @param deliveryCount - Claimed worker delivery carried by the controller event.
+	 * @param deliveryCount - Claimed worker delivery being reconciled.
 	 * @param task - Receipt that identifies the admitted controller task.
 	 * @returns The matching completion, retryable failure, or terminal failure; otherwise `null`.
 	 */

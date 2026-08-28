@@ -75,7 +75,7 @@ export function _ParseArtifactPreprocessBindOutcome(value: unknown, preprocessJo
  *
  * @param value - Untrusted JSON response body.
  * @param preprocessJobId - Job identity in the authority request URL.
- * @param deliveryCount - Delivery selected by the controller's private event.
+ * @param deliveryCount - Delivery selected by the controller's current saved claim.
  * @returns Persisted outcome that matches both requested identities.
  * @throws Error when the response is malformed or selects another job or delivery.
  */

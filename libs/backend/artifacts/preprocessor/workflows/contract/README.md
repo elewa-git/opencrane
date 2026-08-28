@@ -29,12 +29,15 @@ server owns PDF and output data. The controller owns starting the one isolated w
   private controller exchange. The server issues the claim, saves Job and Pod bindings, and records
   each completion or failure. The controller reloads that saved outcome before UID-fenced cleanup;
   a retryable outcome also carries the database-owned time for the next delivery.
-- `ArtifactPreprocessOutcomeKinds` and `__ArtifactPreprocessOutcomeEventName` keep the saved outcome
-  and its delivery-scoped workflow wake-up aligned without placing completion data in the event.
+- `ArtifactPreprocessRecoveryReasons` and `ArtifactPreprocessRecoveryCommand` let the controller
+  report that the exact saved Job became terminal or disappeared without a worker outcome. The
+  complete Job and first-Pod fence must still match.
+- `ArtifactPreprocessOutcomeKinds` keeps every saved outcome tied to one exact delivery. The
+  controller reloads that outcome on its one-second recovery heartbeat.
 - `__ParseArtifactPreprocessTaskReceipt`, `__ParseArtifactPreprocessWorkloadBindRequest`, and
   `__ParseArtifactPreprocessPodBindRequest` reject malformed controller JSON before the server
-  calls its authority. They check the saved task, bootstrap reference, delivery fence, and worker
-  namespace; they do not make an HTTP request.
+  calls its authority. `__ParseArtifactPreprocessRecoveryRequest` additionally requires the first
+  Pod and a controller-owned failure reason. They do not make an HTTP request.
 
 ## Boundary
 
