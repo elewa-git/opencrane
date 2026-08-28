@@ -1,4 +1,5 @@
 import { Observable, type ConfigurationOptions, type ObservableMiddleware, type RequestContext, type ResponseContext, type V1Deployment, type V1Pod, type V1ReplicaSet } from "@kubernetes/client-node";
+import { setTimeout as _Delay } from "node:timers/promises";
 
 import { __WarmRuntimeGenericPodSelector, __WarmRuntimePodCandidate, __WARM_RUNTIME_POOL_LABEL, __WARM_RUNTIME_PROFILE_LABEL, type WarmRuntimePodCandidate, type WarmRuntimePodIdentity, type WarmRuntimePoolProfile } from "@opencrane/backend/agents/runtime/k8s-launcher";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
@@ -74,15 +75,62 @@ async function _PoolOwners(pool: WarmRuntimePoolProfile, options: WarmRuntimeKub
 	return { deploymentUid, replicaSetUids: _ReplicaSetUids(replicaSets.items, deploymentUid) };
 }
 
-/** Checks the Pod identity and owner chain before a delete request. */
-async function _AssertDeletable(identity: WarmRuntimePodIdentity, pool: WarmRuntimePoolProfile, options: WarmRuntimeKubernetesStoreOptions): Promise<void>
+/** Returns whether Kubernetes reported one object as absent. */
+function _IsNotFound(error: unknown): boolean
 {
+	if (error === null || typeof error !== "object")
+	{
+		return false;
+	}
+	const status = error as { readonly code?: unknown; readonly statusCode?: unknown };
+	return status.code === 404 || status.statusCode === 404;
+}
+
+/** Reads the named Pod, returning null only when Kubernetes proves it absent. */
+async function _ReadPod(identity: WarmRuntimePodIdentity, options: WarmRuntimeKubernetesStoreOptions): Promise<V1Pod | null>
+{
+	try
+	{
+		return await options.coreApi.readNamespacedPod({ namespace: identity.namespace, name: identity.podName }, _RequestOptions(options));
+	}
+	catch (error)
+	{
+		if (_IsNotFound(error))
+		{
+			return null;
+		}
+		throw error;
+	}
+}
+
+/** Checks the exact Pod identity and owner chain before a delete request. */
+async function _AssertDeletable(identity: WarmRuntimePodIdentity, pool: WarmRuntimePoolProfile, options: WarmRuntimeKubernetesStoreOptions): Promise<boolean>
+{
+	const pod = await _ReadPod(identity, options);
+	if (pod === null || pod.metadata?.uid !== identity.podUid)
+	{
+		return false;
+	}
 	const owners = await _PoolOwners(pool, options);
-	const pod = await options.coreApi.readNamespacedPod({ namespace: identity.namespace, name: identity.podName }, _RequestOptions(options));
 	const owner = pod.metadata?.ownerReferences?.find(function _ControllerOwner(reference) { return reference.controller === true; });
-	if (owners.deploymentUid !== identity.deploymentUid || pod.metadata?.uid !== identity.podUid || pod.metadata.namespace !== pool.namespace || pod.metadata.labels?.[__WARM_RUNTIME_POOL_LABEL] !== pool.deploymentName || pod.metadata.labels?.[__WARM_RUNTIME_PROFILE_LABEL] !== identity.profile || !owner?.uid || !owners.replicaSetUids.has(owner.uid))
+	if (owners.deploymentUid !== identity.deploymentUid || pod.metadata.namespace !== pool.namespace || pod.metadata.labels?.[__WARM_RUNTIME_POOL_LABEL] !== pool.deploymentName || pod.metadata.labels?.[__WARM_RUNTIME_PROFILE_LABEL] !== identity.profile || !owner?.uid || !owners.replicaSetUids.has(owner.uid))
 	{
 		throw new Error("refusing to delete a warm runtime Pod with different identity or ownership");
+	}
+	return true;
+}
+
+/** Waits until the deleted UID is absent or the Deployment has replaced its Pod name. */
+async function _WaitForPodAbsence(identity: WarmRuntimePodIdentity, options: WarmRuntimeKubernetesStoreOptions): Promise<void>
+{
+	while (true)
+	{
+		const observed = await _ReadPod(identity, options);
+		if (observed === null || observed.metadata?.uid !== identity.podUid)
+		{
+			return;
+		}
+		await _Delay(250, undefined, { signal: options.shutdownSignal });
 	}
 }
 
@@ -138,8 +186,24 @@ export function __CreateWarmRuntimeKubernetesStore(options: WarmRuntimeKubernete
 		{
 			await ___DoWithTrace("agent_controller.warm_runtime.delete", { namespace: identity.namespace, podUid: identity.podUid }, async function _Delete(): Promise<void>
 			{
-				await _AssertDeletable(identity, pool, options);
-				await options.coreApi.deleteNamespacedPod({ namespace: identity.namespace, name: identity.podName, body: { preconditions: { uid: identity.podUid }, gracePeriodSeconds: 0, propagationPolicy: "Background" } }, _RequestOptions(options));
+				if (!await _AssertDeletable(identity, pool, options))
+				{
+					return;
+				}
+				try
+				{
+					await options.coreApi.deleteNamespacedPod({ namespace: identity.namespace, name: identity.podName, body: { preconditions: { uid: identity.podUid }, gracePeriodSeconds: 0, propagationPolicy: "Background" } }, _RequestOptions(options));
+				}
+				catch (error)
+				{
+					const observed = await _ReadPod(identity, options);
+					if (observed === null || observed.metadata?.uid !== identity.podUid)
+					{
+						return;
+					}
+					throw error;
+				}
+				await _WaitForPodAbsence(identity, options);
 			});
 		},
 	};

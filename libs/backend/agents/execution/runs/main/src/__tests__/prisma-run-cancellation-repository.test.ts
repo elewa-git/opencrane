@@ -16,9 +16,9 @@ function _Task(overrides: Record<string, unknown> = {})
 }
 
 /** Creates an exact committed assignment. */
-function _Assignment()
+function _Assignment(overrides: Partial<{ readonly workloadKind: WorkloadKind; readonly workloadUid: string }> = {})
 {
-	return { runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", siloId: "silo-1", namespace: "silo-runtime", workloadProfile: "personal-small", workloadUid: "job-uid-1", workloadKind: WorkloadKind.Job, state: WorkloadAssignmentState.Registered };
+	return { runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", siloId: "silo-1", namespace: "silo-runtime", workloadProfile: "personal-small", workloadUid: "job-uid-1", workloadKind: WorkloadKind.Job as WorkloadKind, state: WorkloadAssignmentState.Registered, ...overrides };
 }
 
 /** Creates a transaction mock for one cancellation request. */
@@ -60,7 +60,7 @@ function _Repository(transaction: ReturnType<typeof _CancellationTransaction>): 
 
 describe("PrismaRunCancellationRepository", function _DescribeCancellationRepository()
 {
-	it("queues receipt-derived orphan cleanup before an unassigned controller Job can escape cancellation", async function _CancelWithoutPhysicalWork()
+	it("leaves an unassigned workflow cancellation for the warm task to finalize", async function _CancelWithoutPhysicalWork()
 	{
 		const transaction = _CancellationTransaction(_Run(), _Task(), null);
 		const repository = _Repository(transaction);
@@ -76,19 +76,30 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 			expect.objectContaining({ toolInvocationId: "invocation-1", state: "Pending", payload: { toolInvocationId: "tool-call-1", outcome: "failed", failureCode: "run_cancelled" } }),
 			expect.objectContaining({ toolInvocationId: "invocation-2", state: "Pending", payload: { toolInvocationId: "tool-call-2", outcome: "failed", failureCode: "run_cancelled" } }),
 		] });
-		expect(transaction.outboxEvent.create).toHaveBeenCalledTimes(2);
-		expect(transaction.outboxEvent.create).toHaveBeenLastCalledWith({ data: expect.objectContaining({ kind: RunOutboxEventKind.RunWorkloadCleanupRequested, availableAt: new Date("2026-07-20T00:01:40.000Z"), payload: expect.objectContaining({ bootstrapReference: expect.stringMatching(/^bootstrap-v1_[0-9a-f]{64}$/), mode: "unassigned_orphan" }) }) });
+		expect(transaction.outboxEvent.create).toHaveBeenCalledTimes(1);
+		expect(transaction.outboxEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ kind: RunOutboxEventKind.RunCancellationRequested }) });
 		expect(transaction.conversationRunEvent.create).not.toHaveBeenCalled();
 	});
 
-	it("delays orphan observation beyond the claimed dispatch lease and request margin", async function _FenceInFlightCreate()
+	it("does not let the retained Job cleaner race a warm task before reservation", async function _FenceInFlightCreate()
 	{
 		const transaction = _CancellationTransaction(_Run(), _Task(), null);
 		const repository = _Repository(transaction);
 
 		await expect(repository.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1, requestedBy: "user-1" })).resolves.toEqual({ status: "cancelling", runId: "run-1", attempt: 1, cleanupRequired: true });
-		expect(transaction.outboxEvent.create).toHaveBeenLastCalledWith({ data: expect.objectContaining({ kind: RunOutboxEventKind.RunWorkloadCleanupRequested, availableAt: new Date("2026-07-20T00:01:40.000Z"), payload: expect.objectContaining({ mode: "unassigned_orphan", workloadUid: null, bootstrapReference: expect.stringMatching(/^bootstrap-v1_[0-9a-f]{64}$/) }) }) });
+		expect(transaction.outboxEvent.create).toHaveBeenCalledTimes(1);
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not send an assigned warm Deployment to the retained Job cleaner", async function _LeavesWarmDeploymentToWorkflow()
+	{
+		const assignment = _Assignment({ workloadKind: WorkloadKind.Deployment, workloadUid: "pod-uid-1" });
+		const transaction = _CancellationTransaction(_Run({ state: AgentRunState.Running }), _Task(), assignment);
+		const repository = _Repository(transaction);
+
+		await expect(repository.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1, requestedBy: "user-1" })).resolves.toEqual({ status: "cancelling", runId: "run-1", attempt: 1, cleanupRequired: true });
+		expect(transaction.outboxEvent.create).toHaveBeenCalledTimes(1);
+		expect(transaction.outboxEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ kind: RunOutboxEventKind.RunCancellationRequested }) });
 	});
 
 	it("revokes an assigned workload and issues cleanup with its immutable Kubernetes UID", async function _FenceAssignedWorkload()

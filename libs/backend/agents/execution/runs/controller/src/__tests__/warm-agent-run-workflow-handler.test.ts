@@ -15,12 +15,13 @@ function _Profiles(): WarmRuntimePoolProfiles
 function _Authority(calls: string[]): AgentRunWarmRuntimeControllerAuthority
 {
 	return {
-		async loadForTask() { return { siloId: "silo-a", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", workloadProfile: "personal-default", namespace: "silo-a-runtime", bootstrapReference: "bootstrap-v1_test", assignmentExpiresAt: "2099-01-01T00:00:00.000Z" }; },
+		async loadForTask() { return { siloId: "silo-a", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", workloadProfile: "personal-default", namespace: "silo-a-runtime", bootstrapReference: "bootstrap-v1_test", assignmentExpiresAt: "2099-01-01T00:00:00.000Z", observation: "running" }; },
 		async reserveWarmPod() { calls.push("reserve"); return "bound"; },
 		async recordWarmProfileActivation() { calls.push("activation-recorded"); return "bound"; },
 		async recordWarmReadiness() { calls.push("readiness-recorded"); return "bound"; },
 		async requestWarmPodDeletion() { calls.push("delete-requested"); return "bound"; },
 		async recordWarmPodDeleted() { calls.push("deleted-recorded"); return "bound"; },
+		async finalizeCancellationWithoutWarmReservation() { calls.push("unreserved-cancellation"); return "bound"; },
 		async terminalizeFailedTask() { calls.push("terminalized"); },
 		async observe() { return "completed"; },
 	};
@@ -79,5 +80,37 @@ describe("warm AgentRun workflow handler", function _WarmAgentRunHandler()
 
 		expect(authority.recordWarmPodDeleted).toHaveBeenCalledTimes(2);
 		expect(sleepUntil).toHaveBeenCalledTimes(1);
+	});
+
+	it("finalizes cancellation before reservation without touching Kubernetes", async function _CancelsBeforeReservation()
+	{
+		const calls: string[] = [];
+		const authority = _Authority(calls);
+		authority.loadForTask = vi.fn(async function _Load() { return { siloId: "silo-a", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", workloadProfile: "personal-default", namespace: "silo-a-runtime", bootstrapReference: "bootstrap-v1_test", assignmentExpiresAt: "2099-01-01T00:00:00.000Z", observation: "cancelling" as const }; });
+		const kubernetes = _Kubernetes(calls);
+		const handler = __CreateWarmAgentRunWorkflowHandler({ authority, kubernetes, profiles: _Profiles(), pollIntervalMilliseconds: 100 });
+
+		const result = await handler.run({ checkpoint: vi.fn(), sleepUntil: vi.fn(), task: { taskId: "task-1", taskName: "agent-runs.execute/v1", idempotencyKey: "agent-run:silo-a:run-1:attempt:1" } } as never, { siloId: "silo-a", runId: "run-1", attempt: 1 });
+
+		expect(result.terminalState).toBe(AgentRunTaskTerminalStates.Cancelled);
+		expect(calls).toEqual(["unreserved-cancellation"]);
+		expect(kubernetes.deletePod).not.toHaveBeenCalled();
+	});
+
+	it("re-observes a reservation conflict and stops when cancellation wins", async function _CancelsReservationConflict()
+	{
+		const calls: string[] = [];
+		const authority = _Authority(calls);
+		authority.reserveWarmPod = vi.fn(async function _Conflict() { calls.push("reserve"); return "conflict" as const; });
+		authority.observe = vi.fn(async function _Cancelling() { return "cancelling" as const; });
+		const kubernetes = _Kubernetes(calls);
+		const handler = __CreateWarmAgentRunWorkflowHandler({ authority, kubernetes, profiles: _Profiles(), pollIntervalMilliseconds: 100 });
+		const checkpoint = vi.fn(async function _Checkpoint(_options: unknown, operation: () => Promise<unknown>) { return await operation(); });
+
+		const result = await handler.run({ checkpoint, sleepUntil: vi.fn(), task: { taskId: "task-1", taskName: "agent-runs.execute/v1", idempotencyKey: "agent-run:silo-a:run-1:attempt:1" } } as never, { siloId: "silo-a", runId: "run-1", attempt: 1 });
+
+		expect(result.terminalState).toBe(AgentRunTaskTerminalStates.Cancelled);
+		expect(calls).toEqual(["list", "reserve", "unreserved-cancellation"]);
+		expect(kubernetes.deletePod).not.toHaveBeenCalled();
 	});
 });

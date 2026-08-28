@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import { __ParseAgentRunWorkflowTaskRequest, type AgentRunTaskInput, type AgentRunWarmRuntimeActivationCommand, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWarmRuntimeDeletionOutcome, type AgentRunWarmRuntimeReadinessCommand, type AgentRunWarmRuntimeReservationCommand } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import { __ParseAgentRunWorkflowTaskRequest, type AgentRunTaskInput, type AgentRunWarmRuntimeActivationCommand, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWarmRuntimeDeletionOutcome, type AgentRunWarmRuntimeReadinessCommand, type AgentRunWarmRuntimeReservationCommand, type AgentRunWarmRuntimeUnreservedCancellationOutcome } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
@@ -56,6 +56,30 @@ export function __CreateAgentRunWorkflowControllerRouter(dependencies: AgentRunW
 	_RegisterWarmBinding(router, "/agent-run-workflows/warm-readiness", dependencies, _WarmReadiness, "agent_controller.agent_run_workflow.warm_readiness", async function _Readiness(input, task, command) { return await dependencies.warmAuthority.recordWarmReadiness(input, task, command); });
 	_RegisterWarmBinding(router, "/agent-run-workflows/warm-delete-request", dependencies, _WarmDeletion, "agent_controller.agent_run_workflow.warm_delete_request", async function _DeleteRequest(input, task, command) { return await dependencies.warmAuthority.requestWarmPodDeletion(input, task, command); });
 	_RegisterWarmBinding(router, "/agent-run-workflows/warm-deleted", dependencies, _WarmDeletion, "agent_controller.agent_run_workflow.warm_deleted", async function _Deleted(input, task, command) { return await dependencies.warmAuthority.recordWarmPodDeleted(input, task, command); });
+
+	router.post("/agent-run-workflows/warm-unreserved-cancellation", async function _UnreservedCancellation(request: Request, response: Response): Promise<void>
+	{
+		try
+		{
+			if (!await _IsController(request, dependencies))
+			{
+				_RespondProblem(response, 401, "controller_identity_denied");
+				return;
+			}
+			const command = __ParseAgentRunWorkflowTaskRequest(request.body);
+			if (command === null)
+			{
+				_RespondProblem(response, 400, "invalid_agent_run_task");
+				return;
+			}
+			_RespondCancellation(response, await dependencies.warmAuthority.finalizeCancellationWithoutWarmReservation(command.input, command.task));
+		}
+		catch (err)
+		{
+			_LogFailure(dependencies, err, "agent_controller.agent_run_workflow.warm_unreserved_cancellation");
+			_RespondProblem(response, 503, "warm_runtime_workflow_unavailable");
+		}
+	});
 
 	router.post("/agent-run-workflows/terminal-failure", async function _TerminalFailure(request: Request, response: Response): Promise<void>
 	{
@@ -248,6 +272,17 @@ function _BearerValue(value: string | undefined): string | null
 
 /** Returns a binding result, or a conflict that stops a stale controller task. */
 function _RespondBinding(response: Response, outcome: AgentRunWarmRuntimeDeletionOutcome): void
+{
+	if (outcome === "conflict")
+	{
+		_RespondProblem(response, 409, "stale_or_conflicting_agent_run");
+		return;
+	}
+	response.status(200).json({ outcome });
+}
+
+/** Returns an unreserved-cancellation result without exposing persistence details. */
+function _RespondCancellation(response: Response, outcome: AgentRunWarmRuntimeUnreservedCancellationOutcome): void
 {
 	if (outcome === "conflict")
 	{

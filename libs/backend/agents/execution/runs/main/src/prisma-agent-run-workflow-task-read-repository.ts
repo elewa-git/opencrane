@@ -119,7 +119,7 @@ export function __CurrentAgentRunWorkflowTask(task: AgentRunWorkflowTaskRow, inp
 /** Checks whether an AgentRun state still permits setup or observation by its current task. */
 export function __CanCreateOrObserveAgentRunWorkflowTask(state: AgentRunState): boolean
 {
-	return state === AgentRunState.Accepted || state === AgentRunState.Queued || state === AgentRunState.Assigned || state === AgentRunState.Running || state === AgentRunState.WaitingForInput || state === AgentRunState.RecoveryRequired;
+	return state === AgentRunState.Accepted || state === AgentRunState.Queued || state === AgentRunState.Assigned || state === AgentRunState.Running || state === AgentRunState.WaitingForInput || state === AgentRunState.RecoveryRequired || state === AgentRunState.Cancelling;
 }
 
 /** Selects the fixed namespace and token audience for the server-approved workload class. */

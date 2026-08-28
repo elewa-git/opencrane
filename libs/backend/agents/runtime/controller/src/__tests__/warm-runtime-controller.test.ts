@@ -51,7 +51,7 @@ describe("warm runtime Kubernetes controller", function _WarmRuntimeKubernetesCo
 		const candidate = (await store.listGenericPods(_Profile()))[0];
 		const activation = await store.activateProfile(candidate, _Profile());
 		await expect(store.proveReadiness(candidate, activation, _Profile())).resolves.toEqual(expect.objectContaining({ podUid: "pod-uid", profile: "personal" }));
-		(options.coreApi.readNamespacedPod as ReturnType<typeof vi.fn>).mockResolvedValue(_Pod("personal", "13"));
+		(options.coreApi.readNamespacedPod as ReturnType<typeof vi.fn>).mockReset().mockResolvedValueOnce(_Pod("personal", "13")).mockRejectedValueOnce({ statusCode: 404 });
 		await store.deletePod({ namespace: "opencrane-runtime", podName: "personal-warm-abc", podUid: "pod-uid", deploymentUid: "deployment-uid", profile: "personal" }, _Profile());
 		expect(options.coreApi.patchNamespacedPod).toHaveBeenCalledWith(expect.objectContaining({ body: [
 			{ op: "test", path: "/metadata/uid", value: "pod-uid" },
@@ -60,6 +60,48 @@ describe("warm runtime Kubernetes controller", function _WarmRuntimeKubernetesCo
 			{ op: "replace", path: "/metadata/labels/opencrane.ai~1warm-runtime-profile", value: "personal" },
 		] }), expect.anything());
 		expect(options.coreApi.deleteNamespacedPod).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ preconditions: { uid: "pod-uid" } }) }), expect.anything());
+	});
+
+	it("treats an already absent exact Pod as replayed deletion success", async function _AcceptsAbsentReplay()
+	{
+		const options = _Options();
+		(options.coreApi.readNamespacedPod as ReturnType<typeof vi.fn>).mockRejectedValue({ statusCode: 404 });
+		const store = __CreateWarmRuntimeKubernetesStore(options);
+
+		await expect(store.deletePod({ namespace: "opencrane-runtime", podName: "personal-warm-abc", podUid: "pod-uid", deploymentUid: "deployment-uid", profile: "personal" }, _Profile())).resolves.toBeUndefined();
+		expect(options.coreApi.deleteNamespacedPod).not.toHaveBeenCalled();
+	});
+
+	it("waits for the exact deleted UID to disappear before returning", async function _WaitsForExactAbsence()
+	{
+		const options = _Options();
+		(options.coreApi.readNamespacedPod as ReturnType<typeof vi.fn>).mockReset().mockResolvedValueOnce(_Pod("personal", "13")).mockResolvedValueOnce({ ..._Pod("generic", "14"), metadata: { ..._Pod("generic", "14").metadata, uid: "replacement-pod-uid" } });
+		const store = __CreateWarmRuntimeKubernetesStore(options);
+
+		await expect(store.deletePod({ namespace: "opencrane-runtime", podName: "personal-warm-abc", podUid: "pod-uid", deploymentUid: "deployment-uid", profile: "personal" }, _Profile())).resolves.toBeUndefined();
+		expect(options.coreApi.readNamespacedPod).toHaveBeenCalledTimes(2);
+	});
+
+	it("accepts a delete race only after a second read proves the saved UID was replaced", async function _AcceptsDeleteRace()
+	{
+		const options = _Options();
+		(options.coreApi.readNamespacedPod as ReturnType<typeof vi.fn>).mockReset().mockResolvedValueOnce(_Pod("personal", "13")).mockResolvedValueOnce({ ..._Pod("generic", "14"), metadata: { ..._Pod("generic", "14").metadata, uid: "replacement-pod-uid" } });
+		(options.coreApi.deleteNamespacedPod as ReturnType<typeof vi.fn>).mockRejectedValue({ statusCode: 409 });
+		const store = __CreateWarmRuntimeKubernetesStore(options);
+
+		await expect(store.deletePod({ namespace: "opencrane-runtime", podName: "personal-warm-abc", podUid: "pod-uid", deploymentUid: "deployment-uid", profile: "personal" }, _Profile())).resolves.toBeUndefined();
+		expect(options.coreApi.readNamespacedPod).toHaveBeenCalledTimes(2);
+	});
+
+	it("preserves a delete failure while the saved UID is still present", async function _RejectsUnprovedDeleteFailure()
+	{
+		const options = _Options();
+		(options.coreApi.readNamespacedPod as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue(_Pod("personal", "13"));
+		(options.coreApi.deleteNamespacedPod as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("transport unavailable"));
+		const store = __CreateWarmRuntimeKubernetesStore(options);
+
+		await expect(store.deletePod({ namespace: "opencrane-runtime", podName: "personal-warm-abc", podUid: "pod-uid", deploymentUid: "deployment-uid", profile: "personal" }, _Profile())).rejects.toThrow(/transport unavailable/);
+		expect(options.coreApi.readNamespacedPod).toHaveBeenCalledTimes(2);
 	});
 
 	it("refuses deletion after the Deployment UID changes", async function _RejectsReplacementOwner()

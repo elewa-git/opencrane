@@ -15,6 +15,8 @@ const _COMMAND: AgentRunWarmRuntimeDeletionCommand = { podName: "warm-pod-1", po
 function _Database(initialActiveClaims: number)
 {
 	let activeClaims = initialActiveClaims;
+	let reservationPresent = true;
+	let assignmentPresent = true;
 	const reservation = { runId: "run-1", attempt: 1, podName: "warm-pod-1", podUid: "pod-1", deploymentUid: "deployment-1", genericProfile: "generic", claimedProfile: "personal", state: WarmRuntimeReservationState.DeleteRequested as WarmRuntimeReservationState, deletedAt: null as Date | null };
 	const run = { id: "run-1", siloId: "silo-1", attempt: 1, state: AgentRunState.Cancelling as AgentRunState, agentServiceId: "service-1", agentRevisionId: "revision-1", inputSnapshotDigest: "sha256:input", effectiveContractDigest: "sha256:contract", conversationId: "conversation-1", parentRunId: null, rootRunId: "run-1", terminalReason: null as AgentRunTerminalReason | null, finishedAt: null as Date | null, service: { id: "service-1", siloId: "silo-1", kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: "revision-1", workloadProfile: "personal-default" }, inputSnapshot: null };
 	const task = { runId: "run-1", attempt: 1, siloId: "silo-1", taskId: "task-1", taskKey: _RECEIPT.idempotencyKey, taskName: AgentRunTaskNames.Execute, assignmentExpiresAt: new Date("2099-01-01T00:00:00.000Z"), run };
@@ -25,10 +27,10 @@ function _Database(initialActiveClaims: number)
 		async $transaction(operation: (transaction: unknown) => Promise<unknown>) { return await operation(client); },
 		agentRunWorkflowTask: { async findUnique() { return task; } },
 		warmRuntimeReservation: {
-			async findUnique() { return reservation; },
+			async findUnique() { return reservationPresent ? reservation : null; },
 			async updateMany() { reservation.state = WarmRuntimeReservationState.Deleted; reservation.deletedAt = new Date(); return { count: 1 }; },
 		},
-		workloadAssignment: { updateMany: vi.fn(async function _Revoke() { return { count: 1 }; }) },
+		workloadAssignment: { findUnique: vi.fn(async function _Find() { return assignmentPresent ? { runId: "run-1", attempt: 1 } : null; }), updateMany: vi.fn(async function _Revoke() { return { count: 1 }; }) },
 		runProofKey: { updateMany: vi.fn(async function _Revoke() { return { count: 1 }; }) },
 		toolInvocation: {
 			async findMany() { return []; },
@@ -52,7 +54,7 @@ function _Database(initialActiveClaims: number)
 		},
 		conversationRunEvent: { async aggregate() { return { _max: { sequence: 4 } }; }, create: createEvent },
 	};
-	return { prisma: client as unknown as PrismaClient, reservation, run, cancelApproval, cancelElicitation, createEvent, setActiveClaims(value: number) { activeClaims = value; } };
+	return { prisma: client as unknown as PrismaClient, reservation, run, cancelApproval, cancelElicitation, createEvent, setActiveClaims(value: number) { activeClaims = value; }, setWarmClaimPresent(value: boolean) { reservationPresent = value; assignmentPresent = value; } };
 }
 
 /** Supplies fixed server settings that are not used by deletion finalization. */
@@ -96,5 +98,30 @@ describe("PrismaAgentRunWarmRuntimeUnitOfWork deletion", function _Suite()
 		expect(database.run.state).toBe(AgentRunState.Cancelled);
 		await expect(authority.recordWarmPodDeleted(_INPUT, _RECEIPT, _COMMAND)).resolves.toBe("idempotent");
 		expect(database.createEvent).toHaveBeenCalledTimes(1);
+	});
+
+	it("finalizes pre-reservation cancellation only after proving both warm claim rows absent", async function _FinalizesUnreservedCancellation()
+	{
+		const database = _Database(0);
+		database.setWarmClaimPresent(false);
+		const authority = _Authority(database.prisma);
+
+		await expect(authority.finalizeCancellationWithoutWarmReservation(_INPUT, _RECEIPT)).resolves.toBe("bound");
+		expect(database.run.state).toBe(AgentRunState.Cancelled);
+		expect(database.run.terminalReason).toBe(AgentRunTerminalReason.UserCancelled);
+		expect(database.createEvent).toHaveBeenCalledWith({ data: expect.objectContaining({ type: "run.cancelled", runId: "run-1" }) });
+
+		await expect(authority.finalizeCancellationWithoutWarmReservation(_INPUT, _RECEIPT)).resolves.toBe("idempotent");
+		expect(database.createEvent).toHaveBeenCalledTimes(1);
+	});
+
+	it("leaves cancellation with the Pod-owning path when a reservation or assignment exists", async function _KeepsReservedCancellation()
+	{
+		const database = _Database(0);
+		const authority = _Authority(database.prisma);
+
+		await expect(authority.finalizeCancellationWithoutWarmReservation(_INPUT, _RECEIPT)).resolves.toBe("reservation_exists");
+		expect(database.run.state).toBe(AgentRunState.Cancelling);
+		expect(database.createEvent).not.toHaveBeenCalled();
 	});
 });

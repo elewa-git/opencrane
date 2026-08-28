@@ -1,6 +1,6 @@
 import { AgentRunState, AgentRunTerminalReason, Prisma, WarmRuntimeReservationState, WorkloadAssignmentState, WorkloadKind, type PrismaClient } from "@prisma/client";
 
-import type { AgentRunWarmRuntimeActivationCommand, AgentRunWarmRuntimeControllerAuthority, AgentRunWarmRuntimeDeletionCommand, AgentRunWarmRuntimeDeletionOutcome, AgentRunWarmRuntimeReadinessCommand, AgentRunWarmRuntimeReservationCommand, AgentRunWorkflowControllerRecord, AgentRunWorkflowObservation, AgentRunTaskInput } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import type { AgentRunWarmRuntimeActivationCommand, AgentRunWarmRuntimeControllerAuthority, AgentRunWarmRuntimeDeletionCommand, AgentRunWarmRuntimeDeletionOutcome, AgentRunWarmRuntimeReadinessCommand, AgentRunWarmRuntimeReservationCommand, AgentRunWarmRuntimeUnreservedCancellationOutcome, AgentRunWorkflowControllerRecord, AgentRunWorkflowObservation, AgentRunTaskInput } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import { __CancelPendingRunApprovalAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { RunEventTypes } from "@opencrane/models/agents";
@@ -38,18 +38,23 @@ class PrismaAgentRunWarmRuntimeRepository implements AgentRunWarmRuntimePersiste
 	{
 		const task = await this.taskReader.read(input, receipt);
 		const identity = task === null ? null : __CurrentAgentRunWorkflowTask(task, input);
-		if (task === null || identity === null || task.run.service === null || !__CanCreateOrObserveAgentRunWorkflowTask(task.run.state))
+		if (task === null || task.run.service === null || !__CanCreateOrObserveAgentRunWorkflowTask(task.run.state))
+		{
+			return null;
+		}
+		if (task.run.state !== AgentRunState.Cancelling && identity === null)
 		{
 			return null;
 		}
 		const runtime = __AgentRunWorkflowRuntimeIdentity(task.run.service.kind, this.options);
 		const reservation = await this.transaction.warmRuntimeReservation.findUnique({ where: { runId_attempt: { runId: input.runId, attempt: input.attempt } } });
-		const expiresAt = task.assignmentExpiresAt ?? new Date(Math.min(Date.now() + this.options.assignmentTtlMilliseconds, identity.trustedUntil.getTime()));
+		const trustedUntil = identity?.trustedUntil.getTime() ?? Date.now() + this.options.assignmentTtlMilliseconds;
+		const expiresAt = task.assignmentExpiresAt ?? new Date(Math.min(Date.now() + this.options.assignmentTtlMilliseconds, trustedUntil));
 		if (reservation !== null && (reservation.siloId !== input.siloId || reservation.namespace !== runtime.namespace || reservation.claimedProfile !== task.run.service.workloadProfile || reservation.idleDeadline.getTime() !== expiresAt.getTime()))
 		{
 			return null;
 		}
-		return { runId: input.runId, attempt: input.attempt, siloId: input.siloId, agentServiceId: task.run.agentServiceId, agentRevisionId: task.run.agentRevisionId, workloadProfile: task.run.service.workloadProfile, namespace: runtime.namespace, bootstrapReference: __AgentRunWorkflowBootstrapReferenceForTask(task), assignmentExpiresAt: expiresAt.toISOString() };
+		return { runId: input.runId, attempt: input.attempt, siloId: input.siloId, agentServiceId: task.run.agentServiceId, agentRevisionId: task.run.agentRevisionId, workloadProfile: task.run.service.workloadProfile, namespace: runtime.namespace, bootstrapReference: __AgentRunWorkflowBootstrapReferenceForTask(task), assignmentExpiresAt: expiresAt.toISOString(), observation: _Observation(task.run.state) };
 	}
 
 	/** Reserves one generic Pod and creates the runtime assignment in the same transaction. */
@@ -179,6 +184,38 @@ class PrismaAgentRunWarmRuntimeRepository implements AgentRunWarmRuntimePersiste
 		return wasDeleted ? "idempotent" : "bound";
 	}
 
+	/** Finalizes a cancelled task only after typed reads prove no warm claim was committed. */
+	async finalizeCancellationWithoutWarmReservation(input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt): Promise<AgentRunWarmRuntimeUnreservedCancellationOutcome>
+	{
+		const task = await this.taskReader.read(input, receipt);
+		if (task === null)
+		{
+			return "conflict";
+		}
+		if (task.run.state === AgentRunState.Cancelled)
+		{
+			return "idempotent";
+		}
+		if (task.run.state !== AgentRunState.Cancelling)
+		{
+			return "conflict";
+		}
+		const reservation = await this.transaction.warmRuntimeReservation.findUnique({ where: { runId_attempt: { runId: input.runId, attempt: input.attempt } } });
+		const assignment = await this.transaction.workloadAssignment.findUnique({ where: { runId_attempt: { runId: input.runId, attempt: input.attempt } } });
+		if (reservation !== null || assignment !== null)
+		{
+			return "reservation_exists";
+		}
+		const now = new Date();
+		const cancellation = await __CancelPendingRunApprovalAuthority(this.transaction, { runId: input.runId, attempt: input.attempt, now });
+		if (cancellation.activeClaimCount > 0)
+		{
+			return "deferred";
+		}
+		await this._FinalizeCancelledRun(task.run, now);
+		return "bound";
+	}
+
 	/** Records a workflow setup failure without writing the retired Job cleanup outbox. */
 	async terminalizeFailedTask(input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt): Promise<void>
 	{
@@ -198,19 +235,7 @@ class PrismaAgentRunWarmRuntimeRepository implements AgentRunWarmRuntimePersiste
 		{
 			return "stale";
 		}
-		if (task.run.state === AgentRunState.Completed)
-		{
-			return "completed";
-		}
-		if (task.run.state === AgentRunState.Failed)
-		{
-			return "failed";
-		}
-		if (task.run.state === AgentRunState.Cancelled || task.run.state === AgentRunState.Cancelling)
-		{
-			return "cancelled";
-		}
-		return "running";
+		return _Observation(task.run.state);
 	}
 
 	/** Returns the reservation only while the task receipt remains current. */
@@ -268,6 +293,8 @@ export class PrismaAgentRunWarmRuntimeUnitOfWork implements AgentRunWarmRuntimeC
 	async requestWarmPodDeletion(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<"bound" | "idempotent" | "conflict"> { return await this._Run(async function _Request(repository) { return await repository.requestWarmPodDeletion(input, task, command); }); }
 	/** Saves successful deletion. */
 	async recordWarmPodDeleted(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<AgentRunWarmRuntimeDeletionOutcome> { return await this._Run(async function _Record(repository) { return await repository.recordWarmPodDeleted(input, task, command); }); }
+	/** Finalizes cancellation only when no warm claim exists. */
+	async finalizeCancellationWithoutWarmReservation(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<AgentRunWarmRuntimeUnreservedCancellationOutcome> { return await this._Run(async function _Finalize(repository) { return await repository.finalizeCancellationWithoutWarmReservation(input, task); }); }
 	/** Records setup failure. */
 	async terminalizeFailedTask(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<void> { await this._Run(async function _Fail(repository) { await repository.terminalizeFailedTask(input, task); }); }
 	/** Reads current run state. */
@@ -313,4 +340,26 @@ function _ReservationMatches(reservation: { readonly runId: string; readonly att
 function _DeletionMatches(reservation: { readonly podName: string; readonly podUid: string; readonly deploymentUid: string; readonly genericProfile: string; readonly claimedProfile: string }, command: AgentRunWarmRuntimeDeletionCommand): boolean
 {
 	return reservation.podName === command.podName && reservation.podUid === command.podUid && reservation.deploymentUid === command.deploymentUid && (command.profile === reservation.genericProfile || command.profile === reservation.claimedProfile);
+}
+
+/** Maps the durable run state to the bounded workflow observation vocabulary. */
+function _Observation(state: AgentRunState): AgentRunWorkflowObservation
+{
+	if (state === AgentRunState.Completed)
+	{
+		return "completed";
+	}
+	if (state === AgentRunState.Failed)
+	{
+		return "failed";
+	}
+	if (state === AgentRunState.Cancelling)
+	{
+		return "cancelling";
+	}
+	if (state === AgentRunState.Cancelled)
+	{
+		return "cancelled";
+	}
+	return "running";
 }

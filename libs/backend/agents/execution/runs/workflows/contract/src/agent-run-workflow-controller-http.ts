@@ -4,7 +4,7 @@ import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workf
 
 import { AgentRunTaskNames } from "./agent-run-task.types";
 import type { AgentRunWorkflowTaskRequest } from "./agent-run-workflow-controller-http.types";
-import type { AgentRunWarmRuntimeDeletionOutcome, AgentRunWorkflowControllerRecord, AgentRunWorkflowObservation } from "./agent-run-workflow-controller.types";
+import type { AgentRunWarmRuntimeDeletionOutcome, AgentRunWarmRuntimeUnreservedCancellationOutcome, AgentRunWorkflowControllerRecord, AgentRunWorkflowObservation } from "./agent-run-workflow-controller.types";
 
 /** Defines the exact durable receipt a controller may send back for an AgentRun task. */
 const _TaskReceiptSchema: ZodType<IWorkflowTaskReceipt> = z.object({ taskId: z.string().min(1).max(128), taskName: z.literal(AgentRunTaskNames.Execute), idempotencyKey: z.string().min(1).max(512) }).strict();
@@ -26,10 +26,11 @@ const _ControllerRecordSchema: ZodType<AgentRunWorkflowControllerRecord> = z.obj
 	namespace: z.string().min(1).max(128),
 	bootstrapReference: z.string().min(1).max(512),
 	assignmentExpiresAt: z.string().datetime({ offset: true, precision: 3 }),
+	observation: z.enum(["completed", "failed", "cancelling", "cancelled", "running", "stale"]),
 }).strict();
 
 /** Defines the state names the server exposes to an already-admitted workflow task. */
-const _ObservationSchema: ZodType<AgentRunWorkflowObservation> = z.enum(["completed", "failed", "cancelled", "running", "stale"]);
+const _ObservationSchema: ZodType<AgentRunWorkflowObservation> = z.enum(["completed", "failed", "cancelling", "cancelled", "running", "stale"]);
 
 /** Parses one incoming task request without exposing validation details to a controller. */
 function _Parse<T>(schema: ZodType<T>, value: unknown): T | null
@@ -60,6 +61,12 @@ export function __ParseAgentRunWorkflowBindingOutcome(value: unknown): "bound" |
 export function __ParseAgentRunWorkflowDeletionOutcome(value: unknown): AgentRunWarmRuntimeDeletionOutcome | null
 {
 	return _Parse(z.object({ outcome: z.enum(["bound", "idempotent", "deferred", "conflict"]) }).strict(), value)?.outcome ?? null;
+}
+
+/** Parses cancellation finalization when no warm Pod has been reserved. */
+export function __ParseAgentRunWorkflowUnreservedCancellationOutcome(value: unknown): AgentRunWarmRuntimeUnreservedCancellationOutcome | null
+{
+	return _Parse(z.object({ outcome: z.enum(["bound", "idempotent", "deferred", "reservation_exists", "conflict"]) }).strict(), value)?.outcome ?? null;
 }
 
 /** Parses the task observation returned by the server. */

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
-import { __ParseAgentRunWorkflowBindingOutcome, __ParseAgentRunWorkflowControllerRecord, __ParseAgentRunWorkflowDeletionOutcome, __ParseAgentRunWorkflowObservation, type AgentRunTaskInput, type AgentRunWarmRuntimeActivationCommand, type AgentRunWarmRuntimeControllerAuthority, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWarmRuntimeDeletionOutcome, type AgentRunWarmRuntimeReadinessCommand, type AgentRunWarmRuntimeReservationCommand, type AgentRunWorkflowControllerRecord, type AgentRunWorkflowObservation } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import { __ParseAgentRunWorkflowBindingOutcome, __ParseAgentRunWorkflowControllerRecord, __ParseAgentRunWorkflowDeletionOutcome, __ParseAgentRunWorkflowObservation, __ParseAgentRunWorkflowUnreservedCancellationOutcome, type AgentRunTaskInput, type AgentRunWarmRuntimeActivationCommand, type AgentRunWarmRuntimeControllerAuthority, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWarmRuntimeDeletionOutcome, type AgentRunWarmRuntimeReadinessCommand, type AgentRunWarmRuntimeReservationCommand, type AgentRunWarmRuntimeUnreservedCancellationOutcome, type AgentRunWorkflowControllerRecord, type AgentRunWorkflowObservation } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
@@ -150,6 +150,19 @@ export function __CreateHttpWarmAgentRunWorkflowControllerAuthority(options: Age
 		}
 		return await _ReadJson(response, __ParseAgentRunWorkflowDeletionOutcome);
 	}
+	async function _UnreservedCancellation(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<AgentRunWarmRuntimeUnreservedCancellationOutcome>
+	{
+		const response = await _Request("/api/internal/agent-controller/agent-run-workflows/warm-unreserved-cancellation", { input, task });
+		if (response.status === 409)
+		{
+			return "conflict";
+		}
+		if (response.status !== 200)
+		{
+			throw new Error(`warm AgentRun unreserved cancellation failed with HTTP ${response.status}`);
+		}
+		return await _ReadJson(response, __ParseAgentRunWorkflowUnreservedCancellationOutcome);
+	}
 	return {
 		async loadForTask(input, task): Promise<AgentRunWorkflowControllerRecord | null>
 		{
@@ -169,6 +182,7 @@ export function __CreateHttpWarmAgentRunWorkflowControllerAuthority(options: Age
 		async recordWarmReadiness(input, task, command) { return await _Binding("/api/internal/agent-controller/agent-run-workflows/warm-readiness", input, task, command); },
 		async requestWarmPodDeletion(input, task, command) { return await _Binding("/api/internal/agent-controller/agent-run-workflows/warm-delete-request", input, task, command); },
 		async recordWarmPodDeleted(input, task, command) { return await _Deletion(input, task, command); },
+		async finalizeCancellationWithoutWarmReservation(input, task) { return await _UnreservedCancellation(input, task); },
 		async terminalizeFailedTask(input, task): Promise<void>
 		{
 			const response = await _Request("/api/internal/agent-controller/agent-run-workflows/terminal-failure", { input, task });

@@ -4,6 +4,9 @@ import { WorkflowTaskRetryableError, WorkflowTaskTerminalError, type IWorkflowTa
 
 import type { WarmAgentRunWorkflowHandlerOptions } from "./warm-agent-run-workflow-handler.types";
 
+/** Carries either the Pod won by reservation or a terminal result observed while competing. */
+type WarmReservationResult = WarmRuntimePodCandidate | AgentRunTaskResult;
+
 /** Suspends through Absurd so a controller restart resumes the same saved task. */
 async function _Wait(context: IWorkflowTaskContext, milliseconds: number): Promise<void>
 {
@@ -28,6 +31,12 @@ function _Terminal(input: AgentRunTaskInput, observation: AgentRunWorkflowObserv
 	return null;
 }
 
+/** Builds the terminal cancellation result after server authority commits its exact fence. */
+function _Cancelled(input: AgentRunTaskInput): AgentRunTaskResult
+{
+	return { runId: input.runId, attempt: input.attempt, terminalState: AgentRunTaskTerminalStates.Cancelled };
+}
+
 /** Converts an unexpected dependency failure into the task's configured retry policy. */
 async function _Retry<TResult>(operation: () => Promise<TResult>): Promise<TResult>
 {
@@ -46,7 +55,22 @@ async function _Retry<TResult>(operation: () => Promise<TResult>): Promise<TResu
 }
 
 /** Reserves the first candidate that wins the database uniqueness fence. */
-async function _Reserve(options: WarmAgentRunWorkflowHandlerOptions, context: IWorkflowTaskContext, input: AgentRunTaskInput, profileName: string, profile: WarmRuntimePoolProfile): Promise<WarmRuntimePodCandidate>
+async function _FinalizeUnreservedCancellation(options: WarmAgentRunWorkflowHandlerOptions, context: IWorkflowTaskContext, input: AgentRunTaskInput): Promise<AgentRunTaskResult | null>
+{
+	const outcome = await _Retry(async function _Finalize() { return await options.authority.finalizeCancellationWithoutWarmReservation(input, context.task); });
+	if (outcome === "conflict")
+	{
+		throw new WorkflowTaskTerminalError("warm AgentRun cancellation lost its task fence");
+	}
+	if (outcome === "bound" || outcome === "idempotent")
+	{
+		return _Cancelled(input);
+	}
+	return null;
+}
+
+/** Reserves a candidate, or stops when cancellation wins before any reservation commits. */
+async function _Reserve(options: WarmAgentRunWorkflowHandlerOptions, context: IWorkflowTaskContext, input: AgentRunTaskInput, profileName: string, profile: WarmRuntimePoolProfile): Promise<WarmReservationResult>
 {
 	while (true)
 	{
@@ -60,8 +84,28 @@ async function _Reserve(options: WarmAgentRunWorkflowHandlerOptions, context: IW
 				return candidate;
 			}
 		}
+		const observation = await _Retry(async function _ObserveConflict() { return await options.authority.observe(input, context.task); });
+		if (observation === "cancelling")
+		{
+			const cancelled = await _FinalizeUnreservedCancellation(options, context, input);
+			if (cancelled !== null)
+			{
+				return cancelled;
+			}
+		}
+		const terminal = _Terminal(input, observation);
+		if (terminal !== null)
+		{
+			return terminal;
+		}
 		await _Wait(context, options.pollIntervalMilliseconds);
 	}
+}
+
+/** Distinguishes a server-owned terminal result from a Kubernetes Pod candidate. */
+function _IsTerminalReservation(result: WarmReservationResult): result is AgentRunTaskResult
+{
+	return "terminalState" in result;
 }
 
 /** Activates one database-reserved Pod and saves the exact patch result. */
@@ -150,7 +194,20 @@ async function _Run(options: WarmAgentRunWorkflowHandlerOptions, context: IWorkf
 	{
 		throw new WorkflowTaskTerminalError("warm AgentRun has no matching deployment-owned pool profile");
 	}
-	const candidate = await context.checkpoint({ stepName: "reserve-generic-warm-pod" }, async function _ReserveCheckpoint() { return await _Reserve(options, context, input, record.workloadProfile, profile); });
+	if (record.observation === "cancelling")
+	{
+		const cancelled = await _FinalizeUnreservedCancellation(options, context, input);
+		if (cancelled !== null)
+		{
+			return cancelled;
+		}
+	}
+	const reservation = await context.checkpoint({ stepName: "reserve-generic-warm-pod" }, async function _ReserveCheckpoint() { return await _Reserve(options, context, input, record.workloadProfile, profile); });
+	if (_IsTerminalReservation(reservation))
+	{
+		return reservation;
+	}
+	const candidate = reservation;
 	let activated = false;
 	try
 	{

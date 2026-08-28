@@ -61,10 +61,15 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			await transaction.workloadAssignment.updateMany({ where: { runId: run.id, attempt: run.attempt, state: { in: [WorkloadAssignmentState.PendingPod, WorkloadAssignmentState.Registered] } }, data: { state: WorkloadAssignmentState.Revoked, revokedAt: now } });
 			await transaction.runProofKey.updateMany({ where: { runId: run.id, attempt: run.attempt, revokedAt: null }, data: { revokedAt: now } });
 			await __CancelPendingRunApprovalAuthority(transaction, { runId: run.id, attempt: run.attempt, now });
-			// 3. Record the cancellation request and schedule cleanup from the bound task receipt.
+			// 3. Record the cancellation request. The warm workflow owns Deployment cleanup and finalization;
+			// the retained cleanup worker receives only an exact legacy Job assignment.
 			const maximum = await transaction.outboxEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
 			let sequence = (maximum._max.sequence ?? 0) + 1;
 			await transaction.outboxEvent.create({ data: { runId: run.id, attempt: run.attempt, sequence, kind: RunOutboxEventKind.RunCancellationRequested, idempotencyKey: `${run.id}:cancellation:${run.attempt}`, payload: { runId: run.id, attempt: run.attempt, requestedBy: command.requestedBy }, availableAt: now } });
+			if (assignment?.workloadKind !== WorkloadKind.Job)
+			{
+				return { status: "cancelling", runId: run.id, attempt: run.attempt, cleanupRequired: true };
+			}
 			const runtimeNamespace = _RuntimeNamespace(service.kind, config);
 			const bootstrapReference = bootstrap?.id ?? __AgentRunWorkflowBootstrapReference({ taskId: task.taskId, runId: task.runId, attempt: task.attempt, siloId: task.siloId, agentServiceId: run.agentServiceId, agentRevisionId: run.agentRevisionId, inputSnapshotDigest: run.inputSnapshotDigest });
 			const cleanup = _CleanupProjection(run, assignment, bootstrapReference, service.workloadProfile, runtimeNamespace, "cancellation");

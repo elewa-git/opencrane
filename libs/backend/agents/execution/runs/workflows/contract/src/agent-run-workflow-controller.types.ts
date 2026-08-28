@@ -8,7 +8,7 @@ import type { AgentRunTaskInput } from "./agent-run-task.types";
  * Completed, failed, and cancelled end the task. Running makes the controller wait and ask again.
  * Stale means a retry replaced this task's attempt, so it must stop without touching Kubernetes.
  */
-export type AgentRunWorkflowObservation = "completed" | "failed" | "cancelled" | "running" | "stale";
+export type AgentRunWorkflowObservation = "completed" | "failed" | "cancelling" | "cancelled" | "running" | "stale";
 
 /**
  * Holds non-secret facts the server approves for one fixed warm runtime claim.
@@ -30,6 +30,8 @@ export interface AgentRunWorkflowControllerRecord extends AgentRunTaskInput
 	readonly bootstrapReference: string;
 	/** Limits how long the warm runtime claim may remain usable. */
 	readonly assignmentExpiresAt: string;
+	/** Reports the server-owned lifecycle observed in the same task-fenced read. */
+	readonly observation: AgentRunWorkflowObservation;
 }
 
 /** Carries one generic warm Pod that Kubernetes has already started. */
@@ -89,6 +91,9 @@ export interface AgentRunWarmRuntimeDeletionCommand
 /** Reports whether exact Pod deletion finished, must be retried, or lost its authority fence. */
 export type AgentRunWarmRuntimeDeletionOutcome = "bound" | "idempotent" | "deferred" | "conflict";
 
+/** Reports whether cancellation finalized without a Pod or found a committed warm reservation. */
+export type AgentRunWarmRuntimeUnreservedCancellationOutcome = AgentRunWarmRuntimeDeletionOutcome | "reservation_exists";
+
 /** Defines the server operations used by the hard-cutoff warm AgentRun workflow. */
 export interface AgentRunWarmRuntimeControllerAuthority
 {
@@ -104,6 +109,8 @@ export interface AgentRunWarmRuntimeControllerAuthority
 	requestWarmPodDeletion(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<"bound" | "idempotent" | "conflict">;
 	/** Records that the exact used Pod deletion request succeeded. */
 	recordWarmPodDeleted(input: AgentRunTaskInput, task: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<AgentRunWarmRuntimeDeletionOutcome>;
+	/** Finalizes cancellation only when the exact attempt has no reservation or assignment. */
+	finalizeCancellationWithoutWarmReservation(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<AgentRunWarmRuntimeUnreservedCancellationOutcome>;
 	/** Fences this receipt and records a setup failure. */
 	terminalizeFailedTask(input: AgentRunTaskInput, task: IWorkflowTaskReceipt): Promise<void>;
 	/** Reads current lifecycle state while the claimed Pod is running. */

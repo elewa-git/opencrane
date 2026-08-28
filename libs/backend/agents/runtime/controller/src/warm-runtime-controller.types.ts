@@ -32,7 +32,7 @@ export interface WarmRuntimeKubernetesStore
 	activateProfile(candidate: WarmRuntimePodCandidate, profile: WarmRuntimePoolProfile): Promise<WarmRuntimeProfileActivation>;
 	/** Probes the exact activated Pod through the network path selected by that profile. */
 	proveReadiness(candidate: WarmRuntimePodCandidate, activation: WarmRuntimeProfileActivation, profile: WarmRuntimePoolProfile): Promise<WarmRuntimeReadinessEvidence>;
-	/** Deletes one used or stale Pod with a UID precondition after owner checks. */
+	/** Deletes one used or stale Pod with a UID precondition and returns only after that UID is absent. */
 	deletePod(identity: WarmRuntimePodIdentity, pool: WarmRuntimePoolProfile): Promise<void>;
 }
 
