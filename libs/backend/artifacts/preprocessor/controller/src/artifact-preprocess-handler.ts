@@ -170,12 +170,12 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 					return claimed;
 				});
 				const claimExpiry = _ClaimExpiry(record.claim.expiresAt);
-				_RequireActiveClaim(claimExpiry);
 
 				// 2. Build or adopt the suspended Job, then bind its Kubernetes UID before any worker code runs.
 				const prepared = await _Job(record, options.profile);
 				const assigned = await context.checkpoint({ stepName: _CheckpointName(cycle, "ensure-suspended-job") }, async function _EnsureSuspendedJob(): Promise<V1Job>
 				{
+					_RequireActiveClaim(claimExpiry);
 					return await _RetryExternal(async function _EnsureJob()
 					{
 						return await options.kubernetes.ensureSuspendedJob(prepared.job);
@@ -198,6 +198,7 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 				// 3. Release only the UID the server recorded, then save the first Pod that exact Job owns.
 				await context.checkpoint({ stepName: _CheckpointName(cycle, "release-job") }, async function _ReleaseJob(): Promise<void>
 				{
+					_RequireActiveClaim(claimExpiry);
 					await _RetryExternal(async function _ReleaseJob()
 					{
 						return await options.kubernetes.releaseJob(prepared.job, binding.workloadUid, record.claim.expiresAt);

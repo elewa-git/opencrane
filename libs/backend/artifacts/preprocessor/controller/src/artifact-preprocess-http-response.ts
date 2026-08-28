@@ -1,5 +1,5 @@
 import { RuntimeWorkloadClaimClasses, type RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
-import { ArtifactPreprocessOutcomeKinds } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { __ParseArtifactPreprocessOutcome } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { z, type ZodType } from "zod";
 
@@ -81,12 +81,7 @@ export function _ParseArtifactPreprocessBindOutcome(value: unknown, preprocessJo
  */
 export function _ParseArtifactPreprocessOutcome(value: unknown, preprocessJobId: string, deliveryCount: number): ArtifactPreprocessOutcome
 {
-	const signal = { preprocessJobId: z.string().min(1).max(128), deliveryCount: z.number().int().min(1) };
-	const outcome = z.discriminatedUnion("kind", [
-		z.object({ ...signal, kind: z.literal(ArtifactPreprocessOutcomeKinds.Completed), completionDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u) }).strict(),
-		z.object({ ...signal, kind: z.literal(ArtifactPreprocessOutcomeKinds.RetryableFailed), retryAt: z.string().datetime({ offset: true }) }).strict(),
-		z.object({ ...signal, kind: z.literal(ArtifactPreprocessOutcomeKinds.TerminalFailed) }).strict(),
-	]).parse(value);
+	const outcome = __ParseArtifactPreprocessOutcome(value);
 	if (outcome.preprocessJobId !== preprocessJobId || outcome.deliveryCount !== deliveryCount)
 	{
 		throw new Error("OpenCrane artifact preprocessing outcome response selected another delivery");

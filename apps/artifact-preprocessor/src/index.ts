@@ -34,7 +34,7 @@ async function _Main(): Promise<void>
 		// 2. Exchange the mounted reference through the projected-token authority.
 		const remote = _CreateArtifactPreprocessorRemote(config);
 		const claim = await remote.bootstrap(bootstrapReference, shutdown.signal);
-		// 3. Process this assignment once so Kubernetes owns retry and cleanup.
+		// 3. Process this assignment once; the durable workflow owns retry and exact Job cleanup.
 		const extractor = _CreatePdfTextExtractor();
 		log.info({ jobId: claim.lease.jobId, attempt: claim.lease.attempt, maximumSourceBytes: config.maximumSourceBytes, maximumOutputBytes: config.maximumOutputBytes }, "artifact preprocessor started");
 		await __ProcessArtifactPreprocessorJob({ remote, extractor, scratchDirectory: config.scratchDirectory, maximumSourceBytes: config.maximumSourceBytes, maximumOutputBytes: config.maximumOutputBytes, conversionTimeoutMilliseconds: config.conversionTimeoutMilliseconds, logger: log }, claim, shutdown.signal);

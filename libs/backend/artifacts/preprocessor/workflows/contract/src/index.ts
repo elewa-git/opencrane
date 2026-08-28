@@ -1,5 +1,5 @@
 export { ArtifactPreprocessPipelineVersions, ArtifactPreprocessTaskDeclaration, ArtifactPreprocessTaskNames } from "./artifact-preprocess-task.types";
-export { __ArtifactPreprocessOutcomeEventName, ArtifactPreprocessOutcomeKinds } from "./artifact-preprocess-outcome.types";
+export { __ArtifactPreprocessOutcomeEventName, __ParseArtifactPreprocessOutcome, ArtifactPreprocessOutcomeKinds } from "./artifact-preprocess-outcome.types";
 export { __ParseArtifactPreprocessPodBindRequest, __ParseArtifactPreprocessTaskReceipt, __ParseArtifactPreprocessWorkloadBindRequest } from "./artifact-preprocess-controller-http";
 export type { ArtifactPreprocessTaskInput } from "./artifact-preprocess-task.types";
 export type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessControllerRecord, ArtifactPreprocessPodBindCommand, ArtifactPreprocessWorkloadBindCommand } from "./artifact-preprocess-controller.types";

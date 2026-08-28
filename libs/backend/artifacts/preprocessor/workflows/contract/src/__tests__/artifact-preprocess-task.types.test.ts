@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
-import { ArtifactPreprocessTaskDeclaration, ArtifactPreprocessTaskNames } from "../index";
+import { __ParseArtifactPreprocessOutcome, ArtifactPreprocessOutcomeKinds, ArtifactPreprocessTaskDeclaration, ArtifactPreprocessTaskNames } from "../index";
 import type { ArtifactPreprocessControllerRecord } from "../index";
 
 describe("artifact preprocess task contract", function _DescribeArtifactPreprocessTaskContract()
@@ -20,5 +20,12 @@ describe("artifact preprocess task contract", function _DescribeArtifactPreproce
 		} satisfies ArtifactPreprocessControllerRecord;
 
 		expect(record.claim.workloadClass).toBe(RuntimeWorkloadClaimClasses.ArtifactPreprocess);
+	});
+
+	it("accepts only exact persisted delivery outcomes", function _ParsesOutcome()
+	{
+		const completed = { preprocessJobId: "preprocess-1", deliveryCount: 1, kind: ArtifactPreprocessOutcomeKinds.Completed, completionDigest: `sha256:${"a".repeat(64)}` };
+		expect(__ParseArtifactPreprocessOutcome(completed)).toEqual(completed);
+		expect(function _ParseUnknownField() { return __ParseArtifactPreprocessOutcome({ ...completed, unexpected: true }); }).toThrow();
 	});
 });

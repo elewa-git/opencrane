@@ -155,6 +155,26 @@ describe("artifact preprocessing workflow handler", function _DescribeArtifactPr
 		expect(kubernetes.deleteJob).toHaveBeenNthCalledWith(2, expect.any(Object), "job-uid-1");
 	});
 
+	it("replays persisted cleanup after the original workload claim expires", async function _ReplaysExpiredCleanup()
+	{
+		const now = Date.now();
+		const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+		const { options, authority, kubernetes } = _Options();
+		const record = _Record(1);
+		authority.claimForTask.mockResolvedValue({ ...record, claim: { ...record.claim, claimedAt: new Date(now).toISOString(), expiresAt: new Date(now + 1_000).toISOString() } });
+		kubernetes.deleteJob.mockRejectedValueOnce(new Error("response lost")).mockResolvedValueOnce(undefined);
+		const { context } = _Context();
+		const handler = __CreateArtifactPreprocessHandler(options);
+
+		await expect(handler.run(context as never, { siloId: "silo-1", preprocessJobId: "preprocess-1" })).rejects.toBeInstanceOf(WorkflowTaskRetryableError);
+		clock.mockReturnValue(now + 2_000);
+		await expect(handler.run(context as never, { siloId: "silo-1", preprocessJobId: "preprocess-1" })).resolves.toEqual({ preprocessJobId: "preprocess-1", completionDigest: `sha256:${"c".repeat(64)}` });
+
+		expect(authority.claimForTask).toHaveBeenCalledOnce();
+		expect(kubernetes.deleteJob).toHaveBeenCalledTimes(2);
+		clock.mockRestore();
+	});
+
 	it("replays ambiguous terminal cleanup before preserving the terminal outcome", async function _ReplaysTerminalDelete()
 	{
 		const { options, authority, kubernetes } = _Options();
