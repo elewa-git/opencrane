@@ -3,6 +3,21 @@ import type { JsonValue } from "@opencrane/util";
 
 import type { McpTaskInputRequest, McpTaskInputResponse, McpTaskRecord } from "./mcp-task.types";
 
+/**
+ * Rolls back MCP task cancellation when any stored fence changes during its transaction.
+ * `cancelMcpTask` maps this sentinel to `TooLate` and skips workflow cancellation, keeping the
+ * database rows and saved workflow on the same outcome.
+ */
+export class _McpTaskCancellationConflictError extends Error
+{
+	/** Builds the sentinel caught by `cancelMcpTask` after the transaction rolls back. */
+	constructor()
+	{
+		super("MCP task cancellation lost its database fence");
+		this.name = "McpTaskCancellationConflictError";
+	}
+}
+
 /** Immutable fields written before task workflow admission. */
 export interface McpTaskSubmissionRecord
 {

@@ -46,7 +46,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 - **Users can install and run MCP servers from an OCI Image Layout ZIP.** OpenCrane accepts only MCP
   `2026-07-28`, imports the package to an immutable image digest, and executes each discovery or tool
   call in an isolated MCP-specific Kubernetes Job with a durable claim, bounded identity, and retry
-  and cleanup ownership.
+  and cleanup ownership. Caller-owned public tasks save input, results, and failures across retries;
+  readiness failures are recorded under the claimed command, and cancellation cannot orphan a Job
+  while the controller is saving its Kubernetes identity.
 
 - **Artifact processing and skill work can now survive worker or server restarts.** Their Absurd
   workflows claim saved work, fence every delivery, retry recoverable failures, preserve completion

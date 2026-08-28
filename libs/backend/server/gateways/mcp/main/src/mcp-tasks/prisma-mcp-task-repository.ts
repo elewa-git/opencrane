@@ -4,9 +4,10 @@ import Ajv from "ajv";
 import { ExternalActionRecoveryMode, McpApprovalStatus, McpExecutorCommandState, McpExecutorWorkloadState, McpServerRevisionState, McpServerStatus, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
 
 import { MCP_ERA_PROTOCOL_VERSION } from "../era-probe/mcp-era-probe.types";
+import { _McpTerminalWorkloadState } from "../runtime/mcp-runtime-terminal-workload-state";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { McpTaskCreateResult, McpTaskRepository, McpTaskSubmissionRecord, McpTaskWorkflowBinding } from "./mcp-task-repository.types";
+import { _McpTaskCancellationConflictError, type McpTaskCreateResult, type McpTaskRepository, type McpTaskSubmissionRecord, type McpTaskWorkflowBinding } from "./mcp-task-repository.types";
 import { McpTaskStates, type McpTaskInputRequest, type McpTaskInputResponse, type McpTaskRecord } from "./mcp-task.types";
 
 /** Fields returned by every task repository operation. */
@@ -29,7 +30,7 @@ const _TASK_SELECT = {
 	result: true,
 	failureCode: true,
 	toolRevision: { select: { name: true, inputSchema: true } },
-	toolInvocation: { select: { id: true, state: true, mcpRuntimeExecution: { select: { id: true, commandState: true, workloadState: true } } } },
+	toolInvocation: { select: { id: true, state: true, mcpRuntimeExecution: { select: { id: true, commandState: true, workloadState: true, workloadUid: true, deliveryCount: true, claimedAt: true, claimExpiresAt: true } } } },
 } as const satisfies Prisma.McpTaskSelect;
 
 /** Prisma projection mapped into the package contract. */
@@ -320,10 +321,24 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 			return "too_late";
 		if (task.toolInvocation !== null)
 		{
-			await this._transaction.mcpRuntimeExecution.updateMany({ where: { toolInvocationId: task.toolInvocation.id, commandState: McpExecutorCommandState.Pending }, data: { commandState: McpExecutorCommandState.Failed, workloadState: McpExecutorWorkloadState.Closed, terminalOutcome: "mcp_task_cancelled", completedAt: new Date() } });
-			await this._transaction.toolInvocation.updateMany({ where: { id: task.toolInvocation.id, state: ToolInvocationState.Ready }, data: { state: ToolInvocationState.Failed, failureCode: "mcp_task_cancelled", completedAt: new Date(), revision: { increment: 1 } } });
+			const execution = task.toolInvocation.mcpRuntimeExecution;
+			const terminalAt = new Date();
+			if (execution !== null)
+			{
+				const workloadState = _McpTerminalWorkloadState(execution, McpExecutorWorkloadState);
+				if (workloadState === null)
+					return "too_late";
+				const updated = await this._transaction.mcpRuntimeExecution.updateMany({ where: { id: execution.id, toolInvocationId: task.toolInvocation.id, commandState: McpExecutorCommandState.Pending, workloadState: execution.workloadState, workloadUid: execution.workloadUid, deliveryCount: execution.deliveryCount, claimedAt: execution.claimedAt, claimExpiresAt: execution.claimExpiresAt }, data: { commandState: McpExecutorCommandState.Failed, workloadState, terminalOutcome: "mcp_task_cancelled", completedAt: terminalAt } });
+				if (updated.count !== 1)
+					throw new _McpTaskCancellationConflictError();
+			}
+			const invocation = await this._transaction.toolInvocation.updateMany({ where: { id: task.toolInvocation.id, state: ToolInvocationState.Ready }, data: { state: ToolInvocationState.Failed, failureCode: "mcp_task_cancelled", completedAt: terminalAt, revision: { increment: 1 } } });
+			if (invocation.count !== 1)
+				throw new _McpTaskCancellationConflictError();
 		}
 		const updated = await this._transaction.mcpTask.updateMany({ where: { id: task.id, state: { in: [McpTaskState.Working, McpTaskState.InputRequired, McpTaskState.Queued] } }, data: { state: McpTaskState.Cancelled, cancelRequestedAt: new Date(), completedAt: new Date(), failureCode: null } });
-		return updated.count === 1 ? "cancelled" : "too_late";
+		if (updated.count !== 1)
+			throw new _McpTaskCancellationConflictError();
+		return "cancelled";
 	}
 }

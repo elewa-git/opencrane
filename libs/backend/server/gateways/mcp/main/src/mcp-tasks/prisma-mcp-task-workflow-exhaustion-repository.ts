@@ -2,6 +2,7 @@ import { ExternalActionClaimKind, McpExecutorCommandState, McpExecutorWorkloadSt
 
 import { ExternalActionClaimKinds, ToolInvocationStates, type McpToolInvocationTransactionParticipant, type ToolInvocationClaim } from "@opencrane/backend/server/iam/authorization";
 
+import { _McpTerminalWorkloadState } from "../runtime/mcp-runtime-terminal-workload-state";
 import { McpTaskStates, type McpTaskWorkflowExhaustionRepository, type McpTaskWorkflowInput, type McpTaskWorkflowResult } from "./mcp-task.types";
 
 /** Failure code shared by the task, invocation, and runtime execution. */
@@ -9,9 +10,6 @@ const _FAILURE_CODE = "workflow_attempts_exhausted";
 
 /** Task row and its complete one-to-one execution aggregate. */
 type _TaskAggregate = Prisma.McpTaskGetPayload<{ include: { toolInvocation: { include: { mcpRuntimeExecution: true } } } }>;
-
-/** Runtime execution stored beneath one task-owned ToolInvocation. */
-type _RuntimeExecution = NonNullable<NonNullable<_TaskAggregate["toolInvocation"]>["mcpRuntimeExecution"]>;
 
 /** Terminal persistence states and the workflow result exposed for each one. */
 const _TERMINAL_STATES: Readonly<Partial<Record<McpTaskState, McpTaskWorkflowResult["state"]>>> = {
@@ -80,7 +78,7 @@ export class PrismaMcpTaskWorkflowExhaustionRepository implements McpTaskWorkflo
 		const execution = invocation?.mcpRuntimeExecution ?? null;
 		if (invocation === null || invocation.state !== ToolInvocationState.Ready || invocation.claimKind !== null || invocation.claimExpiresAt !== null)
 			return null;
-		const workloadState = execution === null ? null : _UnusedTerminalWorkloadState(execution);
+		const workloadState = execution === null ? null : _McpTerminalWorkloadState(execution, McpExecutorWorkloadState);
 		if (execution !== null && (execution.siloId !== task.siloId || execution.kind !== McpRuntimeExecutionKind.Invocation || execution.commandState !== McpExecutorCommandState.Pending || workloadState === null || execution.toolInvocationId !== invocation.id || execution.companionClaimFence !== null || execution.toolInvocationClaimFence !== null || execution.toolInvocationClaimRevision !== null))
 			return null;
 		const closed = await this._toolInvocations.completeUnusedBeforeDispatch(invocation.id, invocation.revision, _FAILURE_CODE, now);
@@ -120,24 +118,6 @@ export class PrismaMcpTaskWorkflowExhaustionRepository implements McpTaskWorkflo
 			throw new Error("MCP runtime database clock unavailable");
 		return clock.now;
 	}
-}
-
-/** Keep an in-flight assignment reclaimable until its deterministic suspended Job UID is saved. */
-function _UnusedTerminalWorkloadState(execution: _RuntimeExecution): McpExecutorWorkloadState | null
-{
-	if (execution.workloadState === McpExecutorWorkloadState.Pending)
-	{
-		if (execution.workloadUid !== null)
-			return null;
-		if (execution.deliveryCount === 0 && execution.claimedAt === null && execution.claimExpiresAt === null)
-			return McpExecutorWorkloadState.Closed;
-		if (execution.deliveryCount > 0 && execution.claimedAt !== null && execution.claimExpiresAt !== null)
-			return McpExecutorWorkloadState.Pending;
-		return null;
-	}
-	if (execution.workloadState === McpExecutorWorkloadState.Assigned || execution.workloadState === McpExecutorWorkloadState.Released || execution.workloadState === McpExecutorWorkloadState.Registered)
-		return execution.workloadUid === null ? null : McpExecutorWorkloadState.Closed;
-	return null;
 }
 
 /** Return the stable workflow result for a task that another actor already closed. */

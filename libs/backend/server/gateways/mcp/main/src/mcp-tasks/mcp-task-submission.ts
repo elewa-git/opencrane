@@ -1,6 +1,7 @@
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
+import { _McpTaskCancellationConflictError } from "./mcp-task-repository.types";
 import { McpTaskCancellationOutcomes, McpTaskInputSubmissionOutcomes, McpTaskStates } from "./mcp-task.types";
 import type { McpTaskCaller, McpTaskCancellationResult, McpTaskInputResponse, McpTaskInputSubmissionResult, McpTaskRecord, McpTaskSubmissionCommand, McpTaskWorkflow, McpTaskWorkflowInput } from "./mcp-task.types";
 
@@ -65,10 +66,20 @@ export async function cancelMcpTask(unitOfWork: McpOperatorUnitOfWork, workflow:
 	const current = await getMcpTask(unitOfWork, caller, taskId);
 	if (current === null || current.workflowTask === null)
 		return { outcome: McpTaskCancellationOutcomes.NotAvailable };
-	const outcome = await unitOfWork.execute(async function _Cancel(transaction)
+	let outcome: "cancelled" | "not_available" | "too_late";
+	try
 	{
-		return transaction.mcpTasks.cancel(caller.siloId, caller.principalId, taskId);
-	});
+		outcome = await unitOfWork.execute(async function _Cancel(transaction)
+		{
+			return transaction.mcpTasks.cancel(caller.siloId, caller.principalId, taskId);
+		});
+	}
+	catch (error)
+	{
+		if (error instanceof _McpTaskCancellationConflictError)
+			return { outcome: McpTaskCancellationOutcomes.TooLate };
+		throw error;
+	}
 	if (outcome === "not_available")
 		return { outcome: McpTaskCancellationOutcomes.NotAvailable };
 	if (outcome === "too_late")

@@ -85,6 +85,11 @@ existing OCI MCP executor runs the immutable image
 The draft server and its background job use one database transaction. Either both are saved, or
 neither is saved. A repeated registration request returns the same draft and the same job.
 
+Cancellation is also tied to the saved runtime claim. If the controller has taken a claim but has
+not yet saved the Kubernetes Job UID, the task stays pending until that exact UID is saved. The
+terminal cleanup claim can then delete the right Job. If provider execution has already started,
+the cancellation request is refused instead of pretending that the tool call did not run.
+
 Individual users browse the approved directory and install servers they may use. For OCI-backed
 servers, the same response lists tools from the newest Ready server revision, including the frozen
 input schema and digest an agent author must save. The API never returns credentials and never

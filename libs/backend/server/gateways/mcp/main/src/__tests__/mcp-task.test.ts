@@ -5,11 +5,11 @@ import { WorkflowTaskStates } from "@opencrane/backend/server/infra/workflows/co
 import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
 
 import type { McpOperatorTransaction, McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
-import type { McpTaskRepository, McpTaskSubmissionRecord, McpTaskWorkflowBinding } from "../mcp-tasks/mcp-task-repository.types";
+import { _McpTaskCancellationConflictError, type McpTaskRepository, type McpTaskSubmissionRecord, type McpTaskWorkflowBinding } from "../mcp-tasks/mcp-task-repository.types";
 import { cancelMcpTask, submitMcpTask, submitMcpTaskInput } from "../mcp-tasks/mcp-task-submission";
 import { __CreateMcpTaskWorkflow } from "../mcp-tasks/mcp-task";
 import { McpTaskCancellationOutcomes, McpTaskInputSubmissionOutcomes, McpTaskStates } from "../mcp-tasks/mcp-task.types";
-import type { McpTaskCaller, McpTaskInputResponse, McpTaskRecord, McpTaskSubmissionCommand } from "../mcp-tasks/mcp-task.types";
+import type { McpTaskCaller, McpTaskInputResponse, McpTaskRecord, McpTaskSubmissionCommand, McpTaskWorkflow } from "../mcp-tasks/mcp-task.types";
 
 /** Mutable task state behind the engine-neutral workflow tests. */
 interface _TaskState
@@ -237,6 +237,21 @@ describe("public MCP task workflow", function _McpTaskSuite()
 		expect(cancelled.task?.state).toBe(McpTaskStates.Cancelled);
 		expect(execution.taskSnapshot(task?.workflowTask as NonNullable<McpTaskRecord["workflowTask"]>).state).toBe(WorkflowTaskStates.Cancelled);
 		expect(runtime.admitInvocation).not.toHaveBeenCalled();
+	});
+
+	it("does not cancel the workflow when the database cancellation fence changes", async function _RefusesChangedCancellationFence()
+	{
+		const state: _TaskState = { task: { id: "mcp-task-1", siloId: "silo-a", principalId: "principal-a", callDigest: "call-digest-1", serverRevisionId: "server-revision-1", toolRevisionId: "tool-revision-1", toolName: "weather.lookup", protocolVersion: "2026-07-28", state: McpTaskStates.Working, inputRequest: null, inputResponse: null, result: null, failureCode: null, toolInvocationRowId: null, workflowTask: { taskId: "workflow-task-1", taskName: "mcp.task.call", idempotencyKey: "workflow-key-1" } } };
+		const repository = { ..._Repository(state), cancel: vi.fn().mockRejectedValue(new _McpTaskCancellationConflictError()) };
+		const transaction = { mcpTasks: repository, workflowTransaction: _WorkflowTransaction() } as unknown as McpOperatorTransaction;
+		const unitOfWork: McpOperatorUnitOfWork = { execute: async function _Execute<Result>(operation: (value: McpOperatorTransaction) => Promise<Result>): Promise<Result> { return operation(transaction); } };
+		const workflow = { admit: vi.fn(), deliverInput: vi.fn(), cancel: vi.fn() } as unknown as McpTaskWorkflow;
+
+		const result = await cancelMcpTask(unitOfWork, workflow, _Caller(), "mcp-task-1");
+
+		expect(result.outcome).toBe(McpTaskCancellationOutcomes.TooLate);
+		expect(workflow.cancel).not.toHaveBeenCalled();
+		expect(state.task?.state).toBe(McpTaskStates.Working);
 	});
 
 	it("closes the public task when the final workflow attempt cannot admit runtime work", async function _RecordsExhaustion()
