@@ -1,12 +1,13 @@
 import { createHash, generateKeyPairSync, type JsonWebKey } from "node:crypto";
 
-import { AgentRunState, WarmRuntimeReservationState, WorkloadAssignmentState, WorkloadKind, type PrismaClient } from "@prisma/client";
+import { AgentRunState, Prisma, WarmRuntimeReservationState, WorkloadAssignmentState, WorkloadKind, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import type { Es256PublicJwk } from "@opencrane/models/authorization";
 
 import { PrismaWarmRuntimeBindingUnitOfWork } from "../prisma-warm-runtime-binding-authority";
+import { PrismaWarmRuntimeBindingRepository, WarmRuntimeBindingConflict } from "../prisma-warm-runtime-binding-repository";
 
 /** Generate valid public proof evidence for one runtime process. */
 function _Proof(): { readonly proofPublicJwk: Es256PublicJwk; readonly proofKeyThumbprint: string }
@@ -17,51 +18,135 @@ function _Proof(): { readonly proofPublicJwk: Es256PublicJwk; readonly proofKeyT
 	return { proofPublicJwk, proofKeyThumbprint: createHash("sha256").update(canonical, "utf8").digest("base64url") };
 }
 
-/** Build mutable rows for one ready warm reservation. */
-function _Database(events: string[])
+/** Build mutable rows and typed compare-and-set delegates for one ready warm reservation. */
+function _Database(events: string[], options: { readonly failAt?: string; readonly serializationFailures?: number } = {})
 {
 	const future = new Date("2099-01-01T00:00:00.000Z");
-	const reservation = { runId: "run-1", attempt: 1, siloId: "silo-1", namespace: "runtime", deploymentName: "personal-warm", deploymentUid: "deployment-1", podName: "warm-pod-1", podUid: "pod-1", podResourceVersion: "13", genericProfile: "generic", claimedProfile: "personal", serviceAccountName: WARM_RUNTIME_SERVICE_ACCOUNT_NAME, state: WarmRuntimeReservationState.Ready as WarmRuntimeReservationState, proofKeyThumbprint: null as string | null, reservedAt: new Date(), profileActivatedAt: new Date(), readinessObservedAt: new Date(), boundAt: null as Date | null, idleDeadline: future, deleteRequestedAt: null, deletedAt: null };
-	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", siloId: "silo-1", subjectId: "user-1", audience: AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, serviceAccountName: WARM_RUNTIME_SERVICE_ACCOUNT_NAME, namespace: "runtime", workloadKind: WorkloadKind.Deployment, workloadUid: "pod-1", workloadProfile: "personal-default", podUid: "pod-1", state: WorkloadAssignmentState.PendingPod as WorkloadAssignmentState, expiresAt: future, createdAt: new Date(), registeredAt: null as Date | null, revokedAt: null };
+	const reservation = { runId: "run-1", attempt: 1, siloId: "silo-1", namespace: "runtime", deploymentName: "personal-warm", deploymentUid: "deployment-1", podName: "warm-pod-1", podUid: "pod-1", podResourceVersion: "13", genericProfile: "generic", claimedProfile: "personal", serviceAccountName: WARM_RUNTIME_SERVICE_ACCOUNT_NAME, state: WarmRuntimeReservationState.Ready as WarmRuntimeReservationState, proofKeyThumbprint: null as string | null, reservedAt: new Date(), profileActivatedAt: new Date(), readinessObservedAt: new Date(), boundAt: null as Date | null, idleDeadline: future, deleteRequestedAt: null as Date | null, deletedAt: null as Date | null };
+	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", siloId: "silo-1", subjectId: "user-1", audience: AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, serviceAccountName: WARM_RUNTIME_SERVICE_ACCOUNT_NAME, namespace: "runtime", workloadKind: WorkloadKind.Deployment, workloadUid: "pod-1", workloadProfile: "personal-default", podUid: "pod-1", state: WorkloadAssignmentState.PendingPod as WorkloadAssignmentState, expiresAt: future, createdAt: new Date(), registeredAt: null as Date | null, revokedAt: null as Date | null };
 	const bootstrap = { id: "bootstrap-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", siloId: "silo-1", subjectId: "user-1", audience: AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, serviceAccountName: WARM_RUNTIME_SERVICE_ACCOUNT_NAME, namespace: "runtime", workloadKind: WorkloadKind.Deployment, workloadUid: "pod-1", claimDigest: "sha256:claim", expiresAt: future, consumedAt: null as Date | null, consumedByPodUid: null as string | null, receiptId: null as string | null, createdAt: new Date() };
-	const run = { id: "run-1", siloId: "silo-1", attempt: 1, state: AgentRunState.Assigned, inputSnapshot: { modelRoute: { publicModelName: "silo-default" }, budgetPolicy: { maxCostUsdMicros: 2_000_000 } } };
-	let proofKey: { keyThumbprint: string } | null = null;
+	const run = { id: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", attempt: 1, state: AgentRunState.Assigned, inputSnapshot: { modelRoute: { publicModelName: "silo-default" }, budgetPolicy: { maxCostUsdMicros: 2_000_000 } } };
+	let proofKey: { id: string; bootstrapId: string; runId: string; attempt: number; workloadKind: WorkloadKind; workloadUid: string; podUid: string; publicKeyJwk: unknown; keyThumbprint: string; expiresAt: Date; revokedAt: Date | null; createdAt: Date } | null = null;
+	let serializationFailures = options.serializationFailures ?? 0;
+	const transactionOptions: unknown[] = [];
+	function _Count(label: string, matches = true): { readonly count: number }
+	{
+		events.push(label);
+		return { count: matches && options.failAt !== label ? 1 : 0 };
+	}
 	const client = {
-		async $transaction(operation: (transaction: unknown) => Promise<unknown>) { const result = await operation(client); events.push("commit"); return result; },
-		async $queryRaw() { return []; },
+		async $transaction(operation: (transaction: unknown) => Promise<unknown>, transactionOption: unknown)
+		{
+			transactionOptions.push(transactionOption);
+			if (serializationFailures > 0)
+			{
+				serializationFailures -= 1;
+				throw new Prisma.PrismaClientKnownRequestError("serialization conflict", { code: "P2034", clientVersion: "6.19.3" });
+			}
+			const snapshot = structuredClone({ reservation, assignment, bootstrap, run, proofKey });
+			try
+			{
+				const result = await operation(client);
+				events.push("commit");
+				return result;
+			}
+			catch (error)
+			{
+				Object.assign(reservation, snapshot.reservation);
+				Object.assign(assignment, snapshot.assignment);
+				Object.assign(bootstrap, snapshot.bootstrap);
+				Object.assign(run, snapshot.run);
+				proofKey = snapshot.proofKey;
+				events.push("rollback");
+				throw error;
+			}
+		},
 		warmRuntimeReservation: {
 			async findUnique() { return reservation; },
-			async updateMany(args: { data: { state: WarmRuntimeReservationState; proofKeyThumbprint: string; boundAt: Date } }) { reservation.state = args.data.state; reservation.proofKeyThumbprint = args.data.proofKeyThumbprint; reservation.boundAt = args.data.boundAt; return { count: 1 }; },
+			async updateMany(args: { data: { state: WarmRuntimeReservationState; proofKeyThumbprint?: string; boundAt?: Date } })
+			{
+				const label = args.data.proofKeyThumbprint === undefined ? "fence:reservation" : "cas:reservation";
+				const count = _Count(label, reservation.state === args.data.state || label === "cas:reservation");
+				if (count.count === 1)
+					Object.assign(reservation, args.data);
+				return count;
+			},
 		},
 		workloadAssignment: {
 			async findUnique() { return assignment; },
-			async updateMany(args: { data: { state: WorkloadAssignmentState; registeredAt: Date } }) { assignment.state = args.data.state; assignment.registeredAt = args.data.registeredAt; return { count: 1 }; },
+			async updateMany(args: { data: { state: WorkloadAssignmentState; registeredAt: Date } })
+			{
+				const count = _Count("cas:assignment", assignment.state === WorkloadAssignmentState.PendingPod && assignment.revokedAt === null);
+				if (count.count === 1)
+					Object.assign(assignment, args.data);
+				return count;
+			},
 		},
 		workloadBootstrap: {
 			async findUnique() { return bootstrap; },
-			async update(args: { data: { consumedAt: Date; consumedByPodUid: string; receiptId: string } }) { Object.assign(bootstrap, args.data); return bootstrap; },
+			async updateMany(args: { data: { consumedAt: Date; consumedByPodUid: string; receiptId: string } })
+			{
+				const count = _Count("cas:bootstrap", bootstrap.consumedAt === null && bootstrap.consumedByPodUid === null && bootstrap.receiptId === null);
+				if (count.count === 1)
+					Object.assign(bootstrap, args.data);
+				return count;
+			},
 		},
-		agentRun: { async findUnique() { return run; } },
+		agentRun: {
+			async findUnique() { return run; },
+			async updateMany() { return _Count("fence:run", run.state === AgentRunState.Assigned); },
+		},
 		runProofKey: {
 			async findUnique() { return proofKey; },
-			async create(args: { data: { keyThumbprint: string } }) { proofKey = { keyThumbprint: args.data.keyThumbprint }; return proofKey; },
+			async create(args: { data: Omit<NonNullable<typeof proofKey>, "revokedAt" | "createdAt"> })
+			{
+				events.push("create:proof");
+				proofKey = { ...args.data, revokedAt: null, createdAt: new Date() };
+				return proofKey;
+			},
 		},
 	};
-	return { prisma: client as unknown as PrismaClient, reservation, assignment, bootstrap, get proofKey() { return proofKey; } };
+	return { prisma: client as unknown as PrismaClient, reservation, assignment, bootstrap, run, transactionOptions, get proofKey() { return proofKey; } };
 }
 
-describe("PrismaWarmRuntimeBindingUnitOfWork", function _Suite()
+/** Build the reviewed identity used by every successful binding attempt. */
+function _Identity()
+{
+	return { subject: "system:serviceaccount:runtime:warm-runtime", namespace: "runtime", serviceAccountName: WARM_RUNTIME_SERVICE_ACCOUNT_NAME, podUid: "pod-1" };
+}
+
+/** Build the transient key issuer used by binding tests. */
+function _Issuer(events?: string[])
+{
+	return Object.assign(vi.fn(async function _Issue(_input?: { readonly expirySeconds: number })
+	{
+		events?.push("mint");
+		return { key: "sk-attempt" };
+	}), { revokeAttemptKey: vi.fn() });
+}
+
+/** Execute the persistence owner directly inside the fake serializable transaction. */
+async function _BindRepository(database: ReturnType<typeof _Database>)
+{
+	return await database.prisma.$transaction(async function _Bind(transaction)
+	{
+		return await new PrismaWarmRuntimeBindingRepository(transaction).bind(_Identity(), _Proof());
+	}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+describe("warm runtime binding persistence", function _Suite()
 {
 	it("commits the exact Pod and proof key before it mints the transient model key", async function _BindsAfterReadiness()
 	{
 		const events: string[] = [];
 		const database = _Database(events);
-		const issueAttemptModelKey = Object.assign(vi.fn(async function _Issue() { events.push("mint"); return { key: "sk-attempt" }; }), { revokeAttemptKey: vi.fn() });
+		const issueAttemptModelKey = _Issuer(events);
 		const authority = new PrismaWarmRuntimeBindingUnitOfWork(database.prisma, { assignmentTtlMilliseconds: 60_000, issueAttemptModelKey });
 		const proof = _Proof();
 
-		await expect(authority.bind({ subject: "system:serviceaccount:runtime:warm-runtime", namespace: "runtime", serviceAccountName: WARM_RUNTIME_SERVICE_ACCOUNT_NAME, podUid: "pod-1" }, proof)).resolves.toMatchObject({ outcome: "bound", attemptModelKey: "sk-attempt" });
-		expect(events).toEqual(["commit", "mint"]);
+		await expect(authority.bind(_Identity(), proof)).resolves.toMatchObject({ outcome: "bound", attemptModelKey: "sk-attempt" });
+		expect(events).toEqual(["fence:run", "fence:reservation", "cas:assignment", "cas:bootstrap", "create:proof", "cas:reservation", "commit", "mint"]);
+		expect(database.transactionOptions).toEqual([{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }]);
 		expect(database.reservation.state).toBe(WarmRuntimeReservationState.Claimed);
 		expect(database.assignment.state).toBe(WorkloadAssignmentState.Registered);
 		expect(database.bootstrap.consumedByPodUid).toBe("pod-1");
@@ -72,15 +157,119 @@ describe("PrismaWarmRuntimeBindingUnitOfWork", function _Suite()
 	it("accepts only the same proof key after the one-use binding", async function _FencesReplay()
 	{
 		const database = _Database([]);
-		const issueAttemptModelKey = Object.assign(vi.fn(async function _Issue() { return { key: "sk-attempt" }; }), { revokeAttemptKey: vi.fn() });
+		const issueAttemptModelKey = _Issuer();
 		const authority = new PrismaWarmRuntimeBindingUnitOfWork(database.prisma, { assignmentTtlMilliseconds: 60_000, issueAttemptModelKey });
-		const identity = { subject: "system:serviceaccount:runtime:warm-runtime", namespace: "runtime", serviceAccountName: WARM_RUNTIME_SERVICE_ACCOUNT_NAME, podUid: "pod-1" };
 		const first = _Proof();
 
-		await expect(authority.bind(identity, first)).resolves.toMatchObject({ outcome: "bound" });
-		await expect(authority.bind(identity, first)).resolves.toMatchObject({ outcome: "idempotent" });
-		await expect(authority.bind(identity, _Proof())).resolves.toEqual({ outcome: "conflict" });
+		await expect(authority.bind(_Identity(), first)).resolves.toMatchObject({ outcome: "bound" });
+		await expect(authority.bind(_Identity(), first)).resolves.toMatchObject({ outcome: "idempotent" });
+		await expect(authority.bind(_Identity(), _Proof())).resolves.toEqual({ outcome: "conflict" });
 		expect(issueAttemptModelKey).toHaveBeenCalledTimes(2);
+	});
+
+	it.each([
+		["reservation", function _Expire(database: ReturnType<typeof _Database>, expired: Date) { database.reservation.idleDeadline = expired; }],
+		["assignment", function _Expire(database: ReturnType<typeof _Database>, expired: Date) { database.assignment.expiresAt = expired; }],
+		["bootstrap", function _Expire(database: ReturnType<typeof _Database>, expired: Date) { database.bootstrap.expiresAt = expired; }],
+		["proof key", function _Expire(database: ReturnType<typeof _Database>, expired: Date) { if (database.proofKey !== null)
+			database.proofKey.expiresAt = expired; }],
+	])("rejects exact replay after the %s expires", async function _RejectsExpiredReplay(_label, expire)
+	{
+		const database = _Database([]);
+		const issueAttemptModelKey = _Issuer();
+		const authority = new PrismaWarmRuntimeBindingUnitOfWork(database.prisma, { assignmentTtlMilliseconds: 60_000, issueAttemptModelKey });
+		const proof = _Proof();
+
+		await expect(authority.bind(_Identity(), proof)).resolves.toMatchObject({ outcome: "bound" });
+		expire(database, new Date("2000-01-01T00:00:00.000Z"));
+		await expect(authority.bind(_Identity(), proof)).resolves.toEqual({ outcome: "conflict" });
+		expect(issueAttemptModelKey).toHaveBeenCalledOnce();
+	});
+
+	it("limits a newly minted key to the remaining saved authority lifetime", async function _LimitsCredentialLifetime()
+	{
+		const clock = Date.now();
+		const database = _Database([]);
+		database.assignment.expiresAt = new Date(clock + 5_000);
+		const now = vi.spyOn(Date, "now").mockReturnValue(clock);
+		const issueAttemptModelKey = _Issuer();
+		const authority = new PrismaWarmRuntimeBindingUnitOfWork(database.prisma, { assignmentTtlMilliseconds: 60_000, issueAttemptModelKey });
+
+		try
+		{
+			await expect(authority.bind(_Identity(), _Proof())).resolves.toMatchObject({ outcome: "bound" });
+			expect(issueAttemptModelKey).toHaveBeenCalledWith(expect.objectContaining({ expirySeconds: expect.any(Number) }));
+			const call = issueAttemptModelKey.mock.calls[0]?.[0];
+			expect(call?.expirySeconds).toBeGreaterThan(0);
+			expect(call?.expirySeconds).toBeLessThanOrEqual(5);
+		}
+		finally
+		{
+			now.mockRestore();
+		}
+	});
+
+	it("revokes a minted key when issuer latency would extend it past saved authority", async function _RevokesLateCredential()
+	{
+		let clock = Date.now();
+		const database = _Database([]);
+		database.assignment.expiresAt = new Date(clock + 5_000);
+		const now = vi.spyOn(Date, "now").mockImplementation(function _Now() { return clock; });
+		const revokeAttemptKey = vi.fn();
+		const issueAttemptModelKey = Object.assign(vi.fn(async function _Issue()
+		{
+			clock += 2_000;
+			return { key: "sk-late" };
+		}), { revokeAttemptKey });
+		const authority = new PrismaWarmRuntimeBindingUnitOfWork(database.prisma, { assignmentTtlMilliseconds: 60_000, issueAttemptModelKey });
+
+		try
+		{
+			await expect(authority.bind(_Identity(), _Proof())).resolves.toEqual({ outcome: "conflict" });
+			expect(revokeAttemptKey).toHaveBeenCalledWith(expect.objectContaining({ key: "sk-late" }));
+		}
+		finally
+		{
+			now.mockRestore();
+		}
+	});
+
+	it.each([
+		["a stale run attempt", function _StaleRun(database: ReturnType<typeof _Database>) { database.run.attempt = 2; }],
+		["a reservation being deleted", function _DeletingReservation(database: ReturnType<typeof _Database>) { database.reservation.deleteRequestedAt = new Date(); }],
+		["a revoked assignment", function _RevokedAssignment(database: ReturnType<typeof _Database>) { database.assignment.revokedAt = new Date(); }],
+		["an already-consumed bootstrap", function _ConsumedBootstrap(database: ReturnType<typeof _Database>) { database.bootstrap.consumedAt = new Date(); database.bootstrap.consumedByPodUid = "pod-1"; database.bootstrap.receiptId = "receipt-old"; }],
+		["mismatched aggregate ownership", function _MismatchedOwner(database: ReturnType<typeof _Database>) { database.bootstrap.subjectId = "another-subject"; }],
+	])("rejects %s before persistence commits", async function _RejectsStaleAggregate(_label, mutate)
+	{
+		const database = _Database([]);
+		mutate(database);
+
+		await expect(_BindRepository(database)).rejects.toBeInstanceOf(WarmRuntimeBindingConflict);
+	});
+
+	it.each(["fence:run", "fence:reservation", "cas:assignment", "cas:bootstrap", "cas:reservation"])("rolls back when %s loses its typed fence", async function _RollsBackLostFence(failAt)
+	{
+		const events: string[] = [];
+		const database = _Database(events, { failAt });
+
+		await expect(_BindRepository(database)).rejects.toBeInstanceOf(WarmRuntimeBindingConflict);
+		expect(database.reservation.state).toBe(WarmRuntimeReservationState.Ready);
+		expect(database.assignment.state).toBe(WorkloadAssignmentState.PendingPod);
+		expect(database.bootstrap.consumedAt).toBeNull();
+		expect(database.proofKey).toBeNull();
+		expect(events.at(-1)).toBe("rollback");
+	});
+
+	it("retries a serialization conflict before it binds", async function _RetriesSerializationConflict()
+	{
+		const database = _Database([], { serializationFailures: 1 });
+		const issueAttemptModelKey = _Issuer();
+		const authority = new PrismaWarmRuntimeBindingUnitOfWork(database.prisma, { assignmentTtlMilliseconds: 60_000, issueAttemptModelKey });
+
+		await expect(authority.bind(_Identity(), _Proof())).resolves.toMatchObject({ outcome: "bound" });
+		expect(database.transactionOptions).toHaveLength(2);
+		expect(issueAttemptModelKey).toHaveBeenCalledOnce();
 	});
 
 	it("rejects malformed proof evidence before opening a transaction", async function _RejectsMalformedProof()
@@ -91,7 +280,7 @@ describe("PrismaWarmRuntimeBindingUnitOfWork", function _Suite()
 		const authority = new PrismaWarmRuntimeBindingUnitOfWork(database.prisma, { assignmentTtlMilliseconds: 60_000, issueAttemptModelKey });
 		const proof = _Proof();
 
-		await expect(authority.bind({ subject: "system:serviceaccount:runtime:warm-runtime", namespace: "runtime", serviceAccountName: WARM_RUNTIME_SERVICE_ACCOUNT_NAME, podUid: "pod-1" }, { ...proof, proofKeyThumbprint: "wrong" })).resolves.toEqual({ outcome: "conflict" });
+		await expect(authority.bind(_Identity(), { ...proof, proofKeyThumbprint: "wrong" })).resolves.toEqual({ outcome: "conflict" });
 		expect(transaction).not.toHaveBeenCalled();
 		expect(issueAttemptModelKey).not.toHaveBeenCalled();
 	});

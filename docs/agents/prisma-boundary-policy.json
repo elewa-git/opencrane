@@ -97,6 +97,13 @@
         ]
       },
       {
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-warm-runtime-binding-repository.ts",
+        "adapter": "PrismaWarmRuntimeBindingRepository",
+        "contract": "WarmRuntimeBindingPersistenceRepository",
+        "contractImportPath": "./warm-runtime-binding.types",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/agents/execution/runs/main/src/prisma-agent-run-workflow-task-read-repository.ts",
         "adapter": "PrismaAgentRunWorkflowTaskReadRepository",
         "contract": "AgentRunWorkflowTaskReadPersistenceRepository",
@@ -916,7 +923,12 @@
         "adapter": "PrismaWarmRuntimeBindingUnitOfWork",
         "contract": "WarmRuntimeBindingAuthority",
         "contractImportPath": "./warm-runtime-binding.types",
-        "constructs": []
+        "constructs": [
+          {
+            "adapter": "PrismaWarmRuntimeBindingRepository",
+            "importPath": "./prisma-warm-runtime-binding-repository"
+          }
+        ]
       },
       {
         "path": "libs/backend/server/infra/workflows/infra_absurd/src/qualification/prisma-workflow-engine-qualification-unit-of-work.ts",

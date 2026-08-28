@@ -27,6 +27,42 @@ export type WarmRuntimeBindingResult =
 	| { readonly outcome: "bound" | "idempotent"; readonly receiptId: string; readonly attemptModelKey: string }
 	| { readonly outcome: "conflict" };
 
+/**
+ * Carries a successful database binding to the unit of work that mints the model key after commit.
+ *
+ * `bound` means this transaction spent the reservation; `idempotent` means the same Pod and proof
+ * were already bound and remain valid. Both carry the earliest saved expiry so the model key cannot
+ * outlive the reservation, assignment, bootstrap, or proof. `conflict` is a refusal found before
+ * writes start; {@link WarmRuntimeBindingConflict} aborts the transaction if a later fence loses.
+ *
+ * Called by: {@link PrismaWarmRuntimeBindingUnitOfWork.bind}.
+ */
+export type WarmRuntimeDatabaseBindingResult =
+	| { readonly outcome: "conflict" }
+	| { readonly outcome: "bound" | "idempotent"; readonly receiptId: string; readonly runId: string; readonly attempt: number; readonly siloId: string; readonly modelRoute: unknown; readonly budgetPolicy: unknown; readonly credentialExpiresAt: Date };
+
+/**
+ * Spends a warm reservation inside a serializable database transaction opened by its caller.
+ *
+ * Implementations must check the AgentRun before the reservation owner, then change the assignment
+ * and bootstrap before changing the reservation. The reservation update is last so losing it throws
+ * and rolls back every earlier write. This port never mints or returns a model key.
+ *
+ * Called by: {@link PrismaWarmRuntimeBindingUnitOfWork.bind}.
+ */
+export interface WarmRuntimeBindingPersistenceRepository
+{
+	/**
+	 * Bind the reviewed Pod or return its still-valid replay.
+	 *
+	 * @param identity - Pod identity returned by Kubernetes TokenReview.
+	 * @param submission - Public proof key and thumbprint supplied by that Pod.
+	 * @returns `bound`, `idempotent`, or a pre-write `conflict` with the expiry that limits later credentials.
+	 * @throws WarmRuntimeBindingConflict When ownership, state, expiry, or a compare-and-set changes after checks begin.
+	 */
+	bind(identity: WarmRuntimeBindingIdentity, submission: WarmRuntimeBindingSubmission): Promise<WarmRuntimeDatabaseBindingResult>;
+}
+
 /** Owns the database transaction that spends one warm reservation. */
 export interface WarmRuntimeBindingAuthority
 {
