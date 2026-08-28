@@ -31,16 +31,16 @@ export interface StandaloneFirstUserAdmissionCommand
 /**
  * The owner claim handed to persistence once the login's host, issuer, and subject have checked out.
  *
- * `mayCreateOwner` is the one permission left: it is true only when the login's verified email
- * matched the configured one, and it decides whether an empty owner slot may be filled.
+ * `mayCreateOwner` is the one permission left: it is true only after the selected login authority
+ * proves the installation's owner eligibility, and it decides whether an empty slot may be filled.
  */
 export interface StandaloneFirstUserOwnerClaim
 {
   /** Silo in which the one-time owner claim is being made. */
   readonly clusterTenant: string;
-  /** Stable OIDC subject that will own the silo. */
+  /** Stable subject from the selected authentication authority that will own the silo. */
   readonly subject: string;
-  /** Whether this callback may create an unclaimed owner slot after verified email matching. */
+  /** Whether this admitted authority may create the installation's unclaimed owner slot. */
   readonly mayCreateOwner: boolean;
 }
 

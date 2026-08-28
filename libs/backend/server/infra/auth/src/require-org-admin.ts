@@ -4,10 +4,10 @@ import type { RequestHandler } from "express";
  * Express guard that lets only organisation admins reach a route — the role allowed to
  * curate the MCP catalogue and approve servers.
  *
- * The decision comes only from `session.authUser.isOrgAdmin`, which was set at login from
- * the caller's verified group claims (`OPENCRANE_ORG_ADMIN_GROUPS`); nothing in the
- * request body, query, or headers can influence it. Platform operators pass too, because
- * the login rules already mark them as org admins.
+ * The decision comes only from `session.authUser.isOrgAdmin`, which the selected login authority
+ * sets from verified group claims or Tier 3's audited fixed-Owner admission; nothing in the request
+ * body, query, or headers can influence it. Platform operators pass too because production login
+ * rules already mark them as org admins.
  *
  * Two cases, both fail-closed:
  *   1. No session — 403.
@@ -42,7 +42,7 @@ export function _RequireOrgAdmin(): RequestHandler
       return;
     }
 
-    // 2. Established session — allow only callers the IdP marked as org admins.
+    // 2. Established session admits only the authority projected by the selected login flow.
     if (authUser.isOrgAdmin)
     {
       next();

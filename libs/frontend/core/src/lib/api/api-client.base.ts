@@ -6,7 +6,7 @@ import { _CreateOpenCraneApiError } from "./api-error";
  * Shared base for the frontend's typed OpenCrane clients.
  *
  * OpenCrane exposes two opencrane-ui surfaces (Control Plane API + Fleet Manager
- * API), each served at its own origin and each owning its own OIDC `/auth`
+ * API), each served at its own origin and each owning its selected `/auth`
  * endpoints. Both clients are therefore **self-contained**: each builds its
  * openapi-fetch client against its own `/api/v1` base, carries the cookie session
  * (`credentials: "include"`), and redirects to **its own** `/auth/login` on a 401.
@@ -71,7 +71,7 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 	}
 
 	/**
-	 * Builds the OIDC login URL for **this** surface, carrying a percent-encoded
+	 * Builds the selected login URL for **this** surface, carrying a percent-encoded
 	 * `returnTo` so the backend can bounce the user back after authentication.
 	 *
 	 * @param returnTo - Post-login destination (typically a path + query).
@@ -83,7 +83,7 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 	}
 
 	/**
-	 * Proactively redirects the browser to this surface's OIDC login flow. Used for
+	 * Proactively redirects the browser to this surface's selected login flow. Used for
 	 * the anonymous case (`GET /auth/me` → `authenticated:false`, HTTP 200), which
 	 * the 401 middleware never sees. No-op outside a browser (SSR).
 	 *
@@ -137,7 +137,7 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 		return serialised ? `?${serialised}` : "";
 	}
 
-	/** Redirect to this surface's OIDC login flow on a 401 (shared by the client middleware and {@link request}). */
+	/** Redirects to this surface's selected login flow on a 401. */
 	private _redirectIfUnauthorized(response: Response): void
 	{
 		if (response.status === 401 && typeof window !== "undefined")
@@ -147,7 +147,7 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 	}
 
 	/**
-	 * Middleware that redirects to this surface's OIDC login flow on a 401 from a
+	 * Middleware that redirects to this surface's selected login flow on a 401 from a
 	 * protected endpoint. `/auth/me` returns 200 (anonymous) rather than 401, so
 	 * this fires only when an established session is missing or expired mid-use.
 	 */

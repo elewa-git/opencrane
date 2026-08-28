@@ -76,7 +76,7 @@ function _handle(handler: RequestHandler): RequestHandler
  *
  * Called by: apps/opencrane/src/app/routes.ts at `/api/v1/organization/members`.
  * @param authority - Startup-selected standalone or Fleet authority.
- * @param resolveCaller - Maps the verified OIDC session and trusted request host.
+ * @param resolveCaller - Maps the admitted browser identity and trusted request host.
  * @returns Router serving directory, validation, create, resend, and acceptance.
  */
 export function _CreateOrganizationMembersRouter(authority: OrganizationMembershipAuthority, resolveCaller: OrganizationMembershipCallerResolver): Router

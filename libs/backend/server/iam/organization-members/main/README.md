@@ -5,13 +5,13 @@
 ## What it owns
 
 This identity and access management package owns the settings-facing organisation directory and the
-full email-address invitation lifecycle. It runs after OpenID Connect (OIDC) has established the
-person's subject, verified email, and host-selected silo. It returns the current members, validates
-recipients, creates expiring links idempotently, rotates links on resend, and accepts a link only for
-the signed-in identity whose provider verified the matching email.
+full email-address invitation lifecycle. It runs after the selected browser authority has established
+the person's subject and host-selected silo. It returns the current members, validates recipients,
+creates expiring links idempotently, rotates links on resend, and accepts a link only when the
+selected authority also verified the signed-in identity's matching email.
 
 ```
- verified OIDC session + trusted host
+ admitted browser identity + trusted host
                   │
                   ▼
  ┌──────────────────────────────────────┐

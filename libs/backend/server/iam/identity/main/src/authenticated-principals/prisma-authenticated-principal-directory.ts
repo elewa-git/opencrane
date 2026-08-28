@@ -2,7 +2,7 @@ import { type Prisma } from "@prisma/client";
 
 import { type AuthenticatedPrincipal, type AuthenticatedPrincipalDirectory } from "./authenticated-principal-directory.types";
 
-/** Resolves verified OIDC coordinates against the local Principal projection. */
+/** Resolves verified authentication-authority coordinates against the local Principal projection. */
 export class PrismaAuthenticatedPrincipalDirectoryRepository implements AuthenticatedPrincipalDirectory
 {
   /** Product authority used only for the exact principal lookup. */

@@ -26,7 +26,7 @@ function _resolveCaller(request: Request): OrganizationMembershipCaller | null
  * standalone branch receives no Fleet client. Browser requests reach only the returned router and
  * therefore cannot select either branch.
  *
- * Called by: apps/opencrane/src/app/public-app.ts.
+ * Called by: the production and Tier 2 composition roots before they build HTTP and socket access.
  * @param prisma - Silo database client used only by standalone mode.
  * @param config - Startup-frozen deployment configuration.
  * @returns Authenticated member routes plus the optional standalone product-access gate.

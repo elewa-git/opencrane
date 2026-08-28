@@ -5,7 +5,7 @@ import type { Logger } from "pino";
 import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 
-import { OidcAuthServiceBase, PrismaOrgMembershipRepository, _ClusterTenantFromHost, _OrgScope, _RequestHost, _ResolvePerOrgClient, _saveSession, type AuthUser, type LoginClient } from "@opencrane/backend/server/infra/auth";
+import { OidcAuthServiceBase, PrismaOrgMembershipUnitOfWork, _ClusterTenantFromHost, _OrgScope, _RequestHost, _ResolvePerOrgClient, _saveSession, type AuthUser, type LoginClient } from "@opencrane/backend/server/infra/auth";
 
 import { PrismaGroupClaimProjectionUnitOfWork } from "../group-claims/mirror-groups";
 import { _AdmitStandaloneFirstUser } from "../standalone-first-user/standalone-first-user-admission";
@@ -51,7 +51,7 @@ export class OidcAuthService extends OidcAuthServiceBase
    */
   constructor(log: Logger, prisma: PrismaClient, customApi: k8s.CustomObjectsApi | null = null, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null = null, standaloneFirstUserAudit: StandaloneFirstUserAdmissionAuditPort | null = null)
   {
-    super(log, new PrismaOrgMembershipRepository(prisma));
+    super(log, new PrismaOrgMembershipUnitOfWork(prisma));
     if (standaloneFirstUserAdmission !== null && standaloneFirstUserAudit === null)
     {
       throw new Error("standalone first-user admission requires an audit adapter");

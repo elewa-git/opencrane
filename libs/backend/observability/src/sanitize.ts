@@ -15,6 +15,7 @@ const _SENSITIVE_FIELD_NAMES = new Set([
 	"last-event-id",
 	"x-opencrane-scan-fence",
 	"x-opencrane-artifact-lease",
+	"x-opencrane-tier3-proxy-secret",
 	"cursor",
 	"claimfence",
 	"password",

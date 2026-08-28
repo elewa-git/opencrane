@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaOrgMembershipRepository } from "../index";
+import { PrismaOrgMembershipRepository } from "../prisma-org-membership-repository";
 
 describe("PrismaOrgMembershipRepository", function _Suite()
 {
@@ -14,7 +14,7 @@ describe("PrismaOrgMembershipRepository", function _Suite()
 
     await expect(repository.findAdminMemberships("user-1")).resolves.toEqual([{ clusterTenant: "acme", role: "Owner" }]);
     expect(findMany).toHaveBeenCalledWith({
-      where: { subject: "user-1", role: { in: ["Owner", "Admin"] } },
+      where: { subject: "user-1", status: "Active", role: { in: ["Owner", "Admin"] } },
       select: { clusterTenant: true, role: true },
       orderBy: { clusterTenant: "asc" },
     });

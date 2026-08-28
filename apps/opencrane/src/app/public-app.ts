@@ -13,15 +13,14 @@ import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _CheckHealth, _ErrorHandler, _RateLimit, _TransportSecurity, type PublicHealthReportReader } from "@opencrane/backend/server/infra/http";
 
 import { _log } from "./log";
-import type { OpenCraneOrganizationMembershipConfig } from "./config.types";
-import { _CreateOrganizationMembersComposition } from "./organization-members-composition";
+import type { OrganizationMembersComposition } from "./organization-members-composition.types";
 import type { PublicAuthenticationComposition } from "./public-app.types";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 import { _RegisterRoutes } from "./routes";
 import { _CreateHttpRequestLogger } from "./telemetry";
 
 /**
- * Build the audit-log appender for the standalone first-owner claim, or null when that claim is not configured.
+ * Builds the audit-log appender for the standalone first-owner claim, or null when that claim is not configured.
  * @see __CreateStandaloneFirstUserAdmissionAuditAppender
  */
 function _CreateStandaloneFirstUserAudit(config: StandaloneFirstUserAdmissionConfig | null): StandaloneFirstUserAdmissionAuditPort | null
@@ -29,12 +28,20 @@ function _CreateStandaloneFirstUserAudit(config: StandaloneFirstUserAdmissionCon
   return config === null ? null : __CreateStandaloneFirstUserAdmissionAuditAppender();
 }
 
-/** Build one session store so channel-proxy cookie delegation resolves the public login session. */
+/**
+ * Builds the production OIDC session, router, and Principal-admission middleware together.
+ *
+ * Called by: the production composition root when Tier 3 development authentication is not selected.
+ * @param prisma - Product authority used for login projection and current membership reads.
+ * @param customApi - Kubernetes API used to resolve per-silo OIDC clients.
+ * @param standaloneFirstUserAdmission - Optional installation contract for the first Owner claim.
+ * @returns The browser authentication handlers shared by public HTTP, internal delegation, and sockets.
+ */
 export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null): PublicAuthenticationComposition
 {
 	const authService = ___CreateOidcAuthService(_log, prisma, customApi, standaloneFirstUserAdmission, _CreateStandaloneFirstUserAudit(standaloneFirstUserAdmission));
 	const admission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(prisma, _log);
-	const authMiddleware = ___AuthMiddleware(admission);
+	const authMiddleware = ___AuthMiddleware(admission, _log);
 	return {
 		authMiddleware,
 		productAuthentication: authMiddleware,
@@ -44,10 +51,12 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
 }
 
 /**
- * Build the ingress-facing Express application.
+ * Builds the ingress-facing Express application.
  *
- * Authentication precedes every product route, while the OIDC router remains public so it can
- * establish the browser session that the product routes require.
+ * Authentication precedes every product route, while the selected login router remains public so
+ * it can establish the browser session that product routes require.
+ *
+ * Called by: the production and Tier 2 composition roots after they select authentication and membership authorities.
  * @param prisma - The main product database client.
  * @param coreApi - Kubernetes core client passed only to routes that create scoped Secrets.
  * @param runAdmission - Managed run admission port shared with scheduler execution.
@@ -56,14 +65,14 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * @param serverNamespace - Namespace in which provider credentials are managed.
  * @param obotCustody - Composed Obot custody authority; fail-closed when the transport is disabled.
  * @param authentication - One browser-session composition shared with the internal resolver.
- * @param organizationMembership - Startup-selected standalone or Fleet member configuration.
+ * @param organizationMembers - Startup-selected standalone or Fleet member composition.
  * @param artifactServiceEnabled - Whether conversation assets have a backing service.
  * @param artifactScannerEnabled - Whether newly quarantined conversation files can be consumed.
  * @param health - Cached public service report reader with no topology or error details.
  * @param mcpWorkflows - Shared transaction and worker authority for saved MCP jobs.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, authentication: PublicAuthenticationComposition, organizationMembership: OpenCraneOrganizationMembershipConfig, artifactServiceEnabled: boolean, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition | null): Express
+export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, authentication: PublicAuthenticationComposition, organizationMembers: OrganizationMembersComposition, artifactServiceEnabled: boolean, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition | null): Express
 {
 	const app = express();
 
@@ -85,7 +94,6 @@ export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, r
 	app.use(...authentication.sessionMiddleware);
 	app.use("/api/v1/auth", authentication.router);
 	app.use(authentication.productAuthentication);
-	const organizationMembers = _CreateOrganizationMembersComposition(prisma, organizationMembership);
 
 	if (organizationMembers.productAccess !== null)
 	{

@@ -23,19 +23,18 @@ export interface OrgMembershipRow
  * reorder meaningfully, or swallow errors — an implementation that returned an empty list
  * on a database error would silently strip an admin's rights.
  *
- * Implemented by: {@link PrismaOrgMembershipRepository} (./prisma-org-membership-repository.ts),
+ * Implemented by: {@link PrismaOrgMembershipUnitOfWork} (./prisma-org-membership-unit-of-work.ts),
  * and by hand-written stubs in ./__tests__.
  * Called by: {@link _ResolveOrgMembershipFacts}; the instance is handed to
- * `OidcAuthServiceBase` at construction (see
- * libs/backend/server/iam/identity/main/src/auth/oidc.service.ts).
+ * `OidcAuthServiceBase` or `Tier3DevelopmentAuthService` at construction.
  */
 export interface OrgMembershipRepository
 {
   /**
    * Fetch the caller's owner and admin memberships. `member` rows must not be returned.
    *
-   * @param subject - The subject the identity provider verified (OIDC `sub`), already
-   *                  trimmed by the caller.
+   * @param subject - The subject the selected authentication authority verified, already trimmed
+   *                  by the caller.
    * @returns The matching rows, or an empty list when the subject administers nothing.
    *          An empty list must mean exactly that — never "the lookup failed".
    * @throws When the lookup cannot be performed. Throwing is required: the resolver

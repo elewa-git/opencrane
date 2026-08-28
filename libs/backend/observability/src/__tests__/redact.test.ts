@@ -49,6 +49,16 @@ describe("REDACT_PATHS", function _redactSuite()
     expect(req.headers["authorization"]).toBe("[Redacted]");
   });
 
+  it("redacts the Tier 3 proxy proof at request and arbitrary nested depths", function _tier3ProxyProof()
+  {
+    const { logger, records } = _redactingLogger();
+    logger.info({ req: { headers: { "x-opencrane-tier3-proxy-secret": "per-run-proof" } }, nested: { Headers: { "X-OpenCrane-Tier3-Proxy-Secret": "case-variant-proof" } } }, "Tier 3 request");
+    const req = records[0]?.["req"] as { headers: Record<string, unknown> };
+    const nested = records[0]?.["nested"] as { Headers: Record<string, unknown> };
+    expect(req.headers["x-opencrane-tier3-proxy-secret"]).toBe("[Redacted]");
+    expect(nested.Headers["X-OpenCrane-Tier3-Proxy-Secret"]).toBe("[Redacted]");
+  });
+
   it("redacts replay cursors in headers and structured fields", function _replayCursor()
   {
     const { logger, records } = _redactingLogger();

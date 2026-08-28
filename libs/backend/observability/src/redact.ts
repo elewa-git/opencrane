@@ -9,8 +9,8 @@
 /**
  * Field paths pino replaces with `[Redacted]` before a record is serialized.
  *
- * Covers auth headers and cookies, replay cursors, API and master keys, OIDC secrets, database
- * URLs, and tool arguments and results. Each entry appears twice — bare and `*.`-prefixed — so a
+ * Covers auth headers and cookies, Tier 3 proxy proof, replay cursors, API and master keys, OIDC
+ * secrets, database URLs, and tool arguments and results. Each entry appears twice — bare and `*.`-prefixed — so a
  * field is caught both at the record root and one level down.
  *
  * This is the path-based half of the defence and it only matches these exact shapes. Arbitrary
@@ -23,11 +23,13 @@ export const REDACT_PATHS: readonly string[] = [
   "req.headers['last-event-id']",
   "req.headers['x-opencrane-scan-fence']",
   "req.headers['x-opencrane-artifact-lease']",
+  "req.headers['x-opencrane-tier3-proxy-secret']",
   "res.headers['set-cookie']",
   "headers.authorization",
   "headers['last-event-id']",
   "headers['x-opencrane-scan-fence']",
   "headers['x-opencrane-artifact-lease']",
+  "headers['x-opencrane-tier3-proxy-secret']",
   "authorization",
   "cursor",
   "claimFence",

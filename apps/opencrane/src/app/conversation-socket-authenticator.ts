@@ -20,10 +20,11 @@ import type { SelfConversationSocketAuthenticator } from "@opencrane/backend/ser
  * @param sessionMiddleware - The public app's session middleware. Its first handler restores the
  *   signed-in browser session onto the upgrade request.
  * @param authMiddleware - The same product authentication boundary used by public HTTP routes.
+ * @param productAccess - The standalone current-membership gate, or null when Fleet owns access.
  * @returns An authenticator that supplies trusted silo and subject coordinates, or `null` for a
  *   rejected upgrade.
  */
-export function _CreateConversationSocketAuthenticator(sessionMiddleware: readonly RequestHandler[], authMiddleware: RequestHandler): SelfConversationSocketAuthenticator
+export function _CreateConversationSocketAuthenticator(sessionMiddleware: readonly RequestHandler[], authMiddleware: RequestHandler, productAccess: RequestHandler | null): SelfConversationSocketAuthenticator
 {
 	const session = sessionMiddleware[0];
 	if (session === undefined) throw new Error("conversation socket authentication requires session middleware");
@@ -34,13 +35,17 @@ export function _CreateConversationSocketAuthenticator(sessionMiddleware: readon
 			await _RunSession(session, request);
 			const expressRequest = _AsExpressRequest(request);
 			if (!await _RunAuthentication(authMiddleware, expressRequest)) return null;
+			if (productAccess !== null && !await _RunAuthentication(productAccess, expressRequest))
+			{
+				return null;
+			}
 			const principal = _ResolveRequestPrincipal(expressRequest);
 			return principal === null ? null : { siloId: principal.siloId, issuer: principal.externalIssuer, subjectId: principal.externalSubject };
 		}
 	};
 }
 
-/** Add Express's header accessor without copying the restored session onto a second request. */
+/** Adds Express's header accessor without copying the restored session onto a second request. */
 function _AsExpressRequest(request: IncomingMessage): Request
 {
 	return Object.assign(Object.create(request), {
@@ -75,7 +80,7 @@ export function __IsSameOriginConversationSocketRequest(request: IncomingMessage
 	catch { return false; }
 }
 
-/** Run the read-only session handler against an upgrade request without sending an HTTP response. */
+/** Runs the read-only session handler against an upgrade request without sending an HTTP response. */
 function _RunSession(session: RequestHandler, request: IncomingMessage): Promise<void>
 {
 	return new Promise<void>(function _Run(resolve, reject)

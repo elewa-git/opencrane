@@ -1,13 +1,15 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
+import type { Logger } from "pino";
 
-import type { AuthenticatedPrincipalAdmission, AuthenticatedPrincipalAdmissionInput, AuthenticatedRequestPrincipal } from "./authenticated-principal-admission.types";
+import type { AuthenticatedPrincipalAdmission, AuthenticatedPrincipalAdmissionInput } from "./authenticated-principal-admission.types";
+import { _AdmitBrowserSession } from "./browser-session-admission";
 import { ___LoadOidcAuthConfig } from "./oidc-config";
 import type { OidcAuthConfig } from "./oidc-config.types";
 import { _RequestHost } from "./request-host";
 import { _ClusterTenantFromHost } from "./request-silo";
 
 /**
- * Build the middleware that decides whether a request may proceed at all.
+ * Builds the middleware that decides whether a request may proceed at all.
  *
  * Checked in this order:
  *   1. Public paths — `/healthz` and everything under `/api/v1/auth` always pass, since
@@ -24,26 +26,30 @@ import { _ClusterTenantFromHost } from "./request-silo";
  *
  * Called by: apps/opencrane/src/app/public-app.ts.
  *
+ * @param admission - Durable Principal resolver shared by authenticated product requests.
+ * @param log - Structured logger used when durable Principal admission is unavailable.
  * @returns Middleware that calls `next()` for public paths and session callers, and sends
  *          401 otherwise.
  */
-export function ___AuthMiddleware(admission: AuthenticatedPrincipalAdmission): RequestHandler
+export function ___AuthMiddleware(admission: AuthenticatedPrincipalAdmission, log: Logger): RequestHandler
 {
   const oidcConfig = ___LoadOidcAuthConfig();
 
   return async function _authHandler(req, res, next)
   {
-    await _resolveAuth(req, res, next, oidcConfig, admission);
+    await _resolveAuth(req, res, next, oidcConfig, admission, log);
   };
 }
 
 /**
- * Resolve authentication for a single request.
+ * Resolves authentication for a single request.
  *
  * @param req        - Incoming Express request.
- * @param res        - Express response (used only to send 401/403).
+ * @param res        - Express response used to send the shared 401 or 503 envelope.
  * @param next       - Express next function (called with no args on success).
  * @param oidcConfig - The OIDC config snapshot taken at factory time.
+ * @param admission  - Resolves the session tuple to a durable local Principal.
+ * @param log        - Records a structured warning when Principal admission is unavailable.
  */
 async function _resolveAuth(
   req: Request,
@@ -51,6 +57,7 @@ async function _resolveAuth(
   next: NextFunction,
   oidcConfig: OidcAuthConfig,
   admission: AuthenticatedPrincipalAdmission,
+  log: Logger,
 ): Promise<void>
 {
   // 1. Public paths bypass all auth checks — /healthz and the auth router
@@ -66,35 +73,17 @@ async function _resolveAuth(
   const siloId = _ClusterTenantFromHost(_RequestHost(req))?.trim() ?? "";
   const issuer = authUser?.issuer?.trim() ?? "";
   const subject = authUser?.sub?.trim() ?? "";
-  const authorizationExpiresAt = new Date(authUser?.authorizationExpiresAt ?? "");
-  const authorizationCurrent = Number.isFinite(authorizationExpiresAt.getTime()) && authorizationExpiresAt.getTime() > Date.now();
-  if (oidcConfig.enabled && authUser && siloId && authUser.siloId === siloId && issuer === oidcConfig.issuerUrl && subject && authorizationCurrent)
-  {
-    const input: AuthenticatedPrincipalAdmissionInput = {
+	let input: AuthenticatedPrincipalAdmissionInput | null = null;
+	if (oidcConfig.enabled && authUser && siloId && issuer === oidcConfig.issuerUrl && subject)
+	{
+		input = {
 		siloId,
 		issuer,
 		subject,
 	};
-	let principal: AuthenticatedRequestPrincipal | null;
-	try
-	{
-		principal = await admission.admit(input);
 	}
-	catch
+	await _AdmitBrowserSession(req, res, next, admission, input, "OIDC session required", function _LogUnavailable(err)
 	{
-		res.status(503).json({ error: "identity_projection_unavailable" });
-		return;
-	}
-	if (principal === null || principal.siloId !== siloId || principal.issuer !== issuer || principal.subject !== subject || !principal.principalId.trim())
-	{
-		res.status(401).json({ error: "authenticated_principal_required" });
-		return;
-	}
-	req.authenticatedPrincipal = principal;
-	next();
-    return;
-  }
-
-  // 3. Missing or disabled identity configuration never opens a tokenless API.
-  res.status(401).json({ error: "OIDC session required" });
+		log.warn({ err, siloId }, "OIDC Principal admission is unavailable");
+	});
 }

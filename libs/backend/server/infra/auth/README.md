@@ -1,13 +1,15 @@
-# @opencrane/backend/server/infra/auth — OIDC login and authorization substrate
+# @opencrane/backend/server/infra/auth — browser login and authorization boundary
 
 > [backend](../../../README.md) › [server](../../README.md) › [infra](../README.md) › auth
 
 ## What it owns
 
 This library answers, for every incoming HTTP request, **"who is this, and are they allowed in?"** —
-the sign-in and gatekeeping layer the OpenCrane server sits behind. It uses **OIDC** (OpenID Connect,
-the standard sign-in protocol where an external identity provider vouches for a user) and keeps a
-**session** (the server-remembered fact that a browser has logged in, carried in a cookie).
+the sign-in and gatekeeping layer the OpenCrane server sits behind. Production uses **OIDC** (OpenID
+Connect, the standard sign-in protocol where an external identity provider vouches for a user).
+The disposable Tier 3 profile instead accepts only its startup-selected development identity after
+the loopback proxy proves it owns a fresh per-run secret. Both modes keep a **session** (the
+server-remembered fact that a browser has logged in, carried in a signed cookie).
 
 It is the first runtime seam every protected request passes through:
 
@@ -44,13 +46,17 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
 
 - `___AuthMiddleware`, `AuthenticatedPrincipalAdmission` — the request authentication middleware and
   its fail-closed durable-identity admission port.
-- `___LoadOidcAuthConfig`, `OidcAuthConfig`, `_IsDevAuthMode` — OIDC configuration.
+- `___DevelopmentAuthMiddleware`, `AuthenticatedPrincipalAdmissionInput` — Tier 3's exact
+  issuer/silo/subject session gate and durable Principal admission boundary.
+- `___CreateBrowserSessionMiddleware`, `BrowserSessionConfig` — the shared signed-session mechanism
+  used by production OIDC and disposable Tier 3 authentication.
+- `___LoadOidcAuthConfig`, `OidcAuthConfig` — OIDC configuration.
 - `OidcAuthServiceBase`, `LoginClient`, `AuthStatus` — the login-flow service and per-org login seam.
   Subclasses may declare a post-login admission failure fatal when silently continuing would present
   a signed-in user with false onboarding state. Fatal failures destroy the freshly regenerated
   session before returning the callback error; optional projection work remains best-effort.
 - Session helpers + `AuthUser`; `_ResolveIdentityClaims`; `_ResolveOrgMembershipFacts`,
-  `OrgMembershipFacts`, `OrgMembershipRepository`, and `PrismaOrgMembershipRepository`.
+  `OrgMembershipFacts`, `OrgMembershipRepository`, and `PrismaOrgMembershipUnitOfWork`.
 - `_ResolveRequestPrincipal`, `RequestPrincipal` — expose the admitted local Principal, independently
   rechecked host silo, and organisation-admin flag without importing any backend-domain caller type.
 - `_CreateMountedPublicKeySource`, `MountedPublicKeySource` — fail-closed access to an absolute
@@ -60,7 +66,9 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
 
 ## Boundary
 
-Consumed by the `apps/opencrane` server and the IAM, tenancy, and gateway backend domains. It
+Consumed by the `apps/opencrane` server and the IAM, tenancy, and gateway backend domains. Tier 3's
+proxy proof authenticates the loopback coordinator, not a human; only the development composition
+root may turn it into the fixed identity and only after exact durable Principal admission. It
 establishes *who* the caller is and coarse gates (operator/admin); fine-grained per-action decisions
 belong to the authorization model. Backend routers map `RequestPrincipal` into their own caller
 contracts, keeping this package independent of business types. It reads config, sessions,
@@ -74,8 +82,9 @@ Tagged `scope:auth` (`layer:infra`): it may depend only on `scope:auth`, `scope:
 
 ## Data & persistence
 
-`PrismaOrgMembershipRepository` reads only owner/admin rows from the app-owned `OrgMembership`
-model. This package owns neither that model nor its schema or migrations; clean-database setup stays
+`PrismaOrgMembershipUnitOfWork` opens the read transaction and delegates only its exact binding to
+`PrismaOrgMembershipRepository`, which reads active owner/admin rows from the app-owned
+`OrgMembership` model. This package owns neither that model nor its schema or migrations; clean-database setup stays
 with the target baseline under `apps/opencrane/prisma`. Repository failures propagate so callers do
 not confuse an unavailable authority source with a successful empty membership result.
 

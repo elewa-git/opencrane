@@ -644,6 +644,18 @@
     ],
     "unitsOfWork": [
       {
+        "path": "libs/backend/server/infra/auth/src/prisma-org-membership-unit-of-work.ts",
+        "adapter": "PrismaOrgMembershipUnitOfWork",
+        "contract": "OrgMembershipRepository",
+        "contractImportPath": "./org-membership.types",
+        "constructs": [
+          {
+            "adapter": "PrismaOrgMembershipRepository",
+            "importPath": "./prisma-org-membership-repository"
+          }
+        ]
+      },
+      {
         "path": "libs/backend/server/agents/agent-services/main/src/db/prisma-agent-revision-lifecycle.ts",
         "adapter": "PrismaAgentRevisionLifecycleUnitOfWork",
         "contract": "AgentRevisionLifecycleRepository",
@@ -1323,6 +1335,7 @@
 		"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
 		"libs/backend/server/iam/identity/main/src/auth/oidc.service.ts",
+		"apps/opencrane/src/app/tier3-development-authentication.ts",
 		"libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts"
     ]
   },

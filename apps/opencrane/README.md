@@ -199,7 +199,8 @@ are:
 | `OPENCRANE_SILO_ID` | Silo that owns tasks admitted by this server | required |
 | `OPENCRANE_WORKFLOW_*` | Absurd database pool, worker concurrency, and polling limits | small development defaults |
 | `OPENCRANE_MCP_ERA_PROBE_*` | Timeout and response-size limit for remote MCP protocol checks | 5 seconds / 64 KiB |
-| `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
+| `OIDC_*` | Production organisation sign-in, callbacks, and server-side session protection | required outside Tier 3 |
+| `OPENCRANE_AUTH_MODE`, `OPENCRANE_TIER3_*_SECRET_PATH` | Select the dev-only fixed Tier 3 identity and its file-mounted, per-run proxy/session secrets | OIDC mode |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `OPENCRANE_INITIAL_MODEL_*` | Optional first provider key; the server persists its custody reference and requires LiteLLM registration before readiness | disabled |
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL`, `CHANNEL_PROXY_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
@@ -225,6 +226,12 @@ loopback PostgreSQL URL, signed local membership keys, and fixed identity values
 also supply separate owner-only controller and runtime launch-secret paths. The development
 entrypoint refuses production mode, non-loopback databases, identity overrides, and missing Agent
 credentials before it opens a listener.
+
+The full-silo `npm run dev:tier3` profile selects a separate development authentication mode. Its
+loopback proxy overwrites caller-provided proof with a fresh run secret, while the server requires
+the exact `.test` host and startup-selected issuer, silo, and subject. Login projects that identity
+through the normal durable Principal and standalone Owner authorities before issuing a signed,
+bounded session. The chart rejects this mode outside `global.environment=dev` or alongside OIDC.
 
 In standalone mode, successful OIDC authentication does not itself grant product access. Existing
 active members proceed normally. A verified identity without membership can call only the signed

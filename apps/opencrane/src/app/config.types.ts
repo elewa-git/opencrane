@@ -1,4 +1,4 @@
-import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
+import type { StandaloneFirstUserAdmissionConfig, Tier3DevelopmentAuthenticationConfig } from "@opencrane/backend/server/iam/identity";
 import { OrganizationMembershipDeploymentModes, type StandaloneOrganizationMembershipConfig } from "@opencrane/backend/server/iam/organization-members";
 import type { FleetOrganizationMembershipHttpClientConfig } from "@opencrane/backend/server/infra/organization-membership-gateway";
 
@@ -110,6 +110,16 @@ export interface InitialModelBootstrapConfig
 	readonly apiKey: string;
 }
 
+/**
+ * Adds the independent signed-session secret to the validated Tier 3 identity and proxy proof.
+ *
+ * Called by: `_ReadProcessConfig` and `_CreateTier3DevelopmentAuthentication` in the app composition.
+ */
+export interface OpenCraneTier3DevelopmentAuthenticationConfig extends Tier3DevelopmentAuthenticationConfig
+{
+	readonly sessionSecret: string;
+}
+
 /** Process-owned settings that shape the OpenCrane server lifecycle. */
 export interface OpenCraneProcessConfig
 {
@@ -131,6 +141,8 @@ export interface OpenCraneProcessConfig
 	readonly schedulerIntervalMilliseconds: number;
 	/** Optional verified-email contract that can claim exactly one standalone-silo owner. */
 	readonly standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null;
+	/** Explicit disposable Tier 3 authentication mode, mutually exclusive with OIDC. */
+	readonly tier3DevelopmentAuthentication: OpenCraneTier3DevelopmentAuthenticationConfig | null;
 	/** Durable control-plane task and MCP protocol-check settings. */
 	readonly workflows: OpenCraneWorkflowConfig;
 }

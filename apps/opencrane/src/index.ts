@@ -15,6 +15,7 @@ import { _ReconcileChannelTargetRoutes, _StartChannelTargetRouteReconciler } fro
 import { _CreateExternalActionWorker } from "./app/external-action-composition";
 import { _CreateInternalApp } from "./app/internal-app";
 import { _CreateMcpWorkflowComposition } from "./app/mcp-workflow-composition";
+import { _CreateOrganizationMembersComposition } from "./app/organization-members-composition";
 import { _BootstrapInitialModel } from "./app/initial-model-bootstrap";
 import { _CreateKubernetesClients } from "./app/kubernetes-clients";
 import { _StartProcessLifecycle } from "./app/lifecycle";
@@ -22,6 +23,7 @@ import { _log } from "./app/log";
 import { _CreatePublicApp, _CreatePublicAuthentication } from "./app/public-app";
 import { _CreateRunCancellationAuthority } from "./app/run-cancellation-composition";
 import { _CreateConversationSocketAuthenticator } from "./app/conversation-socket-authenticator";
+import { _CreateTier3DevelopmentAuthentication } from "./app/tier3-development-authentication";
 import { _ProcessShutdownSignal } from "./app/process-shutdown";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory";
 import { ___CreatePrismaClient } from "./infra/db/db";
@@ -61,12 +63,15 @@ async function _Main(): Promise<void>
 	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows);
 
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
-	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
+	const authentication = config.tier3DevelopmentAuthentication === null
+		? _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission)
+		: _CreateTier3DevelopmentAuthentication(prisma, config.tier3DevelopmentAuthentication);
+	const organizationMembers = _CreateOrganizationMembersComposition(prisma, _ReadOrganizationMembershipConfig());
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
-	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, obot.custody, authentication, _ReadOrganizationMembershipConfig(), true, config.runtime.artifactScannerEnabled, publicHealth, workflows);
+	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, obot.custody, authentication, organizationMembers, true, config.runtime.artifactScannerEnabled, publicHealth, workflows);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware);
-	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
+	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware, organizationMembers.productAccess), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
 	await _StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, obot.stop, workflows.runtime);

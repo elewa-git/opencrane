@@ -296,7 +296,7 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
  */
 async function _ResolveCaller(principalDirectory: AuthenticatedPrincipalDirectory, req: Request): Promise<McpOperatorCaller | null>
 {
-  // 1. Resolve the verified OIDC subject and trusted request silo without accepting either from
+  // 1. Resolves the admitted browser subject and trusted request silo without accepting either from
   //    the request body.
   const requestPrincipal = _ResolveRequestPrincipal(req);
   const authUser = req.session?.authUser;
@@ -305,8 +305,8 @@ async function _ResolveCaller(principalDirectory: AuthenticatedPrincipalDirector
     return null;
   }
 
-  // 2. Bind the external identity to the durable local Principal. Missing or stale projections
-  //    fail closed, so raw OIDC claims never become MCP authority by themselves.
+  // 2. Binds the external identity to the durable local Principal. Missing or stale projections
+  //    fail closed, so raw session claims never become MCP authority by themselves.
   return principalDirectory.resolveAuthenticatedPrincipal(requestPrincipal.siloId, authUser.issuer, authUser.sub);
 }
 

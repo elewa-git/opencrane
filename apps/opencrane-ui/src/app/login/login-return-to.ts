@@ -1,7 +1,7 @@
 /**
  * Returns a relative Angular router URL that is safe to carry through login.
  *
- * The access guard uses this path to carry an invitation token through the full-page OIDC redirect
+ * The access guard uses this path to carry an invitation token through the full-page login redirect
  * without browser storage. Rejecting absolute, protocol-relative, encoded, backslash, control-character,
  * and oversized values prevents an attacker-authored login query from becoming an open redirect.
  *

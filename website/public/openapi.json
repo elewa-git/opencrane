@@ -3,7 +3,7 @@
   "info": {
     "title": "OpenCrane Control Plane API",
     "version": "1.0.0",
-    "description": "Multi-tenant AI agent platform management API.\n\n**Authentication**\n\n- *Human operators* — OIDC browser flow via `GET /auth/login` → `/auth/callback`. Session cookie is set server-side.\n- In-cluster workloads use short-lived, audience-bound projected service-account tokens at their dedicated internal trust boundaries.\n- Endpoints tagged *Auth* and *Meta* (`/auth/*`, `/openapi.json`) require no credentials."
+    "description": "Multi-tenant AI agent platform management API.\n\n**Authentication**\n\n- *Human operators* — the selected browser authentication mode starts at `GET /auth/login`. Production OIDC completes at `/auth/callback`; disposable Tier 3 development establishes its fixed local identity directly. The session cookie is set server-side.\n- In-cluster workloads use short-lived, audience-bound projected service-account tokens at their dedicated internal trust boundaries.\n- Endpoints tagged *Auth* and *Meta* (`/auth/*`, `/openapi.json`) require no credentials."
   },
   "servers": [
     {
@@ -13251,9 +13251,9 @@
     },
     "/auth/login": {
       "get": {
-        "operationId": "startOidcLogin",
-        "summary": "Redirect the browser to the configured OIDC identity provider to start login",
-        "description": "Browser redirect — not intended for programmatic use. Returns 503 when OIDC is not configured.",
+        "operationId": "startBrowserLogin",
+        "summary": "Start the browser login selected by this deployment",
+        "description": "Browser redirect — not intended for programmatic use. Production redirects to OIDC; Tier 3 establishes its installation-selected development identity.",
         "tags": [
           "Auth"
         ],
@@ -13276,12 +13276,12 @@
                 "create"
               ]
             },
-            "description": "Use create to open the identity provider's registration flow. Other values are rejected."
+            "description": "Use create to open the OIDC provider's registration flow. Tier 3 and other values reject the prompt."
           }
         ],
         "responses": {
           "302": {
-            "description": "Redirect to identity provider."
+            "description": "Redirect to the identity provider or back into Tier 3 with its signed development session."
           },
           "400": {
             "description": "Unsupported login prompt.",
@@ -13293,8 +13293,18 @@
               }
             }
           },
+          "403": {
+            "description": "Tier 3 proxy proof is absent or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "503": {
-            "description": "OIDC not configured.",
+            "description": "The selected browser authentication is unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -13309,7 +13319,7 @@
     "/auth/reauthenticate": {
       "get": {
         "operationId": "reauthenticate",
-        "summary": "Force fresh OIDC authentication for a sensitive action",
+        "summary": "Refresh the selected browser authentication for a sensitive action",
         "tags": [
           "Auth"
         ],
@@ -13326,7 +13336,7 @@
         ],
         "responses": {
           "302": {
-            "description": "Redirect to the configured provider with prompt=login."
+            "description": "Redirect through fresh provider authentication or renew the bounded Tier 3 development session."
           },
           "401": {
             "description": "An authenticated session is required before step-up.",
@@ -13338,8 +13348,18 @@
               }
             }
           },
+          "403": {
+            "description": "Tier 3 proxy proof is absent or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "503": {
-            "description": "OIDC is not configured."
+            "description": "The selected browser authentication is unavailable."
           }
         }
       }
@@ -13392,14 +13412,14 @@
                         },
                         "issuer": {
                           "type": "string",
-                          "description": "Identity provider that authenticated the user."
+                          "description": "Configured authority that authenticated the user."
                         },
                         "groups": {
                           "type": "array",
                           "items": {
                             "type": "string"
                           },
-                          "description": "The caller's stable group identifiers from the OIDC groups claim (empty when none)."
+                          "description": "Stable group identifiers from the verified authority, or an empty set for Tier 3."
                         },
                         "isPlatformOperator": {
                           "type": "boolean",
@@ -13471,7 +13491,7 @@
       "get": {
         "operationId": "completeOidcLogin",
         "summary": "OIDC authorization callback — validates the response and establishes a session",
-        "description": "Called by the identity provider after a successful login. Redirects back to the SPA.",
+        "description": "Called by the identity provider after a successful OIDC login. Tier 3 has no callback and returns 503.",
         "tags": [
           "Auth"
         ],
@@ -13512,8 +13532,8 @@
     "/auth/logout": {
       "post": {
         "operationId": "logout",
-        "summary": "Destroy the current session and return the IdP RP-initiated logout URL",
-        "description": "Invalidates the server-side session and returns the identity provider logout URL when upstream logout is available.",
+        "summary": "Destroy the current session and return any upstream logout URL",
+        "description": "Invalidates the server-side session. OIDC may return an identity-provider logout URL; Tier 3 returns null.",
         "tags": [
           "Auth"
         ],

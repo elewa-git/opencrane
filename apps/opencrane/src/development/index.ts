@@ -15,6 +15,7 @@ import { ___BindConsole } from "@opencrane/backend/observability";
 import { _CreateRunCancellationAuthority } from "../app/run-cancellation-composition";
 import { _CreateConversationSocketAuthenticator } from "../app/conversation-socket-authenticator";
 import { _CreatePublicApp } from "../app/public-app";
+import { _CreateOrganizationMembersComposition } from "../app/organization-members-composition";
 import { _log } from "../app/log";
 import { _ProcessShutdownSignal } from "../app/process-shutdown";
 import { ___CreatePrismaClient } from "../infra/db/db";
@@ -57,6 +58,7 @@ async function _Main(): Promise<void>
 			publicBaseUrl: "http://local-development.localhost:4200",
 		},
 	} as const;
+	const organizationMembers = _CreateOrganizationMembersComposition(prisma, organizationMembership);
 	const publicApp = _CreatePublicApp(
 		prisma,
 		_CreateUnavailableDevelopmentCoreApi(),
@@ -66,7 +68,7 @@ async function _Main(): Promise<void>
 		runtimeConfig.serverNamespace,
 		obot.custody,
 		authentication,
-		organizationMembership,
+		organizationMembers,
 		false,
 		false,
 		health,
@@ -77,7 +79,7 @@ async function _Main(): Promise<void>
 		personalRunAdmission,
 		_CreateConversationAttachmentAdmission,
 		_log,
-		_CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware),
+		_CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware, organizationMembers.productAccess),
 		{
 			interrupts: _CreateElicitationInterruptReader(prisma),
 			shutdownSignal: _ProcessShutdownSignal

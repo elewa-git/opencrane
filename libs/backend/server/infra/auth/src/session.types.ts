@@ -3,10 +3,9 @@ import "express-session";
 /**
  * The logged-in human, as stored in the session cookie store.
  *
- * Written once per login by `OidcAuthServiceBase.completeLogin` (through its private
- * `_buildAuthUser`) and read afterwards by {@link ___AuthMiddleware}, the two route
- * guards, and `_ResolveRequestPrincipal`. Treat it as a cache of what was true AT LOGIN:
- * nothing here is refreshed while the session lives.
+ * Written once by the selected browser-login service and read afterwards by the matching
+ * authentication middleware, the two route guards, and `_ResolveRequestPrincipal`. Treat it as
+ * a cache of what was true AT LOGIN: nothing here is refreshed while the session lives.
  *
  * The one exception is {@link AuthUser.isOrgAdmin}, which `/auth/me` recomputes on every
  * call by OR-ing the stored value with current `OrgMembership` rows. So a route guard
@@ -18,19 +17,19 @@ import "express-session";
  */
 export interface AuthUser
 {
-  /** Stable subject identifier from the identity provider. */
+  /** Stable subject identifier from the selected authentication authority. */
   sub: string;
 
   /** Issuer that authenticated the user. */
   issuer: string;
 
-  /** The caller's group memberships from the OIDC groups/roles claims (empty when none). */
+  /** The caller's verified group claims, or an empty set for the fixed Tier 3 identity. */
   groups: string[];
 
-  /** Silo whose OIDC client or standalone admission bound this login; absent until post-login admission succeeds. */
+  /** Silo whose selected login authority and standalone admission bound this login. */
   siloId?: string;
 
-  /** ID-token expiry that bounds how long cached authorization claims remain usable. */
+  /** Session authorization expiry that bounds how long cached authorization facts remain usable. */
   authorizationExpiresAt: string;
 
   /**
@@ -52,7 +51,7 @@ export interface AuthUser
   /** Human-readable email address when available. */
   email?: string;
 
-  /** Whether the provider marked the email as verified. */
+  /** Whether the selected authentication authority verified the email. */
   emailVerified?: boolean;
 
   /** Display name when available. */
@@ -70,7 +69,7 @@ declare module "express-session"
   interface SessionData
   {
     /**
-     * The authenticated human identity, established by the OIDC login flow and read by the
+     * The authenticated identity established by the selected browser-login flow and read by the
      * authorization gates (see {@link AuthUser}).
      */
     authUser?: AuthUser;
