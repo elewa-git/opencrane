@@ -7,6 +7,7 @@
 {{- $firstUser := .Values.clustertenantManager.firstUser -}}
 {{- $ociRegistry := .Values.clustertenantManager.workflows.ociRegistry -}}
 {{- $ociRegistryAuthorization := $ociRegistry.authorization -}}
+{{- $continuationKeyring := .Values.clustertenantManager.workflows.continuationKeyring -}}
 {{- $mcpExecutor := (index .Values "opencrane-mcp-executor").mcpExecutor -}}
 {{- $controlPlaneHost := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
 {{- $channelSiloId := .Values.channelProxy.siloId | default $firstUser.clusterTenant | default .Release.Name -}}
@@ -55,6 +56,12 @@
 {{- end -}}
 {{- if and $ociRegistryAuthorization.existingSecret (empty $ociRegistryAuthorization.secretKey) -}}
 {{- fail "clustertenantManager.workflows.ociRegistry.authorization.secretKey is required when an existingSecret is configured" -}}
+{{- end -}}
+{{- if empty $continuationKeyring.existingSecret -}}
+{{- fail "clustertenantManager.workflows.continuationKeyring.existingSecret is required" -}}
+{{- end -}}
+{{- if empty $continuationKeyring.secretKey -}}
+{{- fail "clustertenantManager.workflows.continuationKeyring.secretKey is required" -}}
 {{- end -}}
 apiVersion: apps/v1
 kind: Deployment
@@ -143,6 +150,8 @@ spec:
               value: {{ .Values.clustertenantManager.workflows.workerConcurrency | quote }}
             - name: OPENCRANE_WORKFLOW_POLL_INTERVAL_MS
               value: {{ .Values.clustertenantManager.workflows.pollIntervalMilliseconds | quote }}
+            - name: AGENT_RUNTIME_CONTINUATION_KEYRING_PATH
+              value: /var/run/opencrane/runtime-continuation/keyring.json
             - name: OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS
               value: {{ .Values.clustertenantManager.workflows.mcpEraProbeTimeoutMilliseconds | quote }}
             - name: OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES
@@ -345,6 +354,9 @@ spec:
             - name: memory-gateway-token
               mountPath: /var/run/opencrane/memory-gateway
               readOnly: true
+            - name: runtime-continuation-keyring
+              mountPath: /var/run/opencrane/runtime-continuation
+              readOnly: true
             {{- if $ociRegistryAuthorization.existingSecret }}
             - name: oci-registry-authorization
               mountPath: /var/run/opencrane/oci-registry
@@ -415,6 +427,14 @@ spec:
                   path: token
                   audience: opencrane-memory-gateway
                   expirationSeconds: {{ .Values.clustertenantManager.memoryGateway.projectedTokenTtlSeconds }}
+        # The server re-reads this keyring for every continuation operation so rotation is live.
+        - name: runtime-continuation-keyring
+          secret:
+            secretName: {{ $continuationKeyring.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ $continuationKeyring.secretKey | quote }}
+                path: keyring.json
         {{- if $ociRegistryAuthorization.existingSecret }}
         # OpenCrane re-reads this file for every registry request so Secret rotation takes effect.
         - name: oci-registry-authorization

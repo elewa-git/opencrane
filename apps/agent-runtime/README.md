@@ -46,8 +46,8 @@ external services, and saves durable state. The runtime never calls an external 
   attempt.
 - It sends model output, usage, tool requests, questions, and terminal results back as bounded
   candidates.
-- It stores only replaceable encrypted local checkpoint data. The server remains the source of
-  truth.
+- Before waiting, it sends one bounded continuation to the server. The server encrypts and saves
+  that state so a replacement runtime can continue the same model turn.
 
 ## Public surface
 
@@ -74,8 +74,6 @@ executor class and are not loaded into this Pod.
 - `OPENCRANE_WARM_PROFILE` — fixed claimed network profile expected by the readiness endpoint.
 - `POD_UID` — immutable Pod UID from the Kubernetes downward API.
 - `OPENCRANE_RUNTIME_LITELLM_BASE_URL` — in-cluster LiteLLM endpoint.
-- `OPENCRANE_RUNTIME_CHECKPOINT_DIR` — replaceable encrypted checkpoint directory.
-
 `/tmp/opencrane/proof-evidence.json` contains only the public JWK and its thumbprint. It contains no
 private proof key or model key. The file survives a container restart in the same Pod and disappears
 when the workflow deletes that Pod.
@@ -89,7 +87,7 @@ bounded temporary scratch storage.
 - `src/warm_runtime.py` owns the local readiness paths.
 - `src/bootstrap/` owns proof-key generation and the binding request.
 - `src/transport/` owns server communication.
-- `src/attempts/` owns command execution and saved-result resume.
+- `src/attempts/` owns command execution, the serializable continuation, and saved-result resume.
 - `src/model_loop/` adapts the bounded Pydantic AI loop.
 - `src/protocol/` converts model events into the stable OpenCrane protocol.
 

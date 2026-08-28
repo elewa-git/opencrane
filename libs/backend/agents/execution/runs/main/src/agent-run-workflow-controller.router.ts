@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import { __ParseAgentRunWorkflowTaskRequest, type AgentRunTaskInput, type AgentRunWarmRuntimeActivationCommand, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWarmRuntimeDeletionOutcome, type AgentRunWarmRuntimeReadinessCommand, type AgentRunWarmRuntimeReservationCommand, type AgentRunWarmRuntimeUnreservedCancellationOutcome } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import { __ParseAgentRunWorkflowTaskRequest, type AgentRunTaskInput, type AgentRunWarmRuntimeActivationCommand, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWarmRuntimeDeletionOutcome, type AgentRunWarmRuntimeReadinessCommand, type AgentRunWarmRuntimeReplacementOutcome, type AgentRunWarmRuntimeReservationCommand, type AgentRunWarmRuntimeUnreservedCancellationOutcome } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
@@ -56,6 +56,7 @@ export function __CreateAgentRunWorkflowControllerRouter(dependencies: AgentRunW
 	_RegisterWarmBinding(router, "/agent-run-workflows/warm-readiness", dependencies, _WarmReadiness, "agent_controller.agent_run_workflow.warm_readiness", async function _Readiness(input, task, command) { return await dependencies.warmAuthority.recordWarmReadiness(input, task, command); });
 	_RegisterWarmBinding(router, "/agent-run-workflows/warm-delete-request", dependencies, _WarmDeletion, "agent_controller.agent_run_workflow.warm_delete_request", async function _DeleteRequest(input, task, command) { return await dependencies.warmAuthority.requestWarmPodDeletion(input, task, command); });
 	_RegisterWarmBinding(router, "/agent-run-workflows/warm-deleted", dependencies, _WarmDeletion, "agent_controller.agent_run_workflow.warm_deleted", async function _Deleted(input, task, command) { return await dependencies.warmAuthority.recordWarmPodDeleted(input, task, command); });
+	_RegisterWarmBinding(router, "/agent-run-workflows/warm-replacement", dependencies, _WarmDeletion, "agent_controller.agent_run_workflow.warm_replacement", async function _Replacement(input, task, command) { return await dependencies.warmAuthority.prepareWarmRuntimeReplacement(input, task, command); });
 
 	router.post("/agent-run-workflows/warm-unreserved-cancellation", async function _UnreservedCancellation(request: Request, response: Response): Promise<void>
 	{
@@ -174,7 +175,8 @@ function _WarmReservation(value: unknown): WarmCommand<AgentRunWarmRuntimeReserv
 	{
 		return null;
 	}
-	return { input: envelope.input, task: envelope.task, command: fields as unknown as AgentRunWarmRuntimeReservationCommand };
+	const generation = envelope.command["generation"];
+	return !Number.isSafeInteger(generation) || (generation as number) < 1 ? null : { input: envelope.input, task: envelope.task, command: { ...fields, generation } as unknown as AgentRunWarmRuntimeReservationCommand };
 }
 
 /** Parses the result of one conditional profile patch. */
@@ -208,11 +210,12 @@ function _WarmDeletion(value: unknown): WarmCommand<AgentRunWarmRuntimeDeletionC
 	const podUid = envelope === null ? null : _WarmString(envelope.command, "podUid");
 	const deploymentUid = envelope === null ? null : _WarmString(envelope.command, "deploymentUid");
 	const profile = envelope === null ? null : _WarmString(envelope.command, "profile");
-	return envelope === null || podName === null || podUid === null || deploymentUid === null || profile === null ? null : { input: envelope.input, task: envelope.task, command: { podName, podUid, deploymentUid, profile } };
+	const generation = envelope?.command["generation"];
+	return envelope === null || podName === null || podUid === null || deploymentUid === null || profile === null || !Number.isSafeInteger(generation) || (generation as number) < 1 ? null : { input: envelope.input, task: envelope.task, command: { generation: generation as number, podName, podUid, deploymentUid, profile } };
 }
 
 /** Registers one authenticated warm command route with the common conflict response. */
-function _RegisterWarmBinding<TCommand>(router: Router, path: string, dependencies: AgentRunWorkflowControllerRouterDependencies, parse: (value: unknown) => WarmCommand<TCommand> | null, operation: string, execute: (input: WarmCommand<TCommand>["input"], task: WarmCommand<TCommand>["task"], command: TCommand) => Promise<AgentRunWarmRuntimeDeletionOutcome>): void
+function _RegisterWarmBinding<TCommand>(router: Router, path: string, dependencies: AgentRunWorkflowControllerRouterDependencies, parse: (value: unknown) => WarmCommand<TCommand> | null, operation: string, execute: (input: WarmCommand<TCommand>["input"], task: WarmCommand<TCommand>["task"], command: TCommand) => Promise<AgentRunWarmRuntimeDeletionOutcome | AgentRunWarmRuntimeReplacementOutcome>): void
 {
 	router.post(path, async function _WarmBinding(request: Request, response: Response): Promise<void>
 	{
@@ -271,7 +274,7 @@ function _BearerValue(value: string | undefined): string | null
 }
 
 /** Returns a binding result, or a conflict that stops a stale controller task. */
-function _RespondBinding(response: Response, outcome: AgentRunWarmRuntimeDeletionOutcome): void
+function _RespondBinding(response: Response, outcome: AgentRunWarmRuntimeDeletionOutcome | AgentRunWarmRuntimeReplacementOutcome): void
 {
 	if (outcome === "conflict")
 	{

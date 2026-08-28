@@ -7,6 +7,8 @@ export interface AgentRunWorkflowBootstrapReferenceInput
 	readonly runId: string;
 	/** Identifies the immutable attempt that owns the task. */
 	readonly attempt: number;
+	/** Identifies the Pod binding generation that may spend this reference. */
+	readonly generation: number;
 	/** Names the silo whose runtime namespace may contain the Job. */
 	readonly siloId: string;
 	/** Identifies the service that selected the runtime profile. */

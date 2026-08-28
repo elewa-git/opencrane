@@ -110,6 +110,7 @@ fi
 source "$COGNEE_IMAGE_POLICY"
 source "$SCRIPT_DIR/initial-model-provider.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
+source "$SCRIPT_DIR/runtime-continuation-keyring-secret.sh"
 source "$SCRIPT_DIR/database-migration-orchestrator.sh"
 source "$SCRIPT_DIR/database-release-finalization.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
@@ -158,6 +159,7 @@ BASE_DOMAIN="${OPENCRANE_BASE_DOMAIN:-}"
 STORAGE_CLASS=""        # empty → cluster default StorageClass
 ARTIFACT_STORAGE_CLASS="" # resolved class for the durable, expandable ArtifactStore PVC
 INVITATION_SIGNING_SECRET="${OPENCRANE_INVITATION_SIGNING_SECRET:-opencrane-invitation-signing}"
+RUNTIME_CONTINUATION_KEYRING_SECRET="${OPENCRANE_RUNTIME_CONTINUATION_KEYRING_SECRET:-opencrane-runtime-continuation}"
 MEMBERSHIP_MODE="${OPENCRANE_MEMBERSHIP_MODE:-standalone}"
 [[ "$MEMBERSHIP_MODE" == "standalone" || "$MEMBERSHIP_MODE" == "fleet" ]] || { echo "OPENCRANE_MEMBERSHIP_MODE must be standalone or fleet." >&2; exit 2; }
 VALUES_FILE=""
@@ -635,6 +637,7 @@ _copy_cnpg_uri_secret() {
 if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
   ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"
 fi
+ensure_runtime_continuation_keyring_secret "$NAMESPACE" "$RUNTIME_CONTINUATION_KEYRING_SECRET"
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
@@ -877,6 +880,7 @@ log "Installing the OpenCrane Helm release '$RELEASE'…"
 # and it only forces fields the chart actually applies (foreign managers of OTHER fields
 # are untouched). Without it a single stray imperative patch wedges every future upgrade.
 build_membership_helm_args
+build_runtime_continuation_keyring_helm_args
 helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --create-namespace
   --force-conflicts
   --set-string "networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST"
@@ -895,6 +899,7 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set-string "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET"
   --set "litellm.existingSecret=opencrane-litellm"
   "${MEMBERSHIP_HELM_ARGS[@]}"
+  "${RUNTIME_CONTINUATION_KEYRING_HELM_ARGS[@]}"
   "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}")
 [[ -n "$REGISTRY_PULL_SECRET" ]] && helm_args+=(--set-string "global.imagePullSecret=$REGISTRY_PULL_SECRET")
 if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then

@@ -1,14 +1,15 @@
 """Focused runtime elicitation producer and resume-result conformance tests."""
 
+import hashlib
 import importlib.util
+import json
 import threading
 import unittest
 from unittest import mock
 
+from src.attempts.continuation import clear_continuation, initialize_continuation, record_elicitation, record_tool_call
 from src.attempts.elicitation_results import resolve_elicitation_results
 from src.attempts.execution import execute_resume_attempt, execute_start_attempt
-from src.attempts.pending_elicitations import clear_pending_elicitations, record_pending_elicitation
-from src.attempts.pending_tools import record_pending_tool_call
 from src.attempts.resume_results import resolve_resume_results
 from src.model_loop.driver import (
     _external_toolsets,
@@ -17,11 +18,11 @@ from src.model_loop.driver import (
     pydantic_ai_resume_source,
     translate_framework_event,
 )
-from src.model_loop.histories import clear_model_history
 from src.model_loop.openai_generated_outputs import OpenAIGeneratedOutputCollector, OpenAIGeneratedOutputConfiguration
 from src.protocol.event_projector import RuntimeEventProjector
 from src.protocol.elicitation import ELICITATION_TOOL_NAME, canonical_json_digest, elicitation_proposal
 from src.protocol.wait_reasons import RuntimeWaitReason
+from src.constants import PROTOCOL_VERSION
 
 
 def _coordinates_payload() -> dict:
@@ -43,7 +44,10 @@ def _start_command() -> dict:
     """Build one fenced start command."""
     return {
         "kind": "start_attempt",
+        "protocolVersion": PROTOCOL_VERSION,
+        "runtimeInstanceId": "runtime-instance-1",
         "commandId": "command-start",
+        "sequence": 1,
         "fence": 2,
         "assignment": {"runId": "run-1", "attempt": 1},
         "payload": {"snapshot": {"inputGeneration": 1}, "compiledInput": _coordinates_payload()},
@@ -54,7 +58,10 @@ def _resume_command(results: list[object]) -> dict:
     """Build one fenced resume carrying server-owned elicitation results."""
     return {
         "kind": "resume_attempt",
+        "protocolVersion": PROTOCOL_VERSION,
+        "runtimeInstanceId": "runtime-instance-1",
         "commandId": "command-resume",
+        "sequence": 2,
         "fence": 3,
         "assignment": {"runId": "run-1", "attempt": 1},
         "payload": {
@@ -62,8 +69,40 @@ def _resume_command(results: list[object]) -> dict:
             "toolResults": [],
             "steeringRequests": [],
             "elicitationResults": results,
+            "continuation": _continuation(results),
         },
     }
+
+
+def _continuation(results: list[object]) -> dict:
+    """Build one digest-bound continuation carrying the expected question correlations."""
+    request_keys = {
+        result["requestKey"]
+        for result in results
+        if isinstance(result, dict) and isinstance(result.get("requestKey"), str)
+    }
+    pending = [
+        {"requestKey": request_key, "frameworkCallId": "framework-question-1"}
+        for request_key in sorted(request_keys)
+    ]
+    unsigned = {
+        "version": "opencrane.agent-runtime-continuation/v1",
+        "revision": 1,
+        "runId": "run-1",
+        "attempt": 1,
+        "inputGeneration": 2,
+        "appliedCommandSequence": 1,
+        "compiledInput": _coordinates_payload(),
+        "modelMessages": [{"message": "saved question"}],
+        "pendingToolCalls": [],
+        "pendingElicitations": pending,
+    }
+    encoded = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return {**unsigned, "digest": "sha256:" + hashlib.sha256(encoded).hexdigest()}
+
+
+def _accept_continuation(_coordinates: dict, _generation: int, _continuation_value: dict) -> None:
+    """Stand in for successful server persistence in direct producer tests."""
 
 
 def _free_text_event() -> dict:
@@ -95,6 +134,7 @@ class RuntimeElicitationProducerTests(unittest.TestCase):
                 "runtime-instance-1",
                 emitted.append,
                 event_source=lambda _compiled, _cancel, _steering: iter([_free_text_event()]),
+                save_continuation=_accept_continuation,
             )
 
         self.assertEqual([item["kind"] for item in emitted], ["event", "elicitation"])
@@ -127,6 +167,7 @@ class RuntimeElicitationProducerTests(unittest.TestCase):
                 "runtime-instance-1",
                 emitted.append,
                 event_source=lambda _compiled, _cancel, _steering: iter(events),
+                save_continuation=_accept_continuation,
             )
 
         self.assertEqual([item["kind"] for item in emitted], ["event", "elicitation", "event", "external_action"])
@@ -231,13 +272,14 @@ class RuntimeElicitationProducerTests(unittest.TestCase):
         self.assertNotIn("Bearer secret", str(emitted))
 
     def test_pending_elicitation_registry_is_bounded(self) -> None:
-        """More than 256 concurrent correlations fail closed instead of growing process memory."""
-        self.addCleanup(clear_pending_elicitations, "capacity-run", 1)
-        for index in range(256):
-            record_pending_elicitation("capacity-run", 1, f"question-{index}", f"call-{index}")
+        """More than 128 concurrent correlations fail closed instead of growing process memory."""
+        self.addCleanup(clear_continuation, "capacity-run", 1)
+        initialize_continuation("capacity-run", 1, 1, 1, {"runId": "capacity-run", "attempt": 1})
+        for index in range(128):
+            record_elicitation("capacity-run", 1, f"question-{index}", f"call-{index}")
 
         with self.assertRaisesRegex(ValueError, "capacity"):
-            record_pending_elicitation("capacity-run", 1, "question-overflow", "call-overflow")
+            record_elicitation("capacity-run", 1, "question-overflow", "call-overflow")
 
     @unittest.skipUnless(importlib.util.find_spec("pydantic_ai"), "pydantic-ai is a qualification dependency")
     def test_pinned_framework_builtin_call_resumes_through_deferred_result(self) -> None:
@@ -272,22 +314,21 @@ class RuntimeElicitationProducerTests(unittest.TestCase):
             deferred_tool_requests_cls=DeferredToolRequests,
         )
         compiled_input = {"runId": "run-1", "attempt": 1, "messages": [{"role": "user", "content": "Plan it."}]}
+        initialize_continuation("run-1", 1, 1, 1, compiled_input)
         cancel_event = threading.Event()
 
         def _components(_compiled_input):
             return (agent, OpenAIGeneratedOutputCollector(), "http://unused.invalid", "test-key")
 
-        self.addCleanup(clear_model_history, "run-1", 1)
-        self.addCleanup(clear_pending_elicitations, "run-1", 1)
+        self.addCleanup(clear_continuation, "run-1", 1)
         with mock.patch("src.model_loop.driver._model_loop_components", side_effect=_components):
             events = list(pydantic_ai_event_source(compiled_input, cancel_event, []))
             request = next(event for event in events if event.get("type") == "elicitation_request")
             emitted: list[dict] = []
             projector = RuntimeEventProjector(
-                {"protocolVersion": "opencrane.agent-runtime/v1", "runtimeInstanceId": "runtime-instance-1", "commandId": "command-1", "runId": "run-1", "attempt": 1, "fence": 1},
+                {"protocolVersion": PROTOCOL_VERSION, "runtimeInstanceId": "runtime-instance-1", "commandId": "command-1", "sequence": 1, "runId": "run-1", "attempt": 1, "fence": 1},
                 compiled_input,
                 emitted.append,
-                lambda *_args: None,
             )
             projector.emit(request)
             resumed = list(pydantic_ai_resume_source(
@@ -314,8 +355,7 @@ class RuntimeElicitationResumeTests(unittest.TestCase):
             "response": {"kind": "free_text", "text": "Use Nairobi."},
         }
         captured: dict = {}
-        record_pending_elicitation("run-1", 1, "question-1", "framework-question-1")
-        self.addCleanup(clear_pending_elicitations, "run-1", 1)
+        self.addCleanup(clear_continuation, "run-1", 1)
 
         def _resume_source(_compiled, model_results, _cancel, _steering):
             captured["results"] = dict(model_results)
@@ -338,9 +378,10 @@ class RuntimeElicitationResumeTests(unittest.TestCase):
             {"requestId": "request-3", "requestKey": "a2ui-1", "outcome": "answered"},
         ]
 
+        initialize_continuation("run-1", 1, 1, 1, _coordinates_payload())
         for index, result in enumerate(results):
-            record_pending_elicitation("run-1", 1, result["requestKey"], f"call-{index}")
-        self.addCleanup(clear_pending_elicitations, "run-1", 1)
+            record_elicitation("run-1", 1, result["requestKey"], f"call-{index}")
+        self.addCleanup(clear_continuation, "run-1", 1)
         resolved = resolve_elicitation_results(results)
 
         self.assertEqual(resolved, results)
@@ -378,9 +419,10 @@ class RuntimeElicitationResumeTests(unittest.TestCase):
 
     def test_malformed_mixed_batch_consumes_neither_result_kind(self) -> None:
         """A corrected mixed resume can reuse both correlations after malformed tool input fails."""
-        record_pending_tool_call("run-1", 1, "tool-call-1", "search", {"q": "safe"})
-        record_pending_elicitation("run-1", 1, "question-1", "input-call-1")
-        self.addCleanup(clear_pending_elicitations, "run-1", 1)
+        initialize_continuation("run-1", 1, 1, 1, _coordinates_payload())
+        record_tool_call("run-1", 1, "tool-call-1")
+        record_elicitation("run-1", 1, "question-1", "input-call-1")
+        self.addCleanup(clear_continuation, "run-1", 1)
         coordinates = {"runId": "run-1", "attempt": 1}
         elicitation = [{"requestId": "request-1", "requestKey": "question-1", "outcome": "expired"}]
 
@@ -403,9 +445,10 @@ class RuntimeElicitationResumeTests(unittest.TestCase):
 
     def test_framework_call_id_collision_consumes_neither_result(self) -> None:
         """Tool and elicitation terminal values cannot overwrite each other in model context."""
-        record_pending_tool_call("run-1", 1, "same-call", "search", {})
-        record_pending_elicitation("run-1", 1, "question-1", "same-call")
-        self.addCleanup(clear_pending_elicitations, "run-1", 1)
+        initialize_continuation("run-1", 1, 1, 1, _coordinates_payload())
+        record_tool_call("run-1", 1, "same-call")
+        record_elicitation("run-1", 1, "question-1", "same-call")
+        self.addCleanup(clear_continuation, "run-1", 1)
         coordinates = {"runId": "run-1", "attempt": 1}
 
         result = resolve_resume_results(

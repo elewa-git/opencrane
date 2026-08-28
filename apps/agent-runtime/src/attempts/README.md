@@ -11,7 +11,7 @@ start · resume · cancel command
              │
              ▼
 ┌────────────────────────┐
-│ attempt step  ◄── HERE │  coordinate loop, checkpoint, candidates, terminal gate
+│ attempt step  ◄── HERE │  coordinate loop, continuation, candidates, terminal gate
 └────────────┬───────────┘
              ▼
 ordered candidate sequence
@@ -19,10 +19,9 @@ ordered candidate sequence
 
 | File | Responsibility |
 | --- | --- |
-| `execution.py` | Validates commands and coordinates model-loop, checkpoint, and candidate seams. |
+| `continuation.py` | Keeps the one serializable attempt aggregate and validates replacement state. |
+| `execution.py` | Validates commands and coordinates model-loop, continuation, and candidate seams. |
 | `elicitation_results.py` | Validates exact terminal participant-input results before model resume. |
-| `pending_tools.py` | Keeps same-attempt external tool-call correlation until one server result consumes it. |
-| `pending_elicitations.py` | Keeps bounded request-key-to-framework-call correlation for participant input. |
 | `resume_results.py` | Validates and consumes mixed tool and elicitation results atomically. |
 | `tool_results.py` | Validates saved terminal tool-result shapes without repeating external work. |
 | `terminal.py` | Delivers at most one stable terminal candidate per active attempt. |
@@ -41,6 +40,11 @@ Answered ordinary input may carry one JSON response. A protected A2UI answer del
 response, while declined, expired, cancelled, and failed outcomes are response-free terminal
 markers. Unknown fields, duplicate request ids or keys, non-JSON content, and mismatched outcome
 shapes fail the whole resume without exposing participant content in logs or error candidates.
+
+Before an attempt waits, the runtime saves the exact compact model history and pending tool or
+question correlations through the authenticated control-plane connection. The server encrypts that
+continuation. A replacement runtime restores it from a fenced resume command before consuming any
+saved result.
 
 ## See also
 

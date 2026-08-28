@@ -25,6 +25,7 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("DATABASE_URL", "postgresql://opencrane:test@localhost:5432/opencrane");
 		vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.default.svc.cluster.local:8080");
 		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
+		vi.stubEnv("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH", "/var/run/opencrane/runtime-continuation/keyring.json");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_BASE_URL", "https://registry.example.test");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_REPOSITORY", "opencrane/mcp-images");
 		vi.stubEnv("OPENCRANE_SILO_ID", "silo-test");
@@ -62,6 +63,7 @@ describe("opencrane process config", function _ProcessConfigSuite()
 				artifactScannerClaimLeaseMilliseconds: 240_000,
 				artifactScannerNamespace: "artifact-scanner",
 				managedRuntimeNamespace: "managed-runs",
+				continuationKeyringPath: "/var/run/opencrane/runtime-continuation/keyring.json",
 				mcpCompanionClaimLeaseMilliseconds: 25_000,
 				mcpControllerClaimLeaseMilliseconds: 20_000,
 				mcpExecutorNamespace: "mcp-executors",

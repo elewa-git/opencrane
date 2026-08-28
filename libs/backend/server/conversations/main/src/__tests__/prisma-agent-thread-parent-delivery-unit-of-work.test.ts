@@ -19,7 +19,7 @@ function _Authority(transaction: object): PrismaAgentThreadParentDeliveryUnitOfW
 }
 
 /** Active attempt coordinates returned by the runtime-assignment authority. */
-function _Assignment(): object { return { siloId: "silo-1", agentServiceId: "service-1", attempt: 1, run: { attempt: 1 } }; }
+function _Assignment(): object { return { siloId: "silo-1", agentServiceId: "service-1", attempt: 1, bindingGeneration: 2, run: { attempt: 1 }, warmRuntimeReservations: [{ generation: 2 }] }; }
 
 describe("PrismaAgentThreadParentDeliveryUnitOfWork", function _Suite()
 {
@@ -44,9 +44,18 @@ describe("PrismaAgentThreadParentDeliveryUnitOfWork", function _Suite()
 		const existing = vi.fn();
 		const transaction = { workloadAssignment: { findFirst: vi.fn().mockResolvedValue(null) }, conversationAgentThread: { findFirst: vi.fn() }, agentThreadParentDelivery: { findUnique: existing } };
 		await expect(_Authority(transaction).deliver(_IDENTITY, _COMMAND)).resolves.toEqual({ outcome: "denied", reason: "authority_unavailable" });
-		expect(transaction.workloadAssignment.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ runId: "run-1", namespace: "runtime", serviceAccountName: "agent-runtime-service-1", podUid: "pod-1", state: "Registered", expiresAt: { gt: expect.any(Date) }, run: { state: AgentRunState.Running } }), select: expect.objectContaining({ attempt: true, run: { select: { attempt: true } } }) }));
+		expect(transaction.workloadAssignment.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ runId: "run-1", namespace: "runtime", serviceAccountName: "agent-runtime-service-1", state: "Registered", expiresAt: { gt: expect.any(Date) }, run: { state: AgentRunState.Running } }), select: expect.objectContaining({ attempt: true, bindingGeneration: true, run: { select: { attempt: true } }, warmRuntimeReservations: { where: expect.objectContaining({ namespace: "runtime", serviceAccountName: "agent-runtime-service-1", podUid: "pod-1", state: "Claimed" }), select: { generation: true } } }) }));
 		expect(transaction.conversationAgentThread.findFirst).not.toHaveBeenCalled();
 		expect(existing).not.toHaveBeenCalled();
+	});
+
+	it("rejects a Pod reservation older than the assignment generation", async function _RejectsOldPod()
+	{
+		const thread = vi.fn();
+		const transaction = { workloadAssignment: { findFirst: vi.fn().mockResolvedValue({ ..._Assignment(), warmRuntimeReservations: [{ generation: 1 }] }) }, conversationAgentThread: { findFirst: thread }, agentThreadParentDelivery: { findUnique: vi.fn() } };
+
+		await expect(_Authority(transaction).deliver(_IDENTITY, _COMMAND)).resolves.toEqual({ outcome: "denied", reason: "authority_unavailable" });
+		expect(thread).not.toHaveBeenCalled();
 	});
 
 	it("rejects a registered assignment after its run becomes terminal or advances attempt", async function _RejectsInactiveRun()

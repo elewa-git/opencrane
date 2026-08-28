@@ -19,7 +19,7 @@ function _Database()
 	let asset: Record<string, unknown> | null = null;
 	let revision: Record<string, unknown> | null = null;
 	let scanJob: Record<string, unknown> | null = null;
-	const assignment = { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, podUid: _IDENTITY.podUid, state: WorkloadAssignmentState.Registered, expiresAt: new Date("2030-01-01T00:00:00.000Z"), run: { id: "run-1", attempt: 2, conversationId: "conversation-1" } };
+	const assignment = { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, bindingGeneration: 2, state: WorkloadAssignmentState.Registered, expiresAt: new Date("2030-01-01T00:00:00.000Z"), run: { id: "run-1", attempt: 2, conversationId: "conversation-1" }, warmRuntimeReservations: [{ generation: 2 }] };
 
 	function _TicketWithAsset(): Record<string, unknown> | null
 	{

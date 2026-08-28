@@ -64,13 +64,13 @@ export class PrismaAgentRunWorkflowTaskReadRepository implements AgentRunWorkflo
 }
 
 /** Builds the internal binding reference from immutable task and run identity. */
-export function __AgentRunWorkflowBootstrapReferenceForTask(task: AgentRunWorkflowTaskRow): string
+export function __AgentRunWorkflowBootstrapReferenceForTask(task: AgentRunWorkflowTaskRow, generation: number): string
 {
 	if (task.taskId === null)
 	{
 		throw new Error("AgentRun workflow bootstrap requires a bound task receipt.");
 	}
-	return __AgentRunWorkflowBootstrapReference({ taskId: task.taskId, runId: task.runId, attempt: task.attempt, siloId: task.siloId, agentServiceId: task.run.agentServiceId, agentRevisionId: task.run.agentRevisionId, inputSnapshotDigest: task.run.inputSnapshotDigest });
+	return __AgentRunWorkflowBootstrapReference({ taskId: task.taskId, runId: task.runId, attempt: task.attempt, generation, siloId: task.siloId, agentServiceId: task.run.agentServiceId, agentRevisionId: task.run.agentRevisionId, inputSnapshotDigest: task.run.inputSnapshotDigest });
 }
 
 /** Digests immutable assignment fields so a binding reference cannot move to another workload. */

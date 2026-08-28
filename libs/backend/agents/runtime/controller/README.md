@@ -37,7 +37,8 @@ returns to the pool.
 ## Public surface
 
 - `__CreateWarmRuntimeKubernetesStore(options)` creates the Kubernetes adapter.
-- `WarmRuntimeKubernetesStore` defines list, activate, readiness, and delete operations.
+- `WarmRuntimeKubernetesStore` defines list, activate, readiness, current-Pod observation, and delete
+  operations.
 - `WarmRuntimePoolProfiles` maps each server-selected runtime profile to one fixed Helm pool.
 - `__AssertWarmRuntimeTiming` checks the claim and pool-miss latency budgets.
 

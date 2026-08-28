@@ -7,10 +7,10 @@ durable acceptance: every candidate still crosses the server's fenced persistenc
 import hashlib
 from collections.abc import Callable
 
+from ..attempts.continuation import record_elicitation, record_tool_call
 from .candidates import candidate, elicitation_candidate, normalize_event, tool_call_candidate
 from .elicitation import elicitation_proposal
 from .wait_reasons import RuntimeWaitReason
-from ..attempts.pending_elicitations import record_pending_elicitation
 
 
 class RuntimeEventProjector:
@@ -21,7 +21,6 @@ class RuntimeEventProjector:
         coordinates: dict[str, object],
         compiled_input: dict[str, object],
         post_candidate: Callable[[dict[str, object]], None],
-        record_tool_call: Callable[[str, int, str, str, object], None],
         publish_output: Callable[[dict[str, object], str, dict[str, object]], None] | None = None,
     ) -> None:
         """Bind projection to immutable command coordinates and its frozen grant set."""
@@ -30,7 +29,6 @@ class RuntimeEventProjector:
         self._coordinates = coordinates
         self._compiled_input = compiled_input
         self._post_candidate = post_candidate
-        self._record_tool_call = record_tool_call
         self._publish_output = publish_output
         # Deriving the message id from the command makes replay deterministic while keeping separate
         # command lifecycles distinct inside the same run attempt.
@@ -115,12 +113,10 @@ class RuntimeEventProjector:
             )
             # Record the exact pending-call identity before posting the actionable proposal. A resume
             # result is accepted only when it maps back to this run/attempt/invocation tuple.
-            self._record_tool_call(
+            record_tool_call(
                 str(self._coordinates["runId"]),
                 int(self._coordinates["attempt"]),  # type: ignore[arg-type]
                 str(proposal["toolInvocationId"]),
-                str(neutral_event.get("toolName")),
-                proposal["arguments"],
             )
         # Failed projections still emit their bounded error proposal, while valid proposals are sent
         # only after their explanatory event and resume correlation state have been established.
@@ -154,7 +150,7 @@ class RuntimeEventProjector:
         self.complete_message()
         # Record the link first, then send the question, in that order. If recording fails there is no
         # card yet; if sending fails the recorded link goes when the attempt ends.
-        record_pending_elicitation(
+        record_elicitation(
             str(self._coordinates["runId"]),
             int(self._coordinates["attempt"]),
             str(proposal["requestKey"]),

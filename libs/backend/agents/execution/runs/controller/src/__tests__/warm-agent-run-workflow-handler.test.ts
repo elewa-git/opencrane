@@ -15,12 +15,13 @@ function _Profiles(): WarmRuntimePoolProfiles
 function _Authority(calls: string[]): AgentRunWarmRuntimeControllerAuthority
 {
 	return {
-		async loadForTask() { return { siloId: "silo-a", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", workloadProfile: "personal-default", namespace: "silo-a-runtime", bootstrapReference: "bootstrap-v1_test", assignmentExpiresAt: "2099-01-01T00:00:00.000Z", observation: "running" }; },
+		async loadForTask() { return { siloId: "silo-a", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", workloadProfile: "personal-default", namespace: "silo-a-runtime", bootstrapReference: "bootstrap-v2_test", bindingGeneration: 1, assignmentExpiresAt: "2099-01-01T00:00:00.000Z", observation: "running" }; },
 		async reserveWarmPod() { calls.push("reserve"); return "bound"; },
 		async recordWarmProfileActivation() { calls.push("activation-recorded"); return "bound"; },
 		async recordWarmReadiness() { calls.push("readiness-recorded"); return "bound"; },
 		async requestWarmPodDeletion() { calls.push("delete-requested"); return "bound"; },
 		async recordWarmPodDeleted() { calls.push("deleted-recorded"); return "bound"; },
+		async prepareWarmRuntimeReplacement() { calls.push("replacement"); return "replace"; },
 		async finalizeCancellationWithoutWarmReservation() { calls.push("unreserved-cancellation"); return "bound"; },
 		async terminalizeFailedTask() { calls.push("terminalized"); },
 		async observe() { return "completed"; },
@@ -34,6 +35,7 @@ function _Kubernetes(calls: string[]): WarmRuntimeKubernetesStore
 		async listGenericPods() { calls.push("list"); return [{ podName: "warm-abc", podUid: "pod-uid", resourceVersion: "12", deploymentUid: "deployment-uid", podIp: "10.42.0.10" }]; },
 		async activateProfile() { calls.push("activate"); return { podUid: "pod-uid", resourceVersion: "13", profile: "personal" }; },
 		async proveReadiness() { calls.push("probe"); return { podUid: "pod-uid", resourceVersion: "13", profile: "personal", observedAt: "2026-08-27T12:00:00.000Z" }; },
+		async observeClaimedPod() { calls.push("observe-pod"); return "running"; },
 		deletePod: vi.fn(async function _DeletePod() { calls.push("delete"); }),
 	};
 }
@@ -78,6 +80,76 @@ describe("warm AgentRun workflow handler", function _WarmAgentRunHandler()
 		expect(kubernetes.deletePod).toHaveBeenCalledWith(expect.objectContaining({ profile: "personal" }), expect.anything());
 	});
 
+	it("replaces a missing Pod only while the run is waiting for input", async function _ReplacesWaitingRuntime()
+	{
+		const calls: string[] = [];
+		const authority = _Authority(calls);
+		const initial = await authority.loadForTask({} as never, {} as never);
+		let loads = 0;
+		authority.loadForTask = vi.fn(async function _Load()
+		{
+			loads += 1;
+			return loads === 1 ? { ...initial!, observation: "waiting_for_input" as const } : { ...initial!, bindingGeneration: 2, observation: "completed" as const };
+		});
+		authority.observe = vi.fn(async function _Waiting() { return "waiting_for_input" as const; });
+		const kubernetes = _Kubernetes(calls);
+		kubernetes.observeClaimedPod = vi.fn(async function _Missing() { return "missing" as const; });
+		const handler = __CreateWarmAgentRunWorkflowHandler({ authority, kubernetes, profiles: _Profiles(), pollIntervalMilliseconds: 100 });
+
+		const result = await handler.run({ checkpoint: async function _Checkpoint(_options: unknown, operation: () => Promise<unknown>) { return await operation(); }, sleepUntil: vi.fn(), task: { taskId: "task-1", taskName: "agent-runs.execute/v1", idempotencyKey: "agent-run:silo-a:run-1:attempt:1" } } as never, { siloId: "silo-a", runId: "run-1", attempt: 1 });
+
+		expect(result.terminalState).toBe(AgentRunTaskTerminalStates.Completed);
+		expect(calls).toContain("replacement");
+		expect(calls).toContain("delete");
+	});
+
+	it("finishes an older saved deletion before reserving the replacement generation", async function _DrainsPriorDeletion()
+	{
+		const calls: string[] = [];
+		const authority = _Authority(calls);
+		const initial = await authority.loadForTask({} as never, {} as never);
+		let loads = 0;
+		authority.loadForTask = vi.fn(async function _Load()
+		{
+			loads += 1;
+			return loads === 1
+				? { ...initial!, bindingGeneration: 2, pendingDeletion: { generation: 1, podName: "warm-old", podUid: "pod-old", deploymentUid: "deployment-uid", profile: "personal" } }
+				: { ...initial!, bindingGeneration: 2, observation: "completed" as const };
+		});
+		const kubernetes = _Kubernetes(calls);
+		const handler = __CreateWarmAgentRunWorkflowHandler({ authority, kubernetes, profiles: _Profiles(), pollIntervalMilliseconds: 100 });
+
+		const result = await handler.run({ checkpoint: async function _Checkpoint(_options: unknown, operation: () => Promise<unknown>) { return await operation(); }, sleepUntil: vi.fn(), task: { taskId: "task-1", taskName: "agent-runs.execute/v1", idempotencyKey: "agent-run:silo-a:run-1:attempt:1" } } as never, { siloId: "silo-a", runId: "run-1", attempt: 1 });
+
+		expect(result.terminalState).toBe(AgentRunTaskTerminalStates.Completed);
+		expect(kubernetes.deletePod).toHaveBeenCalledWith(expect.objectContaining({ podName: "warm-old", podUid: "pod-old" }), expect.anything());
+		expect(calls).toEqual(["delete", "deleted-recorded"]);
+	});
+
+	it("does not replay a missing Pod while the model loop is running", async function _RequiresRecoveryForRunningRuntime()
+	{
+		const calls: string[] = [];
+		const authority = _Authority(calls);
+		const initial = await authority.loadForTask({} as never, {} as never);
+		let loads = 0;
+		authority.loadForTask = vi.fn(async function _Load()
+		{
+			loads += 1;
+			return loads === 1 ? initial : { ...initial!, observation: "completed" as const };
+		});
+		authority.observe = vi.fn(async function _Running() { return "running" as const; });
+		authority.prepareWarmRuntimeReplacement = vi.fn(async function _RecoveryRequired() { calls.push("recovery-required"); return "recovery_required" as const; });
+		const kubernetes = _Kubernetes(calls);
+		kubernetes.observeClaimedPod = vi.fn(async function _Terminal() { return "terminal" as const; });
+		const handler = __CreateWarmAgentRunWorkflowHandler({ authority, kubernetes, profiles: _Profiles(), pollIntervalMilliseconds: 100 });
+
+		const result = await handler.run({ checkpoint: async function _Checkpoint(_options: unknown, operation: () => Promise<unknown>) { return await operation(); }, sleepUntil: vi.fn(), task: { taskId: "task-1", taskName: "agent-runs.execute/v1", idempotencyKey: "agent-run:silo-a:run-1:attempt:1" } } as never, { siloId: "silo-a", runId: "run-1", attempt: 1 });
+
+		expect(result.terminalState).toBe(AgentRunTaskTerminalStates.Completed);
+		expect(calls).toContain("recovery-required");
+		expect(calls).not.toContain("replacement");
+	});
+
 	it("waits after Pod deletion until provider output no longer defers cancellation", async function _WaitsForOutputLease()
 	{
 		const calls: string[] = [];
@@ -101,7 +173,7 @@ describe("warm AgentRun workflow handler", function _WarmAgentRunHandler()
 	{
 		const calls: string[] = [];
 		const authority = _Authority(calls);
-		authority.loadForTask = vi.fn(async function _Load() { return { siloId: "silo-a", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", workloadProfile: "personal-default", namespace: "silo-a-runtime", bootstrapReference: "bootstrap-v1_test", assignmentExpiresAt: "2099-01-01T00:00:00.000Z", observation: "cancelling" as const }; });
+		authority.loadForTask = vi.fn(async function _Load() { return { siloId: "silo-a", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", workloadProfile: "personal-default", namespace: "silo-a-runtime", bootstrapReference: "bootstrap-v2_test", bindingGeneration: 1, assignmentExpiresAt: "2099-01-01T00:00:00.000Z", observation: "cancelling" as const }; });
 		const kubernetes = _Kubernetes(calls);
 		const handler = __CreateWarmAgentRunWorkflowHandler({ authority, kubernetes, profiles: _Profiles(), pollIntervalMilliseconds: 100 });
 

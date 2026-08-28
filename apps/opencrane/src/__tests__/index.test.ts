@@ -4,7 +4,7 @@ import express, { Router, type Express } from "express";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, PublicHealthServiceNames, PublicHealthServiceStatuses, PublicHealthStatuses, RuntimeCandidateKinds, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME, type RuntimeCandidate } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_VERSION, PublicHealthServiceNames, PublicHealthServiceStatuses, PublicHealthStatuses, RuntimeCandidateKinds, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME, type RuntimeCandidate } from "@opencrane/contracts";
 import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _RateLimit } from "@opencrane/backend/server/infra/http";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
@@ -81,6 +81,7 @@ async function _BuildRuntimeCandidateApp(username: string, audiences: string[] =
     {
       return run({
         $queryRaw: vi.fn().mockResolvedValue([]),
+        warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(null) },
         workloadAssignment: { findUnique: vi.fn().mockResolvedValue(null) },
       });
     }),
@@ -107,7 +108,7 @@ async function _BuildRuntimeCandidateApp(username: string, audiences: string[] =
 function _RuntimeCandidate(): RuntimeCandidate
 {
   return {
-    protocolVersion: AGENT_RUNTIME_PROTOCOL_V1,
+    protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION,
     runtimeInstanceId: "runtime-1",
     commandId: "command-1",
     candidateId: "candidate-1",
@@ -129,7 +130,8 @@ describe("Control Plane", () =>
     vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo-runtime");
     vi.stubEnv("AGENT_RUNTIME_MANAGED_NAMESPACE", "opencrane-silo-managed-runtime");
     vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.opencrane-silo.svc.cluster.local:8080");
-    vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
+		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
+		vi.stubEnv("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH", "/var/run/opencrane/runtime-continuation/keyring.json");
 		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_BASE_URL", "https://registry.example.test");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_REPOSITORY", "opencrane/mcp-images");

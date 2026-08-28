@@ -1,4 +1,4 @@
-import { AGENT_RUNTIME_PROTOCOL_V1, RunInputSnapshotIdentityKinds, RuntimeCandidateKinds, type CompiledRunInput, type RunInputSnapshot, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_VERSION, RunInputSnapshotIdentityKinds, RuntimeCandidateKinds, type CompiledRunInput, type RunInputSnapshot, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 import { describe, expect, it } from "vitest";
 
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "../runtime-protocol-authority";
@@ -41,7 +41,7 @@ function _compiledInput(): CompiledRunInput
 function _command(): RuntimeStartAttemptCommand
 {
 	return {
-		protocolVersion: AGENT_RUNTIME_PROTOCOL_V1,
+		protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION,
 		runtimeInstanceId: "runtime-1",
 		commandId: "command-1",
 		sequence: 3,
@@ -57,13 +57,13 @@ function _command(): RuntimeStartAttemptCommand
 /** Returns a valid runtime event candidate for the current authority. */
 function _candidate(): RuntimeCandidate
 {
-	return { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1", runId: "run-1", attempt: 2, fence: 7, kind: RuntimeCandidateKinds.Event, eventType: "run.started", payload: {} };
+	return { protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION, runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1", runId: "run-1", attempt: 2, fence: 7, kind: RuntimeCandidateKinds.Event, eventType: "run.started", payload: {} };
 }
 
 /** Returns a valid external-action candidate for the current authority. */
 function _actionCandidate(): RuntimeCandidate
 {
-	return { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "action-1", runId: "run-1", attempt: 2, fence: 7, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId: "tool-1", toolInvocationId: "invocation-1", argumentsDigest: "sha256:arguments", arguments: {} };
+	return { protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION, runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "action-1", runId: "run-1", attempt: 2, fence: 7, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId: "tool-1", toolInvocationId: "invocation-1", argumentsDigest: "sha256:arguments", arguments: {} };
 }
 
 describe("runtime protocol authority", function _describeRuntimeProtocolAuthority()

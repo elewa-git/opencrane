@@ -13,7 +13,7 @@ const _NOW = new Date("2026-08-11T10:00:00.000Z");
 /** Exact live assignment selected by the output authority. */
 function _Assignment()
 {
-	return { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, podUid: _IDENTITY.podUid, state: WorkloadAssignmentState.Registered, expiresAt: new Date(Date.now() + 60_000), run: { id: "run-1", attempt: 2, conversationId: "conversation-1" } };
+	return { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, bindingGeneration: 2, state: WorkloadAssignmentState.Registered, expiresAt: new Date(Date.now() + 60_000), run: { id: "run-1", attempt: 2, conversationId: "conversation-1" }, warmRuntimeReservations: [{ generation: 2 }] };
 }
 
 /** Complete generated asset fixture returned by mocked Prisma writes. */
@@ -43,11 +43,20 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 		const result = await new PrismaConversationAssetOutputRepository(transaction as never).reserve(_IDENTITY, _COMMAND);
 
 		expect(result).toEqual({ outcome: "issued", ticketId: expect.any(String) });
-		expect(transaction.workloadAssignment.findFirst).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 2, namespace: "runtime-ns", serviceAccountName: "agent-runtime-default", podUid: "pod-1", state: WorkloadAssignmentState.Registered, expiresAt: { gt: expect.any(Date) }, run: { attempt: 2 } }, include: { run: true } });
+		expect(transaction.workloadAssignment.findFirst).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 2, namespace: "runtime-ns", serviceAccountName: "agent-runtime-default", state: WorkloadAssignmentState.Registered, expiresAt: { gt: expect.any(Date) }, run: { attempt: 2 } }, include: { run: true, warmRuntimeReservations: { where: { namespace: "runtime-ns", serviceAccountName: "agent-runtime-default", podUid: "pod-1", state: "Claimed", idleDeadline: { gt: expect.any(Date) } }, select: { generation: true } } } });
 		expect(transaction.conversationRunEvent.findFirst).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", runId: "run-1", type: "message.started", messageId: "message-1" }, select: { sequence: true, payload: true } });
 		expect(transaction.artifact.create).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1", ownerPrincipalId: "principal-1", kind: ArtifactKind.Generated }) });
 		expect(transaction.artifactUploadLease.create).toHaveBeenCalledWith({ data: expect.objectContaining({ expectedContentAddress: _ADDRESS, expectedByteLength: 5n, mediaType: "application/pdf" }) });
 		expect(transaction.conversationAsset.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", runAttempt: 2, runEventSequence: 7, runMessageId: "message-1", provenance: ConversationAssetProvenance.AgentOutput, state: ConversationAssetState.Uploading }) });
+	});
+
+	it("rejects an output from a Pod reservation older than the assignment generation", async function _RejectsOldPod()
+	{
+		const assignment = { ..._Assignment(), warmRuntimeReservations: [{ generation: 1 }] };
+		const transaction = { workloadAssignment: { findFirst: vi.fn().mockResolvedValue(assignment) }, conversationRunEvent: { findFirst: vi.fn() }, principal: { findMany: vi.fn() } };
+
+		await expect(new PrismaConversationAssetOutputRepository(transaction as never).reserve(_IDENTITY, _COMMAND)).resolves.toEqual({ outcome: "denied", reason: "runtime_unavailable" });
+		expect(transaction.conversationRunEvent.findFirst).not.toHaveBeenCalled();
 	});
 
 	it("enforces the approved 200 MiB total across all outputs for one message", async function _LimitsMessageTotal()

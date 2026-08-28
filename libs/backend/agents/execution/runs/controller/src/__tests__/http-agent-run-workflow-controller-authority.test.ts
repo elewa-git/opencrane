@@ -23,7 +23,7 @@ describe("warm AgentRun workflow controller HTTP authority", function _Suite()
 		{
 			expect(String(input)).toBe("http://opencrane-server.silo-a.svc.cluster.local:3001/api/internal/agent-controller/agent-run-workflows/load");
 			expect(init?.headers).toEqual(expect.objectContaining({}));
-			return new Response(JSON.stringify({ siloId: "silo-a", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", workloadProfile: "personal-default", namespace: "silo-a-runtime", bootstrapReference: "bootstrap-v1_test", assignmentExpiresAt: "2099-01-01T00:00:00.000Z", observation: "running" }), { status: 200 });
+			return new Response(JSON.stringify({ siloId: "silo-a", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", workloadProfile: "personal-default", namespace: "silo-a-runtime", bootstrapReference: "bootstrap-v2_test", bindingGeneration: 1, assignmentExpiresAt: "2099-01-01T00:00:00.000Z", observation: "running" }), { status: 200 });
 		});
 		const authority = _Authority(fetch);
 

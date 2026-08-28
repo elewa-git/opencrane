@@ -27,7 +27,7 @@ runtime.py  warm binding, process lifecycle, and bounded reconnects
     model_loop/       protocol/
     Pydantic adapter  candidate projection
         │
-        └── encrypted local checkpoint
+        └── bounded continuation saved by the server
 
 config.py · constants.py · observability.py support the components above.
 ```
@@ -62,8 +62,8 @@ config.py · constants.py · observability.py support the components above.
    sequence, storage lease, or receipt. Terminal delivery alone may reuse
    its stable identifier after an ambiguous network loss.
 8. A `resume_attempt` carries exact saved tool and participant-input results. `attempts/tool_results.py` maps each
-   `toolInvocationId` back to the pending call recorded at proposal time
-   (`attempts/pending_tools.py`) and feeds the framework that saved result.
+   `toolInvocationId` back to the pending call recorded in the attempt continuation and feeds the
+   framework that saved result.
    `attempts/elicitation_results.py` rejects unknown fields and invalid terminal shapes before any
    pending tool result is consumed. Ordinary answers enter the next model boundary exactly;
    declined, expired, cancelled, failed, and protected redacted answers enter as terminal markers.
@@ -78,8 +78,10 @@ config.py · constants.py · observability.py support the components above.
   relationship, approval, budgets, cancellation, tool execution, and durable terminal state. The
   runtime proposes; it does not author authority.
 - Every candidate echoes the runtime instance, command, run, attempt, and fence that admitted it.
-- The local checkpoint is encrypted, replaceable, and bound to run coordinates. Missing, corrupt,
-  foreign, or stale checkpoint data is discarded; it never overrides server state.
+- The process keeps one serializable working aggregate for model history and pending call
+  correlations. Before waiting it sends the bounded plaintext over the authenticated internal
+  connection; the server encrypts and stores it. A resume restores only a digest-checked continuation
+  whose run, attempt, input generation, revision, and command sequence match.
 - Public proof evidence is saved in the Pod's temporary scratch before the first bind. A container
   restart on the same Pod reuses that public evidence and receives a fresh model key in memory. No
   private proof key or model key is written to disk.

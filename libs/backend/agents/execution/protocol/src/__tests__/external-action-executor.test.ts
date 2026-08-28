@@ -8,7 +8,7 @@ import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, UnsupportedE
 /** Build a candidate for the given tool revision prefix. */
 function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate
 {
-	return { protocolVersion: "opencrane.agent-runtime/v1", runtimeInstanceId: "instance-1", commandId: "command-1", candidateId: "candidate-1", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId, toolInvocationId: "invocation-1", argumentsDigest: "sha256:d", arguments: { query: "a" } };
+	return { protocolVersion: "opencrane.agent-runtime/v2", runtimeInstanceId: "instance-1", commandId: "command-1", candidateId: "candidate-1", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId, toolInvocationId: "invocation-1", argumentsDigest: "sha256:d", arguments: { query: "a" } };
 }
 
 /** The composition root wires only fail-closed transports until a real one is verified. */

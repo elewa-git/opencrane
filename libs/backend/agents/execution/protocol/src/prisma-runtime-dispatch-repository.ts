@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { AgentRunState as PrismaAgentRunState, Prisma, RuntimeSteeringRequestState, WorkloadAssignmentState, WorkloadKind } from "@prisma/client";
+import { AgentRunState as PrismaAgentRunState, Prisma, RuntimeSteeringRequestState, WarmRuntimeReservationState, WorkloadAssignmentState, WorkloadKind } from "@prisma/client";
 
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, WARM_RUNTIME_SERVICE_ACCOUNT_NAME, type RuntimeAssignmentIdentity } from "@opencrane/contracts";
 
@@ -64,7 +64,13 @@ export class PrismaRuntimeDispatchRepository implements RuntimeStreamBindingRepo
 	/** Advances the exact command sequence fence. */
 	advanceCommand(runId: string, attempt: number, expectedSequence: number, nextSequence: number)
 	{
-		return this.prisma.runtimeCommandStream.updateMany({ where: { runId, attempt, nextCommandSequence: expectedSequence }, data: { nextCommandSequence: nextSequence } });
+		return this.prisma.runtimeCommandStream.updateMany({ where: { runId, attempt, nextCommandSequence: expectedSequence }, data: { nextCommandSequence: nextSequence, dispatchBlockedReason: null, dispatchBlockedAt: null } });
+	}
+
+	/** Records a visible fail-closed state without consuming the unsendable resume inputs. */
+	markDispatchRecoveryRequired(runId: string, attempt: number, expectedSequence: number, reason: string, now: Date)
+	{
+		return this.prisma.runtimeCommandStream.updateMany({ where: { runId, attempt, nextCommandSequence: expectedSequence }, data: { dispatchBlockedReason: reason, dispatchBlockedAt: now } });
 	}
 
 	/** Marks steering requests delivered by a saved resume command. */
@@ -88,8 +94,11 @@ export class PrismaRuntimeDispatchRepository implements RuntimeStreamBindingRepo
 	/** Loads and validates the assignment, run, and snapshot for one reviewed Pod identity. */
 	async loadContext(config: RuntimeDispatchAuthorityConfig, identity: RuntimeStreamWorkloadIdentity): Promise<RuntimeDispatchContext | null>
 	{
-		const assignment = await this.prisma.workloadAssignment.findUnique({ where: { namespace_podUid: { namespace: identity.namespace, podUid: identity.podUid } } });
-		if (assignment === null || assignment.podUid === null || assignment.state !== WorkloadAssignmentState.Registered || assignment.serviceAccountName !== identity.serviceAccountName)
+		const reservation = await this.prisma.warmRuntimeReservation.findUnique({ where: { namespace_podUid: { namespace: identity.namespace, podUid: identity.podUid } } });
+		if (reservation === null || reservation.state !== WarmRuntimeReservationState.Claimed || reservation.serviceAccountName !== identity.serviceAccountName)
+			return null;
+		const assignment = await this.prisma.workloadAssignment.findUnique({ where: { runId_attempt: { runId: reservation.runId, attempt: reservation.attempt } } });
+		if (assignment === null || assignment.bindingGeneration !== reservation.generation || assignment.state !== WorkloadAssignmentState.Registered || assignment.serviceAccountName !== reservation.serviceAccountName)
 			return null;
 		const run = await this.prisma.agentRun.findUnique({ where: { id: assignment.runId } });
 		if (run === null || run.attempt !== assignment.attempt || run.agentServiceId !== assignment.agentServiceId || run.agentRevisionId !== assignment.agentRevisionId || run.siloId !== assignment.siloId)
@@ -98,9 +107,9 @@ export class PrismaRuntimeDispatchRepository implements RuntimeStreamBindingRepo
 		if (snapshot === null)
 			return null;
 		const snapshotIdentity = _snapshotIdentity(snapshot.identitySnapshot);
-		if (snapshotIdentity === null || assignment.subjectId !== snapshotIdentity.executionSubjectId || !_RuntimePlaneMatches(snapshotIdentity, assignment, config))
+		if (snapshotIdentity === null || assignment.subjectId !== snapshotIdentity.executionSubjectId || !_RuntimePlaneMatches(snapshotIdentity, assignment, reservation, config))
 			return null;
-		const assignmentDigest = _computeAssignmentDigest({ runId: assignment.runId, attempt: assignment.attempt, agentServiceId: assignment.agentServiceId, agentRevisionId: assignment.agentRevisionId, siloId: assignment.siloId, subjectId: assignment.subjectId, identity: snapshotIdentity, serviceAccountName: assignment.serviceAccountName, podUid: assignment.podUid, expiresAt: assignment.expiresAt, createdAt: assignment.createdAt });
+		const assignmentDigest = _computeAssignmentDigest({ runId: assignment.runId, attempt: assignment.attempt, generation: reservation.generation, agentServiceId: assignment.agentServiceId, agentRevisionId: assignment.agentRevisionId, siloId: assignment.siloId, subjectId: assignment.subjectId, identity: snapshotIdentity, serviceAccountName: reservation.serviceAccountName, podUid: reservation.podUid, expiresAt: reservation.idleDeadline, createdAt: reservation.reservedAt });
 		return {
 			runId: assignment.runId,
 			attempt: assignment.attempt,
@@ -116,27 +125,27 @@ export class PrismaRuntimeDispatchRepository implements RuntimeStreamBindingRepo
 			personaRevisionId: snapshot.personaRevisionId,
 			identity: snapshotIdentity,
 			capabilitySetDigest: snapshot.capabilitySetDigest,
-			serviceAccountName: assignment.serviceAccountName,
+			serviceAccountName: reservation.serviceAccountName,
 			workloadKind: assignment.workloadKind,
-			podUid: assignment.podUid,
-			leaseExpiresAtEpochMs: assignment.expiresAt.getTime(),
-			assignmentIssuedAt: assignment.createdAt.toISOString(),
-			assignmentExpiresAt: assignment.expiresAt.toISOString(),
+			podUid: reservation.podUid,
+			leaseExpiresAtEpochMs: reservation.idleDeadline.getTime(),
+			assignmentIssuedAt: reservation.reservedAt.toISOString(),
+			assignmentExpiresAt: reservation.idleDeadline.toISOString(),
 		};
 	}
 }
 
 /** Returns whether the assignment plane matches the snapshot identity. */
-function _RuntimePlaneMatches(identity: RuntimeAssignmentIdentity, assignment: { namespace: string; audience: string; serviceAccountName: string; workloadKind: WorkloadKind }, config: RuntimeDispatchAuthorityConfig): boolean
+function _RuntimePlaneMatches(identity: RuntimeAssignmentIdentity, assignment: { audience: string; workloadKind: WorkloadKind }, reservation: { namespace: string; serviceAccountName: string }, config: RuntimeDispatchAuthorityConfig): boolean
 {
-	const warm = assignment.workloadKind === WorkloadKind.Deployment && assignment.serviceAccountName === WARM_RUNTIME_SERVICE_ACCOUNT_NAME;
+	const warm = assignment.workloadKind === WorkloadKind.Deployment && reservation.serviceAccountName === WARM_RUNTIME_SERVICE_ACCOUNT_NAME;
 	if (identity.kind === RunInputSnapshotIdentityKinds.Service)
 	{
-		return assignment.namespace === config.managedRuntimeNamespace
+		return reservation.namespace === config.managedRuntimeNamespace
 			&& assignment.audience === MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE
 			&& warm;
 	}
-	return assignment.namespace === config.personalRuntimeNamespace
+	return reservation.namespace === config.personalRuntimeNamespace
 		&& assignment.audience === AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE
 		&& warm;
 }
@@ -159,9 +168,9 @@ function _toAdmissionRunState(state: PrismaAgentRunState): RuntimeAdmissionRunSt
 }
 
 /** Hashes the assignment identity fields in one fixed order. */
-function _computeAssignmentDigest(context: { runId: string; attempt: number; agentServiceId: string; agentRevisionId: string; siloId: string; subjectId: string; identity: RuntimeAssignmentIdentity; serviceAccountName: string; podUid: string; expiresAt: Date; createdAt: Date }): string
+function _computeAssignmentDigest(context: { runId: string; attempt: number; generation: number; agentServiceId: string; agentRevisionId: string; siloId: string; subjectId: string; identity: RuntimeAssignmentIdentity; serviceAccountName: string; podUid: string; expiresAt: Date; createdAt: Date }): string
 {
-	const canonical = JSON.stringify(["opencrane-runtime-assignment-digest-v2", context.runId, context.attempt, context.agentServiceId, context.agentRevisionId, context.siloId, context.subjectId, _CanonicalAssignmentIdentity(context.identity), context.serviceAccountName, context.podUid, context.expiresAt.toISOString(), context.createdAt.toISOString()]);
+	const canonical = JSON.stringify(["opencrane-runtime-assignment-digest-v3", context.runId, context.attempt, context.generation, context.agentServiceId, context.agentRevisionId, context.siloId, context.subjectId, _CanonicalAssignmentIdentity(context.identity), context.serviceAccountName, context.podUid, context.expiresAt.toISOString(), context.createdAt.toISOString()]);
 	return `sha256:${createHash("sha256").update(canonical, "utf8").digest("hex")}`;
 }
 

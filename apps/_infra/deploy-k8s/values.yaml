@@ -463,6 +463,11 @@ clustertenantManager:
     databasePoolSize: 2
     workerConcurrency: 2
     pollIntervalMilliseconds: 100
+    # -- Continuations hold the exact paused model state. The deploy script creates this
+    # rotating encryption keyring once and retains it across upgrades.
+    continuationKeyring:
+      existingSecret: opencrane-runtime-continuation
+      secretKey: keyring.json
     mcpEraProbeTimeoutMilliseconds: 5000
     mcpEraProbeMaximumResponseBytes: 65536
     # -- OCI Image Layout ZIP admission imports accepted MCP images into this fixed repository.

@@ -187,6 +187,9 @@
       "@opencrane/backend/server/infra/agent-runtime-stream": [
         "./libs/backend/server/infra/agent-runtime-stream/src/index.ts"
       ],
+      "@opencrane/backend/server/infra/agent-runtime-continuation": [
+        "./libs/backend/server/infra/agent-runtime-continuation/src/index.ts"
+      ],
       "@opencrane/backend/server/infra/workload-identity": [
         "./libs/backend/server/infra/workload-identity/src/index.ts"
       ],

@@ -1,0 +1,11 @@
+{
+  "name": "backend-server-infra-agent-runtime-continuation",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/server/infra/agent-runtime-continuation/src",
+  "tags": ["type:lib", "layer:infra", "scope:agent-runtime-continuation"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/server/infra/agent-runtime-continuation" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/server/infra/agent-runtime-continuation" } }
+  }
+}

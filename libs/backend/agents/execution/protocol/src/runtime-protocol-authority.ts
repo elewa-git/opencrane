@@ -1,4 +1,4 @@
-import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCommandKinds } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_VERSION, RuntimeCommandKinds } from "@opencrane/contracts";
 import { AgentRunStates } from "@opencrane/models/agents";
 
 import { RuntimeAdmissionOutcomes, type RuntimeAdmissionRunState, type RuntimeCandidateAdmission, type RuntimeCandidateAdmissionInput, type RuntimeCommandAdmission, type RuntimeCommandAdmissionInput } from "./runtime-protocol-authority.types";
@@ -74,7 +74,8 @@ export function __AdmitRuntimeCommand(input: RuntimeCommandAdmissionInput): Runt
 	{
 		return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "invalid_frame" };
 	}
-	if (command.protocolVersion !== AGENT_RUNTIME_PROTOCOL_V1) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "unsupported_protocol" };
+	if (command.protocolVersion !== AGENT_RUNTIME_PROTOCOL_VERSION)
+		return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "unsupported_protocol" };
 	if (nowEpochMs < issuedAtEpochMs) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "not_yet_valid" };
 	if (nowEpochMs >= expiresAtEpochMs || nowEpochMs >= assignmentExpiresAtEpochMs) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "expired" };
 	if (!Number.isSafeInteger(authority.leaseExpiresAtEpochMs) || nowEpochMs >= authority.leaseExpiresAtEpochMs) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "expired" };
@@ -132,7 +133,8 @@ export function __AdmitRuntimeCandidate(input: RuntimeCandidateAdmissionInput): 
 	{
 		return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "invalid_candidate" };
 	}
-	if (candidate.protocolVersion !== AGENT_RUNTIME_PROTOCOL_V1) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "unsupported_protocol" };
+	if (candidate.protocolVersion !== AGENT_RUNTIME_PROTOCOL_VERSION)
+		return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "unsupported_protocol" };
 	if (_isTerminalForAdmission(authority.runState)) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "terminal_run" };
 	if (!Number.isSafeInteger(authority.leaseExpiresAtEpochMs) || input.clock.nowEpochMs() >= authority.leaseExpiresAtEpochMs) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "expired" };
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCandidateKinds, type RuntimeElicitationCandidate } from "./agent-runtime-protocol.types";
+import { AGENT_RUNTIME_PROTOCOL_VERSION, RuntimeCandidateKinds, type RuntimeElicitationCandidate } from "./agent-runtime-protocol.types";
 import { ElicitationBodyKinds, ElicitationPurposes } from "./conversation-elicitation.types";
 
 /**
@@ -41,7 +41,7 @@ const _A2uiPurposePayload = z.object({ displayedActionId: _Identifier, sourceCom
 const _A2uiActionProposal = z.object({ requestKey: _Identifier, purpose: z.literal(ElicitationPurposes.A2uiAction), body: _Body, purposePayloadDigest: _Digest, purposePayload: _A2uiPurposePayload, expiresInSeconds: z.number().int().min(30).max(900) }).strict();
 /** Runtime candidate coordinates plus the two generic purposes a runtime may propose. */
 const _RuntimeElicitationCandidateSchema = z.object({
-	protocolVersion: z.literal(AGENT_RUNTIME_PROTOCOL_V1),
+	protocolVersion: z.literal(AGENT_RUNTIME_PROTOCOL_VERSION),
 	runtimeInstanceId: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{7,127}$/u),
 	commandId: _Identifier,
 	candidateId: _Identifier,

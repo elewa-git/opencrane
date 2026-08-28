@@ -7,7 +7,13 @@
 This package is the checkpoint between OpenCrane and the process that executes a personal or managed
 agent. The executor may be implemented in any language; it receives commands and proposes results,
 but it does not get to decide what is current or authoritative. This package owns that decision
-through the language-neutral `AgentRuntimeProtocol v1`.
+through the language-neutral `AgentRuntimeProtocol v2`.
+
+Protocol v2 also owns durable continuation. A continuation is the model messages and pending tool or
+participant-request correlations needed to resume a paused loop. The runtime sends it only at a
+governed pause. This package checks the current run, attempt, command, fence, input generation, and
+every pending identifier, then encrypts it before saving. Every resume command carries the decrypted
+continuation; there is no process-local or protocol-v1 fallback.
 
 Before a command reaches an executor, it checks that the command belongs to the currently assigned
 run attempt, carries the exact frozen input snapshot and tagged user-or-service identity, arrives in
@@ -103,6 +109,10 @@ before disconnecting Prisma.
   including first-party personal-session tool augmentation, durable candidate admission, one-time
   saved tool and elicitation result resume, and canonical event reporting. Personal snapshots expose
   a sealed, approval-required `memory:recall` descriptor; the compiler has no memory-gateway port.
+- `PrismaRuntimeContinuationAuthorityUnitOfWork` — validates, encrypts, stores, restores, and retires
+  the exact server-owned continuation for one fenced run attempt.
+- `RuntimeContinuationAuthority` — keeps command dispatch and warm replacement dependent on that
+  durable continuation behavior without exposing its Prisma or encryption implementation.
 - `__CreateProductionExternalActionWorker` — constructs the bounded process worker that prepares,
   claims, executes, reconciles, and recovers durable ToolInvocations.
 - `__CreateProductionExternalActionApprovalOpener` — binds an approval-required invocation to its
@@ -128,6 +138,18 @@ The runtime opens its authenticated stream outward to OpenCrane. This library ma
 replayed, expired, mismatched, cancelling, and terminal frames fail closed. It owns admission only;
 cancellation and durable events remain with their canonical authorities.
 
+## Dependency direction
+
+Tagged `scope:execution-protocol` (`layer:backend`): it may depend on agent, execution-run,
+execution-input, and personal-configuration contracts, authentication, authorization, the MCP
+runtime authority, the three injected transport-port scopes, and shared contracts. Tool
+descriptors are projected only from the immutable snapshot; no decision or resume path consults a
+live catalogue. Candidate arguments and the schema digest are validated before admission, and the
+same frozen schema is propagated to deferred approval. The
+authentication edge resolves only the backend-type-free request principal. Fail-closed transport
+adapters implement narrow ports without exposing credentials. The package never imports an app or
+a model driver.
+
 ## Data & persistence
 
 The compiler adapter reads the immutable persona, conversation, artifact, skill, and model-route
@@ -136,11 +158,12 @@ input. The model chooses a query through the approval-required `memory_recall` t
 content delivery is deferred to #601. The adapter seals the current fenced run attempt into the
 compiled input without mutating the stored snapshot and rejects any compiler result whose run or
 attempt disagrees with dispatch authority. It turns the snapshot's immutable MCP tool revisions directly
-into approval-required tool descriptors. The dispatch adapter owns two Postgres models in
-`runtime.prisma`: `RuntimeCommandStream` (one per run
-attempt — the lease fence, the bound runtime instance, the next command sequence, and accepted
-candidate ids) and `RuntimeDispatchedCommand` (one row per minted command, whose ids are exactly the
-attempt's accepted command set). Their clean-database schema lives in the OpenCrane-owned target
+into approval-required tool descriptors. The dispatch adapter owns four Postgres models in
+`runtime.prisma`: `RuntimeCommandStream` (one per run attempt — the lease fence, bound runtime
+instance, next command sequence, accepted candidate ids, and any visible dispatch block),
+`RuntimeDispatchedCommand` (one row per minted command), `RuntimeContinuationCheckpoint` (the
+encrypted model-loop state needed for replacement), and `RuntimeSteeringRequest` (saved participant
+instructions). Their clean-database schema lives in the OpenCrane-owned target
 baseline. It reads the assignment, run, and immutable snapshot rows owned by the execution-run and
 conversation domains. Canonical events and terminal state remain written by the injected
 execution-run authority, never by this transport/protocol package directly.
@@ -163,23 +186,12 @@ browser connection therefore cannot drop an instruction or force a model turn to
 | `Running` after a prior resume | steering only | Remain idle; do not supersede the active loop. |
 | `Cancelling` | any stale approval, steering marker, or reconnect frontier | Cancellation wins; skip stored start/resume delivery and mint or redeliver the sole newer positive stop command. |
 
-## Dependency direction
-
-Tagged `scope:execution-protocol` (`layer:backend`): it may depend on agent, execution-run,
-execution-input, and personal-configuration contracts, authentication, authorization, the MCP
-runtime authority, the three injected transport-port scopes, and shared contracts. Tool
-descriptors are projected only from the immutable snapshot; no decision or resume path consults a
-live catalogue. Candidate arguments and the schema digest are validated before admission, and the
-same frozen schema is propagated to deferred approval. The
-authentication edge resolves only the backend-type-free request principal. Fail-closed transport
-adapters implement narrow ports without exposing credentials. The package never imports an app or
-a model driver.
+Personal and managed runtime Pods share the same protocol but not an identity plane: every tagged
+snapshot is re-bound to its deployment-owned namespace, projected-token audience, and ServiceAccount
+grammar before a command or candidate is accepted.
 
 ## See also
 
 - Parent group: [execution](../README.md)
 - Wire contract: [`@opencrane/contracts`](../../../../contracts/README.md)
 - Run authority: [execution/runs](../runs/main/README.md)
-Personal and managed runtime Pods share the same protocol but not an identity plane: every tagged
-snapshot is re-bound to its deployment-owned namespace, projected-token audience, and ServiceAccount
-grammar before a command or candidate is accepted.

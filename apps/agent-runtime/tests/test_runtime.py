@@ -8,6 +8,7 @@ reach no network.
 """
 
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -20,11 +21,12 @@ from urllib.error import HTTPError, URLError
 
 from src.bootstrap.exchange import BootstrapDeniedError
 from src.bootstrap.proof import load_or_create_proof_key as _load_or_create_proof_key, rfc7638_thumbprint as _rfc7638_thumbprint
-from src.constants import CHECKPOINT_FILENAME
-from src.model_loop.checkpoints import (
-    checkpoint_path as _checkpoint_path,
-    read_checkpoint as _read_checkpoint,
-    write_checkpoint as _write_checkpoint,
+from src.constants import PROTOCOL_VERSION
+from src.attempts.continuation import (
+    clear_continuation as _clear_model_history,
+    initialize_continuation as _initialize_continuation,
+    load_model_messages as _load_model_history,
+    store_model_messages as _store_model_history,
 )
 from src.model_loop.driver import (
     absorb_steering as _absorb_steering,
@@ -35,11 +37,6 @@ from src.model_loop.driver import (
 )
 from src.model_loop.openai_generated_outputs import OpenAIGeneratedOutputConfiguration as _OpenAIGeneratedOutputConfiguration
 from src.model_loop.openai_generated_outputs import OpenAIGeneratedOutputCollector as _OpenAIGeneratedOutputCollector
-from src.model_loop.histories import (
-    clear_model_history as _clear_model_history,
-    load_model_history as _load_model_history,
-    store_model_history as _store_model_history,
-)
 from src.attempts.execution import (
     execute_cancel_attempt as _execute_cancel_attempt,
     execute_resume_attempt as _execute_resume_attempt,
@@ -55,7 +52,7 @@ from src.protocol.candidates import (
 )
 from src.protocol.wait_reasons import RuntimeWaitReason as _RuntimeWaitReason
 from src.runtime import retry_delay as _retry_delay, run_forever
-from src.transport.http import post_candidate as _post_candidate
+from src.transport.http import post_candidate as _post_candidate, post_continuation as _post_continuation
 from src.transport.stream import (
     _AttemptWorkerRegistry,
     iter_commands as _iter_commands,
@@ -84,7 +81,10 @@ def _start_command(attempt: int = 1) -> dict:
     """Build one structurally valid ``start_attempt`` command carrying a compiled input."""
     return {
         "kind": "start_attempt",
+        "protocolVersion": PROTOCOL_VERSION,
+        "runtimeInstanceId": "instance-1",
         "commandId": "c1",
+        "sequence": 1,
         "fence": 2,
         "assignment": {"runId": "r1", "attempt": attempt},
         "payload": {"snapshot": {"inputGeneration": 4}, "compiledInput": _compiled_input(attempt=attempt)},
@@ -95,10 +95,19 @@ def _resume_command(attempt: int = 1) -> dict:
     """Build one structurally valid ``resume_attempt`` command carrying saved tool results."""
     return {
         "kind": "resume_attempt",
+        "protocolVersion": PROTOCOL_VERSION,
+        "runtimeInstanceId": "instance-1",
         "commandId": "c2",
+        "sequence": 2,
         "fence": 2,
         "assignment": {"runId": "r1", "attempt": attempt},
-        "payload": {"inputGeneration": 7, "toolResults": [], "steeringRequests": [], "elicitationResults": []},
+        "payload": {
+            "inputGeneration": 7,
+            "toolResults": [{"toolInvocationId": "tool-1", "outcome": "succeeded", "result": {"ok": True}}],
+            "steeringRequests": [],
+            "elicitationResults": [],
+            "continuation": _continuation(attempt=attempt),
+        },
     }
 
 
@@ -106,23 +115,42 @@ def _cancel_command(attempt: int = 1) -> dict:
     """Build one structurally valid ``cancel_attempt`` command carrying a server-chosen reason."""
     return {
         "kind": "cancel_attempt",
+        "protocolVersion": PROTOCOL_VERSION,
+        "runtimeInstanceId": "instance-1",
         "commandId": "c3",
+        "sequence": 3,
         "fence": 2,
         "assignment": {"runId": "r1", "attempt": attempt},
         "payload": {"reason": "budget_exhausted"},
     }
 
 
-class _ReversingCipher:
-    """A reversible in-test cipher seam so checkpoints round-trip without the ``cryptography`` package."""
+def _continuation(attempt: int = 1, compiled_input: dict | None = None, model_messages: list | None = None) -> dict:
+    """Build one digest-bound continuation accepted by the v2 resume fixture."""
+    unsigned = {
+        "version": "opencrane.agent-runtime-continuation/v1",
+        "revision": 1,
+        "runId": "r1",
+        "attempt": attempt,
+        "inputGeneration": 7,
+        "appliedCommandSequence": 1,
+        "compiledInput": compiled_input or _compiled_input(attempt=attempt),
+        "modelMessages": model_messages or [{"message": "saved turn"}],
+        "pendingToolCalls": [{"toolInvocationId": "tool-1", "frameworkCallId": "tool-1"}],
+        "pendingElicitations": [],
+    }
+    encoded = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return {**unsigned, "digest": "sha256:" + hashlib.sha256(encoded).hexdigest()}
 
-    def encrypt(self, data: bytes) -> bytes:
-        return b"v:" + data[::-1]
 
-    def decrypt(self, token: bytes) -> bytes:
-        if not token.startswith(b"v:"):
-            raise ValueError("bad token")
-        return token[len(b"v:"):][::-1]
+def _initialize_test_continuation(run_id: str, attempt: int, compiled_input: dict | None = None) -> None:
+    """Create the aggregate required by direct history and pending-correlation unit tests."""
+    value = compiled_input or _compiled_input(run_id=run_id, attempt=attempt)
+    _initialize_continuation(run_id, attempt, 7, 1, value)
+
+
+def _accept_continuation(_coordinates: dict, _input_generation: int, _continuation: dict) -> None:
+    """Stand in for successful server persistence in direct executor tests."""
 
 
 class RuntimeRetryDelayTests(unittest.TestCase):
@@ -145,6 +173,40 @@ class RuntimeRetryDelayTests(unittest.TestCase):
             _post_candidate("https://control.example", "projected-token", candidate, _post)
 
         self.assertEqual(sent, [candidate])
+
+    def test_continuation_transport_posts_the_fenced_body(self) -> None:
+        """A waiting checkpoint uses the private v2 endpoint and requires an exact 202 response."""
+        sent: list[tuple[str, dict]] = []
+        coordinates = _command_coordinates(_start_command(), "instance-1")
+        assert coordinates is not None
+
+        def _post(url: str, _token: str, body: dict, _timeout: float) -> int:
+            sent.append((url, body))
+            return 202
+
+        continuation = _continuation()
+        _post_continuation("https://control.example/api/internal/warm-runtime", "projected-token", coordinates, 7, continuation, _post)
+
+        self.assertEqual(sent[0][0], "https://control.example/api/internal/warm-runtime/continuations")
+        self.assertEqual(sent[0][1]["continuation"], continuation)
+        self.assertNotIn("projected-token", json.dumps(sent[0][1]))
+
+    def test_continuation_transport_retries_the_exact_document_after_ambiguous_loss(self) -> None:
+        """A longer outage keeps retrying the same idempotent checkpoint until it is accepted."""
+        sent: list[dict] = []
+        coordinates = _command_coordinates(_start_command(), "instance-1")
+        assert coordinates is not None
+
+        def _post(_url: str, _token: str, body: dict, _timeout: float) -> int:
+            sent.append(body)
+            if len(sent) < 5:
+                raise URLError("response lost")
+            return 202
+
+        _post_continuation("https://control.example/api/internal/warm-runtime", "projected-token", coordinates, 7, _continuation(), _post, wait=lambda _delay: False)
+
+        self.assertEqual(len(sent), 5)
+        self.assertTrue(all(body is sent[0] for body in sent))
 
 
 class RuntimeThumbprintTests(unittest.TestCase):
@@ -197,7 +259,7 @@ class RuntimeCommandFramingTests(unittest.TestCase):
             b'data: {"kind":"start_attempt","commandId":"c1","fence":1,"assignment":{"runId":"r1","attempt":1}}\n',
             b"\n",
             b"event: heartbeat\n",
-            b'data: {"protocolVersion":"opencrane.agent-runtime/v1"}\n',
+            b'data: {"protocolVersion":"unsupported-protocol"}\n',
             b"\n",
         ]
         commands = list(_iter_commands(iter(lines), threading.Event()))
@@ -313,61 +375,6 @@ class RuntimeSteeringTests(unittest.TestCase):
         buffer.append("do Y")
         self.assertEqual(_absorb_steering(buffer), ["do Y"])
         self.assertEqual(_absorb_steering(buffer), [])
-
-
-class RuntimeCheckpointTests(unittest.TestCase):
-    """Validate the encrypted, version-tagged, replaceable, subordinate local checkpoint."""
-
-    def test_checkpoint_round_trips_encrypted_and_version_tagged(self) -> None:
-        """A written checkpoint is stored encrypted and reads back its state when coordinates agree."""
-        with tempfile.TemporaryDirectory() as directory:
-            cipher = _ReversingCipher()
-            path = _write_checkpoint("r1", 1, 3, {"compiledInput": {"tools": []}}, cipher=cipher, checkpoint_dir=directory)
-            with open(path, "rb") as handle:
-                raw = handle.read()
-            # The payload is ciphered on disk, not stored as readable plaintext JSON.
-            self.assertNotIn(b"compiledInput", raw)
-            self.assertNotIn(b"checkpointVersion", raw)
-            state = _read_checkpoint("r1", 1, 3, cipher=cipher, checkpoint_dir=directory)
-            self.assertEqual(state, {"compiledInput": {"tools": []}})
-
-    def test_checkpoint_is_discarded_when_coordinates_disagree(self) -> None:
-        """A checkpoint that disagrees with the server run/attempt/inputGeneration is discarded."""
-        with tempfile.TemporaryDirectory() as directory:
-            cipher = _ReversingCipher()
-            _write_checkpoint("r1", 1, 3, {"compiledInput": {}}, cipher=cipher, checkpoint_dir=directory)
-            self.assertIsNone(_read_checkpoint("r1", 1, 4, cipher=cipher, checkpoint_dir=directory))
-            self.assertIsNone(_read_checkpoint("other", 1, 3, cipher=cipher, checkpoint_dir=directory))
-            self.assertIsNone(_read_checkpoint("r1", 2, 3, cipher=cipher, checkpoint_dir=directory))
-
-    def test_a_wrong_version_checkpoint_is_discarded(self) -> None:
-        """A checkpoint tagged with an unknown version is discarded rather than trusted."""
-        with tempfile.TemporaryDirectory() as directory:
-            cipher = _ReversingCipher()
-            path = _checkpoint_path(directory)
-            forged = cipher.encrypt(json.dumps({"checkpointVersion": 999, "runId": "r1", "attempt": 1, "inputGeneration": 3, "state": {}}, sort_keys=True, separators=(",", ":")).encode("utf-8"))
-            with open(path, "wb") as handle:
-                handle.write(forged)
-            self.assertIsNone(_read_checkpoint("r1", 1, 3, cipher=cipher, checkpoint_dir=directory))
-
-    def test_second_write_atomically_replaces_the_first(self) -> None:
-        """Writing a new checkpoint replaces the prior one at the same fixed path."""
-        with tempfile.TemporaryDirectory() as directory:
-            cipher = _ReversingCipher()
-            _write_checkpoint("r1", 1, 3, {"compiledInput": {"tag": "first"}}, cipher=cipher, checkpoint_dir=directory)
-            _write_checkpoint("r1", 1, 3, {"compiledInput": {"tag": "second"}}, cipher=cipher, checkpoint_dir=directory)
-            # Only the single fixed checkpoint file survives, holding the latest state.
-            self.assertEqual(os.listdir(directory), [CHECKPOINT_FILENAME])
-            self.assertEqual(_read_checkpoint("r1", 1, 3, cipher=cipher, checkpoint_dir=directory), {"compiledInput": {"tag": "second"}})
-
-    def test_checkpoint_directory_environment_override_is_honoured(self) -> None:
-        """The documented checkpoint-directory setting remains part of the process contract."""
-        with tempfile.TemporaryDirectory() as directory:
-            os.environ["OPENCRANE_RUNTIME_CHECKPOINT_DIR"] = directory
-            try:
-                self.assertEqual(_checkpoint_path(None), os.path.join(directory, CHECKPOINT_FILENAME))
-            finally:
-                os.environ.pop("OPENCRANE_RUNTIME_CHECKPOINT_DIR", None)
 
 
 class RuntimeZeroRetryTests(unittest.TestCase):
@@ -525,6 +532,7 @@ class RuntimeDeferredToolBridgeTests(unittest.TestCase):
     def test_model_history_is_coordinate_bound_and_copy_safe(self) -> None:
         """History is replaced and copied only under one exact run-attempt key."""
         source = [{"message": "first"}]
+        _initialize_test_continuation("history-run", 2)
         _store_model_history("history-run", 2, source)
         source.append({"message": "outside"})
 
@@ -575,6 +583,7 @@ class RuntimeDeferredToolBridgeTests(unittest.TestCase):
             "attempt": 1,
             "messages": [{"role": "user", "content": "What did I decide?"}],
         }
+        _initialize_test_continuation("framework-run", 1, compiled_input)
         cancel_event = threading.Event()
 
         def _model_components(_compiled_input: dict[str, object]) -> tuple[object, object, str, str]:
@@ -611,7 +620,7 @@ class RuntimeExecutorTests(unittest.TestCase):
             {"type": "tool_call", "toolName": "alpha", "toolCallId": "t1", "arguments": '{"q":"a"}'},
             {"type": "usage", "inputTokens": 5, "outputTokens": 7},
         ]
-        _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=lambda _compiled, _cancel, _steer: iter(fixture))
+        _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=lambda _compiled, _cancel, _steer: iter(fixture), save_continuation=_accept_continuation)
         kinds = [candidate["kind"] for candidate in emitted]
         self.assertEqual(kinds, ["event", "event", "event", "event", "external_action", "event", "event"])
         self.assertEqual([candidate.get("eventType") for candidate in emitted], ["run.started", "message.started", "message.delta", "tool.requested", None, "run.usage", "message.completed"])
@@ -620,9 +629,8 @@ class RuntimeExecutorTests(unittest.TestCase):
     def test_cancellation_clears_history_even_after_a_pending_tool_event(self) -> None:
         """A racing cancel cannot leave resumable framework history behind a pending call."""
         cancel_event = threading.Event()
-        _store_model_history("r1", 1, [{"message": "private framework context"}])
-
         def _events(_compiled: dict, _cancel: threading.Event, _steering: list[str]):
+            _store_model_history("r1", 1, [{"message": "private framework context"}])
             yield {"type": "tool_call", "toolName": "alpha", "toolCallId": "cancelled-call", "arguments": "{}"}
             cancel_event.set()
 
@@ -640,6 +648,7 @@ class RuntimeExecutorTests(unittest.TestCase):
         """Attempt-two model history cannot fall back to or clear the first-attempt key."""
         self.addCleanup(_clear_model_history, "r1", 1)
         self.addCleanup(_clear_model_history, "r1", 2)
+        _initialize_test_continuation("r1", 1)
         _store_model_history("r1", 1, [{"message": "older attempt"}])
 
         def _events(compiled: dict, _cancel: threading.Event, _steer: list[str]):
@@ -667,7 +676,7 @@ class RuntimeExecutorTests(unittest.TestCase):
         emitted: list[dict] = []
         fixture = [{"type": "tool_call", "toolName": "zulu", "toolCallId": "t2", "arguments": '{"n":1}'}]
         with mock.patch("src.attempts.execution.run_evidence") as evidence:
-            _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=lambda _compiled, _cancel, _steer: iter(fixture))
+            _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=lambda _compiled, _cancel, _steer: iter(fixture), save_continuation=_accept_continuation)
         self.assertEqual(emitted[1]["eventType"], "tool.requested")
         action = emitted[2]
         self.assertEqual(action["kind"], "external_action")
@@ -748,8 +757,8 @@ class RuntimeResumeCancelTests(unittest.TestCase):
             return iter([{"type": "output_text", "text": "resumed"}, {"type": "usage", "inputTokens": 1, "outputTokens": 2}])
 
         _execute_resume_attempt(_resume_command(), "instance-1", emitted.append, resume_event_source=_resume_source)
-        self.assertEqual(captured["results"], {})
-        self.assertEqual(captured["compiledInput"], {})
+        self.assertEqual(captured["results"], {"tool-1": {"ok": True}})
+        self.assertEqual(captured["compiledInput"], _compiled_input())
         event_types = [candidate["eventType"] for candidate in emitted]
         self.assertEqual(event_types, ["run.resumed", "message.started", "message.delta", "run.usage", "message.completed", "run.completed"])
         self.assertEqual(emitted[0]["payload"], {"inputGeneration": 7})
@@ -765,6 +774,23 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.failed"])
         self.assertEqual(emitted[0]["payload"], {"reason": "invalid_tool_results"})
 
+    def test_resume_rejects_a_changed_continuation_before_model_work(self) -> None:
+        """A digest mismatch cannot consume results or reach the model provider."""
+        command = _resume_command()
+        command["payload"]["continuation"]["compiledInput"]["instructions"] = "changed"
+        called = False
+        emitted: list[dict] = []
+
+        def _resume_source(*_args):
+            nonlocal called
+            called = True
+            return iter([])
+
+        _execute_resume_attempt(command, "instance-1", emitted.append, resume_event_source=_resume_source)
+
+        self.assertFalse(called)
+        self.assertEqual(emitted[-1]["payload"], {"reason": "invalid_continuation"})
+
     def test_resume_seeds_queued_steering_before_the_next_safe_boundary(self) -> None:
         """Resume passes validated owner steering to the executor's pre-model buffer."""
         command = _resume_command()
@@ -778,24 +804,19 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         _execute_resume_attempt(command, "instance-1", lambda _candidate: None, resume_event_source=_resume_source)
         self.assertEqual(captured["steering"], ["Prioritise the current decision."])
 
-    def test_resume_passes_the_injected_cipher_recovery_to_the_driver(self) -> None:
-        """The model driver receives the exact coordinate-checked checkpoint, never a second cipher read."""
+    def test_resume_passes_the_server_continuation_to_the_driver(self) -> None:
+        """The model driver receives the exact coordinate-checked server continuation."""
         emitted: list[dict] = []
         captured: dict = {}
-        cipher = _ReversingCipher()
         compiled_input = _compiled_input()
 
         def _resume_source(recovered_input, _deferred, _cancel, _steering):
             captured["compiledInput"] = recovered_input
             return iter([])
 
-        with tempfile.TemporaryDirectory() as directory:
-            os.environ["OPENCRANE_RUNTIME_CHECKPOINT_DIR"] = directory
-            try:
-                _write_checkpoint("r1", 1, 7, {"compiledInput": compiled_input}, cipher=cipher, checkpoint_dir=directory)
-                _execute_resume_attempt(_resume_command(), "instance-1", emitted.append, resume_event_source=_resume_source, checkpoint_cipher=cipher)
-            finally:
-                os.environ.pop("OPENCRANE_RUNTIME_CHECKPOINT_DIR", None)
+        command = _resume_command()
+        command["payload"]["continuation"] = _continuation(compiled_input=compiled_input)
+        _execute_resume_attempt(command, "instance-1", emitted.append, resume_event_source=_resume_source)
 
         self.assertEqual(captured["compiledInput"], compiled_input)
         self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.resumed", "run.completed"])
@@ -804,23 +825,18 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         """Attempt-two resume reads and clears only its exact compiled-history coordinate."""
         self.addCleanup(_clear_model_history, "r1", 1)
         self.addCleanup(_clear_model_history, "r1", 2)
-        cipher = _ReversingCipher()
         compiled_input = _compiled_input(attempt=2)
+        _initialize_test_continuation("r1", 1)
         _store_model_history("r1", 1, [{"message": "older attempt"}])
-        _store_model_history("r1", 2, [{"message": "attempt two"}])
 
         def _resume_source(recovered_input, _deferred, _cancel, _steering):
             self.assertEqual((recovered_input["runId"], recovered_input["attempt"]), ("r1", 2))
             self.assertEqual(_load_model_history("r1", 2), [{"message": "attempt two"}])
             return iter([])
 
-        with tempfile.TemporaryDirectory() as directory:
-            os.environ["OPENCRANE_RUNTIME_CHECKPOINT_DIR"] = directory
-            try:
-                _write_checkpoint("r1", 2, 7, {"compiledInput": compiled_input}, cipher=cipher, checkpoint_dir=directory)
-                _execute_resume_attempt(_resume_command(2), "instance-1", lambda _candidate: None, resume_event_source=_resume_source, checkpoint_cipher=cipher)
-            finally:
-                os.environ.pop("OPENCRANE_RUNTIME_CHECKPOINT_DIR", None)
+        command = _resume_command(2)
+        command["payload"]["continuation"] = _continuation(attempt=2, compiled_input=compiled_input, model_messages=[{"message": "attempt two"}])
+        _execute_resume_attempt(command, "instance-1", lambda _candidate: None, resume_event_source=_resume_source)
 
         self.assertIsNone(_load_model_history("r1", 2))
         self.assertEqual(_load_model_history("r1", 1), [{"message": "older attempt"}])
@@ -844,6 +860,8 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         """An attempt-two cancel cannot leave or erase history under a neighbouring attempt."""
         self.addCleanup(_clear_model_history, "r1", 1)
         self.addCleanup(_clear_model_history, "r1", 2)
+        _initialize_test_continuation("r1", 1)
+        _initialize_test_continuation("r1", 2, _compiled_input(attempt=2))
         _store_model_history("r1", 1, [{"message": "older attempt"}])
         _store_model_history("r1", 2, [{"message": "attempt two"}])
 

@@ -103,7 +103,7 @@ model AgentRun {
   agentThreadDeliveries    AgentThreadParentDelivery[]
   conversationAssets       ConversationAsset[]
   conversationAssetTickets ConversationAssetOutputTicket[]
-  warmRuntimeReservation   WarmRuntimeReservation?
+  warmRuntimeReservations  WarmRuntimeReservation[]
 
   @@unique([siloId, requestIdempotencyKey])
   @@unique([id, agentServiceId, agentRevisionId])
@@ -127,6 +127,7 @@ model AgentRun {
 model WarmRuntimeReservation {
   runId                String                      @map("run_id")
   attempt              Int
+  generation           Int                         @default(1)
   siloId               String                      @map("silo_id")
   namespace            String
   deploymentName       String                      @map("deployment_name")
@@ -146,9 +147,11 @@ model WarmRuntimeReservation {
   idleDeadline          DateTime                    @map("idle_deadline")
   deleteRequestedAt     DateTime?                   @map("delete_requested_at")
   deletedAt             DateTime?                   @map("deleted_at")
-  run                    AgentRun                    @relation(fields: [runId, attempt], references: [id, attempt], onDelete: Restrict)
+  run                    AgentRun                    @relation(fields: [runId, attempt], references: [id, attempt], onDelete: Restrict, map: "warm_runtime_reservations_run_fkey")
+  assignment             WorkloadAssignment          @relation(fields: [runId, attempt], references: [runId, attempt], onDelete: Restrict, map: "warm_runtime_reservations_assignment_fkey")
+  bootstrap              WorkloadBootstrap?
 
-  @@id([runId, attempt])
+  @@id([runId, attempt, generation])
   @@unique([namespace, podUid])
   @@unique([namespace, deploymentUid, podName])
   @@index([state, idleDeadline])
@@ -262,14 +265,16 @@ model WorkloadAssignment {
   workloadUid              String                          @map("workload_uid")
   workloadProfile          String                          @map("workload_profile")
   podUid                   String?                         @map("pod_uid")
+  bindingGeneration        Int                             @default(1) @map("binding_generation")
   state                    WorkloadAssignmentState         @default(PendingPod)
   expiresAt                DateTime                        @map("expires_at")
   createdAt                DateTime                        @default(now()) @map("created_at")
   registeredAt             DateTime?                       @map("registered_at")
   revokedAt                DateTime?                       @map("revoked_at")
   run                      AgentRun                        @relation(fields: [runId, siloId, agentServiceId, agentRevisionId], references: [id, siloId, agentServiceId, agentRevisionId], onDelete: Restrict)
-  bootstrap                WorkloadBootstrap?
-  proofKey                 RunProofKey?
+  bootstraps               WorkloadBootstrap[]
+  proofKeys                RunProofKey[]
+  warmRuntimeReservations  WarmRuntimeReservation[]
   executionReceipts        ActionExecutionReceipt[]
   approvalRequests         ApprovalRequest[]
   conversationAssetTickets ConversationAssetOutputTicket[]
@@ -290,6 +295,7 @@ model WorkloadBootstrap {
   id                 String             @id @default(cuid())
   runId              String             @map("run_id")
   attempt            Int
+  generation         Int                @default(1)
   agentServiceId     String             @map("agent_service_id")
   agentRevisionId    String             @map("agent_revision_id")
   siloId             String             @map("silo_id")
@@ -303,13 +309,14 @@ model WorkloadBootstrap {
   expiresAt          DateTime           @map("expires_at")
   consumedAt         DateTime?          @map("consumed_at")
   consumedByPodUid   String?            @map("consumed_by_pod_uid")
+  revokedAt          DateTime?          @map("revoked_at")
   receiptId          String?            @unique @map("receipt_id")
   createdAt          DateTime           @default(now()) @map("created_at")
   assignment         WorkloadAssignment @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, audience, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, audience, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
+  reservation        WarmRuntimeReservation @relation(fields: [runId, attempt, generation], references: [runId, attempt, generation], onDelete: Restrict)
   proofKey           RunProofKey?
 
-  @@unique([runId, attempt])
-  @@unique([runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, audience, serviceAccountName, namespace, workloadKind, workloadUid], map: "workload_bootstrap_assignment_identity_key")
+  @@unique([runId, attempt, generation])
   @@index([expiresAt])
   @@map("workload_bootstraps")
 }
@@ -319,6 +326,7 @@ model RunProofKey {
   bootstrapId       String                   @unique @map("bootstrap_id")
   runId             String                   @map("run_id")
   attempt           Int
+  generation        Int                      @default(1)
   workloadKind      WorkloadKind             @map("workload_kind")
   workloadUid       String                   @map("workload_uid")
   podUid            String                   @map("pod_uid")
@@ -328,13 +336,12 @@ model RunProofKey {
   revokedAt         DateTime?                @map("revoked_at")
   createdAt         DateTime                 @default(now()) @map("created_at")
   run               AgentRun                 @relation(fields: [runId], references: [id], onDelete: Restrict, map: "run_proof_keys_run_fkey")
-  assignment        WorkloadAssignment       @relation(fields: [runId, attempt, workloadKind, workloadUid, podUid], references: [runId, attempt, workloadKind, workloadUid, podUid], onDelete: Restrict, map: "run_proof_keys_assignment_fkey")
+  assignment        WorkloadAssignment       @relation(fields: [runId, attempt, workloadKind, workloadUid], references: [runId, attempt, workloadKind, workloadUid], onDelete: Restrict, map: "run_proof_keys_assignment_fkey")
   bootstrap         WorkloadBootstrap        @relation(fields: [bootstrapId], references: [id], onDelete: Restrict)
   approvalRequests  ApprovalRequest[]
   executionReceipts ActionExecutionReceipt[]
 
-  @@unique([runId, attempt])
-  @@unique([runId, attempt, workloadKind, workloadUid])
+  @@unique([runId, attempt, generation])
   @@unique([runId, attempt, workloadKind, workloadUid, podUid])
   @@unique([id, runId, attempt])
   @@unique([id, runId, attempt, keyThumbprint], map: "run_proof_key_bound_thumbprint_key")

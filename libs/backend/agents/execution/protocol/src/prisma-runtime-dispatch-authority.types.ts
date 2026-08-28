@@ -3,6 +3,7 @@ import type { AgentRunTerminalReason, Prisma, RuntimeCommandKind, WorkloadKind }
 import type { CompiledRunInput, RunInputSnapshot, RuntimeAssignmentIdentity } from "@opencrane/contracts";
 import type { ExpireElicitationBatchCommand, OpenElicitationCommand, RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import type { JsonValue } from "@opencrane/util";
+import type { ToolInvocationRunRecoveryAuthority } from "@opencrane/backend/server/iam/authorization";
 
 import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types";
 import type { RuntimeWaitReasons } from "./runtime-wait-reasons.types";
@@ -66,6 +67,9 @@ export interface RuntimeEventReporter
 	/** Validate and persist an already-fenced canonical runtime event in the current transaction. */
 	reportInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly sourceIsStartAttempt: boolean; readonly eventType: string; readonly payload: JsonValue }): Promise<{ readonly outcome: "reported" | "denied"; readonly reason?: string }>;
 }
+
+/** Runs-owned recovery transition used when no safe runtime command can be built. */
+export type RuntimeDispatchRecoveryAuthority = Pick<ToolInvocationRunRecoveryAuthority, "enterRecoveryRequiredInTransaction">;
 
 /**
  * Closes approvals whose deadline has passed, in the caller's transaction.

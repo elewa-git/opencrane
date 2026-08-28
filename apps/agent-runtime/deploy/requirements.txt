@@ -9,6 +9,9 @@
 # `slim` distribution with only the `openai` extra deliberately excludes Harness, sessions, UI
 # adapters, hosted-tool integrations, memory/compaction, and Logfire export.
 #
+# `rfc8785` — emits the same canonical JSON bytes as the TypeScript control plane before both sides
+# calculate a continuation digest. The runtime never treats this digest as encryption.
+#
 # QUALIFICATION REQUIREMENT (ADR 0010): before a release is treated as supported, replace this with
 # a fully hash-pinned transitive lock (`pip-compile --generate-hashes` / `--require-hashes`) resolved
 # against the package index, together with the pinned base-image digest in deploy/Dockerfile and the
@@ -16,6 +19,7 @@
 # release hash lock; this does not retain or reactivate any superseded runtime.
 cryptography==48.0.1
 pydantic-ai-slim[openai]==2.13.0
+rfc8785==0.1.4
 # Pydantic AI permits a range, but generated code-execution outputs depend on this exact SDK's
 # `/containers/{container_id}/files/{file_id}/content` streaming client. Pin its universal wheel so
 # that provider-private retrieval cannot drift underneath the runtime image.

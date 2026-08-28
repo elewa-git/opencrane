@@ -14,9 +14,9 @@ import threading
 from collections.abc import Callable, Iterator
 
 from ..config import environment
+from ..attempts.continuation import load_model_messages, store_model_messages
 from .generated_output_policy import order_generated_outputs as _order_generated_outputs
 from .generated_output_policy import validate_generated_output_batch
-from .histories import load_model_history, store_model_history
 from .openai_generated_outputs import OpenAIGeneratedOutputCollector, OpenAIGeneratedOutputConfiguration, openai_generated_output_configuration
 from ..protocol.elicitation import ELICITATION_TOOL_NAME, elicitation_proposal, elicitation_tool_schema
 
@@ -255,7 +255,7 @@ def pydantic_ai_event_source(
         # Keep the messages only if the attempt was not cancelled. A cancelled attempt must leave nothing
         # for a later resume to pick up as though this turn had finished normally.
         if not cancel_event.is_set():
-            store_model_history(*_history_coordinates(compiled_input), run.all_messages())
+            store_model_messages(*_history_coordinates(compiled_input), run.all_messages())
         usage = _run_usage(run)
         events.append(
             {
@@ -293,7 +293,7 @@ def pydantic_ai_resume_source(
 
     agent, output_collector, output_base_url, output_attempt_key = _model_loop_components(compiled_input, attempt_model_key)
     coordinates = _history_coordinates(compiled_input)
-    message_history = load_model_history(*coordinates)
+    message_history = load_model_messages(*coordinates)
     # Stop if the messages are gone, which is what happens when the process has been replaced. Rebuilding
     # the conversation from the compiled input would leave out the turn that made the call, so the model
     # would be handed an answer to something it has no record of asking.
@@ -338,7 +338,7 @@ def pydantic_ai_resume_source(
             events.extend(await output_collector.finish(base_url=output_base_url, attempt_key=output_attempt_key))
             # Replace the stored messages with this turn's. A resumed turn can stop on another call or
             # question, and the resume after it has to carry on from here, not from the earlier turn.
-            store_model_history(*coordinates, run.all_messages())
+            store_model_messages(*coordinates, run.all_messages())
         events = _order_generated_outputs(events)
         usage = _run_usage(run)
         events.append(

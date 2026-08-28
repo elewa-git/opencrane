@@ -45,6 +45,8 @@ export interface InternalRuntimeConfig
 	readonly commandTtlMilliseconds: number;
 	/** Delay before recovering an unacknowledged runtime command. */
 	readonly commandRecoveryMilliseconds: number;
+	/** Absolute path of the Secret-mounted rotating continuation encryption keyring. */
+	readonly continuationKeyringPath: string;
 	/** Namespace containing the managed-agent warm Pod pool. */
 	readonly managedRuntimeNamespace: string | undefined;
 	/** Lease held by one Pod-bound companion command claim. */

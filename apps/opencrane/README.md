@@ -181,8 +181,8 @@ conversation conditionally owns serial `AgentRun -> ordered RunEvent` streams; d
 messages create no run.
 
 Database triggers protect lifecycle and proof bindings that Prisma cannot express alone. Runtime
-Jobs hold attempt-scoped scratch and checkpoints; they do not replace the server's run,
-conversation, approval, or artifact records.
+Pods hold only a working model-loop copy. The server encrypts durable continuations in PostgreSQL,
+so a replacement Pod can resume a governed pause without trusting local disk.
 
 ## Runtime & config
 
@@ -197,6 +197,7 @@ are:
 | `DATABASE_URL` | PostgreSQL connection string | required |
 | `OPENCRANE_SILO_ID` | Silo that owns tasks admitted by this server | required |
 | `OPENCRANE_WORKFLOW_*` | Absurd database pool, worker concurrency, and polling limits | small development defaults |
+| `AGENT_RUNTIME_CONTINUATION_KEYRING_PATH` | Read-only mounted keyring used to encrypt and decrypt durable runtime continuations | required |
 | `OPENCRANE_MCP_ERA_PROBE_*` | Timeout and response-size limit for remote MCP protocol checks | 5 seconds / 64 KiB |
 | `OPENCRANE_OCI_REGISTRY_*` | Fixed HTTPS registry repository, request timeout, and optional Secret-backed authorization used to import admitted MCP images by digest | deployment profile / 30 seconds / no credential |
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |

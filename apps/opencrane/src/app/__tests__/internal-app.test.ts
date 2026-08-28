@@ -34,6 +34,7 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		claimLeaseMilliseconds: 30_000,
 		commandRecoveryMilliseconds: 15_000,
 		commandTtlMilliseconds: 60_000,
+		continuationKeyringPath: "/var/run/opencrane/runtime-continuation/keyring.json",
 		managedRuntimeNamespace: "managed-runtime",
 		mcpCompanionClaimLeaseMilliseconds: 30_000,
 		mcpControllerClaimLeaseMilliseconds: 30_000,

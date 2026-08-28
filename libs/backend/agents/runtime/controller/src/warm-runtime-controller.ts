@@ -4,7 +4,7 @@ import { setTimeout as _Delay } from "node:timers/promises";
 import { __WarmRuntimeGenericPodSelector, __WarmRuntimePodCandidate, __WARM_RUNTIME_POOL_LABEL, __WARM_RUNTIME_PROFILE_LABEL, type WarmRuntimePodCandidate, type WarmRuntimePodIdentity, type WarmRuntimePoolProfile } from "@opencrane/backend/agents/runtime/k8s-launcher";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { WarmRuntimeKubernetesStore, WarmRuntimeKubernetesStoreOptions, WarmRuntimePodPatchOperation, WarmRuntimeProfileActivation, WarmRuntimeReadinessEvidence } from "./warm-runtime-controller.types";
+import type { WarmRuntimeKubernetesStore, WarmRuntimeKubernetesStoreOptions, WarmRuntimePodObservation, WarmRuntimePodPatchOperation, WarmRuntimeProfileActivation, WarmRuntimeReadinessEvidence } from "./warm-runtime-controller.types";
 
 /** Combines shutdown with one fixed request deadline. */
 function _RequestOptions(options: WarmRuntimeKubernetesStoreOptions): ConfigurationOptions
@@ -120,6 +120,23 @@ async function _AssertDeletable(identity: WarmRuntimePodIdentity, pool: WarmRunt
 	return true;
 }
 
+/** Classifies the saved claimed Pod without treating a short readiness loss as runtime death. */
+async function _ObserveClaimedPod(identity: WarmRuntimePodIdentity, pool: WarmRuntimePoolProfile, options: WarmRuntimeKubernetesStoreOptions): Promise<WarmRuntimePodObservation>
+{
+	const pod = await _ReadPod(identity, options);
+	if (pod === null || pod.metadata?.uid !== identity.podUid)
+	{
+		return "missing";
+	}
+	const owners = await _PoolOwners(pool, options);
+	const owner = pod.metadata?.ownerReferences?.find(function _ControllerOwner(reference) { return reference.controller === true; });
+	if (owners.deploymentUid !== identity.deploymentUid || pod.metadata.namespace !== pool.namespace || pod.metadata.labels?.[__WARM_RUNTIME_POOL_LABEL] !== pool.deploymentName || pod.metadata.labels?.[__WARM_RUNTIME_PROFILE_LABEL] !== identity.profile || !owner?.uid || !owners.replicaSetUids.has(owner.uid))
+	{
+		throw new Error("refusing to observe a warm runtime Pod with different identity or ownership");
+	}
+	return pod.status?.phase === "Failed" || pod.status?.phase === "Succeeded" ? "terminal" : "running";
+}
+
 /** Waits until the deleted UID is absent or the Deployment has replaced its Pod name. */
 async function _WaitForPodAbsence(identity: WarmRuntimePodIdentity, options: WarmRuntimeKubernetesStoreOptions): Promise<void>
 {
@@ -180,6 +197,13 @@ export function __CreateWarmRuntimeKubernetesStore(options: WarmRuntimeKubernete
 					throw new Error("warm runtime readiness probe did not cross the selected network profile");
 				}
 				return { ...activation, observedAt: new Date().toISOString() };
+			});
+		},
+		async observeClaimedPod(identity, pool): Promise<WarmRuntimePodObservation>
+		{
+			return await ___DoWithTrace("agent_controller.warm_runtime.observe_claimed", { namespace: identity.namespace, podUid: identity.podUid }, async function _Observe(): Promise<WarmRuntimePodObservation>
+			{
+				return await _ObserveClaimedPod(identity, pool, options);
 			});
 		},
 		async deletePod(identity, pool): Promise<void>

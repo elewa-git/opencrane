@@ -1,5 +1,7 @@
-import type { ResumeAttemptCommand, RuntimeElicitationResult, RuntimeToolResult } from "@opencrane/contracts";
+import type { RuntimeElicitationResult, RuntimeToolResult } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
+
+import type { StoredRuntimeResumeInput } from "./runtime-resume-input.types";
 
 /**
  * Parse a saved resume payload back into the exact command body it came from.
@@ -16,7 +18,7 @@ import type { JsonValue } from "@opencrane/util";
  * stops the re-send: no command goes out, rather than a changed one.
  * @see PrismaRuntimeDispatchAuthority for the byte-for-byte redelivery rule this protects.
  */
-export function _ParseRuntimeResumeInput(payload: unknown): ResumeAttemptCommand | null
+export function _ParseRuntimeResumeInput(payload: unknown): StoredRuntimeResumeInput | null
 {
 	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
 	const record = payload as { readonly [key: string]: JsonValue };

@@ -36,6 +36,13 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/agents/execution/protocol/src/prisma-runtime-continuation-repository.ts",
+        "adapter": "PrismaRuntimeContinuationRepository",
+        "contract": "RuntimeContinuationPersistenceRepository",
+        "contractImportPath": "./runtime-continuation.types",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/server/iam/authorization/main/src/prisma-runtime-authority.ts",
         "adapter": "PrismaRuntimeAuthorityRepository",
         "contract": "CapabilityActionReceiptRepository",
@@ -867,6 +874,18 @@
           {
             "adapter": "PrismaRuntimeDispatchRepository",
             "importPath": "./prisma-runtime-dispatch-repository"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/agents/execution/protocol/src/prisma-runtime-continuation-authority.ts",
+        "adapter": "PrismaRuntimeContinuationAuthorityUnitOfWork",
+        "contract": "RuntimeContinuationAuthority",
+        "contractImportPath": "./runtime-continuation.types",
+        "constructs": [
+          {
+            "adapter": "PrismaRuntimeContinuationRepository",
+            "importPath": "./prisma-runtime-continuation-repository"
           }
         ]
       },

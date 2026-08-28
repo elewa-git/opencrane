@@ -23,7 +23,9 @@ handler for one AgentRun attempt.
  activate profile → prove readiness → let Pod bind
         │
         ▼
- wait for run completion
+ watch the exact claimed Pod while the run works
+        │ dead while waiting → fence and claim a fresh Pod
+        │ dead while working → require recovery; never replay model work
         │
         ▼
  delete the used Pod
@@ -31,8 +33,10 @@ handler for one AgentRun attempt.
 
 **In this flow:** [workflow contract](../workflows/contract/README.md) · [runtime controller](../../../runtime/controller/README.md)
 
-Absurd checkpoints the Kubernetes steps. If the controller restarts, it resumes the same saved task
-and reads the saved Pod identity instead of starting a second run.
+Absurd checkpoints each binding generation's Kubernetes steps. If the controller restarts, it
+resumes the same saved task. A replacement uses a new generation, so a stale Pod cannot reconnect as
+the current runtime. Before it reserves that replacement, the handler finishes any older saved Pod
+deletion that a prior controller process did not record.
 
 ## Public surface
 

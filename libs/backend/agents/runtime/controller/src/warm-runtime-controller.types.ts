@@ -23,6 +23,17 @@ export interface WarmRuntimeReadinessEvidence extends WarmRuntimeProfileActivati
 	readonly observedAt: string;
 }
 
+/**
+ * Reports what Kubernetes says about the saved claimed Pod during AgentRun recovery checks.
+ *
+ * `running` means the same UID still belongs to the selected pool and the workflow keeps waiting.
+ * `missing` means that UID is absent or the Pod name now belongs to another UID. `terminal` means
+ * that Pod reached `Succeeded` or `Failed`. Both non-running results make the workflow ask server
+ * authority whether replacement is allowed; an ownership mismatch throws instead of becoming one
+ * of these values.
+ */
+export type WarmRuntimePodObservation = "running" | "missing" | "terminal";
+
 /** Defines Kubernetes operations available to the warm-runtime workflow handler. */
 export interface WarmRuntimeKubernetesStore
 {
@@ -32,6 +43,8 @@ export interface WarmRuntimeKubernetesStore
 	activateProfile(candidate: WarmRuntimePodCandidate, profile: WarmRuntimePoolProfile): Promise<WarmRuntimeProfileActivation>;
 	/** Probes the exact activated Pod through the network path selected by that profile. */
 	proveReadiness(candidate: WarmRuntimePodCandidate, activation: WarmRuntimeProfileActivation, profile: WarmRuntimePoolProfile): Promise<WarmRuntimeReadinessEvidence>;
+	/** Observes only the saved Pod UID and rejects a Pod that no longer belongs to the selected pool. */
+	observeClaimedPod(identity: WarmRuntimePodIdentity, pool: WarmRuntimePoolProfile): Promise<WarmRuntimePodObservation>;
 	/** Deletes one used or stale Pod with a UID precondition and returns only after that UID is absent. */
 	deletePod(identity: WarmRuntimePodIdentity, pool: WarmRuntimePoolProfile): Promise<void>;
 }

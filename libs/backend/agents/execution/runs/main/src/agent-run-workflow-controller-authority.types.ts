@@ -1,4 +1,4 @@
-import type { AgentRunWarmRuntimeActivationCommand, AgentRunWarmRuntimeDeletionCommand, AgentRunWarmRuntimeDeletionOutcome, AgentRunWarmRuntimeReadinessCommand, AgentRunWarmRuntimeReservationCommand, AgentRunWarmRuntimeUnreservedCancellationOutcome, AgentRunWorkflowControllerRecord, AgentRunWorkflowObservation, AgentRunTaskInput } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import type { AgentRunWarmRuntimeActivationCommand, AgentRunWarmRuntimeDeletionCommand, AgentRunWarmRuntimeDeletionOutcome, AgentRunWarmRuntimeReadinessCommand, AgentRunWarmRuntimeReplacementOutcome, AgentRunWarmRuntimeReservationCommand, AgentRunWarmRuntimeUnreservedCancellationOutcome, AgentRunWorkflowControllerRecord, AgentRunWorkflowObservation, AgentRunTaskInput } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { AttemptModelKeyIssuerWithRevocation } from "./attempt-model-key.types";
@@ -19,6 +19,21 @@ export interface AgentRunWorkflowControllerAuthorityOptions
 	readonly assignmentTtlMilliseconds: number;
 	/** Mints the transient model key after the database transaction has committed. */
 	readonly issueAttemptModelKey: AttemptModelKeyIssuerWithRevocation;
+	/** Checks a waiting continuation and advances its stream fence on the replacement transaction. */
+	readonly continuationRecovery: AgentRunRuntimeContinuationRecoveryPort;
+}
+
+/**
+ * Lets the AgentRun lifecycle prove that a waiting attempt can continue on a replacement Pod.
+ *
+ * The caller passes its current database transaction so continuation validation, stream fencing,
+ * credential revocation, and the Pod-generation change commit together. A null result means the
+ * lifecycle must move the run to `RecoveryRequired` instead of replaying it.
+ */
+export interface AgentRunRuntimeContinuationRecoveryPort
+{
+	/** Returns true after validation and fencing, or null when replacement cannot safely resume. */
+	prepareReplacementInTransaction(transaction: unknown, runId: string, attempt: number): Promise<true | null>;
 }
 
 /** Persists each warm runtime transition inside one caller-owned transaction. */
@@ -36,6 +51,8 @@ export interface AgentRunWarmRuntimePersistenceRepository
 	requestWarmPodDeletion(input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<"bound" | "idempotent" | "conflict">;
 	/** Records deletion and revokes the assignment credentials. */
 	recordWarmPodDeleted(input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand): Promise<AgentRunWarmRuntimeDeletionOutcome>;
+	/** Fences a dead current binding and advances its generation only after continuation validation. */
+	prepareWarmRuntimeReplacement(input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt, command: AgentRunWarmRuntimeDeletionCommand, continuationAvailable: boolean): Promise<AgentRunWarmRuntimeReplacementOutcome>;
 	/** Finalizes cancellation after proving the exact attempt has no warm reservation or assignment. */
 	finalizeCancellationWithoutWarmReservation(input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt): Promise<AgentRunWarmRuntimeUnreservedCancellationOutcome>;
 	/** Marks the run failed when setup cannot finish. */

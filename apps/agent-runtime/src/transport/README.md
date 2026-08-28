@@ -20,13 +20,14 @@ OpenCrane control plane
 
 | File | Responsibility |
 | --- | --- |
-| `http.py` | Sends each non-terminal candidate once over bounded authenticated JSON. |
+| `http.py` | Sends candidates and bounded continuations over authenticated JSON. |
 | `stream.py` | Parses bounded command frames and dispatches attempt workers. |
 
 A dropped stream signals the active attempt to stop. The transport never persists commands or opens
 an inbound listener. Clean EOF and exceptional disconnects share bounded reconnect backoff. Ordinary
 candidates are not retried; terminal candidates alone reuse their stable identifier after ambiguous
-network loss, but never after an explicit HTTP refusal.
+network loss, but never after an explicit HTTP refusal. A waiting continuation is also safe to replay:
+the transport retries the exact same revision until the server accepts it or the attempt is cancelled.
 
 ## See also
 

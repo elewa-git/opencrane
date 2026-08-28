@@ -19,7 +19,7 @@ from ..attempts.execution import (
 from ..attempts.terminal import TerminalGate
 from ..constants import MAX_FRAME_BYTES, PROTOCOL_VERSION
 from ..observability import log, trace
-from .http import post_candidate
+from .http import post_candidate, post_continuation
 from .output import publish_output_asset
 
 
@@ -108,6 +108,10 @@ def _launch_attempt_worker(
         with trace("agent_runtime.output.publish", runId=coordinates.get("runId"), attempt=coordinates.get("attempt"), byteLength=byte_length):
             publish_output_asset(control_plane_url, token, coordinates, message_id, output)
 
+    def _save_continuation(coordinates: dict[str, object], input_generation: int, continuation: dict[str, object]) -> None:
+        """Save the replacement state before this worker reports that it is waiting."""
+        post_continuation(control_plane_url, token, coordinates, input_generation, continuation, cancel_event=cancel_event)
+
     def _run() -> None:
         """Run the injected handler and release its signal even after an unexpected exception."""
         try:
@@ -115,6 +119,7 @@ def _launch_attempt_worker(
                 "cancel_event": cancel_event,
                 "terminal_gate": terminal_gate,
                 "publish_output": _publish_output,
+                "save_continuation": _save_continuation,
             }
             if attempt_model_key is not None:
                 arguments["attempt_model_key"] = attempt_model_key

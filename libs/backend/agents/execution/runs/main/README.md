@@ -39,6 +39,8 @@ does not grant permission to use a run.
 - A duplicate admission returns the first saved input only when the caller and request match.
 - A retry keeps the same logical run and fixed input, but starts the next attempt.
 - A warm Pod can be claimed once. It is never returned to the generic pool after use.
+- The assignment stays stable across runtime replacement. Its binding generation selects the current
+  Pod reservation, bootstrap, and proof key; earlier generations remain revoked history.
 - The Pod receives its model key only after the database has saved the exact Pod identity and proof
   key.
 - Runtime events are accepted only for the current run, attempt, Pod, and command.
@@ -52,8 +54,10 @@ does not grant permission to use a run.
 
 - `PrismaRunAdmissionRepository` saves a new run, its fixed input, and its workflow task together.
 - `PrismaAgentRunRetryUnitOfWork` starts the next attempt after checking the current terminal state.
-- `PrismaAgentRunWarmRuntimeUnitOfWork` reserves a warm Pod and records activation, readiness,
-  deletion, and workflow completion.
+- `PrismaAgentRunWarmRuntimeUnitOfWork` reserves a warm Pod, records activation and readiness, and
+  replaces a dead waiting runtime only after the saved continuation has been checked and fenced.
+- `AgentRunRuntimeContinuationRecoveryPort` lets the run lifecycle ask the protocol authority to
+  validate the saved continuation and fence the dead runtime before advancing the binding generation.
 - `PrismaWarmRuntimeBindingUnitOfWork` binds the reviewed warm Pod to its saved reservation and returns
   the short-lived model key in memory.
 - `__CreateWarmRuntimeBindingRouter` exposes the private warm-Pod binding route.
@@ -83,8 +87,9 @@ shared backend libraries. It never imports an application or Kubernetes client.
 
 The main records are `AgentRun`, `RunInputSnapshot`, `AgentRunWorkflowTask`,
 `WarmRuntimeReservation`, `WorkloadAssignment`, `WorkloadBootstrap`, `RunProofKey`, and ordered run
-events. Admission saves the run, fixed input, and workflow task together. Warm-runtime changes are
-saved before the next Kubernetes step begins.
+events. Admission saves the run, fixed input, and workflow task together. Each
+`WarmRuntimeReservation`, `WorkloadBootstrap`, and `RunProofKey` belongs to one binding generation.
+Warm-runtime changes are saved before the next Kubernetes step begins.
 
 ## See also
 
