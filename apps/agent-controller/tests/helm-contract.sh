@@ -12,8 +12,6 @@ ARTIFACT_ROLE="$(mktemp)"
 ARTIFACT_BINDING="$(mktemp)"
 ARTIFACT_ADMISSION="$(mktemp)"
 ARTIFACT_ADMISSION_BINDING="$(mktemp)"
-CLEANUP_ROLE="$(mktemp)"
-CLEANUP_BINDING="$(mktemp)"
 RUNTIME_NAMESPACE="$(mktemp)"
 MANAGED_RUNTIME_NAMESPACE="$(mktemp)"
 RUNTIME_QUOTA="$(mktemp)"
@@ -25,7 +23,7 @@ CONTROLLER_POLICY="$(mktemp)"
 RUNTIME_DENY="$(mktemp)"
 RUNTIME_EGRESS="$(mktemp)"
 prepare_current_chart_sources
-trap 'cleanup_current_chart_sources; rm -f "$MANIFEST" "$DISABLED" "$ARTIFACT_DISABLED" "$ARTIFACT_ROLE" "$ARTIFACT_BINDING" "$ARTIFACT_ADMISSION" "$ARTIFACT_ADMISSION_BINDING" "$CLEANUP_ROLE" "$CLEANUP_BINDING" "$RUNTIME_NAMESPACE" "$MANAGED_RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$MANAGED_RUNTIME_QUOTA" "$ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+trap 'cleanup_current_chart_sources; rm -f "$MANIFEST" "$DISABLED" "$ARTIFACT_DISABLED" "$ARTIFACT_ROLE" "$ARTIFACT_BINDING" "$ARTIFACT_ADMISSION" "$ARTIFACT_ADMISSION_BINDING" "$RUNTIME_NAMESPACE" "$MANAGED_RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$MANAGED_RUNTIME_QUOTA" "$ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
 CHART_ROOT="$(current_chart_sources_dir)"
 
 render_enabled() {
@@ -58,8 +56,6 @@ awk 'BEGIN { RS="---" } $0 ~ /\nkind: Role\n/ && $0 ~ /\n  name: agent-controlle
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: RoleBinding\n/ && $0 ~ /\n  name: agent-controller-artifact-preprocessor\n/ { print $0 }' "$MANIFEST" > "$ARTIFACT_BINDING"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ValidatingAdmissionPolicy\n/ && $0 ~ /app.kubernetes.io\/component: artifact-preprocessor/ { print $0 }' "$MANIFEST" > "$ARTIFACT_ADMISSION"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ValidatingAdmissionPolicyBinding\n/ && $0 ~ /app.kubernetes.io\/component: artifact-preprocessor/ { print $0 }' "$MANIFEST" > "$ARTIFACT_ADMISSION_BINDING"
-awk 'BEGIN { RS="---" } $0 ~ /\nkind: Role\n/ && $0 ~ /\n  name: oc-opencrane-runtime-cleanup\n/ { print $0 }' "$MANIFEST" > "$CLEANUP_ROLE"
-awk 'BEGIN { RS="---" } $0 ~ /\nkind: RoleBinding\n/ && $0 ~ /\n  name: oc-opencrane-runtime-cleanup\n/ { print $0 }' "$MANIFEST" > "$CLEANUP_BINDING"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: Namespace\n/ && $0 ~ /\n  name: oc-opencrane-runtime\n/ { print $0 }' "$MANIFEST" > "$RUNTIME_NAMESPACE"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: Namespace\n/ && $0 ~ /\n  name: oc-opencrane-managed-runtime\n/ { print $0 }' "$MANIFEST" > "$MANAGED_RUNTIME_NAMESPACE"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ResourceQuota\n/ && $0 ~ /\n  name: oc-opencrane-warm-runtime\n/ && $0 ~ /\n  namespace: oc-opencrane-runtime\n/ { print $0 }' "$MANIFEST" > "$RUNTIME_QUOTA"
@@ -98,18 +94,11 @@ if grep -Eq 'AGENT_CONTROLLER_PROFILES_JSON|managed-agent-runtime-default|agent-
   exit 1
 fi
 
-# Only the OpenCrane server receives runtime Job deletion, through a separately named Role.
-test -s "$CLEANUP_ROLE"
-grep -Fq 'namespace: oc-opencrane-runtime' "$CLEANUP_ROLE"
-grep -Fq 'resources: ["jobs"]' "$CLEANUP_ROLE"
-grep -Fq 'verbs: ["get", "delete"]' "$CLEANUP_ROLE"
-if grep -Eq '"(create|list|patch|update|watch)"|resources: \["(pods|secrets)"\]' "$CLEANUP_ROLE"; then
-  echo "runtime cleanup Role exceeds server-owned Job observation/deletion authority" >&2
+# AgentRun cancellation is workflow-owned, so the OpenCrane server has no legacy Job cleanup Role.
+if grep -Fq 'name: oc-opencrane-runtime-cleanup' "$MANIFEST"; then
+  echo "legacy AgentRun Job cleanup RBAC remains in the enabled render" >&2
   exit 1
 fi
-test -s "$CLEANUP_BINDING"
-grep -A4 -F 'kind: ServiceAccount' "$CLEANUP_BINDING" | grep -F 'name: oc-opencrane-opencrane-server' >/dev/null
-grep -A4 -F 'kind: ServiceAccount' "$CLEANUP_BINDING" | grep -F 'namespace: server-ns' >/dev/null
 
 # Governed skill namespaces are derived from their owning charts. Their controller Roles can create,
 # exact-adopt, and conditionally release Jobs, plus list the exact Job-owned Pod for registration.
@@ -350,9 +339,8 @@ grep -Fq 'cidr: "10.43.0.1/32"' "$DISABLED"
 grep -A3 -F 'cidr: "10.43.0.1/32"' "$DISABLED" | grep -F 'port: 443' >/dev/null
 grep -Fq 'cidr: "172.18.0.2/32"' "$DISABLED"
 grep -A3 -F 'cidr: "172.18.0.2/32"' "$DISABLED" | grep -Fq 'port: 6443'
-# `name: oc-opencrane-runtime` is anchored so the server-owned `oc-opencrane-runtime-cleanup`
-# RBAC (rendered by the opencrane-server chart regardless of the controller switch) is not
-# misread as controller residue.
+# The exact runtime namespace names are anchored so workload-class resources do not count as
+# controller residue when the controller is disabled.
 if grep -Eq 'kind: ValidatingAdmissionPolicy|name: oc-opencrane-runtime$|name: oc-opencrane-managed-runtime$|name: oc-opencrane-warm-runtime|opencrane.ai/runtime-release|AGENT_CONTROLLER_WARM_PROFILES_JSON' "$DISABLED"; then
   echo "disabled agent-controller rendered runtime authority" >&2
   exit 1

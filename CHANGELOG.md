@@ -51,8 +51,8 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 - **Artifact processing and skill work can now survive worker or server restarts.** Their Absurd
   workflows claim saved work, fence every delivery, retry recoverable failures, preserve completion
   evidence, and clean up expired or replaced workload and output leases. AgentRun execution and
-  terminal recovery also use Absurd; its physical Kubernetes Job cleanup remains on the existing
-  database-polled reconciler until that final ownership moves.
+  terminal recovery also use Absurd; the saved AgentRun workflow now removes the exact warm Pod and
+  finalizes cancellation without a separate database-polled Job cleaner.
 
 - **Users and operators can now see the availability of every user-visible service through
   unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,

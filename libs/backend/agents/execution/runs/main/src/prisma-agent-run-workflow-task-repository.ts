@@ -89,10 +89,4 @@ export class PrismaAgentRunWorkflowTaskRepository implements AgentRunWorkflowTas
 		}
 		return "conflict";
 	}
-
-	/** Reads the receipt facts cancellation needs while the caller holds its run lifecycle locks. */
-	async findBoundTask(runId: string, attempt: number): Promise<AgentRunWorkflowTaskBoundReceipt | null>
-	{
-		return await this.transaction.agentRunWorkflowTask.findUnique({ where: { runId_attempt: { runId, attempt } }, select: { taskId: true, runId: true, attempt: true, siloId: true } });
-	}
 }

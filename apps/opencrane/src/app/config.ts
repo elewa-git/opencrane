@@ -207,8 +207,8 @@ function _readWorkflowConfig(): OpenCraneWorkflowConfig
 /**
  * Read process settings once so listeners and workers share one startup snapshot.
  *
- * The workers, not this parser, still check that runtime namespaces are present and distinct, because those values grant
- * Kubernetes cleanup authority; parsing configuration alone must not make that trust decision.
+ * Runtime authorities, not this parser, still check that runtime namespaces are present and
+ * distinct before using those namespaces in trusted workload routes.
  */
 export function _ReadProcessConfig(): OpenCraneProcessConfig
 {

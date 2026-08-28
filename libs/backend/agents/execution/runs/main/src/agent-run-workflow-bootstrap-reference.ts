@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import type { AgentRunWorkflowBootstrapReferenceInput } from "./agent-run-workflow-bootstrap-reference.types";
 
 /**
- * Creates the deterministic non-secret reference shared by task execution and later cleanup.
+ * Creates the deterministic non-secret reference shared by task execution and warm Pod binding.
  *
- * Called by: the AgentRun workflow controller and cancellation authority. Both derive this from
- * the saved task receipt, so cleanup still finds a Job if cancellation wins before assignment.
+ * Called by: the AgentRun workflow controller when it reserves and binds a warm runtime. Both
+ * operations derive the same value from the saved task receipt, so a retry cannot change identity.
  */
 export function __AgentRunWorkflowBootstrapReference(input: AgentRunWorkflowBootstrapReferenceInput): string
 {

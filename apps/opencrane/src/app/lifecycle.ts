@@ -1,12 +1,10 @@
 import type { Server } from "node:http";
 
-import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 import type { Express } from "express";
 
 import type { ExternalActionWorker } from "@opencrane/backend/agents/execution/protocol";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
-import type { RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { ChannelTargetRouteReconciler } from "@opencrane/backend/server/agents/channel-targets";
 import type { SelfConversationSocketServer } from "@opencrane/backend/server/conversations";
 import { ___ShutdownTelemetry } from "@opencrane/backend/observability";
@@ -75,13 +73,13 @@ function _startHttpServers(publicApp: Express, internalApp: Express, config: Ope
  * Workload routes stay on a separate socket throughout the lifecycle; shutdown stops producers
  * before closing listeners and database state, then flushes telemetry as the final I/O boundary.
  */
-export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runCancellation: RunCancellationRepository, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, conversationSockets: SelfConversationSocketServer, unbindConsole: () => void, externalActions: ExternalActionWorker, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime): Promise<void>
+export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, managedRunAdmission: ManagedRunAdmissionPort, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, conversationSockets: SelfConversationSocketServer, unbindConsole: () => void, externalActions: ExternalActionWorker, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime): Promise<void>
 {
 	// 1. Start workers only after application composition has registered every durable task.
 	let backgroundWorkers: OpenCraneBackgroundWorkers;
 	try
 	{
-		backgroundWorkers = await _StartBackgroundWorkers(prisma, batchApi, managedRunAdmission, runCancellation, config, externalActions, mcpRuntime, workflowRuntime);
+		backgroundWorkers = await _StartBackgroundWorkers(prisma, managedRunAdmission, config, externalActions, mcpRuntime, workflowRuntime);
 	}
 	catch (error)
 	{

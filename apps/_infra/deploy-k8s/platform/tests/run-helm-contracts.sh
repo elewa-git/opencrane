@@ -14,7 +14,7 @@ for contract in \
   database-migration-deploy-contract.sh \
   workflow-engine-qualification-contract.sh \
   server-key-permissions-contract.sh \
-  server-runtime-cleanup-rbac-contract.sh \
+  server-rbac-contract.sh \
   server-network-policy-contract.sh \
   platform-network-policy-contract.sh \
   post-deploy-health-contract.sh \

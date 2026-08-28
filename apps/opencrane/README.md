@@ -110,8 +110,7 @@ its resources to the lifecycle owner.
   source, read, upload, and output brokers; those pieces are inseparable from this process's private
   configuration and do not expose a reusable ArtifactStore client.
 - `src/app/background-workers.ts` owns the Absurd worker, schedule ticks, durable external-action
-  passes, expired-run repair, and fenced cleanup loops. Shutdown lets active work finish before
-  Prisma closes.
+  passes, and MCP completion recovery. Shutdown lets active work finish before Prisma closes.
 - `src/app/external-action-composition.ts` binds that worker to the immutable execution snapshot,
   canonical tool lifecycle unit of work, deferred-approval authority, and private provider ports.
 - `src/app/lifecycle.ts` starts workers before both listeners, aborts active external exchanges during

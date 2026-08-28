@@ -1,25 +1,11 @@
-import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ExternalActionWorker } from "@opencrane/backend/agents/execution/protocol";
-import type { RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { OpenCraneProcessConfig } from "../config.types";
-
-const _cleanupDrain = vi.hoisted(function _CleanupDrain() { return vi.fn(async function _drain(): Promise<void> {}); });
-
-vi.mock("@opencrane/backend/agents/execution/runs", function _Runs()
-{
-	return { __CreateRuntimeWorkloadCleanupUseCase: function _CreateCleanup() { return { drain: _cleanupDrain, reconcileNext: vi.fn() }; } };
-});
-
-vi.mock("@opencrane/backend/agents/runtime/cleanup", function _Cleanup()
-{
-	return { __CreateKubernetesRuntimeWorkloadCleanupStore: function _CreateStore() { return {}; } };
-});
 
 vi.mock("@opencrane/backend/server/agents/scheduling", function _Scheduling()
 {
@@ -47,9 +33,7 @@ describe("OpenCrane background workers", function _BackgroundWorkerSuite()
 		const recoverExpiredInvocation = vi.fn().mockResolvedValue(false);
 		const workers = await _StartBackgroundWorkers(
 			{} as PrismaClient,
-			{} as k8s.BatchV1Api,
 			{} as ManagedRunAdmissionPort,
-			{} as RunCancellationRepository,
 			{ schedulerEnabled: false, schedulerIntervalMilliseconds: 60_000 } as OpenCraneProcessConfig,
 			{ drain: externalDrain, runOnce: vi.fn().mockResolvedValue(false) } as unknown as ExternalActionWorker,
 			{ recoverExpiredInvocation } as never,
@@ -61,7 +45,6 @@ describe("OpenCrane background workers", function _BackgroundWorkerSuite()
 		expect(recoverExpiredInvocation).toHaveBeenCalledOnce();
 		await workers.stop();
 		expect(close).toHaveBeenCalledOnce();
-		expect(_cleanupDrain).toHaveBeenCalledOnce();
 		expect(externalDrain).toHaveBeenCalledOnce();
 		vi.useRealTimers();
 	});

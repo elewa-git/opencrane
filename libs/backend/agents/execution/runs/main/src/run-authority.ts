@@ -14,12 +14,6 @@ function _isRetryable(run: AgentRun): boolean
 }
 
 /**
- * Returns whether a claimed workload kind is one this server knows how to reason about.
- *
- * `job` is the only value, because `agent-controller` creates a Kubernetes Job per attempt and
- * nothing else. Anything else is a claim about a workload the server never created.
- */
-/**
  * Runs a failed or cancelled run again, by raising its attempt counter instead of creating a second
  * run.
  *

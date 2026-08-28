@@ -707,10 +707,10 @@
 		"constructs": []
 	  },
 	  {
-		"path": "libs/backend/agents/execution/runs/main/src/prisma-run-cancellation-event-deferral-repository.ts",
-		"adapter": "PrismaRunCancellationEventDeferralRepository",
-		"contract": "RunCancellationEventDeferralRepository",
-		"contractImportPath": "./run-cancellation-event-deferral.types",
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-run-cancellation-repository.ts",
+		"adapter": "PrismaRunCancellationRepository",
+		"contract": "RunCancellationPersistenceRepository",
+		"contractImportPath": "./run-cancellation.types",
 		"constructs": []
 	  },
 	  {
@@ -1514,13 +1514,13 @@
 		]
 	  },
 	  {
-		"path": "libs/backend/agents/execution/runs/main/src/prisma-run-cancellation-event-deferral-repository.ts",
-		"adapter": "PrismaRunCancellationEventDeferralUnitOfWork",
-		"contract": "RunCancellationEventDeferralUnitOfWork",
-		"contractImportPath": "./run-cancellation-event-deferral.types",
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-run-cancellation-repository.ts",
+		"adapter": "PrismaRunCancellationUnitOfWork",
+		"contract": "RunCancellationRepository",
+		"contractImportPath": "./run-cancellation.types",
 		"constructs": [
 		  {
-			"adapter": "PrismaRunCancellationEventDeferralRepository",
+			"adapter": "PrismaRunCancellationRepository",
 			"importPath": "<same-file>"
 		  }
 		]

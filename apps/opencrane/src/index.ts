@@ -53,7 +53,7 @@ async function _Main(): Promise<void>
 	const membershipEvidence = _CreateFleetMembershipEvidenceConfig();
 	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, _CreateManagedExecutionEvidenceAuthority());
 	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, workflows.execution, runAdmissionCapacityGate, membershipEvidence);
-	const runCancellation = _CreateRunCancellationAuthority(prisma, config.runtime);
+	const runCancellation = _CreateRunCancellationAuthority(prisma);
 
 	// 4. Compose the class-specific MCP authority before the generic external-action worker.
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
@@ -69,7 +69,7 @@ async function _Main(): Promise<void>
 	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, workflows.execution, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	await _StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, mcpRuntime.authority, workflows.runtime);
+	await _StartProcessLifecycle(publicApp, internalApp, prisma, managedRunAdmission, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, mcpRuntime.authority, workflows.runtime);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)

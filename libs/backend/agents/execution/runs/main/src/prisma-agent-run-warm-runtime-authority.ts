@@ -216,7 +216,7 @@ class PrismaAgentRunWarmRuntimeRepository implements AgentRunWarmRuntimePersiste
 		return "bound";
 	}
 
-	/** Records a workflow setup failure without writing the retired Job cleanup outbox. */
+	/** Terminalizes a failed setup inside its task transaction without starting another lifecycle. */
 	async terminalizeFailedTask(input: AgentRunTaskInput, receipt: IWorkflowTaskReceipt): Promise<void>
 	{
 		const task = await this.taskReader.read(input, receipt);

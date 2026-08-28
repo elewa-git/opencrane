@@ -132,7 +132,6 @@ export default [
             { sourceTag: "scope:agent-runtime-launcher", onlyDependOnLibsWithTags: ["scope:agent-runtime-launcher", "scope:shared"] },
 			{ sourceTag: "scope:artifact-preprocessor-launcher", onlyDependOnLibsWithTags: ["scope:artifact-preprocessor-launcher", "scope:shared"] },
 			{ sourceTag: "scope:artifact-preprocessor-controller", onlyDependOnLibsWithTags: ["scope:artifact-preprocessor-controller", "scope:artifact-preprocessor-launcher", "scope:artifacts-workflow-contract", "scope:runtime-workloads", "scope:shared", "scope:workflows"] },
-            { sourceTag: "scope:agent-runtime-cleanup", onlyDependOnLibsWithTags: ["scope:agent-runtime-cleanup", "scope:agent-runtime-launcher", "scope:shared"] },
             { sourceTag: "scope:skills-launcher", onlyDependOnLibsWithTags: ["scope:skills-launcher", "scope:shared"] },
             { sourceTag: "scope:skills-controller", onlyDependOnLibsWithTags: ["scope:skills-controller", "scope:skills-launcher", "scope:skills-workflow-contract", "scope:runtime-workloads", "scope:shared", "scope:workflows"] },
             { sourceTag: "scope:agent-runtime-controller", onlyDependOnLibsWithTags: ["scope:agent-runtime-controller", "scope:agent-runtime-launcher", "scope:shared"] },
@@ -190,7 +189,6 @@ export default [
             {
               sourceTag: "scope:opencrane",
               onlyDependOnLibsWithTags: [
-                "scope:agent-runtime-cleanup",
                 "scope:agent-runtime-stream",
                 "scope:agent-services",
                 "scope:api-spec",

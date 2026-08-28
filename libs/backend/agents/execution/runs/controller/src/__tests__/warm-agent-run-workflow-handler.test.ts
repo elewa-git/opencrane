@@ -51,6 +51,21 @@ describe("warm AgentRun workflow handler", function _WarmAgentRunHandler()
 		expect(checkpoint).toHaveBeenCalledTimes(4);
 	});
 
+	it("deletes the reserved Pod when cancellation wins after readiness", async function _CancelsRunningWarmPod()
+	{
+		const calls: string[] = [];
+		const authority = _Authority(calls);
+		authority.observe = vi.fn(async function _Cancelling() { return "cancelling" as const; });
+		const sleepUntil = vi.fn();
+		const handler = __CreateWarmAgentRunWorkflowHandler({ authority, kubernetes: _Kubernetes(calls), profiles: _Profiles(), pollIntervalMilliseconds: 100 });
+
+		const result = await handler.run({ checkpoint: async function _Checkpoint(_options: unknown, operation: () => Promise<unknown>) { return await operation(); }, sleepUntil, task: { taskId: "task-1", taskName: "agent-runs.execute/v1", idempotencyKey: "agent-run:silo-a:run-1:attempt:1" } } as never, { siloId: "silo-a", runId: "run-1", attempt: 1 });
+
+		expect(result.terminalState).toBe(AgentRunTaskTerminalStates.Cancelled);
+		expect(calls).toEqual(["list", "reserve", "activate", "activation-recorded", "probe", "readiness-recorded", "delete-requested", "delete", "deleted-recorded"]);
+		expect(sleepUntil).not.toHaveBeenCalled();
+	});
+
 	it("deletes a reserved Pod after readiness fails", async function _DeletesAfterFailure()
 	{
 		const calls: string[] = [];
@@ -112,5 +127,39 @@ describe("warm AgentRun workflow handler", function _WarmAgentRunHandler()
 		expect(result.terminalState).toBe(AgentRunTaskTerminalStates.Cancelled);
 		expect(calls).toEqual(["list", "reserve", "unreserved-cancellation"]);
 		expect(kubernetes.deletePod).not.toHaveBeenCalled();
+	});
+
+	it("keeps cancellation open until it reacquires the saved reservation", async function _ReacquiresSavedReservation()
+	{
+		const calls: string[] = [];
+		const authority = _Authority(calls);
+		authority.observe = vi.fn(async function _Cancelling() { return "cancelling" as const; });
+		let finalizationAttempts = 0;
+		authority.finalizeCancellationWithoutWarmReservation = vi.fn(async function _NotYetUnreserved()
+		{
+			calls.push("unreserved-cancellation");
+			finalizationAttempts += 1;
+			return finalizationAttempts === 1 ? "deferred" : "reservation_exists";
+		});
+		authority.reserveWarmPod = vi.fn(async function _Reacquire() { calls.push("reserve"); return "idempotent" as const; });
+		const kubernetes = _Kubernetes(calls);
+		let candidateScans = 0;
+		kubernetes.listGenericPods = vi.fn(async function _FindCandidate()
+		{
+			calls.push("list");
+			candidateScans += 1;
+			if (candidateScans <= 2)
+				return [];
+			return [{ podName: "warm-abc", podUid: "pod-uid", resourceVersion: "12", deploymentUid: "deployment-uid", podIp: "10.42.0.10" }];
+		});
+		const sleepUntil = vi.fn();
+		const handler = __CreateWarmAgentRunWorkflowHandler({ authority, kubernetes, profiles: _Profiles(), pollIntervalMilliseconds: 100 });
+
+		const result = await handler.run({ checkpoint: async function _Checkpoint(_options: unknown, operation: () => Promise<unknown>) { return await operation(); }, sleepUntil, task: { taskId: "task-1", taskName: "agent-runs.execute/v1", idempotencyKey: "agent-run:silo-a:run-1:attempt:1" } } as never, { siloId: "silo-a", runId: "run-1", attempt: 1 });
+
+		expect(result.terminalState).toBe(AgentRunTaskTerminalStates.Cancelled);
+		expect(calls).toEqual(["list", "unreserved-cancellation", "list", "unreserved-cancellation", "list", "reserve", "activate", "activation-recorded", "probe", "readiness-recorded", "delete-requested", "delete", "deleted-recorded"]);
+		expect(sleepUntil).toHaveBeenCalledTimes(2);
+		expect(kubernetes.deletePod).toHaveBeenCalledOnce();
 	});
 });

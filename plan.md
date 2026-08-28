@@ -103,21 +103,18 @@ tests fail closed; backup/restore reconstructs target-owned stores; no legacy co
 
 ### Phase E — personal runtime and AgentService plane (core runtime built; phase incomplete)
 
-**Core runtime built and CI-qualified:** the dependent PR stack now defines immutable run input, the fenced runtime protocol,
-the outbound-only runtime process, the suspended one-Job-per-attempt resource contract, and a
-crash-safe controller boundary that exactly creates/adopts suspended Jobs before persisting their
-Kubernetes UID as the pending assignment. This dependent slice adds a durable release claim,
-conditionally unsuspends only that assigned Job, and records its unique first Pod before bootstrap
-exchange can begin. A further dependent slice adds cancellation-owned cleanup of abandoned
-suspended Jobs: a nonterminal `Cancelling` run state fences the current assignment, proof key, and
-pending approvals before any Job is touched; `PrismaRunCancellationRepository` then issues an
-assigned or delayed-orphan cleanup claim, and only its confirmed deletion or authoritative absence
-moves the run to `Cancelled`. The runtime protocol and channel-target admission fences close on
-`cancelling` the same way they close on a terminal state. Bootstrap exchange and the full runtime
-command lifecycle now land: the dispatch authority mints `start_attempt`, `resume_attempt`, and a
-positive `cancel_attempt` stop signal (with exactly-once terminal reporting under a race); the runtime
-surfaces model tool calls as external-action candidates that the server validates against the
-immutable snapshot and admits into the durable ToolInvocation lifecycle before any provider request.
+**Core runtime built and CI-qualified:** the dependent PR stack now defines immutable run input, the
+fenced runtime protocol, the outbound-only runtime process, and fixed warm Pod pools. The saved
+AgentRun workflow reserves one Pod, binds the exact database assignment, drives readiness and work,
+and removes that same Pod during cancellation or terminal cleanup. A nonterminal `Cancelling` run
+state fences the current assignment, proof key, and pending approvals before the workflow removes
+physical work; only workflow completion moves the run to `Cancelled`. The runtime protocol and
+channel-target admission fences close on `cancelling` the same way they close on a terminal state.
+Bootstrap exchange and the full runtime command lifecycle now land: the dispatch authority mints
+`start_attempt`, `resume_attempt`, and a positive `cancel_attempt` stop signal with exactly-once
+terminal reporting under a race. The runtime surfaces model tool calls as external-action candidates
+that the server validates against the immutable snapshot and admits into the durable ToolInvocation
+lifecycle before any provider request.
 A tool grant flagged `requiresApproval` enters `AwaitingApproval` and opens a pending
 `ApprovalRequest`, so the pause is reachable end to end. The owner-bound approval-DECISION and
 steering-INGEST APIs are built:

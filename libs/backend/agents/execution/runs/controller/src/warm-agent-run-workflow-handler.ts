@@ -137,12 +137,16 @@ async function _ProveReadiness(options: WarmAgentRunWorkflowHandlerOptions, cont
 	});
 }
 
-/** Waits for the server-owned AgentRun state to become terminal. */
+/** Stops on cancellation so the caller's finally block deletes the reserved Pod, or on a terminal run state. */
 async function _WaitForTerminal(options: WarmAgentRunWorkflowHandlerOptions, context: IWorkflowTaskContext, input: AgentRunTaskInput): Promise<AgentRunTaskResult>
 {
 	while (true)
 	{
 		const observation = await _Retry(async function _Observe() { return await options.authority.observe(input, context.task); });
+		if (observation === "cancelling")
+		{
+			return _Cancelled(input);
+		}
 		const terminal = _Terminal(input, observation);
 		if (terminal !== null)
 		{

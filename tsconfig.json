@@ -211,9 +211,6 @@
       "@opencrane/backend/agents/runtime/mcp-executor/companion": [
         "./libs/backend/agents/runtime/mcp-executor/companion/src/index.ts"
       ],
-      "@opencrane/backend/agents/runtime/cleanup": [
-        "./libs/backend/agents/runtime/cleanup/main/src/index.ts"
-      ],
       "@opencrane/backend/agents/skills/k8s-launcher": [
         "./libs/backend/agents/skills/k8s-launcher/src/index.ts"
       ],

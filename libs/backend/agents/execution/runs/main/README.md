@@ -42,9 +42,10 @@ does not grant permission to use a run.
 - The Pod receives its model key only after the database has saved the exact Pod identity and proof
   key.
 - Runtime events are accepted only for the current run, attempt, Pod, and command.
-- Cancellation changes the database state first. Physical cleanup follows that saved decision.
-- Cancellation becomes final only after the exact used Pod is deleted and any provider output claim
-  has settled. Pending approvals and participant requests close without resuming the run.
+- Cancellation changes the database state first. The saved workflow then removes the exact used Pod
+  and completes any provider output handoff.
+- Cancellation becomes final only after that workflow cleanup has finished. Pending approvals and
+  participant requests close without resuming the run.
 - Competing writes use serializable database transactions and typed compare-and-set updates.
 
 ## Public surface
@@ -60,8 +61,8 @@ does not grant permission to use a run.
   saved workflow.
 - `PrismaRuntimeEventReporter` and `PrismaRuntimeTerminalReporter` save accepted runtime progress and
   terminal results.
-- `PrismaRunCancellationRepository` saves the initial cancellation decision while the warm workflow
-  owns exact Pod deletion and final cancellation.
+- `PrismaRunCancellationUnitOfWork` owns the database transaction for the initial cancellation
+  decision; its transaction-scoped repository publishes only the workflow cancellation event.
 - The self-run routers expose status, retry, and cancellation to the signed-in participant.
 
 ## Boundary
