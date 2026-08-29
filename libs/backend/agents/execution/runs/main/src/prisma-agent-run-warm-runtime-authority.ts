@@ -99,7 +99,8 @@ class PrismaAgentRunWarmRuntimeRepository implements AgentRunWarmRuntimePersiste
 		if (initial && task.run.state === AgentRunState.Accepted)
 		{
 			const queued = await this.transaction.agentRun.updateMany({ where: { id: input.runId, attempt: input.attempt, state: AgentRunState.Accepted }, data: { state: AgentRunState.Queued } });
-			if (queued.count !== 1) return "conflict";
+			if (queued.count !== 1)
+				return "conflict";
 		}
 		if (initial)
 		{

@@ -51,9 +51,11 @@ function _Bearer(value: string | undefined): string | null
 /** Parse only public proof-key evidence; Pod coordinates come from TokenReview. */
 function _Submission(value: unknown): WarmRuntimeBindingSubmission | null
 {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+	if (typeof value !== "object" || value === null || Array.isArray(value))
+		return null;
 	const record = value as Record<string, unknown>;
-	if (Object.keys(record).length !== 2 || !("proofPublicJwk" in record) || !("proofKeyThumbprint" in record)) return null;
+	if (Object.keys(record).length !== 2 || !("proofPublicJwk" in record) || !("proofKeyThumbprint" in record))
+		return null;
 	const thumbprint = record["proofKeyThumbprint"];
 	const publicJwk = _Jwk(record["proofPublicJwk"]);
 	return typeof thumbprint === "string" && thumbprint.length > 0 && thumbprint.length <= 128 && publicJwk !== null ? { proofPublicJwk: publicJwk, proofKeyThumbprint: thumbprint } : null;
@@ -62,8 +64,10 @@ function _Submission(value: unknown): WarmRuntimeBindingSubmission | null
 /** Accept one complete public P-256 JWK without extra members. */
 function _Jwk(value: unknown): Es256PublicJwk | null
 {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+	if (typeof value !== "object" || value === null || Array.isArray(value))
+		return null;
 	const record = value as Record<string, unknown>;
-	if (Object.keys(record).length !== 4 || record["kty"] !== "EC" || record["crv"] !== "P-256" || typeof record["x"] !== "string" || typeof record["y"] !== "string" || record["x"].length === 0 || record["y"].length === 0 || record["x"].length > 128 || record["y"].length > 128) return null;
+	if (Object.keys(record).length !== 4 || record["kty"] !== "EC" || record["crv"] !== "P-256" || typeof record["x"] !== "string" || typeof record["y"] !== "string" || record["x"].length === 0 || record["y"].length === 0 || record["x"].length > 128 || record["y"].length > 128)
+		return null;
 	return { kty: "EC", crv: "P-256", x: record["x"], y: record["y"] };
 }

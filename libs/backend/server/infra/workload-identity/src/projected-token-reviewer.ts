@@ -218,7 +218,8 @@ export function _CreateWarmRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi
 			const status = await _ReviewProjectedToken(authApi, token, [WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE]);
 			const subject = _ParseServiceAccountSubject(status?.user?.username ?? "");
 			const podUid = _ReadReviewedPodUid(status?.user?.extra);
-			if (!subject || !podUid || subject.serviceAccountName !== WARM_RUNTIME_SERVICE_ACCOUNT_NAME || (subject.namespace !== config.personalRuntimeNamespace && subject.namespace !== config.managedRuntimeNamespace)) return null;
+			if (!subject || !podUid || subject.serviceAccountName !== WARM_RUNTIME_SERVICE_ACCOUNT_NAME || (subject.namespace !== config.personalRuntimeNamespace && subject.namespace !== config.managedRuntimeNamespace))
+				return null;
 			return { subject: status?.user?.username ?? "", ...subject, podUid };
 		},
 	};
