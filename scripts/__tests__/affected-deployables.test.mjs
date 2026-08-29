@@ -47,6 +47,21 @@ test("selects sorted release descriptors owned by affected container apps", func
 	]);
 });
 
+test("preserves an app-owned Docker target in the publication matrix", function _SelectsDockerTarget()
+{
+	const project = {
+		name: "opencrane-prisma-migrator",
+		targets: { container: { metadata: { release: { image: "opencrane-prisma-migrator", dockerfile: "apps/opencrane/deploy/Dockerfile", target: "migration" } } } },
+	};
+	assert.deepEqual(selectAffectedDeployables([project]), [{
+		project: "opencrane-prisma-migrator",
+		image: "opencrane-prisma-migrator",
+		dockerfile: "apps/opencrane/deploy/Dockerfile",
+		target: "migration",
+	}]);
+	assert.match(_Workflow(), /target: \$\{\{ matrix\.target \}\}/u);
+});
+
 test("selects the complete current-silo image set from app-owned container metadata", function _SelectsDevelopSmokeImages()
 {
 	const projects = [
@@ -91,13 +106,14 @@ test("fails closed when a container target is not publishable", function _Reject
 test("uses an explicit publication set and makes manual dispatch validation-only by default", function _SelectsForcedProjects()
 {
 	assert.deepEqual(selectForcedContainerProjects("none"), []);
+	assert.deepEqual(selectForcedContainerProjects("all", ["skill-authoring", "opencrane", "skill-authoring"]), ["opencrane", "skill-authoring"]);
 	assert.deepEqual(selectForcedContainerProjects("bootstrap"), ["channel-proxy", "memory-gateway"]);
 	assert.deepEqual(selectForcedContainerProjects("artifact"), ["artifact-service"]);
 	assert.deepEqual(selectForcedContainerProjects("qualification"), ["artifact-service", "channel-proxy", "cognee", "memory-gateway", "opencrane", "opencrane-ui", "postgres"]);
 	assert.deepEqual(selectForcedContainerProjects("server"), ["opencrane"]);
 	assert.deepEqual(selectForcedContainerProjects("ui"), ["opencrane-ui"]);
 	assert.equal(selectForcedContainerProjects(""), null);
-	assert.throws(function _UnknownForce() { selectForcedContainerProjects("all"); }, /unsupported FORCE_DEPLOYABLES value: all/u);
+	assert.throws(function _UnknownForce() { selectForcedContainerProjects("everything"); }, /unsupported FORCE_DEPLOYABLES value: everything/u);
 });
 
 test("selects affected image smokes unless manual qualification expands to every owner", function _SelectsImageSmokes()
@@ -210,6 +226,7 @@ test("keeps heavyweight remote qualification ahead of image publication", functi
 	assert.ok(imageSmokeJob, "image smoke job must remain independently inspectable");
 	assert.ok(publishSmokeImagesJob, "develop must publish a complete immutable smoke image set");
 	assert.match(workflow, /heavy_qualification:[\s\S]*?- image-smoke[\s\S]*?- k3d[\s\S]*?- all/u);
+	assert.match(workflow, /publish_deployables:[\s\S]*?- all[\s\S]*?- qualification/u);
 	assert.match(workflow, /github\.ref == 'refs\/heads\/develop'/u);
 	assert.match(workflow, /run: \.\/apps\/_infra\/deploy-k8s\/platform\/tests\/develop-smoke\.sh/u);
 	assert.match(workflow, /inputs\.heavy_qualification == 'k3d'/u);

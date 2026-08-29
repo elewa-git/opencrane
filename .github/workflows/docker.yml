@@ -30,6 +30,7 @@ on:
           - none
           - bootstrap
           - artifact
+          - all
           - qualification
           - server
           - ui
@@ -660,6 +661,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
           push: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_deployables != 'none') }}
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}

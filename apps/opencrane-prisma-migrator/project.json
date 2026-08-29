@@ -15,7 +15,8 @@
       "metadata": {
         "release": {
           "image": "opencrane-prisma-migrator",
-          "dockerfile": "apps/opencrane/deploy/Dockerfile"
+          "dockerfile": "apps/opencrane/deploy/Dockerfile",
+          "target": "migration"
         }
       },
       "options": { "command": "docker build --target migration -f apps/opencrane/deploy/Dockerfile ." }
