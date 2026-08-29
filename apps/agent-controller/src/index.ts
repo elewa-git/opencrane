@@ -6,7 +6,7 @@ import { __CreateHttpWarmAgentRunWorkflowControllerAuthority, __CreateWarmAgentR
 import { AgentRunTaskDeclaration } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import { __CreateWarmRuntimeKubernetesStore } from "@opencrane/backend/agents/runtime/controller";
 import { __CreateHttpMcpExecutorControllerAuthority, __CreateKubernetesMcpExecutorControllerStore, __RunMcpExecutorController } from "@opencrane/backend/agents/runtime/mcp-executor/controller";
-import { __CreateHttpSkillAuthoringValidationControllerAuthority, __CreateKubernetesSkillWorkloadControllerStore, __CreateSkillAuthoringValidationHandler } from "@opencrane/backend/agents/skills/controller";
+import { __CreateHttpSkillAuthoringValidationControllerAuthority, __CreateKubernetesSkillAuthoringValidationStore, __CreateSkillAuthoringValidationHandler } from "@opencrane/backend/agents/skills/controller";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import { __CreateArtifactPreprocessHandler, __CreateHttpArtifactPreprocessControllerAuthority } from "@opencrane/backend/artifacts/preprocessor/controller";
 import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
@@ -39,7 +39,7 @@ async function _Main(): Promise<void>
 		const mcpExecutorAuthority = __CreateHttpMcpExecutorControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds });
 		const artifactAuthority = config.artifactPreprocessorProfile === undefined ? null : __CreateHttpArtifactPreprocessControllerAuthority(controllerAuthorityOptions);
 		const agentRunKubernetes = __CreateWarmRuntimeKubernetesStore({ appsApi: kubeConfig.makeApiClient(k8s.AppsV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
-		const skillKubernetes = __CreateKubernetesSkillWorkloadControllerStore({ batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
+		const skillKubernetes = __CreateKubernetesSkillAuthoringValidationStore({ batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
 		const mcpKubernetes = __CreateKubernetesMcpExecutorControllerStore({ batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
 		const artifactKubernetes = config.artifactPreprocessorProfile === undefined ? null : __CreateKubernetesGovernedJobControllerStore({ batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal, workloadLabelKey: "opencrane.ai/artifact-preprocessor", releaseTraceName: "agent_controller.artifact_preprocess_job.release" });
 

@@ -355,17 +355,16 @@ agentController:
     genericProfile: generic
     personalProfile: personal
     managedProfile: managed
-  skillWorkloadProfiles:
-    authoring:
-      image:
-        repository: ghcr.io/elewa-git/opencrane-skill-authoring
-        digest: ""
-        pullPolicy: IfNotPresent
-      scratchSize: 128Mi
-      activeDeadlineSeconds: 300
-      resources:
-        requests: { cpu: 500m, memory: 3Gi }
-        limits: { cpu: "2", memory: 4Gi }
+  skillAuthoringValidation:
+    image:
+      repository: ghcr.io/elewa-git/opencrane-skill-authoring
+      digest: ""
+      pullPolicy: IfNotPresent
+    scratchSize: 128Mi
+    activeDeadlineSeconds: 300
+    resources:
+      requests: { cpu: 500m, memory: 3Gi }
+      limits: { cpu: "2", memory: 4Gi }
   resources:
     requests:
       cpu: 25m

@@ -25,7 +25,7 @@ Kubernetes cluster
     │   └── fixed warm Deployment; one claimed Pod per managed attempt
     └── restricted worker namespaces
         ├── skill authoring
-        ├── tool runner
+        ├── MCP executor
         └── artifact preprocessor
 ```
 

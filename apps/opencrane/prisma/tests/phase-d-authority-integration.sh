@@ -26,7 +26,6 @@ fi
 
 run_psql < "$TEST_FILE"
 run_psql < "$SCRIPT_DIR/run-input-snapshot-admission.sql"
-run_psql < "$SCRIPT_DIR/skill-workload-authority.sql"
 run_psql < "$SCRIPT_DIR/skill-authoring-validation-authority.sql"
 
 RACE_DIR="$(mktemp -d)"

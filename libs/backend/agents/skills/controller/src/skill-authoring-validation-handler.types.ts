@@ -2,7 +2,7 @@ import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
 import type { SkillAuthoringValidationTaskInput } from "@opencrane/backend/agents/skills/workflows/contract";
 import type { SkillAuthoringValidationControllerAuthority } from "@opencrane/backend/agents/skills/workflows/contract";
-import type { SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
+import type { SkillAuthoringValidationJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
 import type { GovernedJobObservation, GovernedJobReleaseFence } from "@opencrane/backend/agents/runtime/workloads/k8s-controller";
 import type { IWorkflowTaskContext, IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -40,7 +40,7 @@ export interface SkillAuthoringValidationHandlerOptions
 	/** Supplies the controller Kubernetes adapter, which mutates authoring Jobs. */
 	readonly kubernetes: SkillAuthoringValidationKubernetesStore;
 	/** Supplies the deployment-owned profile for the supported Python authoring Job class. */
-	readonly profile: SkillWorkloadJobProfile;
+	readonly profile: SkillAuthoringValidationJobProfile;
 	/** Sets the delay before the task checks again for the Job's first Pod. */
 	readonly podWaitMilliseconds: number;
 }

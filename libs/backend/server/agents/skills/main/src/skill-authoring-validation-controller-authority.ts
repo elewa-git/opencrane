@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { Prisma, SkillAuthoringValidationCompletionOutcome, SkillAuthoringValidationState, SkillAuthoringValidationWorkloadClass, SkillRevisionState } from "@prisma/client";
 
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
-import { __HashSkillWorkloadBootstrapReference, SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
+import { __HashSkillAuthoringValidationBootstrapReference, SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { SkillAuthoringValidationRecoveryReasons, SkillAuthoringValidationTaskDeclaration, SkillAuthoringValidationTaskNames, type SkillAuthoringValidationBindOutcome, type SkillAuthoringValidationCompletion, type SkillAuthoringValidationControllerAuthority, type SkillAuthoringValidationControllerRecord, type SkillAuthoringValidationPodBindCommand, type SkillAuthoringValidationRecoveryOutcome, type SkillAuthoringValidationReleaseOutcome, type SkillAuthoringValidationWorkloadBindCommand } from "@opencrane/backend/agents/skills/workflows/contract";
 import type { RuntimeWorkloadBinding, RuntimeWorkloadClaim } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
@@ -244,7 +244,7 @@ export class PrismaSkillAuthoringValidationControllerRepository implements Skill
 		{
 			return "conflict";
 		}
-		const referenceHash = await __HashSkillWorkloadBootstrapReference(command.bootstrapReference);
+		const referenceHash = await __HashSkillAuthoringValidationBootstrapReference(command.bootstrapReference);
 		if (claim.workloadUid !== null)
 		{
 			const matches = claim.workloadUid === command.binding.workloadUid

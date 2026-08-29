@@ -2,7 +2,7 @@ import { Readable } from "node:stream";
 
 import { Router, type Request, type Response } from "express";
 
-import { __HashSkillWorkloadBootstrapReference, __IsSkillWorkloadBootstrapReference } from "@opencrane/contracts";
+import { __HashSkillAuthoringValidationBootstrapReference, __IsSkillAuthoringValidationBootstrapReference } from "@opencrane/contracts";
 
 import type { SkillAuthoringValidationWorkerRouterDependencies } from "./skill-authoring-validation-worker.types";
 import { _ParseSkillAuthoringValidationWorkerCompletion } from "./skill-authoring-validation-worker.validator";
@@ -26,7 +26,7 @@ export function __CreateSkillAuthoringValidationWorkerRouter(dependencies: Skill
 		try
 		{
 			// 1. Resolve only the stored reference hash so the request cannot select a validation identity.
-			const record = await dependencies.authority.loadBootstrap(await __HashSkillWorkloadBootstrapReference(reference));
+			const record = await dependencies.authority.loadBootstrap(await __HashSkillAuthoringValidationBootstrapReference(reference));
 			if (record === null)
 			{
 				response.status(409).json({ error: "bootstrap_unavailable" });
@@ -42,7 +42,7 @@ export function __CreateSkillAuthoringValidationWorkerRouter(dependencies: Skill
 			}
 
 			// 3. Spend the reference once and reveal only the server-selected validation identifier.
-			const outcome = await dependencies.authority.consumeBootstrap(await __HashSkillWorkloadBootstrapReference(reference), identity);
+			const outcome = await dependencies.authority.consumeBootstrap(await __HashSkillAuthoringValidationBootstrapReference(reference), identity);
 			if (outcome !== "consumed")
 			{
 				response.status(409).json({ error: "bootstrap_unavailable" });
@@ -165,7 +165,7 @@ function _Reference(value: unknown): string | null
 	if (value === null || typeof value !== "object" || Array.isArray(value))
 		return null;
 	const body = value as Record<string, unknown>;
-	return Object.keys(body).length === 1 && __IsSkillWorkloadBootstrapReference(body["bootstrapReference"]) ? body["bootstrapReference"] : null;
+	return Object.keys(body).length === 1 && __IsSkillAuthoringValidationBootstrapReference(body["bootstrapReference"]) ? body["bootstrapReference"] : null;
 }
 
 /** Read one bearer token without accepting a second credential or whitespace. */

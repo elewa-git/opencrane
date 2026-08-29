@@ -84,8 +84,8 @@ directly.
 
 The `Skill`, `SkillRevision`, and `SkillAuthoringValidation` records belong to the broader skill capability in
 `apps/opencrane/prisma/schema/skills.prisma`. The validation record holds the task receipt, one-use
-bootstrap identity, and worker completion inbox. The forward 0.10.0 migration removes retired
-legacy skill-workload rows and tables after the replacement code is complete.
+bootstrap identity, and worker completion inbox. The forward 0.10.0 migration removes the retired
+SQL workload rows and tables after the replacement code is complete.
 
 ## See also
 

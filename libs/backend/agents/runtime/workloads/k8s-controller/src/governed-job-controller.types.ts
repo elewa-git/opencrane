@@ -5,8 +5,7 @@ import type { ConfigurationOptions, V1Job, V1Pod, V1PodList } from "@kubernetes/
  * database claim. Implementations must compare the complete expected manifest, its saved Job UID,
  * and the first Pod's ownership before returning Kubernetes state to the database authority.
  *
- * Called by: `__ReconcileNextSkillWorkload`, `__ReconcileNextSkillWorkloadRelease`,
- * `__ReconcileNextMcpExecutorWorkload`, and `__ReconcileNextMcpExecutorRelease`.
+ * Called by: the skill-authoring, artifact-preprocessing, and MCP workflow handlers.
  */
 export interface GovernedJobControllerStore
 {
@@ -127,7 +126,7 @@ export interface GovernedJobControllerCoreApi
  * and trace names in code, while the process supplies its Kubernetes clients, request deadline, and
  * shutdown signal.
  *
- * Called by: `__CreateKubernetesSkillWorkloadControllerStore` and
+ * Called by: `__CreateKubernetesSkillAuthoringValidationStore` and
  * `__CreateKubernetesMcpExecutorControllerStore` when the agent controller starts.
  */
 export interface GovernedJobControllerStoreOptions

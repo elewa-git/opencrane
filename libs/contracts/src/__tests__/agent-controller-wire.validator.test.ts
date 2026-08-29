@@ -12,7 +12,7 @@ describe("agent-controller wire grammar", function _DescribeWireGrammar()
 		expect(___IsAgentControllerIdentifier("run\n1")).toBe(false);
 	});
 
-	it("accepts only an empty server-selected skill workload claim", function _ChecksEmptyClaim()
+	it("accepts only an empty server-selected controller claim", function _ChecksEmptyClaim()
 	{
 		expect(___IsEmptyAgentControllerCommand({})).toBe(true);
 		expect(___IsEmptyAgentControllerCommand({ workloadId: "caller-selected" })).toBe(false);

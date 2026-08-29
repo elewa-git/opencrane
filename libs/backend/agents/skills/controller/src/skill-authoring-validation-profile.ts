@@ -1,5 +1,5 @@
-import { __BuildGovernedSkillWorkloadJob, SkillWorkloadKinds } from "@opencrane/backend/agents/skills/k8s-launcher";
-import type { SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
+import { __BuildSkillAuthoringValidationJob } from "@opencrane/backend/agents/skills/k8s-launcher";
+import type { SkillAuthoringValidationJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
 
 /** Return whether a value is a plain object whose own keys can be validated. */
 function _IsRecord(value: unknown): value is Readonly<Record<string, unknown>>
@@ -24,10 +24,10 @@ function _ResourceMap(value: unknown): Readonly<Record<"cpu" | "memory", string>
 }
 
 /** Validate the sole deployment-owned skill-authoring Job profile. */
-export function __ValidateSkillAuthoringValidationProfile(value: unknown): SkillWorkloadJobProfile & { readonly kind: "authoring" }
+export function __ValidateSkillAuthoringValidationProfile(value: unknown): SkillAuthoringValidationJobProfile
 {
-	const keys = ["kind", "image", "imagePullPolicy", "serverNamespace", "namespace", "serviceAccountName", "capabilityTokenAudience", "bootstrapUrl", "capabilityTokenPath", "bootstrapReferencePath", "scratchSize", "activeDeadlineSeconds", "ttlSecondsAfterFinished", "resources"];
-	if (!_IsRecord(value) || !_HasOnlyKeys(value, keys) || value["kind"] !== SkillWorkloadKinds.Authoring)
+	const keys = ["image", "imagePullPolicy", "serverNamespace", "namespace", "serviceAccountName", "capabilityTokenAudience", "bootstrapUrl", "capabilityTokenPath", "bootstrapReferencePath", "scratchSize", "activeDeadlineSeconds", "ttlSecondsAfterFinished", "resources"];
+	if (!_IsRecord(value) || !_HasOnlyKeys(value, keys))
 	{
 		throw new Error("skill authoring profile must be one complete authoring object");
 	}
@@ -46,7 +46,7 @@ export function __ValidateSkillAuthoringValidationProfile(value: unknown): Skill
 	{
 		throw new Error("skill authoring profile must contain bounded resources");
 	}
-	const profile: SkillWorkloadJobProfile & { readonly kind: "authoring" } = { kind: "authoring", image: value["image"], imagePullPolicy: value["imagePullPolicy"], serverNamespace: value["serverNamespace"], namespace: value["namespace"], serviceAccountName: value["serviceAccountName"], capabilityTokenAudience: value["capabilityTokenAudience"], bootstrapUrl: value["bootstrapUrl"], capabilityTokenPath: value["capabilityTokenPath"], bootstrapReferencePath: value["bootstrapReferencePath"], scratchSize: value["scratchSize"], activeDeadlineSeconds: value["activeDeadlineSeconds"], ttlSecondsAfterFinished: value["ttlSecondsAfterFinished"], resources: { requests, limits } };
-	__BuildGovernedSkillWorkloadJob({ jobId: "profile-validation", siloId: "profile-validation", namespace: profile.namespace, capabilityReference: `skill-bootstrap-v1_${"0".repeat(64)}` }, profile);
+	const profile: SkillAuthoringValidationJobProfile = { image: value["image"], imagePullPolicy: value["imagePullPolicy"], serverNamespace: value["serverNamespace"], namespace: value["namespace"], serviceAccountName: value["serviceAccountName"], capabilityTokenAudience: value["capabilityTokenAudience"], bootstrapUrl: value["bootstrapUrl"], capabilityTokenPath: value["capabilityTokenPath"], bootstrapReferencePath: value["bootstrapReferencePath"], scratchSize: value["scratchSize"], activeDeadlineSeconds: value["activeDeadlineSeconds"], ttlSecondsAfterFinished: value["ttlSecondsAfterFinished"], resources: { requests, limits } };
+	__BuildSkillAuthoringValidationJob({ jobId: "profile-validation", siloId: "profile-validation", namespace: profile.namespace, capabilityReference: `skill-bootstrap-v1_${"0".repeat(64)}` }, profile);
 	return profile;
 }

@@ -16,7 +16,7 @@ function _WarmProfilesJson(): string
 /** Return the Helm-equivalent governed skill-authoring profile. */
 function _SkillAuthoringProfileJson(): string
 {
-	return JSON.stringify({ kind: "authoring", image: `ghcr.io/elewa-git/opencrane-skill-authoring@sha256:${"a".repeat(64)}`, imagePullPolicy: "IfNotPresent", serverNamespace: "silo-a", namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", capabilityTokenAudience: "opencrane-skill-authoring", bootstrapUrl: "http://opencrane-opencrane-server.silo-a.svc.cluster.local:8081/api/internal/agent-runtime", capabilityTokenPath: "/var/run/opencrane/tokens/capability.token", bootstrapReferencePath: "/var/run/opencrane/bootstrap/reference", scratchSize: "128Mi", activeDeadlineSeconds: 300, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "500m", memory: "3Gi" }, limits: { cpu: "2", memory: "4Gi" } } });
+	return JSON.stringify({ image: `ghcr.io/elewa-git/opencrane-skill-authoring@sha256:${"a".repeat(64)}`, imagePullPolicy: "IfNotPresent", serverNamespace: "silo-a", namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", capabilityTokenAudience: "opencrane-skill-authoring", bootstrapUrl: "http://opencrane-opencrane-server.silo-a.svc.cluster.local:8081/api/internal/agent-runtime", capabilityTokenPath: "/var/run/opencrane/tokens/capability.token", bootstrapReferencePath: "/var/run/opencrane/bootstrap/reference", scratchSize: "128Mi", activeDeadlineSeconds: 300, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "500m", memory: "3Gi" }, limits: { cpu: "2", memory: "4Gi" } } });
 }
 
 /** Return the Helm-equivalent OCI MCP executor profile. */
@@ -59,7 +59,7 @@ describe("agent-controller process config", function _Suite()
 	{
 		expect(function _InvalidNamespace() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_WARM_PROFILES_JSON: _WarmProfilesJson().replace("\"silo-a-runtime\"", "\"Not a namespace\"") }); }).toThrow(/Kubernetes DNS labels/);
 		expect(function _MovingImage() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_WARM_PROFILES_JSON: _WarmProfilesJson().replace(/@sha256:[a-f0-9]{64}/, ":latest") }); }).toThrow(/immutable image/);
-		expect(function _SkillProfileWrongClass() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_SKILL_AUTHORING_PROFILE_JSON: _SkillAuthoringProfileJson().replace("\"kind\":\"authoring\"", "\"kind\":\"tool-runner\"") }); }).toThrow(/complete authoring object/);
+		expect(function _SkillProfileUnexpectedField() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_SKILL_AUTHORING_PROFILE_JSON: _SkillAuthoringProfileJson().replace("{", "{\"unexpected\":true,") }); }).toThrow(/complete authoring object/);
 		expect(function _McpProfileMovingImage() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON: _McpExecutorProfileJson().replace(/@sha256:[a-f0-9]{64}/, ":latest") }); }).toThrow(/immutable companion image/);
 	});
 

@@ -62,7 +62,6 @@ exchange returns scoped execution material.
 | [`apps/artifact-service`](../../apps/artifact-service) | Private immutable-byte service behind signed leases |
 | [`apps/artifact-preprocessor`](../../apps/artifact-preprocessor) | Assigned artifact-processing Job with brokered bytes |
 | [`apps/skill-authoring`](../../apps/skill-authoring) | Assigned skill-authoring Job with brokered inputs |
-| [`apps/tool-runner`](../../apps/tool-runner) | Sandboxed non-integration tool Job with capability-scoped egress |
 
 ### Storage
 

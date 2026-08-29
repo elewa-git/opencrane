@@ -62,8 +62,8 @@ before any task is saved.
 The OpenCrane server composition declares and admits this task but does not run it. The
 agent-controller composition registers the handler and is the only process that may create the
 Kubernetes Job. The previous authoring poller and its generic workload routes are gone. The server
-mounts workflow-specific bootstrap, input, and completion routes for the exact saved validation;
-the separate tool runner keeps its existing bootstrap route. This package does not parse OCI (Open
+mounts workflow-specific bootstrap, input, and completion routes for the exact saved validation.
+This package does not parse OCI (Open
 Container Initiative) ZIP files or admit MCP (Model Context Protocol) bundles; the OCI import path
 hands runtime work an already immutable image digest through its shared seam.
 

@@ -56,7 +56,7 @@
         "agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32",
         "agentController.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "agentController.runtimeProfile.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "agentController.skillWorkloadProfiles.authoring.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "agentController.skillAuthoringValidation.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "clustertenantManager.database.existingSecret=test-opencrane-db",
         "opencrane-mcp-executor.mcpExecutor.image.digest=sha256:9999999999999999999999999999999999999999999999999999999999999999"
       ],
@@ -87,7 +87,7 @@
       "workloadIds": ["mcp-executor"]
     },
     {
-      "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-workload-job.ts",
+      "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-validation-job.ts",
       "anchor": "kind: \"Job\"",
       "workloadIds": ["skill-authoring"]
     },
@@ -216,7 +216,7 @@
       "podClass": "Job/skill-authoring-attempt",
       "image": "ghcr.io/elewa-git/opencrane-skill-authoring@sha256:<release-digest>",
       "owner": "apps/skill-authoring",
-      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-workload-job.ts", "anchor": "kind: \"Job\"" }
+      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-validation-job.ts", "anchor": "kind: \"Job\"" }
     },
     {
       "id": "cognee",

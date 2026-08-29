@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { SkillAuthoringValidationRecoveryReasons, SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
-import { SkillWorkloadKinds } from "@opencrane/backend/agents/skills/k8s-launcher";
 
 import { __CreateSkillAuthoringValidationHandler } from "../skill-authoring-validation-handler";
 import type { SkillAuthoringValidationHandlerOptions, SkillAuthoringValidationTaskContext } from "../skill-authoring-validation-handler.types";
@@ -10,7 +9,6 @@ import type { SkillAuthoringValidationHandlerOptions, SkillAuthoringValidationTa
 function _Profile()
 {
 	return {
-		kind: SkillWorkloadKinds.Authoring,
 		image: `ghcr.io/opencrane/skill-authoring@sha256:${"a".repeat(64)}`,
 		imagePullPolicy: "IfNotPresent" as const,
 		serverNamespace: "opencrane-server",

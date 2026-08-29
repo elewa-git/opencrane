@@ -34,7 +34,7 @@ render_enabled() {
     --set-string agentController.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
     --set-string agentController.runtimeProfile.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
     --set-string agentController.warmRuntime.managedNamespace=oc-opencrane-managed-runtime \
-    --set-string agentController.skillWorkloadProfiles.authoring.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
+    --set-string agentController.skillAuthoringValidation.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
     --set-string opencrane-mcp-executor.mcpExecutor.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
     --set artifactPreprocessor.enabled=true \
     --set-string artifactPreprocessor.image.digest=sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \
@@ -101,12 +101,12 @@ fi
 
 # The governed skill namespace is derived from its owning chart. Its controller Role can create,
 # exact-adopt, and conditionally release Jobs, plus list the exact Job-owned Pod for registration.
-grep -A16 -F 'namespace: opencrane-skill-authoring' "$MANIFEST" | grep -F 'name: agent-controller-skill-workloads' >/dev/null
-grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -F 'verbs: ["get", "create", "patch"]' >/dev/null
-grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -F 'resources: ["pods"]' >/dev/null
-grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -F 'verbs: ["list"]' >/dev/null
-if grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -E '"(delete|update|watch)"' >/dev/null; then
-  echo "skill workload Roles exceed fenced Job release and Pod discovery authority" >&2
+grep -A16 -F 'namespace: opencrane-skill-authoring' "$MANIFEST" | grep -F 'name: agent-controller-skill-authoring' >/dev/null
+grep -A16 -F 'name: agent-controller-skill-authoring' "$MANIFEST" | grep -F 'verbs: ["get", "create", "patch"]' >/dev/null
+grep -A16 -F 'name: agent-controller-skill-authoring' "$MANIFEST" | grep -F 'resources: ["pods"]' >/dev/null
+grep -A16 -F 'name: agent-controller-skill-authoring' "$MANIFEST" | grep -F 'verbs: ["list"]' >/dev/null
+if grep -A16 -F 'name: agent-controller-skill-authoring' "$MANIFEST" | grep -E '"(delete|update|watch)"' >/dev/null; then
+  echo "skill-authoring Roles exceed fenced Job release and Pod discovery authority" >&2
   exit 1
 fi
 
@@ -242,7 +242,7 @@ if grep -Eq 'agent-runtime-a|opencrane-managed-agent-runtime|managed-agent-runti
 fi
 # The skill namespace receives controller Job create/get, so its fail-closed admission policy
 # must bind the same identity to the exact suspended authoring envelope.
-grep -Eq 'name: .*skill-workloads' "$ADMISSION"
+grep -Eq 'name: .*skill-authoring' "$ADMISSION"
 grep -Fq 'values: ["skill-authoring"]' "$ADMISSION"
 grep -Fq 'operations: ["CREATE", "UPDATE"]' "$ADMISSION"
 grep -Fq "object.spec.suspend == true" "$ADMISSION"
@@ -250,7 +250,7 @@ grep -Fq "object.spec.template.spec.containers[0].name == 'skill-authoring'" "$A
 grep -Fq "object.metadata.annotations['opencrane.ai/capability-reference'].matches('^skill-bootstrap-v1_[a-f0-9]{64}$')" "$ADMISSION"
 grep -Fq "object.spec.template.metadata.annotations['opencrane.ai/capability-reference'] == object.metadata.annotations['opencrane.ai/capability-reference']" "$ADMISSION"
 grep -Fq 'object.spec.template.metadata.labels.size() == 2' "$ADMISSION"
-grep -Fq "object.spec.template.metadata.labels['opencrane.ai/skill-workload'] == object.metadata.labels['opencrane.ai/skill-workload']" "$ADMISSION"
+grep -Fq "object.spec.template.metadata.labels['opencrane.ai/skill-authoring-validation'] == object.metadata.labels['opencrane.ai/skill-authoring-validation']" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/elewa-git/opencrane-skill-authoring@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].env.size() == 3" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_SKILL_BOOTSTRAP_URL'" "$ADMISSION"

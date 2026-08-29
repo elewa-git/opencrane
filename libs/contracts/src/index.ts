@@ -27,7 +27,7 @@ export type * from "./compiled-run-input.types";
 export * from "./prompt-compiler-version";
 export * from "./personal-configuration.types";
 export * from "./public-health.types";
-export * from "./skill-workload-bootstrap-reference";
+export * from "./skill-authoring-validation-bootstrap-reference";
 export * from "./run-input-snapshot.types";
 export * from "./agent-controller-identity.types";
 // Keep sibling-only `_...` wire schemas and parsers out of the cross-package public surface.

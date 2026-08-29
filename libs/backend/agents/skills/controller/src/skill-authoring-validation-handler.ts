@@ -2,12 +2,12 @@ import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import type { SkillAuthoringValidationCurrentStatus, SkillAuthoringValidationTaskInput } from "@opencrane/backend/agents/skills/workflows/contract";
-import { __BuildGovernedSkillWorkloadJob, SkillWorkloadKinds } from "@opencrane/backend/agents/skills/k8s-launcher";
+import { __BuildSkillAuthoringValidationJob } from "@opencrane/backend/agents/skills/k8s-launcher";
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { GovernedJobObservation } from "@opencrane/backend/agents/runtime/workloads/k8s-controller";
 import { SkillAuthoringValidationRecoveryReasons } from "@opencrane/backend/agents/skills/workflows/contract";
-import { __CreateSkillWorkloadBootstrapReference } from "@opencrane/contracts";
+import { __CreateSkillAuthoringValidationBootstrapReference } from "@opencrane/contracts";
 import { WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -67,12 +67,8 @@ function _PodUid(pod: V1Pod): string
  */
 async function _Job(record: SkillAuthoringValidationControllerRecord, profile: SkillAuthoringValidationHandlerOptions["profile"]): Promise<{ readonly job: V1Job; readonly bootstrapReference: string }>
 {
-	if (profile.kind !== SkillWorkloadKinds.Authoring)
-	{
-		throw new WorkflowTaskTerminalError("Skill authoring validation requires the authoring Job profile.");
-	}
-	const bootstrapReference = await __CreateSkillWorkloadBootstrapReference(record.validationId);
-	const job = __BuildGovernedSkillWorkloadJob({ jobId: record.jobId, siloId: record.siloId, namespace: profile.namespace, capabilityReference: bootstrapReference }, profile);
+	const bootstrapReference = await __CreateSkillAuthoringValidationBootstrapReference(record.validationId);
+	const job = __BuildSkillAuthoringValidationJob({ jobId: record.jobId, siloId: record.siloId, namespace: profile.namespace, capabilityReference: bootstrapReference }, profile);
 	return { job, bootstrapReference };
 }
 

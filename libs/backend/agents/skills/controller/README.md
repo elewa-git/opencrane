@@ -1,10 +1,10 @@
-# @opencrane/backend/agents/skills/controller — governed skill Job reconciliation
+# @opencrane/backend/agents/skills/controller — skill-authoring validation Job controller
 
 > [backend](../../../../README.md) › [agents](../../../README.md) › [skills](../README.md) › controller
 
 ## What it owns
 
-This package contains the Kubernetes work for skill Jobs. A workflow is a saved task that can wait,
+This package contains the Kubernetes work for skill-authoring validation Jobs. A workflow is a saved task that can wait,
 retry, and continue after a restart. The agent controller registers the Python validation workflow
 handler and uses it to create, observe, and clean up one restricted Job.
 
@@ -24,7 +24,7 @@ Python code running.
 
 ## Public surface
 
-- `__CreateKubernetesSkillWorkloadControllerStore` — supplies skill-owned labels and trace names to
+- `__CreateKubernetesSkillAuthoringValidationStore` — supplies authoring-validation labels and trace names to
   the shared exact governed Job store.
 - `__CreateSkillAuthoringValidationHandler` — returns the registered workflow handler. It records
   Job and Pod IDs, checks the saved result every second, retries expired delivery claims, and removes

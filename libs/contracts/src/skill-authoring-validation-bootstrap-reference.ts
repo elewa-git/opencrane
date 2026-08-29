@@ -1,5 +1,5 @@
 /** Prefix that marks a reference as a skill-worker bootstrap reference rather than an agent-runtime one, so the two cannot be swapped. */
-const _SKILL_WORKLOAD_BOOTSTRAP_PREFIX = "skill-bootstrap-v1_";
+const _SKILL_AUTHORING_VALIDATION_BOOTSTRAP_PREFIX = "skill-bootstrap-v1_";
 
 /** Audience fixed on every projected token used by the Python skill-validation Job. */
 export const SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE = "opencrane-skill-authoring";
@@ -12,19 +12,19 @@ export const SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME = "skill-authoring-
  *
  * The result is mounted into that workload's Job and nowhere else. It is not a credential: on its
  * own it grants nothing, and the server stores only its hash, so a leaked reference cannot be
- * reversed into the workload id. Store it with
- * {@link __HashSkillWorkloadBootstrapReference}, never in plain form.
+ * reversed into the validation id. Store it with
+ * {@link __HashSkillAuthoringValidationBootstrapReference}, never in plain form.
  *
  * Called by: the authoring-validation handler before it binds a Job.
  * @param validationId - Validation id; must match `[a-zA-Z0-9_-]{1,128}`.
  * @returns The prefixed reference, safe to mount into the Job.
  * @throws Error when `validationId` contains any other character, so an unsafe id cannot reach a capability reference.
  */
-export async function __CreateSkillWorkloadBootstrapReference(validationId: string): Promise<string>
+export async function __CreateSkillAuthoringValidationBootstrapReference(validationId: string): Promise<string>
 {
 	if (!/^[a-zA-Z0-9_-]{1,128}$/.test(validationId))
 		throw new Error("skill validation id is not safe to project into a capability reference");
-	return `${_SKILL_WORKLOAD_BOOTSTRAP_PREFIX}${await _Sha256Hex(validationId)}`;
+	return `${_SKILL_AUTHORING_VALIDATION_BOOTSTRAP_PREFIX}${await _Sha256Hex(validationId)}`;
 }
 
 /**
@@ -37,7 +37,7 @@ export async function __CreateSkillWorkloadBootstrapReference(validationId: stri
  * @param reference - The plain bootstrap reference presented by a worker.
  * @returns Lowercase `sha256:<hex>` digest, the form stored in the database.
  */
-export async function __HashSkillWorkloadBootstrapReference(reference: string): Promise<`sha256:${string}`>
+export async function __HashSkillAuthoringValidationBootstrapReference(reference: string): Promise<`sha256:${string}`>
 {
 	return `sha256:${await _Sha256Hex(reference)}`;
 }
@@ -52,7 +52,7 @@ export async function __HashSkillWorkloadBootstrapReference(reference: string): 
  * @param value - Untrusted value from a request.
  * @returns True only for the prefix followed by 64 lowercase hex characters.
  */
-export function __IsSkillWorkloadBootstrapReference(value: unknown): value is string
+export function __IsSkillAuthoringValidationBootstrapReference(value: unknown): value is string
 {
 	return typeof value === "string" && /^skill-bootstrap-v1_[a-f0-9]{64}$/.test(value);
 }

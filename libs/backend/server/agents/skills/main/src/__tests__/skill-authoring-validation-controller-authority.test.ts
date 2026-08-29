@@ -2,7 +2,7 @@ import { Prisma, SkillAuthoringValidationCompletionOutcome, SkillAuthoringValida
 import { describe, expect, it, vi } from "vitest";
 
 import { SkillAuthoringValidationRecoveryReasons, SkillAuthoringValidationTaskNames } from "@opencrane/backend/agents/skills/workflows/contract";
-import { __HashSkillWorkloadBootstrapReference, SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
+import { __HashSkillAuthoringValidationBootstrapReference, SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
 import { PrismaSkillAuthoringValidationControllerUnitOfWork } from "../prisma-skill-authoring-validation-controller-unit-of-work";
 import { PrismaSkillAuthoringValidationControllerRepository } from "../skill-authoring-validation-controller-authority";
@@ -119,7 +119,7 @@ describe("Prisma skill authoring validation controller authority", function _Des
 			..._Validation(),
 			state: SkillAuthoringValidationState.Running,
 			workloadClaim: { id: "claim-1", workloadClass: SkillAuthoringValidationWorkloadClass.SkillAuthoringValidation, profileName: "authoring", idempotencyKey: "workload-key-1", executionReference: "validation-1", claimedAt: new Date("2026-08-25T10:00:00.000Z"), deliveryCount: 2, expiresAt: new Date("2026-08-25T10:10:00.000Z"), workloadUid: "job-uid-1", firstPodUid: null },
-			bootstrap: { id: "bootstrap-1", referenceHash: await __HashSkillWorkloadBootstrapReference(bootstrapReference), namespace: "opencrane-skill-authoring", serviceAccount: SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME, expiresAt },
+			bootstrap: { id: "bootstrap-1", referenceHash: await __HashSkillAuthoringValidationBootstrapReference(bootstrapReference), namespace: "opencrane-skill-authoring", serviceAccount: SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME, expiresAt },
 			skillRevision: { state: SkillRevisionState.Draft, testReport: null, scanResult: null },
 			completionInbox: null,
 		};
@@ -334,6 +334,6 @@ describe("Prisma skill authoring validation controller authority", function _Des
 		await expect(authority.loadCurrentCompletion("validation-1", _Task())).resolves.toEqual({ validationId: "validation-1", completionDigest: validation.completionInbox.completionDigest });
 		await expect(authority.failUnreported("validation-1", _Task(), binding, SkillAuthoringValidationRecoveryReasons.JobTerminalWithoutCompletion)).resolves.toBe("failed");
 		expect(updateMany).toHaveBeenCalledWith({ where: { id: "validation-1", state: SkillAuthoringValidationState.Running }, data: { state: SkillAuthoringValidationState.Failed, failureCode: SkillAuthoringValidationRecoveryReasons.JobTerminalWithoutCompletion } });
-		await expect(authority.failUnreported("validation-1", _Task(), { ...binding, profileName: "tool-runner" }, SkillAuthoringValidationRecoveryReasons.JobTerminalWithoutCompletion)).resolves.toBe("conflict");
+		await expect(authority.failUnreported("validation-1", _Task(), { ...binding, profileName: "invalid-authoring" }, SkillAuthoringValidationRecoveryReasons.JobTerminalWithoutCompletion)).resolves.toBe("conflict");
 	});
 });

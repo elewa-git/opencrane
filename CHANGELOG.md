@@ -165,14 +165,11 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   closed rather than silently drifting. Mid-run recall, writes, and correction remain unavailable
   pending a durable write lifecycle.
 
-- **Skill authoring and tenant-authored tool execution now run as fully isolated, hardened
-  Kubernetes Jobs.** The agent controller — the only process allowed to create these workloads —
-  projects a suspended, non-privileged, read-only-root-filesystem Job with no embedded source
-  code, bundle bytes, arguments, or credentials; a database-fenced release then permits exactly
-  one conditional unsuspend, and a fail-closed admission policy accepts only that exact pinned Job
-  shape from the controller's identity. Each Job receives its identity through a short-lived,
-  audience-bound projected token and an opaque bootstrap reference in separate read-only files —
-  never inline — so an authoring or tool-runner workload cannot escalate past what it was granted.
+- **Skill authoring now runs as a durable, isolated Kubernetes Job.** The server saves a validation
+  workflow with the skill change, and the agent controller creates only the pinned, restricted
+  authoring Job accepted by fail-closed admission. Retries and restart recovery come from the saved
+  workflow task; projected identity and an opaque bootstrap reference bind the worker to the exact
+  validation without exposing source bytes or credentials in the Job.
 
 - **Every artifact and skill now has a stable, content-addressed, versioned identity, and users
   can browse their own uploads.** Artifact bytes are stored once, addressed by their SHA-256
@@ -305,7 +302,7 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   exemption.** `$queryRaw`, `$queryRawUnsafe`, `$executeRaw`, and `$executeRawUnsafe` are now
   forbidden in production TypeScript — including inside a previously-declared repository adapter —
   and no temporary policy exemption can reopen them. The invariants those queries used to enforce
-  (skill-workload fencing, artifact-preprocessing claims) now live as reviewed, database-owned
+  (artifact-preprocessing claims and workflow admission) now live as reviewed, database-owned
   functions and triggers in the schema baseline, reached only through typed Prisma delegates.
 
 ### Removed

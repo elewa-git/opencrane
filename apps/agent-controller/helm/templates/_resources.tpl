@@ -38,7 +38,7 @@
 {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.runtimeProfile.image.digest) }}
 {{- fail "agentController.enabled=true requires an immutable sha256 agentController.runtimeProfile.image.digest" }}
 {{- end }}
-{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.skillWorkloadProfiles.authoring.image.digest) }}
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.skillAuthoringValidation.image.digest) }}
 {{- fail "agentController.enabled=true requires an immutable sha256 authoring worker image digest" }}
 {{- end }}
 {{- $mcpExecutorValues := (index .Values "opencrane-mcp-executor").mcpExecutor -}}
@@ -65,7 +65,7 @@
 {{- fail "agentController.runtimeProfile.name must be a valid personal profile name distinct from reserved managed-default" -}}
 {{- end -}}
 {{- $runtimeNamespaces := list $runtimeNamespace $managedRuntimeNamespace -}}
-{{- $authoringImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.authoring.image.repository .Values.agentController.skillWorkloadProfiles.authoring.image.digest -}}
+{{- $authoringImage := printf "%s@%s" .Values.agentController.skillAuthoringValidation.image.repository .Values.agentController.skillAuthoringValidation.image.digest -}}
 {{- $authoringNamespace := (index .Values "opencrane-skill-authoring").skillAuthoring.namespace -}}
 {{- $mcpExecutorNamespace := $mcpExecutorValues.namespace -}}
 {{- $artifactValues := .Values.artifactPreprocessor -}}
@@ -81,7 +81,7 @@
 {{- $siloId := .Values.channelProxy.siloId | default .Values.clustertenantManager.firstUser.clusterTenant | default .Release.Name -}}
 {{- $controllerImage := printf "%s@%s" .Values.agentController.image.repository .Values.agentController.image.digest -}}
 {{- $controllerUsername := printf "system:serviceaccount:%s:%s" .Release.Namespace $controllerName -}}
-{{- $skillAdmissionName := printf "%s-skill-workloads" (include "opencrane.agentController.admissionName" .) -}}
+{{- $skillAdmissionName := printf "%s-skill-authoring" (include "opencrane.agentController.admissionName" .) -}}
 {{- $mcpAdmissionName := printf "%s-mcp-executor" (include "opencrane.agentController.admissionName" .) | trunc 63 | trimSuffix "-" -}}
 {{- $artifactAdmissionName := printf "%s-artifact-preprocessor" (include "opencrane.agentController.admissionName" .) | trunc 63 | trimSuffix "-" -}}
 {{- range $namespace := $runtimeNamespaces }}
@@ -133,7 +133,7 @@ spec:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ $controllerName }}-skill-workloads
+  name: {{ $controllerName }}-skill-authoring
   namespace: {{ $namespace }}
   labels:
     {{- include "opencrane.labels" $ | nindent 4 }}
@@ -151,7 +151,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ $controllerName }}-skill-workloads
+  name: {{ $controllerName }}-skill-authoring
   namespace: {{ $namespace }}
   labels:
     {{- include "opencrane.labels" $ | nindent 4 }}
@@ -163,7 +163,7 @@ subjects:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ $controllerName }}-skill-workloads
+  name: {{ $controllerName }}-skill-authoring
 ---
 {{- end }}
 ---
@@ -508,7 +508,7 @@ spec:
             - name: AGENT_CONTROLLER_WARM_PROFILES_JSON
               value: {{ dict .Values.agentController.runtimeProfile.name $personalWarmProfile $managedRuntimeProfileName $managedWarmProfile | toJson | quote }}
             - name: AGENT_CONTROLLER_SKILL_AUTHORING_PROFILE_JSON
-              value: {{ dict "kind" "authoring" "image" $authoringImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.authoring.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $authoringNamespace "serviceAccountName" "skill-authoring-default" "capabilityTokenAudience" "opencrane-skill-authoring" "bootstrapUrl" $skillBootstrapUrl "capabilityTokenPath" "/var/run/opencrane/tokens/capability.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.skillWorkloadProfiles.authoring.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.authoring.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.authoring.resources | toJson | quote }}
+              value: {{ dict "image" $authoringImage "imagePullPolicy" .Values.agentController.skillAuthoringValidation.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $authoringNamespace "serviceAccountName" "skill-authoring-default" "capabilityTokenAudience" "opencrane-skill-authoring" "bootstrapUrl" $skillBootstrapUrl "capabilityTokenPath" "/var/run/opencrane/tokens/capability.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.skillAuthoringValidation.scratchSize "activeDeadlineSeconds" .Values.agentController.skillAuthoringValidation.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillAuthoringValidation.resources | toJson | quote }}
             - name: AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON
               value: {{ dict "companionImage" $mcpCompanionImage "imagePullPolicy" $mcpExecutorValues.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $mcpExecutorNamespace "serviceAccountName" $mcpExecutorValues.serviceAccountName "opencraneInternalUrl" $mcpInternalUrl "projectedTokenTtlSeconds" $mcpExecutorValues.projectedTokenTtlSeconds "scratchSize" $mcpExecutorValues.scratchSize "activeDeadlineSeconds" $mcpExecutorValues.activeDeadlineSeconds "serverResources" $mcpExecutorValues.serverResources "companionResources" $mcpExecutorValues.companionResources | toJson | quote }}
             {{- if $artifactValues.enabled }}
@@ -884,7 +884,7 @@ metadata:
   name: {{ $skillAdmissionName }}
   labels:
     {{- include "opencrane.labels" . | nindent 4 }}
-    app.kubernetes.io/component: governed-skill-workloads
+    app.kubernetes.io/component: skill-authoring-validation
 spec:
   failurePolicy: Fail
   matchConstraints:
@@ -910,7 +910,7 @@ spec:
           object.metadata.labels.size() == 3 &&
           object.metadata.labels['app.kubernetes.io/name'] == 'opencrane-skill-authoring' &&
           object.metadata.labels['app.kubernetes.io/component'] == 'skill-authoring') &&
-        object.metadata.labels['opencrane.ai/skill-workload'] == object.metadata.name &&
+        object.metadata.labels['opencrane.ai/skill-authoring-validation'] == object.metadata.name &&
         object.metadata.annotations.size() == 3 &&
         object.metadata.annotations['opencrane.ai/silo-id'].size() > 0 &&
         object.metadata.annotations['opencrane.ai/job-id'].size() > 0 &&
@@ -923,18 +923,18 @@ spec:
         request.operation == 'UPDATE' || (object.spec.suspend == true && object.spec.parallelism == 1 && object.spec.completions == 1 &&
         object.spec.backoffLimit == 0 && object.spec.ttlSecondsAfterFinished == 0 &&
         (object.metadata.namespace == {{ $authoringNamespace | toJson }} &&
-          object.spec.activeDeadlineSeconds == {{ .Values.agentController.skillWorkloadProfiles.authoring.activeDeadlineSeconds }} &&
+          object.spec.activeDeadlineSeconds == {{ .Values.agentController.skillAuthoringValidation.activeDeadlineSeconds }} &&
           object.spec.template.spec.serviceAccountName == 'skill-authoring-default' &&
           object.spec.template.metadata.labels['app.kubernetes.io/component'] == 'skill-authoring' &&
           object.spec.template.spec.containers[0].name == 'skill-authoring' &&
           object.spec.template.spec.containers[0].image == {{ $authoringImage | toJson }} &&
-          object.spec.template.spec.containers[0].imagePullPolicy == {{ .Values.agentController.skillWorkloadProfiles.authoring.image.pullPolicy | toJson }} &&
-          object.spec.template.spec.containers[0].resources.requests.cpu == {{ .Values.agentController.skillWorkloadProfiles.authoring.resources.requests.cpu | toString | toJson }} &&
-          object.spec.template.spec.containers[0].resources.requests.memory == {{ .Values.agentController.skillWorkloadProfiles.authoring.resources.requests.memory | toString | toJson }} &&
-          object.spec.template.spec.containers[0].resources.limits.cpu == {{ .Values.agentController.skillWorkloadProfiles.authoring.resources.limits.cpu | toString | toJson }} &&
-          object.spec.template.spec.containers[0].resources.limits.memory == {{ .Values.agentController.skillWorkloadProfiles.authoring.resources.limits.memory | toString | toJson }} &&
+          object.spec.template.spec.containers[0].imagePullPolicy == {{ .Values.agentController.skillAuthoringValidation.image.pullPolicy | toJson }} &&
+          object.spec.template.spec.containers[0].resources.requests.cpu == {{ .Values.agentController.skillAuthoringValidation.resources.requests.cpu | toString | toJson }} &&
+          object.spec.template.spec.containers[0].resources.requests.memory == {{ .Values.agentController.skillAuthoringValidation.resources.requests.memory | toString | toJson }} &&
+          object.spec.template.spec.containers[0].resources.limits.cpu == {{ .Values.agentController.skillAuthoringValidation.resources.limits.cpu | toString | toJson }} &&
+          object.spec.template.spec.containers[0].resources.limits.memory == {{ .Values.agentController.skillAuthoringValidation.resources.limits.memory | toString | toJson }} &&
           object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-skill-authoring' &&
-          quantity(object.spec.template.spec.volumes[2].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.skillWorkloadProfiles.authoring.scratchSize | toJson }})) == 0) &&
+          quantity(object.spec.template.spec.volumes[2].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.skillAuthoringValidation.scratchSize | toJson }})) == 0) &&
         object.spec.template.spec.containers.size() == 1 &&
         (!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.size() == 0) &&
         (!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0) &&
@@ -988,7 +988,7 @@ spec:
         object.spec.template.spec.volumes[2].name == 'scratch' &&
         object.spec.template.metadata.labels.size() == 2 &&
         object.spec.template.metadata.labels['app.kubernetes.io/component'] == object.metadata.labels['app.kubernetes.io/component'] &&
-        object.spec.template.metadata.labels['opencrane.ai/skill-workload'] == object.metadata.labels['opencrane.ai/skill-workload'] &&
+        object.spec.template.metadata.labels['opencrane.ai/skill-authoring-validation'] == object.metadata.labels['opencrane.ai/skill-authoring-validation'] &&
         object.spec.template.metadata.annotations.size() == 3 &&
         object.spec.template.metadata.annotations['opencrane.ai/silo-id'] == object.metadata.annotations['opencrane.ai/silo-id'] &&
         object.spec.template.metadata.annotations['opencrane.ai/job-id'] == object.metadata.annotations['opencrane.ai/job-id'] &&
@@ -1016,7 +1016,7 @@ metadata:
   name: {{ $skillAdmissionName }}
   labels:
     {{- include "opencrane.labels" . | nindent 4 }}
-    app.kubernetes.io/component: governed-skill-workloads
+    app.kubernetes.io/component: skill-authoring-validation
 spec:
   policyName: {{ $skillAdmissionName }}
   validationActions: [Deny]
