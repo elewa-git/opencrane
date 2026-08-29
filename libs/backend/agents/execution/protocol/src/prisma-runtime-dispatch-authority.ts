@@ -14,7 +14,7 @@ import { _ApplyRuntimeCandidateSideEffects, _RuntimeCandidateRequiresEventReport
 import { PrismaRuntimeCommandDecisionUnitOfWork } from "./prisma-runtime-command-decision-unit-of-work";
 import { PrismaRuntimeDispatchStateUnitOfWork } from "./prisma-runtime-dispatch-state-repository";
 import { PrismaRuntimeResumeInputUnitOfWork } from "./prisma-runtime-resume-input-repository";
-import { _BuildToolInvocationIntent, _OpenRuntimeElicitation, _RuntimeToolInvocationFingerprint } from "./runtime-candidate-preparation";
+import { _BindToolInvocationAuthorization, _OpenRuntimeElicitation, _PrepareToolInvocation, _RuntimeToolInvocationFingerprint } from "./runtime-candidate-preparation";
 import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector";
 import { _ParseRuntimeResumeInput } from "./runtime-resume-input";
 import type { RuntimeContinuationAuthority, RuntimeContinuationSaveResult } from "./runtime-continuation.types";
@@ -414,13 +414,15 @@ async function _admitCandidate(transaction: Prisma.TransactionClient, repository
 			if (candidate.kind === RuntimeCandidateKinds.ExternalAction)
 			{
 				const now = new Date(clock.nowEpochMs());
+				const preparation = await _PrepareToolInvocation(transaction, context, stream.runtimeInstanceId, candidate, compileRunInput);
+				if (preparation === null) return { accepted: false, reason: "external_action_invalid" };
 				const authorizationEvidence = await externalActionAuthorization.admitInTransaction(transaction, context, candidate, now);
 				if (authorizationEvidence === null)
 					return { accepted: false, reason: "external_action_not_authorized" };
-				const intent = await _BuildToolInvocationIntent(transaction, context, stream.runtimeInstanceId, candidate, authorizationEvidence, compileRunInput);
-				if (intent === null) return { accepted: false, reason: "external_action_invalid" };
+				const intent = _BindToolInvocationAuthorization(preparation, context, authorizationEvidence);
+				if (intent === null) throw new RuntimeCandidateSideEffectDeniedError("external_action_invalid");
 				const durable = await __AdmitPreparingToolInvocationInTransaction(transaction, intent, now, TOOL_INVOCATION_PREPARATION_POLICY);
-				if (durable.outcome === ToolInvocationAdmissionOutcomes.Conflict) return { accepted: false, reason: "external_action_conflict" };
+				if (durable.outcome === ToolInvocationAdmissionOutcomes.Conflict) throw new RuntimeCandidateSideEffectDeniedError("external_action_conflict");
 			}
 			if (candidate.kind === RuntimeCandidateKinds.Elicitation)
 			{
@@ -428,7 +430,7 @@ async function _admitCandidate(transaction: Prisma.TransactionClient, repository
 			}
 			// 2c. Apply transaction-local canonical event effects before accepting the id.
 			const sideEffectDenial = await _ApplyRuntimeCandidateSideEffects(transaction, candidate, context.runId, context.attempt, sourceCommand.kind === RuntimeCommandKind.StartAttempt, eventReporter);
-			if (sideEffectDenial !== null) return { accepted: false, reason: sideEffectDenial };
+			if (sideEffectDenial !== null) throw new RuntimeCandidateSideEffectDeniedError(sideEffectDenial);
 			// 3. Append the accepted candidate id monotonically under the exact stream sequence fence.
 			const appended = await repository.appendCandidate(context.runId, context.attempt, stream.nextCommandSequence, candidate.candidateId);
 			if (appended.count !== 1) throw new Error("runtime dispatch lost its candidate acceptance fence");

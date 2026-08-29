@@ -762,6 +762,20 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(authorization.admitInTransaction).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ runId: "run-1", siloId: "silo-1" }), candidate, new Date("2026-07-20T00:01:00.000Z"));
 	});
 
+	it("validates compiled tool arguments before recording central authorization", async function _ValidatesBeforeAuthorization()
+	{
+		const authorization = { admitInTransaction: vi.fn() };
+		const context = _authority({ runState: "Running", externalActionAuthorization: authorization });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const argumentsValue = { q: 42 };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-invalid", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId: "integration:search:query", toolInvocationId: "invocation-invalid", argumentsDigest: ___DigestCanonicalJson(argumentsValue), arguments: argumentsValue };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: false, reason: "external_action_invalid" });
+		expect(authorization.admitInTransaction).not.toHaveBeenCalled();
+		expect(context.toolInvocations).toHaveLength(0);
+		expect(context.streams[0]?.acceptedCandidateIds).toEqual([]);
+	});
+
 	it("refuses evidence bound to a different workload assignment", async function _RefusesWrongAssignment()
 	{
 		const authorization = { admitInTransaction: vi.fn(async function _Admit(_transaction, context, candidate) { return _AuthorizationEvidence(context, candidate, `sha256:${"c".repeat(64)}`); }) };

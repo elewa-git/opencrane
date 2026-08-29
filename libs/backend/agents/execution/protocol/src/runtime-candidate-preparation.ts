@@ -10,6 +10,9 @@ import { _CompileRunInputForContext } from "./compiled-run-input-context";
 import type { RunInputCompiler, RuntimeDispatchContext } from "./prisma-runtime-dispatch-authority.types";
 import type { RuntimeExternalActionAuthorizationEvidence } from "./runtime-external-action-authorization.types";
 
+/** Provider-free invocation facts validated before central authority records an allow decision. */
+export type RuntimeToolInvocationPreparation = Omit<ToolInvocationIntent, "authorizationEvidence">;
+
 /** Bind one generic runtime proposal to transaction-consistent run, conversation, participant, and server time. */
 export async function _OpenRuntimeElicitation(context: RuntimeDispatchContext, candidate: RuntimeElicitationCandidate, elicitationUnitOfWork: RuntimeElicitationUnitOfWork, now: Date): Promise<boolean>
 {
@@ -44,54 +47,56 @@ export async function _OpenRuntimeElicitation(context: RuntimeDispatchContext, c
 	return opened !== null;
 }
 
-/** Check the candidate and build the ToolInvocation record saved when it is admitted. Contacts no provider. */
-export async function _BuildToolInvocationIntent(transaction: Parameters<RunInputCompiler>[2], context: RuntimeDispatchContext, runtimeInstanceId: string, candidate: RuntimeExternalActionCandidate, authorizationEvidence: RuntimeExternalActionAuthorizationEvidence, compileRunInput: RunInputCompiler): Promise<ToolInvocationIntent | null>
+/** Compile and validate provider-free invocation facts before recording an allow decision. */
+export async function _PrepareToolInvocation(transaction: Parameters<RunInputCompiler>[2], context: RuntimeDispatchContext, runtimeInstanceId: string, candidate: RuntimeExternalActionCandidate, compileRunInput: RunInputCompiler): Promise<RuntimeToolInvocationPreparation | null>
 {
-	try
-	{
-		const actualArgumentsDigest = __DigestCanonicalJson(candidate.arguments);
-		if (actualArgumentsDigest !== candidate.argumentsDigest
-			|| authorizationEvidence.agentRevisionId !== context.agentRevisionId
-			|| authorizationEvidence.runId !== context.runId
-			|| authorizationEvidence.attempt !== context.attempt
-			|| authorizationEvidence.argumentsDigest !== actualArgumentsDigest
-			|| authorizationEvidence.assignmentDigest !== context.assignmentDigest)
-			return null;
-		const compiled = await _CompileRunInputForContext(context, transaction, compileRunInput);
-		const tool = compiled.tools.find(function _Granted(definition) { return definition.toolRevisionId === candidate.toolRevisionId; });
-		if (tool === undefined || __DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest || !__ValidateDeferredToolArguments(tool.parametersSchema, candidate.arguments))
-			return null;
-		return {
-			siloId: context.siloId,
-			runId: context.runId,
-			attempt: context.attempt,
-			agentServiceId: context.agentServiceId,
-			agentRevisionId: context.agentRevisionId,
-			subjectId: context.identity.executionSubjectId,
-			requestIdentity: { runtimeInstanceId, commandId: candidate.commandId, candidateId: candidate.candidateId },
-			toolRevisionId: candidate.toolRevisionId,
-			toolInvocationId: candidate.toolInvocationId,
-			arguments: candidate.arguments,
-			argumentsDigest: candidate.argumentsDigest,
-			requestFingerprint: _RuntimeToolInvocationFingerprint(candidate, actualArgumentsDigest),
-			approvalRequired: tool.requiresApproval || candidate.toolRevisionId === PERSONAL_MEMORY_RECALL_TOOL_REVISION,
-			authorizationEvidence: {
-				principalId: authorizationEvidence.principalId,
-				actorKind: authorizationEvidence.actorKind,
-				coordinates: authorizationEvidence.coordinates,
-				decisionDigests: authorizationEvidence.decisionDigests,
-				membershipRevision: authorizationEvidence.membershipRevision,
-				assignmentDigest: authorizationEvidence.assignmentDigest,
-				evidenceDigest: authorizationEvidence.evidenceDigest,
-			},
-			recoveryMode: ExternalActionRecoveryModes.Manual,
-			recoveryKey: null,
-		};
-	}
-	catch
-	{
+	const actualArgumentsDigest = __DigestCanonicalJson(candidate.arguments);
+	if (actualArgumentsDigest !== candidate.argumentsDigest)
 		return null;
-	}
+	const compiled = await _CompileRunInputForContext(context, transaction, compileRunInput);
+	const tool = compiled.tools.find(function _Granted(definition) { return definition.toolRevisionId === candidate.toolRevisionId; });
+	if (tool === undefined || __DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest || !__ValidateDeferredToolArguments(tool.parametersSchema, candidate.arguments))
+		return null;
+	return {
+		siloId: context.siloId,
+		runId: context.runId,
+		attempt: context.attempt,
+		agentServiceId: context.agentServiceId,
+		agentRevisionId: context.agentRevisionId,
+		subjectId: context.identity.executionSubjectId,
+		requestIdentity: { runtimeInstanceId, commandId: candidate.commandId, candidateId: candidate.candidateId },
+		toolRevisionId: candidate.toolRevisionId,
+		toolInvocationId: candidate.toolInvocationId,
+		arguments: candidate.arguments,
+		argumentsDigest: candidate.argumentsDigest,
+		requestFingerprint: _RuntimeToolInvocationFingerprint(candidate, actualArgumentsDigest),
+		approvalRequired: tool.requiresApproval || candidate.toolRevisionId === PERSONAL_MEMORY_RECALL_TOOL_REVISION,
+		recoveryMode: ExternalActionRecoveryModes.Manual,
+		recoveryKey: null,
+	};
+}
+
+/** Bind central evidence only after the invocation is fully compiled and schema-valid. */
+export function _BindToolInvocationAuthorization(preparation: RuntimeToolInvocationPreparation, context: RuntimeDispatchContext, authorizationEvidence: RuntimeExternalActionAuthorizationEvidence): ToolInvocationIntent | null
+{
+	if (authorizationEvidence.agentRevisionId !== context.agentRevisionId
+		|| authorizationEvidence.runId !== context.runId
+		|| authorizationEvidence.attempt !== context.attempt
+		|| authorizationEvidence.argumentsDigest !== preparation.argumentsDigest
+		|| authorizationEvidence.assignmentDigest !== context.assignmentDigest)
+		return null;
+	return {
+		...preparation,
+		authorizationEvidence: {
+			principalId: authorizationEvidence.principalId,
+			actorKind: authorizationEvidence.actorKind,
+			coordinates: authorizationEvidence.coordinates,
+			decisionDigests: authorizationEvidence.decisionDigests,
+			membershipRevision: authorizationEvidence.membershipRevision,
+			assignmentDigest: authorizationEvidence.assignmentDigest,
+			evidenceDigest: authorizationEvidence.evidenceDigest,
+		},
+	};
 }
 
 /**
