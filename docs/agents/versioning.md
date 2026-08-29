@@ -98,4 +98,5 @@ untracked baseline bytes, and future chart/database changes without their versio
 An unreleased candidate records `previousRepositoryCommit`: the exact commit of its declared
 predecessor train. PR validation uses that commit until the predecessor tag exists. Release
 qualification requires the predecessor's immutable Git tag before the new release tag can publish
-an artifact or represent a deployable upgrade path.
+an artifact or represent a deployable upgrade path. That tag must point to the recorded commit, so
+it cannot silently change the upgrade path that PR validation checked.
