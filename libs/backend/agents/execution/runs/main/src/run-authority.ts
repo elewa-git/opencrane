@@ -28,10 +28,8 @@ function _isRetryable(run: AgentRun): boolean
  * "increments only one attempt when retry requests race" asserts.
  *
  * A replayed retry is handled ahead of the state checks. If the run is already one attempt past what
- * the caller observed, this may be that caller's own earlier request arriving twice, so the terminal
- * and service checks are skipped and the repository decides by comparing the stored retry key. Doing
- * it in this order is what lets a repeat still succeed after the AgentService has since retired,
- * which "returns the durable same-key attempt even when the service later retires" pins.
+ * the caller observed and owns the deterministic workflow task for that attempt, the terminal and
+ * service checks are skipped. This lets a repeat still succeed after the AgentService has retired.
  *
  * Called by: `PrismaConversationUnitOfWork.retryRun`
  * (libs/backend/server/conversations/main/src/db/prisma-conversation-unit-of-work.ts), reached from
@@ -39,9 +37,9 @@ function _isRetryable(run: AgentRun): boolean
  *
  * @param repository - Where the run is read and the attempt raised; the same instance is used for
  * both, so they see one database.
- * @param command - The run, the attempt the participant observed, who is asking, and their retry key.
- * @returns `started` when this call created the attempt, `idempotent` when the same retry key already
- * had — both are successes carrying the run at its new attempt. `denied` means nothing changed; the
+ * @param command - The run, the attempt the participant observed, and who is asking.
+ * @returns `started` when this call created the attempt, `idempotent` when an earlier request already
+ * started it — both are successes carrying the run at its new attempt. `denied` means nothing changed; the
  * reason decides the status code the router sends and whether the client should re-read first.
  * @throws Whatever the repository throws, typically when the database is unreachable. The router
  * catches it and answers 503, so a caller must not read a throw as a refusal.
@@ -51,7 +49,7 @@ export async function __StartNextRunAttempt(repository: AgentRunAuthorityReposit
 {
 	// 1. Refuse a malformed command before touching the database. Every field here is required by the
 	// write's conditions, so a blank one would silently widen or narrow what the update matches.
-	if (!command.runId.trim() || !command.siloId.trim() || !command.conversationId.trim() || !command.requestedBy.trim() || !command.idempotencyKey.trim() || !Number.isSafeInteger(command.expectedAttempt) || command.expectedAttempt < 1 || !Number.isFinite(Date.parse(command.acceptedAt)))
+	if (!command.runId.trim() || !command.siloId.trim() || !command.conversationId.trim() || !command.requestedBy.trim() || !Number.isSafeInteger(command.expectedAttempt) || command.expectedAttempt < 1 || !Number.isFinite(Date.parse(command.acceptedAt)))
 	{
 		return { outcome: "denied", reason: "invalid_command" };
 	}
@@ -62,7 +60,7 @@ export async function __StartNextRunAttempt(repository: AgentRunAuthorityReposit
 	// which the router answers 404 for, so this cannot be used to find out that a run exists.
 	// The `couldBeIdempotentRetry` check comes first because a run one attempt ahead may be this same
 	// request arriving twice: in that case the state and service checks are skipped and the repository
-	// settles it by the stored retry key, so a repeat still succeeds after the service has retired.
+	// settles it by the deterministic workflow task, so a repeat still succeeds after the service has retired.
 	const authority = await repository.getRunAuthority(command.runId);
 	if (authority === null)
 	{

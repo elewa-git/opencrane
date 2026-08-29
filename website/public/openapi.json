@@ -11255,7 +11255,7 @@
       "post": {
         "operationId": "retryMyConversationRun",
         "summary": "Start a fresh attempt for one failed conversation run",
-        "description": "Requires current organisation membership, active conversation participation, the exact terminal attempt, the still-active Agent revision, and a fresh retry key. Repeating the same key returns the same new attempt.",
+        "description": "Requires current organisation membership, active conversation participation, the exact terminal attempt, and the still-active Agent revision. Repeating the request for that attempt returns the same new attempt.",
         "tags": [
           "Conversations"
         ],
@@ -11285,18 +11285,12 @@
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
-                  "expectedAttempt",
-                  "idempotencyKey"
+                  "expectedAttempt"
                 ],
                 "properties": {
                   "expectedAttempt": {
                     "type": "integer",
                     "minimum": 1
-                  },
-                  "idempotencyKey": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 128
                   }
                 }
               }
@@ -11305,7 +11299,7 @@
         },
         "responses": {
           "200": {
-            "description": "The same retry key already started this attempt.",
+            "description": "The next attempt was already started.",
             "content": {
               "application/json": {
                 "schema": {

@@ -262,18 +262,18 @@ export const _SelfConversationsOpenapiPaths = {
 	// required: `__StartNextRunAttempt` uses it as a compare-and-swap guard, so two clients racing
 	// on the same failed attempt cannot both start one.
 	//
-	// 200 versus 201 is the client's only way to tell a fresh start from a replay of the same retry
-	// key, and 404 deliberately covers both "no such run" and "that run is not in a conversation you
+	// 200 versus 201 is the client's only way to tell a fresh start from a replay of the same next
+	// attempt, and 404 deliberately covers both "no such run" and "that run is not in a conversation you
 	// participate in" so the route cannot be used to discover other people's runs.
 	"/me/conversations/{conversationId}/runs/{runId}/retry": {
 		post: {
 			operationId: "retryMyConversationRun",
 			summary: "Start a fresh attempt for one failed conversation run",
-			description: "Requires current organisation membership, active conversation participation, the exact terminal attempt, the still-active Agent revision, and a fresh retry key. Repeating the same key returns the same new attempt.",
+			description: "Requires current organisation membership, active conversation participation, the exact terminal attempt, and the still-active Agent revision. Repeating the request for that attempt returns the same new attempt.",
 			tags: ["Conversations"],
 			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }, { name: "runId", in: "path", required: true, schema: { type: "string" } }],
-			requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["expectedAttempt", "idempotencyKey"], properties: { expectedAttempt: { type: "integer", minimum: 1 }, idempotencyKey: { type: "string", minLength: 1, maxLength: 128 } } } } } },
-			responses: { 201: { description: "Fresh attempt started.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "runId", "attempt"], properties: { outcome: { type: "string", enum: ["started"] }, runId: { type: "string" }, attempt: { type: "integer", minimum: 2 } } } } } }, 200: { description: "The same retry key already started this attempt.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "runId", "attempt"], properties: { outcome: { type: "string", enum: ["idempotent"] }, runId: { type: "string" }, attempt: { type: "integer", minimum: 2 } } } } } }, 400: { description: "Malformed retry request." }, 401: { description: "Authentication required." }, 404: { description: "Conversation run unavailable to this participant." }, 409: { description: "Attempt, terminal state, active Agent service, or revision no longer permits retry." }, 503: { description: "Retry authority unavailable." } },
+			requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["expectedAttempt"], properties: { expectedAttempt: { type: "integer", minimum: 1 } } } } } },
+			responses: { 201: { description: "Fresh attempt started.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "runId", "attempt"], properties: { outcome: { type: "string", enum: ["started"] }, runId: { type: "string" }, attempt: { type: "integer", minimum: 2 } } } } } }, 200: { description: "The next attempt was already started.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "runId", "attempt"], properties: { outcome: { type: "string", enum: ["idempotent"] }, runId: { type: "string" }, attempt: { type: "integer", minimum: 2 } } } } } }, 400: { description: "Malformed retry request." }, 401: { description: "Authentication required." }, 404: { description: "Conversation run unavailable to this participant." }, 409: { description: "Attempt, terminal state, active Agent service, or revision no longer permits retry." }, 503: { description: "Retry authority unavailable." } },
 		},
 	},
 	"/me/conversations/{conversationId}/archive": {

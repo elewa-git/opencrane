@@ -27,11 +27,6 @@ export interface StartNextRunAttemptCommand
 	readonly conversationId: string;
 	/** The authenticated subject asking. Must still be an active org member and a current participant when the write happens. */
 	readonly requestedBy: string;
-	/**
-	 * The client's retry key. Sending the same key again returns the attempt it already started
-	 * rather than starting a third; a different key against an already-advanced run is a conflict.
-	 */
-	readonly idempotencyKey: string;
 	/** ISO-8601 instant from the server's clock, stored as the new attempt's `acceptedAt`. */
 	readonly acceptedAt: string;
 }
@@ -168,7 +163,7 @@ export interface RunRetryAuthority
 {
 	/**
 	 * Starts or replays the next attempt of an existing run.
-	 * @param command - Run, observed attempt, signed-in owner, route, retry key, and server time.
+	 * @param command - Run, observed attempt, signed-in owner, route, and server time.
 	 * @returns The user-facing retry outcome.
 	 */
 	retry(command: StartNextRunAttemptCommand): Promise<StartNextRunAttemptResult>;
@@ -178,7 +173,7 @@ export interface RunRetryAuthority
  * What to tell the participant who asked to retry a run.
  *
  * Two of these are successes and differ only in who started the attempt: `started` means this
- * request did, `idempotent` means an earlier request with the same key already had. Both carry the
+ * request did, `idempotent` means an earlier request already started the next attempt. Both carry the
  * run at its new attempt, so a client can render either the same way — and both `outcome` strings
  * appear in the published OpenAPI schema for `POST /me/conversations/{id}/runs/{runId}/retry`
  * (201 and 200), so renaming one breaks API clients.

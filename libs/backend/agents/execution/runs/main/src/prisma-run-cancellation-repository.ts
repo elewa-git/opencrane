@@ -8,8 +8,8 @@ import type { RequestRunCancellationCommand, RequestRunCancellationResult, RunCa
 /**
  * Owns the Serializable database transaction for an AgentRun cancellation.
  *
- * The run fence, workload and proof-key revocations, pending approval cancellation, and workflow
- * event commit or roll back together. A request returns `cancelling` when accepted, `idempotent`
+ * The run fence, workload and proof-key revocations, and pending approval cancellation commit or
+ * roll back together. A request returns `cancelling` when accepted, `idempotent`
  * when the attempt is already cancelling or cancelled, `not_found` for a missing run, or `conflict`
  * when the command or saved authority does not permit the change.
  *

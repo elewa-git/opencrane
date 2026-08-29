@@ -18,7 +18,7 @@ const _RETRYABLE_RUN_RETRY_CODES = new Set(["P2002", "P2034"]);
  * The domain authority performs an advisory read and then a separately guarded write. This class
  * supplies a fresh transaction-bound repository for each part and may repeat the full decision only
  * after Prisma confirms P2002 or P2034 rolled it back. After three conflicts it reads the committed
- * next-attempt event and accepts it only when the stored owner and retry key match this request.
+ * next-attempt workflow task and accepts it only when it matches the requested run coordinates.
  *
  * Called by: `PrismaConversationUnitOfWork.retryRun` through its injected `RunRetryAuthority` port.
  * @implements RunRetryAuthority
@@ -39,7 +39,7 @@ export class PrismaAgentRunRetryUnitOfWork implements RunRetryAuthority
 
 	/**
 	 * Starts or replays a participant-authorized next attempt.
-	 * @param command - Owner, route, observed attempt, retry key, and server acceptance time.
+	 * @param command - Owner, route, observed attempt, and server acceptance time.
 	 * @returns The user-facing started, idempotent, or denied result.
 	 * @throws The last P2002/P2034 when no matching winner exists after three attempts, or any other
 	 * database error immediately.

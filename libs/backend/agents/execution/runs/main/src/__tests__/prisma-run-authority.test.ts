@@ -9,7 +9,7 @@ import type { AtomicStartNextRunAttemptCommand } from "../run-authority.types";
 /** Creates one participant-authorized atomic retry command. */
 function _command(): AtomicStartNextRunAttemptCommand
 {
-	return { runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", idempotencyKey: "retry-1", expectedAgentServiceId: "service-1", expectedAgentServiceSiloId: "silo-1", expectedAgentServiceState: "active", expectedActiveAgentRevisionId: "revision-1", acceptedAt: "2026-07-18T01:00:00.000Z" };
+	return { runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", expectedAgentServiceId: "service-1", expectedAgentServiceSiloId: "silo-1", expectedAgentServiceState: "active", expectedActiveAgentRevisionId: "revision-1", acceptedAt: "2026-07-18T01:00:00.000Z" };
 }
 
 /** Creates one retryable Prisma run row. */
@@ -75,7 +75,7 @@ describe("Prisma AgentRun authority adapter", function _suite()
 		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
 	});
 
-	it("replays only the same durable retry key for the next attempt", async function _Idempotency()
+	it("replays the deterministic workflow task for the next attempt", async function _Idempotency()
 	{
 		const run = { ..._runRow(), attempt: 2, state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null };
 		const transaction = { ..._taskStore(), ..._authority(), agentService: { findUnique: vi.fn().mockResolvedValue(_serviceRow()) }, agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn() } };
@@ -83,7 +83,7 @@ describe("Prisma AgentRun authority adapter", function _suite()
 		const repository = new PrismaAgentRunAuthorityRepository(transaction as never, _workflow());
 
 		await expect(repository.startNextAttemptAtomically(_command())).resolves.toMatchObject({ status: "idempotent", run: { attempt: 2 } });
-		await expect(repository.startNextAttemptAtomically({ ..._command(), idempotencyKey: "retry-other" })).resolves.toMatchObject({ status: "idempotent", run: { attempt: 2 } });
+		await expect(repository.startNextAttemptAtomically(_command())).resolves.toMatchObject({ status: "idempotent", run: { attempt: 2 } });
 		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
 	});
 
@@ -104,7 +104,7 @@ describe("Prisma AgentRun authority adapter", function _suite()
 		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
 	});
 
-	it("reads the committed same-key attempt after three rolled-back transactions", async function _ReadsWinner()
+	it("reads the committed next attempt after three rolled-back transactions", async function _ReadsWinner()
 	{
 		const uniqueConflict = new Prisma.PrismaClientKnownRequestError("unique conflict", { code: "P2002", clientVersion: "test" });
 		const serializationConflict = new Prisma.PrismaClientKnownRequestError("serialization conflict", { code: "P2034", clientVersion: "test" });

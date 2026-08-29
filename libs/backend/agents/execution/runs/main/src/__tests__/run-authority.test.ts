@@ -7,7 +7,7 @@ import type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AtomicRunA
 /** Creates one participant-authorized retry command. */
 function _command(): AtomicStartNextRunAttemptCommand
 {
-	return { runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", idempotencyKey: "retry-1", acceptedAt: "2026-07-18T01:00:00.000Z", expectedAgentServiceId: "service-1", expectedAgentServiceSiloId: "silo-1", expectedAgentServiceState: "active", expectedActiveAgentRevisionId: "revision-1" };
+	return { runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", acceptedAt: "2026-07-18T01:00:00.000Z", expectedAgentServiceId: "service-1", expectedAgentServiceSiloId: "silo-1", expectedAgentServiceState: "active", expectedActiveAgentRevisionId: "revision-1" };
 }
 
 /** Creates a failed first attempt for one logical run. */
@@ -138,7 +138,7 @@ describe("single AgentRun authority", function _suite()
 		expect((await repository.getRunAuthority("run-1"))?.run.attempt).toBe(2);
 	});
 
-	it("returns the durable same-key attempt even when the service later retires", async function _IdempotentAfterRetirement()
+	it("returns the durable next attempt even when the service later retires", async function _IdempotentAfterRetirement()
 	{
 		const run = { ..._run(), attempt: 2, state: "accepted" as const, acceptedAt: "2026-07-18T01:00:00.000Z", startedAt: null, finishedAt: null, terminalReason: null };
 		const repository: AgentRunAuthorityRepository = {

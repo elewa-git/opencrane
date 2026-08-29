@@ -202,7 +202,7 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 		// timings, and terminal reason go back to null — while the id, conversation, service, and
 		// revision stay, so the run keeps its identity and history rather than becoming a new run.
 		// A count other than 1 means somebody else got there first, so the row is read again to say
-		// which of the three things happened: the same retry replayed, a different attempt now, or the
+		// which of the three things happened: the next attempt already exists, a different attempt now, or the
 		// service having changed underneath.
 		const nextAttempt = command.expectedAttempt + 1;
 		const changed = await transaction.agentRun.updateMany({

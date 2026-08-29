@@ -1090,7 +1090,7 @@ export interface paths {
         put?: never;
         /**
          * Start a fresh attempt for one failed conversation run
-         * @description Requires current organisation membership, active conversation participation, the exact terminal attempt, the still-active Agent revision, and a fresh retry key. Repeating the same key returns the same new attempt.
+         * @description Requires current organisation membership, active conversation participation, the exact terminal attempt, and the still-active Agent revision. Repeating the request for that attempt returns the same new attempt.
          */
         post: operations["retryMyConversationRun"];
         delete?: never;
@@ -6978,12 +6978,11 @@ export interface operations {
             content: {
                 "application/json": {
                     expectedAttempt: number;
-                    idempotencyKey: string;
                 };
             };
         };
         responses: {
-            /** @description The same retry key already started this attempt. */
+            /** @description The next attempt was already started. */
             200: {
                 headers: {
                     [name: string]: unknown;
