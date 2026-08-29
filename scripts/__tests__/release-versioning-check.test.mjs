@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -15,6 +15,13 @@ import { isAdjacentMinor, isAdjacentPatch, parseSemver, sha256 } from "../releas
 function _WriteJson(path, value)
 {
 	writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function _Git(root, args)
+{
+	const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+	assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+	return result.stdout.trim();
 }
 
 function _Fixture({
@@ -119,16 +126,94 @@ test("rejects an invalid Git base instead of suppressing changed files", () =>
 	assert.match(`${result.stdout}${result.stderr}`, /definitely-not-a-ref/u);
 });
 
-test("scopes current release ownership to its declared predecessor", () =>
+test("uses the resolved predecessor reference and the CI base fallback", () =>
 {
-	assert.equal(__SelectDirectReleaseComparisonBase("0.9.0", "0.9.1"), "0.9.1");
-	assert.equal(__SelectDirectReleaseComparisonBase("0.9.1", null), "0.9.1");
+	assert.equal(__SelectDirectReleaseComparisonBase("guard-base", "0.9.3"), "0.9.3");
+	assert.equal(__SelectDirectReleaseComparisonBase("guard-base", null), "guard-base");
 });
 
-test("keeps the CLI's direct release diff scoped to the declared predecessor", () =>
+test("keeps the CLI's direct release diff scoped to the resolved predecessor revision", () =>
 {
 	const source = readFileSync(join(import.meta.dirname, "../release-versioning-check.mjs"), "utf8");
-	assert.match(source, /_ChangedFiles\(\[__SelectDirectReleaseComparisonBase\(base, versionBase\)\]\)/u);
+	assert.match(source, /previousRepositoryCommit/u);
+	assert.match(source, /__SelectDirectReleaseComparisonBase\(base, previousReleaseTag \?\? previousRepositoryCommit\)/u);
+	assert.match(source, /require-published-predecessor/u);
+});
+
+test("fetches release tags before requiring a published predecessor", () =>
+{
+	const workflow = readFileSync(join(import.meta.dirname, "../../.github/workflows/release.yml"), "utf8");
+	assert.match(workflow, /fetch-depth: 0/u);
+	assert.match(workflow, /--require-published-predecessor/u);
+});
+
+test("permits an untagged predecessor commit in PR validation but requires its tag for release qualification", () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.8.0",
+		previousRepositoryVersion: "0.7.0",
+		previousSchemaVersion: "0.7.0",
+		schemaVersion: "0.7.0",
+		adaptedVersion: "0.8.0",
+		previousChartVersion: "0.7.0",
+	});
+	try
+	{
+		_WriteJson(join(fixture.root, "nx.json"), { plugins: [] });
+		_WriteJson(join(fixture.root, "apps/example/project.json"), {
+			name: "example",
+			projectType: "application",
+			root: "apps/example",
+			metadata: { release: { adaptedVersion: "0.8.0" } },
+		});
+		mkdirSync(join(fixture.root, "apps/example/helm/migrations"), { recursive: true });
+		_WriteJson(join(fixture.root, "apps/example/helm/migrations/0.7.0-to-0.8.0.json"), {
+			fromChartVersion: "0.7.0",
+			toChartVersion: "0.8.0",
+			kind: "noop",
+		});
+		mkdirSync(join(fixture.root, "scripts"));
+		cpSync(join(import.meta.dirname, "../release-versioning-check.mjs"), join(fixture.root, "scripts/release-versioning-check.mjs"));
+		cpSync(join(import.meta.dirname, "../release-versioning"), join(fixture.root, "scripts/release-versioning"), { recursive: true });
+		symlinkSync(join(import.meta.dirname, "../../node_modules"), join(fixture.root, "node_modules"));
+		_Git(fixture.root, ["init"]);
+		_Git(fixture.root, ["config", "user.email", "release-versioning@example.test"]);
+		_Git(fixture.root, ["config", "user.name", "Release versioning test"]);
+		_Git(fixture.root, ["config", "commit.gpgSign", "false"]);
+		_Git(fixture.root, ["add", "."]);
+		_Git(fixture.root, ["commit", "-m", "Create the untagged predecessor"]);
+		const predecessor = _Git(fixture.root, ["rev-parse", "HEAD"]);
+		const manifestPath = join(fixture.root, "releases/0.8.0.json");
+		const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+		manifest.previousRepositoryCommit = predecessor;
+		_WriteJson(manifestPath, manifest);
+		writeFileSync(join(fixture.root, "apps/example/.release-marker"), "candidate\n");
+		_Git(fixture.root, ["add", "."]);
+		_Git(fixture.root, ["commit", "-m", "Compose the candidate release"]);
+		const candidate = _Git(fixture.root, ["rev-parse", "HEAD"]);
+		const command = [join(fixture.root, "scripts/release-versioning-check.mjs"), "--base", predecessor];
+		const prResult = spawnSync(process.execPath, command, { cwd: fixture.root, encoding: "utf8" });
+		assert.equal(prResult.status, 0, `${prResult.stdout}${prResult.stderr}`);
+		const qualificationResult = spawnSync(process.execPath, [...command, "--require-published-predecessor"], { cwd: fixture.root, encoding: "utf8" });
+		assert.notEqual(qualificationResult.status, 0);
+		assert.match(`${qualificationResult.stdout}${qualificationResult.stderr}`, /requires an immutable Git tag/u);
+		_Git(fixture.root, ["tag", "0.7.0", predecessor]);
+		const taggedQualificationResult = spawnSync(process.execPath, [...command, "--require-published-predecessor"], { cwd: fixture.root, encoding: "utf8" });
+		assert.equal(taggedQualificationResult.status, 0, `${taggedQualificationResult.stdout}${taggedQualificationResult.stderr}`);
+		_Git(fixture.root, ["tag", "-f", "0.7.0", candidate]);
+		const mismatchedTagResult = spawnSync(process.execPath, [...command, "--require-published-predecessor"], { cwd: fixture.root, encoding: "utf8" });
+		assert.notEqual(mismatchedTagResult.status, 0);
+		assert.match(`${mismatchedTagResult.stdout}${mismatchedTagResult.stderr}`, /does not match previousRepositoryCommit/u);
+		_Git(fixture.root, ["tag", "-f", "0.7.0", predecessor]);
+		_Git(fixture.root, ["tag", "0.8.0", candidate]);
+		const taggedCandidateResult = spawnSync(process.execPath, [...command, "--require-published-predecessor"], { cwd: fixture.root, encoding: "utf8" });
+		assert.equal(taggedCandidateResult.status, 0, `${taggedCandidateResult.stdout}${taggedCandidateResult.stderr}`);
+		assert.equal(_Git(fixture.root, ["rev-parse", "HEAD"]), candidate);
+	}
+	finally
+	{
+		rmSync(fixture.root, { recursive: true, force: true });
+	}
 });
 
 test("accepts a complete mirrored release fixture", async () =>

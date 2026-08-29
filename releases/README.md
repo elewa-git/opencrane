@@ -8,6 +8,10 @@ can truthfully combine independently evolved server, UI, database, worker, and c
 The `adoptionBaseline` is a one-time observed-composition stamp for history that predates this
 ledger; all later stamps identify the exact last adapted train.
 
+Before its predecessor version is tagged, a candidate manifest records `previousRepositoryCommit`.
+That immutable commit identifies the exact predecessor state used by PR validation. Release
+qualification still requires the predecessor's Git tag before publishing the candidate.
+
 The release manifest records the version and database images used by a deployment. When the database
 schema version changes, the deployer runs the dedicated Prisma migration image. Prisma Migrate reads
 the one ledger under `apps/opencrane/prisma/prisma-migrations/`; there is no second version-pair SQL

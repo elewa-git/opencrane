@@ -18,13 +18,13 @@ import { compareSemver, isAdjacentMinor, parseSemver, readJson, sha256 } from ".
  * keeps that base's already-released changes out of the candidate's direct diff.
  * Called by: `release-versioning-check.mjs` before it validates the workspace.
  * @param {string} base The last successful workflow revision used for cumulative validation.
- * @param {string | null} versionBase The candidate manifest's declared predecessor.
- * @returns {string} The predecessor when present, otherwise the cumulative base for adoption.
+ * @param {string | null} predecessorRef The immutable predecessor tag or commit when one exists.
+ * @returns {string} The immutable predecessor reference, or the cumulative base for adoption.
  * @see validateWorkspace
  */
-export function __SelectDirectReleaseComparisonBase(base, versionBase)
+export function __SelectDirectReleaseComparisonBase(base, predecessorRef)
 {
-	return versionBase ?? base;
+	return predecessorRef ?? base;
 }
 
 const _IGNORED_TOUCH = [

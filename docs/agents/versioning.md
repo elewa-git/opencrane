@@ -94,3 +94,8 @@ npm run test:release-versioning
 
 The checker rejects missing app stamps, package/chart mirror drift, an incomplete release manifest,
 untracked baseline bytes, and future chart/database changes without their version-to-version path.
+
+An unreleased candidate records `previousRepositoryCommit`: the exact commit of its declared
+predecessor train. PR validation uses that commit until the predecessor tag exists. Release
+qualification requires the predecessor's immutable Git tag before the new release tag can publish
+an artifact or represent a deployable upgrade path.

@@ -2,6 +2,7 @@
   "$schema": "./release-manifest.schema.json",
   "repositoryVersion": "0.10.0",
   "previousRepositoryVersion": "0.9.3",
+  "previousRepositoryCommit": "abc7a62a5c7d6d1c9601ded46a18015cfedb4cd4",
   "adoptionBaseline": false,
   "database": {
     "schemaVersion": "0.10.0",
@@ -112,8 +113,8 @@
     "skill-authoring": {
       "root": "apps/skill-authoring",
       "adaptedVersion": "0.10.0",
-      "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
+      "chartVersion": "0.10.0",
+      "chartAppVersion": "0.10.0"
     },
     "tool-runner": {
       "root": "apps/tool-runner",
