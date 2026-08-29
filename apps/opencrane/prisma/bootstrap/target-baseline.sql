@@ -147,7 +147,7 @@ CREATE TYPE "McpServerTransport" AS ENUM ('streamable-http', 'sse', 'websocket')
 
 CREATE TYPE "McpEraProbeStatus" AS ENUM ('not-required', 'pending', 'accepted', 'rejected');
 
-CREATE TYPE "McpbValidationState" AS ENUM ('pending', 'verified', 'rejected');
+CREATE TYPE "OciImageValidationState" AS ENUM ('pending', 'imported', 'rejected');
 
 -- CreateEnum
 CREATE TYPE "McpServerStatus" AS ENUM ('active', 'degraded', 'draft');
@@ -1001,16 +1001,16 @@ CREATE TABLE "mcp_registration_claims" (
 );
 
 -- CreateTable
-CREATE TABLE "mcpb_validation_claims" (
+CREATE TABLE "oci_image_validation_claims" (
     "silo_id" TEXT NOT NULL,
     "identity_digest" TEXT NOT NULL,
     "touched_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "mcpb_validation_claims_pkey" PRIMARY KEY ("silo_id", "identity_digest")
+    CONSTRAINT "oci_image_validation_claims_pkey" PRIMARY KEY ("silo_id", "identity_digest")
 );
 
 -- CreateTable
-CREATE TABLE "mcpb_validations" (
+CREATE TABLE "oci_image_validations" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
     "artifact_id" TEXT NOT NULL,
@@ -1020,20 +1020,18 @@ CREATE TABLE "mcpb_validations" (
     "media_type" TEXT NOT NULL,
     "submission_key_digest" TEXT NOT NULL,
     "submission_digest" TEXT NOT NULL,
-    "accepted_manifest_version" TEXT NOT NULL DEFAULT '0.3',
-    "state" "McpbValidationState" NOT NULL DEFAULT 'pending',
-    "manifest_name" TEXT,
-    "bundle_version" TEXT,
-    "manifest_digest" TEXT,
-    "publisher" TEXT,
-    "signer_fingerprint" TEXT,
+    "state" "OciImageValidationState" NOT NULL DEFAULT 'pending',
+    "index_digest" TEXT,
+    "image_manifest_digest" TEXT,
+    "config_digest" TEXT,
+    "registry_reference" TEXT,
     "failure_code" TEXT,
     "created_by_principal_id" TEXT NOT NULL,
     "completed_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "mcpb_validations_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "oci_image_validations_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2289,9 +2287,9 @@ CREATE UNIQUE INDEX "mcp_servers_silo_id_registration_key_digest_key" ON "mcp_se
 -- CreateIndex
 CREATE INDEX "mcp_servers_approval_status_idx" ON "mcp_servers"("approval_status");
 
-CREATE UNIQUE INDEX "mcpb_validations_silo_id_submission_key_digest_key" ON "mcpb_validations"("silo_id", "submission_key_digest");
+CREATE UNIQUE INDEX "oci_image_validations_silo_id_submission_key_digest_key" ON "oci_image_validations"("silo_id", "submission_key_digest");
 
-CREATE INDEX "mcpb_validations_silo_id_state_created_at_idx" ON "mcpb_validations"("silo_id", "state", "created_at");
+CREATE INDEX "oci_image_validations_silo_id_state_created_at_idx" ON "oci_image_validations"("silo_id", "state", "created_at");
 
 -- CreateIndex
 CREATE INDEX "mcp_server_installs_principal_id_idx" ON "mcp_server_installs"("principal_id");
@@ -2937,28 +2935,28 @@ ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_era_probe_evidence_check" 
     ("era_probe_status" = 'not-required' AND "era_probe_attempts" = 0 AND "registration_key_digest" IS NULL AND "registration_digest" IS NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
     OR ("era_probe_status" = 'pending' AND "era_probe_attempts" >= 0 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
     OR ("era_probe_status" = 'accepted' AND "era_probe_attempts" >= 1 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND btrim("era_protocol_version") <> '' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NOT NULL)
-    OR ("era_probe_status" = 'rejected' AND "era_probe_attempts" >= 1 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probed_at" IS NOT NULL AND ((btrim("era_protocol_version") <> '' AND "era_probe_failure_code" IS NULL) OR ("era_protocol_version" IS NULL AND "era_probe_failure_code" IN ('unsafe_endpoint', 'invalid_response', 'retry_exhausted'))))
+    OR ("era_probe_status" = 'rejected' AND "era_probe_attempts" >= 1 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probed_at" IS NOT NULL AND ((btrim("era_protocol_version") <> '' AND "era_probe_failure_code" = 'unsupported_mcp_protocol_version') OR ("era_protocol_version" IS NULL AND "era_probe_failure_code" IN ('unsafe_endpoint', 'not_mcp_server', 'retry_exhausted'))))
 );
 
 ALTER TABLE "mcp_registration_claims" ADD CONSTRAINT "mcp_registration_claims_identity_check" CHECK (
     btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
 );
 
-ALTER TABLE "mcpb_validation_claims" ADD CONSTRAINT "mcpb_validation_claims_identity_check" CHECK (
+ALTER TABLE "oci_image_validation_claims" ADD CONSTRAINT "oci_image_validation_claims_identity_check" CHECK (
     btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
 );
 
-ALTER TABLE "mcpb_validations" ADD CONSTRAINT "mcpb_validations_identity_check" CHECK (
+ALTER TABLE "oci_image_validations" ADD CONSTRAINT "oci_image_validations_identity_check" CHECK (
     btrim("silo_id") <> '' AND btrim("artifact_id") <> '' AND btrim("artifact_revision_id") <> '' AND
     btrim("created_by_principal_id") <> '' AND btrim("media_type") <> '' AND "byte_length" >= 0 AND
-    "accepted_manifest_version" = '0.3' AND "content_address" ~ '^sha256:[0-9a-f]{64}$' AND
+    "content_address" ~ '^sha256:[0-9a-f]{64}$' AND
     "submission_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "submission_digest" ~ '^sha256:[0-9a-f]{64}$'
 );
 
-ALTER TABLE "mcpb_validations" ADD CONSTRAINT "mcpb_validations_result_check" CHECK (
-    ("state" = 'pending' AND "manifest_name" IS NULL AND "bundle_version" IS NULL AND "manifest_digest" IS NULL AND "publisher" IS NULL AND "signer_fingerprint" IS NULL AND "failure_code" IS NULL AND "completed_at" IS NULL)
-    OR ("state" = 'verified' AND btrim("manifest_name") <> '' AND btrim("bundle_version") <> '' AND "manifest_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("publisher") <> '' AND "signer_fingerprint" ~ '^sha256:[0-9a-f]{64}$' AND "failure_code" IS NULL AND "completed_at" IS NOT NULL)
-    OR ("state" = 'rejected' AND "manifest_name" IS NULL AND "bundle_version" IS NULL AND "manifest_digest" IS NULL AND "publisher" IS NULL AND "signer_fingerprint" IS NULL AND "failure_code" IN ('artifact_mismatch', 'bundle_too_large', 'invalid_archive', 'invalid_manifest', 'invalid_signature', 'unsupported_manifest_version') AND "completed_at" IS NOT NULL)
+ALTER TABLE "oci_image_validations" ADD CONSTRAINT "oci_image_validations_result_check" CHECK (
+    ("state" = 'pending' AND "index_digest" IS NULL AND "image_manifest_digest" IS NULL AND "config_digest" IS NULL AND "registry_reference" IS NULL AND "failure_code" IS NULL AND "completed_at" IS NULL)
+    OR ("state" = 'imported' AND "index_digest" ~ '^sha256:[0-9a-f]{64}$' AND "image_manifest_digest" ~ '^sha256:[0-9a-f]{64}$' AND "config_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registry_reference" ~ '^[a-z0-9][a-z0-9.-]*(?::[0-9]+)?/[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$' AND "failure_code" IS NULL AND "completed_at" IS NOT NULL)
+    OR ("state" = 'rejected' AND "index_digest" IS NULL AND "image_manifest_digest" IS NULL AND "config_digest" IS NULL AND "registry_reference" IS NULL AND "failure_code" IN ('artifact_mismatch', 'bundle_too_large', 'malformed_zip_package', 'not_oci_image_layout', 'invalid_layout', 'invalid_index', 'invalid_image_manifest', 'validation_failed', 'registry_import_failed') AND "completed_at" IS NOT NULL)
 );
 
 -- AddForeignKey

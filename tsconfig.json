@@ -10,6 +10,9 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "paths": {
+      "@opencrane/backend/server/utils": [
+        "./libs/backend/server/utils/src/index.ts"
+      ],
       "@opencrane/backend/server/agents/agent-services": [
         "./libs/backend/server/agents/agent-services/main/src/index.ts"
       ],
@@ -204,6 +207,9 @@
       ],
       "@opencrane/backend/server/infra/mcp-era-probe": [
         "./libs/backend/server/infra/mcp-era-probe/src/index.ts"
+      ],
+      "@opencrane/backend/server/infra/oci-registry": [
+        "./libs/backend/server/infra/oci-registry/src/index.ts"
       ],
       "@opencrane/backend/server/infra/workflows/contract": [
         "./libs/backend/server/infra/workflows/contract/src/index.ts"

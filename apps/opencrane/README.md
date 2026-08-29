@@ -94,9 +94,10 @@ its resources to the lifecycle owner.
   sharing authority is mounted behind the shared per-IP limiter before identity or database work.
 - `src/app/runtime-composition.ts` binds controller, skill-workload, runtime, and optional-worker
   authorities by caller plane without choosing transport paths.
-- `src/app/mcp-workflow-composition.ts` creates one Absurd worker for both remote MCP protocol
-  checks and saved MCP bundle checks. A workflow is saved work that may continue later; here it
-  checks a registered server or signed bundle without keeping the administrator's request open.
+- `src/app/mcp-workflow-composition.ts` creates one Absurd worker for remote MCP protocol checks
+  and OCI image admission. A workflow is saved work that may continue after the server restarts.
+  Here it checks a registered server, validates a saved OCI Image Layout ZIP, imports the accepted
+  image into the configured registry, and saves its immutable digest without keeping the request open.
 - `src/app/persona-approval-composition.ts` adapts agent-service persona selection to the persona
   approval port on one Serializable transaction. It maps agent outcomes but owns no persona or
   AgentRevision persistence.
@@ -195,6 +196,7 @@ are:
 | `OPENCRANE_SILO_ID` | Silo that owns tasks admitted by this server | required |
 | `OPENCRANE_WORKFLOW_*` | Absurd database pool, worker concurrency, and polling limits | small development defaults |
 | `OPENCRANE_MCP_ERA_PROBE_*` | Timeout and response-size limit for remote MCP protocol checks | 5 seconds / 64 KiB |
+| `OPENCRANE_OCI_REGISTRY_*` | Fixed HTTPS registry repository, request timeout, and optional Secret-backed authorization used to import admitted MCP images by digest | deployment profile / 30 seconds / no credential |
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `OPENCRANE_INITIAL_MODEL_*` | Optional first provider key; the server persists its custody reference and requires LiteLLM registration before readiness | disabled |

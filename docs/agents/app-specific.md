@@ -50,6 +50,7 @@ app's source.
 | [`libs/backend/server/conversation-assets`](../../libs/backend/server/conversation-assets/main/README.md) | Participant upload, quarantine, scan, and message-attachment authority. |
 | [`libs/backend/server/infra`](../../libs/backend/server/infra/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
 | [`libs/backend/server/infra/workflows`](../../libs/backend/server/infra/workflows/README.md) | Workflow-engine task contract, guardrails, finite respawn chains, the Absurd adapter, and deterministic test support. |
+| [`libs/backend/server/infra/oci-registry`](../../libs/backend/server/infra/oci-registry/README.md) | Digest-checked OCI Distribution client used by image admission. |
 | [`libs/backend/server/infra/organization-membership-gateway`](../../libs/backend/server/infra/organization-membership-gateway/README.md) | HTTPS and projected-token transport to Fleet membership and billing authority. |
 | [`libs/backend/observability`](../../libs/backend/observability/README.md) | Cross-cutting structured logging and execution tracing. |
 

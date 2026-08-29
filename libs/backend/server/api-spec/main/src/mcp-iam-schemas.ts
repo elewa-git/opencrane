@@ -78,9 +78,9 @@ export const _McpIamOpenapiSchemas = {
 			groups: { type: "array", description: "All local groups eligible to receive an MCP authorization grant.", items: { $ref: "#/components/schemas/EntitledGroup" } },
 		},
 	},
-	McpbValidationSubmission: {
+	OciImageValidationSubmission: {
 		type: "object",
-		description: "An organisation-admin request to verify one exact published MCP bundle. The idempotency key makes a retried request return the same saved validation.",
+		description: "An organisation-admin request to admit one exact published OCI image. The idempotency key makes a retried request return the same saved record.",
 		required: ["idempotencyKey", "artifactId", "artifactRevisionId"],
 		additionalProperties: false,
 		properties: {
@@ -89,9 +89,9 @@ export const _McpIamOpenapiSchemas = {
 			artifactRevisionId: { type: "string", description: "Exact immutable published revision to verify." },
 		},
 	},
-	McpbValidation: {
+	OciImageValidation: {
 		type: "object",
-		description: "Saved status of one MCP bundle validation. A background workflow verifies the signed package and its manifest after this record is created.",
+		description: "Saved status of one OCI image admission. A background workflow checks the full layout and imports every referenced blob into the configured registry.",
 		required: ["id", "artifactId", "artifactRevisionId", "byteLength", "mediaType", "submissionDigest", "state"],
 		properties: {
 			id: { type: "string", description: "Stable validation identifier." },
@@ -100,13 +100,12 @@ export const _McpIamOpenapiSchemas = {
 			byteLength: { type: "integer", minimum: 0, description: "Saved compressed bundle size in bytes." },
 			mediaType: { type: "string", description: "Media type saved with the artifact revision." },
 			submissionDigest: { type: "string", description: "Digest that binds the background job to its immutable input." },
-			state: { type: "string", enum: ["Pending", "Verified", "Rejected"], description: "Current validation result." },
-			manifestName: { type: ["string", "null"], description: "Verified bundle name, or null until verification succeeds." },
-			bundleVersion: { type: ["string", "null"], description: "Verified bundle version, or null until verification succeeds." },
-			manifestDigest: { type: ["string", "null"], description: "Digest of the verified root manifest, or null until verification succeeds." },
-			publisher: { type: ["string", "null"], description: "Trusted signing certificate publisher, or null until verification succeeds." },
-			signerFingerprint: { type: ["string", "null"], description: "Trusted signing certificate fingerprint, or null until verification succeeds." },
-			failureCode: { type: ["string", "null"], enum: ["artifact_mismatch", "bundle_too_large", "invalid_archive", "invalid_manifest", "invalid_signature", "unsupported_manifest_version", null], description: "Bounded rejection reason, or null while pending or verified." },
+			state: { type: "string", enum: ["Pending", "Imported", "Rejected"], description: "Current admission result." },
+			indexDigest: { type: ["string", "null"], description: "Digest of the verified OCI layout index, or null until verification succeeds." },
+			imageManifestDigest: { type: ["string", "null"], description: "Digest of the selected OCI image manifest, or null until verification succeeds." },
+			configDigest: { type: ["string", "null"], description: "Digest of the selected OCI image configuration, or null until verification succeeds." },
+			registryReference: { type: ["string", "null"], description: "Digest-pinned image reference in the configured registry, or null until import succeeds." },
+			failureCode: { type: ["string", "null"], enum: ["artifact_mismatch", "bundle_too_large", "malformed_zip_package", "not_oci_image_layout", "invalid_layout", "invalid_index", "invalid_image_manifest", "validation_failed", "registry_import_failed", null], description: "Bounded rejection reason, or null while pending or imported." },
 		},
 	},
 	ResourceShare: {

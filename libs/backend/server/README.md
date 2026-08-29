@@ -16,6 +16,7 @@ contract.
 | [`knowledge`](./knowledge/) | Organisational retrieval and memory access. | retrieval |
 | [`tenancy`](./tenancy/) | The organisation boundary used by server capabilities. | cluster-tenants |
 | [`reporting`](./reporting/) | Agent and model economics. | spend |
+| [`utils`](./utils/) | Server-only helpers shared across capability boundaries. | ZIP package parsing |
 | [`infra`](./infra/) | Process-specific transport, identity, and external-I/O seams. | api, auth, agent-runtime-stream, workload-identity, http, memory-gateway-client, obot-custody, sandbox-execution |
 
 [`api-spec`](./api-spec/main/) remains flat because it aggregates public paths from every group;

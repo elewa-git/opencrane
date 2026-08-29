@@ -87,6 +87,14 @@ export interface OpenCraneWorkflowConfig
 	readonly mcpEraProbeMaximumResponseBytes: number;
 	/** Hard timeout for one remote MCP protocol check. */
 	readonly mcpEraProbeTimeoutMilliseconds: number;
+	/** Optional absolute path whose current contents authorize the configured OCI registry. */
+	readonly ociRegistryAuthorizationFilePath: string | undefined;
+	/** HTTPS origin of the registry that stores admitted OCI images. */
+	readonly ociRegistryBaseUrl: string;
+	/** Fixed repository below the registry origin used for admitted MCP images. */
+	readonly ociRegistryRepository: string;
+	/** Hard timeout applied separately to each OCI registry request. */
+	readonly ociRegistryTimeoutMilliseconds: number;
 	/** Delay between checks for newly admitted durable tasks. */
 	readonly pollIntervalMilliseconds: number;
 	/** Silo that owns every task admitted by this server process. */

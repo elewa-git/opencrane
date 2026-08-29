@@ -473,6 +473,15 @@ clustertenantManager:
     pollIntervalMilliseconds: 100
     mcpEraProbeTimeoutMilliseconds: 5000
     mcpEraProbeMaximumResponseBytes: 65536
+    # -- OCI Image Layout ZIP admission imports accepted MCP images into this fixed repository.
+    # The reserved .invalid default is non-routable; a deployment profile must name its registry.
+    ociRegistry:
+      baseUrl: https://registry.invalid
+      repository: opencrane/mcp-images
+      requestTimeoutMilliseconds: 30000
+      authorization:
+        existingSecret: ""
+        secretKey: authorization
   # -- Optional first model credential. The deploy engine creates the named provider-custody
   # Secret from OPENCRANE_INITIAL_MODEL_API_KEY, then the server seeds it through LiteLLM before
   # becoming ready. Keep both fields empty for a deliberately model-unconfigured install.

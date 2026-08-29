@@ -621,10 +621,10 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/server/gateways/mcp/main/src/mcpb-validation/prisma-mcpb-validation-repository.ts",
-        "adapter": "PrismaMcpbValidationRepository",
-        "contract": "McpbValidationRepository",
-        "contractImportPath": "./mcpb-validation-repository.types",
+        "path": "libs/backend/server/gateways/mcp/main/src/oci-image-validation/prisma-oci-image-validation-repository.ts",
+        "adapter": "PrismaOciImageValidationRepository",
+        "contract": "OciImageValidationRepository",
+        "contractImportPath": "./oci-image-validation-repository.types",
         "constructs": []
       },
       {
@@ -1260,8 +1260,8 @@
             "importPath": "./prisma-mcp-operator-repository"
           },
           {
-            "adapter": "PrismaMcpbValidationRepository",
-            "importPath": "../mcpb-validation/prisma-mcpb-validation-repository"
+            "adapter": "PrismaOciImageValidationRepository",
+            "importPath": "../oci-image-validation/prisma-oci-image-validation-repository"
           },
           {
             "adapter": "PrismaAuthorizationGrantRepository",
