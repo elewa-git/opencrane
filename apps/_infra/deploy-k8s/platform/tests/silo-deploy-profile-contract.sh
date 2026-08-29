@@ -67,6 +67,7 @@ grep -Fq -- 'clustertenantManager.firstUser.clusterTenant=$prior_first_user_clus
 grep -Fq -- '"$extra_set_flag" == "--set-string"' "$DEPLOY_CORE"
 grep -Fq -- '"${EXTRA_HELM_ARGS[@]-}"' "$DEPLOY_CORE"
 grep -Fq -- 'if [[ ${#EXTRA_SET[@]} -gt 0 ]]; then' "$DEPLOY_CORE"
+grep -Fq -- $'  --server-side=true\n  --force-conflicts' "$DEPLOY_CORE"
 grep -Fq -- 'SKILL_AUTHORING_NAMESPACE="${RELEASE}-skill-authoring"' "$DEPLOY_CORE"
 grep -Fq -- 'TOOL_RUNNER_NAMESPACE="${RELEASE}-tools"' "$DEPLOY_CORE"
 grep -Fq -- 'MCP_EXECUTOR_NAMESPACE="${RELEASE}-mcp-executors"' "$DEPLOY_CORE"

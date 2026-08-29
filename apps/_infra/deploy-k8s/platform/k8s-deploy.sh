@@ -890,7 +890,7 @@ ensure_registry_pull_secret "$NAMESPACE" "$REGISTRY_PULL_SECRET" "$REGISTRY_PULL
 log "Using the app-owned chart sources packaged from this checkout…"
 
 log "Installing the OpenCrane Helm release '$RELEASE'…"
-# --force-conflicts: Helm 4 applies server-side, so any out-of-band actor that has
+# --server-side and --force-conflicts: Helm applies the chart through server-side apply, so any out-of-band actor that has
 # claimed field ownership of a chart-rendered field (e.g. a `kubectl patch`/`kubectl set
 # image` leaving a `kubectl-*` manager, or a now-removed operator drift-repairer whose
 # stale `node-fetch` ownership persists on the live object — see the warning above and
@@ -902,6 +902,7 @@ log "Installing the OpenCrane Helm release '$RELEASE'…"
 build_membership_helm_args
 build_runtime_continuation_keyring_helm_args
 helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --create-namespace
+  --server-side=true
   --force-conflicts
   --set-string "networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST"
   --set-string "clustertenantManager.database.existingSecret=$POSTGRES_APP_SECRET"
