@@ -692,6 +692,24 @@ RETIREMENT_OWNER_LABEL="opencrane.ai/retirement-owner"
 SKILL_AUTHORING_NAMESPACE="${RELEASE}-skill-authoring"
 TOOL_RUNNER_NAMESPACE="${RELEASE}-tools"
 MCP_EXECUTOR_NAMESPACE="${RELEASE}-mcp-executors"
+_adopt_legacy_artifact_namespace() {
+  local resource_name="${RELEASE}-artifact-service"
+  local resource
+  local managed_by
+  local helm_release_name
+  local helm_release_namespace
+  for resource in deployment persistentvolumeclaim service serviceaccount networkpolicy; do
+    managed_by="$(kubectl get "$resource/$resource_name" -n "$ARTIFACT_NAMESPACE" -o 'jsonpath={.metadata.labels.app\.kubernetes\.io/managed-by}' 2>/dev/null || true)"
+    helm_release_name="$(kubectl get "$resource/$resource_name" -n "$ARTIFACT_NAMESPACE" -o 'jsonpath={.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)"
+    helm_release_namespace="$(kubectl get "$resource/$resource_name" -n "$ARTIFACT_NAMESPACE" -o 'jsonpath={.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || true)"
+    if [[ "$managed_by" != "Helm" || "$helm_release_name" != "$RELEASE" \
+      || "$helm_release_namespace" != "$NAMESPACE" ]]; then
+      err "Cannot adopt legacy artifact namespace '$ARTIFACT_NAMESPACE'; '$resource/$resource_name' does not prove Helm release '$RELEASE' in '$NAMESPACE' owns it."
+      exit 1
+    fi
+  done
+  kubectl label namespace "$ARTIFACT_NAMESPACE" "$RETIREMENT_OWNER_LABEL=$RELEASE"
+}
 set +e
 ARTIFACT_NAMESPACE_RESOURCE="$(kubectl get namespace "$ARTIFACT_NAMESPACE" --ignore-not-found -o name)"
 ARTIFACT_NAMESPACE_STATUS=$?
@@ -702,7 +720,9 @@ if (( ARTIFACT_NAMESPACE_STATUS != 0 )); then
 fi
 if [[ -n "$ARTIFACT_NAMESPACE_RESOURCE" ]]; then
   ARTIFACT_NAMESPACE_OWNER="$(kubectl get namespace "$ARTIFACT_NAMESPACE" -o "jsonpath={.metadata.labels.${RETIREMENT_OWNER_LABEL//./\\.}}")"
-  if [[ "$ARTIFACT_NAMESPACE_OWNER" != "$RELEASE" ]]; then
+  if [[ -z "$ARTIFACT_NAMESPACE_OWNER" ]]; then
+    _adopt_legacy_artifact_namespace
+  elif [[ "$ARTIFACT_NAMESPACE_OWNER" != "$RELEASE" ]]; then
     err "Artifact namespace '$ARTIFACT_NAMESPACE' belongs to '${ARTIFACT_NAMESPACE_OWNER:-an unknown owner}', not '$RELEASE'."
     exit 1
   fi

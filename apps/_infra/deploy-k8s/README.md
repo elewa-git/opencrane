@@ -99,7 +99,9 @@ outside its deletion surface.
 The umbrella renders no business logic and installs no cluster-wide controller. It composes app-owned
 templates, the server and runtime namespaces, per-silo `NetworkPolicies`, and the warm runtime Pod's
 release-scoped `ValidatingAdmissionPolicy`; it does not own the workloads themselves (each app does) or
-the shared substrate helpers (the `k8s-platform` library does). Self-service ClusterTenant management and
+the shared substrate helpers (the `k8s-platform` library does). During a forward upgrade, the deploy
+script adopts an unlabelled legacy artifact namespace only when its Helm deployment proves the exact
+release and namespace owner. Self-service ClusterTenant management and
 billing are OFF — a silo serves exactly one ClusterTenant.
 
 ## Dependency direction
