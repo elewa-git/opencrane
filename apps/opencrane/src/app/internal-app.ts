@@ -13,10 +13,14 @@ import { _CreateHttpRequestLogger } from "./telemetry";
 import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
 
 /** Fails closed when an isolated app test does not supply the process workflow engine. */
-const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "spawn"> = {
+const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = {
 	async spawn(): Promise<never>
 	{
 		throw new Error("workflow task admission is unavailable");
+	},
+	async emitEventInTransaction(): Promise<never>
+	{
+		throw new Error("workflow event admission is unavailable");
 	},
 };
 
@@ -26,7 +30,7 @@ const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "spawn"> = {
  * It shares the public listener's signed-session middleware only so channel-proxy can delegate the
  * browser cookie. Every resolver request independently TokenReviews the proxy workload identity.
  */
-export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn"> = _UnavailableWorkflowExecution): Express
+export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = _UnavailableWorkflowExecution): Express
 {
 	const app = express();
 

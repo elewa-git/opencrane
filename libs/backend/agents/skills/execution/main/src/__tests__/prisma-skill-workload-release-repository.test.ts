@@ -9,11 +9,11 @@ describe("Prisma skill workload release repository", function _DescribeReleaseRe
 		const updateManyAndReturn = vi.fn().mockResolvedValue([{ releaseClaimedAt: new Date("2099-07-26T05:00:01.000Z"), releaseExpiresAt: new Date("2099-07-26T05:00:31.000Z") }]);
 		const transaction = {
 			skillWorkloadReleaseClaimCandidate: { findFirst: vi.fn().mockResolvedValue({ id: "workload-1" }) },
-			skillWorkload: { findUnique: vi.fn().mockResolvedValue({ id: "workload-1", siloId: "silo-1", kind: "Authoring", state: "Assigned", workloadUid: "job-uid-1", releasedAt: null, releaseClaimedAt: null, releaseDeliveryCount: 0, releaseExpiresAt: null, bootstrap: { consumedAt: null, expiresAt: new Date("2099-07-26T05:15:00.000Z") } }), updateManyAndReturn },
+			skillWorkload: { findUnique: vi.fn().mockResolvedValue({ id: "workload-1", siloId: "silo-1", kind: "ToolRunner", state: "Assigned", workloadUid: "job-uid-1", releasedAt: null, releaseClaimedAt: null, releaseDeliveryCount: 0, releaseExpiresAt: null, bootstrap: { consumedAt: null, expiresAt: new Date("2099-07-26T05:15:00.000Z") } }), updateManyAndReturn },
 		};
 		const repository = new PrismaSkillWorkloadReleaseRepository(transaction as never, 30_000);
 
-		await expect(repository.claimNextRelease()).resolves.toEqual({ workloadId: "workload-1", siloId: "silo-1", kind: "authoring", workloadUid: "job-uid-1", releaseClaimedAt: "2099-07-26T05:00:01.000Z", releaseDeliveryCount: 1, expiresAt: "2099-07-26T05:00:31.000Z" });
+		await expect(repository.claimNextRelease()).resolves.toEqual({ workloadId: "workload-1", siloId: "silo-1", kind: "tool-runner", workloadUid: "job-uid-1", releaseClaimedAt: "2099-07-26T05:00:01.000Z", releaseDeliveryCount: 1, expiresAt: "2099-07-26T05:00:31.000Z" });
 		const mutation = updateManyAndReturn.mock.calls[0]?.[0] as { readonly data?: { readonly releaseClaimedAt?: Date; readonly releaseExpiresAt?: Date } } | undefined;
 		expect(mutation?.data?.releaseClaimedAt?.getTime()).toBe(0);
 		expect((mutation?.data?.releaseExpiresAt?.getTime() ?? 0) - (mutation?.data?.releaseClaimedAt?.getTime() ?? 0)).toBe(30_000);
@@ -26,7 +26,7 @@ describe("Prisma skill workload release repository", function _DescribeReleaseRe
 		const updateMany = vi.fn().mockResolvedValue({ count: 1 });
 		const transaction = {
 			skillAuthorityClock: { findUnique: vi.fn().mockResolvedValue({ singleton: 1, now }) },
-			skillWorkload: { findUnique: vi.fn().mockResolvedValue({ id: "workload-1", state: "Assigned", workloadUid: "job-uid-1", releasedAt: null, releaseClaimedAt, releaseDeliveryCount: 1, releaseExpiresAt: new Date("2099-07-26T05:00:31.000Z"), bootstrap: { consumedAt: null, expiresAt: new Date("2099-07-26T05:15:00.000Z") } }), updateMany },
+			skillWorkload: { findUnique: vi.fn().mockResolvedValue({ id: "workload-1", kind: "ToolRunner", state: "Assigned", workloadUid: "job-uid-1", releasedAt: null, releaseClaimedAt, releaseDeliveryCount: 1, releaseExpiresAt: new Date("2099-07-26T05:00:31.000Z"), bootstrap: { consumedAt: null, expiresAt: new Date("2099-07-26T05:15:00.000Z") } }), updateMany },
 		};
 		const repository = new PrismaSkillWorkloadReleaseRepository(transaction as never, 30_000);
 

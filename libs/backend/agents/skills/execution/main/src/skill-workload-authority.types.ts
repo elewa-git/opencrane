@@ -1,5 +1,3 @@
-import type { SkillAuthoringCompletionCommand } from "./skill-authoring-completion.types";
-import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types";
 import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types";
 import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types";
 
@@ -27,21 +25,7 @@ export interface SkillWorkloadBootstrapAuthority
 	consumeAtomically(referenceHash: string, identity: SkillWorkloadBootstrapIdentity): Promise<"consumed" | "conflict">;
 }
 
-/** Records an authoring worker's final report. */
-export interface SkillAuthoringCompletionAuthority
-{
-	/** Completes one workload, using the fixed-shape reports its authoring Pod sent. */
-	completeAtomically(command: SkillAuthoringCompletionCommand, identity: SkillWorkloadBootstrapIdentity): Promise<"completed" | "conflict">;
-}
-
-/** Finds the source artifact an authoring worker is allowed to read. */
-export interface SkillAuthoringInputAuthority
-{
-	/** Loads the sole source artifact authorised for the reviewed worker Pod. */
-	loadForWorker(workloadId: string, identity: SkillWorkloadBootstrapIdentity): Promise<SkillAuthoringInputRecord | null>;
-}
-
-/** All four skill-execution authorities, backed by one unit of work. */
-export interface SkillWorkloadExecutionAuthority extends SkillWorkloadDispatchAuthority, SkillWorkloadBootstrapAuthority, SkillAuthoringCompletionAuthority, SkillAuthoringInputAuthority
+/** Retained tool-runner authorities backed by one unit of work. */
+export interface SkillWorkloadExecutionAuthority extends SkillWorkloadDispatchAuthority, SkillWorkloadBootstrapAuthority
 {
 }

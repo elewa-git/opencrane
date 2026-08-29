@@ -5,8 +5,8 @@ export interface AgentControllerSkillWorkloadClaim
 	readonly workloadId: string;
 	/** Silo owning the immutable SkillRevision. */
 	readonly siloId: string;
-	/** Isolated authoring or tool-runner Job class. */
-	readonly kind: "authoring" | "tool-runner";
+	/** Retained isolated tool-runner Job class. */
+	readonly kind: "tool-runner";
 	/** Immutable revision selected by the skill-work authority. */
 	readonly skillRevisionId: string;
 	/** Exact database claim instant. */

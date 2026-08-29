@@ -18,8 +18,17 @@ export enum SkillWorkloadControllerReconcileOutcomes
 	Registered = "registered",
 }
 
-/** One deployment profile per workload class. */
-export type SkillWorkloadControllerProfiles = Readonly<Record<AgentControllerSkillWorkloadClaim["kind"], SkillWorkloadJobProfile>>;
+/** Deployment profiles shared by the task-owned authoring handler and retained tool-runner poller. */
+export interface SkillWorkloadControllerProfiles
+{
+	/** Profile consumed only by the durable authoring-validation task handler. */
+	readonly authoring: SkillWorkloadJobProfile & { readonly kind: "authoring" };
+	/** Profile consumed only by the retained published-tool poller. */
+	readonly "tool-runner": SkillWorkloadJobProfile & { readonly kind: "tool-runner" };
+}
+
+/** Fixed profile retained by the legacy poller for published OCI tool execution only. */
+export type SkillToolRunnerJobProfile = SkillWorkloadJobProfile & { readonly kind: "tool-runner" };
 
 /** The OpenCrane server calls the skill controller may make. The controller only calls out; nothing calls into it. */
 export interface SkillWorkloadControllerAuthority
@@ -64,8 +73,8 @@ export interface SkillWorkloadControllerOptions
 	readonly authority: SkillWorkloadControllerAuthority;
 	/** Talks to Kubernetes with only the permissions this controller needs. */
 	readonly kubernetes: GovernedJobControllerStore;
-	/** Deployment-owned profiles for the only two governed workload classes. */
-	readonly profiles: SkillWorkloadControllerProfiles;
+	/** Deployment-owned profile for the sole workload class this legacy poller may run. */
+	readonly profile: SkillToolRunnerJobProfile;
 	/** Delay after an idle poll or a handled reconciliation failure. */
 	readonly pollIntervalMilliseconds: number;
 	/** Process-wide structured logger. */

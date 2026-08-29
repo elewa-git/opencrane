@@ -5,8 +5,8 @@ export interface SkillWorkloadClaim
 	readonly workloadId: string;
 	/** Silo owning the exact revision and workload. */
 	readonly siloId: string;
-	/** Workload class: authoring, or running a published tool. */
-	readonly kind: "authoring" | "tool-runner";
+	/** Retained workload class for running a published tool. */
+	readonly kind: "tool-runner";
 	/** Immutable SkillRevision selected before the claim. */
 	readonly skillRevisionId: string;
 	/** Delivery counter, raised by one on every claim. An out-of-date controller replica holds an older number and is rejected. */
@@ -39,8 +39,8 @@ export interface SkillWorkloadReleaseClaim
 	readonly workloadId: string;
 	/** ClusterTenant silo that owns the released Job. */
 	readonly siloId: string;
-	/** Workload class. It picks which controller profile is used. */
-	readonly kind: "authoring" | "tool-runner";
+	/** Retained tool-runner workload class. */
+	readonly kind: "tool-runner";
 	/** Immutable Job UID that Kubernetes must release. */
 	readonly workloadUid: string;
 	/** Database-issued release-claim instant. */

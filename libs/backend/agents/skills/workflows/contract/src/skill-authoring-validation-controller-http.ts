@@ -1,10 +1,11 @@
-import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
+import { RuntimeWorkloadClaimClasses, type RuntimeWorkloadBinding, type RuntimeWorkloadClaim } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { z, type ZodType } from "zod";
 
+import { SkillAuthoringValidationRecoveryReasons } from "./skill-authoring-validation-controller.types";
 import type { SkillAuthoringValidationCompletion, SkillAuthoringValidationPodBindCommand, SkillAuthoringValidationWorkloadBindCommand } from "./skill-authoring-validation-controller.types";
-import type { SkillAuthoringValidationCompletionLoadRequest, SkillAuthoringValidationCompletionRequest, SkillAuthoringValidationPodBindRequest, SkillAuthoringValidationWorkloadBindRequest } from "./skill-authoring-validation-controller-http.types";
-import { SkillAuthoringValidationTaskNames } from "./skill-authoring-validation-task.types";
+import type { SkillAuthoringValidationCompletionRequest, SkillAuthoringValidationPodBindRequest, SkillAuthoringValidationRecoveryRequest, SkillAuthoringValidationReleaseRequest, SkillAuthoringValidationUnboundExpiryRequest, SkillAuthoringValidationWorkloadBindRequest } from "./skill-authoring-validation-controller-http.types";
+import { SkillAuthoringValidationTaskDeclaration, SkillAuthoringValidationTaskNames } from "./skill-authoring-validation-task.types";
 
 /** Checks the canonical UTC timestamp used to fence a controller delivery. */
 function _IsCanonicalUtcMilliseconds(value: string): boolean
@@ -30,20 +31,36 @@ const _BindingSchema: ZodType<RuntimeWorkloadBinding> = z.object({
 	firstPodUid: z.string().min(1).max(128).optional(),
 }).strict();
 
+/** Defines the complete server-issued claim accepted by final unbound-expiry recovery. */
+const _ClaimSchema: ZodType<RuntimeWorkloadClaim> = z.object({
+	claimId: z.string().min(1).max(128),
+	siloId: z.string().min(1).max(128),
+	workloadClass: z.literal(RuntimeWorkloadClaimClasses.SkillAuthoringValidation),
+	profileName: z.literal("authoring"),
+	idempotencyKey: z.string().min(1).max(512),
+	executionReference: z.string().min(1).max(512),
+	claimedAt: z.string().datetime({ offset: true, precision: 3 }).refine(_IsCanonicalUtcMilliseconds),
+	deliveryCount: z.number().int().min(1).max(SkillAuthoringValidationTaskDeclaration.retryPolicy.maximumAttempts),
+	expiresAt: z.string().datetime({ offset: true, precision: 3 }).refine(_IsCanonicalUtcMilliseconds),
+}).strict();
+
 /** Defines a strict workload bind body before its namespace is compared with deployment configuration. */
 const _WorkloadBindBodySchema = z.object({ task: _TaskReceiptSchema, binding: _BindingSchema, bootstrapReference: z.string().min(1).max(512), namespace: z.string().min(1).max(63) }).strict();
 
 /** Defines a strict first-Pod bind body. */
 const _PodBindBodySchema = z.object({ task: _TaskReceiptSchema, binding: _BindingSchema }).strict();
 
-/** Defines a strict completion inbox lookup body. */
-const _CompletionLoadBodySchema = z.object({ task: _TaskReceiptSchema, completionDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u) }).strict();
-
 /** Defines a strict terminal completion identity. */
 const _CompletionBodySchema: ZodType<SkillAuthoringValidationCompletion> = z.object({ validationId: z.string().min(1).max(128), completionDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u) }).strict();
 
 /** Defines the task receipt and completion evidence that may reach the terminal writer. */
 const _CompletionRequestBodySchema = z.object({ task: _TaskReceiptSchema, completion: _CompletionBodySchema }).strict();
+
+/** Defines the exact task, binding, and stable Kubernetes recovery reason. */
+const _RecoveryRequestBodySchema = z.object({ task: _TaskReceiptSchema, binding: _BindingSchema, reason: z.nativeEnum(SkillAuthoringValidationRecoveryReasons) }).strict();
+
+/** Defines the saved task and final expired claim for a validation that never bound a Job. */
+const _UnboundExpiryRequestBodySchema = z.object({ task: _TaskReceiptSchema, claim: _ClaimSchema }).strict();
 
 /** Parses a strict JSON body without exposing validation-library details through the controller API. */
 function _Parse<T>(schema: ZodType<T>, value: unknown): T | null
@@ -102,16 +119,11 @@ export function __ParseSkillAuthoringValidationPodBindRequest(value: unknown): S
 	return { task: parsed.task, command };
 }
 
-/**
- * Parses a controller request to load server-owned completion evidence.
- *
- * Called by: `__CreateSkillAuthoringValidationControllerRouter` before it reads the inbox.
- * @param value - Untrusted JSON request body.
- * @returns The task receipt and completion digest, or `null` when either is invalid.
- */
-export function __ParseSkillAuthoringValidationCompletionLoadRequest(value: unknown): SkillAuthoringValidationCompletionLoadRequest | null
+/** Parses the exact bound Job whose release must still be valid by database time. */
+export function __ParseSkillAuthoringValidationReleaseRequest(value: unknown): SkillAuthoringValidationReleaseRequest | null
 {
-	return _Parse(_CompletionLoadBodySchema, value);
+	const parsed = _Parse(_PodBindBodySchema, value);
+	return parsed === null || parsed.binding.firstPodUid !== undefined ? null : parsed;
 }
 
 /**
@@ -124,4 +136,16 @@ export function __ParseSkillAuthoringValidationCompletionLoadRequest(value: unkn
 export function __ParseSkillAuthoringValidationCompletionRequest(value: unknown): SkillAuthoringValidationCompletionRequest | null
 {
 	return _Parse(_CompletionRequestBodySchema, value);
+}
+
+/** Parse a task-owned Job recovery request without accepting worker-controlled evidence. */
+export function __ParseSkillAuthoringValidationRecoveryRequest(value: unknown): SkillAuthoringValidationRecoveryRequest | null
+{
+	return _Parse(_RecoveryRequestBodySchema, value);
+}
+
+/** Parse the final unbound claim-expiry request without accepting a Kubernetes identity. */
+export function __ParseSkillAuthoringValidationUnboundExpiryRequest(value: unknown): SkillAuthoringValidationUnboundExpiryRequest | null
+{
+	return _Parse(_UnboundExpiryRequestBodySchema, value);
 }

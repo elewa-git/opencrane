@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import type { SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerAuthority, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationPodBindCommand, SkillAuthoringValidationWorkloadBindCommand } from "@opencrane/backend/agents/skills/workflows/contract";
+import type { SkillAuthoringValidationBindOutcome, SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerAuthority, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationCurrentStatus, SkillAuthoringValidationPodBindCommand, SkillAuthoringValidationRecoveryOutcome, SkillAuthoringValidationRecoveryReasons, SkillAuthoringValidationReleaseOutcome, SkillAuthoringValidationWorkloadBindCommand } from "@opencrane/backend/agents/skills/workflows/contract";
+import type { RuntimeWorkloadBinding, RuntimeWorkloadClaim } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { PrismaSkillAuthoringValidationControllerRepository } from "./skill-authoring-validation-controller-authority";
@@ -26,22 +27,46 @@ export class PrismaSkillAuthoringValidationControllerUnitOfWork implements Skill
 		return await this._Run(async function _Claim(repository) { return await repository.claimForTask(validationId, task); });
 	}
 
+	/** Reads lifecycle state without changing a workload claim. */
+	async loadCurrentStatus(validationId: string, task: IWorkflowTaskReceipt): Promise<SkillAuthoringValidationCurrentStatus>
+	{
+		return await this._Run(async function _LoadStatus(repository) { return await repository.loadCurrentStatus(validationId, task); });
+	}
+
+	/** Saves terminal failure after the final unbound database claim expires. */
+	async failExpiredBeforeWorkload(validationId: string, task: IWorkflowTaskReceipt, claim: RuntimeWorkloadClaim): Promise<SkillAuthoringValidationRecoveryOutcome>
+	{
+		return await this._Run(async function _FailExpired(repository) { return await repository.failExpiredBeforeWorkload(validationId, task, claim); });
+	}
+
 	/** Saves the Job UID and one-use bootstrap under the current controller delivery. */
-	async bindWorkload(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationWorkloadBindCommand): Promise<"bound" | "idempotent" | "conflict">
+	async bindWorkload(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationWorkloadBindCommand): Promise<SkillAuthoringValidationBindOutcome>
 	{
 		return await this._Run(async function _Bind(repository) { return await repository.bindWorkload(validationId, task, command); });
 	}
 
+	/** Rechecks the exact bound Job against database time immediately before release. */
+	async authorizeRelease(validationId: string, task: IWorkflowTaskReceipt, binding: RuntimeWorkloadBinding): Promise<SkillAuthoringValidationReleaseOutcome>
+	{
+		return await this._Run(async function _Authorize(repository) { return await repository.authorizeRelease(validationId, task, binding); });
+	}
+
 	/** Saves the unique first Pod under the current controller delivery. */
-	async bindFirstPod(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationPodBindCommand): Promise<"bound" | "idempotent" | "conflict">
+	async bindFirstPod(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationPodBindCommand): Promise<SkillAuthoringValidationBindOutcome>
 	{
 		return await this._Run(async function _Bind(repository) { return await repository.bindFirstPod(validationId, task, command); });
 	}
 
-	/** Reads completion evidence through the same task-receipt boundary. */
-	async loadCompletion(validationId: string, completionDigest: string, task: IWorkflowTaskReceipt): Promise<SkillAuthoringValidationCompletion | null>
+	/** Reads the current worker completion for task-owned recovery polling. */
+	async loadCurrentCompletion(validationId: string, task: IWorkflowTaskReceipt): Promise<SkillAuthoringValidationCompletion | null>
 	{
-		return await this._Run(async function _Load(repository) { return await repository.loadCompletion(validationId, completionDigest, task); });
+		return await this._Run(async function _Load(repository) { return await repository.loadCurrentCompletion(validationId, task); });
+	}
+
+	/** Saves a stable terminal failure for an exact Job that cannot report. */
+	async failUnreported(validationId: string, task: IWorkflowTaskReceipt, binding: RuntimeWorkloadBinding, reason: SkillAuthoringValidationRecoveryReasons): Promise<SkillAuthoringValidationRecoveryOutcome>
+	{
+		return await this._Run(async function _Fail(repository) { return await repository.failUnreported(validationId, task, binding, reason); });
 	}
 
 	/** Applies the terminal state that the persisted worker completion proves. */

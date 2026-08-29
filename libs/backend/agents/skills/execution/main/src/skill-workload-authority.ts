@@ -1,5 +1,3 @@
-import type { SkillAuthoringCompletionCommand } from "./skill-authoring-completion.types";
-import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types";
 import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types";
 import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types";
 import type { SkillWorkloadExecutionAuthority } from "./skill-workload-authority.types";
@@ -59,18 +57,6 @@ export class _SkillWorkloadExecutionAuthority implements SkillWorkloadExecutionA
 		return this._runConflictAs(function _ConsumeBootstrap(transaction): Promise<"consumed" | "conflict"> { return transaction.bootstraps.consume(referenceHash, identity); }, "conflict");
 	}
 
-	/** Stores the authoring reports and the workload's final state in one transaction. */
-	async completeAtomically(command: SkillAuthoringCompletionCommand, identity: SkillWorkloadBootstrapIdentity): Promise<"completed" | "conflict">
-	{
-		return this._runConflictAs(function _CompleteAuthoring(transaction): Promise<"completed" | "conflict"> { return transaction.authoringCompletions.complete(command, identity); }, "conflict");
-	}
-
-	/** Reads the artifact ids in a transaction, then closes it before any ArtifactStore call. */
-	loadForWorker(workloadId: string, identity: SkillWorkloadBootstrapIdentity): Promise<SkillAuthoringInputRecord | null>
-	{
-		return this.unitOfWork.run(function _LoadAuthoringInput(transaction): Promise<SkillAuthoringInputRecord | null> { return transaction.authoringInputs.load(workloadId, identity); });
-	}
-
 	/** Runs one transaction. Turns a rolled-back conflict into the supplied fallback value, and rethrows anything else. */
 	private async _runConflictAs<Result>(work: SkillWorkloadExecutionWork<Result>, conflict: Result): Promise<Result>
 	{
@@ -86,7 +72,7 @@ export class _SkillWorkloadExecutionAuthority implements SkillWorkloadExecutionA
 	}
 }
 
-/** Creates the authority used by the four internal HTTP routes. */
+/** Creates the authority used by the retained tool-runner internal routes. */
 export function _CreateSkillWorkloadExecutionAuthority(unitOfWork: SkillWorkloadExecutionUnitOfWork): SkillWorkloadExecutionAuthority
 {
 	return new _SkillWorkloadExecutionAuthority(unitOfWork);

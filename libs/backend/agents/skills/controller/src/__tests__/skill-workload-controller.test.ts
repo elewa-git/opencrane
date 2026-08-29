@@ -18,10 +18,10 @@ function _Profiles()
 	};
 }
 
-/** Return one authoring workload claim. */
+/** Return one retained tool-runner workload claim. */
 function _Claim()
 {
-	return { workloadId: "workload_1", siloId: "silo-a", kind: "authoring" as const, skillRevisionId: "revision-1", claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 2, expiresAt: "2026-07-24T00:00:30.000Z" };
+	return { workloadId: "workload_1", siloId: "silo-a", kind: "tool-runner" as const, skillRevisionId: "revision-1", claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 2, expiresAt: "2026-07-24T00:00:30.000Z" };
 }
 
 /** Build an authority whose unused methods throw if a test calls them. */
@@ -33,13 +33,13 @@ function _Authority(overrides: Partial<SkillWorkloadControllerAuthority>): Skill
 /** Build a Kubernetes adapter whose unused methods throw if a test calls them. */
 function _Kubernetes(overrides: Partial<GovernedJobControllerStore>): GovernedJobControllerStore
 {
-	return { async ensureSuspendedJob() { throw new Error("unexpected Job"); }, async releaseJob() { throw new Error("unexpected Job release"); }, async findFirstPod() { throw new Error("unexpected Pod lookup"); }, async deleteJob() { throw new Error("unexpected Job deletion"); }, ...overrides };
+	return { async ensureSuspendedJob() { throw new Error("unexpected Job"); }, async releaseJob() { throw new Error("unexpected Job release"); }, async findFirstPod() { throw new Error("unexpected Pod lookup"); }, async observeJob() { throw new Error("unexpected Job observation"); }, async deleteJob() { throw new Error("unexpected Job deletion"); }, ...overrides };
 }
 
 /** Compose reconciler options from focused fake ports. */
 function _Options(authority: SkillWorkloadControllerAuthority, kubernetes: GovernedJobControllerStore): SkillWorkloadControllerOptions
 {
-	return { authority, kubernetes, profiles: _Profiles(), pollIntervalMilliseconds: 1_000, log: _Log };
+	return { authority, kubernetes, profile: _Profiles()["tool-runner"], pollIntervalMilliseconds: 1_000, log: _Log };
 }
 
 describe("governed skill workload controller", function _DescribeController()
@@ -57,7 +57,7 @@ describe("governed skill workload controller", function _DescribeController()
 		const built = expected as unknown as V1Job;
 		expect(calls).toEqual(["claim", "job", "commit"]);
 		expect(built.spec?.suspend).toBe(true);
-		expect(built.metadata?.namespace).toBe("opencrane-skill-authoring");
+		expect(built.metadata?.namespace).toBe("opencrane-tools");
 		expect(built.metadata?.annotations?.["opencrane.ai/capability-reference"]).toMatch(/^skill-bootstrap-v1_[a-f0-9]{64}$/);
 		expect(committed).toEqual({ claimedAt: _Claim().claimedAt, deliveryCount: 2, workloadUid: "job-uid-1", bootstrapReference: built.metadata?.annotations?.["opencrane.ai/capability-reference"], namespace: built.metadata?.namespace });
 		expect(result).toEqual({ outcome: "assigned", workloadId: "workload_1", workloadUid: "job-uid-1" });
@@ -93,7 +93,7 @@ describe("governed skill workload controller", function _DescribeController()
 
 	it("releases only the durable Job UID then records its uniquely selected first Pod", async function _ReleasesAndRegistersFirstPod()
 	{
-		const claim = { workloadId: "workload_1", siloId: "silo-a", kind: "authoring" as const, workloadUid: "job-uid-1", releaseClaimedAt: "2026-07-24T00:01:00.000Z", releaseDeliveryCount: 1, expiresAt: "2026-07-24T00:01:30.000Z" };
+		const claim = { workloadId: "workload_1", siloId: "silo-a", kind: "tool-runner" as const, workloadUid: "job-uid-1", releaseClaimedAt: "2026-07-24T00:01:00.000Z", releaseDeliveryCount: 1, expiresAt: "2026-07-24T00:01:30.000Z" };
 		const authority = _Authority({ async __ClaimRelease() { return claim; }, async __CommitRelease() { return "released"; }, async __RegisterFirstPod() { return "registered"; } });
 		const kubernetes = _Kubernetes({ async releaseJob(job) { return { ...job, metadata: { ...job.metadata, uid: "job-uid-1" }, spec: { ...job.spec!, suspend: false } }; }, async findFirstPod(job, workloadUid, serviceAccountName) { const name = job.metadata?.name; const namespace = job.metadata?.namespace; if (!name || !namespace)
 		{

@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import time
 from typing import Callable, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -12,6 +13,11 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 _EXPECTED_BASE_PATH = "/api/internal/agent-runtime"
 _MAX_FILE_BYTES = 4096
 _MAX_RESPONSE_BYTES = 4096
+_AUTHORING_BOOTSTRAP_RETRY_SECONDS = 300
+
+
+class _BootstrapNotReadyError(RuntimeError):
+    """Signal the bounded race between Job release and first-Pod registration."""
 
 
 class _Response(Protocol):
@@ -67,11 +73,30 @@ def _open(request: Request, timeout: float) -> _Response:
 
 def acknowledge(base_url: str, token_path: str, reference_path: str, open_request: Callable[[Request, float], _Response] = _open) -> str:
     """Consume one opaque bootstrap reference and return only its server-bound workload coordinate."""
+    return _acknowledge(base_url, token_path, reference_path, _acknowledgement_url(base_url), "workloadId", open_request)
+
+
+def acknowledge_authoring_validation(base_url: str, token_path: str, reference_path: str, open_request: Callable[[Request, float], _Response] = _open) -> str:
+    """Consume one authoring-validation bootstrap without changing the protected tool-runner endpoint."""
+    endpoint = _acknowledgement_url(base_url).removesuffix("/skill-workloads:bootstrap") + "/skill-authoring-validations:bootstrap"
+    deadline = time.monotonic() + _AUTHORING_BOOTSTRAP_RETRY_SECONDS
+    while True:
+        try:
+            return _acknowledge(base_url, token_path, reference_path, endpoint, "validationId", open_request)
+        except _BootstrapNotReadyError as error:
+            if time.monotonic() >= deadline:
+                raise RuntimeError("bootstrap acknowledgement remained unavailable") from error
+            time.sleep(1.0)
+
+
+def _acknowledge(base_url: str, token_path: str, reference_path: str, endpoint: str, identifier_field: str, open_request: Callable[[Request, float], _Response]) -> str:
+    """Send one fixed bootstrap exchange after its public wrapper chooses the exact protocol."""
     token = _read_single_line(token_path, "capability token")
     reference = _read_single_line(reference_path, "bootstrap reference")
     if len(reference) != 83 or not reference.startswith("skill-bootstrap-v1_") or any(character not in "0123456789abcdef" for character in reference.removeprefix("skill-bootstrap-v1_")):
         raise RuntimeError("projected bootstrap reference is invalid")
-    request = Request(_acknowledgement_url(base_url), data=json.dumps({"bootstrapReference": reference}, separators=(",", ":")).encode("utf-8"), headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Accept": "application/json"}, method="POST")
+    _acknowledgement_url(base_url)
+    request = Request(endpoint, data=json.dumps({"bootstrapReference": reference}, separators=(",", ":")).encode("utf-8"), headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Accept": "application/json"}, method="POST")
     try:
         response = open_request(request, 10.0)
         payload_bytes = response.read()
@@ -80,14 +105,16 @@ def acknowledge(base_url: str, token_path: str, reference_path: str, open_reques
         payload = json.loads(payload_bytes.decode("utf-8"))
     except HTTPError as error:
         try:
+            if error.code == 409:
+                raise _BootstrapNotReadyError("bootstrap acknowledgement is not ready") from error
             raise RuntimeError(f"bootstrap acknowledgement was denied ({error.code})") from error
         finally:
             error.close()
     except (OSError, URLError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise RuntimeError("bootstrap acknowledgement is unavailable") from error
-    if response.status != 200 or not isinstance(payload, dict) or set(payload) != {"acknowledged", "workloadId"} or payload.get("acknowledged") is not True or not _workload_id(payload.get("workloadId")):
+    if response.status != 200 or not isinstance(payload, dict) or set(payload) != {"acknowledged", identifier_field} or payload.get("acknowledged") is not True or not _workload_id(payload.get(identifier_field)):
         raise RuntimeError("bootstrap acknowledgement was rejected")
-    return payload["workloadId"]
+    return payload[identifier_field]
 
 
 def _workload_id(value: object) -> bool:

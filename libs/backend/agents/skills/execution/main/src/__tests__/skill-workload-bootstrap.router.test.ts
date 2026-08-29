@@ -12,8 +12,8 @@ const _REFERENCE = `skill-bootstrap-v1_${"a".repeat(64)}`;
 function _App(overrides: Partial<SkillWorkloadBootstrapRouterDependencies> = {})
 {
 	const dependencies: SkillWorkloadBootstrapRouterDependencies = {
-		tokenReviewer: { __Review: vi.fn().mockResolvedValue({ namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" }) },
-		authority: { loadUnconsumedByReferenceHash: vi.fn().mockResolvedValue({ workloadId: "workload-1", referenceHash: `sha256:${"b".repeat(64)}`, audience: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", namespace: "opencrane-skill-authoring", workloadUid: "job-uid-1", podUid: "pod-uid-1" }), consumeAtomically: vi.fn().mockResolvedValue("consumed") },
+		tokenReviewer: { __Review: vi.fn().mockResolvedValue({ namespace: "opencrane-tools", serviceAccountName: "tool-runner-default", podUid: "pod-uid-1" }) },
+		authority: { loadUnconsumedByReferenceHash: vi.fn().mockResolvedValue({ workloadId: "workload-1", referenceHash: `sha256:${"b".repeat(64)}`, audience: "opencrane-tool-runner", serviceAccountName: "tool-runner-default", namespace: "opencrane-tools", workloadUid: "job-uid-1", podUid: "pod-uid-1" }), consumeAtomically: vi.fn().mockResolvedValue("consumed") },
 		logger: { error: vi.fn() },
 		...overrides,
 	};
@@ -32,14 +32,14 @@ describe("governed skill worker bootstrap router", function _DescribeBootstrap()
 
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({ acknowledged: true, workloadId: "workload-1" });
-		expect(dependencies.tokenReviewer.__Review).toHaveBeenCalledWith("projected-token", "opencrane-skill-authoring");
-		expect(dependencies.authority.consumeAtomically).toHaveBeenCalledWith(expect.stringMatching(/^sha256:[a-f0-9]{64}$/), { namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" });
+		expect(dependencies.tokenReviewer.__Review).toHaveBeenCalledWith("projected-token", "opencrane-tool-runner");
+		expect(dependencies.authority.consumeAtomically).toHaveBeenCalledWith(expect.stringMatching(/^sha256:[a-f0-9]{64}$/), { namespace: "opencrane-tools", serviceAccountName: "tool-runner-default", podUid: "pod-uid-1" });
 	});
 
 	it("does not consume when a reviewed worker Pod differs from durable registration", async function _RejectsForeignPod()
 	{
-		const authority = { loadUnconsumedByReferenceHash: vi.fn().mockResolvedValue({ workloadId: "workload-1", referenceHash: `sha256:${"b".repeat(64)}`, audience: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", namespace: "opencrane-skill-authoring", workloadUid: "job-uid-1", podUid: "pod-uid-1" }), consumeAtomically: vi.fn() };
-		const { app } = _App({ tokenReviewer: { __Review: vi.fn().mockResolvedValue({ namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "foreign-pod" }) }, authority });
+		const authority = { loadUnconsumedByReferenceHash: vi.fn().mockResolvedValue({ workloadId: "workload-1", referenceHash: `sha256:${"b".repeat(64)}`, audience: "opencrane-tool-runner", serviceAccountName: "tool-runner-default", namespace: "opencrane-tools", workloadUid: "job-uid-1", podUid: "pod-uid-1" }), consumeAtomically: vi.fn() };
+		const { app } = _App({ tokenReviewer: { __Review: vi.fn().mockResolvedValue({ namespace: "opencrane-tools", serviceAccountName: "tool-runner-default", podUid: "foreign-pod" }) }, authority });
 
 		expect((await request(app).post("/skill-workloads:bootstrap").set("authorization", "Bearer projected-token").send({ bootstrapReference: _REFERENCE })).status).toBe(401);
 		expect(authority.consumeAtomically).not.toHaveBeenCalled();

@@ -206,7 +206,7 @@ export function __CreateArtifactPreprocessHandler(options: ArtifactPreprocessHan
 					_RequireActiveClaim(claimExpiry);
 					await _RetryExternal(async function _ReleaseJob()
 					{
-						return await options.kubernetes.releaseJob(prepared.job, binding.workloadUid, record.claim.expiresAt);
+						return await options.kubernetes.releaseJob(prepared.job, binding.workloadUid, { expiresAt: record.claim.expiresAt });
 					});
 				});
 				let pod: V1Pod | null = null;

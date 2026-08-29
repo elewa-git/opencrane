@@ -39,6 +39,8 @@ audience returns no identity. The raw token and full Kubernetes response never l
   ServiceAccount.
 - `_CreateMcpExecutorTokenReviewer` — returns an OCI MCP companion identity only when Kubernetes
   confirms its namespace, zero-RBAC ServiceAccount, audience, and bound Pod UID.
+- `_CreateSkillAuthoringValidationTokenReviewer` — binds the Python validation Job to its fixed
+  audience, namespace, ServiceAccount, and saved Pod UID.
 - `_CreateArtifactPreprocessorTokenReviewer` — binds preprocessing to its isolated worker namespace.
 - `_CreateChannelProxyTokenReviewer` — binds channel resolution to one deployment-selected audience,
   namespace, and ServiceAccount without duplicating Kubernetes TokenReview in the application root.

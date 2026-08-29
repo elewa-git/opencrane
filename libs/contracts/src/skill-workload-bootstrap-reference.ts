@@ -1,24 +1,37 @@
 /** Prefix that marks a reference as a skill-worker bootstrap reference rather than an agent-runtime one, so the two cannot be swapped. */
 const _SKILL_WORKLOAD_BOOTSTRAP_PREFIX = "skill-bootstrap-v1_";
 
+/** Audience fixed on every projected token used by the Python skill-validation Job. */
+export const SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE = "opencrane-skill-authoring";
+
+/** ServiceAccount fixed on every Python skill-validation Job. */
+export const SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME = "skill-authoring-default";
+
+/** Audience fixed on every projected token used by the retained OCI tool-runner Job. */
+export const TOOL_RUNNER_PROJECTED_TOKEN_AUDIENCE = "opencrane-tool-runner";
+
+/** ServiceAccount fixed on every retained OCI tool-runner Job. */
+export const TOOL_RUNNER_SERVICE_ACCOUNT_NAME = "tool-runner-default";
+
 /**
- * Build the bootstrap reference for one skill workload.
+ * Build the bootstrap reference shared by Python validation Jobs and retained OCI tool-runner Jobs.
  *
  * The result is mounted into that workload's Job and nowhere else. It is not a credential: on its
  * own it grants nothing, and the server stores only its hash, so a leaked reference cannot be
  * reversed into the workload id. Store it with
  * {@link __HashSkillWorkloadBootstrapReference}, never in plain form.
  *
- * Called by: `libs/backend/agents/skills/execution/main/src/prisma-skill-workload-assignment-repository.ts`,
- * `libs/backend/agents/skills/controller/src/skill-workload-controller.ts`.
- * @param workloadId - Skill workload id; must match `[a-zA-Z0-9_-]{1,128}`.
+ * Called by: the authoring-validation handler and the retained tool-runner controller and assignment
+ * repository before they bind a Job.
+ * @param validationId - Validation or tool-runner workload id; must match `[a-zA-Z0-9_-]{1,128}`.
  * @returns The prefixed reference, safe to mount into the Job.
- * @throws Error when `workloadId` contains any other character, so an unsafe id can never reach a capability reference.
+ * @throws Error when `validationId` contains any other character, so an unsafe id cannot reach a capability reference.
  */
-export async function __CreateSkillWorkloadBootstrapReference(workloadId: string): Promise<string>
+export async function __CreateSkillWorkloadBootstrapReference(validationId: string): Promise<string>
 {
-	if (!/^[a-zA-Z0-9_-]{1,128}$/.test(workloadId)) throw new Error("governed skill workload id is not safe to project into a capability reference");
-	return `${_SKILL_WORKLOAD_BOOTSTRAP_PREFIX}${await _Sha256Hex(workloadId)}`;
+	if (!/^[a-zA-Z0-9_-]{1,128}$/.test(validationId))
+		throw new Error("skill validation id is not safe to project into a capability reference");
+	return `${_SKILL_WORKLOAD_BOOTSTRAP_PREFIX}${await _Sha256Hex(validationId)}`;
 }
 
 /**
@@ -27,8 +40,8 @@ export async function __CreateSkillWorkloadBootstrapReference(workloadId: string
  * Postgres holds only this hash. A worker presents the plain reference; the server hashes what it
  * receives and matches on the result, so a database read never yields a usable reference.
  *
- * Called by: `libs/backend/agents/skills/execution/main/src/skill-workload-bootstrap.router.ts`,
- * `libs/backend/agents/skills/execution/main/src/prisma-skill-workload-assignment-repository.ts`.
+ * Called by: the authoring-validation server authority, retained tool-runner assignment repository,
+ * and both worker routers when they store or match a reference.
  * @param reference - The plain bootstrap reference presented by a worker.
  * @returns Lowercase `sha256:<hex>` digest, the form stored in the database.
  */
@@ -43,7 +56,8 @@ export async function __HashSkillWorkloadBootstrapReference(reference: string): 
  * A shape check only — it proves nothing about whether the reference was issued or is still
  * valid. Call it to reject malformed input early, then match the hash to authorize.
  *
- * Called by: `libs/backend/agents/skills/execution/main/src/skill-workload-bootstrap.router.ts`.
+ * Called by: both authoring-validation and retained tool-runner worker routers before they ask their
+ * database authority to match the presented reference hash.
  * @param value - Untrusted value from a request.
  * @returns True only for the prefix followed by 64 lowercase hex characters.
  */

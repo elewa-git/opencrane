@@ -3,6 +3,7 @@ import type { V1Job, V1Pod } from "@kubernetes/client-node";
 import type { SkillAuthoringValidationTaskInput } from "@opencrane/backend/agents/skills/workflows/contract";
 import type { SkillAuthoringValidationControllerAuthority } from "@opencrane/backend/agents/skills/workflows/contract";
 import type { SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
+import type { GovernedJobObservation, GovernedJobReleaseFence } from "@opencrane/backend/agents/runtime/workloads/k8s-controller";
 import type { IWorkflowTaskContext, IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
 export type { SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerAuthority, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationPodBindCommand, SkillAuthoringValidationWorkloadBindCommand } from "@opencrane/backend/agents/skills/workflows/contract";
@@ -22,9 +23,13 @@ export interface SkillAuthoringValidationKubernetesStore
 	/** Creates the suspended authoring Job or adopts the matching Job after a controller restart. */
 	ensureSuspendedJob(expected: V1Job): Promise<V1Job>;
 	/** Releases the assigned Job after the server has recorded its UID and bootstrap reference. */
-	releaseJob(expected: V1Job, jobUid: string, claimExpiresAt: string): Promise<V1Job>;
+	releaseJob(expected: V1Job, jobUid: string, releaseFence: GovernedJobReleaseFence): Promise<V1Job>;
 	/** Returns the first Pod owned by the Job, or null while Kubernetes has not created one. */
 	findFirstPod(expected: V1Job, jobUid: string, serviceAccountName: string): Promise<V1Pod | null>;
+	/** Observes whether the exact released Job is running, terminal, or missing. */
+	observeJob(expected: V1Job, jobUid: string): Promise<GovernedJobObservation>;
+	/** Deletes only the exact Job UID after a durable completion or recovery failure. */
+	deleteJob(expected: V1Job, jobUid: string): Promise<void>;
 }
 
 /** Configures the controller-hosted task for a Python authoring validation. */
@@ -44,4 +49,4 @@ export interface SkillAuthoringValidationHandlerOptions
 export type CreateSkillAuthoringValidationHandler = (options: SkillAuthoringValidationHandlerOptions) => IWorkflowTaskDefinition<SkillAuthoringValidationTaskInput, SkillAuthoringValidationTaskResult>;
 
 /** Narrows the workflow context to the checkpoint, delay, task identity, and private-event operations this handler uses. */
-export type SkillAuthoringValidationTaskContext = Pick<IWorkflowTaskContext, "checkpoint" | "sleepUntil" | "task" | "waitForEvent">;
+export type SkillAuthoringValidationTaskContext = Pick<IWorkflowTaskContext, "checkpoint" | "sleepUntil" | "task">;

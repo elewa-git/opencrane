@@ -1,6 +1,6 @@
 import * as k8s from "@kubernetes/client-node";
 
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME, SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE, SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, ReviewedSkillWorkloadIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity, SkillWorkloadTokenReviewer } from "./workload-identity.types";
@@ -147,6 +147,19 @@ export function _CreateArtifactPreprocessorTokenReviewer(authApi: ProjectedToken
 export function _CreateArtifactScannerTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): FixedServiceAccountTokenReviewer
 {
 	return _CreateFixedServiceAccountTokenReviewer(authApi, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, namespace, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME);
+}
+
+/** Build the Pod-bound reviewer for the sole Python skill-validation workload identity. */
+export function _CreateSkillAuthoringValidationTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): RuntimeTokenReviewer
+{
+	return {
+		async __Review(token: string): Promise<RuntimeWorkloadIdentity | null>
+		{
+			const status = await _ReviewProjectedToken(authApi, token, [SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE]);
+			const podUid = _ReadReviewedPodUid(status?.user?.extra);
+			return _ParseRuntimeSubject(status?.user?.username ?? "", namespace, podUid, function _IsSkillAuthoringValidationServiceAccount(value): boolean { return value === SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME; });
+		},
+	};
 }
 
 /** Build the fixed TokenReview adapter for one deployment-owned channel-proxy identity. */

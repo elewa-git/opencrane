@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
-import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateChannelProxyTokenReviewer, _CreateMcpExecutorTokenReviewer, _CreateMemoryGatewayServerTokenReviewer, _CreateSkillWorkloadTokenReviewer, _CreateWarmRuntimeTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "../projected-token-reviewer";
+import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateChannelProxyTokenReviewer, _CreateMcpExecutorTokenReviewer, _CreateMemoryGatewayServerTokenReviewer, _CreateSkillAuthoringValidationTokenReviewer, _CreateSkillWorkloadTokenReviewer, _CreateWarmRuntimeTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "../projected-token-reviewer";
 
 /** Build a TokenReview API stub with one controlled Kubernetes response. */
 function _ReviewApi(status: object)
@@ -103,6 +103,27 @@ describe("projected Kubernetes workload identity", function _describeProjectedId
 	{
 		const reviewer = _CreateSkillWorkloadTokenReviewer(_ReviewApi(_ValidStatus("skill-audience", "system:serviceaccount:skills-ns:skill-authoring-1")) as never);
 		await expect(reviewer.__Review("token", "skill-audience")).resolves.toEqual({ namespace: "skills-ns", serviceAccountName: "skill-authoring-1", podUid: "pod-uid-1" });
+	});
+
+	it("binds Python skill validation to its fixed audience, namespace, account, and Pod UID", async function _ReviewsSkillAuthoringValidation()
+	{
+		const subject = "system:serviceaccount:skill-authoring:skill-authoring-default";
+		const api = _ReviewApi(_ValidStatus("opencrane-skill-authoring", subject));
+		const reviewer = _CreateSkillAuthoringValidationTokenReviewer(api as never, "skill-authoring");
+
+		await expect(reviewer.__Review("token")).resolves.toEqual({ subject, namespace: "skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" });
+		expect(api.createTokenReview).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ spec: expect.objectContaining({ audiences: ["opencrane-skill-authoring"], token: "token" }) }) }));
+	});
+
+	it.each([
+		["wrong audience", _ValidStatus("other", "system:serviceaccount:skill-authoring:skill-authoring-default")],
+		["wrong namespace", _ValidStatus("opencrane-skill-authoring", "system:serviceaccount:other:skill-authoring-default")],
+		["wrong account", _ValidStatus("opencrane-skill-authoring", "system:serviceaccount:skill-authoring:other")],
+		["missing Pod UID", _ValidStatus("opencrane-skill-authoring", "system:serviceaccount:skill-authoring:skill-authoring-default", { user: { username: "system:serviceaccount:skill-authoring:skill-authoring-default", extra: {} } })],
+	])("rejects a Python skill validation with %s", async function _RejectsSkillAuthoringValidation(_description, status)
+	{
+		const reviewer = _CreateSkillAuthoringValidationTokenReviewer(_ReviewApi(status) as never, "skill-authoring");
+		await expect(reviewer.__Review("token")).resolves.toBeNull();
 	});
 
 	it("binds a warm runtime only through its dedicated audience and fixed account", async function _ReviewsWarmRuntime()

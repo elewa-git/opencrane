@@ -13,7 +13,7 @@ import { _AgentControllerBoundedIdentifierSchema, _AgentControllerMillisecondIns
 const _SkillWorkloadClaimSchema: z.ZodType<AgentControllerSkillWorkloadClaim> = z.object({
 	workloadId: _AgentControllerBoundedIdentifierSchema,
 	siloId: _AgentControllerBoundedIdentifierSchema,
-	kind: z.enum(["authoring", "tool-runner"]),
+	kind: z.literal("tool-runner"),
 	skillRevisionId: _AgentControllerBoundedIdentifierSchema,
 	claimedAt: _AgentControllerMillisecondInstantSchema,
 	deliveryCount: _AgentControllerPositiveIntegerSchema,
@@ -43,7 +43,7 @@ const _SkillWorkloadAssignmentResultSchema: z.ZodType<AgentControllerSkillWorklo
 const _SkillWorkloadReleaseClaimSchema: z.ZodType<AgentControllerSkillWorkloadReleaseClaim> = z.object({
 	workloadId: _AgentControllerBoundedIdentifierSchema,
 	siloId: _AgentControllerBoundedIdentifierSchema,
-	kind: z.enum(["authoring", "tool-runner"]),
+	kind: z.literal("tool-runner"),
 	workloadUid: _AgentControllerBoundedIdentifierSchema,
 	releaseClaimedAt: _AgentControllerMillisecondInstantSchema,
 	releaseDeliveryCount: _AgentControllerPositiveIntegerSchema,

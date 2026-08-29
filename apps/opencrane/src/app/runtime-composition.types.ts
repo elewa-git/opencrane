@@ -17,16 +17,14 @@ export interface InternalRuntimeComposition
 {
 	/** Controller-only router that serves one durable AgentRun workflow task. */
 	readonly agentRunWorkflowController: Router;
-	/** Controller-only router for governed skill workload dispatch. */
-	readonly skillWorkloadDispatch: Router;
 	/** Controller-only router for one admitted skill-authoring validation workflow. */
 	readonly skillAuthoringValidationController: Router;
-	/** Runtime router for one-use workload bootstrap claims. */
+	/** Controller-only router for protected legacy tool-runner dispatch. */
+	readonly skillWorkloadDispatch: Router;
+	/** Worker-only protocol for one task-bound Python skill validation Job. */
+	readonly skillAuthoringValidationWorker: Router;
+	/** Runtime router for one-use legacy tool-runner bootstrap claims. */
 	readonly skillWorkloadBootstrap: Router;
-	/** Runtime router for reading fenced skill-authoring input. */
-	readonly skillAuthoringInput: Router;
-	/** Runtime router for committing fenced skill-authoring completion. */
-	readonly skillAuthoringCompletion: Router;
 	/** Optional controller router for task-bound PDF preprocessing Jobs. */
 	readonly artifactPreprocessController: Router | null;
 	/** Optional preprocessor router, present only when the restricted worker plane is enabled. */
@@ -62,10 +60,10 @@ export type ControllerRuntimeComposition = Pick<
 	"agentRunWorkflowController" | "skillAuthoringValidationController" | "skillWorkloadDispatch"
 >;
 
-/** The subset of routers built by the isolated skill-workload composition step. */
+/** The subset of routers that preserves the previously admitted skill-workload exchange. */
 export type SkillWorkloadRuntimeComposition = Pick<
 	InternalRuntimeComposition,
-	"skillWorkloadBootstrap" | "skillAuthoringInput" | "skillAuthoringCompletion"
+	"skillWorkloadBootstrap"
 >;
 
 /** The subset of routers built by the runtime-protocol composition step. */

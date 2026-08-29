@@ -1,13 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
-import type { SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerAuthority, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationPodBindCommand, SkillAuthoringValidationWorkloadBindCommand } from "@opencrane/backend/agents/skills/workflows/contract";
+import type { SkillAuthoringValidationBindOutcome, SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerAuthority, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationCurrentStatus, SkillAuthoringValidationPodBindCommand, SkillAuthoringValidationRecoveryOutcome, SkillAuthoringValidationRecoveryReasons, SkillAuthoringValidationReleaseOutcome, SkillAuthoringValidationWorkloadBindCommand } from "@opencrane/backend/agents/skills/workflows/contract";
+import type { RuntimeWorkloadBinding, RuntimeWorkloadClaim } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { SkillAuthoringValidationControllerFetch, SkillAuthoringValidationControllerHttpAuthorityOptions, SkillAuthoringValidationControllerTokenReader } from "./controller-http.types";
-import { _ParseSkillAuthoringValidationBindOutcome, _ParseSkillAuthoringValidationCompletion, _ParseSkillAuthoringValidationCompletionOutcome, _ParseSkillAuthoringValidationControllerRecord } from "./skill-authoring-validation-http-response";
+import { _ParseSkillAuthoringValidationBindOutcome, _ParseSkillAuthoringValidationCompletion, _ParseSkillAuthoringValidationCompletionOutcome, _ParseSkillAuthoringValidationControllerRecord, _ParseSkillAuthoringValidationCurrentStatus, _ParseSkillAuthoringValidationRecoveryOutcome, _ParseSkillAuthoringValidationReleaseOutcome } from "./skill-authoring-validation-http-response";
 
 /** Limits one controller-only API response before this adapter parses it. */
 const _MAX_RESPONSE_BYTES = 16 * 1024;
@@ -161,10 +162,38 @@ export function __CreateHttpSkillAuthoringValidationControllerAuthority(options:
 				return _ReadAndValidateJson(response, function _Validate(value: unknown): SkillAuthoringValidationControllerRecord { return _ParseSkillAuthoringValidationControllerRecord(value, acceptedValidationId); });
 			});
 		},
-		async bindWorkload(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationWorkloadBindCommand): Promise<"bound" | "idempotent" | "conflict">
+		async loadCurrentStatus(validationId: string, task: IWorkflowTaskReceipt): Promise<SkillAuthoringValidationCurrentStatus>
 		{
 			const acceptedValidationId = _ValidationId(validationId);
-			return ___DoWithTrace("agent_controller.skill_authoring_validation.workload_binding", { validationId: acceptedValidationId, workloadUid: command.binding.workloadUid }, async function _BindWorkload(): Promise<"bound" | "idempotent" | "conflict">
+			return ___DoWithTrace("agent_controller.skill_authoring_validation.status_current", { validationId: acceptedValidationId }, async function _LoadStatus(): Promise<SkillAuthoringValidationCurrentStatus>
+			{
+				const response = await _Request(`/api/internal/agent-controller/skill-authoring-validations/${encodeURIComponent(acceptedValidationId)}/status/current`, "POST", task);
+				if (response.status !== 200)
+					throw new Error(`OpenCrane skill authoring validation current status failed with HTTP ${response.status}`);
+				return _ReadAndValidateJson(response, function _Validate(value: unknown): SkillAuthoringValidationCurrentStatus { return _ParseSkillAuthoringValidationCurrentStatus(value, acceptedValidationId); });
+			});
+		},
+		async failExpiredBeforeWorkload(validationId: string, task: IWorkflowTaskReceipt, claim: RuntimeWorkloadClaim): Promise<SkillAuthoringValidationRecoveryOutcome>
+		{
+			const acceptedValidationId = _ValidationId(validationId);
+			return ___DoWithTrace("agent_controller.skill_authoring_validation.unbound_expiry", { validationId: acceptedValidationId, deliveryCount: claim.deliveryCount }, async function _FailExpired(): Promise<SkillAuthoringValidationRecoveryOutcome>
+			{
+				const response = await _Request(`/api/internal/agent-controller/skill-authoring-validations/${encodeURIComponent(acceptedValidationId)}/failure/unbound-expiry`, "POST", { task, claim });
+				if (response.status === 409)
+				{
+					return "conflict";
+				}
+				if (response.status !== 200)
+				{
+					throw new Error(`OpenCrane skill authoring validation unbound expiry failed with HTTP ${response.status}`);
+				}
+				return _ReadAndValidateJson(response, function _Validate(value: unknown): Exclude<SkillAuthoringValidationRecoveryOutcome, "conflict"> { return _ParseSkillAuthoringValidationRecoveryOutcome(value, acceptedValidationId); });
+			});
+		},
+		async bindWorkload(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationWorkloadBindCommand): Promise<SkillAuthoringValidationBindOutcome>
+		{
+			const acceptedValidationId = _ValidationId(validationId);
+			return ___DoWithTrace("agent_controller.skill_authoring_validation.workload_binding", { validationId: acceptedValidationId, workloadUid: command.binding.workloadUid }, async function _BindWorkload(): Promise<SkillAuthoringValidationBindOutcome>
 			{
 				const response = await _Request(`/api/internal/agent-controller/skill-authoring-validations/${encodeURIComponent(acceptedValidationId)}/workload-binding`, "PUT", { task, ...command });
 				if (response.status === 409)
@@ -175,13 +204,31 @@ export function __CreateHttpSkillAuthoringValidationControllerAuthority(options:
 				{
 					throw new Error(`OpenCrane skill authoring validation workload binding failed with HTTP ${response.status}`);
 				}
-				return _ReadAndValidateJson(response, function _Validate(value: unknown): "bound" | "idempotent" { return _ParseSkillAuthoringValidationBindOutcome(value, acceptedValidationId); });
+				return _ReadAndValidateJson(response, function _Validate(value: unknown): Exclude<SkillAuthoringValidationBindOutcome, "conflict"> { return _ParseSkillAuthoringValidationBindOutcome(value, acceptedValidationId); });
 			});
 		},
-		async bindFirstPod(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationPodBindCommand): Promise<"bound" | "idempotent" | "conflict">
+		async authorizeRelease(validationId: string, task: IWorkflowTaskReceipt, binding: RuntimeWorkloadBinding): Promise<SkillAuthoringValidationReleaseOutcome>
 		{
 			const acceptedValidationId = _ValidationId(validationId);
-			return ___DoWithTrace("agent_controller.skill_authoring_validation.pod_binding", { validationId: acceptedValidationId, podUid: command.binding.firstPodUid }, async function _BindFirstPod(): Promise<"bound" | "idempotent" | "conflict">
+			return ___DoWithTrace("agent_controller.skill_authoring_validation.release_authorization", { validationId: acceptedValidationId, workloadUid: binding.workloadUid }, async function _AuthorizeRelease(): Promise<SkillAuthoringValidationReleaseOutcome>
+			{
+				const requestStartedAt = performance.now();
+				const response = await _Request(`/api/internal/agent-controller/skill-authoring-validations/${encodeURIComponent(acceptedValidationId)}/release-authorization`, "POST", { task, binding });
+				if (response.status === 409)
+					return "conflict";
+				if (response.status !== 200)
+					throw new Error(`OpenCrane skill authoring validation release authorization failed with HTTP ${response.status}`);
+				const outcome = await _ReadAndValidateJson(response, function _Validate(value: unknown): Exclude<SkillAuthoringValidationReleaseOutcome, "conflict"> { return _ParseSkillAuthoringValidationReleaseOutcome(value, acceptedValidationId); });
+				if (outcome === "expired")
+					return outcome;
+				const releaseLifetimeSeconds = outcome.releaseLifetimeSeconds - Math.ceil((performance.now() - requestStartedAt) / 1_000);
+				return releaseLifetimeSeconds < 1 ? "expired" : { outcome: "authorized", releaseLifetimeSeconds };
+			});
+		},
+		async bindFirstPod(validationId: string, task: IWorkflowTaskReceipt, command: SkillAuthoringValidationPodBindCommand): Promise<SkillAuthoringValidationBindOutcome>
+		{
+			const acceptedValidationId = _ValidationId(validationId);
+			return ___DoWithTrace("agent_controller.skill_authoring_validation.pod_binding", { validationId: acceptedValidationId, podUid: command.binding.firstPodUid }, async function _BindFirstPod(): Promise<SkillAuthoringValidationBindOutcome>
 			{
 				const response = await _Request(`/api/internal/agent-controller/skill-authoring-validations/${encodeURIComponent(acceptedValidationId)}/pod-binding`, "PUT", { task, ...command });
 				if (response.status === 409)
@@ -192,24 +239,33 @@ export function __CreateHttpSkillAuthoringValidationControllerAuthority(options:
 				{
 					throw new Error(`OpenCrane skill authoring validation Pod binding failed with HTTP ${response.status}`);
 				}
-				return _ReadAndValidateJson(response, function _Validate(value: unknown): "bound" | "idempotent" { return _ParseSkillAuthoringValidationBindOutcome(value, acceptedValidationId); });
+				return _ReadAndValidateJson(response, function _Validate(value: unknown): Exclude<SkillAuthoringValidationBindOutcome, "conflict"> { return _ParseSkillAuthoringValidationBindOutcome(value, acceptedValidationId); });
 			});
 		},
-		async loadCompletion(validationId: string, completionDigest: string, task: IWorkflowTaskReceipt): Promise<SkillAuthoringValidationCompletion | null>
+		async loadCurrentCompletion(validationId: string, task: IWorkflowTaskReceipt): Promise<SkillAuthoringValidationCompletion | null>
 		{
 			const acceptedValidationId = _ValidationId(validationId);
-			return ___DoWithTrace("agent_controller.skill_authoring_validation.completion_load", { validationId: acceptedValidationId }, async function _LoadCompletion(): Promise<SkillAuthoringValidationCompletion | null>
+			return ___DoWithTrace("agent_controller.skill_authoring_validation.completion_current", { validationId: acceptedValidationId }, async function _LoadCurrent(): Promise<SkillAuthoringValidationCompletion | null>
 			{
-				const response = await _Request(`/api/internal/agent-controller/skill-authoring-validations/${encodeURIComponent(acceptedValidationId)}/completion/load`, "POST", { task, completionDigest });
-				if (response.status === 409)
-				{
+				const response = await _Request(`/api/internal/agent-controller/skill-authoring-validations/${encodeURIComponent(acceptedValidationId)}/completion/current`, "POST", task);
+				if (response.status === 204)
 					return null;
-				}
 				if (response.status !== 200)
-				{
-					throw new Error(`OpenCrane skill authoring validation completion load failed with HTTP ${response.status}`);
-				}
+					throw new Error(`OpenCrane skill authoring validation current completion failed with HTTP ${response.status}`);
 				return _ReadAndValidateJson(response, function _Validate(value: unknown): SkillAuthoringValidationCompletion { return _ParseSkillAuthoringValidationCompletion(value, acceptedValidationId); });
+			});
+		},
+		async failUnreported(validationId: string, task: IWorkflowTaskReceipt, binding: RuntimeWorkloadBinding, reason: SkillAuthoringValidationRecoveryReasons): Promise<SkillAuthoringValidationRecoveryOutcome>
+		{
+			const acceptedValidationId = _ValidationId(validationId);
+			return ___DoWithTrace("agent_controller.skill_authoring_validation.failure_unreported", { validationId: acceptedValidationId, workloadUid: binding.workloadUid, reason }, async function _Fail(): Promise<SkillAuthoringValidationRecoveryOutcome>
+			{
+				const response = await _Request(`/api/internal/agent-controller/skill-authoring-validations/${encodeURIComponent(acceptedValidationId)}/failure/unreported`, "POST", { task, binding, reason });
+				if (response.status === 409)
+					return "conflict";
+				if (response.status !== 200)
+					throw new Error(`OpenCrane skill authoring validation recovery failed with HTTP ${response.status}`);
+				return _ReadAndValidateJson(response, function _Validate(value: unknown): Exclude<SkillAuthoringValidationRecoveryOutcome, "conflict"> { return _ParseSkillAuthoringValidationRecoveryOutcome(value, acceptedValidationId); });
 			});
 		},
 		async complete(validationId: string, completion: SkillAuthoringValidationCompletion, task: IWorkflowTaskReceipt): Promise<"completed" | "idempotent" | "conflict">

@@ -4,10 +4,10 @@
 
 ## What it owns
 
-This dependency-free Python package is the bootstrap step for the governed skill-worker image
-build. A released authoring or tool-runner Pod reads an opaque bootstrap reference and an
-audience-bound projected token from read-only files, then acknowledges that one reference to its
-same-silo OpenCrane Service. A *silo* is one customer's isolated OpenCrane deployment.
+This dependency-free Python package supplies the bootstrap step shared by governed skill workers.
+A released Pod reads an opaque bootstrap reference and an audience-bound projected token from
+read-only files, then acknowledges that one reference to its same-silo OpenCrane Service. A *silo*
+is one customer's isolated OpenCrane deployment.
 
 ```
  released worker Pod
@@ -24,13 +24,15 @@ same-silo OpenCrane Service. A *silo* is one customer's isolated OpenCrane deplo
 **In this flow:** [Job contract](../k8s-launcher/README.md) ·
 [agent controller](../../../../../../apps/agent-controller/README.md)
 
-The client does not execute skill code, read artifacts, or hold Kubernetes, database, or object-store
+The client does not run candidate skill code as a tenant tool, read artifacts directly, or hold Kubernetes, database, or object-store
 access. If a value is missing, malformed, redirected, or answered with anything other than the
 minimal positive receipt, it stops without retrying or exposing a secret.
 
 ## Public surface
 
 - `acknowledge` — sends one fail-closed bootstrap acknowledgement using projected files.
+- `acknowledge_authoring_validation` — retries only the short race between authoring Job release and
+  the controller saving its first Pod, for at most five minutes.
 - `main` — reads the three deployment-owned environment variables and returns a process exit code.
 
 ## Boundary

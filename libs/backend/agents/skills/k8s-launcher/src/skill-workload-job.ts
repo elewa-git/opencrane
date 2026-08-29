@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import type { V1Job } from "@kubernetes/client-node";
 
+import { SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE, SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME, TOOL_RUNNER_PROJECTED_TOKEN_AUDIENCE, TOOL_RUNNER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
+
 import { __BuildSkillAuthoringWorkloadJob } from "./skill-authoring-workload-job";
 import { SkillWorkloadKinds } from "./skill-workload-job.types";
 import type { SkillWorkloadJobAssignment, SkillWorkloadJobProfile } from "./skill-workload-job.types";
@@ -95,8 +97,8 @@ function _ParseCpuMillis(value: string): number | null
 function _AssertProfile(profile: SkillWorkloadJobProfile): void
 {
 	// 1. Work out the one ServiceAccount and token audience this class may use. Never take them from the caller.
-	const expectedServiceAccountName = profile.kind === SkillWorkloadKinds.Authoring ? "skill-authoring-default" : "tool-runner-default";
-	const expectedAudience = profile.kind === SkillWorkloadKinds.Authoring ? "opencrane-skill-authoring" : "opencrane-tool-runner";
+	const expectedServiceAccountName = profile.kind === SkillWorkloadKinds.Authoring ? SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME : TOOL_RUNNER_SERVICE_ACCOUNT_NAME;
+	const expectedAudience = profile.kind === SkillWorkloadKinds.Authoring ? SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE : TOOL_RUNNER_PROJECTED_TOKEN_AUDIENCE;
 
 	// 2. Turn the profile's sizes into numbers, so requests, limits, and this class's minimums can be compared.
 	const scratchBytes = _ParseBinaryBytes(profile.scratchSize);

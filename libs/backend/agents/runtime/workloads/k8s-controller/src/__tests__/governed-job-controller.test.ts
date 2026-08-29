@@ -26,9 +26,9 @@ function _FirstPod(job: V1Job): V1Pod
 }
 
 /** Compose the shared store with focused fake Kubernetes clients. */
-function _Store(batchApi: GovernedJobControllerBatchApi, coreApi: GovernedJobControllerCoreApi)
+function _Store(batchApi: GovernedJobControllerBatchApi, coreApi: GovernedJobControllerCoreApi, requestTimeoutMilliseconds = 1_000)
 {
-	return __CreateKubernetesGovernedJobControllerStore({ batchApi, coreApi, requestTimeoutMilliseconds: 1_000, shutdownSignal: new AbortController().signal, workloadLabelKey: "opencrane.ai/test-workload", releaseTraceName: "test_workload.release" });
+	return __CreateKubernetesGovernedJobControllerStore({ batchApi, coreApi, requestTimeoutMilliseconds, shutdownSignal: new AbortController().signal, workloadLabelKey: "opencrane.ai/test-workload", releaseTraceName: "test_workload.release" });
 }
 
 describe("governed Kubernetes Job controller store", function _DescribeGovernedJobStore()
@@ -65,8 +65,33 @@ describe("governed Kubernetes Job controller store", function _DescribeGovernedJ
 		const patchNamespacedJob = vi.fn().mockResolvedValue(released);
 		const store = _Store({ createNamespacedJob: vi.fn(), readNamespacedJob: vi.fn().mockResolvedValue(current), patchNamespacedJob, deleteNamespacedJob: vi.fn() }, { listNamespacedPod: vi.fn() });
 
-		await expect(store.releaseJob(expected, "job-uid-1", "2999-01-01T00:00:00.000Z")).resolves.toEqual(released);
+		await expect(store.releaseJob(expected, "job-uid-1", { expiresAt: "2999-01-01T00:00:00.000Z" })).resolves.toEqual(released);
 		expect(patchNamespacedJob).toHaveBeenCalledWith(expect.objectContaining({ body: expect.arrayContaining([{ op: "test", path: "/metadata/uid", value: "job-uid-1" }, { op: "test", path: "/metadata/resourceVersion", value: "7" }]) }), expect.any(Object));
+	});
+
+	it("uses database-calculated lifetime without consulting the controller clock", async function _UsesDatabaseLifetime()
+	{
+		const expected = _ExpectedJob();
+		const current = _PersistedJob(expected);
+		const released = { ...current, spec: { ...current.spec!, activeDeadlineSeconds: 118, suspend: false } };
+		const patchNamespacedJob = vi.fn().mockResolvedValue(released);
+		const store = _Store({ createNamespacedJob: vi.fn(), readNamespacedJob: vi.fn().mockResolvedValue(current), patchNamespacedJob, deleteNamespacedJob: vi.fn() }, { listNamespacedPod: vi.fn() });
+		const now = vi.spyOn(Date, "now").mockReturnValue(Date.parse("3999-01-01T00:00:00.000Z"));
+
+		await expect(store.releaseJob(expected, "job-uid-1", { lifetimeSeconds: 120 })).resolves.toEqual(released);
+		expect(patchNamespacedJob).toHaveBeenCalledWith(expect.objectContaining({ body: expect.arrayContaining([{ op: "replace", path: "/spec/activeDeadlineSeconds", value: 118 }]) }), expect.any(Object));
+		now.mockRestore();
+	});
+
+	it("refuses release when the remaining database lifetime cannot cover both Kubernetes calls", async function _ReservesKubernetesLatency()
+	{
+		const expected = _ExpectedJob();
+		const current = _PersistedJob(expected);
+		const patchNamespacedJob = vi.fn();
+		const store = _Store({ createNamespacedJob: vi.fn(), readNamespacedJob: vi.fn().mockResolvedValue(current), patchNamespacedJob, deleteNamespacedJob: vi.fn() }, { listNamespacedPod: vi.fn() }, 10_000);
+
+		await expect(store.releaseJob(expected, "job-uid-1", { lifetimeSeconds: 16 })).rejects.toThrow(/lease expired/);
+		expect(patchNamespacedJob).not.toHaveBeenCalled();
 	});
 
 	it("returns only the single exact first Pod owned by the bound Job", async function _FindsExactPod()

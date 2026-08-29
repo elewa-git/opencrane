@@ -1,6 +1,8 @@
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
+import type { RuntimeWorkloadBinding, RuntimeWorkloadClaim } from "@opencrane/backend/agents/runtime/workloads/contract";
 
 import type { SkillAuthoringValidationCompletion, SkillAuthoringValidationPodBindCommand, SkillAuthoringValidationWorkloadBindCommand } from "./skill-authoring-validation-controller.types";
+import type { SkillAuthoringValidationRecoveryReasons } from "./skill-authoring-validation-controller.types";
 
 /**
  * Carries the saved task receipt and Job evidence for one suspended authoring Job.
@@ -31,18 +33,13 @@ export interface SkillAuthoringValidationPodBindRequest
 	readonly command: SkillAuthoringValidationPodBindCommand;
 }
 
-/**
- * Carries the saved task receipt and digest used to read completion evidence from the inbox.
- *
- * Called by: `__ParseSkillAuthoringValidationCompletionLoadRequest`. The digest identifies a
- * server-owned inbox record; it does not let the controller supply a completion result.
- */
-export interface SkillAuthoringValidationCompletionLoadRequest
+/** Carries the saved task and exact bound Job for the database-time release check. */
+export interface SkillAuthoringValidationReleaseRequest
 {
 	/** Exact task receipt saved during validation admission. */
 	readonly task: IWorkflowTaskReceipt;
-	/** Immutable digest that identifies one server-owned completion inbox row. */
-	readonly completionDigest: string;
+	/** Current claim delivery and immutable Job identity. */
+	readonly binding: RuntimeWorkloadBinding;
 }
 
 /**
@@ -57,4 +54,24 @@ export interface SkillAuthoringValidationCompletionRequest
 	readonly task: IWorkflowTaskReceipt;
 	/** Completion identity that the server will match to the route validation id and inbox. */
 	readonly completion: SkillAuthoringValidationCompletion;
+}
+
+/** Carries a task-owned recovery decision for the exact saved Job binding. */
+export interface SkillAuthoringValidationRecoveryRequest
+{
+	/** Exact task receipt saved during validation admission. */
+	readonly task: IWorkflowTaskReceipt;
+	/** Current claim delivery and immutable Job identity. */
+	readonly binding: RuntimeWorkloadBinding;
+	/** Stable reason derived from Kubernetes observation. */
+	readonly reason: SkillAuthoringValidationRecoveryReasons;
+}
+
+/** Carries the final expired claim for a validation that never bound a Job. */
+export interface SkillAuthoringValidationUnboundExpiryRequest
+{
+	/** Exact task receipt saved during validation admission. */
+	readonly task: IWorkflowTaskReceipt;
+	/** Final server-issued claim that expired before workload binding. */
+	readonly claim: RuntimeWorkloadClaim;
 }

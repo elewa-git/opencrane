@@ -5,7 +5,7 @@ import { ___ParseAgentControllerSkillWorkloadAssignmentCommand, ___ParseAgentCon
 /** Return one valid governed skill workload claim. */
 function _SkillClaim()
 {
-	return { workloadId: "workload-1", siloId: "silo-1", kind: "authoring", skillRevisionId: "revision-1", claimedAt: "2026-07-20T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-20T00:01:00.000Z", ignored: true };
+	return { workloadId: "workload-1", siloId: "silo-1", kind: "tool-runner", skillRevisionId: "revision-1", claimedAt: "2026-07-20T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-20T00:01:00.000Z", ignored: true };
 }
 
 /** Return one valid governed skill release claim. */
@@ -18,7 +18,7 @@ describe("agent-controller skill-workload contract validators", function _Descri
 {
 	it("strips untrusted response extensions while retaining exact typed claims", function _StripsResponseExtensions()
 	{
-		expect(___ParseAgentControllerSkillWorkloadClaim(_SkillClaim())).toEqual({ workloadId: "workload-1", siloId: "silo-1", kind: "authoring", skillRevisionId: "revision-1", claimedAt: "2026-07-20T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-20T00:01:00.000Z" });
+		expect(___ParseAgentControllerSkillWorkloadClaim(_SkillClaim())).toEqual({ workloadId: "workload-1", siloId: "silo-1", kind: "tool-runner", skillRevisionId: "revision-1", claimedAt: "2026-07-20T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-20T00:01:00.000Z" });
 		expect(___ParseAgentControllerSkillWorkloadReleaseClaim(_SkillReleaseClaim())).toEqual({ workloadId: "workload-1", siloId: "silo-1", kind: "tool-runner", workloadUid: "job-1", releaseClaimedAt: "2026-07-20T00:02:00.000Z", releaseDeliveryCount: 2, expiresAt: "2026-07-20T00:03:00.000Z" });
 	});
 

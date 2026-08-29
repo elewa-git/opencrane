@@ -82,16 +82,6 @@ SELECT pg_temp.assert_true(
 );
 INSERT INTO "skill_authoring_validation_completion_inbox" ("id", "validation_id", "completion_digest", "outcome", "test_report", "scan_result")
 VALUES ('validation-inbox-1', 'validation-1', 'sha256:' || repeat('e', 64), 'succeeded', '{"passed":true}', '{"passed":true}');
-SELECT pg_temp.expect_failure(
-    'wake-up event must name its saved completion',
-    $statement$
-        INSERT INTO "skill_authoring_validation_workflow_event_outbox" ("id", "completion_inbox_id", "event_name", "payload")
-        VALUES ('validation-outbox-invalid', 'validation-inbox-1', 'skill-authoring-completed', '{}')
-    $statement$,
-    'payload must name its saved completion'
-);
-INSERT INTO "skill_authoring_validation_workflow_event_outbox" ("id", "completion_inbox_id", "event_name", "payload")
-VALUES ('validation-outbox-1', 'validation-inbox-1', 'skill-authoring-completed', jsonb_build_object('validationId', 'validation-1', 'completionDigest', 'sha256:' || repeat('e', 64)));
 UPDATE "skill_authoring_validations" SET "state" = 'succeeded' WHERE "id" = 'validation-1';
 
 INSERT INTO "skill_revisions" ("id", "skill_id", "revision", "artifact_id", "artifact_revision_id", "artifact_content_address", "manifest", "requirements", "trust_class", "authored_by")
@@ -129,13 +119,30 @@ SET "claimed_at" = date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3), 
 WHERE "id" = 'validation-claim-3';
 UPDATE "skill_authoring_validation_workload_claims" SET "workload_uid" = 'validation-job-3' WHERE "id" = 'validation-claim-3';
 UPDATE "skill_authoring_validations" SET "state" = 'running' WHERE "id" = 'validation-3';
+SELECT pg_temp.expect_failure(
+    'a bound claim cannot fail as expired before database time reaches its expiry',
+    $statement$UPDATE "skill_authoring_validations" SET "state" = 'failed', "failure_code" = 'claim_expired_without_worker' WHERE "id" = 'validation-3'$statement$,
+    'requires its saved failure completion'
+);
 SELECT pg_sleep(0.1);
-UPDATE "skill_authoring_validation_workload_claims"
-SET "claimed_at" = date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3), "expires_at" = date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3) + interval '5 minutes', "delivery_count" = 2
-WHERE "id" = 'validation-claim-3';
+SELECT pg_temp.expect_failure(
+    'an expired bound workload lease cannot renew',
+    $statement$UPDATE "skill_authoring_validation_workload_claims" SET "claimed_at" = clock_timestamp(), "expires_at" = clock_timestamp() + interval '5 minutes', "delivery_count" = 2 WHERE "id" = 'validation-claim-3'$statement$,
+    'lease generation must advance after expiry'
+);
 SELECT pg_temp.assert_true(
-    'an expired workload lease may recover the same Job before its first Pod binds',
-    (SELECT "workload_uid" = 'validation-job-3' AND "first_pod_uid" IS NULL AND "delivery_count" = 2 FROM "skill_authoring_validation_workload_claims" WHERE "id" = 'validation-claim-3')
+    'the bound workload keeps its original delivery after expiry',
+    (SELECT "workload_uid" = 'validation-job-3' AND "first_pod_uid" IS NULL AND "delivery_count" = 1 FROM "skill_authoring_validation_workload_claims" WHERE "id" = 'validation-claim-3')
+);
+UPDATE "skill_authoring_validations" SET "state" = 'failed', "failure_code" = 'claim_expired_without_worker' WHERE "id" = 'validation-3';
+SELECT pg_temp.assert_true(
+    'task-owned recovery may fail a bound Job without a worker completion',
+    (SELECT "state" = 'failed' AND "failure_code" = 'claim_expired_without_worker' FROM "skill_authoring_validations" WHERE "id" = 'validation-3')
+);
+SELECT pg_temp.expect_failure(
+    'task-owned recovery cannot replace a saved worker completion',
+    $statement$UPDATE "skill_authoring_validations" SET "state" = 'failed', "failure_code" = 'job_terminal_without_completion' WHERE "id" = 'validation-2'$statement$,
+    'requires its saved failure completion'
 );
 
 ROLLBACK;

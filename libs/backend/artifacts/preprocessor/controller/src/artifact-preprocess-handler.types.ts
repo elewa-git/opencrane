@@ -1,7 +1,7 @@
 import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
 import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessTaskInput } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
-import type { GovernedJobObservation } from "@opencrane/backend/agents/runtime/workloads/k8s-controller";
+import type { GovernedJobObservation, GovernedJobReleaseFence } from "@opencrane/backend/agents/runtime/workloads/k8s-controller";
 import type { ArtifactPreprocessorJobProfile } from "@opencrane/backend/artifacts/preprocessor/k8s-launcher";
 import type { IWorkflowTaskContext, IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -28,7 +28,7 @@ export interface ArtifactPreprocessKubernetesStore
 	 * @param claimExpiresAt - Server-issued deadline after which this delivery must not run.
 	 * @returns The released Kubernetes Job.
 	 */
-	releaseJob(expected: V1Job, jobUid: string, claimExpiresAt: string): Promise<V1Job>;
+	releaseJob(expected: V1Job, jobUid: string, releaseFence: GovernedJobReleaseFence): Promise<V1Job>;
 	/**
 	 * Finds the first Pod owned by the released Job.
 	 *

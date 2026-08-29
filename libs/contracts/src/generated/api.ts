@@ -1301,6 +1301,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/skills/authoring-validations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start validation for a Draft Python skill revision
+         * @description A workflow is a saved task that can continue after a worker or server restarts. This route starts one workflow that tests and scans the selected Draft revision. The server reads the silo and artifact details itself; the request supplies only the revision identifier.
+         */
+        post: operations["startSkillAuthoringValidation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/assets": {
         parameters: {
             query?: never;
@@ -7891,6 +7911,80 @@ export interface operations {
                 };
             };
             /** @description The skill catalogue could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    startSkillAuthoringValidation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    skillRevisionId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The validation and its saved workflow task were committed together. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        validationId: string;
+                        taskId: string;
+                    };
+                };
+            };
+            /** @description The request did not contain one valid skill revision identifier. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The authenticated Principal does not own the selected skill revision. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The selected revision cannot start this validation. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The validation could not be saved. */
             503: {
                 headers: {
                     [name: string]: unknown;

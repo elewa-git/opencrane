@@ -12,68 +12,77 @@ BEGIN
 END;
 $$;
 
-INSERT INTO "artifacts" ("id", "silo_id", "owner_principal_id", "kind", "updated_at") VALUES ('work-artifact','work-silo','user-1','skill',clock_timestamp());
-INSERT INTO "artifact_revisions" ("id", "artifact_id", "revision", "content_address", "byte_length", "media_type", "provenance", "created_by") VALUES ('work-artifact-revision','work-artifact',1,'sha256:'||repeat('a',64),1,'application/gzip','{}','user-1');
-UPDATE "artifacts" SET "current_revision_id"='work-artifact-revision' WHERE "id"='work-artifact';
-INSERT INTO "skills" ("id", "silo_id", "owner_principal_id", "name", "updated_at") VALUES ('work-skill','work-silo','user-1','work skill',clock_timestamp());
-INSERT INTO "skill_revisions" ("id", "skill_id", "revision", "artifact_id", "artifact_revision_id", "artifact_content_address", "manifest", "requirements", "trust_class", "authored_by") VALUES ('work-draft','work-skill',1,'work-artifact','work-artifact-revision','sha256:'||repeat('a',64),'{}','{}','sandboxed_python','user-1');
+CREATE FUNCTION pg_temp.assert_true(test_name TEXT, condition BOOLEAN) RETURNS VOID LANGUAGE plpgsql AS $$
+BEGIN
+    IF condition IS NOT TRUE THEN RAISE EXCEPTION 'FAIL: %', test_name; END IF;
+    RAISE NOTICE 'PASS: %', test_name;
+END;
+$$;
 
-INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "skill_revision_id") VALUES ('authoring-work','work-silo','authoring','work-draft');
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM "skill_workload_claim_candidates" WHERE "id"='authoring-work') THEN RAISE EXCEPTION 'FAIL: typed claim view must expose the eligible workload'; END IF; END; $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM "skill_authority_clock" WHERE "singleton"=1 AND "now" <= clock_timestamp()) THEN RAISE EXCEPTION 'FAIL: typed skill clock view must expose database time'; END IF; END; $$;
-SELECT pg_temp.expect_failure('workload must begin pending', $statement$INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "state", "skill_revision_id", "cancelled_at") VALUES ('authoring-cancelled','work-silo','authoring','cancelled','work-draft',clock_timestamp())$statement$, 'SkillWorkload must begin pending');
-SELECT pg_temp.expect_failure('one authoring workload per revision', $statement$INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "skill_revision_id") VALUES ('authoring-work-duplicate','work-silo','authoring','work-draft')$statement$, 'skill_workloads_one_authoring_per_revision_key');
-SELECT pg_temp.expect_failure('authoring workload has no invocation anchor', $statement$INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "skill_revision_id", "tool_invocation_id") VALUES ('authoring-bad-anchor','work-silo','authoring','work-draft','missing-invocation')$statement$, 'authoring SkillWorkload');
-SELECT pg_temp.expect_failure('runner workload remains unavailable before snapshot-bound admission', $statement$INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "skill_revision_id") VALUES ('runner-no-anchor','work-silo','tool_runner','work-draft')$statement$, 'tool-runner SkillWorkload requires the later snapshot-bound workload admission authority');
-UPDATE "skill_workloads" SET "claimed_at"=TIMESTAMP '1970-01-01', "claim_expires_at"=TIMESTAMP '1970-01-01 00:01:00', "delivery_count"=1 WHERE "id"='authoring-work';
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM "skill_workloads" WHERE "id"='authoring-work' AND "claimed_at" > TIMESTAMP '2026-01-01' AND "claim_expires_at" - "claimed_at" = interval '1 minute') THEN RAISE EXCEPTION 'FAIL: claim timing must come from the database clock'; END IF; END; $$;
-UPDATE "skill_workloads" SET "state"='assigned', "workload_uid"='job-uid-1' WHERE "id"='authoring-work';
-SELECT pg_temp.expect_failure('release requires a durable current bootstrap-backed claim', $statement$UPDATE "skill_workloads" SET "released_at"=clock_timestamp() WHERE "id"='authoring-work'$statement$, 'current bootstrap-backed prior release claim');
-SELECT pg_temp.expect_failure('release cannot fabricate its claim in one transition', $statement$UPDATE "skill_workloads" SET "release_claimed_at"=clock_timestamp(), "release_delivery_count"=1, "release_expires_at"=clock_timestamp()+interval '1 minute', "released_at"=clock_timestamp() WHERE "id"='authoring-work'$statement$, 'current bootstrap-backed prior release claim');
-SELECT pg_temp.expect_failure('bootstrap must begin unconsumed', $statement$INSERT INTO "skill_workload_bootstraps" ("id", "skill_workload_id", "reference_hash", "audience", "service_account_name", "namespace", "workload_uid", "expires_at", "consumed_at", "consumed_by_pod_uid") VALUES ('bootstrap-preconsumed','authoring-work','sha256:'||repeat('a',64),'opencrane-skill-authoring','skill-authoring-default','opencrane-skill-authoring','job-uid-1',clock_timestamp()+interval '5 minutes',clock_timestamp(),'pod-uid-1')$statement$, 'begin unconsumed');
-INSERT INTO "skill_workload_bootstraps" ("id", "skill_workload_id", "reference_hash", "audience", "service_account_name", "namespace", "workload_uid") VALUES ('bootstrap-1','authoring-work','sha256:'||repeat('b',64),'opencrane-skill-authoring','skill-authoring-default','opencrane-skill-authoring','job-uid-1');
-SELECT pg_temp.expect_failure('bootstrap identity follows workload class', $statement$INSERT INTO "skill_workload_bootstraps" ("id", "skill_workload_id", "reference_hash", "audience", "service_account_name", "namespace", "workload_uid", "expires_at") VALUES ('bootstrap-wrong-class','authoring-work','sha256:'||repeat('c',64),'opencrane-tool-runner','tool-runner-default','opencrane-tools','job-uid-1',clock_timestamp()+interval '5 minutes')$statement$, 'SkillWorkloadBootstrap identity');
-SELECT pg_temp.expect_failure('bootstrap requires assigned workload UID', $statement$INSERT INTO "skill_workload_bootstraps" ("id", "skill_workload_id", "reference_hash", "audience", "service_account_name", "namespace", "workload_uid", "expires_at") VALUES ('bootstrap-wrong-uid','authoring-work','sha256:'||repeat('d',64),'opencrane-skill-authoring','skill-authoring-default','opencrane-skill-authoring','other-job',clock_timestamp()+interval '5 minutes')$statement$, 'exact assigned workload UID');
-SELECT pg_temp.expect_failure('bootstrap requires registered workload Pod', $statement$UPDATE "skill_workload_bootstraps" SET "consumed_at"=clock_timestamp(), "consumed_by_pod_uid"='pod-uid-1' WHERE "id"='bootstrap-1'$statement$, 'registered workload Pod');
-SELECT pg_temp.expect_failure('worker Pod registration requires release', $statement$UPDATE "skill_workloads" SET "worker_pod_uid"='pod-uid-1' WHERE "id"='authoring-work'$statement$, 'current released workload');
-UPDATE "skill_workloads" SET "release_claimed_at"=clock_timestamp(), "release_delivery_count"=1, "release_expires_at"=clock_timestamp()+interval '1 minute' WHERE "id"='authoring-work';
-UPDATE "skill_workloads" SET "released_at"=clock_timestamp() WHERE "id"='authoring-work';
-UPDATE "skill_workloads" SET "worker_pod_uid"='pod-uid-1' WHERE "id"='authoring-work';
-UPDATE "skill_workload_bootstraps" SET "consumed_at"=clock_timestamp(), "consumed_by_pod_uid"='pod-uid-1' WHERE "id"='bootstrap-1';
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM "skill_workload_bootstraps" WHERE "id"='bootstrap-1' AND "consumed_at" > TIMESTAMP '2026-01-01') THEN RAISE EXCEPTION 'FAIL: bootstrap consumption must use the database clock'; END IF; END; $$;
-SELECT pg_temp.expect_failure('consumed bootstrap is terminal', $statement$UPDATE "skill_workload_bootstraps" SET "consumed_by_pod_uid"='other-pod' WHERE "id"='bootstrap-1'$statement$, 'consumed SkillWorkloadBootstrap is terminal');
-SELECT pg_temp.expect_failure('worker Pod identity is immutable', $statement$UPDATE "skill_workloads" SET "worker_pod_uid"='other-pod' WHERE "id"='authoring-work'$statement$, 'worker Pod identity is immutable');
+INSERT INTO "artifacts" ("id", "silo_id", "owner_principal_id", "kind", "updated_at")
+VALUES ('runner-artifact', 'runner-silo', 'runner-user', 'skill', clock_timestamp());
+INSERT INTO "artifact_revisions" ("id", "artifact_id", "revision", "content_address", "byte_length", "media_type", "provenance", "created_by")
+VALUES ('runner-artifact-revision', 'runner-artifact', 1, 'sha256:' || repeat('a', 64), 1, 'application/gzip', '{}', 'runner-user');
+UPDATE "artifact_revisions" SET "state" = 'published' WHERE "id" = 'runner-artifact-revision';
+UPDATE "artifacts" SET "current_revision_id" = 'runner-artifact-revision' WHERE "id" = 'runner-artifact';
 
-INSERT INTO "skill_revisions" ("id", "skill_id", "revision", "artifact_id", "artifact_revision_id", "artifact_content_address", "manifest", "requirements", "trust_class", "authored_by") VALUES ('work-draft-completion','work-skill',2,'work-artifact','work-artifact-revision','sha256:'||repeat('a',64),'{}','{}','sandboxed_python','user-1');
-INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "skill_revision_id") VALUES ('authoring-work-completion','work-silo','authoring','work-draft-completion');
-UPDATE "skill_workloads" SET "claimed_at"=TIMESTAMP '1970-01-01', "claim_expires_at"=TIMESTAMP '1970-01-01 00:01:00', "delivery_count"=1 WHERE "id"='authoring-work-completion';
-UPDATE "skill_workloads" SET "state"='assigned', "workload_uid"='job-uid-completion' WHERE "id"='authoring-work-completion';
-INSERT INTO "skill_workload_bootstraps" ("id", "skill_workload_id", "reference_hash", "audience", "service_account_name", "namespace", "workload_uid", "expires_at") VALUES ('bootstrap-completion','authoring-work-completion','sha256:'||repeat('f',64),'opencrane-skill-authoring','skill-authoring-default','opencrane-skill-authoring','job-uid-completion',clock_timestamp()+interval '5 minutes');
-UPDATE "skill_workloads" SET "release_claimed_at"=clock_timestamp(), "release_delivery_count"=1, "release_expires_at"=clock_timestamp()+interval '1 minute' WHERE "id"='authoring-work-completion';
-UPDATE "skill_workloads" SET "released_at"=clock_timestamp() WHERE "id"='authoring-work-completion';
-UPDATE "skill_workloads" SET "worker_pod_uid"='pod-uid-completion' WHERE "id"='authoring-work-completion';
-UPDATE "skill_workload_bootstraps" SET "consumed_at"=clock_timestamp(), "consumed_by_pod_uid"='pod-uid-completion' WHERE "id"='bootstrap-completion';
-SELECT pg_temp.expect_failure('completion requires passed bounded evidence', $statement$UPDATE "skill_workloads" SET "state"='succeeded', "completed_at"=clock_timestamp() WHERE "id"='authoring-work-completion'$statement$, 'bounded passed draft test and scan reports');
-UPDATE "skill_revisions" SET "test_report"='{"passed":true,"summary":"checks passed","checksRun":1}', "scan_result"='{"passed":true,"summary":"scan passed","checksRun":1}' WHERE "id"='work-draft-completion';
-UPDATE "skill_workloads" SET "state"='succeeded', "completed_at"=clock_timestamp() WHERE "id"='authoring-work-completion';
-SELECT pg_temp.expect_failure('completed workload is terminal', $statement$UPDATE "skill_workloads" SET "state"='failed', "failure_code"='late_failure' WHERE "id"='authoring-work-completion'$statement$, 'terminal SkillWorkload is immutable');
+INSERT INTO "skills" ("id", "silo_id", "owner_principal_id", "name", "updated_at")
+VALUES ('runner-skill', 'runner-silo', 'runner-user', 'runner skill', clock_timestamp());
+INSERT INTO "skill_revisions" ("id", "skill_id", "revision", "artifact_id", "artifact_revision_id", "artifact_content_address", "manifest", "requirements", "trust_class", "authored_by")
+VALUES ('runner-revision', 'runner-skill', 1, 'runner-artifact', 'runner-artifact-revision', 'sha256:' || repeat('a', 64), '{}', '{}', 'sandboxed_python', 'runner-user');
+UPDATE "skill_revisions"
+SET "state" = 'review', "reviewed_by" = 'reviewer', "test_report" = '{"passed":true}', "scan_result" = '{"passed":true}'
+WHERE "id" = 'runner-revision';
+UPDATE "skill_revisions"
+SET "state" = 'published', "signature" = 'signature', "signer_key_id" = 'key', "published_at" = clock_timestamp()
+WHERE "id" = 'runner-revision';
 
-INSERT INTO "skill_revisions" ("id", "skill_id", "revision", "artifact_id", "artifact_revision_id", "artifact_content_address", "manifest", "requirements", "trust_class", "authored_by") VALUES ('work-draft-unconsumed','work-skill',3,'work-artifact','work-artifact-revision','sha256:'||repeat('a',64),'{}','{}','sandboxed_python','user-1');
-INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "skill_revision_id") VALUES ('authoring-work-unconsumed','work-silo','authoring','work-draft-unconsumed');
-UPDATE "skill_workloads" SET "claimed_at"=TIMESTAMP '1970-01-01', "claim_expires_at"=TIMESTAMP '1970-01-01 00:01:00', "delivery_count"=1 WHERE "id"='authoring-work-unconsumed';
-UPDATE "skill_workloads" SET "state"='assigned', "workload_uid"='job-uid-2' WHERE "id"='authoring-work-unconsumed';
-INSERT INTO "skill_workload_bootstraps" ("id", "skill_workload_id", "reference_hash", "audience", "service_account_name", "namespace", "workload_uid", "expires_at") VALUES ('bootstrap-unconsumed','authoring-work-unconsumed','sha256:'||repeat('e',64),'opencrane-skill-authoring','skill-authoring-default','opencrane-skill-authoring','job-uid-2',clock_timestamp()+interval '5 minutes');
-SELECT pg_temp.expect_failure('workload source is immutable', $statement$UPDATE "skill_workloads" SET "silo_id"='other-silo' WHERE "id"='authoring-work'$statement$, 'source coordinates are immutable');
-SELECT pg_temp.expect_failure('workload evidence cannot be deleted', $statement$DELETE FROM "skill_workloads" WHERE "id"='authoring-work'$statement$, 'SkillWorkload rows cannot be deleted');
+INSERT INTO "oci_image_validations" ("id", "silo_id", "artifact_id", "artifact_revision_id", "content_address", "byte_length", "media_type", "submission_key_digest", "submission_digest", "state", "index_digest", "image_manifest_digest", "config_digest", "registry_reference", "created_by_principal_id", "completed_at", "updated_at")
+VALUES ('runner-oci', 'runner-silo', 'runner-artifact', 'runner-artifact-revision', 'sha256:' || repeat('a', 64), 1, 'application/vnd.oci.image.layout.v1+zip', 'sha256:' || repeat('b', 64), 'sha256:' || repeat('c', 64), 'imported', 'sha256:' || repeat('d', 64), 'sha256:' || repeat('e', 64), 'sha256:' || repeat('f', 64), 'registry.local/opencrane/runner@sha256:' || repeat('1', 64), 'runner-user', clock_timestamp(), clock_timestamp());
+INSERT INTO "mcp_servers" ("id", "silo_id", "name", "endpoint", "transport", "status", "updated_at")
+VALUES ('runner-server', 'runner-silo', 'runner server', 'oci://runner', 'oci-image', 'active', clock_timestamp());
+INSERT INTO "mcp_server_revisions" ("id", "silo_id", "mcp_server_id", "oci_image_validation_id", "revision", "registry_reference", "protocol_version", "state", "completed_at", "updated_at")
+VALUES ('runner-server-revision', 'runner-silo', 'runner-server', 'runner-oci', 1, 'registry.local/opencrane/runner@sha256:' || repeat('1', 64), '2026-07-28', 'ready', clock_timestamp(), clock_timestamp());
+INSERT INTO "mcp_tool_revisions" ("id", "silo_id", "server_revision_id", "name", "input_schema", "input_schema_digest")
+VALUES ('runner-tool-revision', 'runner-silo', 'runner-server-revision', 'run', '{}', 'sha256:' || repeat('2', 64));
+INSERT INTO "mcp_tasks" ("id", "silo_id", "principal_id", "request_key_digest", "call_digest", "server_revision_id", "tool_revision_id", "protocol_version", "arguments", "updated_at")
+VALUES ('runner-task', 'runner-silo', 'runner-user', 'sha256:' || repeat('3', 64), 'sha256:' || repeat('4', 64), 'runner-server-revision', 'runner-tool-revision', '2026-07-28', '{}', clock_timestamp());
+INSERT INTO "tool_invocations" ("id", "silo_id", "mcp_task_id", "subject_id", "runtime_instance_id", "command_id", "candidate_id", "tool_revision_id", "tool_invocation_id", "arguments", "arguments_digest", "effective_arguments", "effective_arguments_digest", "request_fingerprint", "request_identity", "recovery_mode", "retry_deadline_at", "next_preparation_attempt_at", "updated_at")
+VALUES ('runner-invocation', 'runner-silo', 'runner-task', 'runner-user', 'runner-runtime', 'runner-command', 'runner-candidate', 'runner-tool-revision', 'runner-public-invocation', '{}', 'sha256:' || repeat('5', 64), '{}', 'sha256:' || repeat('5', 64), 'sha256:' || repeat('6', 64), '{}', 'manual', clock_timestamp() + interval '1 hour', clock_timestamp(), clock_timestamp());
+UPDATE "tool_invocations" SET "state" = 'ready', "revision" = 1, "updated_at" = clock_timestamp() WHERE "id" = 'runner-invocation';
 
-UPDATE "skill_revisions" SET "state"='review' WHERE "id"='work-draft';
-UPDATE "skill_revisions" SET "state"='review' WHERE "id"='work-draft-unconsumed';
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM "skill_workloads" WHERE "id"='authoring-work' AND "state"='cancelled' AND "cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'FAIL: leaving Draft must cancel assigned authoring workload'; END IF; END; $$;
-SELECT pg_temp.expect_failure('cancelled workload bootstrap cannot be consumed', $statement$UPDATE "skill_workload_bootstraps" SET "consumed_at"=clock_timestamp(), "consumed_by_pod_uid"='pod-uid-2' WHERE "id"='bootstrap-unconsumed'$statement$, 'exact assigned workload UID');
-SELECT pg_temp.expect_failure('cancelled workload is terminal', $statement$UPDATE "skill_workloads" SET "state"='pending', "cancelled_at"=NULL WHERE "id"='authoring-work'$statement$, 'terminal SkillWorkload is immutable');
-UPDATE "skill_revisions" SET "state"='published', "reviewed_by"='reviewer', "test_report"='{"passed":true}', "scan_result"='{"passed":true}', "signature"='signature', "signer_key_id"='key', "published_at"=clock_timestamp() WHERE "id"='work-draft';
-SELECT pg_temp.expect_failure('authoring requires draft revision', $statement$INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "skill_revision_id") VALUES ('authoring-published','work-silo','authoring','work-draft')$statement$, 'authoring SkillWorkload requires Draft');
-UPDATE "skill_revisions" SET "state"='revoked', "revoked_at"=clock_timestamp() WHERE "id"='work-draft';
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM "skill_workloads" WHERE "id"='authoring-work') THEN RAISE EXCEPTION 'FAIL: revocation must not invalidate existing workload'; END IF; END; $$;
+SELECT pg_temp.expect_failure('a tool-runner workload requires an invocation anchor', $statement$INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "skill_revision_id") VALUES ('runner-no-anchor', 'runner-silo', 'tool_runner', 'runner-revision')$statement$, 'same-silo Ready ToolInvocation');
+INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "skill_revision_id", "tool_invocation_id")
+VALUES ('runner-work', 'runner-silo', 'tool_runner', 'runner-revision', 'runner-invocation');
+SELECT pg_temp.assert_true('the claim view exposes published tool-runner work', EXISTS (SELECT 1 FROM "skill_workload_claim_candidates" WHERE "id" = 'runner-work' AND "kind" = 'tool_runner'));
+SELECT pg_temp.assert_true('the skill clock exposes database time', EXISTS (SELECT 1 FROM "skill_authority_clock" WHERE "singleton" = 1 AND "now" <= clock_timestamp()));
+
+UPDATE "skill_workloads"
+SET "claimed_at" = TIMESTAMP '1970-01-01', "claim_expires_at" = TIMESTAMP '1970-01-01 00:01:00', "delivery_count" = 1
+WHERE "id" = 'runner-work';
+SELECT pg_temp.assert_true('claim timing comes from the database clock', (SELECT "claimed_at" > TIMESTAMP '2026-01-01' AND "claim_expires_at" - "claimed_at" = interval '1 minute' FROM "skill_workloads" WHERE "id" = 'runner-work'));
+UPDATE "skill_workloads" SET "state" = 'assigned', "workload_uid" = 'runner-job-uid' WHERE "id" = 'runner-work';
+
+SELECT pg_temp.expect_failure('bootstrap identity is fixed to the tool-runner class', $statement$INSERT INTO "skill_workload_bootstraps" ("id", "skill_workload_id", "reference_hash", "audience", "service_account_name", "namespace", "workload_uid") VALUES ('runner-bad-bootstrap', 'runner-work', 'sha256:' || repeat('7', 64), 'opencrane-skill-authoring', 'skill-authoring-default', 'opencrane-tools', 'runner-job-uid')$statement$, 'tool-runner workload class');
+INSERT INTO "skill_workload_bootstraps" ("id", "skill_workload_id", "reference_hash", "audience", "service_account_name", "namespace", "workload_uid")
+VALUES ('runner-bootstrap', 'runner-work', 'sha256:' || repeat('8', 64), 'opencrane-tool-runner', 'tool-runner-default', 'opencrane-tools', 'runner-job-uid');
+SELECT pg_temp.expect_failure('release requires a prior live claim', $statement$UPDATE "skill_workloads" SET "released_at" = clock_timestamp() WHERE "id" = 'runner-work'$statement$, 'current bootstrap-backed prior release claim');
+UPDATE "skill_workloads"
+SET "release_claimed_at" = clock_timestamp(), "release_delivery_count" = 1, "release_expires_at" = clock_timestamp() + interval '1 minute'
+WHERE "id" = 'runner-work';
+UPDATE "skill_workloads" SET "released_at" = clock_timestamp() WHERE "id" = 'runner-work';
+UPDATE "skill_workloads" SET "worker_pod_uid" = 'runner-pod-uid' WHERE "id" = 'runner-work';
+UPDATE "skill_workload_bootstraps" SET "consumed_at" = TIMESTAMP '1970-01-01', "consumed_by_pod_uid" = 'runner-pod-uid' WHERE "id" = 'runner-bootstrap';
+SELECT pg_temp.assert_true('bootstrap consumption uses the database clock', (SELECT "consumed_at" > TIMESTAMP '2026-01-01' FROM "skill_workload_bootstraps" WHERE "id" = 'runner-bootstrap'));
+
+SELECT pg_temp.expect_failure('generic workload authority cannot complete tool execution', $statement$UPDATE "skill_workloads" SET "state" = 'succeeded', "completed_at" = clock_timestamp() WHERE "id" = 'runner-work'$statement$, 'completion belongs to its ToolInvocation authority');
+SELECT pg_temp.expect_failure('workload source coordinates are immutable', $statement$UPDATE "skill_workloads" SET "silo_id" = 'other-silo' WHERE "id" = 'runner-work'$statement$, 'source coordinates are immutable');
+SELECT pg_temp.expect_failure('workload evidence cannot be deleted', $statement$DELETE FROM "skill_workloads" WHERE "id" = 'runner-work'$statement$, 'SkillWorkload rows cannot be deleted');
+
+UPDATE "tool_invocations"
+SET "state" = 'failed', "failure_code" = 'cancelled_by_test', "completed_at" = clock_timestamp(), "revision" = 2, "updated_at" = clock_timestamp()
+WHERE "id" = 'runner-invocation';
+SELECT pg_temp.assert_true('a terminal invocation cancels its remaining tool-runner workload', (SELECT "state" = 'cancelled' AND "cancelled_at" IS NOT NULL FROM "skill_workloads" WHERE "id" = 'runner-work'));
+SELECT pg_temp.expect_failure('cancelled workloads are terminal', $statement$UPDATE "skill_workloads" SET "state" = 'pending', "cancelled_at" = NULL WHERE "id" = 'runner-work'$statement$, 'terminal SkillWorkload is immutable');
 
 ROLLBACK;

@@ -47,7 +47,6 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE UNIQUE INDEX "conversations_activity_sequence_key"',
 	'CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"',
 	'CREATE UNIQUE INDEX "authorization_grant_exact_authority_key"',
-	'CREATE UNIQUE INDEX "skill_workloads_one_authoring_per_revision_key"',
 	'CONSTRAINT "model_definitions_generated_output_capabilities_check"',
 	'CREATE TYPE "ToolInvocationState" AS ENUM (\'preparing\', \'awaiting_approval\', \'ready\', \'claimed\', \'reconciling\', \'succeeded\', \'failed\', \'recovery_required\');',
 	'CREATE TABLE "tool_result_deliveries"',

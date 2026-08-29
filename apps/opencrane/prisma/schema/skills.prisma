@@ -18,7 +18,6 @@ enum SkillTrustClass {
 
 /// Isolated Job class selected by the durable skill-work authority.
 enum SkillWorkloadKind {
-  Authoring  @map("authoring")
   ToolRunner @map("tool_runner")
 }
 
@@ -198,8 +197,8 @@ model SkillAuthoringValidationBootstrap {
 
 /// Saves the one worker completion that can supply terminal validation evidence.
 ///
-/// The server records this inbox row before it publishes a wake-up event. The validation trigger
-/// requires its outcome and, for failure, its code before it accepts a terminal state.
+/// The server records this inbox row before the task's recovery heartbeat can apply it. The
+/// validation trigger requires its outcome and, for failure, its code before terminal state.
 model SkillAuthoringValidationCompletionInbox {
   id               String                                       @id @default(cuid())
   validationId     String                                       @unique @map("validation_id")
@@ -210,30 +209,11 @@ model SkillAuthoringValidationCompletionInbox {
   failureCode      String?                                      @map("failure_code")
   receivedAt       DateTime                                     @default(now()) @map("received_at")
   validation       SkillAuthoringValidation                     @relation(fields: [validationId], references: [id], onDelete: Restrict)
-  outbox           SkillAuthoringValidationWorkflowEventOutbox?
 
   @@map("skill_authoring_validation_completion_inbox")
 }
 
-/// Stores the wake-up event for a saved completion until a publisher marks it sent.
-///
-/// One outbox row per completion lets the completion and notification commit together without making
-/// the remote task depend on a successful publish in that same transaction.
-model SkillAuthoringValidationWorkflowEventOutbox {
-  id                  String                                  @id @default(cuid())
-  completionInboxId   String                                  @unique @map("completion_inbox_id")
-  eventName           String                                  @map("event_name")
-  payload             Json                                    @map("payload")
-  publishedAt         DateTime?                               @map("published_at")
-  publicationAttempts Int                                     @default(0) @map("publication_attempts")
-  createdAt           DateTime                                @default(now()) @map("created_at")
-  completionInbox     SkillAuthoringValidationCompletionInbox @relation(fields: [completionInboxId], references: [id], onDelete: Restrict)
-
-  @@index([publishedAt, createdAt])
-  @@map("skill_authoring_validation_workflow_event_outbox")
-}
-
-/// Existing controller-polled Job record, retained until the durable validation flow replaces it completely.
+/// Stores the retained controller-polled Job record for published tool-runner skills only.
 model SkillWorkload {
   id                   String                  @id @default(cuid())
   siloId               String                  @map("silo_id")

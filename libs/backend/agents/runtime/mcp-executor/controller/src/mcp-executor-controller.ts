@@ -65,7 +65,7 @@ export async function __ReconcileNextMcpExecutorRelease(options: McpExecutorCont
 		const job = __BuildSuspendedMcpExecutorJob({ claim: claimed.claim, registryReference: claimed.registryReference, namespace: options.profile.namespace }, options.profile, new Date(claimed.claim.claimedAt));
 
 		// 2. Release the saved Job UID, then record that external update against the release claim.
-		await options.kubernetes.releaseJob(job, claimed.workloadUid, claimed.releaseExpiresAt);
+		await options.kubernetes.releaseJob(job, claimed.workloadUid, { expiresAt: claimed.releaseExpiresAt });
 		const command = { releaseClaimedAt: claimed.releaseClaimedAt, releaseDeliveryCount: claimed.releaseDeliveryCount, workloadUid: claimed.workloadUid };
 		const releaseOutcome = await options.authority.__CommitRelease(claimed.claim.claimId, command, signal);
 		if (releaseOutcome === "conflict")

@@ -27,7 +27,8 @@ export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleas
 		if (candidate === null) return null;
 		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: candidate.id }, include: { bootstrap: true } });
 		const bootstrap = workload?.bootstrap;
-		if (workload === null || bootstrap === null || bootstrap === undefined || workload.workloadUid === null) return null;
+		if (workload === null || bootstrap === null || bootstrap === undefined || workload.workloadUid === null || workload.kind !== SkillWorkloadKind.ToolRunner)
+			return null;
 
 		// 2. We send only the lease length. The `skill_workloads_authority` trigger sets the timestamp from database time and shortens the expiry to the bootstrap's own expiry.
 		const releaseDeliveryCount = workload.releaseDeliveryCount + 1;
@@ -38,7 +39,7 @@ export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleas
 		});
 		const claim = claimed[0];
 		if (claim === undefined || claim.releaseClaimedAt === null || claim.releaseExpiresAt === null) throw new Error("skill workload release claim lost its fence");
-		return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === SkillWorkloadKind.Authoring ? "authoring" : "tool-runner", workloadUid: workload.workloadUid, releaseClaimedAt: claim.releaseClaimedAt.toISOString(), releaseDeliveryCount, expiresAt: claim.releaseExpiresAt.toISOString() };
+		return { workloadId: workload.id, siloId: workload.siloId, kind: "tool-runner", workloadUid: workload.workloadUid, releaseClaimedAt: claim.releaseClaimedAt.toISOString(), releaseDeliveryCount, expiresAt: claim.releaseExpiresAt.toISOString() };
 	}
 
 	/** Records the release for the current claim, or returns `idempotent` when the same release was already recorded. */
@@ -46,7 +47,8 @@ export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleas
 	{
 		if (!_IsReleaseCommandValid(workloadId, command)) return "conflict";
 		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: workloadId }, include: { bootstrap: true } });
-		if (workload === null) return "conflict";
+		if (workload === null || workload.kind !== SkillWorkloadKind.ToolRunner)
+			return "conflict";
 		if (workload.releasedAt !== null) return _IsSameRelease(workload, command) ? "idempotent" : "conflict";
 		const now = await this._databaseNow();
 		const bootstrap = workload.bootstrap;
@@ -61,7 +63,8 @@ export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleas
 		if (!_IsReleaseCommandValid(workloadId, command) || command.podUid.length === 0) return "conflict";
 		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: workloadId }, include: { bootstrap: true } });
 		const bootstrap = workload?.bootstrap;
-		if (workload === null || bootstrap === null || bootstrap === undefined) return "conflict";
+		if (workload === null || bootstrap === null || bootstrap === undefined || workload.kind !== SkillWorkloadKind.ToolRunner)
+			return "conflict";
 		if (workload.workerPodUid !== null) return workload.workerPodUid === command.podUid && _IsSameRelease(workload, command) ? "idempotent" : "conflict";
 		const now = await this._databaseNow();
 		if (workload.state !== SkillWorkloadState.Assigned || workload.releasedAt === null || workload.workloadUid !== command.workloadUid || !_IsSameRelease(workload, command) || workload.releaseExpiresAt === null || now >= workload.releaseExpiresAt || bootstrap.consumedAt !== null || bootstrap.expiresAt <= now || bootstrap.workloadUid !== command.workloadUid) return "conflict";

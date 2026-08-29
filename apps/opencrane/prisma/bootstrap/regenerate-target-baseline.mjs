@@ -61,12 +61,6 @@ normalizedGenerated = _ReplaceExactlyOnce(
 );
 normalizedGenerated = _ReplaceExactlyOnce(
 	normalizedGenerated,
-	'CREATE INDEX "skill_workloads_state_claim_expires_at_idx" ON "skill_workloads"("state", "claim_expires_at");',
-	'CREATE INDEX "skill_workloads_state_claim_expires_at_idx" ON "skill_workloads"("state", "claim_expires_at");\n\nCREATE UNIQUE INDEX "skill_workloads_one_authoring_per_revision_key" ON "skill_workloads"("skill_revision_id") WHERE "kind" = \'authoring\';',
-	"skill workload claim index",
-);
-normalizedGenerated = _ReplaceExactlyOnce(
-	normalizedGenerated,
 	'CREATE INDEX "conversation_run_events_run_id_message_id_idx" ON "conversation_run_events"("run_id", "message_id");',
 	'CREATE INDEX "conversation_run_events_run_id_message_id_idx" ON "conversation_run_events"("run_id", "message_id");\n\nCREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "message_id") WHERE "type" = \'message.started\';',
 	"conversation message event index",

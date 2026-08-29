@@ -61,7 +61,7 @@ describe("agent-controller skill-workload dispatch router", function _DescribeRo
 
 	it("returns only the database-fenced workload claim to the reviewed controller", async function _ReturnsClaim()
 	{
-		const claim = { workloadId: "workload-1", siloId: "silo-a", kind: "authoring" as const, skillRevisionId: "revision-1", claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-24T00:00:30.000Z" };
+		const claim = { workloadId: "workload-1", siloId: "silo-a", kind: "tool-runner" as const, skillRevisionId: "revision-1", claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-24T00:00:30.000Z" };
 		const { app } = _App({ authority: { claimNextAtomically: vi.fn().mockResolvedValue(claim), commitAssignmentAtomically: vi.fn(), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn(), registerFirstPodAtomically: vi.fn() } });
 
 		const response = await request(app).post("/skill-workloads:claim").set("authorization", "Bearer projected-token").send({});
@@ -72,7 +72,7 @@ describe("agent-controller skill-workload dispatch router", function _DescribeRo
 
 	it("forwards exact assignment evidence and rejects caller-selected extensions", async function _CommitsAssignment()
 	{
-		const command = { claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, workloadUid: "job-uid-1", bootstrapReference: `skill-bootstrap-v1_${"a".repeat(64)}`, namespace: "tenant-a-authoring" };
+		const command = { claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, workloadUid: "job-uid-1", bootstrapReference: `skill-bootstrap-v1_${"a".repeat(64)}`, namespace: "tenant-a-tools" };
 		const authority = { claimNextAtomically: vi.fn(), commitAssignmentAtomically: vi.fn().mockResolvedValue("assigned" as const), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn(), registerFirstPodAtomically: vi.fn() };
 		const { app } = _App({ authority });
 

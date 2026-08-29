@@ -1,6 +1,6 @@
 import { SkillCatalogueRevisionStates, SkillCatalogueStates } from "./skill-catalogue.types";
 
-/** OpenAPI path fragment for the browser-safe silo-scoped skill catalogue. */
+/** OpenAPI paths for the browser-safe skill catalogue and validation start command. */
 export const _SkillCatalogueOpenapiPaths = {
 	"/skills": {
 		get: {
@@ -41,6 +41,46 @@ export const _SkillCatalogueOpenapiPaths = {
 				},
 				401: { description: "No authenticated browser session owns the request.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
 				503: { description: "The skill catalogue could not be read.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+			},
+		},
+	},
+	"/skills/authoring-validations": {
+		post: {
+			operationId: "startSkillAuthoringValidation",
+			summary: "Start validation for a Draft Python skill revision",
+			description: "A workflow is a saved task that can continue after a worker or server restarts. This route starts one workflow that tests and scans the selected Draft revision. The server reads the silo and artifact details itself; the request supplies only the revision identifier.",
+			tags: ["Skills"],
+			requestBody: {
+				required: true,
+				content: {
+					"application/json": {
+						schema: {
+							type: "object",
+							additionalProperties: false,
+							required: ["skillRevisionId"],
+							properties: { skillRevisionId: { type: "string", minLength: 1, maxLength: 256 } },
+						},
+					},
+				},
+			},
+			responses: {
+				202: {
+					description: "The validation and its saved workflow task were committed together.",
+					content: {
+						"application/json": {
+							schema: {
+								type: "object",
+								required: ["validationId", "taskId"],
+								properties: { validationId: { type: "string" }, taskId: { type: "string" } },
+							},
+						},
+					},
+				},
+				400: { description: "The request did not contain one valid skill revision identifier.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+				401: { description: "No authenticated browser session owns the request.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+				403: { description: "The authenticated Principal does not own the selected skill revision.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+				409: { description: "The selected revision cannot start this validation.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+				503: { description: "The validation could not be saved.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
 			},
 		},
 	},

@@ -3,7 +3,7 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
-import { SkillAuthoringValidationTaskNames, type SkillAuthoringValidationControllerAuthority } from "@opencrane/backend/agents/skills/workflows/contract";
+import { SkillAuthoringValidationRecoveryReasons, SkillAuthoringValidationTaskNames, type SkillAuthoringValidationControllerAuthority } from "@opencrane/backend/agents/skills/workflows/contract";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 
 import { __CreateSkillAuthoringValidationControllerRouter } from "../skill-authoring-validation-controller.router";
@@ -35,7 +35,7 @@ function _WorkloadBinding()
 /** Builds an internal Express app with a configurable controller authority. */
 function _App(overrides: Partial<SkillAuthoringValidationControllerRouterDependencies> = {})
 {
-	const authority: SkillAuthoringValidationControllerAuthority = { claimForTask: vi.fn().mockResolvedValue(_Record()), bindWorkload: vi.fn().mockResolvedValue("bound"), bindFirstPod: vi.fn().mockResolvedValue("bound"), loadCompletion: vi.fn().mockResolvedValue({ validationId: "validation-1", completionDigest: `sha256:${"b".repeat(64)}` }), complete: vi.fn().mockResolvedValue("completed") };
+	const authority: SkillAuthoringValidationControllerAuthority = { claimForTask: vi.fn().mockResolvedValue(_Record()), failExpiredBeforeWorkload: vi.fn().mockResolvedValue("failed"), bindWorkload: vi.fn().mockResolvedValue("bound"), authorizeRelease: vi.fn().mockResolvedValue({ outcome: "authorized", releaseLifetimeSeconds: 300 }), bindFirstPod: vi.fn().mockResolvedValue("bound"), loadCurrentStatus: vi.fn().mockResolvedValue("active"), loadCurrentCompletion: vi.fn().mockResolvedValue(null), failUnreported: vi.fn().mockResolvedValue("failed"), complete: vi.fn().mockResolvedValue("completed") };
 	const dependencies: SkillAuthoringValidationControllerRouterDependencies = {
 		namespace: "silo-a",
 		authoringNamespace: "opencrane-skill-authoring",
@@ -83,6 +83,26 @@ describe("agent-controller skill authoring validation router", function _Describ
 		expect(invalid.status).toBe(400);
 	});
 
+	it("returns the database-owned expiry outcome without turning it into a transport failure", async function _ReturnsExpiredBind()
+	{
+		const { app, dependencies } = _App();
+		vi.mocked(dependencies.authority.bindWorkload).mockResolvedValue("expired");
+		const response = await request(app).put("/skill-authoring-validations/validation-1/workload-binding").set("authorization", "Bearer projected-token").send({ task: _Task(), binding: _WorkloadBinding(), bootstrapReference: "skill-bootstrap-v1_opaque-reference", namespace: "opencrane-skill-authoring" });
+
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual({ outcome: "expired", validationId: "validation-1" });
+	});
+
+	it("checks database time again immediately before the exact Job is released", async function _AuthorizesRelease()
+	{
+		const { app, dependencies } = _App();
+		const response = await request(app).post("/skill-authoring-validations/validation-1/release-authorization").set("authorization", "Bearer projected-token").send({ task: _Task(), binding: _WorkloadBinding() });
+
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual({ outcome: "authorized", releaseLifetimeSeconds: 300, validationId: "validation-1" });
+		expect(dependencies.authority.authorizeRelease).toHaveBeenCalledWith("validation-1", _Task(), _WorkloadBinding());
+	});
+
 	it("binds the first Pod under the original Job delivery", async function _BindsFirstPod()
 	{
 		const { app, dependencies } = _App();
@@ -93,23 +113,59 @@ describe("agent-controller skill authoring validation router", function _Describ
 		expect(dependencies.authority.bindFirstPod).toHaveBeenCalledWith("validation-1", _Task(), { binding });
 	});
 
-	it("loads and applies inbox evidence for the same validation", async function _Completes()
+	it("forwards only the final server-issued claim for unbound expiry", async function _FailsUnboundExpiry()
+	{
+		const { app, dependencies } = _App();
+		const claim = { ..._Record().claim, deliveryCount: 3 };
+		const response = await request(app).post("/skill-authoring-validations/validation-1/failure/unbound-expiry").set("authorization", "Bearer projected-token").send({ task: _Task(), claim });
+
+		expect(response.body).toEqual({ outcome: "failed", validationId: "validation-1" });
+		expect(dependencies.authority.failExpiredBeforeWorkload).toHaveBeenCalledWith("validation-1", _Task(), claim);
+	});
+
+	it("applies inbox evidence for the same validation", async function _Completes()
 	{
 		const { app, dependencies } = _App();
 		const completion = { validationId: "validation-1", completionDigest: `sha256:${"b".repeat(64)}` };
-		const loaded = await request(app).post("/skill-authoring-validations/validation-1/completion/load").set("authorization", "Bearer projected-token").send({ task: _Task(), completionDigest: completion.completionDigest });
 		const completed = await request(app).post("/skill-authoring-validations/validation-1/completion/complete").set("authorization", "Bearer projected-token").send({ task: _Task(), completion });
 
-		expect(loaded.body).toEqual(completion);
 		expect(completed.body).toEqual({ outcome: "completed", validationId: "validation-1" });
 		expect(dependencies.authority.complete).toHaveBeenCalledWith("validation-1", completion, _Task());
+	});
+
+	it("loads the current completion and saves only a fixed task-owned recovery reason", async function _Recovers()
+	{
+		const completion = { validationId: "validation-1", completionDigest: `sha256:${"b".repeat(64)}` };
+		const { app, dependencies } = _App();
+		vi.mocked(dependencies.authority.loadCurrentCompletion).mockResolvedValue(completion);
+		const binding = { ..._WorkloadBinding(), firstPodUid: "pod-uid-1" };
+
+		const loaded = await request(app).post("/skill-authoring-validations/validation-1/completion/current").set("authorization", "Bearer projected-token").send(_Task());
+		const failed = await request(app).post("/skill-authoring-validations/validation-1/failure/unreported").set("authorization", "Bearer projected-token").send({ task: _Task(), binding, reason: SkillAuthoringValidationRecoveryReasons.JobTerminalWithoutCompletion });
+		const invalid = await request(app).post("/skill-authoring-validations/validation-1/failure/unreported").set("authorization", "Bearer projected-token").send({ task: _Task(), binding, reason: "worker_said_so" });
+
+		expect(loaded.body).toEqual(completion);
+		expect(failed.body).toEqual({ outcome: "failed", validationId: "validation-1" });
+		expect(invalid.status).toBe(400);
+		expect(dependencies.authority.failUnreported).toHaveBeenCalledWith("validation-1", _Task(), binding, SkillAuthoringValidationRecoveryReasons.JobTerminalWithoutCompletion);
+	});
+
+	it("loads the current durable lifecycle status without changing it", async function _LoadsCurrentStatus()
+	{
+		const { app, dependencies } = _App();
+		vi.mocked(dependencies.authority.loadCurrentStatus).mockResolvedValue("cancelled");
+
+		const response = await request(app).post("/skill-authoring-validations/validation-1/status/current").set("authorization", "Bearer projected-token").send(_Task());
+
+		expect(response.body).toEqual({ status: "cancelled", validationId: "validation-1" });
+		expect(dependencies.authority.loadCurrentStatus).toHaveBeenCalledWith("validation-1", _Task());
 	});
 
 	it("logs authority failures without bearer tokens or request bodies", async function _LogsFailure()
 	{
 		const failure = new Error("database unavailable");
 		const logger = { error: vi.fn() };
-		const authority: SkillAuthoringValidationControllerAuthority = { claimForTask: vi.fn().mockRejectedValue(failure), bindWorkload: vi.fn(), bindFirstPod: vi.fn(), loadCompletion: vi.fn(), complete: vi.fn() };
+		const authority: SkillAuthoringValidationControllerAuthority = { claimForTask: vi.fn().mockRejectedValue(failure), failExpiredBeforeWorkload: vi.fn(), bindWorkload: vi.fn(), authorizeRelease: vi.fn(), bindFirstPod: vi.fn(), loadCurrentStatus: vi.fn(), loadCurrentCompletion: vi.fn(), failUnreported: vi.fn(), complete: vi.fn() };
 		const { app } = _App({ authority, logger });
 		const response = await request(app).post("/skill-authoring-validations/validation-1/claim").set("authorization", "Bearer secret-projected-token").send(_Task());
 

@@ -25,11 +25,11 @@ export interface GovernedJobControllerStore
 	 *
 	 * @param expected - The suspended manifest recorded for this assignment.
 	 * @param workloadUid - The Kubernetes UID saved when the assignment was committed.
-	 * @param releaseExpiresAt - The database claim expiry that the Job deadline must precede.
+	 * @param releaseFence - The database expiry or database-calculated remaining lifetime that bounds the Job.
 	 * @returns The verified Job with `spec.suspend` set to `false`.
 	 * @throws When the claim has expired or Kubernetes no longer holds the assigned Job.
 	 */
-	releaseJob(expected: V1Job, workloadUid: string, releaseExpiresAt: string): Promise<V1Job>;
+	releaseJob(expected: V1Job, workloadUid: string, releaseFence: GovernedJobReleaseFence): Promise<V1Job>;
 	/**
 	 * Finds the first Pod for the saved Job UID and verifies its owner, labels, namespace, and service
 	 * account before the controller records that Pod in the database.
@@ -62,6 +62,18 @@ export interface GovernedJobControllerStore
 	 */
 	deleteJob(expectedJob: V1Job, workloadUid: string): Promise<void>;
 }
+
+/**
+ * Bounds a Job release with database authority instead of trusting the controller clock.
+ *
+ * Existing workload classes pass an absolute database expiry. Remote authorities pass a remaining
+ * lifetime calculated from database time, after subtracting the HTTP round trip, so the controller
+ * does not compare its clock with the database clock. The Kubernetes store then reserves enough
+ * lifetime for its read and patch requests before it releases the Job.
+ *
+ * Called by: each class-specific governed Job controller immediately before Kubernetes release.
+ */
+export type GovernedJobReleaseFence = { readonly expiresAt: string } | { readonly lifetimeSeconds: number };
 
 /**
  * Tells a workload workflow what it may do after the store verifies the released Kubernetes Job.

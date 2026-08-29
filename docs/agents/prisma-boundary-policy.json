@@ -381,20 +381,6 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-authoring-completion-repository.ts",
-        "adapter": "PrismaSkillAuthoringCompletionRepository",
-        "contract": "SkillAuthoringCompletionRepository",
-        "contractImportPath": "./skill-workload-unit-of-work.types",
-        "constructs": []
-      },
-      {
-        "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-authoring-input-repository.ts",
-        "adapter": "PrismaSkillAuthoringInputRepository",
-        "contract": "SkillAuthoringInputRepository",
-        "contractImportPath": "./skill-workload-unit-of-work.types",
-        "constructs": []
-      },
-      {
         "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.ts",
         "adapter": "PrismaArtifactAuthorityRepository",
         "contract": "ArtifactAuthorityRepository",
@@ -566,6 +552,25 @@
         "adapter": "PrismaSkillAuthoringValidationRepository",
         "contract": "SkillAuthoringValidationRepository",
         "contractImportPath": "@opencrane/backend/agents/skills/workflows",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/skills/main/src/prisma-skill-authoring-validation-submission-repository.ts",
+        "adapter": "PrismaSkillAuthoringValidationSubmissionRepository",
+        "contract": "SkillAuthoringValidationSubmissionAuthority",
+        "contractImportPath": "./skill-authoring-validation-submission.types",
+        "constructs": [
+          {
+            "adapter": "PrismaSkillAuthoringValidationRepository",
+            "importPath": "./prisma-skill-authoring-validation-repository"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/agents/skills/main/src/prisma-skill-authoring-validation-worker-repository.ts",
+        "adapter": "PrismaSkillAuthoringValidationWorkerRepository",
+        "contract": "SkillAuthoringValidationWorkerAuthority",
+        "contractImportPath": "./skill-authoring-validation-worker.types",
         "constructs": []
       },
       {
@@ -1125,14 +1130,6 @@
           {
             "adapter": "PrismaSkillWorkloadBootstrapRepository",
             "importPath": "./prisma-skill-workload-bootstrap-repository"
-          },
-          {
-            "adapter": "PrismaSkillAuthoringCompletionRepository",
-            "importPath": "./prisma-skill-authoring-completion-repository"
-          },
-          {
-            "adapter": "PrismaSkillAuthoringInputRepository",
-            "importPath": "./prisma-skill-authoring-input-repository"
           }
         ]
       },
@@ -1145,6 +1142,30 @@
           {
             "adapter": "PrismaSkillAuthoringValidationControllerRepository",
             "importPath": "./skill-authoring-validation-controller-authority"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/agents/skills/main/src/prisma-skill-authoring-validation-submission.ts",
+        "adapter": "PrismaSkillAuthoringValidationSubmissionUnitOfWork",
+        "contract": "SkillAuthoringValidationSubmissionAuthority",
+        "contractImportPath": "./skill-authoring-validation-submission.types",
+        "constructs": [
+          {
+            "adapter": "PrismaSkillAuthoringValidationSubmissionRepository",
+            "importPath": "./prisma-skill-authoring-validation-submission-repository"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/agents/skills/main/src/prisma-skill-authoring-validation-worker.ts",
+        "adapter": "PrismaSkillAuthoringValidationWorkerUnitOfWork",
+        "contract": "SkillAuthoringValidationWorkerAuthority",
+        "contractImportPath": "./skill-authoring-validation-worker.types",
+        "constructs": [
+          {
+            "adapter": "PrismaSkillAuthoringValidationWorkerRepository",
+            "importPath": "./prisma-skill-authoring-validation-worker-repository"
           }
         ]
       },

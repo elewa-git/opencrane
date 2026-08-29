@@ -11,7 +11,7 @@ function _Options(fetch: typeof globalThis.fetch)
 /** Return one claim response body. */
 function _Claim()
 {
-	return { workloadId: "workload-1", siloId: "silo-a", kind: "authoring", skillRevisionId: "revision-1", claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-24T00:00:30.000Z" };
+	return { workloadId: "workload-1", siloId: "silo-a", kind: "tool-runner", skillRevisionId: "revision-1", claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-24T00:00:30.000Z" };
 }
 
 /** Return a chunked response larger than the 16 KiB limit. */
@@ -69,7 +69,7 @@ describe("HTTP governed skill workload authority", function _DescribeAuthority()
 		const malformedClaim = __CreateHttpSkillWorkloadControllerAuthority(_Options(vi.fn().mockResolvedValue(new Response(JSON.stringify({ ..._Claim(), skillRevisionId: "" }), { status: 200 }))));
 		await expect(malformedClaim.__Claim(new AbortController().signal)).rejects.toThrow(/skill workload claim\.skillRevisionId must be a bounded identifier/);
 
-		const release = { workloadId: "workload-1", siloId: "silo-a", kind: "authoring", workloadUid: "job-uid-1", releaseClaimedAt: "2026-07-24T00:00:30.000Z", releaseDeliveryCount: 1, expiresAt: "2026-07-24T00:01:00Z" };
+		const release = { workloadId: "workload-1", siloId: "silo-a", kind: "tool-runner", workloadUid: "job-uid-1", releaseClaimedAt: "2026-07-24T00:00:30.000Z", releaseDeliveryCount: 1, expiresAt: "2026-07-24T00:01:00Z" };
 		const malformedRelease = __CreateHttpSkillWorkloadControllerAuthority(_Options(vi.fn().mockResolvedValue(new Response(JSON.stringify(release), { status: 200 }))));
 		await expect(malformedRelease.__ClaimRelease(new AbortController().signal)).rejects.toThrow(/skill workload release claim\.expiresAt must be a UTC millisecond instant/);
 	});

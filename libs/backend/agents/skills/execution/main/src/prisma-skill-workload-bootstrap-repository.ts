@@ -1,4 +1,6 @@
-import type { Prisma } from "@prisma/client";
+import { SkillWorkloadKind, type Prisma } from "@prisma/client";
+
+import { TOOL_RUNNER_PROJECTED_TOKEN_AUDIENCE, TOOL_RUNNER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
 import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types";
 import { _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps";
@@ -20,7 +22,7 @@ export class PrismaSkillWorkloadBootstrapRepository implements SkillWorkloadBoot
 	async loadUnconsumed(referenceHash: string): Promise<SkillWorkloadBootstrapRecord | null>
 	{
 		const now = await this._databaseNow();
-		const bootstrap = await this.transaction.skillWorkloadBootstrap.findFirst({ where: { referenceHash, consumedAt: null, expiresAt: { gt: now }, skillWorkload: { releasedAt: { not: null }, workerPodUid: { not: null } } }, include: { skillWorkload: true } });
+		const bootstrap = await this.transaction.skillWorkloadBootstrap.findFirst({ where: { referenceHash, audience: TOOL_RUNNER_PROJECTED_TOKEN_AUDIENCE, serviceAccountName: TOOL_RUNNER_SERVICE_ACCOUNT_NAME, consumedAt: null, expiresAt: { gt: now }, skillWorkload: { kind: SkillWorkloadKind.ToolRunner, releasedAt: { not: null }, workerPodUid: { not: null } } }, include: { skillWorkload: true } });
 		if (bootstrap === null || bootstrap.skillWorkload.workerPodUid === null) return null;
 		return { workloadId: bootstrap.skillWorkloadId, referenceHash: bootstrap.referenceHash, audience: bootstrap.audience, serviceAccountName: bootstrap.serviceAccountName, namespace: bootstrap.namespace, workloadUid: bootstrap.workloadUid, podUid: bootstrap.skillWorkload.workerPodUid };
 	}
@@ -29,7 +31,7 @@ export class PrismaSkillWorkloadBootstrapRepository implements SkillWorkloadBoot
 	async consume(referenceHash: string, identity: SkillWorkloadBootstrapIdentity): Promise<"consumed" | "conflict">
 	{
 		const now = await this._databaseNow();
-		const updated = await this.transaction.skillWorkloadBootstrap.updateMany({ where: { referenceHash, consumedAt: null, expiresAt: { gt: now }, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, skillWorkload: { releasedAt: { not: null }, workerPodUid: identity.podUid } }, data: { consumedAt: _SkillWorkloadTimestampProposal, consumedByPodUid: identity.podUid } });
+		const updated = await this.transaction.skillWorkloadBootstrap.updateMany({ where: { referenceHash, audience: TOOL_RUNNER_PROJECTED_TOKEN_AUDIENCE, serviceAccountName: TOOL_RUNNER_SERVICE_ACCOUNT_NAME, consumedAt: null, expiresAt: { gt: now }, namespace: identity.namespace, skillWorkload: { kind: SkillWorkloadKind.ToolRunner, releasedAt: { not: null }, workerPodUid: identity.podUid } }, data: { consumedAt: _SkillWorkloadTimestampProposal, consumedByPodUid: identity.podUid } });
 		return updated.count === 1 ? "consumed" : "conflict";
 	}
 

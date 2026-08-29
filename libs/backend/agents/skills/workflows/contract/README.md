@@ -16,10 +16,10 @@ process needs to import the other process's implementation.
                          validation id + silo id only
 ```
 
-**In the planned flow:** [workflow admission](../main/README.md) saves the task in a database
-transaction and [controller](../../../controller/README.md) later runs its handler. This slice
-installs the shared declaration but does not yet wire a product schema, repository adapter, route,
-or deployable controller registration.
+**In this flow:** [workflow admission](../main/README.md) saves the task in a database transaction
+and [controller](../../../controller/README.md) runs its handler. The public server route saves the
+validation and task together, and the controller uses this contract for recovery, retries, and
+cleanup.
 
 The input never contains artifact bytes, credentials, a Kubernetes Job, or a selected queue. The
 server composition owns queue choice, while the controller owns the handler implementation.
@@ -30,6 +30,8 @@ server composition owns queue choice, while the controller owns the handler impl
   server declaration and controller registration.
 - `SkillAuthoringValidationTaskInput` carries only the owning silo and saved validation ID.
 - `SkillAuthoringValidationTaskNames` names the single supported Python validation task.
+- `SkillAuthoringValidationRecoveryReasons` names the failures the task may save when its Job cannot
+  report a result.
 
 ## Boundary
 

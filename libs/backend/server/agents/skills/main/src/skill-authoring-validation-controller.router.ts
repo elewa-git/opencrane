@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import { __ParseSkillAuthoringValidationCompletionLoadRequest, __ParseSkillAuthoringValidationCompletionRequest, __ParseSkillAuthoringValidationPodBindRequest, __ParseSkillAuthoringValidationTaskReceipt, __ParseSkillAuthoringValidationWorkloadBindRequest } from "@opencrane/backend/agents/skills/workflows/contract";
+import { __ParseSkillAuthoringValidationCompletionRequest, __ParseSkillAuthoringValidationPodBindRequest, __ParseSkillAuthoringValidationRecoveryRequest, __ParseSkillAuthoringValidationReleaseRequest, __ParseSkillAuthoringValidationTaskReceipt, __ParseSkillAuthoringValidationUnboundExpiryRequest, __ParseSkillAuthoringValidationWorkloadBindRequest } from "@opencrane/backend/agents/skills/workflows/contract";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
 import type { SkillAuthoringValidationControllerIdentity, SkillAuthoringValidationControllerRouterDependencies } from "./skill-authoring-validation-controller.router.types";
@@ -77,6 +77,63 @@ export function __CreateSkillAuthoringValidationControllerRouter(dependencies: S
 		}
 	});
 
+	router.post("/skill-authoring-validations/:validationId/release-authorization", async function _AuthorizeRelease(request: Request, response: Response): Promise<void>
+	{
+		try
+		{
+			if (!await _IsController(request, dependencies))
+			{
+				_RespondProblem(response, 401, "controller_identity_denied");
+				return;
+			}
+			const validationId = _ValidationId(request);
+			const requestBody = __ParseSkillAuthoringValidationReleaseRequest(request.body);
+			if (validationId === null || requestBody === null)
+			{
+				_RespondProblem(response, 400, "invalid_release_authorization");
+				return;
+			}
+			const outcome = await dependencies.authority.authorizeRelease(validationId, requestBody.task, requestBody.binding);
+			if (outcome === "conflict")
+			{
+				_RespondProblem(response, 409, "stale_or_conflicting_validation");
+				return;
+			}
+			response.status(200).json(outcome === "expired" ? { outcome, validationId } : { ...outcome, validationId });
+		}
+		catch (err)
+		{
+			_LogFailure(dependencies, err, "agent_controller.skill_authoring_validation.release_authorization");
+			_RespondProblem(response, 503, "skill_authoring_validation_unavailable");
+		}
+	});
+
+	router.post("/skill-authoring-validations/:validationId/failure/unbound-expiry", async function _FailUnboundExpiry(request: Request, response: Response): Promise<void>
+	{
+		try
+		{
+			if (!await _IsController(request, dependencies))
+			{
+				_RespondProblem(response, 401, "controller_identity_denied");
+				return;
+			}
+			const validationId = _ValidationId(request);
+			const expiry = __ParseSkillAuthoringValidationUnboundExpiryRequest(request.body);
+			if (validationId === null || expiry === null)
+			{
+				_RespondProblem(response, 400, "invalid_unbound_expiry");
+				return;
+			}
+			const outcome = await dependencies.authority.failExpiredBeforeWorkload(validationId, expiry.task, expiry.claim);
+			_RespondOutcome(response, outcome, validationId);
+		}
+		catch (err)
+		{
+			_LogFailure(dependencies, err, "agent_controller.skill_authoring_validation.unbound_expiry");
+			_RespondProblem(response, 503, "skill_authoring_validation_unavailable");
+		}
+	});
+
 	router.put("/skill-authoring-validations/:validationId/pod-binding", async function _BindPod(request: Request, response: Response): Promise<void>
 	{
 		try
@@ -103,7 +160,7 @@ export function __CreateSkillAuthoringValidationControllerRouter(dependencies: S
 		}
 	});
 
-	router.post("/skill-authoring-validations/:validationId/completion/load", async function _LoadCompletion(request: Request, response: Response): Promise<void>
+	router.post("/skill-authoring-validations/:validationId/status/current", async function _LoadCurrentStatus(request: Request, response: Response): Promise<void>
 	{
 		try
 		{
@@ -113,23 +170,75 @@ export function __CreateSkillAuthoringValidationControllerRouter(dependencies: S
 				return;
 			}
 			const validationId = _ValidationId(request);
-			const requestBody = __ParseSkillAuthoringValidationCompletionLoadRequest(request.body);
-			if (validationId === null || requestBody === null)
+			const task = __ParseSkillAuthoringValidationTaskReceipt(request.body);
+			if (validationId === null || task === null)
+			{
+				_RespondProblem(response, 400, "invalid_status_load");
+				return;
+			}
+			const status = await dependencies.authority.loadCurrentStatus(validationId, task);
+			response.status(200).json({ status, validationId });
+		}
+		catch (err)
+		{
+			_LogFailure(dependencies, err, "agent_controller.skill_authoring_validation.status_current");
+			_RespondProblem(response, 503, "skill_authoring_validation_unavailable");
+		}
+	});
+
+	router.post("/skill-authoring-validations/:validationId/completion/current", async function _LoadCurrentCompletion(request: Request, response: Response): Promise<void>
+	{
+		try
+		{
+			if (!await _IsController(request, dependencies))
+			{
+				_RespondProblem(response, 401, "controller_identity_denied");
+				return;
+			}
+			const validationId = _ValidationId(request);
+			const task = __ParseSkillAuthoringValidationTaskReceipt(request.body);
+			if (validationId === null || task === null)
 			{
 				_RespondProblem(response, 400, "invalid_completion_load");
 				return;
 			}
-			const completion = await dependencies.authority.loadCompletion(validationId, requestBody.completionDigest, requestBody.task);
+			const completion = await dependencies.authority.loadCurrentCompletion(validationId, task);
 			if (completion === null)
 			{
-				_RespondProblem(response, 409, "stale_or_unavailable_completion");
+				response.status(204).end();
 				return;
 			}
 			response.status(200).json(completion);
 		}
 		catch (err)
 		{
-			_LogFailure(dependencies, err, "agent_controller.skill_authoring_validation.completion_load");
+			_LogFailure(dependencies, err, "agent_controller.skill_authoring_validation.completion_current");
+			_RespondProblem(response, 503, "skill_authoring_validation_unavailable");
+		}
+	});
+
+	router.post("/skill-authoring-validations/:validationId/failure/unreported", async function _FailUnreported(request: Request, response: Response): Promise<void>
+	{
+		try
+		{
+			if (!await _IsController(request, dependencies))
+			{
+				_RespondProblem(response, 401, "controller_identity_denied");
+				return;
+			}
+			const validationId = _ValidationId(request);
+			const recovery = __ParseSkillAuthoringValidationRecoveryRequest(request.body);
+			if (validationId === null || recovery === null)
+			{
+				_RespondProblem(response, 400, "invalid_validation_recovery");
+				return;
+			}
+			const outcome = await dependencies.authority.failUnreported(validationId, recovery.task, recovery.binding, recovery.reason);
+			_RespondOutcome(response, outcome, validationId);
+		}
+		catch (err)
+		{
+			_LogFailure(dependencies, err, "agent_controller.skill_authoring_validation.failure_unreported");
 			_RespondProblem(response, 503, "skill_authoring_validation_unavailable");
 		}
 	});
@@ -202,7 +311,7 @@ function _BearerValue(value: string | undefined): string | null
 }
 
 /** Writes a terminal or retry-safe controller outcome without exposing authority state. */
-function _RespondOutcome(response: Response, outcome: "bound" | "completed" | "idempotent" | "conflict", validationId: string): void
+function _RespondOutcome(response: Response, outcome: "authorized" | "bound" | "completed" | "expired" | "failed" | "idempotent" | "not_expired" | "conflict", validationId: string): void
 {
 	if (outcome === "conflict")
 	{

@@ -1,7 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { PrismaSkillAuthoringCompletionRepository } from "./prisma-skill-authoring-completion-repository";
-import { PrismaSkillAuthoringInputRepository } from "./prisma-skill-authoring-input-repository";
 import { PrismaSkillWorkloadBootstrapRepository } from "./prisma-skill-workload-bootstrap-repository";
 import { PrismaSkillWorkloadAssignmentRepository } from "./prisma-skill-workload-assignment-repository";
 import { PrismaSkillWorkloadReleaseRepository } from "./prisma-skill-workload-release-repository";
@@ -39,8 +37,6 @@ export class PrismaSkillWorkloadUnitOfWork implements SkillWorkloadExecutionUnit
 						assignments: new PrismaSkillWorkloadAssignmentRepository(transaction, claimLeaseMilliseconds),
 						releases: new PrismaSkillWorkloadReleaseRepository(transaction, claimLeaseMilliseconds),
 						bootstraps: new PrismaSkillWorkloadBootstrapRepository(transaction),
-						authoringCompletions: new PrismaSkillAuthoringCompletionRepository(transaction),
-						authoringInputs: new PrismaSkillAuthoringInputRepository(transaction),
 					};
 
 					// 2. Keep only database work inside the transaction. Callers do network and file I/O after it commits.

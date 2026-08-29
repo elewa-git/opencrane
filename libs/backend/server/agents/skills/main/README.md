@@ -25,7 +25,7 @@ browser catalogue  ──► discovery only; never a skill bundle or execution a
         ▼
  server transaction ──► validation record ──► Absurd task receipt
                          │
-                         └── one-use worker bootstrap, completion inbox, wake-up event
+                         └── one-use worker bootstrap and completion inbox
 ```
 
 **In this flow:** [artifacts](../../artifacts/main/README.md) *(holds the bundle)* · [agent-services](../../agent-services/main/README.md) *(assigns skills to managed agent revisions)*
@@ -49,17 +49,24 @@ returns unavailable rather than a partially widened result.
   skill validation. It rechecks the selected silo, revision, and active published artifact, then
   creates or reuses the validation record and binds the exact Absurd task receipt. Its caller must
   provide the database transaction that also admits that task.
+- `__CreateSkillAuthoringValidationSubmissionRouter` and
+  `PrismaSkillAuthoringValidationSubmissionUnitOfWork` — accept only a skill revision ID from an
+  authenticated browser, load the silo and artifact details from the database, and save the
+  validation and its workflow task in one database transaction.
 - `PrismaSkillAuthoringValidationControllerUnitOfWork` — server-side claim, Job/Pod binding, and
   terminal-completion authority for that saved task. It uses short database transactions and only
-  accepts the one authoring profile; an HTTP route will expose it to the controller in the next
-  wiring slice.
+  accepts the one authoring profile.
+- `__CreateSkillAuthoringValidationWorkerRouter` and
+  `PrismaSkillAuthoringValidationWorkerUnitOfWork` — expose the one-use bootstrap, immutable input,
+  and completion protocol to the exact Python Job Pod. The task checks that saved completion every
+  second while the Job is running.
 
 ## Boundary
 
-The application mounts the exported catalogue router and supplies the Prisma-backed catalogue
-repository. Neither validation authority is a browser API or can run a Job: together they save the
-facts that let the controller and worker paths act safely. This package does not author, test, scan,
-sign, publish, revoke, download, or execute skills, and it does not store bytes.
+The application mounts both the catalogue and validation-start routes. The controller route lets
+only the fixed controller identity bind the Job and Pod. The worker routes let only the fixed
+authoring ServiceAccount and bound Pod obtain input and report completion. This package does not
+run Kubernetes Jobs, test or scan candidate code, publish or execute skills, or store artifact bytes.
 
 The catalogue deliberately excludes artifact content addresses, bundle bytes, manifests,
 requirements, test and scan evidence, signatures, signer keys, reviewer identities, and all
@@ -74,12 +81,11 @@ domains directly.
 
 ## Data & persistence
 
-The `Skill`, `SkillRevision`, legacy controller-polled `SkillWorkload`, and new
+The `Skill`, `SkillRevision`, retained tool-runner `SkillWorkload`, and new
 `SkillAuthoringValidation` records belong to the broader skill capability in
 `apps/opencrane/prisma/schema/skills.prisma`. The validation record holds the task receipt, one-use
-bootstrap identity, worker completion inbox, and durable wake-up event. The repository owns only
-creation/reuse and receipt binding; the controller and worker authority will own later lifecycle
-transitions.
+bootstrap identity, and worker completion inbox. The forward 0.10.0 migration removes retired
+authoring workload rows after the replacement code is complete.
 
 ## See also
 

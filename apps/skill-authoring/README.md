@@ -22,7 +22,7 @@ only after a durable workload claim and exact Pod registration.
 
 **In this flow:** [agent controller](../agent-controller/README.md) *(sole Kubernetes mutator)* ·
 [skill launcher](../../libs/backend/agents/skills/k8s-launcher/README.md) *(pure Job shape)* ·
-OpenCrane *(bootstrap acknowledgement authority)*
+OpenCrane *(bootstrap, input, and completion authority)*
 
 ## Public surface
 
@@ -41,7 +41,7 @@ input, and terminal completion. Every endpoint TokenReviews the fixed projected-
 registered Pod UID. The worker receives no ArtifactStore endpoint, credential, or signed lease; the server
 selects and streams only the immutable source artifact pinned on its assigned draft revision. The server
 refuses compressed candidate bundles larger than 16 MiB before it mints an ArtifactStore read lease,
-and returns the pinned SHA-256 address alongside the length so the future validator can verify the
+and returns the pinned SHA-256 address alongside the length so the validator can verify the
 downloaded bytes. The admitted Job reserves at least 128 MiB of ephemeral `/tmp` space: 16 MiB
 compressed input, 32 MiB extracted source, and validation work cannot safely share the old 64 MiB
 budget. The authoring Job also reserves 3 GiB and caps at 4 GiB of memory because the pinned ClamAV
@@ -59,7 +59,7 @@ The database never updates in a running Job: refresh it only by building, smoke-
 a new pinned image.
 
 Once a release supplies that final digest, each Job performs one closed lifecycle: it acknowledges its
-server-selected workload, downloads that workload's immutable archive, extracts it below `/tmp`, runs
+server-selected validation, downloads that validation's immutable archive, extracts it below `/tmp`, runs
 the four fixed offline checks, and submits either the two compact passing reports or one stable
 technical failure code. The worker deletes its temporary archive and extracted files on every path.
 It never sends validator output, candidate source, or file paths to the control plane.
@@ -80,11 +80,10 @@ it in a separate values review. A tag, local image ID, or Dockerfile base digest
 substitute for that final published digest.
 
 The controller stays disabled until one review supplies all of these: exact immutable digests for the
-controller, personal runtime, authoring worker, and tool-runner worker; an exact Kubernetes API
+controller, personal runtime, and authoring worker; an exact Kubernetes API
 Service CIDR; Kubernetes 1.30 or later; and an instance-local LiteLLM deployment. Only then may it
 set `agentController.enabled=true`. Publishing this image alone cannot create a worker Job.
 
 ## See also
 
 - Job builder: [skills k8s launcher](../../libs/backend/agents/skills/k8s-launcher/README.md)
-- Related workload: [tool runner](../tool-runner/README.md)

@@ -5,6 +5,8 @@ import json
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
+from urllib.error import HTTPError
 
 
 _PATH = pathlib.Path(__file__).parents[1] / "src" / "bootstrap.py"
@@ -56,6 +58,47 @@ class BootstrapTests(unittest.TestCase):
         """A worker profile must never redirect the acknowledgement to an arbitrary host."""
         with self.assertRaisesRegex(RuntimeError, "endpoint is invalid"):
             _WORKER._acknowledgement_url("https://outside.example/api/internal/agent-runtime")
+
+    def test_acknowledges_the_task_owned_authoring_endpoint_without_changing_the_default(self) -> None:
+        """Keep the new authoring protocol explicit while the protected tool-runner path remains available."""
+        with tempfile.TemporaryDirectory() as directory:
+            token = pathlib.Path(directory) / "token"
+            reference = pathlib.Path(directory) / "reference"
+            token.write_text("projected-token", encoding="utf-8")
+            reference.write_text("skill-bootstrap-v1_" + "a" * 64, encoding="utf-8")
+            captured: dict[str, object] = {}
+
+            def _Open(request: object, timeout: float) -> _Response:
+                captured["url"] = request.full_url
+                return _Response(200, {"acknowledged": True, "validationId": "validation-1"})
+
+            validation_id = _WORKER.acknowledge_authoring_validation("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", str(token), str(reference), _Open)
+
+            self.assertEqual(captured["url"], "http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime/skill-authoring-validations:bootstrap")
+            self.assertEqual(validation_id, "validation-1")
+
+    def test_retries_the_authoring_release_race_and_rereads_the_projected_token(self) -> None:
+        """Let the Job wait for its Pod binding while preserving projected-token rotation."""
+        with tempfile.TemporaryDirectory() as directory:
+            token = pathlib.Path(directory) / "token"
+            reference = pathlib.Path(directory) / "reference"
+            token.write_text("projected-token-1", encoding="utf-8")
+            reference.write_text("skill-bootstrap-v1_" + "a" * 64, encoding="utf-8")
+            authorizations: list[str | None] = []
+
+            def _Open(request: object, timeout: float) -> _Response:
+                authorizations.append(request.get_header("Authorization"))
+                if len(authorizations) == 1:
+                    token.write_text("projected-token-2", encoding="utf-8")
+                    raise HTTPError(request.full_url, 409, "not ready", {}, None)
+                return _Response(200, {"acknowledged": True, "validationId": "validation-1"})
+
+            with mock.patch.object(_WORKER.time, "sleep") as sleep:
+                validation_id = _WORKER.acknowledge_authoring_validation("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", str(token), str(reference), _Open)
+
+            self.assertEqual(validation_id, "validation-1")
+            self.assertEqual(authorizations, ["Bearer projected-token-1", "Bearer projected-token-2"])
+            sleep.assert_called_once_with(1.0)
 
     def test_rejects_a_non_minimal_acknowledgement(self) -> None:
         """Keep a compromised internal endpoint from exhausting the worker's small process."""

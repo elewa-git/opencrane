@@ -1,5 +1,3 @@
-import type { SkillAuthoringCompletionCommand } from "./skill-authoring-completion.types";
-import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types";
 import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types";
 import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types";
 
@@ -37,21 +35,7 @@ export interface SkillWorkloadBootstrapRepository
 	consume(referenceHash: string, identity: SkillWorkloadBootstrapIdentity): Promise<"consumed" | "conflict">;
 }
 
-/** Stores an authoring worker's final report, inside one transaction. */
-export interface SkillAuthoringCompletionRepository
-{
-	/** Stores the worker's reports and moves that one workload to its final state. */
-	complete(command: SkillAuthoringCompletionCommand, identity: SkillWorkloadBootstrapIdentity): Promise<"completed" | "conflict">;
-}
-
-/** Finds the source artifact for one authoring Pod, inside one transaction. */
-export interface SkillAuthoringInputRepository
-{
-	/** Returns the pinned artifact, or null when any of the checked ids does not match. */
-	load(workloadId: string, identity: SkillWorkloadBootstrapIdentity): Promise<SkillAuthoringInputRecord | null>;
-}
-
-/** All five repositories, bound to the same Postgres transaction. */
+/** Tool-runner repositories bound to the same Postgres transaction. */
 export interface SkillWorkloadExecutionTransaction
 {
 	/** Controller claim and suspended-Job assignment authority. */
@@ -60,10 +44,6 @@ export interface SkillWorkloadExecutionTransaction
 	readonly releases: SkillWorkloadReleaseRepository;
 	/** One-use bootstrap lookup and consumption authority. */
 	readonly bootstraps: SkillWorkloadBootstrapRepository;
-	/** Authoring terminal-evidence authority. */
-	readonly authoringCompletions: SkillAuthoringCompletionRepository;
-	/** Authoring source-artifact selection authority. */
-	readonly authoringInputs: SkillAuthoringInputRepository;
 }
 
 /** A function that does its work using all the repositories on one transaction. */

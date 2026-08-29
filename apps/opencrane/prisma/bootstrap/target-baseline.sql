@@ -263,7 +263,7 @@ CREATE TYPE "SkillRevisionState" AS ENUM ('draft', 'review', 'published', 'rejec
 CREATE TYPE "SkillTrustClass" AS ENUM ('reviewed_instructions', 'sandboxed_python');
 
 -- CreateEnum
-CREATE TYPE "SkillWorkloadKind" AS ENUM ('authoring', 'tool_runner');
+CREATE TYPE "SkillWorkloadKind" AS ENUM ('tool_runner');
 
 -- CreateEnum
 CREATE TYPE "SkillWorkloadState" AS ENUM ('pending', 'assigned', 'succeeded', 'failed', 'cancelled');
@@ -1796,6 +1796,7 @@ CREATE TABLE "agent_runs" (
 CREATE TABLE "warm_runtime_reservations" (
     "run_id" TEXT NOT NULL,
     "attempt" INTEGER NOT NULL,
+    "generation" INTEGER NOT NULL DEFAULT 1,
     "silo_id" TEXT NOT NULL,
     "namespace" TEXT NOT NULL,
     "deployment_name" TEXT NOT NULL,
@@ -1816,7 +1817,7 @@ CREATE TABLE "warm_runtime_reservations" (
     "delete_requested_at" TIMESTAMP(3),
     "deleted_at" TIMESTAMP(3),
 
-    CONSTRAINT "warm_runtime_reservations_pkey" PRIMARY KEY ("run_id","attempt")
+    CONSTRAINT "warm_runtime_reservations_pkey" PRIMARY KEY ("run_id","attempt","generation")
 );
 
 -- CreateTable
@@ -1906,6 +1907,7 @@ CREATE TABLE "workload_assignments" (
     "workload_uid" TEXT NOT NULL,
     "workload_profile" TEXT NOT NULL,
     "pod_uid" TEXT,
+    "binding_generation" INTEGER NOT NULL DEFAULT 1,
     "state" "WorkloadAssignmentState" NOT NULL DEFAULT 'pending_pod',
     "expires_at" TIMESTAMP(3) NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1920,6 +1922,7 @@ CREATE TABLE "workload_bootstraps" (
     "id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
     "attempt" INTEGER NOT NULL,
+    "generation" INTEGER NOT NULL DEFAULT 1,
     "agent_service_id" TEXT NOT NULL,
     "agent_revision_id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -1933,6 +1936,7 @@ CREATE TABLE "workload_bootstraps" (
     "expires_at" TIMESTAMP(3) NOT NULL,
     "consumed_at" TIMESTAMP(3),
     "consumed_by_pod_uid" TEXT,
+    "revoked_at" TIMESTAMP(3),
     "receipt_id" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -1945,6 +1949,7 @@ CREATE TABLE "run_proof_keys" (
     "bootstrap_id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
     "attempt" INTEGER NOT NULL,
+    "generation" INTEGER NOT NULL DEFAULT 1,
     "workload_kind" "WorkloadKind" NOT NULL,
     "workload_uid" TEXT NOT NULL,
     "pod_uid" TEXT NOT NULL,
@@ -1986,10 +1991,35 @@ CREATE TABLE "runtime_command_streams" (
     "runtime_instance_id" TEXT,
     "next_command_sequence" INTEGER NOT NULL DEFAULT 1,
     "accepted_candidate_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "dispatch_blocked_reason" TEXT,
+    "dispatch_blocked_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "runtime_command_streams_pkey" PRIMARY KEY ("run_id","attempt")
+);
+
+-- CreateTable
+CREATE TABLE "runtime_continuation_checkpoints" (
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "input_generation" INTEGER NOT NULL,
+    "format_version" TEXT NOT NULL,
+    "revision" INTEGER NOT NULL,
+    "digest" TEXT NOT NULL,
+    "applied_command_sequence" INTEGER NOT NULL,
+    "source_runtime_instance_id" TEXT NOT NULL,
+    "source_command_id" TEXT NOT NULL,
+    "source_fence" INTEGER NOT NULL,
+    "key_id" TEXT NOT NULL,
+    "ciphertext" BYTEA NOT NULL,
+    "nonce" BYTEA NOT NULL,
+    "authentication_tag" BYTEA NOT NULL,
+    "plaintext_bytes" INTEGER NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "runtime_continuation_checkpoints_pkey" PRIMARY KEY ("run_id","attempt","input_generation")
 );
 
 -- CreateTable
@@ -2144,19 +2174,6 @@ CREATE TABLE "skill_authoring_validation_completion_inbox" (
     "received_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "skill_authoring_validation_completion_inbox_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "skill_authoring_validation_workflow_event_outbox" (
-    "id" TEXT NOT NULL,
-    "completion_inbox_id" TEXT NOT NULL,
-    "event_name" TEXT NOT NULL,
-    "payload" JSONB NOT NULL,
-    "published_at" TIMESTAMP(3),
-    "publication_attempts" INTEGER NOT NULL DEFAULT 0,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "skill_authoring_validation_workflow_event_outbox_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -3181,10 +3198,7 @@ CREATE UNIQUE INDEX "workload_bootstraps_receipt_id_key" ON "workload_bootstraps
 CREATE INDEX "workload_bootstraps_expires_at_idx" ON "workload_bootstraps"("expires_at");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "workload_bootstraps_run_id_attempt_key" ON "workload_bootstraps"("run_id", "attempt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_bootstrap_assignment_identity_key" ON "workload_bootstraps"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid");
+CREATE UNIQUE INDEX "workload_bootstraps_run_id_attempt_generation_key" ON "workload_bootstraps"("run_id", "attempt", "generation");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "run_proof_keys_bootstrap_id_key" ON "run_proof_keys"("bootstrap_id");
@@ -3199,10 +3213,7 @@ CREATE INDEX "run_proof_keys_pod_uid_idx" ON "run_proof_keys"("pod_uid");
 CREATE INDEX "run_proof_keys_expires_at_idx" ON "run_proof_keys"("expires_at");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_run_id_attempt_key" ON "run_proof_keys"("run_id", "attempt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_run_id_attempt_workload_kind_workload_uid_key" ON "run_proof_keys"("run_id", "attempt", "workload_kind", "workload_uid");
+CREATE UNIQUE INDEX "run_proof_keys_run_id_attempt_generation_key" ON "run_proof_keys"("run_id", "attempt", "generation");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "run_proof_keys_run_id_attempt_workload_kind_workload_uid_po_key" ON "run_proof_keys"("run_id", "attempt", "workload_kind", "workload_uid", "pod_uid");
@@ -3224,6 +3235,9 @@ CREATE INDEX "run_outbox_events_published_at_available_at_idx" ON "run_outbox_ev
 
 -- CreateIndex
 CREATE UNIQUE INDEX "run_outbox_events_run_id_sequence_key" ON "run_outbox_events"("run_id", "sequence");
+
+-- CreateIndex
+CREATE INDEX "runtime_continuation_checkpoints_run_id_attempt_revision_idx" ON "runtime_continuation_checkpoints"("run_id", "attempt", "revision");
 
 -- CreateIndex
 CREATE INDEX "runtime_steering_boundaries_run_id_attempt_idx" ON "runtime_steering_boundaries"("run_id", "attempt");
@@ -3310,12 +3324,6 @@ CREATE INDEX "skill_authoring_validation_bootstraps_expires_at_idx" ON "skill_au
 CREATE UNIQUE INDEX "skill_authoring_validation_completion_inbox_validation_id_key" ON "skill_authoring_validation_completion_inbox"("validation_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "skill_authoring_validation_workflow_event_outbox_completion_key" ON "skill_authoring_validation_workflow_event_outbox"("completion_inbox_id");
-
--- CreateIndex
-CREATE INDEX "skill_authoring_validation_workflow_event_outbox_published__idx" ON "skill_authoring_validation_workflow_event_outbox"("published_at", "created_at");
-
--- CreateIndex
 CREATE UNIQUE INDEX "skill_workloads_tool_invocation_id_key" ON "skill_workloads"("tool_invocation_id");
 
 -- CreateIndex
@@ -3329,8 +3337,6 @@ CREATE INDEX "skill_workloads_silo_id_state_created_at_idx" ON "skill_workloads"
 
 -- CreateIndex
 CREATE INDEX "skill_workloads_state_claim_expires_at_idx" ON "skill_workloads"("state", "claim_expires_at");
-
-CREATE UNIQUE INDEX "skill_workloads_one_authoring_per_revision_key" ON "skill_workloads"("skill_revision_id") WHERE "kind" = 'authoring';
 
 -- CreateIndex
 CREATE INDEX "skill_workloads_state_release_expires_at_idx" ON "skill_workloads"("state", "release_expires_at");
@@ -3816,7 +3822,10 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_silo_id_fke
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "warm_runtime_reservations" ADD CONSTRAINT "warm_runtime_reservations_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "warm_runtime_reservations" ADD CONSTRAINT "warm_runtime_reservations_run_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "warm_runtime_reservations" ADD CONSTRAINT "warm_runtime_reservations_assignment_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "workload_assignments"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "agent_run_workflow_tasks" ADD CONSTRAINT "agent_run_workflow_tasks_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3843,16 +3852,22 @@ ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_run_id_s
 ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_run_id_attempt_agent_service_id_agent__fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_run_id_attempt_generation_fkey" FOREIGN KEY ("run_id", "attempt", "generation") REFERENCES "warm_runtime_reservations"("run_id", "attempt", "generation") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_run_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_assignment_fkey" FOREIGN KEY ("run_id", "attempt", "workload_kind", "workload_uid", "pod_uid") REFERENCES "workload_assignments"("run_id", "attempt", "workload_kind", "workload_uid", "pod_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_assignment_fkey" FOREIGN KEY ("run_id", "attempt", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_bootstrap_id_fkey" FOREIGN KEY ("bootstrap_id") REFERENCES "workload_bootstraps"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "run_outbox_events" ADD CONSTRAINT "run_outbox_events_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "runtime_continuation_checkpoints" ADD CONSTRAINT "runtime_continuation_checkpoints_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3877,9 +3892,6 @@ ALTER TABLE "skill_authoring_validation_bootstraps" ADD CONSTRAINT "skill_author
 
 -- AddForeignKey
 ALTER TABLE "skill_authoring_validation_completion_inbox" ADD CONSTRAINT "skill_authoring_validation_completion_inbox_validation_id_fkey" FOREIGN KEY ("validation_id") REFERENCES "skill_authoring_validations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "skill_authoring_validation_workflow_event_outbox" ADD CONSTRAINT "skill_authoring_validation_workflow_event_outbox_completio_fkey" FOREIGN KEY ("completion_inbox_id") REFERENCES "skill_authoring_validation_completion_inbox"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_skill_revision_id_fkey" FOREIGN KEY ("skill_revision_id") REFERENCES "skill_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -6450,8 +6462,8 @@ BEGIN
       JOIN "skill_revisions" revision ON revision."id" = workload."skill_revision_id"
      WHERE workload."state" = 'pending'
        AND (workload."claim_expires_at" IS NULL OR workload."claim_expires_at" <= clock_timestamp())
-       AND ((workload."kind" = 'authoring' AND revision."state" = 'draft')
-         OR (workload."kind" = 'tool_runner' AND revision."state" = 'published'))
+       AND workload."kind" = 'tool_runner'
+       AND revision."state" = 'published'
      ORDER BY workload."created_at", workload."id"
      FOR UPDATE OF revision SKIP LOCKED
      LIMIT 1;
@@ -6504,7 +6516,6 @@ BEGIN
         IF NEW."release_expires_at" IS NULL OR NEW."release_expires_at" <= NEW."release_claimed_at" THEN RAISE EXCEPTION 'SkillWorkload release claim requires a current bootstrap'; END IF;
     END IF;
     IF TG_OP = 'UPDATE' AND OLD."released_at" IS NULL AND NEW."released_at" IS NOT NULL THEN NEW."released_at" := transition_time; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" = 'assigned' AND NEW."state" IN ('succeeded', 'failed') THEN NEW."completed_at" := transition_time; END IF;
     IF TG_OP = 'INSERT' AND (NEW."state" <> 'pending' OR NEW."claimed_at" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."delivery_count" <> 0 OR NEW."workload_uid" IS NOT NULL OR NEW."worker_pod_uid" IS NOT NULL OR NEW."release_claimed_at" IS NOT NULL OR NEW."release_delivery_count" <> 0 OR NEW."release_expires_at" IS NOT NULL OR NEW."released_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload must begin pending without claim or assignment'; END IF;
     IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."skill_revision_id" IS DISTINCT FROM OLD."skill_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id") THEN
         RAISE EXCEPTION 'SkillWorkload source coordinates are immutable';
@@ -6512,27 +6523,22 @@ BEGIN
     IF TG_OP = 'UPDATE' AND OLD."state" IN ('succeeded', 'failed', 'cancelled') AND (NEW."state" IS DISTINCT FROM OLD."state" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code" OR NEW."cancelled_at" IS DISTINCT FROM OLD."cancelled_at") THEN RAISE EXCEPTION 'terminal SkillWorkload is immutable'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."workload_uid" IS NOT NULL AND NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" THEN RAISE EXCEPTION 'SkillWorkload assignment identity is immutable'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."worker_pod_uid" IS NOT NULL AND NEW."worker_pod_uid" IS DISTINCT FROM OLD."worker_pod_uid" THEN RAISE EXCEPTION 'SkillWorkload worker Pod identity is immutable'; END IF;
-    IF NEW."worker_pod_uid" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'succeeded', 'failed', 'cancelled') OR btrim(NEW."worker_pod_uid") = '') THEN RAISE EXCEPTION 'SkillWorkload worker Pod requires its assigned or terminal workload'; END IF;
+    IF NEW."worker_pod_uid" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'cancelled') OR btrim(NEW."worker_pod_uid") = '') THEN RAISE EXCEPTION 'SkillWorkload worker Pod requires its assigned or cancelled workload'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."worker_pod_uid" IS NULL AND NEW."worker_pod_uid" IS NOT NULL AND (OLD."state" <> 'assigned' OR NEW."state" <> 'assigned' OR OLD."released_at" IS NULL OR OLD."release_expires_at" IS NULL OR transition_time >= OLD."release_expires_at") THEN RAISE EXCEPTION 'SkillWorkload worker Pod registration requires a current released workload'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."released_at" IS NOT NULL AND (NEW."released_at" IS DISTINCT FROM OLD."released_at" OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at") THEN RAISE EXCEPTION 'released SkillWorkload is terminal'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."released_at" IS NULL AND NEW."released_at" IS NOT NULL AND (OLD."release_claimed_at" IS NULL OR OLD."release_expires_at" IS NULL OR OLD."release_claimed_at" > transition_time OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at" OR NEW."released_at" > transition_time OR transition_time >= OLD."release_expires_at" OR NOT EXISTS (SELECT 1 FROM "skill_workload_bootstraps" WHERE "skill_workload_id" = NEW."id" AND "consumed_at" IS NULL AND "expires_at" > transition_time)) THEN RAISE EXCEPTION 'SkillWorkload release requires a current bootstrap-backed prior release claim'; END IF;
     IF TG_OP = 'UPDATE' AND NEW."released_at" IS NULL AND (NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at") AND (NEW."release_claimed_at" IS NULL OR NEW."release_expires_at" IS NULL OR NEW."release_expires_at" <= NEW."release_claimed_at" OR NEW."release_delivery_count" <> OLD."release_delivery_count" + 1 OR (OLD."release_claimed_at" IS NOT NULL AND NEW."release_claimed_at" <= OLD."release_claimed_at")) THEN RAISE EXCEPTION 'SkillWorkload release claim generation must advance monotonically'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'pending' AND (NEW."delivery_count" < OLD."delivery_count" OR (NEW."delivery_count" = OLD."delivery_count" AND (NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."claim_expires_at" IS DISTINCT FROM OLD."claim_expires_at")) OR (NEW."delivery_count" > OLD."delivery_count" AND (NEW."delivery_count" <> OLD."delivery_count" + 1 OR NEW."claimed_at" IS NULL OR NEW."claim_expires_at" IS NULL OR NEW."claim_expires_at" <= NEW."claimed_at" OR (OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" <= OLD."claimed_at")))) THEN RAISE EXCEPTION 'SkillWorkload claim generation must advance monotonically'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."state" IS DISTINCT FROM NEW."state" AND NEW."state" = 'assigned' AND NOT (OLD."state" = 'pending' AND OLD."claimed_at" IS NOT NULL AND OLD."claim_expires_at" IS NOT NULL AND transition_time < OLD."claim_expires_at" AND NEW."claimed_at" = OLD."claimed_at" AND NEW."claim_expires_at" = OLD."claim_expires_at" AND NEW."delivery_count" = OLD."delivery_count" AND NEW."workload_uid" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload assignment requires exact current prior claim'; END IF;
-    IF TG_OP = 'UPDATE' AND NEW."state" IN ('succeeded', 'failed') AND NOT (OLD."state" = 'assigned' AND OLD."released_at" IS NOT NULL AND OLD."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."completed_at" >= OLD."released_at") THEN RAISE EXCEPTION 'SkillWorkload completion requires released registered assignment'; END IF;
-    IF NEW."delivery_count" < 0 OR ((NEW."claimed_at" IS NULL) <> (NEW."claim_expires_at" IS NULL)) OR NEW."release_delivery_count" < 0 OR ((NEW."release_claimed_at" IS NULL) <> (NEW."release_expires_at" IS NULL)) OR (NEW."released_at" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'succeeded', 'failed', 'cancelled') OR NEW."release_claimed_at" IS NULL OR NEW."release_expires_at" IS NULL OR NEW."release_delivery_count" < 1)) OR NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL AND NEW."workload_uid" IS NULL AND NEW."worker_pod_uid" IS NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'assigned' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."claim_expires_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'succeeded' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."claim_expires_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'failed' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."claim_expires_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."failure_code" IS NOT NULL AND btrim(NEW."failure_code") <> '') OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching claim, assignment, completion, and cancellation evidence'; END IF;
+    IF TG_OP = 'UPDATE' AND NEW."state" IN ('succeeded', 'failed') THEN RAISE EXCEPTION 'tool-runner SkillWorkload completion belongs to its ToolInvocation authority'; END IF;
+    IF NEW."delivery_count" < 0 OR ((NEW."claimed_at" IS NULL) <> (NEW."claim_expires_at" IS NULL)) OR NEW."release_delivery_count" < 0 OR ((NEW."release_claimed_at" IS NULL) <> (NEW."release_expires_at" IS NULL)) OR (NEW."released_at" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'cancelled') OR NEW."release_claimed_at" IS NULL OR NEW."release_expires_at" IS NULL OR NEW."release_delivery_count" < 1)) OR NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL AND NEW."workload_uid" IS NULL AND NEW."worker_pod_uid" IS NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'assigned' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."claim_expires_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching claim, assignment, and cancellation evidence'; END IF;
     IF TG_OP = 'INSERT' THEN
         SELECT skill."silo_id", revision."state", revision."trust_class" INTO revision_silo_id, revision_state, revision_trust FROM "skill_revisions" revision JOIN "skills" skill ON skill."id" = revision."skill_id" WHERE revision."id" = NEW."skill_revision_id" FOR UPDATE OF revision, skill;
         IF revision_silo_id IS DISTINCT FROM NEW."silo_id" OR revision_trust IS DISTINCT FROM 'sandboxed_python' THEN RAISE EXCEPTION 'SkillWorkload requires same-silo SandboxedPython SkillRevision'; END IF;
-        IF NEW."kind" = 'authoring' AND (NEW."tool_invocation_id" IS NOT NULL OR revision_state IS DISTINCT FROM 'draft') THEN RAISE EXCEPTION 'authoring SkillWorkload requires Draft revision and no ToolInvocation'; END IF;
-        IF NEW."kind" = 'tool_runner' THEN
-            RAISE EXCEPTION 'tool-runner SkillWorkload requires the later snapshot-bound workload admission authority';
+        IF NEW."kind" <> 'tool_runner' OR revision_state IS DISTINCT FROM 'published' OR NEW."tool_invocation_id" IS NULL
+            OR NOT EXISTS (SELECT 1 FROM "tool_invocations" invocation WHERE invocation."id" = NEW."tool_invocation_id" AND invocation."silo_id" = NEW."silo_id" AND invocation."state" = 'ready') THEN
+            RAISE EXCEPTION 'tool-runner SkillWorkload requires a same-silo Ready ToolInvocation and Published revision';
         END IF;
-    END IF;
-    IF TG_OP = 'UPDATE' AND NEW."state" IN ('succeeded', 'failed') THEN
-        IF NOT EXISTS (SELECT 1 FROM "skill_workload_bootstraps" bootstrap WHERE bootstrap."skill_workload_id" = NEW."id" AND bootstrap."consumed_at" IS NOT NULL AND bootstrap."consumed_by_pod_uid" = OLD."worker_pod_uid") THEN RAISE EXCEPTION 'SkillWorkload completion requires its consumed canonical worker bootstrap'; END IF;
-        IF NEW."kind" <> 'authoring' THEN RAISE EXCEPTION 'tool runner completion has its own ToolInvocation authority'; END IF;
-        IF NEW."state" = 'succeeded' AND NOT EXISTS (SELECT 1 FROM "skill_revisions" revision WHERE revision."id" = NEW."skill_revision_id" AND revision."state" = 'draft' AND jsonb_typeof(revision."test_report") = 'object' AND (SELECT count(*) FROM jsonb_object_keys(revision."test_report")) = 3 AND revision."test_report" @> '{"passed":true}'::jsonb AND jsonb_typeof(revision."test_report"->'summary') = 'string' AND length(revision."test_report"->>'summary') BETWEEN 1 AND 2000 AND jsonb_typeof(revision."test_report"->'checksRun') = 'number' AND (revision."test_report"->>'checksRun') ~ '^(0|[1-9][0-9]{0,3}|10000)$' AND jsonb_typeof(revision."scan_result") = 'object' AND (SELECT count(*) FROM jsonb_object_keys(revision."scan_result")) = 3 AND revision."scan_result" @> '{"passed":true}'::jsonb AND jsonb_typeof(revision."scan_result"->'summary') = 'string' AND length(revision."scan_result"->>'summary') BETWEEN 1 AND 2000 AND jsonb_typeof(revision."scan_result"->'checksRun') = 'number' AND (revision."scan_result"->>'checksRun') ~ '^(0|[1-9][0-9]{0,3}|10000)$') THEN RAISE EXCEPTION 'authoring completion requires bounded passed draft test and scan reports'; END IF;
     END IF;
     RETURN NEW;
 END;
@@ -6552,7 +6558,7 @@ BEGIN
     SELECT "kind", "state", "workload_uid", "worker_pod_uid" INTO workload_kind, workload_state, assigned_uid, assigned_pod_uid FROM "skill_workloads" WHERE "id" = NEW."skill_workload_id" FOR UPDATE;
     IF workload_state IS DISTINCT FROM 'assigned' OR assigned_uid IS DISTINCT FROM NEW."workload_uid" THEN RAISE EXCEPTION 'SkillWorkloadBootstrap requires its exact assigned workload UID'; END IF;
     IF TG_OP = 'UPDATE' AND assigned_pod_uid IS DISTINCT FROM NEW."consumed_by_pod_uid" THEN RAISE EXCEPTION 'bootstrap consumer Pod is not the registered workload Pod'; END IF;
-    IF NEW."namespace" !~ '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$' OR length(NEW."namespace") > 63 OR (workload_kind = 'authoring' AND (NEW."audience" <> 'opencrane-skill-authoring' OR NEW."service_account_name" <> 'skill-authoring-default')) OR (workload_kind = 'tool_runner' AND (NEW."audience" <> 'opencrane-tool-runner' OR NEW."service_account_name" <> 'tool-runner-default')) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap identity must match its workload class'; END IF;
+    IF NEW."namespace" !~ '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$' OR length(NEW."namespace") > 63 OR workload_kind <> 'tool_runner' OR NEW."audience" <> 'opencrane-tool-runner' OR NEW."service_account_name" <> 'tool-runner-default' THEN RAISE EXCEPTION 'SkillWorkloadBootstrap identity must match the tool-runner workload class'; END IF;
     RETURN NEW;
 END;
 $$;
@@ -6595,7 +6601,7 @@ BEGIN
     IF NEW."task_name" IS NOT NULL AND NEW."task_name" <> 'skills.authoring.validate/v1' THEN
         RAISE EXCEPTION 'SkillAuthoringValidation task receipt must name the reviewed task';
     END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" NOT IN ('pending', 'running', 'cancelled') THEN
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" NOT IN ('pending', 'running', 'failed', 'cancelled') THEN
         RAISE EXCEPTION 'SkillAuthoringValidation has an invalid transition from pending';
     END IF;
     IF TG_OP = 'UPDATE' AND OLD."state" = 'running' AND NEW."state" NOT IN ('running', 'succeeded', 'failed', 'cancelled') THEN
@@ -6624,10 +6630,24 @@ BEGIN
             RAISE EXCEPTION 'running SkillAuthoringValidation preserves its task and start time';
         END IF;
     END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'failed' THEN
+        IF OLD."task_id" IS NULL OR NEW."task_id" IS DISTINCT FROM OLD."task_id" OR NEW."task_name" IS DISTINCT FROM OLD."task_name"
+            OR NEW."started_at" IS NOT NULL OR NEW."failure_code" IS DISTINCT FROM 'claim_expired_before_workload'
+            OR EXISTS (SELECT 1 FROM "skill_authoring_validation_completion_inbox" inbox WHERE inbox."validation_id" = NEW."id")
+            OR NOT EXISTS (
+                SELECT 1 FROM "skill_authoring_validation_workload_claims" claim
+                 WHERE claim."validation_id" = NEW."id" AND claim."workload_uid" IS NULL AND claim."first_pod_uid" IS NULL
+                   AND claim."delivery_count" >= 3 AND claim."expires_at" <= date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3)
+            ) THEN
+            RAISE EXCEPTION 'unbound SkillAuthoringValidation may fail only after its final database claim expires';
+        END IF;
+        NEW."completed_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+    END IF;
     IF TG_OP = 'UPDATE' AND OLD."state" = 'running' AND NEW."state" IN ('succeeded', 'failed') THEN
         IF NEW."started_at" IS DISTINCT FROM OLD."started_at" OR NOT EXISTS (
             SELECT 1 FROM "skill_authoring_validation_workload_claims" claim
-             WHERE claim."validation_id" = NEW."id" AND claim."workload_uid" IS NOT NULL AND claim."first_pod_uid" IS NOT NULL
+             WHERE claim."validation_id" = NEW."id" AND claim."workload_uid" IS NOT NULL
+               AND (NEW."state" = 'failed' OR claim."first_pod_uid" IS NOT NULL)
         ) THEN
             RAISE EXCEPTION 'terminal SkillAuthoringValidation preserves its claimed worker identity';
         END IF;
@@ -6637,10 +6657,19 @@ BEGIN
         )) THEN
             RAISE EXCEPTION 'successful SkillAuthoringValidation requires its saved successful completion';
         END IF;
-        IF NEW."state" = 'failed' AND (NEW."failure_code" IS NULL OR NOT EXISTS (
-            SELECT 1 FROM "skill_authoring_validation_completion_inbox" inbox
-             WHERE inbox."validation_id" = NEW."id" AND inbox."outcome" = 'failed' AND inbox."failure_code" = NEW."failure_code"
-        )) THEN
+        IF NEW."state" = 'failed' AND (NEW."failure_code" IS NULL
+            OR (NEW."failure_code" IN ('claim_expired_without_worker', 'job_missing_without_completion', 'job_terminal_without_completion') AND EXISTS (
+                SELECT 1 FROM "skill_authoring_validation_completion_inbox" inbox WHERE inbox."validation_id" = NEW."id"
+            ))
+            OR (NEW."failure_code" = 'claim_expired_without_worker' AND NOT EXISTS (
+                SELECT 1 FROM "skill_authoring_validation_workload_claims" claim
+                 WHERE claim."validation_id" = NEW."id" AND claim."workload_uid" IS NOT NULL
+                   AND claim."expires_at" <= date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3)
+            ))
+            OR (NEW."failure_code" NOT IN ('claim_expired_without_worker', 'job_missing_without_completion', 'job_terminal_without_completion') AND NOT EXISTS (
+                SELECT 1 FROM "skill_authoring_validation_completion_inbox" inbox
+                 WHERE inbox."validation_id" = NEW."id" AND inbox."outcome" = 'failed' AND inbox."failure_code" = NEW."failure_code"
+            ))) THEN
             RAISE EXCEPTION 'failed SkillAuthoringValidation requires its saved failure completion';
         END IF;
         NEW."completed_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
@@ -6692,15 +6721,12 @@ BEGIN
     IF OLD."first_pod_uid" IS NOT NULL AND NEW."first_pod_uid" IS DISTINCT FROM OLD."first_pod_uid" THEN
         RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim first Pod identity is immutable';
     END IF;
-    IF NEW."claimed_at" IS NOT DISTINCT FROM OLD."claimed_at" AND NEW."expires_at" IS NOT DISTINCT FROM OLD."expires_at"
+    IF OLD."workload_uid" IS NULL AND NEW."claimed_at" IS NOT DISTINCT FROM OLD."claimed_at" AND NEW."expires_at" IS NOT DISTINCT FROM OLD."expires_at"
         AND NEW."delivery_count" = OLD."delivery_count" AND NEW."workload_uid" IS NOT DISTINCT FROM OLD."workload_uid"
         AND NEW."first_pod_uid" IS NOT DISTINCT FROM OLD."first_pod_uid"
-        AND (OLD."claimed_at" IS NULL OR (OLD."first_pod_uid" IS NULL AND transition_time >= OLD."expires_at")) THEN
-        IF OLD."workload_uid" IS NULL AND validation_state <> 'pending' THEN
+        AND (OLD."claimed_at" IS NULL OR transition_time >= OLD."expires_at") THEN
+        IF validation_state <> 'pending' THEN
             RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim initial lease requires a pending validation';
-        END IF;
-        IF OLD."workload_uid" IS NOT NULL AND validation_state <> 'running' THEN
-            RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim renewed lease requires a running validation';
         END IF;
         NEW."claimed_at" := transition_time;
         NEW."expires_at" := transition_time + interval '5 minutes';
@@ -6721,12 +6747,11 @@ BEGIN
         END IF;
     ELSIF NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at"
         OR NEW."delivery_count" IS DISTINCT FROM OLD."delivery_count" THEN
-        IF NEW."first_pod_uid" IS NOT NULL OR NEW."claimed_at" IS NULL OR NEW."expires_at" IS NULL OR NEW."expires_at" <= NEW."claimed_at"
+        IF OLD."workload_uid" IS NOT NULL OR NEW."first_pod_uid" IS NOT NULL OR NEW."claimed_at" IS NULL OR NEW."expires_at" IS NULL OR NEW."expires_at" <= NEW."claimed_at"
             OR NEW."delivery_count" <> OLD."delivery_count" + 1
             OR (OLD."expires_at" IS NOT NULL AND transition_time < OLD."expires_at")
             OR (OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" <= OLD."claimed_at")
-            OR (OLD."workload_uid" IS NULL AND validation_state <> 'pending')
-            OR (OLD."workload_uid" IS NOT NULL AND validation_state <> 'running') THEN
+            OR validation_state <> 'pending' THEN
             RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim lease generation must advance after expiry';
         END IF;
     END IF;
@@ -6807,26 +6832,6 @@ BEGIN
     RETURN NEW;
 END;
 $$;
-CREATE FUNCTION "enforce_skill_authoring_validation_event_outbox"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE inbox_validation_id TEXT; inbox_completion_digest TEXT;
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillAuthoringValidationWorkflowEventOutbox rows cannot be deleted'; END IF;
-    IF TG_OP = 'INSERT' AND (NEW."event_name" <> 'skill-authoring-completed' OR NEW."published_at" IS NOT NULL OR NEW."publication_attempts" <> 0) THEN
-        RAISE EXCEPTION 'SkillAuthoringValidationWorkflowEventOutbox must begin as an unpublished completion event';
-    END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."completion_inbox_id" IS DISTINCT FROM OLD."completion_inbox_id" OR NEW."event_name" IS DISTINCT FROM OLD."event_name" OR NEW."payload" IS DISTINCT FROM OLD."payload" OR NEW."publication_attempts" < OLD."publication_attempts") THEN
-        RAISE EXCEPTION 'SkillAuthoringValidationWorkflowEventOutbox immutable event facts cannot change';
-    END IF;
-    SELECT "validation_id", "completion_digest" INTO inbox_validation_id, inbox_completion_digest
-      FROM "skill_authoring_validation_completion_inbox" WHERE "id" = NEW."completion_inbox_id" FOR KEY SHARE;
-    IF jsonb_typeof(NEW."payload") <> 'object' OR (SELECT count(*) FROM jsonb_object_keys(NEW."payload")) <> 2
-        OR NEW."payload"->>'validationId' IS DISTINCT FROM inbox_validation_id
-        OR NEW."payload"->>'completionDigest' IS DISTINCT FROM inbox_completion_digest THEN
-        RAISE EXCEPTION 'SkillAuthoringValidationWorkflowEventOutbox payload must name its saved completion';
-    END IF;
-    RETURN NEW;
-END;
-$$;
 CREATE FUNCTION "enforce_tool_result_delivery_identity"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE public_tool_invocation_id TEXT;
 BEGIN
@@ -6895,7 +6900,7 @@ BEGIN
     IF TG_TABLE_NAME = 'skill_revisions' AND NEW."state" <> OLD."state" THEN
         UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
           WHERE "state" IN ('pending', 'assigned') AND "skill_revision_id"=NEW."id"
-            AND (("kind"='authoring' AND NEW."state" <> 'draft') OR ("kind"='tool_runner' AND NEW."state" <> 'published'));
+            AND "kind"='tool_runner' AND NEW."state" <> 'published';
     ELSIF TG_TABLE_NAME = 'tool_invocations' AND NEW."state" <> OLD."state" AND NEW."state" IN ('succeeded', 'failed', 'recovery_required') THEN
         UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
           WHERE "state" IN ('pending', 'assigned') AND "kind"='tool_runner' AND "tool_invocation_id"=NEW."id";
@@ -7841,7 +7846,6 @@ CREATE TRIGGER "skill_authoring_validations_authority" BEFORE INSERT OR UPDATE O
 CREATE TRIGGER "skill_authoring_validation_workload_claims_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_authoring_validation_workload_claims" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_authoring_validation_workload_claim"();
 CREATE TRIGGER "skill_authoring_validation_bootstraps_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_authoring_validation_bootstraps" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_authoring_validation_bootstrap"();
 CREATE TRIGGER "skill_authoring_validation_completion_inbox_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_authoring_validation_completion_inbox" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_authoring_validation_completion"();
-CREATE TRIGGER "skill_authoring_validation_event_outbox_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_authoring_validation_workflow_event_outbox" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_authoring_validation_event_outbox"();
 CREATE TRIGGER "skill_workloads_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workloads" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_authority"();
 CREATE TRIGGER "skill_workload_bootstraps_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workload_bootstraps" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_bootstrap"();
 CREATE TRIGGER "cancel_ineligible_skill_workloads_on_revision" AFTER UPDATE OF "state" ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "cancel_ineligible_skill_workloads"();

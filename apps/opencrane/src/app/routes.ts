@@ -22,7 +22,7 @@ import { _CreateSelfConversationsRouter } from "@opencrane/backend/server/conver
 import { _CreateConversationAttachmentAdmission, __CreateConversationAssetRouter } from "@opencrane/backend/server/conversation-assets";
 import { _CreateSelfRunCancellationRouter, _CreateSelfRunStatusRouter, type RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
-import { _CreateSkillCatalogueRouter } from "@opencrane/backend/server/agents/skills";
+import { PrismaSkillAuthoringValidationSubmissionUnitOfWork, _CreateSkillCatalogueRouter, __CreateSkillAuthoringValidationSubmissionRouter } from "@opencrane/backend/server/agents/skills";
 import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { _OpenapiRouter, _RateLimit } from "@opencrane/backend/server/infra/http";
@@ -68,6 +68,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 	const agentRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/agent-services", handler: _CreateAgentServicesRouter(prisma, runAdmission, _log) },
 		{ method: "use", path: "/api/v1/skills", handler: _CreateSkillCatalogueRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/skills", handler: __CreateSkillAuthoringValidationSubmissionRouter({ resolveCaller: _ResolveSkillAuthoringValidationCaller, authority: new PrismaSkillAuthoringValidationSubmissionUnitOfWork(prisma, mcpWorkflows.execution), logger: _log }) },
 	];
 	const personalWorkspaceRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/me/onboarding", handler: onboarding.router },
@@ -129,6 +130,13 @@ const _ResolveConversationAssetCaller = function _ConversationAssetCaller(reques
 	return principal === null ? null : { siloId: principal.siloId, subjectId: principal.externalSubject, principalId: principal.principalId };
 };
 
+/** Resolve skill validation authority only from the verified browser Principal and its silo. */
+const _ResolveSkillAuthoringValidationCaller = function _SkillAuthoringValidationCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
+{
+	const principal = _ResolveRequestPrincipal(request);
+	return principal === null ? null : { siloId: principal.siloId, principalId: principal.principalId };
+};
+
 /**
  * Composes resource-share authority behind the shared per-IP limiter before identity or database work.
  *
@@ -174,8 +182,8 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
  * single-use channel context token. Being on the internal listener is not the protection — a router
  * mounted here without its own check would be open to every workload in the cluster.
  *
- * Skill workloads retain the `/api/internal/agent-runtime` base path. Warm runtime binding, command
- * streaming, generated assets, and parent deliveries share `/api/internal/warm-runtime`.
+ * Skill-authoring validation workers use the `/api/internal/agent-runtime` base path. Warm runtime
+ * binding, command streaming, generated assets, and parent deliveries share `/api/internal/warm-runtime`.
  *
  * Called by: internal-app.ts, which builds the workload-facing Express listener.
  *
@@ -184,7 +192,7 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn">): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction">): void
 {
 	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, workflowExecution);
 	const internalControllerRoutes: readonly RouteMount[] = [
@@ -198,9 +206,8 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 		{ method: "use", path: "/api/internal/mcp-executor", handler: mcpRuntime.companion },
 	];
 	const internalRuntimeRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringValidationWorker },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillWorkloadBootstrap },
-		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringInput },
-		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringCompletion },
 	];
 	const internalWarmRuntimeRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.warmRuntimeBinding },

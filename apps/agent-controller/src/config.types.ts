@@ -30,7 +30,7 @@ export interface AgentControllerProcessConfig
 	readonly requestTimeoutMilliseconds: number;
 	/** Fixed personal and managed warm pools keyed by their server-selected profile names. */
 	readonly warmRuntimeProfiles: WarmRuntimePoolProfiles;
-	/** Immutable profiles for the only governed skill Job classes. */
+	/** Immutable profiles for governed skill Jobs, including the task-owned authoring handler. */
 	readonly skillWorkloadProfiles: SkillWorkloadControllerProfiles;
 	/** Immutable profile for OCI-backed MCP executor Jobs. */
 	readonly mcpExecutorProfile: McpExecutorJobProfile;

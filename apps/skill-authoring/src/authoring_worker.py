@@ -60,13 +60,13 @@ def _input_url(base_url: str, workload_id: str) -> str:
     if not bootstrap._workload_id(workload_id):
         raise RuntimeError("authoring workload identifier is invalid")
     bootstrap._acknowledgement_url(base_url)
-    return f"{base_url}/skill-authoring-workloads/{workload_id}/input"
+    return f"{base_url}/skill-authoring-validations/{workload_id}/input"
 
 
 def _completion_url(base_url: str) -> str:
     """Derive the sole terminal authoring completion URL after validating the deployment-owned internal base URL."""
     bootstrap._acknowledgement_url(base_url)
-    return f"{base_url}/skill-authoring-workloads:complete"
+    return f"{base_url}/skill-authoring-validations:complete"
 
 
 def download_bundle(base_url: str, workload_id: str, token_path: str, destination: Path, open_request: Callable[[Request, float], _InputResponse] = bootstrap._open) -> Path:
@@ -220,7 +220,7 @@ def run_authoring_workload(base_url: str, workload_id: str, token_path: str, dow
             return _complete_failed_workload(base_url, workload_id, token_path, complete)
         if test_report.get("passed") is not True or scan_result.get("passed") is not True:
             return _complete_failed_workload(base_url, workload_id, token_path, complete)
-        if _deliver_terminal(base_url, workload_id, token_path, {"workloadId": workload_id, "outcome": "succeeded", "testReport": test_report, "scanResult": scan_result}, complete):
+        if _deliver_terminal(base_url, workload_id, token_path, {"validationId": workload_id, "outcome": "succeeded", "testReport": test_report, "scanResult": scan_result}, complete):
             return 0
         _write_event("completion_uncertain")
         return 1
@@ -231,7 +231,7 @@ def run_authoring_workload(base_url: str, workload_id: str, token_path: str, dow
 
 def _complete_failed_workload(base_url: str, workload_id: str, token_path: str, complete: Callable[[str, str, str, dict[str, object]], None]) -> int:
     """Submit the one technical failure without masking an authority outage as a successful Job."""
-    if not _deliver_terminal(base_url, workload_id, token_path, {"workloadId": workload_id, "outcome": "failed", "failureCode": _VALIDATION_FAILURE_CODE}, complete):
+    if not _deliver_terminal(base_url, workload_id, token_path, {"validationId": workload_id, "outcome": "failed", "failureCode": _VALIDATION_FAILURE_CODE}, complete):
         _write_event("failure_completion_unavailable")
     return 1
 
@@ -317,13 +317,13 @@ def _contains_dependency_declaration(value: object) -> bool:
 
 def _completion_command(command: dict[str, object], workload_id: str) -> bool:
     """Keep completion payloads within the server-owned two-outcome contract and never forward raw validator output."""
-    if command.get("workloadId") != workload_id:
+    if command.get("validationId") != workload_id:
         return False
     if command.get("outcome") == "failed":
         failure_code = command.get("failureCode")
-        return set(command) == {"workloadId", "outcome", "failureCode"} and isinstance(failure_code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", failure_code) is not None
+        return set(command) == {"validationId", "outcome", "failureCode"} and isinstance(failure_code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", failure_code) is not None
     if command.get("outcome") == "succeeded":
-        return set(command) == {"workloadId", "outcome", "testReport", "scanResult"} and _completion_report(command.get("testReport")) and _completion_report(command.get("scanResult"))
+        return set(command) == {"validationId", "outcome", "testReport", "scanResult"} and _completion_report(command.get("testReport")) and _completion_report(command.get("scanResult"))
     return False
 
 
@@ -372,7 +372,7 @@ def main() -> int:
         base_url = bootstrap._required_environment("OPENCRANE_SKILL_BOOTSTRAP_URL")
         token_path = bootstrap._required_environment("OPENCRANE_SKILL_TOKEN_PATH")
         reference_path = bootstrap._required_environment("OPENCRANE_SKILL_BOOTSTRAP_REFERENCE_PATH")
-        workload_id = bootstrap.acknowledge(base_url, token_path, reference_path)
+        workload_id = bootstrap.acknowledge_authoring_validation(base_url, token_path, reference_path)
         return run_authoring_workload(base_url, workload_id, token_path)
     except RuntimeError as error:
         print(json.dumps({"component": "skill-authoring-worker", "event": "validation_unavailable", "reason": str(error)}, sort_keys=True), file=sys.stderr, flush=True)

@@ -76,7 +76,7 @@ async function _Main(): Promise<void>
 		await runtime.startWorkers({ workerName: "agent-controller" });
 		log.info({ profiles: Object.entries(config.warmRuntimeProfiles).map(function _Profile([name, profile]) { return { name, namespace: profile.namespace }; }), artifactPreprocessingEnabled: config.artifactPreprocessorProfile !== undefined }, "agent controller started");
 		await Promise.all([
-			__RunSkillWorkloadController({ authority: skillWorkloadAuthority, kubernetes: skillKubernetes, profiles: config.skillWorkloadProfiles, pollIntervalMilliseconds: config.pollIntervalMilliseconds, log }, shutdown.signal),
+			__RunSkillWorkloadController({ authority: skillWorkloadAuthority, kubernetes: skillKubernetes, profile: config.skillWorkloadProfiles["tool-runner"], pollIntervalMilliseconds: config.pollIntervalMilliseconds, log }, shutdown.signal),
 			__RunMcpExecutorController({ authority: mcpExecutorAuthority, kubernetes: mcpKubernetes, profile: config.mcpExecutorProfile, pollIntervalMilliseconds: config.pollIntervalMilliseconds, log }, shutdown.signal),
 		]);
 	}

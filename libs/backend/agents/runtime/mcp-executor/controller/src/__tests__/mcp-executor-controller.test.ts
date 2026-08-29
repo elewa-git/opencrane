@@ -44,7 +44,7 @@ describe("MCP executor controller", function _DescribeController()
 		const kubernetes = { ensureSuspendedJob: vi.fn(), observeJob: vi.fn(), releaseJob: vi.fn().mockResolvedValue(undefined), findFirstPod: vi.fn().mockResolvedValue({ metadata: { uid: "pod-uid-1" } }), deleteJob: vi.fn() };
 
 		await expect(__ReconcileNextMcpExecutorRelease(_Options(authority, kubernetes), new AbortController().signal)).resolves.toMatchObject({ outcome: "registered", podUid: "pod-uid-1" });
-		expect(kubernetes.releaseJob).toHaveBeenCalledWith(expect.anything(), "job-uid-1", release.releaseExpiresAt);
+		expect(kubernetes.releaseJob).toHaveBeenCalledWith(expect.anything(), "job-uid-1", { expiresAt: release.releaseExpiresAt });
 		expect(authority.__RegisterFirstPod).toHaveBeenCalledWith("claim-1", expect.objectContaining({ workloadUid: "job-uid-1", podUid: "pod-uid-1", releaseDeliveryCount: 2 }), expect.any(AbortSignal));
 	});
 

@@ -4,16 +4,15 @@
 
 ## What it owns
 
-This package contains the outbound Kubernetes work for skill jobs. The current pilot is a
-**reconciler**: it repeatedly makes Kubernetes match a saved workload claim. It also exports a
-remote workflow handler that later composition will use to create and observe a Job for a saved task.
-The product schema, routes, and deployable controller registration for that handler are not wired in
-this approved ports-only slice.
+This package contains the Kubernetes work for skill Jobs. A workflow is a saved task that can wait,
+retry, and continue after a restart. The agent controller registers the Python validation workflow
+handler and uses it to create, observe, and clean up one restricted Job. The older polling loop remains
+only for tool-runner workloads.
 
 ```
- legacy workload claim ──► controller ◄── HERE ──► suspended Job
-                               ▲                   │
- saved remote validation task ─┘──── immutable UID ┘
+ saved Python validation task ──► controller ◄── HERE ──► restricted authoring Job
+ tool-runner workload claim ────►    │                         │
+                                   saved UID and Pod identity ─┘
 ```
 
 **In this flow:** the retained [execution authority](../execution/main/README.md), the new shared
@@ -30,23 +29,22 @@ Python code running.
 - `__ReconcileNextSkillWorkloadRelease` — conditionally releases one assigned Job and registers its
   exact first worker Pod.
 - `__RunSkillWorkloadController` — polls until process shutdown while isolating one failed claim.
-- `__ValidateSkillWorkloadControllerProfiles` — validates the two deployment-owned job-class profiles.
+- `__ValidateSkillWorkloadControllerProfiles` — validates the deployment-owned authoring and tool-runner profiles.
 - `__CreateHttpSkillWorkloadControllerAuthority` — bounds and decodes internal responses, then
   delegates every wire shape and echo invariant to the model-adjacent Zod validators in
   `@opencrane/contracts`.
 - `__CreateKubernetesSkillWorkloadControllerStore` — supplies skill-owned labels and trace names to
   the shared exact governed Job store.
-- `__CreateSkillAuthoringValidationHandler` — returns the uncomposed remote Python validation
-  handler that records Job and Pod IDs before it accepts the server's persisted completion event.
+- `__CreateSkillAuthoringValidationHandler` — returns the registered workflow handler. It records
+  Job and Pod IDs, checks the saved result every second, retries expired delivery claims, and removes
+  only the exact Job it recorded.
 
 ## Boundary
 
 This package accepts ports for OpenCrane and Kubernetes; it does not use Prisma, issue a capability,
-read artifact bytes, duplicate controller wire validators, or run a worker. The retained polling
-pilot releases only an exact UID-bound Job under a short durable release claim. When a later
-composition registers it, the remote handler records a Job ID before release and a Pod ID before it
-accepts a server-persisted completion. A later worker protocol must exchange the non-secret Job
-reference through a separately authenticated boundary before any code can run.
+read artifact bytes, duplicate controller wire validators, or run a worker. The retained tool-runner
+poller releases only an exact UID-bound Job under a short saved release claim. The workflow handler
+records a Job ID before release and a Pod ID before it can accept a worker result.
 
 ## Dependency direction
 

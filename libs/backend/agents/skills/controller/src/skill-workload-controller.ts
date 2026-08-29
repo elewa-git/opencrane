@@ -1,4 +1,4 @@
-import { __BuildGovernedSkillWorkloadJob, type SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
+import { __BuildGovernedSkillWorkloadJob, SkillWorkloadKinds, type SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
 import { __CreateSkillWorkloadBootstrapReference } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
@@ -67,7 +67,7 @@ export function __ValidateSkillWorkloadControllerProfiles(value: unknown): Skill
 	{
 		throw new Error("skill workload controller requires exactly authoring and tool-runner profiles");
 	}
-	const profiles: Record<"authoring" | "tool-runner", SkillWorkloadJobProfile> = {} as Record<"authoring" | "tool-runner", SkillWorkloadJobProfile>;
+	const profiles = {} as { authoring: SkillWorkloadJobProfile & { readonly kind: "authoring" }; "tool-runner": SkillWorkloadJobProfile & { readonly kind: "tool-runner" } };
 	for (const kind of ["authoring", "tool-runner"] as const)
 	{
 		const profile = _SkillWorkloadJobProfile(candidate[kind]);
@@ -80,7 +80,14 @@ export function __ValidateSkillWorkloadControllerProfiles(value: unknown): Skill
 			throw new Error(`skill workload controller ${kind} profile has the wrong workload class`);
 		}
 		__BuildGovernedSkillWorkloadJob({ jobId: "profile-validation", siloId: "profile-validation", namespace: profile.namespace, capabilityReference: `skill-bootstrap-v1_${"0".repeat(64)}` }, profile);
-		profiles[kind] = profile;
+		if (kind === SkillWorkloadKinds.Authoring)
+		{
+			profiles.authoring = profile as SkillWorkloadJobProfile & { readonly kind: "authoring" };
+		}
+		else
+		{
+			profiles["tool-runner"] = profile as SkillWorkloadJobProfile & { readonly kind: "tool-runner" };
+		}
 	}
 	return profiles;
 }
@@ -95,8 +102,12 @@ export async function __ReconcileNextSkillWorkloadRelease(options: SkillWorkload
 		if (claim === null) return { outcome: SkillWorkloadControllerReconcileOutcomes.Idle };
 
 		// 2. Rebuild the same Job manifest from the deployment profile for this class plus the bootstrap reference.
-		const profile = options.profiles[claim.kind];
-		if (!profile || profile.serverNamespace === profile.namespace)
+		if (claim.kind !== SkillWorkloadKinds.ToolRunner)
+		{
+			throw new Error("legacy skill workload release accepts only tool-runner claims");
+		}
+		const profile = options.profile;
+		if (profile.serverNamespace === profile.namespace)
 		{
 			throw new Error("governed skill workload release does not match a bounded isolated profile");
 		}
@@ -104,7 +115,7 @@ export async function __ReconcileNextSkillWorkloadRelease(options: SkillWorkload
 		const job = __BuildGovernedSkillWorkloadJob({ jobId: claim.workloadId, siloId: claim.siloId, namespace: profile.namespace, capabilityReference }, profile);
 
 		// 3. Flip suspend from true to false with a compare-and-swap, then record the release against the same claim.
-		await options.kubernetes.releaseJob(job, claim.workloadUid, claim.expiresAt);
+		await options.kubernetes.releaseJob(job, claim.workloadUid, { expiresAt: claim.expiresAt });
 		const released = await options.authority.__CommitRelease(claim.workloadId, { releaseClaimedAt: claim.releaseClaimedAt, releaseDeliveryCount: claim.releaseDeliveryCount, workloadUid: claim.workloadUid }, signal);
 		if (released === "conflict") throw new Error("governed skill workload release lost its database claim fence");
 
@@ -129,7 +140,11 @@ export async function __ReconcileNextSkillWorkload(options: SkillWorkloadControl
 		if (claim === null) return { outcome: SkillWorkloadControllerReconcileOutcomes.Idle };
 
 		// 2. Rebuild the same suspended Job manifest from this class's profile plus the bootstrap reference.
-		const profile = options.profiles[claim.kind];
+		if (claim.kind !== SkillWorkloadKinds.ToolRunner)
+		{
+			throw new Error("legacy skill workload controller accepts only tool-runner claims");
+		}
+		const profile = options.profile;
 		const capabilityReference = await __CreateSkillWorkloadBootstrapReference(claim.workloadId);
 		const job = __BuildGovernedSkillWorkloadJob({ jobId: claim.workloadId, siloId: claim.siloId, namespace: profile.namespace, capabilityReference }, profile);
 

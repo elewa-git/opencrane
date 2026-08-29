@@ -31,8 +31,8 @@ export interface SkillAuthoringValidationTaskInput
  * Defines the declaration that the server admits and the controller handler later registers.
  *
  * The server composition assigns this declaration to `skill-authoring` but adds no server handler.
- * This ports-only slice does not yet have a product adapter that admits a validation or a deployable
- * controller that registers its handler.
+ * The product route admits this task with its validation, and the agent controller registers its
+ * handler during startup.
  *
  * @see __AdmitSkillAuthoringValidation — applies the transaction-bound admission rule.
  * @see __CreateSkillAuthoringValidationHandler — supplies the controller handler.

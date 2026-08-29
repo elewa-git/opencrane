@@ -20,8 +20,8 @@ Two halves:
   MCP-server, model-routing, memory, approvals, …); others are **re-exported straight from the model
   packages** (`@opencrane/models/{agents,artifacts,authorization,conversations}`) so a caller has
   one import for the whole surface and the wire types stay identical to the domain types. Private
-  controller DTOs use adjacent `*.types.ts`/`*.validator.ts` pairs for runtime attempts and governed
-  skill workloads; those Zod schemas keep runtime acceptance, strict request fields, and TypeScript
+  controller DTOs use adjacent `*.types.ts`/`*.validator.ts` pairs for runtime attempts and the retained tool-runner protocol; those Zod
+  schemas keep runtime acceptance, strict request fields, and TypeScript
   models in one package.
 
 ```
@@ -107,7 +107,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - `RuntimeCommandKinds` and `RuntimeCandidateKinds` — documented string-backed discriminants that
   keep workload command and candidate control flow exhaustive while preserving protocol bytes.
 - `AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE`, `AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME`, and
-  `AgentControllerRunAttempt*`/`AgentControllerSkillWorkload*` — the private controller handshake for claiming one authorised run or governed skill workload,
+  `AgentControllerRunAttempt*` — the private controller handshake for claiming one authorised run,
   reporting the Kubernetes-issued Job identity, and committing that identity under the same database
   lease. `AgentControllerRunWorkloadRelease*` then carries the separate durable command, including
   the assignment's absolute expiry, for releasing only that assigned Job and registering its first
@@ -120,9 +120,12 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   validators colocated with those DTOs. Response parsers strip untrusted extensions, request parsers
   reject extensions, and contextual result parsers bind echoed Job and Pod coordinates to the exact
   submitted command.
+- `AgentControllerSkillWorkload*` — the private controller handshake retained for tool-runner
+  workloads. Skill-authoring validation has moved to its dedicated Absurd workflow and no longer
+  shares this claim or dispatch protocol.
 - `__CreateSkillWorkloadBootstrapReference`, `__HashSkillWorkloadBootstrapReference`, and
   `__IsSkillWorkloadBootstrapReference` — the browser-safe, deterministic protocol shared by the
-  governed-skill controller and the server authority. It creates the opaque Job reference, stores
+  workflow-owned skill-authoring path and retained tool-runner authorities. It creates the opaque Job reference, stores
   only its SHA-256 hash, and rejects any other wire shape; it is not a user credential or a general
   hashing API.
 - `__CreateArtifactPreprocessBootstrapReference`,

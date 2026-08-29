@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import { __HashSkillWorkloadBootstrapReference, __IsSkillWorkloadBootstrapReference } from "@opencrane/contracts";
+import { __HashSkillWorkloadBootstrapReference, __IsSkillWorkloadBootstrapReference, TOOL_RUNNER_PROJECTED_TOKEN_AUDIENCE, TOOL_RUNNER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
 import type { SkillWorkloadBootstrapRouterDependencies } from "./skill-workload-bootstrap.types";
 
@@ -39,8 +39,8 @@ export function __CreateSkillWorkloadBootstrapRouter(dependencies: SkillWorkload
 			}
 
 			// 2. TokenReview the worker's token against the audience and identity the bootstrap row names.
-			const identity = await dependencies.tokenReviewer.__Review(token, record.audience);
-			if (identity === null || identity.namespace !== record.namespace || identity.serviceAccountName !== record.serviceAccountName || identity.podUid !== record.podUid)
+			const identity = await dependencies.tokenReviewer.__Review(token, TOOL_RUNNER_PROJECTED_TOKEN_AUDIENCE);
+			if (record.audience !== TOOL_RUNNER_PROJECTED_TOKEN_AUDIENCE || record.serviceAccountName !== TOOL_RUNNER_SERVICE_ACCOUNT_NAME || identity === null || identity.namespace !== record.namespace || identity.serviceAccountName !== TOOL_RUNNER_SERVICE_ACCOUNT_NAME || identity.podUid !== record.podUid)
 			{
 				response.status(401).json({ error: "worker_identity_denied" });
 				return;
