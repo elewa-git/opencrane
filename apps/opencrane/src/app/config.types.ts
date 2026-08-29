@@ -47,6 +47,13 @@ export interface InternalRuntimeConfig
 	readonly commandRecoveryMilliseconds: number;
 	/** Namespace reserved for managed-agent runtime Jobs. */
 	readonly managedRuntimeNamespace: string | undefined;
+	/** Lease held by one Pod-bound companion command claim. */
+	readonly mcpCompanionClaimLeaseMilliseconds: number;
+	/** Lease held by one controller claim or release delivery. */
+	readonly mcpControllerClaimLeaseMilliseconds: number;
+	/** Namespace reserved for OCI MCP executor Jobs. */
+	readonly mcpExecutorNamespace: string | undefined;
+	/** Class-specific profile selected for every OCI MCP executor claim. */
 	/** Hard timeout applied to every memory-gateway HTTP exchange. */
 	readonly memoryGatewayTimeoutMilliseconds: number;
 	/** Absolute path of the projected audience-bound memory-gateway caller token. */
@@ -61,6 +68,8 @@ export interface InternalRuntimeConfig
 	readonly publishedOutboxRetentionMilliseconds: number;
 	/** Namespace containing the OpenCrane server and agent controller. */
 	readonly serverNamespace: string;
+	/** Silo that owns every OCI MCP runtime row served by this process. */
+	readonly siloId: string;
 	/** Lifetime of one durable runtime assignment. */
 	readonly assignmentTtlMilliseconds: number;
 }

@@ -126,6 +126,13 @@ export interface ToolInvocationWorkSource
 	findNextRunnable(now: Date): Promise<ExternalActionWorkerInvocation | null>;
 }
 
+/** Routes a ready ToolInvocation into a class-specific durable executor before generic dispatch. */
+export interface ExternalActionClassAdmission
+{
+	/** Admit one saved invocation, or report that the generic provider worker still owns it. */
+	admitInvocation(toolInvocationRowId: string): Promise<"admitted" | "idempotent" | "not_ready" | "not_mcp">;
+}
+
 /**
  * Writes every durable state change the worker makes: prepared, claimed, released, completed.
  *
@@ -281,6 +288,8 @@ export interface ExternalActionWorkerDependencies
 {
 	/** Finds the next saved invocation to work on. */
 	readonly source: ToolInvocationWorkSource;
+	/** Gives class-specific executors first refusal before the generic provider adapter can claim work. */
+	readonly classAdmission: ExternalActionClassAdmission;
 	/** Writes ToolInvocation state; each write only succeeds if the row is still on the revision it read. */
 	readonly invocations: ExternalActionWorkerUnitOfWork;
 	/** Loads the run's frozen snapshot. */

@@ -47,10 +47,16 @@ function _SkillProfilesJson(): string
 	});
 }
 
+/** Return the Helm-equivalent OCI MCP executor profile. */
+function _McpExecutorProfileJson(): string
+{
+	return JSON.stringify({ companionImage: `ghcr.io/elewa-git/opencrane-mcp-executor@sha256:${"c".repeat(64)}`, imagePullPolicy: "IfNotPresent", serverNamespace: "silo-a", namespace: "opencrane-mcp-executor", serviceAccountName: "mcp-executor-default", opencraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001/api/internal/mcp-executor", projectedTokenTtlSeconds: 600, scratchSize: "64Mi", activeDeadlineSeconds: 600, serverResources: { requests: { cpu: "100m", memory: "128Mi" }, limits: { cpu: "500m", memory: "512Mi" } }, companionResources: { requests: { cpu: "25m", memory: "64Mi" }, limits: { cpu: "250m", memory: "128Mi" } } });
+}
+
 /** Return the minimal complete process environment. */
 function _Environment(): NodeJS.ProcessEnv
 {
-	return { OPENCRANE_INTERNAL_URL: "http://opencrane-server.silo-a.svc.cluster.local:3001", OPENCRANE_CONTROLLER_TOKEN_PATH: "/var/run/opencrane/tokens/opencrane.token", AGENT_CONTROLLER_POLL_INTERVAL_MS: "1000", AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: _SkillProfilesJson() };
+	return { OPENCRANE_INTERNAL_URL: "http://opencrane-server.silo-a.svc.cluster.local:3001", OPENCRANE_CONTROLLER_TOKEN_PATH: "/var/run/opencrane/tokens/opencrane.token", AGENT_CONTROLLER_POLL_INTERVAL_MS: "1000", AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: _SkillProfilesJson(), AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON: _McpExecutorProfileJson() };
 }
 
 describe("agent-controller process config", function _Suite()
@@ -67,6 +73,7 @@ describe("agent-controller process config", function _Suite()
 		expect(config.outboxPruneIntervalMilliseconds).toBe(3_600_000);
 		expect(config.profiles["personal-default"]?.serviceAccountName).toBe("agent-runtime-default");
 		expect(config.skillWorkloadProfiles.authoring.serviceAccountName).toBe("skill-authoring-default");
+		expect(config.mcpExecutorProfile.serviceAccountName).toBe("mcp-executor-default");
 	});
 
 	it("rejects a collapsed namespace or moving image tag", function _RejectsUnsafeConfig()
@@ -74,6 +81,7 @@ describe("agent-controller process config", function _Suite()
 		expect(function _SameNamespace() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson("silo-a").replace("\"silo-a-runtime\"", "\"silo-a\"") }); }).toThrow(/unique runtime namespace separate/);
 		expect(function _MovingImage() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson().replace(/@sha256:[a-f0-9]{64}/, ":latest") }); }).toThrow(/immutable image/);
 		expect(function _SkillProfileWrongClass() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: _SkillProfilesJson().replace("\"kind\":\"authoring\"", "\"kind\":\"tool-runner\"") }); }).toThrow(/wrong workload class/);
+		expect(function _McpProfileMovingImage() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON: _McpExecutorProfileJson().replace(/@sha256:[a-f0-9]{64}/, ":latest") }); }).toThrow(/immutable companion image/);
 	});
 
 	it("rejects an outbox-retention cadence outside the safe maintenance range", function _RejectsUnsafeRetentionInterval()
@@ -86,5 +94,6 @@ describe("agent-controller process config", function _Suite()
 	{
 		expect(function _InvalidRuntimeProfiles() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_PROFILES_JSON: "{" }); }).toThrow(/AGENT_CONTROLLER_PROFILES_JSON must contain valid JSON/);
 		expect(function _InvalidSkillProfiles() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: "{" }); }).toThrow(/AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON must contain valid JSON/);
+		expect(function _InvalidMcpProfile() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON: "{" }); }).toThrow(/AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON must contain valid JSON/);
 	});
 });

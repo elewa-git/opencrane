@@ -103,6 +103,9 @@ carries a concrete, currently authorized human approval subject.
   canonical lifecycle event in the same transaction; its transaction repository remains
   package-private. Runs owns the injected run-state recovery port; authorization never writes
   `AgentRun.state` directly.
+- `__CreatePrismaMcpToolInvocationParticipantFactory` lets the OCI MCP runtime move a saved tool
+  call inside the same database transaction as its MCP command. Authorization still owns the
+  arguments, claim, result delivery, lifecycle event, and manual-recovery decision.
 - `ToolInvocationAdmissionOutcomes`, `ToolInvocationClaimOutcomes`, `ToolResultDeliveryOutcomes`,
   and `DeferredToolDecisionOutcomes` are stable transaction result vocabularies shared by the
   authorization owner and its protocol consumers.

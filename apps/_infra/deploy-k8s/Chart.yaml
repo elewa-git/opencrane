@@ -62,6 +62,10 @@ dependencies:
   - name: opencrane-tool-runner
     version: ">=0.0.0-0"
     repository: "file://../../tool-runner/helm"
+  - name: opencrane-mcp-executor
+    version: ">=0.0.0-0"
+    repository: "file://../../mcp-executor/helm"
+    condition: agentController.enabled
   - name: opencrane-cognee
     version: ">=0.0.0-0"
     repository: "file://../cognee/helm"

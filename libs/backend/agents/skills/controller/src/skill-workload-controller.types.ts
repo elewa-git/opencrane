@@ -1,8 +1,7 @@
-import type { ConfigurationOptions, V1Job, V1Pod, V1PodList } from "@kubernetes/client-node";
-
 import type { AgentControllerSkillWorkloadAssignmentCommand, AgentControllerSkillWorkloadClaim, AgentControllerSkillWorkloadPodRegistrationCommand, AgentControllerSkillWorkloadReleaseClaim, AgentControllerSkillWorkloadReleaseCommand } from "@opencrane/contracts";
 import type { SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
 import type { Logger } from "@opencrane/backend/observability";
+import type { GovernedJobControllerStore } from "@opencrane/backend/agents/runtime/workloads/k8s-controller";
 
 /** What one reconciliation pass did. The poll loop uses this to decide whether to sleep. */
 export enum SkillWorkloadControllerReconcileOutcomes
@@ -37,48 +36,6 @@ export interface SkillWorkloadControllerAuthority
 	__RegisterFirstPod(workloadId: string, command: AgentControllerSkillWorkloadPodRegistrationCommand, signal: AbortSignal): Promise<"registered" | "idempotent" | "conflict">;
 }
 
-/** The Kubernetes calls the skill controller is allowed to make. */
-export interface SkillWorkloadControllerKubernetesStore
-{
-	/** Create the suspended Job, or adopt one that already exists and matches the expected manifest exactly. */
-	__EnsureSuspendedJob(expected: V1Job): Promise<V1Job>;
-	/** Unsuspend the assigned Job with a compare-and-swap, or return it unchanged when it is already unsuspended. */
-	__EnsureSkillJobReleased(expected: V1Job, workloadUid: string, releaseExpiresAt: string): Promise<V1Job>;
-	/** Return the Job's single worker Pod, or null while Kubernetes has not created it yet. */
-	__FindFirstSkillWorkloadPod(expectedJob: V1Job, workloadUid: string, serviceAccountName: string): Promise<V1Pod | null>;
-}
-
-/** The small part of the Kubernetes Batch API this controller uses: create, read, and unsuspend skill Jobs. */
-export interface SkillWorkloadControllerBatchApi
-{
-	/** Create one deterministic suspended Job. */
-	createNamespacedJob(request: { readonly namespace: string; readonly body: V1Job }, options?: ConfigurationOptions): Promise<V1Job>;
-	/** Read the Job, so it can be compared against the expected manifest and then unsuspended. */
-	readNamespacedJob(request: { readonly namespace: string; readonly name: string }, options?: ConfigurationOptions): Promise<V1Job>;
-	/** Send the one JSON-Patch that unsuspends the Job, guarded by its UID and resourceVersion. */
-	patchNamespacedJob(request: { readonly namespace: string; readonly name: string; readonly body: readonly { readonly op: "test" | "replace"; readonly path: "/metadata/uid" | "/metadata/resourceVersion" | "/spec/activeDeadlineSeconds" | "/spec/suspend"; readonly value: string | number | boolean }[] }, options?: ConfigurationOptions): Promise<V1Job>;
-}
-
-/** The one Kubernetes Core API call this controller uses: list the Pods belonging to a skill Job. */
-export interface SkillWorkloadControllerCoreApi
-{
-	/** List Pods through the exact Job UID and skill-workload label selector. */
-	listNamespacedPod(request: { readonly namespace: string; readonly labelSelector: string }, options?: ConfigurationOptions): Promise<V1PodList>;
-}
-
-/** Dependencies of the Kubernetes adapter dedicated to the governed-skill controller. */
-export interface SkillWorkloadControllerKubernetesStoreOptions
-{
-	/** Batch client whose permissions come from the two skill-namespace Roles. */
-	readonly batchApi: SkillWorkloadControllerBatchApi;
-	/** Core client constrained to Pod list in those namespaces. */
-	readonly coreApi: SkillWorkloadControllerCoreApi;
-	/** Hard timeout propagated to every Kubernetes request. */
-	readonly requestTimeoutMilliseconds: number;
-	/** Shutdown signal passed to every Kubernetes request, so requests abort when the process stops. */
-	readonly shutdownSignal: AbortSignal;
-}
-
 /** Fetch-compatible function injected into the internal HTTP authority adapter. */
 export type SkillWorkloadControllerFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -106,7 +63,7 @@ export interface SkillWorkloadControllerOptions
 	/** The OpenCrane server: it hands out claims and records assignments. */
 	readonly authority: SkillWorkloadControllerAuthority;
 	/** Talks to Kubernetes with only the permissions this controller needs. */
-	readonly kubernetes: SkillWorkloadControllerKubernetesStore;
+	readonly kubernetes: GovernedJobControllerStore;
 	/** Deployment-owned profiles for the only two governed workload classes. */
 	readonly profiles: SkillWorkloadControllerProfiles;
 	/** Delay after an idle poll or a handled reconciliation failure. */

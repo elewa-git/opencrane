@@ -197,6 +197,17 @@ export type ToolResultDeliveryPayload =
 	| { readonly toolInvocationId: string; readonly outcome: "succeeded"; readonly result: JsonValue }
 	| { readonly toolInvocationId: string; readonly outcome: "failed"; readonly failureCode: string };
 
+/** Results of saving one fenced provider completion. */
+export enum ToolInvocationCompletionOutcomes
+{
+	/** This worker stored the result and its delivery. */
+	Completed = "completed",
+	/** Another durable result already won the fence. */
+	Winner = "winner",
+	/** The invocation no longer exists. */
+	Missing = "missing",
+}
+
 /**
  * What happened when a worker tried to record a finished provider call.
  *
@@ -206,9 +217,9 @@ export type ToolResultDeliveryPayload =
  * call the provider again. `missing` means the invocation row is gone.
  */
 export type ToolInvocationCompletionResult =
-	| { readonly outcome: "completed"; readonly invocation: ToolInvocationRecord; readonly delivery: ToolResultDeliveryPayload }
-	| { readonly outcome: "winner"; readonly invocation: ToolInvocationRecord }
-	| { readonly outcome: "missing" };
+	| { readonly outcome: ToolInvocationCompletionOutcomes.Completed; readonly invocation: ToolInvocationRecord; readonly delivery: ToolResultDeliveryPayload }
+	| { readonly outcome: ToolInvocationCompletionOutcomes.Winner; readonly invocation: ToolInvocationRecord }
+	| { readonly outcome: ToolInvocationCompletionOutcomes.Missing };
 
 /**
  * Whether this transaction actually changed the invocation, and the row as it now stands.

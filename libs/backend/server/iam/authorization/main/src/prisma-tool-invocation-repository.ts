@@ -5,7 +5,7 @@ import type { JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "./canonical-json-digest";
 import { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle";
 import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
-import { ToolInvocationAdmissionOutcomes, ToolInvocationClaimOutcomes, ToolResultDeliveryOutcomes, type ToolInvocationAdmissionResult, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationTransactionRepository, type ToolInvocationTransitionResult, type ToolResultDeliveryPayload } from "./tool-invocation.types";
+import { ToolInvocationAdmissionOutcomes, ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolResultDeliveryOutcomes, type ToolInvocationAdmissionResult, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationTransactionRepository, type ToolInvocationTransitionResult, type ToolResultDeliveryPayload } from "./tool-invocation.types";
 
 /** Convert Prisma's ToolInvocationState values into this package's own state enum. */
 const _STATE_FROM_PRISMA: Readonly<Record<ToolInvocationState, ToolInvocationStates>> = {
@@ -249,6 +249,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	{
 		const rows = await this._transaction.toolInvocation.findMany({
 			where: {
+				mcpRuntimeExecution: { is: null },
 				OR: [
 					{
 						run: { is: { state: "Running" } },
@@ -269,7 +270,6 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		const current = rows.find(function _currentAttempt(row) { return row.attempt === row.run.attempt; });
 		return current === undefined ? null : _record(current);
 	}
-
 	/** Record provider-free preparation success and select approval or dispatch readiness. */
 	async markPrepared(invocationId: string, expectedRevision: number, now: Date): Promise<ToolInvocationRecord | null>
 	{
@@ -367,7 +367,6 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		if (updated.count !== 1) return { outcome: ToolInvocationClaimOutcomes.Winner, invocation: winner };
 		return { outcome: ToolInvocationClaimOutcomes.Claimed, claim: { invocationId, kind, fence: nextFence, revision: winner.revision }, invocation: winner };
 	}
-
 	/** Complete one exact claim and create its one-to-one result delivery. */
 	async complete(claim: ToolInvocationClaim, payload: ToolResultDeliveryPayload, now: Date): Promise<ToolInvocationCompletionResult>
 	{
@@ -375,21 +374,24 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		const result = safePayload.outcome === ToolResultDeliveryOutcomes.Succeeded ? _resultInput(safePayload.result) : Prisma.DbNull;
 		const failureCode = safePayload.outcome === ToolResultDeliveryOutcomes.Failed ? safePayload.failureCode : null;
 		const before = await this._transaction.toolInvocation.findUnique({ where: { id: claim.invocationId } });
-		if (before === null) return { outcome: "missing" };
+		if (before === null)
+			return { outcome: ToolInvocationCompletionOutcomes.Missing };
 		const event = _completionEvent(claim.kind, safePayload.outcome);
 		const state = _targetState(_plan(before, event, now));
-		if (state !== ToolInvocationState.Succeeded && state !== ToolInvocationState.Failed) return { outcome: "winner", invocation: _record(before) };
+		if (state !== ToolInvocationState.Succeeded && state !== ToolInvocationState.Failed)
+			return { outcome: ToolInvocationCompletionOutcomes.Winner, invocation: _record(before) };
 		const updated = await this._transaction.toolInvocation.updateMany({
 			where: { id: claim.invocationId, state: _claimedState(claim.kind), claimKind: _CLAIM_TO_PRISMA[claim.kind], claimFence: claim.fence, revision: claim.revision, run: { is: { attempt: before.attempt, state: { in: ["Running", "Cancelling"] } } } },
 			data: { state, result, failureCode, claimKind: null, claimExpiresAt: null, completedAt: now, revision: { increment: 1 } },
 		});
 		const winner = await this._winner(claim.invocationId);
-		if (winner === null) return { outcome: "missing" };
-		if (updated.count !== 1) return { outcome: "winner", invocation: winner };
+		if (winner === null)
+			return { outcome: ToolInvocationCompletionOutcomes.Missing };
+		if (updated.count !== 1)
+			return { outcome: ToolInvocationCompletionOutcomes.Winner, invocation: winner };
 		await this._createDelivery(claim.invocationId, safePayload, now);
-		return { outcome: "completed", invocation: await this._requiredWinner(claim.invocationId), delivery: safePayload };
+		return { outcome: ToolInvocationCompletionOutcomes.Completed, invocation: await this._requiredWinner(claim.invocationId), delivery: safePayload };
 	}
-
 	/** Apply the frozen recovery strategy after one exact ambiguous provider operation. */
 	async completeAmbiguous(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationTransitionResult>
 	{
@@ -404,7 +406,6 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		});
 		return { changed: updated.count === 1, invocation: await this._winner(claim.invocationId) };
 	}
-
 	/** Release an exact claim after the worker proves no provider request started. */
 	async releaseClaimBeforeDispatch(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationTransitionResult>
 	{
@@ -422,7 +423,6 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		if (updated.count === 1 && target === ToolInvocationState.Failed) await this._createDelivery(claim.invocationId, { toolInvocationId: invocation.toolInvocationId, outcome: "failed", failureCode: "external_action_start_event_failed" }, now);
 		return { changed: updated.count === 1, invocation: await this._winner(claim.invocationId) };
 	}
-
 	/** Apply the frozen strategy to one expired provider claim without repeating its effect. */
 	async recoverExpiredClaim(invocationId: string, now: Date): Promise<ToolInvocationTransitionResult>
 	{

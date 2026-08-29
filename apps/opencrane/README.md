@@ -58,11 +58,11 @@ The route registry is deliberately a catalogue rather than a second application 
 | Public `:8080` | Identity and access | audit, groups, grants, resource shares |
 | Public `:8080` | Agents | agent-service management and governed skill catalogue |
 | Public `:8080` | Personal workspace | guided onboarding, assets, persona, approvals, runs, configuration, conversations |
-| Public `:8080` | Gateways | MCP, model routing, providers, bring-your-own-key, model registry |
+| Public `:8080` | Gateways | MCP catalogue, OCI image promotion, model routing, providers, bring-your-own-key, model registry |
 | Public `:8080` | Knowledge and reporting | retrieval sources, budgets, token usage |
-| Internal `:8081` | Controller | run-attempt and skill-workload dispatch |
+| Internal `:8081` | Controller | run-attempt, skill-workload, and OCI MCP Job dispatch |
 | Internal `:8081` | Runtime | one-use bootstrap, command stream, candidate ingest, skill-authoring exchange |
-| Internal `:8081` | Workers and replay | artifact preprocessing and controller-selected conversation replay |
+| Internal `:8081` | Workers and replay | Pod-bound MCP command/result exchange, artifact preprocessing, and controller-selected conversation replay |
 
 The invariant is simple: a request creates or changes durable product state before a worker is
 trusted to act. Runtime input is frozen for the accepted attempt, and events are recorded in order
@@ -98,6 +98,9 @@ its resources to the lifecycle owner.
   and OCI image admission. A workflow is saved work that may continue after the server restarts.
   Here it checks a registered server, validates a saved OCI Image Layout ZIP, imports the accepted
   image into the configured registry, and saves its immutable digest without keeping the request open.
+- `src/app/mcp-runtime-composition.ts` turns that immutable image into a separate MCP executor Job.
+  It shares one database authority across the administrator promotion route, controller claims,
+  Pod-bound companion reports, and saved tool calls, so no generic worker can also run the call.
 - `src/app/persona-approval-composition.ts` adapts agent-service persona selection to the persona
   approval port on one Serializable transaction. It maps agent outcomes but owns no persona or
   AgentRevision persistence.

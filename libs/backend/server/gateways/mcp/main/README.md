@@ -76,6 +76,14 @@ returns credentials and never labels an install connected before a real connecti
 - `registerRemoteServer` — saves a draft server and its protocol-check job together.
 - `__CreateMcpEraProbeWorkflow` — registers the saved background job that checks the server.
 - `__CreateOciImageValidationWorkflow` — registers the saved OCI image admission job.
+- `__CreateMcpOciServerPromotionRouter` — promotes an imported image into a draft server revision and
+  its first discovery execution for an authenticated organisation administrator.
+- `__CreateMcpRuntimeControllerRouter` — exposes the five TokenReview-protected claim, assignment,
+  release, and Pod-registration routes used by the agent controller.
+- `__CreateMcpRuntimeCompanionRouter` — exposes the three TokenReview-protected claim, completion,
+  and failure routes used by one exact MCP companion Pod.
+- `PrismaMcpRuntimeAuthority` — owns the database transactions and delivery fences behind those
+  public, controller, and companion routes.
 - Operator services: `listEntitledCatalog`, `listInstalled`, `installServer`, `approveServer`,
   `publishServer`, and the access editor.
 - `_McpOpenapiPaths` — the OpenAPI path descriptions for this API.
@@ -86,8 +94,10 @@ The application supplies the database transaction and starts the Absurd worker. 
 a Prisma client. `PrismaMcpOperatorUnitOfWork` checks access, changes installs or server state, admits
 background jobs, and records audit entries in one database transaction.
 
-This package does not run agents or call tools. It governs which servers are available and whether a
-user may use them. The external HTTP adapter performs the actual protocol check for the workflow.
+This package does not create Kubernetes workloads, run uploaded images, or call MCP tools. It governs
+which servers are available, promotes imported images, issues database-fenced runtime work, and
+accepts results only from the TokenReview-bound controller or companion Pod. The agent controller
+owns Kubernetes mutation, while the isolated companion performs the actual MCP exchange.
 
 ## Dependency direction
 
