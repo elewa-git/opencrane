@@ -26,7 +26,6 @@ organisation ingress
                              +-> personal warm runtime namespace
                              +-> managed warm runtime namespace
                              +-> skill-authoring Job namespace
-                             +-> tool-runner Job namespace
 
 claimed runtime Pods ----> LiteLLM (attempt model key)
 opencrane server ----> OCI MCP executor Jobs (durable claim + Pod-bound companion)
@@ -57,7 +56,6 @@ Cluster-wide ingress, certificate, DNS, and CloudNativePG controllers are extern
 | Document extraction | `apps/artifact-preprocessor` | none; brokered input and output |
 | Malware scanning | `apps/artifact-scanner` | none; brokered quarantined bytes and fenced result only |
 | Skill authoring Job | `apps/skill-authoring` | none; one governed workload |
-| Tool execution Job | `apps/tool-runner` | none; one governed workload |
 
 Every independently deployed workload has one `apps/<name>` owner. Libraries under `libs/*` contain
 reusable behaviour and never own a deployment.

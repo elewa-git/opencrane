@@ -2,22 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { __BuildGovernedSkillWorkloadJob } from "../skill-workload-job";
 
-/** Builds one bounded tool-runner profile. */
+/** Builds one bounded skill-authoring profile. */
 function _Profile()
 {
-	return { kind: "tool-runner" as const, image: `ghcr.io/opencrane/tool-runner@sha256:${"a".repeat(64)}`, imagePullPolicy: "IfNotPresent" as const, serverNamespace: "opencrane", namespace: "opencrane-tools", serviceAccountName: "tool-runner-default", capabilityTokenAudience: "opencrane-tool-runner", bootstrapUrl: "http://opencrane-server.opencrane.svc.cluster.local:8081/api/internal/agent-runtime", capabilityTokenPath: "/var/run/opencrane/tokens/capability.token", bootstrapReferencePath: "/var/run/opencrane/bootstrap/reference", scratchSize: "64Mi", activeDeadlineSeconds: 300, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "100m", memory: "128Mi" }, limits: { cpu: "500m", memory: "256Mi" } } };
+	return { kind: "authoring" as const, image: `ghcr.io/opencrane/skill-authoring@sha256:${"a".repeat(64)}`, imagePullPolicy: "IfNotPresent" as const, serverNamespace: "opencrane", namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", capabilityTokenAudience: "opencrane-skill-authoring", bootstrapUrl: "http://opencrane-server.opencrane.svc.cluster.local:8081/api/internal/agent-runtime", capabilityTokenPath: "/var/run/opencrane/tokens/capability.token", bootstrapReferencePath: "/var/run/opencrane/bootstrap/reference", scratchSize: "128Mi", activeDeadlineSeconds: 300, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "500m", memory: "3Gi" }, limits: { cpu: "2", memory: "4Gi" } } };
 }
 
 /** Builds the opaque authority coordinates for one worker Job. */
 function _Assignment()
 {
-	return { jobId: "tool-job-1", siloId: "silo-1", namespace: "opencrane-tools", capabilityReference: `skill-bootstrap-v1_${"a".repeat(64)}` };
-}
-
-/** Builds the stricter authoring profile that reserves scratch for archive validation. */
-function _AuthoringProfile()
-{
-	return { ..._Profile(), kind: "authoring" as const, image: `ghcr.io/opencrane/skill-authoring@sha256:${"b".repeat(64)}`, namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", capabilityTokenAudience: "opencrane-skill-authoring", scratchSize: "128Mi", resources: { requests: { cpu: "500m", memory: "3Gi" }, limits: { cpu: "2", memory: "4Gi" } } };
+	return { jobId: "authoring-job-1", siloId: "silo-1", namespace: "opencrane-skill-authoring", capabilityReference: `skill-bootstrap-v1_${"a".repeat(64)}` };
 }
 
 describe("governed skill workload Job", function _describeJob()
@@ -36,8 +30,8 @@ describe("governed skill workload Job", function _describeJob()
 
 	it("rejects a wrong workload identity class or a server-namespace Job", function _rejectsWidening()
 	{
-		expect(function _wrongIdentity() { __BuildGovernedSkillWorkloadJob(_Assignment(), { ..._Profile(), serviceAccountName: "skill-authoring-default" }); }).toThrow(/class-bounded identity/);
-		expect(function _foreignNamespace() { __BuildGovernedSkillWorkloadJob({ ..._Assignment(), namespace: "other-silo-tools" }, _Profile()); }).toThrow(/deployment-owned namespace/);
+		expect(function _wrongIdentity() { __BuildGovernedSkillWorkloadJob(_Assignment(), { ..._Profile(), serviceAccountName: "other-authoring" }); }).toThrow(/class-bounded identity/);
+		expect(function _foreignNamespace() { __BuildGovernedSkillWorkloadJob({ ..._Assignment(), namespace: "other-silo-authoring" }, _Profile()); }).toThrow(/deployment-owned namespace/);
 		expect(function _wrongAudience() { __BuildGovernedSkillWorkloadJob(_Assignment(), { ..._Profile(), capabilityTokenAudience: "opencrane-server" }); }).toThrow(/fixed audience/);
 		expect(function _invalidBootstrapPort() { __BuildGovernedSkillWorkloadJob(_Assignment(), { ..._Profile(), bootstrapUrl: "http://opencrane-server.opencrane.svc.cluster.local:99999/api/internal/agent-runtime" }); }).toThrow(/fixed bootstrap endpoint/);
 		expect(function _oversizedResources() { __BuildGovernedSkillWorkloadJob(_Assignment(), { ..._Profile(), activeDeadlineSeconds: 901, resources: { requests: { cpu: "3", memory: "3Gi" }, limits: { cpu: "3", memory: "3Gi" } } }); }).toThrow(/bounded resources/);
@@ -45,9 +39,9 @@ describe("governed skill workload Job", function _describeJob()
 		expect(function _nonOpaqueReference() { __BuildGovernedSkillWorkloadJob({ ..._Assignment(), capabilityReference: "workload-identifier" }, _Profile()); }).toThrow(/opaque bootstrap reference/);
 	});
 
-	it("builds the separately owned authoring Job class", function _buildsAuthoring()
+	it("builds the workflow-owned authoring Job class", function _buildsAuthoring()
 	{
-		const profile = { ..._AuthoringProfile(), namespace: "opencrane-authoring" };
+		const profile = { ..._Profile(), namespace: "opencrane-authoring" };
 		const job = __BuildGovernedSkillWorkloadJob({ ..._Assignment(), namespace: "opencrane-authoring" }, profile);
 		expect(job.metadata?.name).toMatch(/^skill-author-/);
 		expect(job.spec?.template.metadata?.labels).toMatchObject({ "app.kubernetes.io/component": "skill-authoring" });
@@ -56,8 +50,8 @@ describe("governed skill workload Job", function _describeJob()
 	it("reserves the fixed extraction and validation scratch budget for authoring Jobs", function _reservesAuthoringScratch()
 	{
 		const assignment = { ..._Assignment(), namespace: "opencrane-skill-authoring" };
-		expect(function _smallScratch() { __BuildGovernedSkillWorkloadJob(assignment, { ..._AuthoringProfile(), scratchSize: "32Mi" }); }).toThrow(/bounded resources/);
-		expect(function _smallMemory() { __BuildGovernedSkillWorkloadJob(assignment, { ..._AuthoringProfile(), resources: { requests: { cpu: "500m", memory: "2Gi" }, limits: { cpu: "2", memory: "2Gi" } } }); }).toThrow(/bounded resources/);
-		expect(__BuildGovernedSkillWorkloadJob(assignment, { ..._AuthoringProfile(), scratchSize: "128Mi" }).spec?.template.spec?.volumes).toEqual(expect.arrayContaining([expect.objectContaining({ name: "scratch", emptyDir: { sizeLimit: "128Mi" } })]));
+		expect(function _smallScratch() { __BuildGovernedSkillWorkloadJob(assignment, { ..._Profile(), scratchSize: "32Mi" }); }).toThrow(/bounded resources/);
+		expect(function _smallMemory() { __BuildGovernedSkillWorkloadJob(assignment, { ..._Profile(), resources: { requests: { cpu: "500m", memory: "2Gi" }, limits: { cpu: "2", memory: "2Gi" } } }); }).toThrow(/bounded resources/);
+		expect(__BuildGovernedSkillWorkloadJob(assignment, { ..._Profile(), scratchSize: "128Mi" }).spec?.template.spec?.volumes).toEqual(expect.arrayContaining([expect.objectContaining({ name: "scratch", emptyDir: { sizeLimit: "128Mi" } })]));
 	});
 });

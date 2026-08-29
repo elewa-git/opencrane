@@ -6,17 +6,16 @@
 
 This package contains the Kubernetes work for skill Jobs. A workflow is a saved task that can wait,
 retry, and continue after a restart. The agent controller registers the Python validation workflow
-handler and uses it to create, observe, and clean up one restricted Job. The older polling loop remains
-only for tool-runner workloads.
+handler and uses it to create, observe, and clean up one restricted Job.
 
 ```
  saved Python validation task ──► controller ◄── HERE ──► restricted authoring Job
- tool-runner workload claim ────►    │                         │
-                                   saved UID and Pod identity ─┘
+                                      │                         │
+                                      └─ saved UID and Pod identity ─┘
 ```
 
-**In this flow:** the retained [execution authority](../execution/main/README.md), the new shared
-[workflow task contract](../workflows/contract/README.md), and the [Job builder](../k8s-launcher/README.md).
+**In this flow:** the shared [workflow task contract](../workflows/contract/README.md) and the
+[Job builder](../k8s-launcher/README.md).
 
 The Job stays suspended until a separate, database-fenced release claim authorises one conditional
 unsuspend. The controller then records the exact first Job-owned Pod before the worker bootstrap can
@@ -25,14 +24,6 @@ Python code running.
 
 ## Public surface
 
-- `__ReconcileNextSkillWorkload` — handles at most one fenced claim and suspended Job assignment.
-- `__ReconcileNextSkillWorkloadRelease` — conditionally releases one assigned Job and registers its
-  exact first worker Pod.
-- `__RunSkillWorkloadController` — polls until process shutdown while isolating one failed claim.
-- `__ValidateSkillWorkloadControllerProfiles` — validates the deployment-owned authoring and tool-runner profiles.
-- `__CreateHttpSkillWorkloadControllerAuthority` — bounds and decodes internal responses, then
-  delegates every wire shape and echo invariant to the model-adjacent Zod validators in
-  `@opencrane/contracts`.
 - `__CreateKubernetesSkillWorkloadControllerStore` — supplies skill-owned labels and trace names to
   the shared exact governed Job store.
 - `__CreateSkillAuthoringValidationHandler` — returns the registered workflow handler. It records
@@ -42,8 +33,7 @@ Python code running.
 ## Boundary
 
 This package accepts ports for OpenCrane and Kubernetes; it does not use Prisma, issue a capability,
-read artifact bytes, duplicate controller wire validators, or run a worker. The retained tool-runner
-poller releases only an exact UID-bound Job under a short saved release claim. The workflow handler
+read artifact bytes, duplicate controller wire validators, or run a worker. The workflow handler
 records a Job ID before release and a Pod ID before it can accept a worker result.
 
 ## Dependency direction
@@ -56,5 +46,4 @@ The deployable agent-controller app composes its HTTP and Kubernetes adapters.
 ## See also
 
 - Parent group: [skills](../README.md)
-- Durable authority: [execution](../execution/main/README.md)
 - Task facts: [workflow contract](../workflows/contract/README.md)

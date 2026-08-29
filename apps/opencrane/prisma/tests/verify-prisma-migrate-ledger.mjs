@@ -51,8 +51,12 @@ _RequireBefore('DROP TRIGGER IF EXISTS "run_outbox_events_monotonic"', 'DELETE F
 
 for (const statement of [
 	'DELETE FROM "run_outbox_events" WHERE "kind"::text IN (\'run.attempt_requested\', \'run.workload_release_requested\');',
-	'DELETE FROM "skill_workload_bootstraps"',
-	'DELETE FROM "skill_workloads" WHERE "kind"::text = \'authoring\';',
+	'DELETE FROM "skill_workload_bootstraps";',
+	'DELETE FROM "skill_workloads";',
+	'DROP TABLE "skill_workload_bootstraps";',
+	'DROP TABLE "skill_workloads";',
+	'DROP TYPE "SkillWorkloadKind";',
+	'DROP TYPE "SkillWorkloadState";',
 	'DELETE FROM "agent_revision_integration_assignments";',
 	'DELETE FROM "integration_custody_references";',
 	'DELETE FROM "integrations";',
@@ -91,9 +95,8 @@ _Require(migration.includes("WHEN btrim(\"era_protocol_version\") <> '' THEN 'un
 _Require(migration.includes("WHEN \"era_probe_failure_code\" = 'invalid_response' THEN 'not_mcp_server'"), "the cutover must preserve rejected non-MCP evidence under its 0.10 failure code");
 _RequireBefore('UPDATE "mcp_servers"\n   SET "era_probe_failure_code"', 'ADD CONSTRAINT "mcp_servers_era_probe_evidence_check"', "released era-probe evidence must be mapped before the stricter 0.10 authority constraint");
 
-_Require(!targetBaseline.includes("'authoring'::\"SkillWorkloadKind\""), "clean target must retire the authoring SkillWorkload enum member");
-_Require(!targetBaseline.includes('"kind" = \'authoring\''), "clean target must not retain authoring SkillWorkload authority");
-_Require(!targetBaseline.includes('skill_workloads_one_authoring_per_revision_key'), "clean target must remove the authoring workload index");
+_Require(!targetBaseline.includes('SkillWorkload'), "clean target must remove the retired skill workload types");
+_Require(!targetBaseline.includes('skill_workload'), "clean target must remove the retired skill workload tables and authority");
 _RequireBefore('DELETE FROM "run_outbox_events"', 'CREATE TYPE "RunOutboxEventKind_new"', "retired run events must be deleted before narrowing their enum");
 _RequireBefore('DELETE FROM "integrations";', 'DROP TABLE "integrations";', "retired integration data must be deleted before its table is removed");
 _RequireBefore('SET "state" = \'cancelled\'', 'SET "state" = \'terminal_failed\'', "active artifact output leases must be cancelled before old jobs become terminal");
@@ -151,22 +154,6 @@ for (const name of [
 ])
 {
 	_Require(migration.includes(_TargetFunction(name)), `forward migration must install exact target function ${name}`);
-}
-
-for (const name of [
-	"select_skill_workload_claim_candidate",
-	"enforce_skill_workload_bootstrap",
-])
-{
-	_Require(migration.includes(_TargetFunction(name)), `forward migration must install exact target function ${name}`);
-}
-for (const name of [
-	"enforce_skill_workload_authority",
-	"cancel_ineligible_skill_workloads",
-])
-{
-	const replacement = _TargetFunction(name).replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION");
-	_Require(_NormalizedSql(migration).includes(_NormalizedSql(replacement)), `forward migration must carry exact target function ${name}`);
 }
 
 console.log("0.9.3-to-0.10.0 Prisma migration contract: PASS");

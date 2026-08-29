@@ -16,20 +16,6 @@ enum SkillTrustClass {
   SandboxedPython      @map("sandboxed_python")
 }
 
-/// Isolated Job class selected by the durable skill-work authority.
-enum SkillWorkloadKind {
-  ToolRunner @map("tool_runner")
-}
-
-/// Durable lifecycle of one governed worker request; Kubernetes reports identity, never terminal state.
-enum SkillWorkloadState {
-  Pending   @map("pending")
-  Assigned  @map("assigned")
-  Succeeded @map("succeeded")
-  Failed    @map("failed")
-  Cancelled @map("cancelled")
-}
-
 /// Stores the lifecycle state that the validation trigger uses to decide which evidence must exist.
 ///
 /// These values are persisted in `skill_authoring_validations`; PostgreSQL rejects an unknown value
@@ -111,7 +97,6 @@ model SkillRevision {
   revokedAt              DateTime?                  @map("revoked_at")
   skill                  Skill                      @relation("SkillRevisions", fields: [skillId], references: [id], onDelete: Restrict)
   currentFor             Skill[]                    @relation("CurrentSkillRevision")
-  workloads              SkillWorkload[]
   authoringValidations   SkillAuthoringValidation[]
 
   @@unique([skillId, revision])
@@ -213,78 +198,10 @@ model SkillAuthoringValidationCompletionInbox {
   @@map("skill_authoring_validation_completion_inbox")
 }
 
-/// Stores the retained controller-polled Job record for published tool-runner skills only.
-model SkillWorkload {
-  id                   String                  @id @default(cuid())
-  siloId               String                  @map("silo_id")
-  kind                 SkillWorkloadKind
-  state                SkillWorkloadState      @default(Pending)
-  skillRevisionId      String                  @map("skill_revision_id")
-  toolInvocationId     String?                 @unique @map("tool_invocation_id")
-  claimedAt            DateTime?               @map("claimed_at")
-  claimExpiresAt       DateTime?               @map("claim_expires_at")
-  deliveryCount        Int                     @default(0) @map("delivery_count")
-  workloadUid          String?                 @unique @map("workload_uid")
-  workerPodUid         String?                 @unique @map("worker_pod_uid")
-  releaseClaimedAt     DateTime?               @map("release_claimed_at")
-  releaseDeliveryCount Int                     @default(0) @map("release_delivery_count")
-  releaseExpiresAt     DateTime?               @map("release_expires_at")
-  releasedAt           DateTime?               @map("released_at")
-  createdAt            DateTime                @default(now()) @map("created_at")
-  completedAt          DateTime?               @map("completed_at")
-  failureCode          String?                 @map("failure_code")
-  cancelledAt          DateTime?               @map("cancelled_at")
-  skillRevision        SkillRevision           @relation(fields: [skillRevisionId], references: [id], onDelete: Restrict)
-  toolInvocation       ToolInvocation?         @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
-  bootstrap            SkillWorkloadBootstrap?
-
-  @@index([siloId, state, createdAt])
-  @@index([state, claimExpiresAt])
-  @@index([state, releaseExpiresAt])
-  @@map("skill_workloads")
-}
-
-/// One hashed, one-use worker bootstrap bound to an assigned governed skill Job.
-model SkillWorkloadBootstrap {
-  id                 String        @id @default(cuid())
-  skillWorkloadId    String        @unique @map("skill_workload_id")
-  referenceHash      String        @unique @map("reference_hash")
-  audience           String
-  serviceAccountName String        @map("service_account_name")
-  namespace          String
-  workloadUid        String        @map("workload_uid")
-  expiresAt          DateTime      @default(dbgenerated("(clock_timestamp() + '00:15:00'::interval)")) @map("expires_at")
-  consumedAt         DateTime?     @map("consumed_at")
-  consumedByPodUid   String?       @map("consumed_by_pod_uid")
-  createdAt          DateTime      @default(now()) @map("created_at")
-  skillWorkload      SkillWorkload @relation(fields: [skillWorkloadId], references: [id], onDelete: Restrict)
-
-  @@index([expiresAt])
-  @@map("skill_workload_bootstraps")
-}
-
-/// One database-owned timestamp for typed delegate expiry decisions.
+/// One database-owned timestamp for task claim and completion decisions.
 view SkillAuthorityClock {
   singleton Int      @unique
   now       DateTime
 
   @@map("skill_authority_clock")
-}
-
-/// One locked eligible workload selected without blocking a peer dispatcher.
-view SkillWorkloadClaimCandidate {
-  id              String             @unique
-  siloId          String             @map("silo_id")
-  kind            SkillWorkloadKind
-  skillRevisionId String             @map("skill_revision_id")
-  revisionState   SkillRevisionState @map("revision_state")
-
-  @@map("skill_workload_claim_candidates")
-}
-
-/// One locked eligible assigned workload selected without blocking a peer releaser.
-view SkillWorkloadReleaseClaimCandidate {
-  id String @unique
-
-  @@map("skill_workload_release_claim_candidates")
 }

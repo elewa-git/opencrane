@@ -5,7 +5,7 @@ import type { SkillWorkloadJobAssignment, SkillWorkloadJobProfile } from "./skil
 
 /**
  * Builds the Job object for a skill-authoring workload. The Pod spec inside it comes from
- * `__BuildSkillWorkloadJobSpec`, which both workload classes share.
+ * `__BuildSkillWorkloadJobSpec`, which owns the common restricted Job envelope.
  *
  * This function exists so the authoring class has its own named entry point that the controller and
  * the workload registry can find. It sets metadata only. Everything about security — the security

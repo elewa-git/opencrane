@@ -77,7 +77,7 @@ def acknowledge(base_url: str, token_path: str, reference_path: str, open_reques
 
 
 def acknowledge_authoring_validation(base_url: str, token_path: str, reference_path: str, open_request: Callable[[Request, float], _Response] = _open) -> str:
-    """Consume one authoring-validation bootstrap without changing the protected tool-runner endpoint."""
+    """Consume one authoring-validation bootstrap from the workflow-owned internal endpoint."""
     endpoint = _acknowledgement_url(base_url).removesuffix("/skill-workloads:bootstrap") + "/skill-authoring-validations:bootstrap"
     deadline = time.monotonic() + _AUTHORING_BOOTSTRAP_RETRY_SECONDS
     while True:

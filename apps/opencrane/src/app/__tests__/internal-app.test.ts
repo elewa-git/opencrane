@@ -31,7 +31,6 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		artifactPreprocessorNamespace: undefined,
 		assignmentTtlMilliseconds: 60_000,
 		channelTargets: null,
-		claimLeaseMilliseconds: 30_000,
 		commandRecoveryMilliseconds: 15_000,
 		commandTtlMilliseconds: 60_000,
 		continuationKeyringPath: "/var/run/opencrane/runtime-continuation/keyring.json",

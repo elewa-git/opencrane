@@ -54,9 +54,6 @@ dependencies:
   - name: opencrane-skill-authoring
     version: ">=0.0.0-0"
     repository: "file://../../skill-authoring/helm"
-  - name: opencrane-tool-runner
-    version: ">=0.0.0-0"
-    repository: "file://../../tool-runner/helm"
   - name: opencrane-mcp-executor
     version: ">=0.0.0-0"
     repository: "file://../../mcp-executor/helm"

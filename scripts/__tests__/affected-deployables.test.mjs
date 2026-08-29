@@ -119,10 +119,10 @@ test("uses an explicit publication set and makes manual dispatch validation-only
 test("selects affected image smokes unless manual qualification expands to every owner", function _SelectsImageSmokes()
 {
 	const affected = ["skill-authoring", "skill-authoring"];
-	const all = ["tool-runner", "skill-authoring"];
+	const all = ["mcp-executor", "skill-authoring"];
 	assert.deepEqual(selectImageSmokeProjects(affected, all, ""), [{ project: "skill-authoring" }]);
 	assert.deepEqual(selectImageSmokeProjects(affected, all, "k3d"), [{ project: "skill-authoring" }]);
-	const allProjects = [{ project: "skill-authoring" }, { project: "tool-runner" }];
+	const allProjects = [{ project: "mcp-executor" }, { project: "skill-authoring" }];
 	assert.deepEqual(selectImageSmokeProjects(affected, all, "image-smoke"), allProjects);
 	assert.deepEqual(selectImageSmokeProjects(affected, all, "all"), allProjects);
 	assert.throws(

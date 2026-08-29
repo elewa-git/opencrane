@@ -60,7 +60,7 @@ The route registry is deliberately a catalogue rather than a second application 
 | Public `:8080` | Personal workspace | guided onboarding, assets, persona, approvals, runs, configuration, conversations |
 | Public `:8080` | Gateways | MCP catalogue and durable tool tasks, OCI image promotion, model routing, providers, bring-your-own-key, model registry |
 | Public `:8080` | Knowledge and reporting | retrieval sources, budgets, token usage |
-| Internal `:8081` | Controller | run-attempt, workflow-owned skill-authoring validation, retained tool-runner, and OCI MCP Job dispatch |
+| Internal `:8081` | Controller | run-attempt, workflow-owned skill-authoring validation, and OCI MCP Job dispatch |
 | Internal `:8081` | Runtime | one-use bootstrap, command stream, candidate ingest, skill-authoring exchange |
 | Internal `:8081` | Workers and replay | Pod-bound MCP command/result exchange, artifact preprocessing, and controller-selected conversation replay |
 
@@ -92,7 +92,7 @@ its resources to the lifecycle owner.
 - `src/app/internal-app.ts` builds the workload-facing API on its separate socket.
 - `src/app/routes.ts` contains named per-area route lists and app-owned transport composition. The
   sharing authority is mounted behind the shared per-IP limiter before identity or database work.
-- `src/app/runtime-composition.ts` binds controller, task-owned validation, retained tool-runner, runtime, and optional-worker
+- `src/app/runtime-composition.ts` binds controller, task-owned validation, runtime, and optional-worker
   authorities by caller plane without choosing transport paths.
 - `src/app/mcp-workflow-composition.ts` creates one Absurd worker for remote MCP protocol checks
   and OCI image admission. A workflow is saved work that may continue after the server restarts.

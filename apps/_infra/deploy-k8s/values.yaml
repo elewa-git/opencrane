@@ -187,18 +187,6 @@ opencrane-skill-authoring:
       cpu: "2"
       memory: 4Gi
 
-# -- Isolated capability-only tenant tool Job plane. It contains no standing worker.
-# The dependency name is intentional: Helm passes its contents to the child chart.
-opencrane-tool-runner:
-  toolRunner:
-    namespace: opencrane-tools
-    serviceAccountName: tool-runner-default
-    quota:
-      pods: "10"
-      jobs: "10"
-      cpu: "2"
-      memory: 2Gi
-
 # -- Canonical artifact-byte boundary. It owns only content-addressed bytes on an expandable,
 # release-local PVC; OpenCrane remains the catalog and authorization authority.
 artifactService:
@@ -378,16 +366,6 @@ agentController:
       resources:
         requests: { cpu: 500m, memory: 3Gi }
         limits: { cpu: "2", memory: 4Gi }
-    toolRunner:
-      image:
-        repository: ghcr.io/elewa-git/opencrane-tool-runner
-        digest: ""
-        pullPolicy: IfNotPresent
-      scratchSize: 64Mi
-      activeDeadlineSeconds: 300
-      resources:
-        requests: { cpu: 100m, memory: 128Mi }
-        limits: { cpu: 500m, memory: 256Mi }
   resources:
     requests:
       cpu: 25m

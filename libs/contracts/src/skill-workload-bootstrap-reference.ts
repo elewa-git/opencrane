@@ -7,23 +7,16 @@ export const SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE = "opencrane-sk
 /** ServiceAccount fixed on every Python skill-validation Job. */
 export const SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME = "skill-authoring-default";
 
-/** Audience fixed on every projected token used by the retained OCI tool-runner Job. */
-export const TOOL_RUNNER_PROJECTED_TOKEN_AUDIENCE = "opencrane-tool-runner";
-
-/** ServiceAccount fixed on every retained OCI tool-runner Job. */
-export const TOOL_RUNNER_SERVICE_ACCOUNT_NAME = "tool-runner-default";
-
 /**
- * Build the bootstrap reference shared by Python validation Jobs and retained OCI tool-runner Jobs.
+ * Build the bootstrap reference used by one Python skill-validation Job.
  *
  * The result is mounted into that workload's Job and nowhere else. It is not a credential: on its
  * own it grants nothing, and the server stores only its hash, so a leaked reference cannot be
  * reversed into the workload id. Store it with
  * {@link __HashSkillWorkloadBootstrapReference}, never in plain form.
  *
- * Called by: the authoring-validation handler and the retained tool-runner controller and assignment
- * repository before they bind a Job.
- * @param validationId - Validation or tool-runner workload id; must match `[a-zA-Z0-9_-]{1,128}`.
+ * Called by: the authoring-validation handler before it binds a Job.
+ * @param validationId - Validation id; must match `[a-zA-Z0-9_-]{1,128}`.
  * @returns The prefixed reference, safe to mount into the Job.
  * @throws Error when `validationId` contains any other character, so an unsafe id cannot reach a capability reference.
  */
@@ -40,8 +33,7 @@ export async function __CreateSkillWorkloadBootstrapReference(validationId: stri
  * Postgres holds only this hash. A worker presents the plain reference; the server hashes what it
  * receives and matches on the result, so a database read never yields a usable reference.
  *
- * Called by: the authoring-validation server authority, retained tool-runner assignment repository,
- * and both worker routers when they store or match a reference.
+ * Called by: the authoring-validation server authority and worker router when they store or match a reference.
  * @param reference - The plain bootstrap reference presented by a worker.
  * @returns Lowercase `sha256:<hex>` digest, the form stored in the database.
  */
@@ -56,8 +48,7 @@ export async function __HashSkillWorkloadBootstrapReference(reference: string): 
  * A shape check only — it proves nothing about whether the reference was issued or is still
  * valid. Call it to reject malformed input early, then match the hash to authorize.
  *
- * Called by: both authoring-validation and retained tool-runner worker routers before they ask their
- * database authority to match the presented reference hash.
+ * Called by: the authoring-validation worker router before it asks its database authority to match the presented reference hash.
  * @param value - Untrusted value from a request.
  * @returns True only for the prefix followed by 64 lowercase hex characters.
  */

@@ -42,7 +42,6 @@ enabled_rendered="$(helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_
   --set-string agentController.image.digest="$test_digest" \
   --set-string agentController.runtimeProfile.image.digest="$test_digest" \
   --set-string agentController.skillWorkloadProfiles.authoring.image.digest="$test_digest" \
-  --set-string agentController.skillWorkloadProfiles.toolRunner.image.digest="$test_digest" \
   --set-string opencrane-mcp-executor.mcpExecutor.image.digest="$test_digest")"
 legacy_cleanup="$(printf '%s\n' "$enabled_rendered" | awk '
   BEGIN { RS="---" }

@@ -69,7 +69,6 @@ grep -Fq -- '"${EXTRA_HELM_ARGS[@]-}"' "$DEPLOY_CORE"
 grep -Fq -- 'if [[ ${#EXTRA_SET[@]} -gt 0 ]]; then' "$DEPLOY_CORE"
 grep -Fq -- $'  --server-side=true\n  --force-conflicts' "$DEPLOY_CORE"
 grep -Fq -- 'SKILL_AUTHORING_NAMESPACE="${RELEASE}-skill-authoring"' "$DEPLOY_CORE"
-grep -Fq -- 'TOOL_RUNNER_NAMESPACE="${RELEASE}-tools"' "$DEPLOY_CORE"
 grep -Fq -- 'MCP_EXECUTOR_NAMESPACE="${RELEASE}-mcp-executors"' "$DEPLOY_CORE"
 grep -Fq -- 'ARTIFACT_NAMESPACE_RESOURCE="$(kubectl get namespace "$ARTIFACT_NAMESPACE" --ignore-not-found -o name)"' "$DEPLOY_CORE"
 grep -Fq -- 'if [[ -n "$ARTIFACT_NAMESPACE_RESOURCE" ]]; then' "$DEPLOY_CORE"
@@ -90,7 +89,6 @@ if grep -Fq -- 'kubectl label namespace "$ARTIFACT_NAMESPACE" "opencrane.ai/reti
   exit 1
 fi
 grep -Fq -- '--set-string "opencrane-skill-authoring.skillAuthoring.namespace=$SKILL_AUTHORING_NAMESPACE"' "$DEPLOY_CORE"
-grep -Fq -- '--set-string "opencrane-tool-runner.toolRunner.namespace=$TOOL_RUNNER_NAMESPACE"' "$DEPLOY_CORE"
 grep -Fq -- '--set-string "opencrane-mcp-executor.mcpExecutor.namespace=$MCP_EXECUTOR_NAMESPACE"' "$DEPLOY_CORE"
 grep -Fq -- 'EXPECTED_RELEASE="opencrane-${CLUSTER_TENANT}"' "$DEPLOY_SCRIPT"
 grep -Fq -- '--release "$RELEASE"' "$DEPLOY_SCRIPT"

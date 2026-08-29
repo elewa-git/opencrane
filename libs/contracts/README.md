@@ -20,7 +20,7 @@ Two halves:
   MCP-server, model-routing, memory, approvals, …); others are **re-exported straight from the model
   packages** (`@opencrane/models/{agents,artifacts,authorization,conversations}`) so a caller has
   one import for the whole surface and the wire types stay identical to the domain types. Private
-  controller DTOs use adjacent `*.types.ts`/`*.validator.ts` pairs for runtime attempts and the retained tool-runner protocol; those Zod
+  controller DTOs use adjacent `*.types.ts`/`*.validator.ts` pairs for runtime attempts; those Zod
   schemas keep runtime acceptance, strict request fields, and TypeScript
   models in one package.
 
@@ -120,12 +120,9 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   validators colocated with those DTOs. Response parsers strip untrusted extensions, request parsers
   reject extensions, and contextual result parsers bind echoed Job and Pod coordinates to the exact
   submitted command.
-- `AgentControllerSkillWorkload*` — the private controller handshake retained for tool-runner
-  workloads. Skill-authoring validation has moved to its dedicated Absurd workflow and no longer
-  shares this claim or dispatch protocol.
 - `__CreateSkillWorkloadBootstrapReference`, `__HashSkillWorkloadBootstrapReference`, and
   `__IsSkillWorkloadBootstrapReference` — the browser-safe, deterministic protocol shared by the
-  workflow-owned skill-authoring path and retained tool-runner authorities. It creates the opaque Job reference, stores
+  workflow-owned skill-authoring path. It creates the opaque Job reference, stores
   only its SHA-256 hash, and rejects any other wire shape; it is not a user credential or a general
   hashing API.
 - `__CreateArtifactPreprocessBootstrapReference`,

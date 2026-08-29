@@ -70,7 +70,7 @@ run Kubernetes Jobs, test or scan candidate code, publish or execute skills, or 
 
 The catalogue deliberately excludes artifact content addresses, bundle bytes, manifests,
 requirements, test and scan evidence, signatures, signer keys, reviewer identities, and all
-authoring or tool-runner workload coordinates. It is a discovery surface, not a skill authoring,
+authoring workload coordinates. It is a discovery surface, not a skill authoring,
 publication, download, or execution API.
 
 ## Dependency direction
@@ -82,11 +82,10 @@ directly.
 
 ## Data & persistence
 
-The `Skill`, `SkillRevision`, retained tool-runner `SkillWorkload`, and new
-`SkillAuthoringValidation` records belong to the broader skill capability in
+The `Skill`, `SkillRevision`, and `SkillAuthoringValidation` records belong to the broader skill capability in
 `apps/opencrane/prisma/schema/skills.prisma`. The validation record holds the task receipt, one-use
 bootstrap identity, and worker completion inbox. The forward 0.10.0 migration removes retired
-authoring workload rows after the replacement code is complete.
+legacy skill-workload rows and tables after the replacement code is complete.
 
 ## See also
 

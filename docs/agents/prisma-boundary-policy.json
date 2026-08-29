@@ -360,27 +360,6 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-workload-assignment-repository.ts",
-        "adapter": "PrismaSkillWorkloadAssignmentRepository",
-        "contract": "SkillWorkloadAssignmentRepository",
-        "contractImportPath": "./skill-workload-unit-of-work.types",
-        "constructs": []
-      },
-      {
-        "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-workload-release-repository.ts",
-        "adapter": "PrismaSkillWorkloadReleaseRepository",
-        "contract": "SkillWorkloadReleaseRepository",
-        "contractImportPath": "./skill-workload-unit-of-work.types",
-        "constructs": []
-      },
-      {
-        "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-workload-bootstrap-repository.ts",
-        "adapter": "PrismaSkillWorkloadBootstrapRepository",
-        "contract": "SkillWorkloadBootstrapRepository",
-        "contractImportPath": "./skill-workload-unit-of-work.types",
-        "constructs": []
-      },
-      {
         "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.ts",
         "adapter": "PrismaArtifactAuthorityRepository",
         "contract": "ArtifactAuthorityRepository",
@@ -1110,26 +1089,6 @@
           {
             "adapter": "PrismaPersonalConfigurationMaterializationRepository",
             "importPath": "./prisma-personal-configuration-materialization"
-          }
-        ]
-      },
-      {
-        "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-workload-unit-of-work.ts",
-        "adapter": "PrismaSkillWorkloadUnitOfWork",
-        "contract": "SkillWorkloadExecutionUnitOfWork",
-        "contractImportPath": "./skill-workload-unit-of-work.types",
-        "constructs": [
-          {
-            "adapter": "PrismaSkillWorkloadAssignmentRepository",
-            "importPath": "./prisma-skill-workload-assignment-repository"
-          },
-          {
-            "adapter": "PrismaSkillWorkloadReleaseRepository",
-            "importPath": "./prisma-skill-workload-release-repository"
-          },
-          {
-            "adapter": "PrismaSkillWorkloadBootstrapRepository",
-            "importPath": "./prisma-skill-workload-bootstrap-repository"
           }
         ]
       },

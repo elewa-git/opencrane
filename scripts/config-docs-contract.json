@@ -20,7 +20,6 @@
         { "path": "memoryGateway", "owner": "apps/memory-gateway/helm" },
         { "path": "opencrane-mcp-executor", "owner": "apps/mcp-executor/helm" },
         { "path": "opencrane-skill-authoring", "owner": "apps/skill-authoring/helm" },
-        { "path": "opencrane-tool-runner", "owner": "apps/tool-runner/helm" },
         { "path": "artifactService", "owner": "apps/artifact-service/helm" },
         { "path": "artifactPreprocessor", "owner": "apps/artifact-preprocessor/helm" },
         { "path": "artifactScanner", "owner": "apps/artifact-scanner/helm" },

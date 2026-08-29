@@ -2,7 +2,7 @@
 
 The deployment entrypoint does not invoke these functions until the image contains the complete,
 pinned offline validator suite. Keeping this intake inside the authoring app prevents the shared
-bootstrap client from becoming a tool-runner dependency.
+bootstrap client from becoming a general execution dependency.
 """
 
 import hashlib

@@ -24,7 +24,6 @@ testing on its own, it belongs in a library, not here.
 | [`agent-controller`](./agent-controller/README.md) | Warm-pool owner and sole Kubernetes mutator for governed Jobs. |
 | [`mcp-executor`](./mcp-executor/README.md) | One-shot OpenCrane companion for OCI-backed MCP server Jobs. |
 | [`skill-authoring`](./skill-authoring/README.md) | Chart-only isolated candidate-skill Job plane with no standing worker. |
-| [`tool-runner`](./tool-runner/README.md) | Chart-only isolated tenant-tool Job plane with no standing worker. |
 | [`postgres`](./postgres/README.md) | The durable PostgreSQL deployable. |
 
 Vendored third-party infrastructure (Cognee, LiteLLM, and the Kubernetes release
@@ -36,7 +35,7 @@ service map.
         │                                  channel-proxy (edge)
         ├── memory-gateway · artifact-service · artifact-preprocessor · artifact-scanner
         ├── agent-controller · agent-runtime · mcp-executor
-        ├── skill-authoring · tool-runner
+        ├── skill-authoring
         └── postgres (durable DB)
    apps/_infra/ ── vendored infra + release composer
 ```

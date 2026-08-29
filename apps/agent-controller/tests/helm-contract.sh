@@ -35,7 +35,6 @@ render_enabled() {
     --set-string agentController.runtimeProfile.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
     --set-string agentController.warmRuntime.managedNamespace=oc-opencrane-managed-runtime \
     --set-string agentController.skillWorkloadProfiles.authoring.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
-    --set-string agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
     --set-string opencrane-mcp-executor.mcpExecutor.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
     --set artifactPreprocessor.enabled=true \
     --set-string artifactPreprocessor.image.digest=sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \
@@ -100,10 +99,9 @@ if grep -Fq 'name: oc-opencrane-runtime-cleanup' "$MANIFEST"; then
   exit 1
 fi
 
-# Governed skill namespaces are derived from their owning charts. Their controller Roles can create,
+# The governed skill namespace is derived from its owning chart. Its controller Role can create,
 # exact-adopt, and conditionally release Jobs, plus list the exact Job-owned Pod for registration.
 grep -A16 -F 'namespace: opencrane-skill-authoring' "$MANIFEST" | grep -F 'name: agent-controller-skill-workloads' >/dev/null
-grep -A16 -F 'namespace: opencrane-tools' "$MANIFEST" | grep -F 'name: agent-controller-skill-workloads' >/dev/null
 grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -F 'verbs: ["get", "create", "patch"]' >/dev/null
 grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -F 'resources: ["pods"]' >/dev/null
 grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -F 'verbs: ["list"]' >/dev/null
@@ -242,20 +240,18 @@ if grep -Eq 'agent-runtime-a|opencrane-managed-agent-runtime|managed-agent-runti
   echo "governed Job admission retained the old AgentRun Job grammar" >&2
   exit 1
 fi
-# Skill namespaces also receive controller Job create/get, so their own fail-closed admission policy
-# must bind the same identity to the exact suspended, class-specific worker envelopes.
+# The skill namespace receives controller Job create/get, so its fail-closed admission policy
+# must bind the same identity to the exact suspended authoring envelope.
 grep -Eq 'name: .*skill-workloads' "$ADMISSION"
-grep -Fq 'values: ["skill-authoring", "tool-runner"]' "$ADMISSION"
+grep -Fq 'values: ["skill-authoring"]' "$ADMISSION"
 grep -Fq 'operations: ["CREATE", "UPDATE"]' "$ADMISSION"
 grep -Fq "object.spec.suspend == true" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].name == 'skill-authoring'" "$ADMISSION"
-grep -Fq "object.spec.template.spec.containers[0].name == 'tool-runner'" "$ADMISSION"
 grep -Fq "object.metadata.annotations['opencrane.ai/capability-reference'].matches('^skill-bootstrap-v1_[a-f0-9]{64}$')" "$ADMISSION"
 grep -Fq "object.spec.template.metadata.annotations['opencrane.ai/capability-reference'] == object.metadata.annotations['opencrane.ai/capability-reference']" "$ADMISSION"
 grep -Fq 'object.spec.template.metadata.labels.size() == 2' "$ADMISSION"
 grep -Fq "object.spec.template.metadata.labels['opencrane.ai/skill-workload'] == object.metadata.labels['opencrane.ai/skill-workload']" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/elewa-git/opencrane-skill-authoring@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"" "$ADMISSION"
-grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/elewa-git/opencrane-tool-runner@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].env.size() == 3" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_SKILL_BOOTSTRAP_URL'" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].env[1].name == 'OPENCRANE_SKILL_TOKEN_PATH'" "$ADMISSION"
@@ -277,8 +273,8 @@ grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/elewa-git/o
 grep -Fq "object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-mcp-executor'" "$ADMISSION"
 grep -Fq "object.spec.template.spec.initContainers[0].volumeMounts.size() == 1" "$ADMISSION"
 grep -Fq "object.spec.template.metadata.annotations == object.metadata.annotations" "$ADMISSION"
-grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://oc-opencrane-opencrane-server.server-ns.svc.cluster.local:8081/api/internal/agent-runtime' >/dev/null
-if grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://override.example:8081' >/dev/null; then
+grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_AUTHORING_PROFILE_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://oc-opencrane-opencrane-server.server-ns.svc.cluster.local:8081/api/internal/agent-runtime' >/dev/null
+if grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_AUTHORING_PROFILE_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://override.example:8081' >/dev/null; then
   echo "governed worker bootstrap must not inherit the mutable runtime endpoint override" >&2
   exit 1
 fi

@@ -1,12 +1,11 @@
 import { createHash } from "node:crypto";
 import type { V1Job } from "@kubernetes/client-node";
 
-import { SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE, SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME, TOOL_RUNNER_PROJECTED_TOKEN_AUDIENCE, TOOL_RUNNER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
+import { SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE, SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
 import { __BuildSkillAuthoringWorkloadJob } from "./skill-authoring-workload-job";
 import { SkillWorkloadKinds } from "./skill-workload-job.types";
 import type { SkillWorkloadJobAssignment, SkillWorkloadJobProfile } from "./skill-workload-job.types";
-import { __BuildToolRunnerWorkloadJob } from "./tool-runner-workload-job";
 
 /** Maximum size of the scratch filesystem. Nothing the platform relies on is stored there. */
 const _MAX_SCRATCH_BYTES = 1_073_741_824n;
@@ -96,18 +95,14 @@ function _ParseCpuMillis(value: string): number | null
  */
 function _AssertProfile(profile: SkillWorkloadJobProfile): void
 {
-	// 1. Work out the one ServiceAccount and token audience this class may use. Never take them from the caller.
-	const expectedServiceAccountName = profile.kind === SkillWorkloadKinds.Authoring ? SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME : TOOL_RUNNER_SERVICE_ACCOUNT_NAME;
-	const expectedAudience = profile.kind === SkillWorkloadKinds.Authoring ? SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE : TOOL_RUNNER_PROJECTED_TOKEN_AUDIENCE;
-
-	// 2. Turn the profile's sizes into numbers, so requests, limits, and this class's minimums can be compared.
+	// 1. Turn the profile's sizes into numbers, so requests, limits, and this class's minimums can be compared.
 	const scratchBytes = _ParseBinaryBytes(profile.scratchSize);
 	const requestedCpu = _ParseCpuMillis(String(profile.resources.requests?.cpu ?? ""));
 	const limitedCpu = _ParseCpuMillis(String(profile.resources.limits?.cpu ?? ""));
 	const requestedMemory = _ParseBinaryBytes(String(profile.resources.requests?.memory ?? ""));
 	const limitedMemory = _ParseBinaryBytes(String(profile.resources.limits?.memory ?? ""));
-	// 3. Reject the whole profile if any single check fails. Kubernetes must never get a partly-hardened manifest.
-	if (!/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== expectedServiceAccountName || profile.capabilityTokenAudience !== expectedAudience || !_IsBootstrapUrl(profile.bootstrapUrl) || profile.capabilityTokenPath !== _CAPABILITY_TOKEN_PATH || profile.bootstrapReferencePath !== _BOOTSTRAP_REFERENCE_PATH || profile.namespace.length > 63 || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.namespace) || profile.namespace === profile.serverNamespace || !scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || (profile.kind === SkillWorkloadKinds.Authoring && scratchBytes < _MIN_AUTHORING_SCRATCH_BYTES) || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_ACTIVE_DEADLINE_SECONDS || profile.ttlSecondsAfterFinished !== 0 || !requestedCpu || !limitedCpu || requestedCpu > limitedCpu || limitedCpu > _MAX_CPU_MILLICORES || !requestedMemory || !limitedMemory || requestedMemory > limitedMemory || limitedMemory > _MAX_MEMORY_BYTES || (profile.kind === SkillWorkloadKinds.Authoring && (requestedMemory < _MIN_AUTHORING_MEMORY_BYTES || limitedMemory < _MIN_AUTHORING_MEMORY_LIMIT_BYTES)))
+	// 2. Reject the whole profile if any single check fails. Kubernetes must never get a partly-hardened manifest.
+	if (profile.kind !== SkillWorkloadKinds.Authoring || !/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME || profile.capabilityTokenAudience !== SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE || !_IsBootstrapUrl(profile.bootstrapUrl) || profile.capabilityTokenPath !== _CAPABILITY_TOKEN_PATH || profile.bootstrapReferencePath !== _BOOTSTRAP_REFERENCE_PATH || profile.namespace.length > 63 || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.namespace) || profile.namespace === profile.serverNamespace || !scratchBytes || scratchBytes < _MIN_AUTHORING_SCRATCH_BYTES || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_ACTIVE_DEADLINE_SECONDS || profile.ttlSecondsAfterFinished !== 0 || !requestedCpu || !limitedCpu || requestedCpu > limitedCpu || limitedCpu > _MAX_CPU_MILLICORES || !requestedMemory || !limitedMemory || requestedMemory < _MIN_AUTHORING_MEMORY_BYTES || limitedMemory < _MIN_AUTHORING_MEMORY_LIMIT_BYTES || requestedMemory > limitedMemory || limitedMemory > _MAX_MEMORY_BYTES)
 	{
 		throw new Error("governed skill Job profile requires one fixed bootstrap endpoint, fixed audience and paths, class-bounded identity, immutable image, bounded resources, scratch, and lifetime");
 	}
@@ -140,7 +135,7 @@ function _AssertAssignment(assignment: SkillWorkloadJobAssignment, profile: Skil
 export function __SkillWorkloadJobName(assignment: SkillWorkloadJobAssignment, profile: SkillWorkloadJobProfile): string
 {
 	const digest = createHash("sha256").update(`${profile.kind}\u0000${assignment.siloId}\u0000${assignment.jobId}`).digest("hex").slice(0, 24);
-	return `${profile.kind === SkillWorkloadKinds.Authoring ? "skill-author" : "tool-run"}-${digest}`;
+	return `skill-author-${digest}`;
 }
 
 /**
@@ -157,20 +152,19 @@ export function __BuildGovernedSkillWorkloadJob(assignment: SkillWorkloadJobAssi
 	_AssertProfile(profile);
 	_AssertAssignment(assignment, profile);
 
-	// 2. Pick the builder for this workload class, so each class has its own named build function.
-	return profile.kind === SkillWorkloadKinds.Authoring ? __BuildSkillAuthoringWorkloadJob(assignment, profile) : __BuildToolRunnerWorkloadJob(assignment, profile);
+	// 2. Build the sole supported workflow-owned skill Job class.
+	return __BuildSkillAuthoringWorkloadJob(assignment, profile);
 }
 
 /**
- * Builds the hardened Job spec that both workload classes share. The class-specific builder makes
- * the surrounding Job object and calls this.
+ * Builds the hardened Job spec used by the workflow-owned authoring Job.
  *
  * The profile and assignment have already been checked. Do not add a second way to start work here,
  * and never put source code, tool arguments, artifacts, or credentials in the manifest: a worker
  * gets its short-lived capability only by presenting its projected token and the separate opaque
  * reference to the bootstrap route, which verifies both.
  */
-export function __BuildSkillWorkloadJobSpec(profile: SkillWorkloadJobProfile, component: "skill-authoring" | "tool-runner", name: string, annotations: Readonly<Record<string, string>>): NonNullable<V1Job["spec"]>
+export function __BuildSkillWorkloadJobSpec(profile: SkillWorkloadJobProfile, component: "skill-authoring", name: string, annotations: Readonly<Record<string, string>>): NonNullable<V1Job["spec"]>
 {
 	return {
 		// 1. Lifecycle: the Job stays suspended until the controller has recorded it in the database. backoffLimit 0 means it never retries, and ttlSecondsAfterFinished 0 deletes it — and its scratch — as soon as it finishes.

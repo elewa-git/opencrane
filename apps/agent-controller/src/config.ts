@@ -3,7 +3,7 @@ import { isAbsolute } from "node:path";
 import { __AssertWarmRuntimePoolProfile } from "@opencrane/backend/agents/runtime/k8s-launcher";
 import type { WarmRuntimePoolProfiles } from "@opencrane/backend/agents/runtime/controller";
 import { __ValidateMcpExecutorControllerProfile } from "@opencrane/backend/agents/runtime/mcp-executor/controller";
-import { __ValidateSkillWorkloadControllerProfiles } from "@opencrane/backend/agents/skills/controller";
+import { __ValidateSkillAuthoringValidationProfile } from "@opencrane/backend/agents/skills/controller";
 import { __BuildArtifactPreprocessorJob, type ArtifactPreprocessorJobProfile } from "@opencrane/backend/artifacts/preprocessor/k8s-launcher";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
@@ -119,7 +119,7 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Agent
 
 	// 2. Validate every immutable profile and its dedicated runtime namespace at startup.
 	const warmRuntimeProfiles = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_WARM_PROFILES_JSON"), "AGENT_CONTROLLER_WARM_PROFILES_JSON", _ValidateWarmRuntimeProfiles);
-	const skillWorkloadProfiles = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON"), "AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON", __ValidateSkillWorkloadControllerProfiles);
+	const skillAuthoringProfile = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_SKILL_AUTHORING_PROFILE_JSON"), "AGENT_CONTROLLER_SKILL_AUTHORING_PROFILE_JSON", __ValidateSkillAuthoringValidationProfile);
 	const mcpExecutorProfile = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON"), "AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON", __ValidateMcpExecutorControllerProfile);
 	const artifactPreprocessorProfile = _ArtifactProfile(environment);
 	const serverServiceName = _KubernetesName(environment, "OPENCRANE_SERVER_SERVICE_NAME");
@@ -142,7 +142,7 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Agent
 		pollIntervalMilliseconds: _Integer(environment, "AGENT_CONTROLLER_POLL_INTERVAL_MS", 1_000, 100, 60_000),
 		requestTimeoutMilliseconds: _Integer(environment, "AGENT_CONTROLLER_REQUEST_TIMEOUT_MS", 10_000, 1_000, 60_000),
 		warmRuntimeProfiles,
-		skillWorkloadProfiles,
+		skillAuthoringProfile,
 		mcpExecutorProfile,
 		artifactPreprocessorProfile,
 	};

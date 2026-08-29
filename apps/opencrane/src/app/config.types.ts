@@ -37,8 +37,6 @@ export interface InternalRuntimeConfig
 	readonly artifactPreprocessorMaximumOutputBytes: number;
 	/** Namespace reserved for artifact-preprocessor Pods when enabled. */
 	readonly artifactPreprocessorNamespace: string | undefined;
-	/** Maximum time a controller claim remains valid. */
-	readonly claimLeaseMilliseconds: number;
 	/** Complete resolver and replay configuration, or null when the channel boundary is disabled. */
 	readonly channelTargets: ChannelTargetRuntimeConfig | null;
 	/** Maximum age of a runtime command before it is refused. */

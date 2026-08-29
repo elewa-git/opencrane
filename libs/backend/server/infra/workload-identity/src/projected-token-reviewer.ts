@@ -3,7 +3,7 @@ import * as k8s from "@kubernetes/client-node";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME, SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE, SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, ReviewedSkillWorkloadIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity, SkillWorkloadTokenReviewer } from "./workload-identity.types";
+import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity } from "./workload-identity.types";
 
 /** Return whether one value is a bounded Kubernetes namespace DNS label. */
 function _IsNamespace(value: string): boolean
@@ -173,32 +173,6 @@ export function _CreateChannelProxyTokenReviewer(authApi: ProjectedTokenReviewAp
 export function _CreateMemoryGatewayServerTokenReviewer(authApi: ProjectedTokenReviewApi, config: MemoryGatewayServerIdentityConfig): FixedServiceAccountTokenReviewer
 {
 	return _CreateFixedServiceAccountTokenReviewer(authApi, config.audience, config.namespace, config.serviceAccountName);
-}
-
-/**
- * Build the reviewer for authoring workers. Unlike the fixed reviewers, it fixes NO
- * identity: the audience is supplied per call, and any valid ServiceAccount token with a
- * bound Pod UID is returned. Deciding whether that worker is the expected one is left to
- * the stored bootstrap record, so a non-null result here is authentication only, never
- * authorization.
- *
- * Called by: apps/opencrane/src/app/runtime-composition.ts.
- *
- * @param authApi - Kubernetes client used only to submit TokenReviews.
- * @returns A reviewer returning the worker's namespace, ServiceAccount name, and Pod UID,
- *          or null when the token is invalid for the requested audience or has no Pod UID.
- */
-export function _CreateSkillWorkloadTokenReviewer(authApi: ProjectedTokenReviewApi): SkillWorkloadTokenReviewer
-{
-	return {
-		async __Review(token: string, audience: string): Promise<ReviewedSkillWorkloadIdentity | null>
-		{
-			const status = await _ReviewProjectedToken(authApi, token, [audience]);
-			const subject = _ParseServiceAccountSubject(status?.user?.username ?? "");
-			const podUid = _ReadReviewedPodUid(status?.user?.extra);
-			return subject && podUid ? { ...subject, podUid } : null;
-		},
-	};
 }
 
 /** Return the runtime identity only when the subject parses, its namespace is the expected one, its ServiceAccount name passes the supplied name check, and the token carried a bound Pod UID. */

@@ -8,6 +8,7 @@
 {{- $ociRegistry := .Values.clustertenantManager.workflows.ociRegistry -}}
 {{- $ociRegistryAuthorization := $ociRegistry.authorization -}}
 {{- $continuationKeyring := .Values.clustertenantManager.workflows.continuationKeyring -}}
+{{- $skillAuthoring := (index .Values "opencrane-skill-authoring").skillAuthoring -}}
 {{- $mcpExecutor := (index .Values "opencrane-mcp-executor").mcpExecutor -}}
 {{- $controlPlaneHost := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
 {{- $channelSiloId := .Values.channelProxy.siloId | default $firstUser.clusterTenant | default .Release.Name -}}
@@ -129,8 +130,6 @@ spec:
             - name: CHANNEL_PROXY_URL
               value: {{ printf "http://%s-channel-proxy.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.channelProxy.service.port | quote }}
             {{- end }}
-            - name: AGENT_CONTROLLER_CLAIM_LEASE_SECONDS
-              value: {{ .Values.agentController.claimLeaseSeconds | quote }}
             - name: AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS
               value: {{ .Values.agentController.assignmentTtlSeconds | quote }}
             - name: AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS
@@ -208,6 +207,8 @@ spec:
             - name: AGENT_RUNTIME_MANAGED_NAMESPACE
               value: {{ $managedRuntimeNamespace | quote }}
             # OCI-backed MCP calls use a separate Job class and Pod-bound companion identity.
+            - name: SKILL_AUTHORING_NAMESPACE
+              value: {{ $skillAuthoring.namespace | quote }}
             - name: MCP_EXECUTOR_NAMESPACE
               value: {{ $mcpExecutor.namespace | quote }}
             - name: MCP_CONTROLLER_CLAIM_LEASE_SECONDS

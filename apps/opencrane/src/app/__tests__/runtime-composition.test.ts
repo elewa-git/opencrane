@@ -44,7 +44,6 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		artifactPreprocessorNamespace: undefined,
 		assignmentTtlMilliseconds: 60_000,
 		channelTargets: null,
-		claimLeaseMilliseconds: 30_000,
 		commandRecoveryMilliseconds: 15_000,
 		commandTtlMilliseconds: 60_000,
 		continuationKeyringPath: "/var/run/opencrane/runtime-continuation/keyring.json",
@@ -75,8 +74,6 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 
 		expect(composition.agentRunWorkflowController).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringValidationController).toEqual(expect.any(Function));
-		expect(composition.skillWorkloadDispatch).toEqual(expect.any(Function));
-		expect(composition.skillWorkloadBootstrap).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringValidationWorker).toEqual(expect.any(Function));
 		expect(composition).not.toHaveProperty("skillAuthoringInput");
 		expect(composition).not.toHaveProperty("skillAuthoringCompletion");

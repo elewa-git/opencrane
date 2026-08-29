@@ -10,11 +10,11 @@ An Absurd task asks OpenCrane for one saved run claim, finds a ready generic Pod
 Pod, and binds it to one run attempt. The Pod is discarded after use and its Deployment restores the
 spare.
 
-The same process also projects governed skill workloads into the authoring and tool-runner
-namespaces. Those Jobs are created suspended and their UID is committed to the durable skill record.
+The same process also projects governed skill-authoring validation into its isolated namespace.
+Those Jobs are created suspended and their UID is committed to the durable validation record.
 A separate database-fenced release permits one conditional unsuspend with a deadline bounded by that
 release, followed by registration of the exact first Job-owned Pod. The controller cannot write
-Secrets or choose a worker identity in either skill namespace. A separate fail-closed admission
+Secrets or choose the worker identity. A separate fail-closed admission
 policy permits only the pinned, class-specific worker shape, so the controller cannot use its Job
 permission to create arbitrary work.
 
@@ -104,9 +104,9 @@ outside the app root.
 - `AGENT_CONTROLLER_WARM_PROFILES_JSON` — the exact personal and managed Deployment, namespace,
   ServiceAccount, image, and profile labels. A claim that names anything else is refused before
   Kubernetes I/O.
-- `AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON` — exactly one immutable authoring and tool-runner
-  profile, each using a class-bound ServiceAccount, projected-token audience, and fixed bootstrap
-  file paths and same-silo acknowledgement URL.
+- `AGENT_CONTROLLER_SKILL_AUTHORING_PROFILE_JSON` — one immutable authoring profile using a
+  class-bound ServiceAccount, projected-token audience, fixed bootstrap file paths, and same-silo
+  acknowledgement URL.
 - `AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON` — one immutable profile for OCI-backed MCP Jobs. It
   fixes the companion image, isolated namespace, zero-RBAC ServiceAccount, internal endpoint,
   projected-token lifetime, scratch size, deadline, and both containers' resources.

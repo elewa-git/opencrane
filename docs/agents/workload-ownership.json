@@ -14,7 +14,6 @@
     "managed-agent-runtime",
     "mcp-executor",
     "skill-authoring",
-    "tool-runner",
     "cognee",
     "litellm",
     "postgres-database",
@@ -58,7 +57,6 @@
         "agentController.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "agentController.runtimeProfile.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "agentController.skillWorkloadProfiles.authoring.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "clustertenantManager.database.existingSecret=test-opencrane-db",
         "opencrane-mcp-executor.mcpExecutor.image.digest=sha256:9999999999999999999999999999999999999999999999999999999999999999"
       ],
@@ -94,14 +92,9 @@
       "workloadIds": ["skill-authoring"]
     },
     {
-      "path": "libs/backend/agents/skills/k8s-launcher/src/tool-runner-workload-job.ts",
-      "anchor": "kind: \"Job\"",
-      "workloadIds": ["tool-runner"]
-    },
-    {
       "path": "libs/backend/agents/runtime/workloads/k8s-controller/src/governed-job-controller.ts",
       "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
-      "workloadIds": ["artifact-preprocessor", "skill-authoring", "tool-runner", "mcp-executor"]
+      "workloadIds": ["artifact-preprocessor", "skill-authoring", "mcp-executor"]
     }
   ],
   "nonProducingRuntimeMatches": [],
@@ -224,13 +217,6 @@
       "image": "ghcr.io/elewa-git/opencrane-skill-authoring@sha256:<release-digest>",
       "owner": "apps/skill-authoring",
       "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-workload-job.ts", "anchor": "kind: \"Job\"" }
-    },
-    {
-      "id": "tool-runner",
-      "podClass": "Job/tool-runner-invocation",
-      "image": "ghcr.io/elewa-git/opencrane-tool-runner@sha256:<release-digest>",
-      "owner": "apps/tool-runner",
-      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/tool-runner-workload-job.ts", "anchor": "kind: \"Job\"" }
     },
     {
       "id": "cognee",

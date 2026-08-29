@@ -29,8 +29,6 @@ export * from "./personal-configuration.types";
 export * from "./public-health.types";
 export * from "./skill-workload-bootstrap-reference";
 export * from "./run-input-snapshot.types";
-export type * from "./agent-controller-skill-workload.types";
-export * from "./agent-controller-skill-workload.validator";
 export * from "./agent-controller-identity.types";
 // Keep sibling-only `_...` wire schemas and parsers out of the cross-package public surface.
 export { ___IsAgentControllerIdentifier, ___IsEmptyAgentControllerCommand } from "./agent-controller-wire.validator";

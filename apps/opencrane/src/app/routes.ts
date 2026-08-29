@@ -198,7 +198,6 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	const internalControllerRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentRunWorkflowController },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillAuthoringValidationController },
-		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillWorkloadDispatch },
 		{ method: "use", path: "/api/internal/agent-controller", handler: mcpRuntime.controller },
 		..._OptionalRoute("/api/internal/agent-controller", runtime.artifactPreprocessController),
 	];
@@ -207,7 +206,6 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	];
 	const internalRuntimeRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringValidationWorker },
-		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillWorkloadBootstrap },
 	];
 	const internalWarmRuntimeRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/warm-runtime", handler: runtime.warmRuntimeBinding },

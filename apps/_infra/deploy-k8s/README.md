@@ -27,7 +27,7 @@ wires the pieces and the per-silo networking together.
  │    composes app-owned template libraries into one release:   │
  │    server · opencrane-ui · channel-proxy · artifact-service  │
  │    · artifact-preprocessor · agent-controller                 │
- │    · skill-authoring · tool-runner                            │
+ │    · skill-authoring                                          │
  │    · cognee · litellm                                         │
  └────────────────────────────────────────────────────────────┘
         │  requires (external prerequisites, NOT installed here)
@@ -39,7 +39,6 @@ wires the pieces and the per-silo networking together.
 · [channel-proxy](../../channel-proxy/README.md) · [artifact-service](../../artifact-service/README.md)
 · [artifact-preprocessor](../../artifact-preprocessor/README.md) · [artifact-scanner](../../artifact-scanner/README.md)
 · [agent-controller](../../agent-controller/README.md) · [skill-authoring](../../skill-authoring/README.md)
-· [tool-runner](../../tool-runner/README.md)
 · [postgres](../../postgres/README.md) · [cognee](../cognee/README.md) · [litellm](../litellm/README.md)
 
 A silo installs **only** its own namespaced app releases. `--image-tag` selects one reviewed
@@ -125,9 +124,6 @@ package imports it.
 - `opencrane-skill-authoring.skillAuthoring` — the separate, default-deny candidate-skill namespace
   and aggregate Job quota; it contains no standing worker. The deploy engine derives
   `<release>-skill-authoring`, so different silos never share its Helm-owned namespace.
-- `opencrane-tool-runner.toolRunner` — the separate, default-deny tenant-tool namespace and aggregate
-  Job quota; it contains no standing worker. The deploy engine derives `<release>-tools` for the
-  same per-silo ownership boundary.
 - `--release` — optional only as a restatement of the silo identity. The wrapper derives and
   enforces `opencrane-<cluster-tenant>` so all Helm-owned namespaces stay inside one release.
 - `crds.install` — resolved authoritatively by the deploy engine: the first silo installs the
@@ -183,6 +179,6 @@ package imports it.
   · [artifact-preprocessor](../../artifact-preprocessor/README.md)
   · [artifact-scanner](../../artifact-scanner/README.md)
   · [agent-controller](../../agent-controller/README.md)
-  · [skill-authoring](../../skill-authoring/README.md) · [tool-runner](../../tool-runner/README.md)
+  · [skill-authoring](../../skill-authoring/README.md)
   · [postgres](../../postgres/README.md)
 - Composed infra: [cognee](../cognee/README.md) · [litellm](../litellm/README.md)

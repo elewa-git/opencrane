@@ -6,7 +6,7 @@ import { __CreateHttpWarmAgentRunWorkflowControllerAuthority, __CreateWarmAgentR
 import { AgentRunTaskDeclaration } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import { __CreateWarmRuntimeKubernetesStore } from "@opencrane/backend/agents/runtime/controller";
 import { __CreateHttpMcpExecutorControllerAuthority, __CreateKubernetesMcpExecutorControllerStore, __RunMcpExecutorController } from "@opencrane/backend/agents/runtime/mcp-executor/controller";
-import { __CreateHttpSkillAuthoringValidationControllerAuthority, __CreateHttpSkillWorkloadControllerAuthority, __CreateKubernetesSkillWorkloadControllerStore, __CreateSkillAuthoringValidationHandler, __RunSkillWorkloadController } from "@opencrane/backend/agents/skills/controller";
+import { __CreateHttpSkillAuthoringValidationControllerAuthority, __CreateKubernetesSkillWorkloadControllerStore, __CreateSkillAuthoringValidationHandler } from "@opencrane/backend/agents/skills/controller";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import { __CreateArtifactPreprocessHandler, __CreateHttpArtifactPreprocessControllerAuthority } from "@opencrane/backend/artifacts/preprocessor/controller";
 import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
@@ -35,7 +35,6 @@ async function _Main(): Promise<void>
 		kubeConfig.loadFromCluster();
 		const controllerAuthorityOptions = { openCraneInternalUrl: config.openCraneInternalUrl, serverServiceName: config.serverServiceName, serverNamespace: config.serverNamespace, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal };
 		const agentRunAuthority = __CreateHttpWarmAgentRunWorkflowControllerAuthority(controllerAuthorityOptions);
-		const skillWorkloadAuthority = __CreateHttpSkillWorkloadControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds });
 		const skillAuthoringAuthority = __CreateHttpSkillAuthoringValidationControllerAuthority(controllerAuthorityOptions);
 		const mcpExecutorAuthority = __CreateHttpMcpExecutorControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds });
 		const artifactAuthority = config.artifactPreprocessorProfile === undefined ? null : __CreateHttpArtifactPreprocessControllerAuthority(controllerAuthorityOptions);
@@ -55,7 +54,7 @@ async function _Main(): Promise<void>
 		workflowRuntime = runtime;
 		const execution = __CreateWorkflowGuard({ execution: runtime, log, queueAuthority, siloId: config.siloId });
 		execution.register(__CreateWarmAgentRunWorkflowHandler({ authority: agentRunAuthority, kubernetes: agentRunKubernetes, profiles: config.warmRuntimeProfiles, pollIntervalMilliseconds: config.pollIntervalMilliseconds }));
-		execution.register(__CreateSkillAuthoringValidationHandler({ authority: skillAuthoringAuthority, kubernetes: skillKubernetes, profile: config.skillWorkloadProfiles.authoring, podWaitMilliseconds: config.pollIntervalMilliseconds }));
+		execution.register(__CreateSkillAuthoringValidationHandler({ authority: skillAuthoringAuthority, kubernetes: skillKubernetes, profile: config.skillAuthoringProfile, podWaitMilliseconds: config.pollIntervalMilliseconds }));
 		if (config.artifactPreprocessorProfile !== undefined && artifactAuthority !== null && artifactKubernetes !== null)
 		{
 			execution.register(__CreateArtifactPreprocessHandler({ authority: artifactAuthority, kubernetes: artifactKubernetes, profile: config.artifactPreprocessorProfile, podWaitMilliseconds: config.pollIntervalMilliseconds }));
@@ -75,10 +74,7 @@ async function _Main(): Promise<void>
 		process.once("SIGINT", function _sigint() { _Shutdown("SIGINT"); });
 		await runtime.startWorkers({ workerName: "agent-controller" });
 		log.info({ profiles: Object.entries(config.warmRuntimeProfiles).map(function _Profile([name, profile]) { return { name, namespace: profile.namespace }; }), artifactPreprocessingEnabled: config.artifactPreprocessorProfile !== undefined }, "agent controller started");
-		await Promise.all([
-			__RunSkillWorkloadController({ authority: skillWorkloadAuthority, kubernetes: skillKubernetes, profile: config.skillWorkloadProfiles["tool-runner"], pollIntervalMilliseconds: config.pollIntervalMilliseconds, log }, shutdown.signal),
-			__RunMcpExecutorController({ authority: mcpExecutorAuthority, kubernetes: mcpKubernetes, profile: config.mcpExecutorProfile, pollIntervalMilliseconds: config.pollIntervalMilliseconds, log }, shutdown.signal),
-		]);
+		await __RunMcpExecutorController({ authority: mcpExecutorAuthority, kubernetes: mcpKubernetes, profile: config.mcpExecutorProfile, pollIntervalMilliseconds: config.pollIntervalMilliseconds, log }, shutdown.signal);
 	}
 	finally
 	{

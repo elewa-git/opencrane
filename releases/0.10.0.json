@@ -115,12 +115,6 @@
       "adaptedVersion": "0.10.0",
       "chartVersion": "0.10.0",
       "chartAppVersion": "0.10.0"
-    },
-    "tool-runner": {
-      "root": "apps/tool-runner",
-      "adaptedVersion": "0.8.0",
-      "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
     }
   }
 }

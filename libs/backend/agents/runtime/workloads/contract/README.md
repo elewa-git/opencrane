@@ -51,4 +51,4 @@ Server, controller, MCP, and skill packages may depend on it, but it never depen
 ## See also
 
 - Parent: [runtime workloads](../README.md)
-- Related: [runtime](../../README.md) · [skill execution](../../../skills/execution/main/README.md)
+- Related: [runtime](../../README.md) · [skill workflows](../../../skills/workflows/README.md)

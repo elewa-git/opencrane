@@ -60,7 +60,7 @@ class BootstrapTests(unittest.TestCase):
             _WORKER._acknowledgement_url("https://outside.example/api/internal/agent-runtime")
 
     def test_acknowledges_the_task_owned_authoring_endpoint_without_changing_the_default(self) -> None:
-        """Keep the new authoring protocol explicit while the protected tool-runner path remains available."""
+        """Keep the authoring protocol explicit at the workflow-owned endpoint."""
         with tempfile.TemporaryDirectory() as directory:
             token = pathlib.Path(directory) / "token"
             reference = pathlib.Path(directory) / "reference"

@@ -129,16 +129,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ (index .Values "opencrane-tool-runner").toolRunner.namespace | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/component: tool-runner
-      ports:
-        - protocol: TCP
-          port: {{ .Values.clustertenantManager.service.internalPort }}
     # OCI MCP companions can reach only the internal command API. TokenReview then binds the
     # projected credential to mcp-executor-default and the registered Pod UID.
     - from:
@@ -283,8 +273,7 @@ spec:
 {{- $serverSelector := include "opencrane.selectorLabels" . }}
 {{- $internalPort := .Values.clustertenantManager.service.internalPort }}
 {{- range $worker := (list
-  (dict "name" "skill-authoring-bootstrap" "namespace" (index $.Values "opencrane-skill-authoring").skillAuthoring.namespace "component" "skill-authoring")
-  (dict "name" "tool-runner-bootstrap" "namespace" (index $.Values "opencrane-tool-runner").toolRunner.namespace "component" "tool-runner")) }}
+  (dict "name" "skill-authoring-bootstrap" "namespace" (index $.Values "opencrane-skill-authoring").skillAuthoring.namespace "component" "skill-authoring")) }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

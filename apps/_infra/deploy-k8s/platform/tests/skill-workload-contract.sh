@@ -12,25 +12,15 @@ MEMORY_GATEWAY_API_ARGS=(--set-string 'memoryGateway.kubernetesApiServerCidrs[0]
 rendered="$(helm template opencrane-silo "$CHART_DIR" \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set-string opencrane-skill-authoring.skillAuthoring.namespace=authoring-contract \
-  --set-string opencrane-skill-authoring.skillAuthoring.quota.pods=7 \
-  --set-string opencrane-tool-runner.toolRunner.namespace=tool-contract \
-  --set-string opencrane-tool-runner.toolRunner.quota.jobs=6)"
+  --set-string opencrane-skill-authoring.skillAuthoring.quota.pods=7)"
 
 grep -Fq 'name: authoring-contract' <<<"$rendered"
 grep -Fq 'namespace: authoring-contract' <<<"$rendered"
+grep -A1 -F 'name: SKILL_AUTHORING_NAMESPACE' <<<"$rendered" | grep -Fq 'value: "authoring-contract"'
 grep -Fq 'pods: "7"' <<<"$rendered"
-grep -Fq 'name: tool-contract' <<<"$rendered"
-grep -Fq 'namespace: tool-contract' <<<"$rendered"
-grep -Fq 'count/jobs.batch: "6"' <<<"$rendered"
-
-if helm template opencrane-silo "$CHART_DIR" --set-string opencrane-skill-authoring.skillAuthoring.namespace=shared-skills --set-string opencrane-tool-runner.toolRunner.namespace=shared-skills >/dev/null 2>&1; then
-  echo "expected identical governed-skill namespaces to be rejected" >&2
-  exit 1
-fi
-
 if helm template opencrane-silo "$CHART_DIR" --set-string opencrane-skill-authoring.skillAuthoring.namespace="$(printf 'a%.0s' {1..64})" >/dev/null 2>&1; then
   echo "expected overlength skill-authoring namespace to be rejected" >&2
   exit 1
 fi
 
-echo "skill workload umbrella contract: PASS"
+echo "skill-authoring umbrella contract: PASS"

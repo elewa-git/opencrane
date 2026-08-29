@@ -158,7 +158,6 @@ EXPECTED_AUX_NAMESPACES=(
   "${RELEASE}-managed-runtime"
   "${RELEASE}-artifact-preprocessing"
   "${RELEASE}-skill-authoring"
-  "${RELEASE}-tools"
   "${RELEASE}-mcp-executors"
 )
 RETIREMENT_OWNER_LABEL="opencrane.ai/retirement-owner"
@@ -245,8 +244,6 @@ for auxiliary_namespace in "${EXPECTED_AUX_NAMESPACES[@]}"; do
         assert_auxiliary_namespace_owner "$auxiliary_namespace" deployment "${RELEASE}-artifact-preprocessor" 'app\.kubernetes\.io/instance' "$RELEASE" ;;
       "${RELEASE}-skill-authoring")
         assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount skill-authoring-default 'app\.kubernetes\.io/component' skill-authoring ;;
-      "${RELEASE}-tools")
-        assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount tool-runner-default 'app\.kubernetes\.io/component' tool-runner ;;
       "${RELEASE}-mcp-executors")
         assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount mcp-executor-default 'app\.kubernetes\.io/component' mcp-executor ;;
     esac

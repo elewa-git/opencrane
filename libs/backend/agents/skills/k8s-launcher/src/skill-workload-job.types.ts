@@ -1,20 +1,18 @@
 import type { V1ResourceRequirements } from "@kubernetes/client-node";
 
 /**
- * The two workload classes, as stored in the database.
+ * The workflow-owned skill Job class.
  *
  * The class decides which ServiceAccount, token audience, image, and component label a Job gets.
  * A worker cannot change it: neither the job id nor the bootstrap reference can select a class.
  */
 export enum SkillWorkloadKinds
 {
-	/** Worker that authors and validates a skill offline. It needs more memory and scratch than the tool runner. */
+	/** Worker that authors and validates a skill offline. */
 	Authoring = "authoring",
-	/** Tenant-authored tool execution worker with its distinct ServiceAccount and token audience. */
-	ToolRunner = "tool-runner",
 }
 
-/** The two serialized workload classes accepted by a deployment-owned Job profile. */
+/** The serialized workload class accepted by a deployment-owned authoring profile. */
 export type SkillWorkloadKind = `${SkillWorkloadKinds}`;
 
 /**
@@ -34,7 +32,7 @@ export type SkillWorkloadImagePullPolicy = "Always" | "IfNotPresent" | "Never";
  */
 export interface SkillWorkloadJobProfile
 {
-	/** Workload class. It decides the ServiceAccount name, the token audience, and the component label. */
+	/** Fixed authoring workload class. */
 	readonly kind: SkillWorkloadKind;
 	/** Immutable digest-pinned Python worker image; mutable tags are rejected before projection. */
 	readonly image: string;

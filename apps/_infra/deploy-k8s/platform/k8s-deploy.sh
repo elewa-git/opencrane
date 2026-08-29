@@ -686,11 +686,10 @@ ARTIFACT_CATALOG_KEY_SECRET="${RELEASE}-artifact-catalog-keys"
 ARTIFACT_SERVICE_KEY_SECRET="${RELEASE}-artifact-service-keys"
 # Teardown reads this label before it deletes an auxiliary namespace after its Helm objects are gone.
 RETIREMENT_OWNER_LABEL="opencrane.ai/retirement-owner"
-# Candidate-skill and tenant-tool Jobs need the same release boundary as the
-# application and artifact planes. Static chart defaults would make every silo
+# Candidate-skill Jobs need the same release boundary as the application and
+# artifact planes. Static chart defaults would make every silo
 # compete for one cluster-wide namespace and let the first Helm release claim it.
 SKILL_AUTHORING_NAMESPACE="${RELEASE}-skill-authoring"
-TOOL_RUNNER_NAMESPACE="${RELEASE}-tools"
 MCP_EXECUTOR_NAMESPACE="${RELEASE}-mcp-executors"
 _adopt_legacy_artifact_namespace() {
   local resource_name="${RELEASE}-artifact-service"
@@ -970,7 +969,6 @@ CRDS_INSTALL="$(resolve_cluster_tenant_crd_install \
 helm_args+=(
   --set "crds.install=$CRDS_INSTALL"
   --set-string "opencrane-skill-authoring.skillAuthoring.namespace=$SKILL_AUTHORING_NAMESPACE"
-  --set-string "opencrane-tool-runner.toolRunner.namespace=$TOOL_RUNNER_NAMESPACE"
   --set-string "opencrane-mcp-executor.mcpExecutor.namespace=$MCP_EXECUTOR_NAMESPACE")
 # Value-preservation mode. Helm's DEFAULT on upgrade drops any value a prior release set
 # via --set/-f that this invocation does not restate, silently reverting it to the chart

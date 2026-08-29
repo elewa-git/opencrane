@@ -81,7 +81,7 @@ async function _Job(record: SkillAuthoringValidationControllerRecord, profile: S
  *
  * The bound carries forward the former controller's supported poll range, so a missing Pod cannot
  * busy-loop Kubernetes or wait longer than that range permits.
- * @see __RunSkillWorkloadController — validates the matching 100–60,000 ms poll range.
+ * @see __CreateSkillAuthoringValidationHandler — uses this wait while checking saved task state.
  */
 async function _WaitForPod(context: SkillAuthoringValidationTaskContext, milliseconds: number, claimExpiry: number, stepName: string): Promise<void>
 {
