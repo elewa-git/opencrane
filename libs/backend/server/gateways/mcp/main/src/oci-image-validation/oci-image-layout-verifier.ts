@@ -4,28 +4,10 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { OciRegistryImportPlan } from "@opencrane/backend/server/infra/oci-registry";
 import { ___ParseZipPackage } from "@opencrane/backend/server/utils";
 
-import { OCI_IMAGE_LAYOUT_VERSION, OCI_IMAGE_MAXIMUM_BUNDLE_BYTES, OCI_IMAGE_MAXIMUM_DOCUMENT_BYTES, OciImageVerificationFailureCodes } from "./oci-image-validation.types";
+import { OCI_IMAGE_MAXIMUM_BUNDLE_BYTES, OCI_IMAGE_MAXIMUM_DOCUMENT_BYTES, OciImageVerificationFailureCodes } from "./oci-image-validation.types";
 import type { OciImageLayoutArtifactReader, OciImageLayoutArtifactTarget, OciImageLayoutVerifier, OciImageVerificationResult } from "./oci-image-validation.types";
+import { _OciImageConfigDescriptorSchema, _OciImageIndexDocumentSchema, _OciImageLayerDescriptorSchema, _OciImageLayoutDocumentSchema, _OciImageManifestDescriptorSchema, _OciImageManifestDocumentSchema } from "./oci-image-validation.validator";
 
-/** OCI image manifest media type. */
-const _OCI_IMAGE_MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json";
-/** Only an OCI image manifest may be selected from the layout index. */
-const _OCI_IMAGE_MANIFEST_MEDIA_TYPES = new Set([_OCI_IMAGE_MANIFEST_MEDIA_TYPE]);
-/** OCI image configuration media type. */
-const _OCI_IMAGE_CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json";
-/** Only an OCI image configuration may fill the manifest configuration slot. */
-const _OCI_IMAGE_CONFIG_MEDIA_TYPES = new Set([_OCI_IMAGE_CONFIG_MEDIA_TYPE]);
-/** OCI image-layer media types whose descriptor closure this admission understands. */
-const _OCI_IMAGE_LAYER_MEDIA_TYPES = new Set([
-	"application/vnd.oci.image.layer.v1.tar",
-	"application/vnd.oci.image.layer.v1.tar+gzip",
-	"application/vnd.oci.image.layer.v1.tar+zstd",
-	"application/vnd.oci.image.layer.nondistributable.v1.tar",
-	"application/vnd.oci.image.layer.nondistributable.v1.tar+gzip",
-	"application/vnd.oci.image.layer.nondistributable.v1.tar+zstd",
-]);
-/** Canonical digest grammar accepted by the OCI layout. */
-const _SHA256_DIGEST = /^sha256:[a-f0-9]{64}$/u;
 
 /** Read a fully bounded artifact stream before archive parsing starts. */
 async function _CollectLayoutZip(stream: ReadableStream<Uint8Array>, expectedLength: number): Promise<Buffer | null>
@@ -76,30 +58,17 @@ export async function _ReadOciImageLayoutZip(reader: OciImageLayoutArtifactReade
 	return `sha256:${createHash("sha256").update(layoutZip).digest("hex")}` === target.contentAddress ? layoutZip : null;
 }
 
-/** Return an object only when JSON carries a non-null object value. */
-function _Object(value: Buffer): Record<string, unknown> | null
+/** Parse one bounded JSON document without copying a parser failure into the admission record. */
+function _Json(value: Buffer): unknown | null
 {
 	try
 	{
-		const parsed: unknown = JSON.parse(value.toString("utf8"));
-		return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+		return JSON.parse(value.toString("utf8")) as unknown;
 	}
 	catch
 	{
 		return null;
 	}
-}
-
-/** Return one descriptor only when it uses an allowed media type and bounded SHA-256 address. */
-function _Descriptor(value: unknown, mediaTypes: ReadonlySet<string>, maximumBytes: number): { readonly mediaType: string; readonly digest: string; readonly size: number } | null
-{
-	if (typeof value !== "object" || value === null || Array.isArray(value))
-		return null;
-	const descriptor = value as Record<string, unknown>;
-	const { mediaType, digest, size } = descriptor;
-	if (typeof mediaType !== "string" || !mediaTypes.has(mediaType) || typeof digest !== "string" || !_SHA256_DIGEST.test(digest) || typeof size !== "number" || !Number.isSafeInteger(size) || size < 0 || size > maximumBytes)
-		return null;
-	return { mediaType, digest, size };
 }
 
 /** Resolve one bounded content-addressed blob and verify its address before parsing it. */
@@ -130,56 +99,54 @@ export function _InspectOciImageLayoutForImport(layoutZip: Buffer): { readonly v
 	const indexEntry = archive?.entries.find(function _Index(candidate) { return candidate.path === "index.json"; });
 	if (layoutEntry === undefined || indexEntry === undefined)
 		return { validation: { accepted: false, failureCode: OciImageVerificationFailureCodes.NotOciImageLayout }, plan: null };
-	const layout = _Object(archive.read(layoutEntry, OCI_IMAGE_MAXIMUM_DOCUMENT_BYTES) ?? Buffer.alloc(0));
-	if (layout?.imageLayoutVersion !== OCI_IMAGE_LAYOUT_VERSION)
+	const layout = _OciImageLayoutDocumentSchema.safeParse(_Json(archive.read(layoutEntry, OCI_IMAGE_MAXIMUM_DOCUMENT_BYTES) ?? Buffer.alloc(0)));
+	if (!layout.success)
 		return { validation: { accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidLayout }, plan: null };
 	const indexBytes = archive.read(indexEntry, OCI_IMAGE_MAXIMUM_DOCUMENT_BYTES);
 	if (indexBytes === null)
 		return { validation: { accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidIndex }, plan: null };
-	const index = _Object(indexBytes);
-	if (index === null || index.schemaVersion !== 2 || !Array.isArray(index.manifests) || index.manifests.length !== 1)
+	const index = _OciImageIndexDocumentSchema.safeParse(_Json(indexBytes));
+	if (!index.success)
 		return { validation: { accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidIndex }, plan: null };
-	const manifestDescriptor = _Descriptor(index.manifests[0], _OCI_IMAGE_MANIFEST_MEDIA_TYPES, OCI_IMAGE_MAXIMUM_DOCUMENT_BYTES);
-	if (manifestDescriptor === null)
+	const manifestDescriptor = _OciImageManifestDescriptorSchema.safeParse(index.data.manifests[0]);
+	if (!manifestDescriptor.success)
 		return { validation: { accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidIndex }, plan: null };
-	const manifestBytes = _ReadBlob(archive, manifestDescriptor, OCI_IMAGE_MAXIMUM_DOCUMENT_BYTES);
+	const manifestBytes = _ReadBlob(archive, manifestDescriptor.data, OCI_IMAGE_MAXIMUM_DOCUMENT_BYTES);
 	if (manifestBytes === null)
 		return { validation: { accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest }, plan: null };
-	const manifest = _Object(manifestBytes);
-	if (manifest === null || manifest.schemaVersion !== 2 || (manifest.mediaType !== undefined && manifest.mediaType !== _OCI_IMAGE_MANIFEST_MEDIA_TYPE) || !Array.isArray(manifest.layers) || manifest.layers.length > archive.entries.length)
+	const manifest = _OciImageManifestDocumentSchema.safeParse(_Json(manifestBytes));
+	if (!manifest.success || manifest.data.layers.length > archive.entries.length)
 		return { validation: { accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest }, plan: null };
-	const config = _Descriptor(manifest.config, _OCI_IMAGE_CONFIG_MEDIA_TYPES, OCI_IMAGE_MAXIMUM_DOCUMENT_BYTES);
-	const configBytes = config === null ? null : _ReadBlob(archive, config, OCI_IMAGE_MAXIMUM_DOCUMENT_BYTES);
-	if (config === null || configBytes === null)
+	const config = _OciImageConfigDescriptorSchema.safeParse(manifest.data.config);
+	if (!config.success)
 		return { validation: { accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest }, plan: null };
-	const descriptorDigests = new Set([manifestDescriptor.digest]);
-	if (descriptorDigests.has(config.digest))
+	const configBytes = _ReadBlob(archive, config.data, OCI_IMAGE_MAXIMUM_DOCUMENT_BYTES);
+	if (configBytes === null)
 		return { validation: { accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest }, plan: null };
-	descriptorDigests.add(config.digest);
-	const blobs: { readonly digest: string; readonly bytes: Uint8Array }[] = [{ digest: config.digest, bytes: configBytes }];
-	for (const candidate of manifest.layers)
+	const descriptorDigests = new Set([manifestDescriptor.data.digest]);
+	if (descriptorDigests.has(config.data.digest))
+		return { validation: { accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest }, plan: null };
+	descriptorDigests.add(config.data.digest);
+	const blobs: { readonly digest: string; readonly bytes: Uint8Array }[] = [{ digest: config.data.digest, bytes: configBytes }];
+	for (const candidate of manifest.data.layers)
 	{
-		const layer = _Descriptor(candidate, _OCI_IMAGE_LAYER_MEDIA_TYPES, OCI_IMAGE_MAXIMUM_BUNDLE_BYTES);
-		const layerBytes = layer === null ? null : _ReadBlob(archive, layer, OCI_IMAGE_MAXIMUM_BUNDLE_BYTES);
-		if (layer === null || layerBytes === null || descriptorDigests.has(layer.digest))
+		const layer = _OciImageLayerDescriptorSchema.safeParse(candidate);
+		if (!layer.success)
 			return { validation: { accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest }, plan: null };
-		descriptorDigests.add(layer.digest);
-		blobs.push({ digest: layer.digest, bytes: layerBytes });
+		const layerBytes = _ReadBlob(archive, layer.data, OCI_IMAGE_MAXIMUM_BUNDLE_BYTES);
+		if (layerBytes === null || descriptorDigests.has(layer.data.digest))
+			return { validation: { accepted: false, failureCode: OciImageVerificationFailureCodes.InvalidImageManifest }, plan: null };
+		descriptorDigests.add(layer.data.digest);
+		blobs.push({ digest: layer.data.digest, bytes: layerBytes });
 	}
 	const validation: OciImageVerificationResult = {
 		accepted: true, layout: {
 			indexDigest: `sha256:${createHash("sha256").update(indexBytes).digest("hex")}`,
-			imageManifestDigest: manifestDescriptor.digest,
-			configDigest: config.digest,
+			imageManifestDigest: manifestDescriptor.data.digest,
+			configDigest: config.data.digest,
 		},
 	};
-	return { validation, plan: { blobs, manifest: { digest: manifestDescriptor.digest, mediaType: manifestDescriptor.mediaType, bytes: manifestBytes } } };
-}
-
-/** Returns the layout decision without exposing the byte plan used by the registry importer. */
-export function _InspectOciImageLayout(layoutZip: Buffer): OciImageVerificationResult
-{
-	return _InspectOciImageLayoutForImport(layoutZip).validation;
+	return { validation, plan: { blobs, manifest: { digest: manifestDescriptor.data.digest, mediaType: manifestDescriptor.data.mediaType, bytes: manifestBytes } } };
 }
 
 /**
@@ -196,7 +163,7 @@ export function __CreateOciImageLayoutVerifier(reader: OciImageLayoutArtifactRea
 				const layoutZip = await _ReadOciImageLayoutZip(reader, target);
 				if (layoutZip === null)
 					return { accepted: false, failureCode: target.byteLength > OCI_IMAGE_MAXIMUM_BUNDLE_BYTES ? OciImageVerificationFailureCodes.BundleTooLarge : OciImageVerificationFailureCodes.ArtifactMismatch };
-				return _InspectOciImageLayout(layoutZip);
+				return _InspectOciImageLayoutForImport(layoutZip).validation;
 			});
 		},
 	};

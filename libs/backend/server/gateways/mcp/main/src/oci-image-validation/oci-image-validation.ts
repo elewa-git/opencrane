@@ -49,17 +49,28 @@ function _Target(record: OciImageValidationRecord): OciImageLayoutArtifactTarget
 	return { siloId: record.siloId, artifactId: record.artifactId, artifactRevisionId: record.artifactRevisionId, contentAddress: record.contentAddress, byteLength: record.byteLength, mediaType: record.mediaType };
 }
 
-/** Store one final answer and return the database winner after a replay race. */
+/**
+ * Commit one terminal admission answer and return the durable winner after a replay race.
+ *
+ * The workflow may retry after the registry accepted an import but before this write returned. The
+ * conditional repository write therefore owns the only state transition; a losing attempt rereads
+ * that committed answer instead of choosing a new outcome or adding a second audit event.
+ *
+ * Called by: `_Run` inside the `record-decision` checkpoint after validation and any registry import.
+ */
 async function _Record(options: OciImageValidationWorkflowOptions, input: OciImageValidationTaskInput, result: OciImageAdmissionResult): Promise<OciImageAdmissionResult>
 {
 	return await _RetryablePersistence(async function _RecordWithRetry(): Promise<OciImageAdmissionResult>
 	{
 		return await options.unitOfWork.execute(async function _StoreValidation(transaction): Promise<OciImageAdmissionResult>
 		{
+			// 1. Prove the requested final action against the pending state before the repository changes it.
 			const event = result.accepted ? OciImageValidationEvents.ImportAccepted : OciImageValidationEvents.AdmissionRejected;
 			const expectedAction = result.accepted ? OciImageValidationActions.StoreImported : OciImageValidationActions.StoreRejected;
 			if (__OciImageValidationTransition(OciImageValidationStates.Pending, event) !== expectedAction)
 				throw new WorkflowTaskTerminalError("OCI image validation transition is invalid.");
+
+			// 2. Save once, then read the row that won if another replay committed while this attempt ran.
 			const write = await transaction.ociImageValidations.recordResult(input.siloId, input.validationId, input.submissionDigest, result);
 			if (write === null)
 				throw new WorkflowTaskTerminalError("OCI image validation is unavailable.");
@@ -68,6 +79,8 @@ async function _Record(options: OciImageValidationWorkflowOptions, input: OciIma
 			catch { throw new WorkflowTaskTerminalError("OCI image validation stored result is invalid."); }
 			if (winner === null)
 				throw new WorkflowTaskTerminalError("OCI image validation stored result is unavailable.");
+
+			// 3. Audit only the transition winner so replayed tasks retain one durable history entry.
 			if (write.changed)
 				await transaction.mcp.appendAudit("Updated", `OciImageValidation/${input.validationId}`, `OCI image admission ${winner.accepted ? "imported" : "rejected"}`);
 			return winner;

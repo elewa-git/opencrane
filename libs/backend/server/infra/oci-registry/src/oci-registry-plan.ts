@@ -15,8 +15,8 @@ function _sha256(bytes: Uint8Array): string
 	return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
-/** Rejects content whose declared address does not match its bytes. */
-function _checkContent(digest: string, bytes: Uint8Array, label: string): void
+/** Asserts that checked bytes still match their declared address before registry I/O begins. */
+function _AssertContent(digest: string, bytes: Uint8Array, label: string): void
 {
 	if (!_SHA256_DIGEST_PATTERN.test(digest) || _sha256(bytes) !== digest)
 		throw new OciRegistryImportError(OciRegistryImportErrorCodes.InvalidPlan, `${label} bytes do not match their SHA-256 digest`);
@@ -32,7 +32,7 @@ function _checkContent(digest: string, bytes: Uint8Array, label: string): void
  */
 export function _CheckOciRegistryImportPlan(plan: OciRegistryImportPlan): void
 {
-	_checkContent(plan.manifest.digest, plan.manifest.bytes, "Manifest");
+	_AssertContent(plan.manifest.digest, plan.manifest.bytes, "Manifest");
 	if (plan.manifest.mediaType !== _OCI_IMAGE_MANIFEST_MEDIA_TYPE)
 		throw new OciRegistryImportError(OciRegistryImportErrorCodes.InvalidPlan, "Manifest media type is not an OCI image manifest");
 	if (plan.blobs.length === 0)
@@ -41,7 +41,7 @@ export function _CheckOciRegistryImportPlan(plan: OciRegistryImportPlan): void
 	const seen = new Set<string>();
 	for (const blob of plan.blobs)
 	{
-		_checkContent(blob.digest, blob.bytes, "Blob");
+		_AssertContent(blob.digest, blob.bytes, "Blob");
 		if (seen.has(blob.digest))
 			throw new OciRegistryImportError(OciRegistryImportErrorCodes.InvalidPlan, "Import plan contains a repeated blob digest");
 		seen.add(blob.digest);
