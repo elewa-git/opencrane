@@ -30,8 +30,24 @@ SELECT EXISTS (
     WHERE "migration_id" = '0.9.0-to-0.9.3'
 ) AS untagged_candidate_already_applied \gset
 \if :untagged_candidate_already_applied
-\echo 'The untagged 0.9.3 candidate migration is present; reset this development database or apply an explicitly reviewed forward repair.'
+SELECT to_regclass('opencrane_migrations.forward_repairs') IS NOT NULL AS forward_repair_table_present \gset
+\if :forward_repair_table_present
+SELECT EXISTS (
+    SELECT 1 FROM "opencrane_migrations"."forward_repairs"
+    WHERE "repair_id" = 'untagged-0.9.3-candidate-to-0.10.0'
+      AND "source_migration_id" = '0.9.0-to-0.9.3'
+) AS candidate_forward_repaired \gset
+\else
+SELECT FALSE AS candidate_forward_repaired \gset
+\endif
+\if :candidate_forward_repaired
+\echo 'The exact untagged 0.9.3 candidate forward repair is present.'
+\else
+\echo 'The untagged 0.9.3 candidate migration is present without its reviewed forward repair.'
 \quit
+\endif
+\else
+SELECT FALSE AS candidate_forward_repaired \gset
 \endif
 SELECT (
     to_regclass('absurd.queues') IS NOT NULL
@@ -39,9 +55,11 @@ SELECT (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'groups' AND column_name = 'membership_authority'
     )
-    AND EXISTS (
-        SELECT 1 FROM "opencrane_migrations"."schema_history"
-        WHERE "migration_id" = '0.9.0-to-0.10.0-prerequisite'
+    AND (
+        EXISTS (
+            SELECT 1 FROM "opencrane_migrations"."schema_history"
+            WHERE "migration_id" = '0.9.0-to-0.10.0-prerequisite'
+        ) OR :'candidate_forward_repaired'::boolean
     )
 ) AS migration_already_applied \gset
 \else

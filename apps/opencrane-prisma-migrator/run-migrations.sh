@@ -4,6 +4,7 @@ set -eu
 prisma_cli="${PRISMA_CLI:-/app/node_modules/.bin/prisma}"
 psql_cli="${PSQL_CLI:-/usr/bin/psql}"
 prerequisite_sql="${IAM_PREREQUISITE_SQL:-/app/apps/opencrane/prisma/migrations/0.9.0-to-0.10.0-prerequisite/migration.sql}"
+candidate_repair_sql="${UNTAGGED_CANDIDATE_REPAIR_SQL:-/app/apps/opencrane/prisma/migrations/untagged-0.9.3-candidate-forward-repair/migration.sql}"
 source_baseline_sha256="5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f"
 baseline_migration="20260826000000_0_9_2_baseline"
 workflow_cutover_migration="20260827000000_0_10_0_workflow_cutover"
@@ -20,6 +21,16 @@ if [ ! -f "$prerequisite_sql" ]; then
 	echo "The reviewed 0.9.2 IAM prerequisite SQL is missing." >&2
 	exit 1
 fi
+if [ ! -f "$candidate_repair_sql" ]; then
+	echo "The reviewed untagged-candidate forward repair SQL is missing." >&2
+	exit 1
+fi
+
+candidate_repair_sql_sha256="$(sha256sum "$candidate_repair_sql" | cut -d ' ' -f1)"
+"$psql_cli" --dbname "$DATABASE_URL" --set ON_ERROR_STOP=on \
+	--set "repair_sql_sha256=$candidate_repair_sql_sha256" \
+	--set "migration_silo_id=$OPENCRANE_MIGRATION_SILO_ID" \
+	--file "$candidate_repair_sql"
 
 prerequisite_sql_sha256="$(sha256sum "$prerequisite_sql" | cut -d ' ' -f1)"
 "$psql_cli" --dbname "$DATABASE_URL" --set ON_ERROR_STOP=on \

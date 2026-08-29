@@ -44,25 +44,31 @@ CREATE INDEX "run_model_credential_mint_authorizations_expires_at_idx" ON "run_m
 CREATE UNIQUE INDEX "run_model_credential_mint_authorizations_run_id_attempt_gen_key" ON "run_model_credential_mint_authorizations"("run_id", "attempt", "generation");
 ALTER TABLE "run_model_credential_mint_authorizations" ADD CONSTRAINT "run_model_credential_mint_authorizations_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- Enforce the pre-release hard cutoff for rows that were stored without an organization owner.
--- No trustworthy silo can be derived from these legacy rows. Abort before altering the tables so an
--- operator must explicitly remove or export them instead of this migration assigning a guessed silo.
+-- Enforce the pre-release hard cutoff for rows whose organization owner cannot be derived.
+-- The app-owned untagged-candidate repair attributes invitation audit rows from exact product
+-- references before this migration. Spend and source rows still fail closed instead of guessing.
 DO $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM "audit_log")
-       OR EXISTS (SELECT 1 FROM "token_usage_snapshots")
+    IF EXISTS (SELECT 1 FROM "token_usage_snapshots")
        OR EXISTS (SELECT 1 FROM "global_budget_settings")
        OR EXISTS (SELECT 1 FROM "account_budget_settings")
        OR EXISTS (SELECT 1 FROM "third_party_sources") THEN
 		RAISE EXCEPTION USING
 			ERRCODE = 'OC713',
-			MESSAGE = 'central authorization migration requires empty legacy audit, spend, and third-party source tables because their silo ownership cannot be derived safely';
+			MESSAGE = 'central authorization migration requires empty legacy spend and third-party source tables because their silo ownership cannot be derived safely';
     END IF;
 END $$;
 
-ALTER TABLE "audit_log" ADD COLUMN "silo_id" TEXT NOT NULL;
-DROP INDEX "audit_log_timestamp_idx";
-CREATE INDEX "audit_log_silo_id_timestamp_id_idx" ON "audit_log"("silo_id", "timestamp", "id");
+ALTER TABLE "audit_log" ADD COLUMN IF NOT EXISTS "silo_id" TEXT;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM "audit_log" WHERE "silo_id" IS NULL OR btrim("silo_id") = '') THEN
+        RAISE EXCEPTION 'legacy audit rows require exact-silo attribution before central authorization migration' USING ERRCODE = 'OC713';
+    END IF;
+END $$;
+ALTER TABLE "audit_log" ALTER COLUMN "silo_id" SET NOT NULL;
+DROP INDEX IF EXISTS "audit_log_timestamp_idx";
+CREATE INDEX IF NOT EXISTS "audit_log_silo_id_timestamp_id_idx" ON "audit_log"("silo_id", "timestamp", "id");
 
 ALTER TABLE "token_usage_snapshots" ADD COLUMN "silo_id" TEXT NOT NULL;
 DROP INDEX "token_usage_snapshots_sampled_at_idx";
@@ -295,7 +301,8 @@ INSERT INTO "authorization_grants" (
 )
 SELECT
     'central-conversation-' || action."suffix" || '-' || md5(conversation."id" || ':' || principal."id"),
-    conversation."silo_id", 'principal', NULL, principal."id", 'personal', NULL, principal."id", 'exact',
+    conversation."silo_id", 'principal'::"AuthorizationSubjectKind", NULL, principal."id",
+    'personal'::"AuthorizationBoundaryKind", NULL, principal."id", 'exact'::"AuthorizationBoundaryCoverage",
     'conversation-participant-access', 'opencrane-product-authorization', 1,
     'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
     action."capability_id", 'conversation', conversation."id", 'allow', 0, FALSE, principal."id"
@@ -323,10 +330,11 @@ INSERT INTO "authorization_grants" (
 )
 SELECT DISTINCT
     'central-channel-target-send-' || md5(route."id" || ':' || principal."id"),
-    conversation."silo_id", 'principal', NULL, principal."id", 'personal', NULL, principal."id", 'exact',
+    conversation."silo_id", 'principal'::"AuthorizationSubjectKind", NULL, principal."id",
+    'personal'::"AuthorizationBoundaryKind", NULL, principal."id", 'exact'::"AuthorizationBoundaryCoverage",
     'channel-target-participant-access', 'opencrane-product-authorization', 1,
     'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    'channel-target:send', 'channel-target', route."id", 'allow', 0, FALSE, principal."id"
+    'channel-target:send', 'channel-target', route."id", 'allow'::"AuthorizationEffect", 0, FALSE, principal."id"
 FROM "conversation_participants" participant
 JOIN "conversations" conversation ON conversation."id" = participant."conversation_id"
 JOIN "principals" principal

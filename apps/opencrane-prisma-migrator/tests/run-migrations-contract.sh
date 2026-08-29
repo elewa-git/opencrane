@@ -51,6 +51,7 @@ run_scenario()
 	: >"$TEST_DIR/psql-calls"
 	PRISMA_CLI="$TEST_DIR/prisma" PRISMA_CALLS="$TEST_DIR/calls" PRISMA_SCENARIO="$scenario" \
 		PSQL_CLI="$TEST_DIR/psql" PSQL_CALLS="$TEST_DIR/psql-calls" PSQL_SCENARIO="$scenario" \
+		UNTAGGED_CANDIDATE_REPAIR_SQL="$ROOT/apps/opencrane/prisma/migrations/untagged-0.9.3-candidate-forward-repair/migration.sql" \
 		IAM_PREREQUISITE_SQL="$ROOT/apps/opencrane/prisma/migrations/0.9.0-to-0.10.0-prerequisite/migration.sql" \
 		DATABASE_URL=postgresql://migration.example.test/opencrane OPENCRANE_MIGRATION_SOURCE_VERSION=0.9.2 \
 		OPENCRANE_MIGRATION_SILO_ID=test-silo OPENCRANE_MIGRATION_OIDC_ISSUER=https://issuer.example.test "$ENTRYPOINT"
@@ -59,6 +60,7 @@ run_scenario()
 run_scenario success
 grep -q -- '--dbname postgresql://migration.example.test/opencrane' "$TEST_DIR/psql-calls"
 grep -q -- '--set source_baseline_sha256=5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f' "$TEST_DIR/psql-calls"
+grep -Eq -- '--set repair_sql_sha256=[0-9a-f]{64}' "$TEST_DIR/psql-calls"
 grep -Eq -- '--set migration_sql_sha256=[0-9a-f]{64}' "$TEST_DIR/psql-calls"
 grep -q -- '--set migration_silo_id=test-silo' "$TEST_DIR/psql-calls"
 grep -q -- '--set migration_oidc_issuer=https://issuer.example.test' "$TEST_DIR/psql-calls"
@@ -79,6 +81,7 @@ run_scenario cutover-complete
 : >"$TEST_DIR/calls"
 if PRISMA_CLI="$TEST_DIR/prisma" PRISMA_CALLS="$TEST_DIR/calls" PRISMA_SCENARIO=cutover-resolve-fails \
 	PSQL_CLI="$TEST_DIR/psql" PSQL_CALLS="$TEST_DIR/psql-calls" PSQL_SCENARIO=success \
+	UNTAGGED_CANDIDATE_REPAIR_SQL="$ROOT/apps/opencrane/prisma/migrations/untagged-0.9.3-candidate-forward-repair/migration.sql" \
 	IAM_PREREQUISITE_SQL="$ROOT/apps/opencrane/prisma/migrations/0.9.0-to-0.10.0-prerequisite/migration.sql" \
 	DATABASE_URL=postgresql://migration.example.test/opencrane OPENCRANE_MIGRATION_SOURCE_VERSION=0.9.2 \
 	OPENCRANE_MIGRATION_SILO_ID=test-silo OPENCRANE_MIGRATION_OIDC_ISSUER=https://issuer.example.test "$ENTRYPOINT"; then
@@ -90,6 +93,7 @@ fi
 : >"$TEST_DIR/calls"
 if PRISMA_CLI="$TEST_DIR/prisma" PRISMA_CALLS="$TEST_DIR/calls" PRISMA_SCENARIO=deploy-fails \
 	PSQL_CLI="$TEST_DIR/psql" PSQL_CALLS="$TEST_DIR/psql-calls" PSQL_SCENARIO=success \
+	UNTAGGED_CANDIDATE_REPAIR_SQL="$ROOT/apps/opencrane/prisma/migrations/untagged-0.9.3-candidate-forward-repair/migration.sql" \
 	IAM_PREREQUISITE_SQL="$ROOT/apps/opencrane/prisma/migrations/0.9.0-to-0.10.0-prerequisite/migration.sql" \
 	DATABASE_URL=postgresql://migration.example.test/opencrane OPENCRANE_MIGRATION_SOURCE_VERSION=0.9.2 \
 	OPENCRANE_MIGRATION_SILO_ID=test-silo OPENCRANE_MIGRATION_OIDC_ISSUER=https://issuer.example.test "$ENTRYPOINT"; then
@@ -107,6 +111,7 @@ fi
 : >"$TEST_DIR/calls"
 if PRISMA_CLI="$TEST_DIR/prisma" PRISMA_CALLS="$TEST_DIR/calls" PRISMA_SCENARIO=success \
 	PSQL_CLI="$TEST_DIR/psql" PSQL_CALLS="$TEST_DIR/psql-calls" PSQL_SCENARIO=prerequisite-fails \
+	UNTAGGED_CANDIDATE_REPAIR_SQL="$ROOT/apps/opencrane/prisma/migrations/untagged-0.9.3-candidate-forward-repair/migration.sql" \
 	IAM_PREREQUISITE_SQL="$ROOT/apps/opencrane/prisma/migrations/0.9.0-to-0.10.0-prerequisite/migration.sql" \
 	DATABASE_URL=postgresql://migration.example.test/opencrane OPENCRANE_MIGRATION_SOURCE_VERSION=0.9.2 \
 	OPENCRANE_MIGRATION_SILO_ID=test-silo OPENCRANE_MIGRATION_OIDC_ISSUER=https://issuer.example.test "$ENTRYPOINT"; then

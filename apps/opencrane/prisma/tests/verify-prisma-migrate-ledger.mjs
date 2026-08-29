@@ -9,6 +9,7 @@ const baseline = readFileSync(join(ledgerRoot, "20260826000000_0_9_2_baseline/mi
 const migration = readFileSync(join(ledgerRoot, "20260827000000_0_10_0_workflow_cutover/migration.sql"), "utf8");
 const sqlWorkloadRetirement = readFileSync(join(ledgerRoot, "20260829000000_retire_sql_workload_control_plane/migration.sql"), "utf8");
 const authorizationMigration = readFileSync(join(ledgerRoot, "20260829000000_central_authorization_authority/migration.sql"), "utf8");
+const candidateForwardRepair = readFileSync(join(prismaRoot, "migrations/untagged-0.9.3-candidate-forward-repair/migration.sql"), "utf8");
 const targetBaseline = readFileSync(join(prismaRoot, "bootstrap/target-baseline.sql"), "utf8");
 const releasedCutoverChecksum = createHash("sha256").update(migration).digest("hex");
 
@@ -91,12 +92,21 @@ _Require(authorizationMigration.includes('DROP TYPE "ActionReplayMode";'), "the 
 _Require(!targetBaseline.includes('CREATE TABLE "action_execution_receipts"'), "fresh databases must not install the replaced proof-bound receipt table");
 _Require(authorizationMigration.includes('CREATE TABLE "run_model_credential_mint_authorizations"'), "the central authorization migration must install the one-use model-key effect admission");
 _Require(targetBaseline.includes('CREATE TABLE "run_model_credential_mint_authorizations"'), "fresh databases must install the one-use model-key effect admission");
-for (const legacyTable of ["audit_log", "token_usage_snapshots", "global_budget_settings", "account_budget_settings", "third_party_sources"])
+for (const legacyTable of ["token_usage_snapshots", "global_budget_settings", "account_budget_settings", "third_party_sources"])
 {
 	_Require(authorizationMigration.includes(`EXISTS (SELECT 1 FROM "${legacyTable}")`), `the central authorization migration must reject unowned ${legacyTable} rows`);
 }
-_Require(authorizationMigration.includes("their silo ownership cannot be derived safely"), "the central authorization migration must explain its pre-release ownership cutoff");
+_Require(authorizationMigration.includes('WHERE "silo_id" IS NULL OR btrim("silo_id") = \'\''), "the central authorization migration must reject unattributed audit rows");
+_Require(authorizationMigration.includes("their silo ownership cannot be derived safely"), "the central authorization migration must explain its remaining ownership cutoff");
 _Require(authorizationMigration.includes("ERRCODE = 'OC713'"), "the central authorization migration must expose the legacy ownership cutoff as OC713");
+_Require(candidateForwardRepair.includes("untagged-0.9.3-candidate-to-0.10.0"), "the exact untagged candidate must record a distinct forward repair");
+_Require(candidateForwardRepair.includes("organization.invitations.created") && candidateForwardRepair.includes('invitation."silo_id" = current_setting(\'opencrane.migration_silo_id\')'), "the forward repair must derive every legacy invitation audit row from exact silo evidence");
+for (const sourceChecksum of [
+	"eb429e29c15495608c5e3d50c6d7904ea6e015ea5fc6eff631a310bc6f2ae5fa",
+	"d7229f9995c5c881dd1b4da3dae6d972cb6827e00fca4b7d21fb1c8a48b13f84",
+	"6a4256041ba5a78c6e849531c4d9fffea2cad5afef509344c088e566bcfa0004",
+])
+	_Require(candidateForwardRepair.includes(sourceChecksum), `the forward repair must fail closed on source checksum ${sourceChecksum}`);
 for (const scopedColumn of [
 	'CREATE TABLE "audit_log" (\n    "id" SERIAL NOT NULL,\n    "silo_id" TEXT NOT NULL',
 	'CREATE TABLE "token_usage_snapshots" (\n    "id" SERIAL NOT NULL,\n    "silo_id" TEXT NOT NULL',

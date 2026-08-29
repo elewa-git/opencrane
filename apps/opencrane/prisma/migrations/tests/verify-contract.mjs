@@ -27,6 +27,7 @@ const groupHierarchyTransitionRoot = join(migrationRoot, "0.9.0-to-0.10.0-prereq
 const groupHierarchySql = readFileSync(join(groupHierarchyTransitionRoot, "migration.sql"), "utf8");
 const groupHierarchyManifest = JSON.parse(readFileSync(join(groupHierarchyTransitionRoot, "manifest.json"), "utf8"));
 const groupHierarchySqlDigest = createHash("sha256").update(groupHierarchySql).digest("hex");
+const candidateForwardRepairSql = readFileSync(join(migrationRoot, "untagged-0.9.3-candidate-forward-repair/migration.sql"), "utf8");
 
 function requireContract(condition, message)
 {
@@ -274,7 +275,10 @@ requireContract(groupHierarchySql.includes("pg_advisory_lock"), "group-hierarchy
 requireContract(groupHierarchySql.includes("pg_advisory_xact_lock"), "group-hierarchy migration must serialize hierarchy mutation");
 requireContract(groupHierarchySql.includes("BEGIN;"), "group-hierarchy migration must run transactionally");
 requireContract(groupHierarchySql.includes("migration_already_applied"), "group-hierarchy migration must support exact idempotent retry");
-requireContract(groupHierarchySql.includes("The untagged 0.9.3 candidate migration is present"), "IAM prerequisite must reject an already-applied untagged candidate instead of relabelling it");
+requireContract(groupHierarchySql.includes("without its reviewed forward repair"), "IAM prerequisite must reject an untagged candidate unless the exact forward repair is present");
+requireContract(groupHierarchySql.includes("opencrane_migrations.forward_repairs"), "IAM prerequisite must admit only a durably recorded candidate repair");
+requireContract(candidateForwardRepairSql.includes("untagged-0.9.3-candidate-to-0.10.0"), "candidate repair must retain its distinct non-release identity");
+requireContract(candidateForwardRepairSql.includes("legacy audit rows cannot all be attributed"), "candidate repair must fail closed when audit ownership is ambiguous");
 requireContract(groupHierarchySql.includes("pg_cron extension is missing after the privileged migration prerequisite"), "IAM prerequisite must require pg_cron before mutating application authority");
 requireContract(groupHierarchySql.includes("application owner lacks pg_cron schema access after the privileged migration prerequisite"), "IAM prerequisite must require application-owner cron access");
 requireContract(groupHierarchySql.includes("create schema if not exists absurd"), "IAM prerequisite must install the reviewed Absurd schema");
