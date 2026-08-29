@@ -1,4 +1,4 @@
-import { AgentRunState, ExternalActionRecoveryMode, Prisma, RunOutboxEventKind, ToolInvocationState, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
+import { AgentRunState, ExternalActionRecoveryMode, Prisma, ToolInvocationState, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaRunCancellationUnitOfWork } from "../prisma-run-cancellation-repository";
@@ -31,7 +31,6 @@ function _Transaction(run: ReturnType<typeof _Run>, task: ReturnType<typeof _Tas
 			count: vi.fn().mockResolvedValue(0),
 		},
 		toolResultDelivery: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
-		outboxEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 2 } }), create: vi.fn().mockResolvedValue({}) },
 	};
 }
 
@@ -51,7 +50,7 @@ function _Authority(transaction: ReturnType<typeof _Transaction>)
 
 describe("PrismaRunCancellationUnitOfWork", function _Suite()
 {
-	it("fences the attempt and publishes only workflow-owned cancellation", async function _Cancels()
+	it("fences the attempt so its workflow can finish cancellation", async function _Cancels()
 	{
 		const transaction = _Transaction(_Run(AgentRunState.Running), _Task());
 		const { authority, options } = _Authority(transaction);
@@ -63,8 +62,6 @@ describe("PrismaRunCancellationUnitOfWork", function _Suite()
 		expect(transaction.runProofKey.updateMany).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 1, revokedAt: null }, data: { revokedAt: new Date("2026-07-20T00:01:00.000Z") } });
 		expect(transaction.approvalRequest.updateMany).toHaveBeenCalledOnce();
 		expect(transaction.elicitationRequest.updateMany).toHaveBeenCalledOnce();
-		expect(transaction.outboxEvent.create).toHaveBeenCalledTimes(1);
-		expect(transaction.outboxEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ kind: RunOutboxEventKind.RunCancellationRequested, idempotencyKey: "run-1:cancellation:1" }) });
 	});
 
 	it("requires the exact bound workflow task before it changes run authority", async function _RequiresTask()
@@ -74,20 +71,18 @@ describe("PrismaRunCancellationUnitOfWork", function _Suite()
 
 		await expect(authority.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1, requestedBy: "user-1" })).resolves.toEqual({ status: "conflict", reason: "authority_conflict" });
 		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
-		expect(transaction.outboxEvent.create).not.toHaveBeenCalled();
 	});
 
 	it.each([
 		[AgentRunState.Cancelling, "cancelling"],
 		[AgentRunState.Cancelled, "cancelled"],
-	] as const)("replays %s without another event", async function _Replays(state, expectedState)
+	] as const)("replays %s without another mutation", async function _Replays(state, expectedState)
 	{
 		const transaction = _Transaction(_Run(state), _Task());
 		const { authority } = _Authority(transaction);
 
 		await expect(authority.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1, requestedBy: "user-1" })).resolves.toEqual({ status: "idempotent", runId: "run-1", attempt: 1, state: expectedState });
 		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
-		expect(transaction.outboxEvent.create).not.toHaveBeenCalled();
 	});
 
 	it("rejects malformed coordinates before opening a transaction", async function _RejectsMalformed()

@@ -1,4 +1,4 @@
-import { Prisma, RunOutboxEventKind, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnapshot } from "@prisma/client";
+import { Prisma, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnapshot } from "@prisma/client";
 
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
@@ -46,9 +46,9 @@ class _PreparedAdmissionDenied<TDenial> extends Error
  * Writes the first durable moment of a run to Postgres.
  *
  * One `$transaction` at `Serializable` covers everything: the duplicate check, the caller's optional
- * preparation writes, the snapshot compilation the caller supplies, the run row, its snapshot row and
- * its two outbox events. Either all of it commits or none of it does, so no reader can ever see a run
- * without its snapshot, or a snapshot without the dispatch command that starts it.
+ * preparation writes, the snapshot compilation the caller supplies, the run row, its snapshot row,
+ * and its Absurd workflow task. Either all of it commits or none of it does,
+ * so no reader can ever see a run without its snapshot or the workflow task that starts it.
  *
  * Serializable isolation and the unique silo + idempotency key make that safe under concurrent
  * callers. A losing duplicate recovers the winner's immutable snapshot after its transaction ends.
@@ -155,8 +155,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 					return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
 				}
 
-				// 5. Insert both sides of the deferred snapshot relation, admit the controller task, and keep
-				// the temporary legacy dispatch event in the same commit until controller cutover replaces it.
+				// 5. Insert both sides of the deferred snapshot relation and admit the controller task.
 				await _persistInitialAdmission(transaction, command, compiled.value, admittedAtDate);
 				const admission = new PrismaAgentRunWorkflowTaskAdmissionUnitOfWork(transaction);
 				await admission.admit(workflow, { siloId: command.siloId, runId: command.runId, attempt: 1 });
@@ -240,7 +239,7 @@ function _matchesCommand(value: RunAdmissionBuild, command: RunAdmissionCommand)
 		&& value.authority.trigger === command.trigger;
 }
 
-/** Inserts the run, its only snapshot, and the ordered initial run-domain events. */
+/** Inserts the run and its only snapshot. */
 async function _persistInitialAdmission(transaction: Prisma.TransactionClient, command: RunAdmissionCommand, value: RunAdmissionBuild, admittedAt: Date): Promise<void>
 {
 	await transaction.agentRun.create({ data: {
@@ -259,7 +258,6 @@ async function _persistInitialAdmission(transaction: Prisma.TransactionClient, c
 		acceptedAt: admittedAt,
 	} });
 	await transaction.runInputSnapshot.create({ data: _RunInputSnapshotData(value.snapshot) });
-	await transaction.outboxEvent.createMany({ data: _InitialRunOutboxData(command.runId, value.snapshot.digest, admittedAt) });
 }
 
 /** Maps a dependency-light trigger to the owned database enum representation. */
@@ -268,32 +266,6 @@ function _trigger(value: InitialRunAuthority["trigger"]): "Interactive" | "Sched
 	if (value === "interactive") return "Interactive";
 	if (value === "schedule") return "Schedule";
 	return "ManagedInvocation";
-}
-
-/**
- * Builds the acceptance event every admitted run starts with.
- *
- * The workflow task is admitted in the same database transaction as the run. This event records that
- * the run exists for observers; it does not command a separate dispatcher to start an attempt.
- *
- * @param runId - The run both events belong to.
- * @param inputSnapshotDigest - Carried in both payloads so a worker can confirm it loaded the snapshot
- * the run was admitted with.
- * @param availableAt - When a worker may claim the rows; the admission time, so they are claimable at
- * once.
- */
-export function _InitialRunOutboxData(runId: string, inputSnapshotDigest: string, availableAt: Date): Prisma.OutboxEventCreateManyInput[]
-{
-	const accepted: Prisma.OutboxEventCreateManyInput = {
-		runId,
-		attempt: 1,
-		sequence: 1,
-		kind: RunOutboxEventKind.RunAccepted,
-		idempotencyKey: `${runId}:accepted`,
-		payload: { runId, inputSnapshotDigest },
-		availableAt,
-	};
-	return [accepted];
 }
 
 /**

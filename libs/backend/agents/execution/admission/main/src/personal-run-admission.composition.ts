@@ -39,9 +39,9 @@ import type { RunAdmissionCapacityGate } from "./managed-run-admission.types";
  */
 export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">, capacityGate: RunAdmissionCapacityGate, identityEvidence: FleetMembershipEvidenceConfig): PersonalRunAdmissionPort
 {
-	// 1. The repository that owns the admission transaction and writes the AgentRun row with its input
-	// snapshot. It also takes the advisory lock on silo plus idempotency key, which is what makes two
-	// racing calls with the same key resolve to one run instead of two.
+	// 1. The repository writes the AgentRun, its input snapshot, and its workflow
+	// task in one database transaction. Serializable isolation and the unique idempotency key make two
+	// racing calls resolve to one run instead of two.
 	const admission = new PrismaRunAdmissionRepository(prisma, workflow);
 
 	// 2. The input sources session assembly reads inside that transaction. Identity and skill

@@ -178,7 +178,7 @@ export type RunAdmissionResult<TDenial> = { readonly outcome: "accepted" | "idem
  *
  * Use it when a row must not be able to exist without its run. The conversation caller writes the
  * user's message here, so a stored message without a run is impossible. It runs last, once the run,
- * its snapshot and its outbox events are already inserted, so it may read anything admission wrote
+ * its snapshot and its workflow task are already inserted, so it may read anything admission wrote
  * and may use `value.snapshot.runId` as a foreign key. Throwing rolls the whole admission back.
  *
  * Called by: `PrismaConversationMessageAdmissionUnitOfWork` (server/conversations/main), through
@@ -217,7 +217,7 @@ export type RunAdmissionPrepare = (transaction: RunAdmissionTransaction) => Prom
  * It works through a fixed order at Serializable isolation: resolves committed duplicates,
  * optionally lets the caller write the rows its own inputs need
  * ({@link RunAdmissionPrepare}), re-reads every authority input, and writes the run, its snapshot and
- * its first dispatch outbox row. The unique request key chooses one winner, and a concurrent input
+ * its Absurd workflow task. The unique request key chooses one winner, and a concurrent input
  * change makes the transaction retry instead of reaching a committed snapshot.
  *
  * Called by: `__AssembleRunInputSnapshot` in

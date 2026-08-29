@@ -19,7 +19,7 @@ assembly, the durable run repository, and one app-owned process-local capacity b
  └────────────────────────────────────────┘
                  │  admitted run id / stable denial
                  ▼
- execution/runs ........ durable run + snapshot + outbox
+ execution/runs ........ durable run + snapshot + workflow task
 ```
 
 **In this flow:** [agent services](../../../../server/agents/agent-services/main/README.md) supplies
@@ -35,8 +35,8 @@ Personal admission has two bounded stages. A synthetic per-silo preflight lane f
 duplicate-key and participant-conversation reads before interactive traffic can touch PostgreSQL. Once
 that lane has derived the real personal AgentService, the normal process/silo/service gate limits
 the final transaction that rechecks all mutable authority. A caller-supplied transaction callback
-then persists the canonical input message beside the run, immutable snapshot, and first dispatch
-intent in that same commit. The first lane does not grant product authority; it is overload
+then persists the canonical input message beside the run, immutable snapshot, and Absurd workflow
+task in that same commit. The first lane does not grant product authority; it is overload
 protection for the read path.
 
 Message idempotency keys are public conversation-local coordinates. Before personal admission reads

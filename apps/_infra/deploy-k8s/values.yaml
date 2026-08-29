@@ -301,7 +301,6 @@ agentController:
   # -- Delivered commands are operational handshakes, not the permanent run audit record.
   # The controller deletes only successful records older than this window in bounded batches.
   outboxRetentionSeconds: 604800
-  outboxPruneBatchSize: 100
   projectedTokenTtlSeconds: 600
   kubernetesTokenTtlSeconds: 600
   # -- Exact Kubernetes Service IP CIDRs admitted by the controller's app-owned NetworkPolicy.

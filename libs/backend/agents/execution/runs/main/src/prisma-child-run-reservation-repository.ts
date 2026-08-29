@@ -5,7 +5,7 @@ import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 
 import { __PrepareChildRunAdmission } from "./child-run-admission";
 import type { ChildRunParentAuthority, PrepareChildRunAdmissionCommand, PreparedChildRunAdmission } from "./child-run-admission.types";
-import { _InitialRunOutboxData, _RunInputSnapshot, _RunInputSnapshotData } from "./prisma-run-admission-repository";
+import { _RunInputSnapshot, _RunInputSnapshotData } from "./prisma-run-admission-repository";
 import { __DigestRunInputSnapshot } from "./run-input-snapshot-digest";
 import type { ChildRunReservationBuild, ChildRunReservationCommand, ChildRunReservationRepository, ChildRunReservationResult } from "./child-run-reservation.types";
 
@@ -26,7 +26,7 @@ export class PrismaChildRunReservationRepository implements ChildRunReservationR
 		this.log = log;
 	}
 
-	/** Rechecks and commits a child run, snapshot, immutable reservation, and initial outbox together. */
+	/** Rechecks and commits a child run, snapshot, and immutable reservation together. */
 	async reserve(command: ChildRunReservationCommand, build: ChildRunReservationBuild): Promise<ChildRunReservationResult>
 	{
 		if (!_isValidCommand(command)) return { outcome: "denied", reason: "invalid_command" };
@@ -59,7 +59,7 @@ export class PrismaChildRunReservationRepository implements ChildRunReservationR
 				const prepared = await __PrepareChildRunAdmission(parentAuthority, _prepareCommand(command), command.limits, command.targetAuthorization);
 				if (prepared.outcome === "denied") return prepared;
 
-				// 4. Build and persist only an exact child snapshot, allocation, and dispatch pair in this transaction.
+				// 4. Build and persist only the exact child snapshot and allocation in this transaction.
 				const value = await build.build(prepared.value);
 				if (!_isChildSnapshot(value.snapshot, prepared.value, value.effectiveContractDigest)) return { outcome: "denied", reason: "authority_conflict" };
 				await _persist(transaction, command, value.snapshot, prepared.value);
@@ -173,17 +173,15 @@ function _isChildSnapshot(snapshot: RunInputSnapshot, prepared: PreparedChildRun
 	return budget["maxTokens"] === prepared.budget.maxTokens && budget["maxCostUsdMicros"] === prepared.budget.maxCostUsdMicros;
 }
 
-/** Persists the four inseparable records that make a child eligible for dispatch. */
+/** Persists the three inseparable records that reserve a child run. */
 async function _persist(transaction: Prisma.TransactionClient, command: ChildRunReservationCommand, snapshot: RunInputSnapshot, prepared: PreparedChildRunAdmission): Promise<void>
 {
 	const acceptedAt = new Date(snapshot.compiledAt);
 	const run = _childRunData(command, snapshot, prepared, acceptedAt);
 	const reservation = _reservationData(prepared);
-	const outbox = _InitialRunOutboxData(prepared.runId, snapshot.digest, acceptedAt);
 	await transaction.agentRun.create({ data: run });
 	await transaction.runInputSnapshot.create({ data: _RunInputSnapshotData(snapshot) });
 	await transaction.childRunReservation.create({ data: reservation });
-	await transaction.outboxEvent.createMany({ data: outbox });
 }
 
 /** Initializes the exact child run row committed by the reservation transaction. */

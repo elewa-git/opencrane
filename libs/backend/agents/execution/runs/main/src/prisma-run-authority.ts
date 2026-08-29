@@ -148,25 +148,21 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 	}
 
 	/**
-	 * Raises the attempt counter and writes the event that gets the new attempt dispatched, in one
-	 * transaction.
+	 * Raises the attempt counter and admits the new attempt's workflow task in one transaction.
 	 *
 	 * Authorisation is re-checked here rather than trusted from the HTTP layer, because a person can
 	 * lose their org membership or be removed from the conversation between pressing retry and this
 	 * write landing. "denies a retry before mutation when current participant authority is absent"
 	 * asserts that the update is not even attempted in that case.
 	 *
-	 * The attempt row and its outbox event are written together so a retry cannot be recorded without
-	 * anything picking it up, and cannot be dispatched twice: the event's idempotency key is
-	 * `${runId}:attempt:${attempt}`, one per attempt, and its payload also records who asked and with
-	 * which retry key. That stored payload is what lets a repeated request be recognised as the same
-	 * retry instead of a new one.
+	 * The attempt row and deterministic workflow task are written together, so a retry cannot be
+	 * recorded without durable work and the same request cannot start it twice.
 	 *
 	 * @param command - The retry, plus the run and service coordinates the domain observed.
 	 * @returns One {@link AtomicRunAttemptResult}. `started` is the only value that wrote anything;
 	 * `idempotent` means the attempt was already there and this call left the database alone.
 	 * @throws When a stored enum value is unknown, or the transaction fails or is rolled back — in
-	 * which case neither the attempt nor its event exists.
+	 * which case neither the attempt nor its workflow task exists.
 	 */
 	async startNextAttemptAtomically(command: AtomicStartNextRunAttemptCommand): Promise<AtomicRunAttemptResult>
 	{

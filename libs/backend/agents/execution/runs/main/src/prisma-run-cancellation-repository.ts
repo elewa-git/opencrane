@@ -1,4 +1,4 @@
-import { AgentRunState, Prisma, RunOutboxEventKind, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
+import { AgentRunState, Prisma, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 
 import { __CancelPendingRunApprovalAuthority } from "@opencrane/backend/server/iam/authorization";
 
@@ -54,7 +54,7 @@ export class PrismaRunCancellationUnitOfWork implements RunCancellationRepositor
 /** Persists one cancellation request inside a caller-owned serializable transaction. */
 class PrismaRunCancellationRepository implements RunCancellationPersistenceRepository
 {
-	/** Provides the transaction that owns every run, credential, approval, and outbox fence. */
+	/** Provides the transaction that owns every run, credential, approval, and workflow fence. */
 	private readonly transaction: Prisma.TransactionClient;
 
 	/** Binds this repository to the unit of work's transaction. */
@@ -63,7 +63,7 @@ class PrismaRunCancellationRepository implements RunCancellationPersistenceRepos
 		this.transaction = transaction;
 	}
 
-	/** Revokes the current attempt and publishes the durable workflow cancellation event. */
+	/** Revokes the current attempt so its workflow can finish cancellation. */
 	async requestCancellation(command: RequestRunCancellationCommand, now: Date): Promise<RequestRunCancellationResult>
 	{
 		const run = await this.transaction.agentRun.findUnique({ where: { id: command.runId } });
@@ -87,8 +87,6 @@ class PrismaRunCancellationRepository implements RunCancellationPersistenceRepos
 		await this.transaction.workloadAssignment.updateMany({ where: { runId: run.id, attempt: run.attempt, state: { in: [WorkloadAssignmentState.PendingPod, WorkloadAssignmentState.Registered] } }, data: { state: WorkloadAssignmentState.Revoked, revokedAt: now } });
 		await this.transaction.runProofKey.updateMany({ where: { runId: run.id, attempt: run.attempt, revokedAt: null }, data: { revokedAt: now } });
 		await __CancelPendingRunApprovalAuthority(this.transaction, { runId: run.id, attempt: run.attempt, now });
-		const maximum = await this.transaction.outboxEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-		await this.transaction.outboxEvent.create({ data: { runId: run.id, attempt: run.attempt, sequence: (maximum._max.sequence ?? 0) + 1, kind: RunOutboxEventKind.RunCancellationRequested, idempotencyKey: run.id + ":cancellation:" + run.attempt, payload: { runId: run.id, attempt: run.attempt, requestedBy: command.requestedBy }, availableAt: now } });
 		return { status: "cancelling", runId: run.id, attempt: run.attempt };
 	}
 }

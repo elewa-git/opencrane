@@ -46,13 +46,6 @@ enum WarmRuntimeReservationState {
   Deleted           @map("deleted")
 }
 
-enum RunOutboxEventKind {
-  RunAccepted                 @map("run.accepted")
-  RunWorkloadCleanupRequested @map("run.workload_cleanup_requested")
-  RunCancellationRequested    @map("run.cancellation_requested")
-  RunResumeRequested          @map("run.resume_requested")
-}
-
 /// Immutable outcome of attempting to append one terminal child's result to its parent stream.
 enum ChildRunCompletionDeliveryOutcome {
   Delivered            @map("delivered")
@@ -93,7 +86,6 @@ model AgentRun {
   executionReceipts        ActionExecutionReceipt[]
   toolInvocations          ToolInvocation[]
   workflowTasks            AgentRunWorkflowTask[]
-  outboxEvents             OutboxEvent[]
   steeringRequests         RuntimeSteeringRequest[]
   spawnedChildReservations ChildRunReservation[]           @relation("ChildRunReservationParent")
   childReservation         ChildRunReservation?            @relation("ChildRunReservationChild")
@@ -349,27 +341,4 @@ model RunProofKey {
   @@index([podUid])
   @@index([expiresAt])
   @@map("run_proof_keys")
-}
-
-/// Run-domain transactional outbox, committed atomically with AgentRun authority changes.
-model OutboxEvent {
-  id             String             @id @default(cuid())
-  runId          String             @map("run_id")
-  attempt        Int
-  sequence       Int
-  kind           RunOutboxEventKind
-  idempotencyKey String             @unique @map("idempotency_key")
-  payload        Json
-  availableAt    DateTime           @default(now()) @map("available_at")
-  claimedAt      DateTime?          @map("claimed_at")
-  publishedAt    DateTime?          @map("published_at")
-  failedAt       DateTime?          @map("failed_at")
-  failureCode    String?            @map("failure_code")
-  deliveryCount  Int                @default(0) @map("delivery_count")
-  createdAt      DateTime           @default(now()) @map("created_at")
-  run            AgentRun           @relation(fields: [runId], references: [id], onDelete: Restrict)
-
-  @@unique([runId, sequence])
-  @@index([publishedAt, availableAt])
-  @@map("run_outbox_events")
 }

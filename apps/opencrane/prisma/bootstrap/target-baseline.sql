@@ -239,9 +239,6 @@ CREATE TYPE "WorkloadKind" AS ENUM ('job', 'deployment');
 CREATE TYPE "WarmRuntimeReservationState" AS ENUM ('reserved', 'profile_activating', 'ready', 'claimed', 'delete_requested', 'deleted');
 
 -- CreateEnum
-CREATE TYPE "RunOutboxEventKind" AS ENUM ('run.accepted', 'run.workload_cleanup_requested', 'run.cancellation_requested', 'run.resume_requested');
-
--- CreateEnum
 CREATE TYPE "ChildRunCompletionDeliveryOutcome" AS ENUM ('delivered', 'no_parent_stream', 'parent_stream_terminal');
 
 -- CreateEnum
@@ -261,10 +258,6 @@ CREATE TYPE "SkillRevisionState" AS ENUM ('draft', 'review', 'published', 'rejec
 
 -- CreateEnum
 CREATE TYPE "SkillTrustClass" AS ENUM ('reviewed_instructions', 'sandboxed_python');
-
--- CreateEnum
-
--- CreateEnum
 
 -- CreateEnum
 CREATE TYPE "SkillAuthoringValidationState" AS ENUM ('pending', 'running', 'succeeded', 'failed', 'cancelled');
@@ -1961,26 +1954,6 @@ CREATE TABLE "run_proof_keys" (
 );
 
 -- CreateTable
-CREATE TABLE "run_outbox_events" (
-    "id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "sequence" INTEGER NOT NULL,
-    "kind" "RunOutboxEventKind" NOT NULL,
-    "idempotency_key" TEXT NOT NULL,
-    "payload" JSONB NOT NULL,
-    "available_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "claimed_at" TIMESTAMP(3),
-    "published_at" TIMESTAMP(3),
-    "failed_at" TIMESTAMP(3),
-    "failure_code" TEXT,
-    "delivery_count" INTEGER NOT NULL DEFAULT 0,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "run_outbox_events_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "runtime_command_streams" (
     "run_id" TEXT NOT NULL,
     "attempt" INTEGER NOT NULL,
@@ -3184,15 +3157,6 @@ CREATE UNIQUE INDEX "run_proof_key_bound_thumbprint_key" ON "run_proof_keys"("id
 CREATE UNIQUE INDEX "run_proof_key_bound_pod_key" ON "run_proof_keys"("id", "run_id", "attempt", "workload_kind", "workload_uid", "key_thumbprint", "pod_uid");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_outbox_events_idempotency_key_key" ON "run_outbox_events"("idempotency_key");
-
--- CreateIndex
-CREATE INDEX "run_outbox_events_published_at_available_at_idx" ON "run_outbox_events"("published_at", "available_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_outbox_events_run_id_sequence_key" ON "run_outbox_events"("run_id", "sequence");
-
--- CreateIndex
 CREATE INDEX "runtime_continuation_checkpoints_run_id_attempt_revision_idx" ON "runtime_continuation_checkpoints"("run_id", "attempt", "revision");
 
 -- CreateIndex
@@ -3793,9 +3757,6 @@ ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_assignment_fkey" FOR
 ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_bootstrap_id_fkey" FOREIGN KEY ("bootstrap_id") REFERENCES "workload_bootstraps"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "run_outbox_events" ADD CONSTRAINT "run_outbox_events_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "runtime_continuation_checkpoints" ADD CONSTRAINT "runtime_continuation_checkpoints_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -4199,14 +4160,6 @@ BEGIN
     RETURN NEW;
 END;
 $$;
-CREATE FUNCTION "enforce_accepted_outbox_attempt"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM "agent_runs" WHERE "id" = NEW."run_id" AND "attempt" >= NEW."attempt") THEN
-        RAISE EXCEPTION 'outbox event attempt has not been accepted';
-    END IF;
-    RETURN NEW;
-END;
-$$;
 CREATE FUNCTION "reject_run_input_snapshot_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'RunInputSnapshot rows are immutable';
@@ -4343,7 +4296,6 @@ BEGIN
             PERFORM 1 FROM "workload_assignments" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
             PERFORM 1 FROM "run_proof_keys" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
             PERFORM 1 FROM "agent_run_workflow_tasks" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
-            PERFORM 1 FROM "run_outbox_events" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
             IF EXISTS (
                 SELECT 1 FROM "workload_assignments"
                 WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt"
@@ -4355,22 +4307,6 @@ BEGIN
                 SELECT 1 FROM "run_proof_keys" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "revoked_at" IS NULL
             ) THEN
                 RAISE EXCEPTION 'a Cancelled AgentRun requires every RunProofKey revoked';
-            END IF;
-            IF NOT EXISTS (
-                SELECT 1 FROM "run_outbox_events"
-                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "kind" = 'run.cancellation_requested'::"RunOutboxEventKind"
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun requires its RunCancellationRequested event';
-            END IF;
-            IF EXISTS (
-                SELECT 1 FROM "agent_run_workflow_tasks"
-                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "task_id" IS NOT NULL
-            ) AND NOT EXISTS (
-                SELECT 1 FROM "run_outbox_events"
-                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "kind" = 'run.workload_cleanup_requested'::"RunOutboxEventKind"
-                  AND "published_at" IS NOT NULL AND "failed_at" IS NULL
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun with a bound workflow task requires a confirmed WorkloadCleanup';
             END IF;
         END IF;
         IF OLD."started_at" IS NOT NULL AND NEW."started_at" IS DISTINCT FROM OLD."started_at" THEN
@@ -4555,51 +4491,6 @@ BEGIN
     END IF;
     IF OLD."revoked_at" IS NOT NULL OR NEW."revoked_at" IS NULL THEN
         RAISE EXCEPTION 'RunProofKey may be revoked exactly once';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_run_outbox_event_update"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        IF current_setting('opencrane.run_outbox_prune', true) IS DISTINCT FROM 'true'
-            OR OLD."published_at" IS NULL OR OLD."failed_at" IS NOT NULL THEN
-            RAISE EXCEPTION 'OutboxEvent rows cannot be deleted outside successful-delivery retention';
-        END IF;
-        RETURN OLD;
-    END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."sequence" IS DISTINCT FROM OLD."sequence"
-        OR NEW."kind" IS DISTINCT FROM OLD."kind"
-        OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
-        OR NEW."payload" IS DISTINCT FROM OLD."payload"
-        OR NEW."available_at" IS DISTINCT FROM OLD."available_at"
-        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'OutboxEvent identity, order, and payload are immutable';
-    END IF;
-    IF OLD."published_at" IS NOT NULL OR OLD."failed_at" IS NOT NULL THEN
-        RAISE EXCEPTION 'delivered OutboxEvent status is terminal';
-    END IF;
-    IF OLD."claimed_at" IS NOT NULL AND (
-        NEW."claimed_at" IS NULL OR NEW."claimed_at" < OLD."claimed_at"
-    ) THEN
-        RAISE EXCEPTION 'OutboxEvent claim time cannot move backward or be erased';
-    END IF;
-    IF NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" THEN
-        IF NEW."claimed_at" IS NULL OR NEW."delivery_count" <> OLD."delivery_count" + 1 THEN
-            RAISE EXCEPTION 'each OutboxEvent claim must advance delivery_count exactly once';
-        END IF;
-    ELSIF NEW."delivery_count" <> OLD."delivery_count" THEN
-        RAISE EXCEPTION 'OutboxEvent delivery_count advances only with a new claim';
-    END IF;
-    IF OLD."published_at" IS NOT NULL AND NEW."published_at" IS DISTINCT FROM OLD."published_at" THEN
-        RAISE EXCEPTION 'OutboxEvent publication evidence is immutable';
-    END IF;
-    IF OLD."failed_at" IS NOT NULL AND (
-        NEW."failed_at" IS DISTINCT FROM OLD."failed_at"
-        OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code"
-    ) THEN
-        RAISE EXCEPTION 'OutboxEvent failure evidence is immutable';
     END IF;
     RETURN NEW;
 END;
@@ -6940,16 +6831,6 @@ ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_consumptio
     );
 ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_nonempty_check" CHECK (btrim("workload_uid") <> '' AND btrim("pod_uid") <> '' AND "key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$');
 ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_expiry_check" CHECK ("expires_at" > "created_at");
-ALTER TABLE "run_outbox_events" ADD CONSTRAINT "run_outbox_events_coordinate_check" CHECK ("attempt" > 0 AND "sequence" > 0);
-ALTER TABLE "run_outbox_events" ADD CONSTRAINT "run_outbox_events_delivery_check" CHECK (
-        "delivery_count" >= 0 AND NOT ("published_at" IS NOT NULL AND "failed_at" IS NOT NULL) AND
-        (("claimed_at" IS NULL AND "delivery_count" = 0 AND "published_at" IS NULL AND "failed_at" IS NULL) OR
-         ("claimed_at" IS NOT NULL AND "delivery_count" > 0)) AND
-        ("published_at" IS NULL OR "published_at" >= "claimed_at") AND
-        ("failed_at" IS NULL OR "failed_at" >= "claimed_at") AND
-        (("failed_at" IS NULL AND "failure_code" IS NULL) OR
-         ("failed_at" IS NOT NULL AND "failure_code" IS NOT NULL AND btrim("failure_code") <> ''))
-    );
 ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check" CHECK (
 		btrim("silo_id") <> '' AND
 		(("subject_kind" = 'group' AND "subject_group_id" IS NOT NULL AND "subject_principal_id" IS NULL) OR
@@ -7400,7 +7281,6 @@ CREATE TRIGGER "agent_revision_boundary_attachments_immutable"
 	BEFORE INSERT OR UPDATE OR DELETE ON "agent_revision_boundary_attachments"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_assignment_immutability"();
 CREATE TRIGGER "workload_assignments_current_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "workload_assignments" FOR EACH ROW EXECUTE FUNCTION "enforce_current_workload_assignment_attempt"();
-CREATE TRIGGER "run_outbox_events_accepted_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "run_outbox_events" FOR EACH ROW EXECUTE FUNCTION "enforce_accepted_outbox_attempt"();
 CREATE TRIGGER "run_input_snapshots_immutable" BEFORE UPDATE OR DELETE ON "run_input_snapshots" FOR EACH ROW EXECUTE FUNCTION "reject_run_input_snapshot_mutation"();
 CREATE TRIGGER "child_run_reservations_authority" BEFORE INSERT ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_reservation"();
 CREATE TRIGGER "child_run_reservations_immutable" BEFORE UPDATE OR DELETE ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "reject_child_run_reservation_mutation"();
@@ -7417,9 +7297,6 @@ CREATE TRIGGER "workload_bootstraps_single_use" BEFORE INSERT OR UPDATE OR DELET
 CREATE TRIGGER "run_proof_keys_consumed_bootstrap" BEFORE INSERT ON "run_proof_keys" FOR EACH ROW EXECUTE FUNCTION "enforce_run_proof_key_bootstrap"();
 CREATE TRIGGER "workload_assignments_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "workload_assignments" FOR EACH ROW EXECUTE FUNCTION "enforce_workload_assignment_update"();
 CREATE TRIGGER "run_proof_keys_immutable" BEFORE UPDATE OR DELETE ON "run_proof_keys" FOR EACH ROW EXECUTE FUNCTION "enforce_run_proof_key_update"();
-CREATE TRIGGER "run_outbox_events_monotonic"
-    BEFORE UPDATE OR DELETE ON "run_outbox_events"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_run_outbox_event_update"();
 CREATE TRIGGER "runtime_steering_requests_closed_lifecycle"
     BEFORE INSERT OR UPDATE OR DELETE ON "runtime_steering_requests"
     FOR EACH ROW EXECUTE FUNCTION "enforce_runtime_steering_request_lifecycle"();

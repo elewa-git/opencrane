@@ -41,13 +41,13 @@ export type ChildRunReservationResult = { readonly outcome: "reserved" | "idempo
  *
  * The repository re-runs the child admission decision — limits, budget and target policy — inside a
  * Serializable transaction. A concurrent sibling forces one transaction to retry before it can
- * overspend the parent budget. The child run, snapshot, reservation and outbox row commit together.
+ * overspend the parent budget. The child run, snapshot, and reservation commit together.
  *
  * Implemented by `PrismaChildRunReservationRepository`. No production caller found yet: the
  * spawning path that will use it is not wired, so check before assuming this is live.
  */
 export interface ChildRunReservationRepository
 {
-	/** Rechecks parent authority and atomically writes a child run, snapshot, reservation, and outbox. */
+	/** Rechecks parent authority and atomically writes a child run, snapshot, and reservation. */
 	reserve(command: ChildRunReservationCommand, build: ChildRunReservationBuild): Promise<ChildRunReservationResult>;
 }

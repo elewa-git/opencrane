@@ -1,4 +1,4 @@
-import { AgentRunState, AgentRunTrigger, RunOutboxEventKind, type PrismaClient } from "@prisma/client";
+import { AgentRunState, AgentRunTrigger, type PrismaClient } from "@prisma/client";
 import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
@@ -104,7 +104,6 @@ describe("PrismaChildRunReservationRepository", function _describeReservationRep
 				aggregate: vi.fn().mockResolvedValue({ _count: { childRunId: 0 }, _sum: { maxTokens: null, maxCostUsdMicros: null } }),
 				create: vi.fn(),
 			},
-			outboxEvent: { createMany: vi.fn() },
 		};
 		const repository = new PrismaChildRunReservationRepository(_prisma(transaction));
 		const result = await repository.reserve(_command(parent, 99), { build: async function _build() { return { snapshot: childSnapshot, effectiveContractDigest: childSnapshot.effectiveContractDigest }; } });
@@ -157,20 +156,8 @@ describe("PrismaChildRunReservationRepository", function _describeReservationRep
 			maxTokens: 100,
 			maxCostUsdMicros: 500_000n,
 		} });
-		expect(transaction.outboxEvent.createMany).toHaveBeenCalledWith({ data: [
-			{
-				runId: "child-1",
-				attempt: 1,
-				sequence: 1,
-				kind: RunOutboxEventKind.RunAccepted,
-				idempotencyKey: "child-1:accepted",
-				payload: { runId: "child-1", inputSnapshotDigest: childSnapshot.digest },
-				availableAt: acceptedAt,
-			},
-		] });
 		expect(transaction.agentRun.create.mock.invocationCallOrder[0]).toBeLessThan(transaction.runInputSnapshot.create.mock.invocationCallOrder[0] ?? 0);
 		expect(transaction.runInputSnapshot.create.mock.invocationCallOrder[0]).toBeLessThan(transaction.childRunReservation.create.mock.invocationCallOrder[0] ?? 0);
-		expect(transaction.childRunReservation.create.mock.invocationCallOrder[0]).toBeLessThan(transaction.outboxEvent.createMany.mock.invocationCallOrder[0] ?? 0);
 	});
 
 	it("returns the sealed persisted snapshot for an exact idempotent replay", async function _replaysExactChild()
@@ -195,7 +182,6 @@ describe("PrismaChildRunReservationRepository", function _describeReservationRep
 			},
 			runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ id: "snapshot-1", ...childSnapshot, compiledAt: new Date(childSnapshot.compiledAt) }), create: vi.fn() },
 			childRunReservation: { findUnique: vi.fn().mockResolvedValue({ depth: 2, maxTokens: 100, maxCostUsdMicros: 500_000n }), aggregate: vi.fn(), create: vi.fn() },
-			outboxEvent: { createMany: vi.fn() },
 		};
 		const repository = new PrismaChildRunReservationRepository(_prisma(transaction));
 		const result = await repository.reserve(_command(parent), { build: vi.fn() });
@@ -204,6 +190,5 @@ describe("PrismaChildRunReservationRepository", function _describeReservationRep
 		expect(transaction.agentRun.create).not.toHaveBeenCalled();
 		expect(transaction.runInputSnapshot.create).not.toHaveBeenCalled();
 		expect(transaction.childRunReservation.create).not.toHaveBeenCalled();
-		expect(transaction.outboxEvent.createMany).not.toHaveBeenCalled();
 	});
 });

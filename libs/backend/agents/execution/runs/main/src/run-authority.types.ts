@@ -32,7 +32,7 @@ export interface StartNextRunAttemptCommand
 	 * rather than starting a third; a different key against an already-advanced run is a conflict.
 	 */
 	readonly idempotencyKey: string;
-	/** ISO-8601 instant from the server's clock, stored as the new attempt's `acceptedAt` and as when its outbox event becomes available. */
+	/** ISO-8601 instant from the server's clock, stored as the new attempt's `acceptedAt`. */
 	readonly acceptedAt: string;
 }
 

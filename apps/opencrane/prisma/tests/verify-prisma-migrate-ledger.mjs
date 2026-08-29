@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,9 @@ const prismaRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ledgerRoot = join(prismaRoot, "prisma-migrations");
 const baseline = readFileSync(join(ledgerRoot, "20260826000000_0_9_3_baseline/migration.sql"), "utf8");
 const migration = readFileSync(join(ledgerRoot, "20260827000000_0_10_0_workflow_cutover/migration.sql"), "utf8");
+const sqlWorkloadRetirement = readFileSync(join(ledgerRoot, "20260829000000_retire_sql_workload_control_plane/migration.sql"), "utf8");
 const targetBaseline = readFileSync(join(prismaRoot, "bootstrap/target-baseline.sql"), "utf8");
+const releasedCutoverChecksum = createHash("sha256").update(migration).digest("hex");
 
 function _Require(condition, message)
 {
@@ -20,17 +23,19 @@ function _RequireBefore(earlier, later, message)
 	_Require(earlierIndex >= 0 && laterIndex > earlierIndex, message);
 }
 
+function _RequireBeforeIn(source, earlier, later, message)
+{
+	const earlierIndex = source.indexOf(earlier);
+	const laterIndex = source.indexOf(later);
+	_Require(earlierIndex >= 0 && laterIndex > earlierIndex, message);
+}
+
 function _TargetFunction(name)
 {
 	const start = targetBaseline.indexOf(`CREATE FUNCTION "${name}"`);
 	const end = targetBaseline.indexOf("$$;", start) + 3;
 	_Require(start >= 0 && end > 2, `target function ${name} must exist`);
 	return targetBaseline.slice(start, end);
-}
-
-function _NormalizedSql(value)
-{
-	return value.replace(/\s+/gu, " ").trim();
 }
 
 const ledgerDirectories = readdirSync(ledgerRoot, { withFileTypes: true }).filter(function _IsDirectory(entry) { return entry.isDirectory(); });
@@ -40,6 +45,7 @@ const baselineStatements = baseline
 	.split("\n")
 	.filter(function _IsSql(line) { return line.trim() !== "" && !line.trimStart().startsWith("--"); });
 _Require(baselineStatements.length === 0, "the released 0.9.3 Prisma baseline must remain a no-op");
+_Require(releasedCutoverChecksum === "6a4256041ba5a78c6e849531c4d9fffea2cad5afef509344c088e566bcfa0004", "the applied 0.10.0 cutover migration must retain its released checksum");
 
 _Require(migration.startsWith("-- OpenCrane 0.9.3 to 0.10.0 workflow and OCI cutover."), "the forward migration must name its exact release boundary");
 _Require(migration.match(/^BEGIN;$/gmu)?.length === 1, "the forward migration must open one transaction");
@@ -51,12 +57,6 @@ _RequireBefore('DROP TRIGGER IF EXISTS "run_outbox_events_monotonic"', 'DELETE F
 
 for (const statement of [
 	'DELETE FROM "run_outbox_events" WHERE "kind"::text IN (\'run.attempt_requested\', \'run.workload_release_requested\');',
-	'DELETE FROM "skill_workload_bootstraps";',
-	'DELETE FROM "skill_workloads";',
-	'DROP TABLE "skill_workload_bootstraps";',
-	'DROP TABLE "skill_workloads";',
-	'DROP TYPE "SkillWorkloadKind";',
-	'DROP TYPE "SkillWorkloadState";',
 	'DELETE FROM "agent_revision_integration_assignments";',
 	'DELETE FROM "integration_custody_references";',
 	'DELETE FROM "integrations";',
@@ -64,6 +64,51 @@ for (const statement of [
 {
 	_Require(migration.includes(statement), `approved hard cutoff is missing: ${statement}`);
 }
+
+_Require(sqlWorkloadRetirement.match(/^BEGIN;$/gmu)?.length === 1, "the SQL workload retirement must open one transaction");
+_Require(sqlWorkloadRetirement.match(/^COMMIT;$/gmu)?.length === 1, "the SQL workload retirement must commit one transaction");
+for (const statement of [
+	'DROP TRIGGER IF EXISTS "skill_workloads_authority" ON "skill_workloads";',
+	'DROP TRIGGER IF EXISTS "skill_workload_bootstraps_authority" ON "skill_workload_bootstraps";',
+	'DROP TRIGGER IF EXISTS "cancel_ineligible_skill_workloads_on_revision" ON "skill_revisions";',
+	'DROP TRIGGER IF EXISTS "cancel_ineligible_skill_workloads_on_invocation" ON "tool_invocations";',
+	'DROP VIEW IF EXISTS "skill_workload_claim_candidates";',
+	'DROP VIEW IF EXISTS "skill_workload_release_claim_candidates";',
+	'DROP FUNCTION IF EXISTS "select_skill_workload_claim_candidate"();',
+	'DROP FUNCTION IF EXISTS "select_skill_workload_release_claim_candidate"();',
+	'DROP FUNCTION IF EXISTS "enforce_skill_workload_bootstrap"();',
+	'DROP FUNCTION IF EXISTS "enforce_skill_workload_authority"();',
+	'DROP FUNCTION IF EXISTS "cancel_ineligible_skill_workloads"();',
+	'DELETE FROM "skill_workload_bootstraps";',
+	'DELETE FROM "skill_workloads";',
+	'DROP TABLE "skill_workload_bootstraps";',
+	'DROP TABLE "skill_workloads";',
+	'DROP TYPE "SkillWorkloadKind";',
+	'DROP TYPE "SkillWorkloadState";',
+])
+{
+	_Require(sqlWorkloadRetirement.includes(statement), `SQL workload retirement is missing: ${statement}`);
+}
+
+for (const statement of [
+	'DROP TRIGGER IF EXISTS "run_outbox_events_accepted_attempt" ON "run_outbox_events";',
+	'DROP TRIGGER IF EXISTS "run_outbox_events_monotonic" ON "run_outbox_events";',
+	'DROP FUNCTION IF EXISTS "enforce_accepted_outbox_attempt"();',
+	'DROP FUNCTION IF EXISTS "enforce_run_outbox_event_update"();',
+	'DELETE FROM "run_outbox_events";',
+	'DROP TABLE "run_outbox_events";',
+	'DROP TYPE "RunOutboxEventKind";',
+])
+{
+	_Require(sqlWorkloadRetirement.includes(statement), `run outbox retirement is missing: ${statement}`);
+}
+_RequireBeforeIn(sqlWorkloadRetirement, 'DROP TRIGGER IF EXISTS "run_outbox_events_monotonic"', 'DELETE FROM "run_outbox_events";', "the deletion guard must be removed before run outbox rows are deleted");
+_RequireBeforeIn(sqlWorkloadRetirement, 'DELETE FROM "run_outbox_events";', 'DROP TABLE "run_outbox_events";', "run outbox rows must be deleted before their table is removed");
+_RequireBeforeIn(sqlWorkloadRetirement, 'DROP TABLE "run_outbox_events";', 'DROP TYPE "RunOutboxEventKind";', "the run outbox table must be removed before its enum");
+_Require(!targetBaseline.includes("run_outbox_events"), "clean target must remove the run outbox table and authority");
+_Require(!targetBaseline.includes("RunOutboxEventKind"), "clean target must remove the run outbox enum");
+const runAuthorityReplacement = _TargetFunction("enforce_agent_run_authority_update").replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION");
+_Require(sqlWorkloadRetirement.includes(runAuthorityReplacement), "SQL workload retirement must carry the exact workflow-era AgentRun authority function");
 
 for (const retiredMcpbTable of ["mcpb_validation_claims", "mcpb_validations"])
 {

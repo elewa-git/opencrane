@@ -26,7 +26,7 @@ change — a retry, an audit, or a replay all see the exact same record, identif
  └─────────────────────────────────────────┘
           │  ready (authority + snapshot) / denied (one precise reason)
           ▼
- runs · RunAdmissionRepository  ── persists run + snapshot + outbox events in one commit
+ runs · RunAdmissionRepository  ── persists run + snapshot + workflow task in one commit
 ```
 
 **In this flow:** [execution/runs](../../runs/main/README.md) *(owns the admission transaction, the digest

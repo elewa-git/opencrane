@@ -69,7 +69,7 @@ describe("Prisma AgentRun authority adapter", function _suite()
 
 	it("denies a retry before mutation when current participant authority is absent", async function _Unauthorized()
 	{
-		const transaction = { ..._authority(), agentService: { findUnique: vi.fn() }, agentRun: { findUnique: vi.fn(), updateMany: vi.fn() }, outboxEvent: { findUnique: vi.fn(), aggregate: vi.fn(), create: vi.fn() } };
+		const transaction = { ..._authority(), agentService: { findUnique: vi.fn() }, agentRun: { findUnique: vi.fn(), updateMany: vi.fn() } };
 		transaction.conversationParticipant.findFirst.mockResolvedValue(null);
 		await expect(new PrismaAgentRunAuthorityRepository(transaction as never, _workflow()).startNextAttemptAtomically(_command())).resolves.toEqual({ status: "unauthorized" });
 		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
@@ -99,10 +99,9 @@ describe("Prisma AgentRun authority adapter", function _suite()
 
 	it("does not mutate when the service authority changed", async function _serviceConflict()
 	{
-		const transaction = { ..._authority(), agentService: { findUnique: vi.fn().mockResolvedValue({ ..._serviceRow(), activeRevisionId: "revision-2" }) }, agentRun: { findUnique: vi.fn().mockResolvedValue(_runRow()), updateMany: vi.fn() }, outboxEvent: { findUnique: vi.fn(), aggregate: vi.fn(), create: vi.fn() } };
+		const transaction = { ..._authority(), agentService: { findUnique: vi.fn().mockResolvedValue({ ..._serviceRow(), activeRevisionId: "revision-2" }) }, agentRun: { findUnique: vi.fn().mockResolvedValue(_runRow()), updateMany: vi.fn() } };
 		await expect(new PrismaAgentRunAuthorityRepository(transaction as never, _workflow()).startNextAttemptAtomically(_command())).resolves.toEqual({ status: "agent_service_authority_conflict", currentAgentServiceState: "active", currentAgentServiceSiloId: "silo-1", currentActiveAgentRevisionId: "revision-2" });
 		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
-		expect(transaction.outboxEvent.create).not.toHaveBeenCalled();
 	});
 
 	it("reads the committed same-key attempt after three rolled-back transactions", async function _ReadsWinner()
