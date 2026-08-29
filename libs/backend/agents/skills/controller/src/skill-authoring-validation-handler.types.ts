@@ -7,6 +7,7 @@ import type { GovernedJobObservation, GovernedJobReleaseFence } from "@opencrane
 import type { IWorkflowTaskContext, IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
 export type { SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerAuthority, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationPodBindCommand, SkillAuthoringValidationWorkloadBindCommand } from "@opencrane/backend/agents/skills/workflows/contract";
+export type { SkillAuthoringValidationJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
 
 /** Reports the completion that the handler loaded and asked the server to apply. */
 export interface SkillAuthoringValidationTaskResult

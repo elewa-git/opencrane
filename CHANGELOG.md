@@ -298,12 +298,11 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   redundant in this topology; the flag makes that explicit rather than leaving it as a silent
   gap.
 
-- **Application code can no longer run raw SQL against the database, anywhere, under any
-  exemption.** `$queryRaw`, `$queryRawUnsafe`, `$executeRaw`, and `$executeRawUnsafe` are now
-  forbidden in production TypeScript — including inside a previously-declared repository adapter —
-  and no temporary policy exemption can reopen them. The invariants those queries used to enforce
-  (artifact-preprocessing claims and workflow admission) now live as reviewed, database-owned
-  functions and triggers in the schema baseline, reached only through typed Prisma delegates.
+- **Product and domain repositories can no longer run raw SQL against the database.**
+  `$queryRaw`, `$queryRawUnsafe`, `$executeRaw`, and `$executeRawUnsafe` are forbidden in those
+  production adapters, and no temporary policy exemption can reopen them. Two checked workflow
+  adapters are the narrow exception: they call the fixed, parameterized `absurd.spawn_task` and
+  `absurd.emit_task_event` procedures that admit work and save task events in a database transaction.
 
 ### Removed
 

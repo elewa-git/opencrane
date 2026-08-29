@@ -76,20 +76,21 @@ main conversation. Same identity, same capabilities, same budget, part of the sa
 if the specialist proposes a governed action, it surfaces through the *parent's* approval path.
 This tier is a convenience for context hygiene — it is **not** a security boundary.
 
-### Tier 2 — governed child run or tool job
+### Tier 2 — governed child run
 
 When a skill demands more than instructions, execution crosses a real boundary:
 
 - A skill that needs **capabilities the agent shouldn't hold open**, **its own budget**, or a
   **lifetime beyond the conversation** runs as a [child run](/guide/child-runs) — its own
   identity, its own (smaller) capability set, its own audit trail.
-- **Organisation-authored Python never executes inside a claimed agent runtime Pod.** Trusted image-baked
-  tools may run in-process, but user-authored code executes through an isolated tool Job with
-  exactly the capability its declared requirements were reviewed against.
+- **Organisation-authored Python never executes inside a claimed agent runtime Pod.** Trusted
+  image-baked tools may run in-process. User-authored code is currently rejected because the
+  isolated Job transport is not available yet.
 
-**Rule of thumb:** pure instructions → tier 0 or 1; capabilities, spend, or code execution →
-tier 2. The tier is a property of what the skill was reviewed to need — an agent cannot quietly
-upgrade a checklist into a code-executing specialist.
+**Rule of thumb:** pure instructions → tier 0 or 1; capabilities or spend → tier 2; user-authored
+code → unavailable until the isolated Job transport ships. The tier is a property of what the skill
+was reviewed to need — an agent cannot quietly upgrade a checklist into a code-executing
+specialist.
 
 ## What comes next
 

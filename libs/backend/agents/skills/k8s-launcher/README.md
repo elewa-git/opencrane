@@ -42,8 +42,9 @@ offline checks without using permanent storage.
 
 ## Boundary
 
-The agent controller consumes this builder. It does not make a tool executable, contact the
-ArtifactStore, or provide a worker transport; those require the later durable claim/result protocol.
+The agent controller consumes this builder for authoring-package validation. It does not make a
+published code skill executable; that remains unavailable until a separate execution protocol is
+built.
 Malformed identity, image, lifetime, namespace, resource, bootstrap-endpoint, or bootstrap-reference
 inputs fail before Kubernetes sees a manifest. The reference must use the fixed opaque grammar, so readable durable
 workload identifiers are not repeated in the worker's bootstrap input or environment. Job annotations retain only

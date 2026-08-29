@@ -1,6 +1,6 @@
 import type { WarmRuntimePoolProfiles } from "@opencrane/backend/agents/runtime/controller";
 import type { McpExecutorJobProfile } from "@opencrane/backend/agents/runtime/mcp-executor/k8s-launcher";
-import type { SkillAuthoringValidationJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
+import type { SkillAuthoringValidationJobProfile } from "@opencrane/backend/agents/skills/controller";
 import type { ArtifactPreprocessorJobProfile } from "@opencrane/backend/artifacts/preprocessor/k8s-launcher";
 
 /** Fully validated process configuration for the per-silo agent controller. */

@@ -69,7 +69,6 @@ reusable behaviour and never own a deployment.
   discovery or tool call. The uploaded image receives no OpenCrane token; the fixed companion gets
   a short-lived Pod-bound token and reports one checked result.
 - **Skill-authoring namespace** — candidate-skill Jobs with no standing worker.
-- **Tool-runner namespace** — governed tool Jobs with no standing worker.
 - **Artifact-preprocessor namespace** — bounded document-extraction Jobs with broker-only byte flow.
 - **Artifact-scanner namespace** — an outbound-only scanner Deployment with broker-only quarantined
   byte flow, pinned offline definitions, and no database or ArtifactStore authority.
@@ -114,7 +113,7 @@ fail-closed until their recoverable write authority is implemented and qualified
 PostgreSQL stores durable product and audit state. ArtifactStore stores content-addressed bytes.
 Cognee stores indexed organisation memory under OpenCrane-owned scope and provenance rules.
 
-Runtime Pods and skill, tool, and preprocessing Jobs receive only bounded scratch. Restarting or
+Runtime Pods and skill-authoring and preprocessing Jobs receive only bounded scratch. Restarting or
 deleting a workload cannot delete a conversation, run, artifact, skill, or organisation-memory record.
 
 ## Deployment ownership

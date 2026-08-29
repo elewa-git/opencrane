@@ -39,7 +39,7 @@ Correlate by run id and attempt. Do not use a Pod name as the product incident k
 
 ## Run stuck before assignment
 
-1. Inspect the run state and latest run outbox event.
+1. Inspect the run state, its bound AgentRun workflow task, and the task's saved Absurd events.
 2. Check the controller can reach OpenCrane's internal API.
 3. Check its projected token audience and ServiceAccount.
 4. Check the selected runtime profile names the expected namespace.
