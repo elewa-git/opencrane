@@ -7,12 +7,28 @@ import { _BoundedJsonBody, _FetchJson, _ReadBoundedJson } from "./bounded-json";
 import { __ParseMcpCompanionClaimResponse } from "./mcp-companion-wire";
 import { McpCompanionCommandKinds, McpCompanionRemoteClaimOutcomes, type McpCompanionCommand, type McpCompanionCommandLease, type McpCompanionCompletion, type McpCompanionFailureCodes, type McpCompanionIdentity, type McpCompanionRemote, type McpCompanionRemoteOptions } from "./mcp-companion.types";
 
-/** Create the authenticated OpenCrane command adapter for one companion Pod. */
+/**
+ * Creates the authenticated companion-to-OpenCrane command adapter for one executor Pod.
+ *
+ * The adapter is not the Pod-local connection to the uploaded MCP server. It calls only the fixed
+ * in-cluster OpenCrane executor route, rereads the rotating projected token for every request, and
+ * carries a server-issued `executionId` plus `claimFence` on each terminal report. The uploaded
+ * server never receives the token or the opaque execution reference.
+ *
+ * Called by: apps/mcp-executor/src/index.ts.
+ * @param options - Fixed destination, token reader, request deadline, and byte ceilings for one Pod.
+ * @returns The remote used to claim one server-selected command and report its fenced outcome.
+ */
 export function __CreateMcpCompanionRemote(options: McpCompanionRemoteOptions): McpCompanionRemote
 {
+	// 1. Refuse a substituted destination or unbounded transport before the Pod can make its first call.
 	_AssertOptions(options);
+
+	// 2. Keep the token reader injectable for tests, but use the projected file at every production request.
 	const fetcher = options.fetch ?? fetch;
 	const readToken = options.readToken ?? async function _ReadProjectedToken(): Promise<string> { return readFile(options.tokenPath, "utf8"); };
+
+	// 3. Expose only server-selected claim and fence-bound terminal operations to the companion loop.
 	return {
 		claim(identity, signal) { return _Claim(options, fetcher, readToken, identity, signal); },
 		complete(identity, lease, completion, signal) { return _Report(options, fetcher, readToken, identity, lease, { completion }, "completion", signal); },
@@ -34,6 +50,7 @@ async function _Claim(options: McpCompanionRemoteOptions, fetcher: NonNullable<M
 {
 	return ___DoWithTrace("mcp_companion.command.claim", {}, async function _ClaimCommand(): Promise<McpCompanionCommand | McpCompanionRemoteClaimOutcomes.Terminal | null>
 	{
+		// 1. Send only the Pod identity to OpenCrane, which chooses any discovery or invocation command.
 		const body = _BoundedJsonBody(identity, options.maximumRequestBytes);
 		const headers = await _Headers(readToken, body);
 		const response = await ___DoWithoutTrace(function _SendClaim() { return _FetchJson(fetcher, `${options.openCraneExecutorUrl}/claim`, { method: "POST", headers, body, redirect: "error" }, options.requestTimeoutMilliseconds, signal); });
@@ -45,6 +62,7 @@ async function _Claim(options: McpCompanionRemoteOptions, fetcher: NonNullable<M
 			throw new Error(`MCP companion claim failed with HTTP ${response.status}`);
 		const value = await _ReadBoundedJson(response, options.maximumResponseBytes);
 		const claim = __ParseMcpCompanionClaimResponse(value);
+		// 2. Preserve the server-issued lease so a terminal write cannot be replayed for another claim.
 		const lease = { executionId: claim.executionId, claimFence: claim.claimFence, expiresAt: claim.expiresAt };
 		return claim.kind === McpCompanionCommandKinds.Discovery ? { kind: claim.kind, lease } : { kind: claim.kind, lease, invocationId: claim.invocationId, toolName: claim.toolName, arguments: claim.arguments };
 	});
@@ -56,8 +74,11 @@ async function _Report(options: McpCompanionRemoteOptions, fetcher: NonNullable<
 	const fields = { outcome: suffix };
 	return ___DoWithTrace(`mcp_companion.command.${suffix}`, fields, async function _ReportOutcome(): Promise<void>
 	{
+		// 1. Bind the result to the current execution and fence instead of trusting a companion-selected target.
 		const body = _BoundedJsonBody({ ...identity, executionId: lease.executionId, claimFence: lease.claimFence, ...outcome }, options.maximumRequestBytes);
 		const headers = await _Headers(readToken, body);
+
+		// 2. Use the fixed terminal route and reject every non-empty-success result without a retry loop.
 		const path = `${options.openCraneExecutorUrl}/${suffix === "completion" ? "complete" : "fail"}`;
 		const response = await ___DoWithoutTrace(function _SendOutcome() { return _FetchJson(fetcher, path, { method: "POST", headers, body, redirect: "error" }, options.requestTimeoutMilliseconds, signal); });
 		if (response.status !== 204)

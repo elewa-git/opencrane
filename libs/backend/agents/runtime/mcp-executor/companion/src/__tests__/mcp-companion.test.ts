@@ -151,11 +151,11 @@ describe("MCP companion Pod-local adapter", function _DescribeServer()
 		{
 			const request = JSON.parse(String(init?.body)) as { readonly id: string; readonly method: string };
 			methods.push(request.method);
-			await new Promise<void>(function _Delay(resolve) { setTimeout(resolve, 15); });
+			await new Promise<void>(function _Delay(resolve) { setTimeout(resolve, 125); });
 			return _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", supportedVersions: ["2026-07-28"] } });
 		});
 		const server = __CreateMcpCompanionServer({ serverUrl: "http://127.0.0.1:3000/mcp", requestTimeoutMilliseconds: 1_000, maximumRequestBytes: 4_096, maximumResponseBytes: 4_096, fetch: fetcher });
-		const command = { kind: McpCompanionCommandKinds.Invocation, lease: { ..._LEASE, expiresAt: new Date(Date.now() + 5).toISOString() }, invocationId: "invocation-1", toolName: "calendar.read", arguments: {} } as const;
+		const command = { kind: McpCompanionCommandKinds.Invocation, lease: { ..._LEASE, expiresAt: new Date(Date.now() + 100).toISOString() }, invocationId: "invocation-1", toolName: "calendar.read", arguments: {} } as const;
 		await expect(server.call(command, new AbortController().signal)).rejects.toThrow(/expired/u);
 		expect(methods).toEqual(["server/discover"]);
 	});

@@ -16,6 +16,7 @@ describe("MCP executor protocol", function _DescribeMcpExecutorProtocol()
 		const valid = { jsonrpc: "2.0", id: "opencrane-mcp-tools", result: { tools: [{ name: "calendar.read", description: "Reads events", inputSchema: { type: "object" } }] } };
 		expect(__ParseMcpExecutorToolsListResponse(valid)).toEqual([{ name: "calendar.read", description: "Reads events", inputSchema: { type: "object" } }]);
 		expect(function _Duplicates() { __ParseMcpExecutorToolsListResponse({ jsonrpc: "2.0", id: "opencrane-mcp-tools", result: { tools: [valid.result.tools[0], valid.result.tools[0]] } }); }).toThrow(/invalid/);
+		expect(function _InjectedField() { __ParseMcpExecutorToolsListResponse({ jsonrpc: "2.0", id: "opencrane-mcp-tools", result: { tools: [{ ...valid.result.tools[0], registryReference: "controller-selected" }] } }); }).toThrow(/invalid/);
 		expect(function _NullSchema() { __ParseMcpExecutorToolsListResponse({ jsonrpc: "2.0", id: "opencrane-mcp-tools", result: { tools: [{ name: "invalid", inputSchema: null }] } }); }).toThrow(/invalid/);
 		expect(function _ArraySchema() { __ParseMcpExecutorToolsListResponse({ jsonrpc: "2.0", id: "opencrane-mcp-tools", result: { tools: [{ name: "invalid", inputSchema: [] }] } }); }).toThrow(/invalid/);
 	});
