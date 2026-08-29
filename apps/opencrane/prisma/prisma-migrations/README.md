@@ -28,6 +28,9 @@ Prisma migration ledger  ◄── HERE
 - `20260826000000_0_9_3_baseline` records the released starting point without replaying old SQL.
 - `20260827000000_0_10_0_workflow_cutover` applies the forward workflow and OCI cutover.
 
+Only timestamped migration directories belong here. Contract tests live outside this directory so
+Prisma does not mistake them for migrations.
+
 ## Boundary
 
 New databases still use the reviewed target baseline. Existing 0.9.3 databases use this ledger.

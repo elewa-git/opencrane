@@ -1,9 +1,9 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const prismaRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const ledgerRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const prismaRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ledgerRoot = join(prismaRoot, "prisma-migrations");
 const baseline = readFileSync(join(ledgerRoot, "20260826000000_0_9_3_baseline/migration.sql"), "utf8");
 const migration = readFileSync(join(ledgerRoot, "20260827000000_0_10_0_workflow_cutover/migration.sql"), "utf8");
 const targetBaseline = readFileSync(join(prismaRoot, "bootstrap/target-baseline.sql"), "utf8");
@@ -32,6 +32,9 @@ function _NormalizedSql(value)
 {
 	return value.replace(/\s+/gu, " ").trim();
 }
+
+const ledgerDirectories = readdirSync(ledgerRoot, { withFileTypes: true }).filter(function _IsDirectory(entry) { return entry.isDirectory(); });
+_Require(ledgerDirectories.every(function _HasMigrationSql(entry) { return existsSync(join(ledgerRoot, entry.name, "migration.sql")); }), "every Prisma migration directory must contain migration.sql");
 
 const baselineStatements = baseline
 	.split("\n")

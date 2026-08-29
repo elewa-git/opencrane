@@ -32,7 +32,7 @@
     "test:module-growth": "node --test scripts/__tests__/module-growth-check.test.mjs",
     "check:release-versioning": "node scripts/release-versioning-check.mjs",
     "test:release-versioning": "node --test scripts/__tests__/release-versioning-check.test.mjs",
-    "check:database-migrations": "node apps/opencrane/prisma/migrations/tests/verify-contract.mjs && node apps/opencrane/prisma/prisma-migrations/tests/verify-contract.mjs",
+    "check:database-migrations": "node apps/opencrane/prisma/migrations/tests/verify-contract.mjs && node apps/opencrane/prisma/tests/verify-prisma-migrate-ledger.mjs",
     "test:database-migrations": "apps/opencrane/prisma/migrations/tests/verify-postgres.sh",
     "check:workload-ownership-app-composition": "./scripts/workload-ownership-app-composition-boundary.sh",
     "test:workload-ownership-app-composition": "./scripts/workload-ownership-app-composition-boundary-negative-tests.sh",
