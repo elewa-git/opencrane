@@ -681,7 +681,7 @@ SELECT pg_temp.assert_true(
      FROM "agent_runs" WHERE "id" = 'run-cancel-invariant-proofkey')
 );
 
--- A bound workflow task does not block cancellation finalisation.
+-- A bound workflow task must record exact warm runtime deletion before cancellation finalises.
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "trigger",
     "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
@@ -691,6 +691,28 @@ INSERT INTO "agent_runs" (
     'sha256:' || repeat('d2', 32), 'sha256:' || repeat('d2', 32)
 );
 
+UPDATE "agent_runs" SET "state" = 'queued' WHERE "id" = 'run-cancel-workflow-task';
+
+INSERT INTO "workload_assignments" (
+    "run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id",
+    "audience", "service_account_name", "namespace", "workload_kind", "workload_uid", "workload_profile",
+    "pod_uid", "expires_at"
+) VALUES (
+    'run-cancel-workflow-task', 1, 'svc-main', 'rev-published', 'silo-1', 'user-1',
+    'opencrane-agent-runtime', 'runtime', 'tenant-silo-1', 'deployment', 'pod-uid-cancel-workflow', 'personal-small',
+    'pod-uid-cancel-workflow', clock_timestamp() + interval '1 hour'
+);
+
+INSERT INTO "warm_runtime_reservations" (
+    "run_id", "attempt", "generation", "silo_id", "namespace", "deployment_name", "deployment_uid",
+    "pod_name", "pod_uid", "pod_resource_version", "generic_profile", "claimed_profile",
+    "service_account_name", "state", "idle_deadline"
+) VALUES (
+    'run-cancel-workflow-task', 1, 1, 'silo-1', 'tenant-silo-1', 'personal-warm', 'deployment-uid-cancel-workflow',
+    'pod-cancel-workflow', 'pod-uid-cancel-workflow', '1', 'generic', 'personal-small',
+    'runtime', 'reserved', clock_timestamp() + interval '30 minutes'
+);
+
 INSERT INTO "agent_run_workflow_tasks" (
     "run_id", "attempt", "silo_id", "task_key", "task_name", "task_id", "receipt_bound_at"
 ) VALUES (
@@ -698,14 +720,65 @@ INSERT INTO "agent_run_workflow_tasks" (
     'agent-runs.execute/v1', 'workflow-task-cancel', clock_timestamp()
 );
 
+UPDATE "workload_assignments"
+SET "state" = 'revoked', "revoked_at" = clock_timestamp()
+WHERE "run_id" = 'run-cancel-workflow-task';
 UPDATE "agent_runs" SET "state" = 'cancelling' WHERE "id" = 'run-cancel-workflow-task';
 
+SELECT pg_temp.expect_failure(
+    'Cancelled requires a reserved warm runtime deleted',
+    $statement$
+        UPDATE "agent_runs"
+        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
+        WHERE "id" = 'run-cancel-workflow-task'
+    $statement$,
+    'requires every warm runtime reservation deleted'
+);
+
+UPDATE "warm_runtime_reservations" SET "state" = 'ready' WHERE "run_id" = 'run-cancel-workflow-task';
+SELECT pg_temp.expect_failure(
+    'Cancelled requires a ready warm runtime deleted',
+    $statement$
+        UPDATE "agent_runs"
+        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
+        WHERE "id" = 'run-cancel-workflow-task'
+    $statement$,
+    'requires every warm runtime reservation deleted'
+);
+
+UPDATE "warm_runtime_reservations" SET "state" = 'claimed' WHERE "run_id" = 'run-cancel-workflow-task';
+SELECT pg_temp.expect_failure(
+    'Cancelled requires a claimed warm runtime deleted',
+    $statement$
+        UPDATE "agent_runs"
+        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
+        WHERE "id" = 'run-cancel-workflow-task'
+    $statement$,
+    'requires every warm runtime reservation deleted'
+);
+
+UPDATE "warm_runtime_reservations"
+SET "state" = 'delete_requested', "delete_requested_at" = clock_timestamp()
+WHERE "run_id" = 'run-cancel-workflow-task';
+SELECT pg_temp.expect_failure(
+    'Cancelled requires a deletion-requested warm runtime deleted',
+    $statement$
+        UPDATE "agent_runs"
+        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
+        WHERE "id" = 'run-cancel-workflow-task'
+    $statement$,
+    'requires every warm runtime reservation deleted'
+);
+
+UPDATE "warm_runtime_reservations"
+SET "state" = 'deleted', "deleted_at" = clock_timestamp()
+WHERE "run_id" = 'run-cancel-workflow-task';
 UPDATE "agent_runs"
 SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
 WHERE "id" = 'run-cancel-workflow-task';
 
 SELECT pg_temp.assert_true(
-    'Cancelled finalises with a bound workflow task',
+    'Cancelled finalises after the bound workflow records warm runtime deletion',
     (SELECT "state" = 'cancelled' AND "finished_at" IS NOT NULL AND "terminal_reason" = 'user_cancelled'
      FROM "agent_runs" WHERE "id" = 'run-cancel-workflow-task')
 );

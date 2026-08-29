@@ -71,6 +71,7 @@ BEGIN
             PERFORM 1 FROM "workload_assignments" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
             PERFORM 1 FROM "run_proof_keys" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
             PERFORM 1 FROM "agent_run_workflow_tasks" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
+            PERFORM 1 FROM "warm_runtime_reservations" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
             IF EXISTS (
                 SELECT 1 FROM "workload_assignments"
                 WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt"
@@ -82,6 +83,13 @@ BEGIN
                 SELECT 1 FROM "run_proof_keys" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "revoked_at" IS NULL
             ) THEN
                 RAISE EXCEPTION 'a Cancelled AgentRun requires every RunProofKey revoked';
+            END IF;
+            IF EXISTS (
+                SELECT 1 FROM "warm_runtime_reservations"
+                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt"
+                  AND ("state" <> 'deleted'::"WarmRuntimeReservationState" OR "deleted_at" IS NULL)
+            ) THEN
+                RAISE EXCEPTION 'a Cancelled AgentRun requires every warm runtime reservation deleted';
             END IF;
         END IF;
         IF OLD."started_at" IS NOT NULL AND NEW."started_at" IS DISTINCT FROM OLD."started_at" THEN
