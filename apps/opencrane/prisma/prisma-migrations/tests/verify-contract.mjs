@@ -53,12 +53,18 @@ for (const statement of [
 	'DELETE FROM "agent_revision_integration_assignments";',
 	'DELETE FROM "integration_custody_references";',
 	'DELETE FROM "integrations";',
-	'DELETE FROM "mcpb_validation_claims";',
-	'DELETE FROM "mcpb_validations";',
 ])
 {
 	_Require(migration.includes(statement), `approved hard cutoff is missing: ${statement}`);
 }
+
+for (const retiredMcpbTable of ["mcpb_validation_claims", "mcpb_validations"])
+{
+	_Require(migration.includes(`IF to_regclass('${retiredMcpbTable}') IS NOT NULL THEN`), `the live 0.9.3 upgrade must tolerate absent ${retiredMcpbTable}`);
+	_Require(migration.includes(`EXECUTE 'DELETE FROM "${retiredMcpbTable}";'`), `the cutover must delete ${retiredMcpbTable} when the released database contains it`);
+	_Require(migration.includes(`DROP TABLE IF EXISTS "${retiredMcpbTable}";`), `the cutover must remove ${retiredMcpbTable} when present`);
+}
+_Require(migration.includes('DROP TYPE IF EXISTS "McpbValidationState";'), "the live 0.9.3 upgrade must tolerate an absent MCPB state type");
 
 _Require(!targetBaseline.includes("'authoring'::\"SkillWorkloadKind\""), "clean target must retire the authoring SkillWorkload enum member");
 _Require(!targetBaseline.includes('"kind" = \'authoring\''), "clean target must not retain authoring SkillWorkload authority");
@@ -80,7 +86,7 @@ _RequireBefore('ADD COLUMN     "mcp_tools" JSONB NOT NULL DEFAULT \'[]\'::jsonb'
 
 for (const retiredTable of ["agent_revision_integration_assignments", "integration_custody_references", "integrations", "mcpb_validation_claims", "mcpb_validations"])
 {
-	_Require(migration.includes(`DROP TABLE "${retiredTable}";`), `retired table ${retiredTable} must be removed`);
+	_Require(migration.includes(`DROP TABLE "${retiredTable}";`) || migration.includes(`DROP TABLE IF EXISTS "${retiredTable}";`), `retired table ${retiredTable} must be removed`);
 	_Require(!migration.includes(`CREATE TABLE "${retiredTable}"`), `retired table ${retiredTable} must not be recreated`);
 }
 for (const replacementTable of ["agent_revision_mcp_tool_assignments", "oci_image_validations", "mcp_server_revisions", "mcp_runtime_executions", "skill_authoring_validations", "agent_run_workflow_tasks"])

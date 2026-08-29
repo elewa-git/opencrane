@@ -34,8 +34,9 @@ applying later changes.
 
 ## Public surface
 
-Entrypoint: `run-migrations.sh` records the released 0.9.3 baseline and runs `prisma migrate deploy`.
-A failed migration is returned immediately for a forward code or migration repair.
+Entrypoint: `run-migrations.sh` records the released 0.9.3 baseline, resolves a fully rolled-back
+0.10.0 workflow-cutover attempt when a repaired image retries it, and runs `prisma migrate deploy`.
+Other migration failures are returned immediately for a forward code or migration repair.
 
 ## Boundary
 

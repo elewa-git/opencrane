@@ -15,6 +15,18 @@ case "$PRISMA_SCENARIO:$*" in
 		echo "Error: P3008" >&2
 		exit 1
 		;;
+	cutover-missing:"migrate resolve --rolled-back 20260827000000_0_10_0_workflow_cutover")
+		echo "Error: P3011" >&2
+		exit 1
+		;;
+	cutover-complete:"migrate resolve --rolled-back 20260827000000_0_10_0_workflow_cutover")
+		echo "Error: P3012" >&2
+		exit 1
+		;;
+	cutover-resolve-fails:"migrate resolve --rolled-back 20260827000000_0_10_0_workflow_cutover")
+		echo "unexpected database error" >&2
+		exit 1
+		;;
 	deploy-fails:"migrate deploy")
 		exit 1
 		;;
@@ -33,12 +45,25 @@ run_scenario()
 run_scenario success
 diff -u <(printf '%s\n' \
 	'migrate resolve --applied 20260826000000_0_9_3_baseline' \
+	'migrate resolve --rolled-back 20260827000000_0_10_0_workflow_cutover' \
 	'migrate deploy') "$TEST_DIR/calls"
 
 run_scenario baseline-applied
 diff -u <(printf '%s\n' \
 	'migrate resolve --applied 20260826000000_0_9_3_baseline' \
+	'migrate resolve --rolled-back 20260827000000_0_10_0_workflow_cutover' \
 	'migrate deploy') "$TEST_DIR/calls"
+
+run_scenario cutover-missing
+run_scenario cutover-complete
+
+: >"$TEST_DIR/calls"
+if PRISMA_CLI="$TEST_DIR/prisma" PRISMA_CALLS="$TEST_DIR/calls" PRISMA_SCENARIO=cutover-resolve-fails \
+	OPENCRANE_MIGRATION_SOURCE_VERSION=0.9.3 "$ENTRYPOINT"; then
+	echo "migrator ignored an unexpected failed-migration recovery error" >&2
+	exit 1
+fi
+[[ "$(grep -c '^migrate deploy$' "$TEST_DIR/calls" || true)" == "0" ]]
 
 : >"$TEST_DIR/calls"
 if PRISMA_CLI="$TEST_DIR/prisma" PRISMA_CALLS="$TEST_DIR/calls" PRISMA_SCENARIO=deploy-fails \

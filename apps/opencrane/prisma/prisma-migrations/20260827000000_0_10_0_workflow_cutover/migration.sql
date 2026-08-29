@@ -47,8 +47,17 @@ DELETE FROM "run_outbox_events" WHERE "kind"::text IN ('run.attempt_requested', 
 DELETE FROM "agent_revision_integration_assignments";
 DELETE FROM "integration_custody_references";
 DELETE FROM "integrations";
-DELETE FROM "mcpb_validation_claims";
-DELETE FROM "mcpb_validations";
+-- Some released 0.9.3 databases lack the retired MCPB tables, so delete them only when present.
+DO $cutover$
+BEGIN
+    IF to_regclass('mcpb_validation_claims') IS NOT NULL THEN
+        EXECUTE 'DELETE FROM "mcpb_validation_claims";';
+    END IF;
+    IF to_regclass('mcpb_validations') IS NOT NULL THEN
+        EXECUTE 'DELETE FROM "mcpb_validations";';
+    END IF;
+END
+$cutover$;
 DELETE FROM "skill_workload_bootstraps" bootstrap
  WHERE EXISTS (SELECT 1 FROM "skill_workloads" workload WHERE workload."id" = bootstrap."skill_workload_id" AND workload."kind"::text = 'authoring');
 DELETE FROM "skill_workloads" WHERE "kind"::text = 'authoring';
@@ -161,10 +170,10 @@ DROP TABLE "integrations";
 DROP TABLE "integration_custody_references";
 
 -- DropTable
-DROP TABLE "mcpb_validation_claims";
+DROP TABLE IF EXISTS "mcpb_validation_claims";
 
 -- DropTable
-DROP TABLE "mcpb_validations";
+DROP TABLE IF EXISTS "mcpb_validations";
 
 -- DropEnum
 DROP TYPE "IntegrationState";
@@ -173,7 +182,7 @@ DROP TYPE "IntegrationState";
 DROP TYPE "IntegrationCustodyState";
 
 -- DropEnum
-DROP TYPE "McpbValidationState";
+DROP TYPE IF EXISTS "McpbValidationState";
 
 -- CreateTable
 CREATE TABLE "agent_revision_mcp_tool_assignments" (
