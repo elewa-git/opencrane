@@ -233,6 +233,18 @@ describe("managed agent revision lifecycle", function _suite()
 		expect(port.lastCommand?.requestIdempotencyKey).toBe("req-1");
 	});
 
+	it("rejects trigger and scheduled-slot pairs that do not name the same admission mode", async function _rejectsInvalidTriggerSlotPairs()
+	{
+		const repository = new _Repository();
+		const port = new _AdmissionPort();
+		const seed = await _seedService(repository);
+		repository.services.set(seed.serviceId, { ...repository.services.get(seed.serviceId)!, state: "active", activeRevisionId: seed.revisionId });
+
+		expect(await __AdmitManagedRunNow(repository, port, { agentServiceId: seed.serviceId, siloId: _SILO, requestedBy: "admin-1", requestIdempotencyKey: "req-invalid-1", trigger: "managed_invocation", scheduledSlot: _NOW })).toEqual({ outcome: "denied", reason: "invalid_command" });
+		expect(await __AdmitManagedRunNow(repository, port, { agentServiceId: seed.serviceId, siloId: _SILO, requestedBy: "admin-1", requestIdempotencyKey: "req-invalid-2", trigger: "schedule", scheduledSlot: null })).toEqual({ outcome: "denied", reason: "invalid_command" });
+		expect(port.lastCommand).toBeNull();
+	});
+
 	it("isolates every verb across silos — a silo-B caller cannot touch a silo-A service", async function _crossSilo()
 	{
 		const repository = new _Repository();

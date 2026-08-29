@@ -1,46 +1,7 @@
-import { MANAGED_AGENT_RUNTIME_PROFILE_NAME } from "@opencrane/contracts";
-import { AgentServiceKinds, AgentServiceStates, __DiffAgentRevisions, __IsAgentServiceTransitionAllowed, type AgentRevisionContent, type AgentRevisionId, type AgentServiceId, type AgentServiceState } from "@opencrane/models/agents";
+import { AgentServiceKinds, AgentServiceStates, __DiffAgentRevisions, __IsAgentServiceTransitionAllowed, type AgentRevisionId, type AgentServiceId, type AgentServiceState } from "@opencrane/models/agents";
 
+import { _AreCompareAgentRevisionsCoordinatesValid, _IsChangeAgentServiceStateCommandValid, _IsCreateManagedAgentServiceCommandValid, _IsManagedRunNowCommandValid, _IsRestoreAgentRevisionCommandValid, _IsReviseAgentRevisionCommandValid } from "./agent-revision-lifecycle.validator";
 import { ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleRepository, type AgentServiceHistory, type AgentServiceLifecycleAction, type ChangeAgentServiceStateCommand, type ChangeAgentServiceStateResult, type CompareAgentRevisionsResult, type CreateManagedAgentServiceCommand, type CreateManagedAgentServiceResult, type AppendAgentRevisionResult, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand, type RestoreAgentRevisionCommand, type ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types";
-
-/** Returns whether a string carries a non-empty value after trimming. */
-function _isPresent(value: string): boolean
-{
-	return value.trim().length > 0;
-}
-
-/** Returns whether a budget ceiling is a positive safe integer. */
-function _isPositiveInteger(value: number): boolean
-{
-	return Number.isSafeInteger(value) && value > 0;
-}
-
-/** Returns whether every member of a list maps to a distinct primary key. */
-function _isUniqueBy<T>(items: readonly T[], key: (item: T) => string): boolean
-{
-	return new Set(items.map(key)).size === items.length;
-}
-
-/**
- * Returns whether executable revision content is structurally valid before persistence.
- * Duplicate skill, MCP tool revision, and boundary attachment keys are rejected here so they
- * surface as a 400, rather than a Prisma primary-key violation at insert time.
- */
-function _isContentValid(content: AgentRevisionContent): boolean
-{
-	return _isPresent(content.promptPolicyVersion)
-		&& _isPresent(content.modelDefinitionId)
-		&& (content.personaRevisionId === null || _isPresent(content.personaRevisionId))
-		&& _isPositiveInteger(content.budget.maxTurns)
-		&& _isPositiveInteger(content.budget.maxTokens)
-		&& _isPositiveInteger(content.budget.maxDurationMs)
-		&& content.skills.every(skill => _isPresent(skill.skillId) && _isPresent(skill.revisionId))
-		&& content.mcpToolRevisionIds.every(_isPresent)
-		&& content.boundaryAttachments.every(attachment => _isPresent(attachment.boundaryId))
-		&& _isUniqueBy(content.skills, skill => skill.skillId)
-		&& new Set(content.mcpToolRevisionIds).size === content.mcpToolRevisionIds.length
-		&& _isUniqueBy(content.boundaryAttachments, attachment => `${attachment.boundaryKind}\u0000${attachment.boundaryId}\u0000${attachment.boundaryCoverage}`);
-}
 
 /** Maps one lifecycle action to the target stable-service state it requests. */
 function _actionState(action: AgentServiceLifecycleAction): AgentServiceState
@@ -60,7 +21,7 @@ function _actionState(action: AgentServiceLifecycleAction): AgentServiceState
  */
 export async function __CreateManagedAgentService(repository: AgentRevisionLifecycleRepository, command: CreateManagedAgentServiceCommand, createdAt: string): Promise<CreateManagedAgentServiceResult>
 {
-	if (!_isPresent(command.siloId) || !_isPresent(command.name) || command.workloadProfile !== MANAGED_AGENT_RUNTIME_PROFILE_NAME || !_isPresent(command.authoredBy) || !_isPresent(command.changeMessage) || command.content.personaRevisionId !== null || !_isContentValid(command.content) || !Number.isFinite(Date.parse(createdAt)))
+	if (!_IsCreateManagedAgentServiceCommandValid(command, createdAt))
 	{
 		return { outcome: "denied", reason: "invalid_command" };
 	}
@@ -77,7 +38,7 @@ export async function __CreateManagedAgentService(repository: AgentRevisionLifec
  */
 export async function __ReviseAgentRevision(repository: AgentRevisionLifecycleRepository, command: ReviseAgentRevisionCommand, createdAt: string): Promise<AppendAgentRevisionResult>
 {
-	if (!_isPresent(command.siloId) || !_isPresent(command.agentServiceId) || !_isPresent(command.authoredBy) || !_isPresent(command.changeMessage) || command.content.personaRevisionId !== null || !_isContentValid(command.content) || !Number.isFinite(Date.parse(createdAt)))
+	if (!_IsReviseAgentRevisionCommandValid(command, createdAt))
 	{
 		return { outcome: "denied", reason: "invalid_command" };
 	}
@@ -94,7 +55,7 @@ export async function __ReviseAgentRevision(repository: AgentRevisionLifecycleRe
  */
 export async function __RestoreAgentRevision(repository: AgentRevisionLifecycleRepository, command: RestoreAgentRevisionCommand, createdAt: string): Promise<AppendAgentRevisionResult>
 {
-	if (!_isPresent(command.siloId) || !_isPresent(command.agentServiceId) || !_isPresent(command.sourceRevisionId) || !_isPresent(command.authoredBy) || !_isPresent(command.changeMessage) || !Number.isFinite(Date.parse(createdAt)))
+	if (!_IsRestoreAgentRevisionCommandValid(command, createdAt))
 	{
 		return { outcome: "denied", reason: "invalid_command" };
 	}
@@ -111,7 +72,7 @@ export async function __RestoreAgentRevision(repository: AgentRevisionLifecycleR
  */
 export async function __ChangeAgentServiceState(repository: AgentRevisionLifecycleRepository, command: ChangeAgentServiceStateCommand, changedAt: string): Promise<ChangeAgentServiceStateResult>
 {
-	if (!_isPresent(command.siloId) || !_isPresent(command.agentServiceId) || !Number.isFinite(Date.parse(changedAt)) || !__IsAgentServiceTransitionAllowed(command.expectedState, _actionState(command.action)))
+	if (!_IsChangeAgentServiceStateCommandValid(command, changedAt) || !__IsAgentServiceTransitionAllowed(command.expectedState, _actionState(command.action)))
 	{
 		return { outcome: "denied", reason: "transition_not_allowed" };
 	}
@@ -128,7 +89,7 @@ export async function __ChangeAgentServiceState(repository: AgentRevisionLifecyc
  */
 export async function __CompareAgentRevisions(repository: AgentRevisionLifecycleRepository, siloId: string, baseRevisionId: AgentRevisionId, targetRevisionId: AgentRevisionId): Promise<CompareAgentRevisionsResult>
 {
-	if (!_isPresent(siloId) || !_isPresent(baseRevisionId) || !_isPresent(targetRevisionId))
+	if (!_AreCompareAgentRevisionsCoordinatesValid(siloId, baseRevisionId, targetRevisionId))
 	{
 		return { outcome: "denied", reason: "invalid_command" };
 	}
@@ -171,7 +132,7 @@ export async function __ReadAgentServiceHistory(repository: AgentRevisionLifecyc
  */
 export async function __AdmitManagedRunNow(repository: AgentRevisionLifecycleRepository, port: ManagedRunAdmissionPort, command: ManagedRunNowCommand): Promise<ManagedRunAdmissionResult>
 {
-	if (!_isPresent(command.agentServiceId) || !_isPresent(command.siloId) || !_isPresent(command.requestedBy) || !_isPresent(command.requestIdempotencyKey))
+	if (!_IsManagedRunNowCommandValid(command))
 	{
 		return { outcome: ManagedRunAdmissionOutcomes.Denied, reason: "invalid_command" };
 	}

@@ -782,9 +782,16 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/server/gateways/mcp/main/src/runtime/prisma-mcp-runtime-catalog-repository.ts",
-        "adapter": "PrismaMcpRuntimeCatalogRepository",
-        "contract": "McpRuntimeCatalogRepository",
+        "path": "libs/backend/server/gateways/mcp/main/src/runtime/prisma-mcp-oci-server-promotion-repository.ts",
+        "adapter": "PrismaMcpOciServerPromotionRepository",
+        "contract": "McpOciServerPromotionRepository",
+        "contractImportPath": "./mcp-runtime.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/gateways/mcp/main/src/runtime/prisma-mcp-tool-invocation-admission-repository.ts",
+        "adapter": "PrismaMcpToolInvocationAdmissionRepository",
+        "contract": "McpToolInvocationAdmissionRepository",
         "contractImportPath": "./mcp-runtime.types",
         "constructs": []
       },
@@ -1606,8 +1613,12 @@
         "contractImportPath": "./mcp-runtime.types",
         "constructs": [
           {
-            "adapter": "PrismaMcpRuntimeCatalogRepository",
-            "importPath": "./prisma-mcp-runtime-catalog-repository"
+            "adapter": "PrismaMcpOciServerPromotionRepository",
+            "importPath": "./prisma-mcp-oci-server-promotion-repository"
+          },
+          {
+            "adapter": "PrismaMcpToolInvocationAdmissionRepository",
+            "importPath": "./prisma-mcp-tool-invocation-admission-repository"
           },
           {
             "adapter": "PrismaMcpRuntimeControllerRepository",
