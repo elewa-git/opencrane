@@ -35,7 +35,7 @@ export class PrismaRunCancellationUnitOfWork implements RunCancellationRepositor
 	/**
 	 * Fences the current attempt and records workflow-owned finalization work.
 	 *
-	 * @param command - Run, expected attempt, and authenticated requester.
+	 * @param command - Run and expected attempt already authorized by the caller.
 	 * @returns The accepted, repeated, missing, or refused cancellation outcome.
 	 * @throws When Prisma cannot complete the transaction or the lifecycle compare-and-set loses its fence.
 	 */
@@ -94,5 +94,5 @@ class PrismaRunCancellationRepository implements RunCancellationPersistenceRepos
 /** Reject malformed cancellation coordinates before opening a transaction. */
 function _CancellationCommandIsValid(command: RequestRunCancellationCommand): boolean
 {
-	return command.runId.length > 0 && command.runId.length <= 256 && Number.isSafeInteger(command.expectedAttempt) && command.expectedAttempt > 0 && command.requestedBy.length > 0 && command.requestedBy.length <= 512;
+	return command.runId.length > 0 && command.runId.length <= 256 && Number.isSafeInteger(command.expectedAttempt) && command.expectedAttempt > 0;
 }

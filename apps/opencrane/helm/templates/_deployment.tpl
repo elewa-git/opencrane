@@ -132,8 +132,6 @@ spec:
             {{- end }}
             - name: AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS
               value: {{ .Values.agentController.assignmentTtlSeconds | quote }}
-            - name: AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS
-              value: {{ .Values.agentController.outboxRetentionSeconds | quote }}
             - name: AGENT_RUN_ADMISSION_MAX_CONCURRENT
               value: {{ .Values.clustertenantManager.runAdmission.maxConcurrent | quote }}
             - name: AGENT_RUN_ADMISSION_MAX_QUEUED

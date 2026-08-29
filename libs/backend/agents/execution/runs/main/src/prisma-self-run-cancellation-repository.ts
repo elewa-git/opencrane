@@ -25,7 +25,7 @@ export class PrismaSelfRunCancellationRepository implements SelfRunCancellationR
 		// cancellation repository independently fences the exact mutable attempt inside its transaction.
 		const owned = await this._prisma.agentRun.findFirst({ where: { id: command.runId, siloId: command.siloId, delegatedUserId: command.subjectId }, select: { id: true } });
 		if (owned === null) return { outcome: SelfRunCancellationOutcomes.NotFound };
-		const result = await this._cancellation.requestCancellationAtomically({ runId: owned.id, expectedAttempt: command.expectedAttempt, requestedBy: command.subjectId });
+		const result = await this._cancellation.requestCancellationAtomically({ runId: owned.id, expectedAttempt: command.expectedAttempt });
 		return _MapCancellationResult(result);
 	}
 }

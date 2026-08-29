@@ -5,8 +5,6 @@ export interface RequestRunCancellationCommand
 	readonly runId: string;
 	/** Attempt observed by the caller; stale attempts cannot cancel newer work. */
 	readonly expectedAttempt: number;
-	/** Authenticated user or service subject recorded in the durable cancellation request. */
-	readonly requestedBy: string;
 }
 
 /**
@@ -55,7 +53,7 @@ export type RequestRunCancellationResult =
 /** Persists cancellation inside the serializable transaction opened by its caller. */
 export interface RunCancellationPersistenceRepository
 {
-	/** Revoke the current attempt and publish its durable workflow cancellation event. */
+	/** Revoke the current attempt so its durable workflow can finish cancellation. */
 	requestCancellation(command: RequestRunCancellationCommand, now: Date): Promise<RequestRunCancellationResult>;
 }
 
@@ -65,7 +63,7 @@ export interface RunCancellationRepository
 	/**
 	 * Fence the named attempt and ask its durable workflow to remove physical work.
 	 *
-	 * @param command - Run, expected attempt, and authenticated requester.
+	 * @param command - Run and expected attempt already authorized by the caller.
 	 * @returns The accepted, repeated, missing, or refused cancellation outcome.
 	 */
 	requestCancellationAtomically(command: RequestRunCancellationCommand): Promise<RequestRunCancellationResult>;

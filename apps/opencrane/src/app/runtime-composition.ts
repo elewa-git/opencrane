@@ -67,7 +67,7 @@ const _IssueAttemptModelKey: AttemptModelKeyIssuerWithRevocation = Object.assign
  * shared claim lease explicit without giving either controller endpoint runtime-stream authority.
  *
  * @param prisma - The main product database client.
- * @param config - Frozen leases, assignment limits, and outbox-retention settings.
+ * @param config - Frozen leases and assignment limits.
  * @param namespaces - Validated server, personal-runtime, and managed-runtime identity planes.
  * @param tokenReviewer - Reviewer fixed to the sole agent-controller ServiceAccount.
  * @returns Controller routers with no runtime or worker routes.

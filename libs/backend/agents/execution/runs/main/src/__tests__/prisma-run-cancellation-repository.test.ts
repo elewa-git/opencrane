@@ -55,7 +55,7 @@ describe("PrismaRunCancellationUnitOfWork", function _Suite()
 		const transaction = _Transaction(_Run(AgentRunState.Running), _Task());
 		const { authority, options } = _Authority(transaction);
 
-		await expect(authority.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1, requestedBy: "user-1" })).resolves.toEqual({ status: "cancelling", runId: "run-1", attempt: 1 });
+		await expect(authority.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1 })).resolves.toEqual({ status: "cancelling", runId: "run-1", attempt: 1 });
 		expect(options).toEqual([{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }]);
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 1, state: AgentRunState.Running }, data: { state: AgentRunState.Cancelling } });
 		expect(transaction.workloadAssignment.updateMany).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 1, state: { in: [WorkloadAssignmentState.PendingPod, WorkloadAssignmentState.Registered] } }, data: { state: WorkloadAssignmentState.Revoked, revokedAt: new Date("2026-07-20T00:01:00.000Z") } });
@@ -69,7 +69,7 @@ describe("PrismaRunCancellationUnitOfWork", function _Suite()
 		const transaction = _Transaction(_Run(), null);
 		const { authority } = _Authority(transaction);
 
-		await expect(authority.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1, requestedBy: "user-1" })).resolves.toEqual({ status: "conflict", reason: "authority_conflict" });
+		await expect(authority.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1 })).resolves.toEqual({ status: "conflict", reason: "authority_conflict" });
 		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
 	});
 
@@ -81,7 +81,7 @@ describe("PrismaRunCancellationUnitOfWork", function _Suite()
 		const transaction = _Transaction(_Run(state), _Task());
 		const { authority } = _Authority(transaction);
 
-		await expect(authority.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1, requestedBy: "user-1" })).resolves.toEqual({ status: "idempotent", runId: "run-1", attempt: 1, state: expectedState });
+		await expect(authority.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1 })).resolves.toEqual({ status: "idempotent", runId: "run-1", attempt: 1, state: expectedState });
 		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
 	});
 
@@ -91,7 +91,7 @@ describe("PrismaRunCancellationUnitOfWork", function _Suite()
 		const { authority, prisma } = _Authority(transaction);
 		const start = vi.spyOn(prisma, "$transaction");
 
-		await expect(authority.requestCancellationAtomically({ runId: "", expectedAttempt: 0, requestedBy: "" })).resolves.toEqual({ status: "conflict", reason: "invalid_request" });
+		await expect(authority.requestCancellationAtomically({ runId: "", expectedAttempt: 0 })).resolves.toEqual({ status: "conflict", reason: "invalid_request" });
 		expect(start).not.toHaveBeenCalled();
 	});
 });

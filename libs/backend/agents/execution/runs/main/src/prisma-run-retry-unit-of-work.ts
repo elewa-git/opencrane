@@ -87,7 +87,7 @@ export class PrismaAgentRunRetryUnitOfWork implements RunRetryAuthority
 		return this._Run(function _Read(repository) { return repository.getRunAuthority(runId); }, Prisma.TransactionIsolationLevel.RepeatableRead);
 	}
 
-	/** Applies the guarded attempt and outbox writes together at Serializable isolation. */
+	/** Applies the guarded attempt and workflow-task writes together at Serializable isolation. */
 	private async _StartAttempt(command: AtomicStartNextRunAttemptCommand): Promise<AtomicRunAttemptResult>
 	{
 		return this._Run(function _Start(repository) { return repository.startNextAttemptAtomically(command); }, Prisma.TransactionIsolationLevel.Serializable);

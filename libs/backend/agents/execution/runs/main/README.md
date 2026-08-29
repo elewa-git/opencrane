@@ -66,7 +66,7 @@ does not grant permission to use a run.
 - `PrismaRuntimeEventReporter` and `PrismaRuntimeTerminalReporter` save accepted runtime progress and
   terminal results.
 - `PrismaRunCancellationUnitOfWork` owns the database transaction for the initial cancellation
-  decision; its transaction-scoped repository publishes only the workflow cancellation event.
+  decision; its transaction-scoped repository fences and revokes authority for the saved workflow.
 - The self-run routers expose status, retry, and cancellation to the signed-in participant.
 
 ## Boundary
