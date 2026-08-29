@@ -11,6 +11,7 @@ ALTER TABLE "user_onboarding_bootstrap_conversations" DROP CONSTRAINT IF EXISTS 
 ALTER TABLE "user_onboarding_bootstrap_conversations" DROP CONSTRAINT IF EXISTS "user_onboarding_bootstrap_conversations_persona_revision_id_fkey";
 ALTER TABLE "user_onboardings" DROP CONSTRAINT IF EXISTS "user_onboardings_bootstrap_content_revision_fkey";
 ALTER TABLE "mcp_servers" DROP CONSTRAINT IF EXISTS "mcp_servers_era_probe_evidence_check";
+ALTER TABLE "mcp_servers" DROP CONSTRAINT IF EXISTS "mcp_servers_registration_digest_check";
 ALTER TABLE "channel_invocation_contexts" DROP CONSTRAINT IF EXISTS "channel_invocation_contexts_route_id_receiver_id_silo_id_agent_service_fkey";
 ALTER TABLE "conversation_asset_output_tickets" DROP CONSTRAINT IF EXISTS "conversation_asset_output_tickets_conversation_id_run_id_run_event_sequence_fkey";
 ALTER TABLE "conversation_assets" DROP CONSTRAINT IF EXISTS "conversation_assets_conversation_id_run_id_run_event_sequence_fkey";
@@ -41,6 +42,39 @@ DROP VIEW IF EXISTS "skill_workload_claim_candidates";
 DROP FUNCTION IF EXISTS "select_skill_workload_claim_candidate"();
 DROP FUNCTION IF EXISTS "enforce_skill_workload_bootstrap"();
 DROP INDEX IF EXISTS "skill_workloads_one_authoring_per_revision_key";
+
+-- Released 0.9.3 databases may not have the remote MCP era-probe columns. Add them before the
+-- 0.10.0 constraints refer to era_probe_status, or PostgreSQL stops with an undefined-column error
+-- (SQLSTATE 42703).
+DO $cutover$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+          FROM pg_type type_row
+          JOIN pg_namespace namespace_row ON namespace_row.oid = type_row.typnamespace
+         WHERE type_row.typname = 'McpEraProbeStatus'
+           AND namespace_row.nspname = current_schema()
+    ) THEN
+        CREATE TYPE "McpEraProbeStatus" AS ENUM ('not-required', 'pending', 'accepted', 'rejected');
+    END IF;
+END
+$cutover$;
+ALTER TABLE "mcp_servers" ADD COLUMN IF NOT EXISTS "registration_key_digest" TEXT;
+ALTER TABLE "mcp_servers" ADD COLUMN IF NOT EXISTS "registration_digest" TEXT;
+ALTER TABLE "mcp_servers" ADD COLUMN IF NOT EXISTS "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT 'not-required';
+ALTER TABLE "mcp_servers" ADD COLUMN IF NOT EXISTS "era_protocol_version" TEXT;
+ALTER TABLE "mcp_servers" ADD COLUMN IF NOT EXISTS "era_probe_evidence_digest" TEXT;
+ALTER TABLE "mcp_servers" ADD COLUMN IF NOT EXISTS "era_probe_failure_code" TEXT;
+ALTER TABLE "mcp_servers" ADD COLUMN IF NOT EXISTS "era_probe_attempts" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "mcp_servers" ADD COLUMN IF NOT EXISTS "era_probed_at" TIMESTAMP(3);
+CREATE TABLE IF NOT EXISTS "mcp_registration_claims" (
+    "silo_id" TEXT NOT NULL,
+    "identity_digest" TEXT NOT NULL,
+    "touched_at" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "mcp_registration_claims_pkey" PRIMARY KEY ("silo_id", "identity_digest")
+);
+ALTER TABLE "mcp_registration_claims" DROP CONSTRAINT IF EXISTS "mcp_registration_claims_identity_check";
+CREATE UNIQUE INDEX IF NOT EXISTS "mcp_servers_silo_id_registration_key_digest_key" ON "mcp_servers"("silo_id", "registration_key_digest");
 
 -- The 0.10.0 cutover permanently deletes data that the removed SQL and Obot runtimes can no longer process.
 DELETE FROM "run_outbox_events" WHERE "kind"::text IN ('run.attempt_requested', 'run.workload_release_requested');
@@ -1401,11 +1435,29 @@ ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_ass
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "user_onboardings" ADD CONSTRAINT "user_onboardings_bootstrap_content_revision_id_bootstrap_c_fkey" FOREIGN KEY ("bootstrap_content_revision_id", "bootstrap_content_digest") REFERENCES "user_onboarding_bootstrap_content_revisions"("id", "digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "user_onboarding_bootstrap_conversations" ADD CONSTRAINT "user_onboarding_bootstrap_conversations_content_revision_i_fkey" FOREIGN KEY ("content_revision_id", "content_digest") REFERENCES "user_onboarding_bootstrap_content_revisions"("id", "digest") ON DELETE RESTRICT ON UPDATE CASCADE;
+-- Preserve rejected remote-probe evidence by translating released rows to the 0.10.0 failure codes
+-- before the new constraint checks them.
+UPDATE "mcp_servers"
+   SET "era_probe_failure_code" = CASE
+       WHEN btrim("era_protocol_version") <> '' THEN 'unsupported_mcp_protocol_version'
+       WHEN "era_probe_failure_code" = 'invalid_response' THEN 'not_mcp_server'
+       ELSE "era_probe_failure_code"
+   END
+ WHERE "era_probe_status" = 'rejected'
+   AND ((btrim("era_protocol_version") <> '' AND "era_probe_failure_code" IS NULL)
+        OR ("era_protocol_version" IS NULL AND "era_probe_failure_code" = 'invalid_response'));
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_registration_digest_check" CHECK (
+    ("registration_key_digest" IS NULL AND "registration_digest" IS NULL)
+    OR ("registration_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registration_digest" ~ '^sha256:[0-9a-f]{64}$')
+);
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_era_probe_evidence_check" CHECK (
     ("era_probe_status" = 'not-required' AND "era_probe_attempts" = 0 AND "registration_key_digest" IS NULL AND "registration_digest" IS NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
     OR ("era_probe_status" = 'pending' AND "era_probe_attempts" >= 0 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
     OR ("era_probe_status" = 'accepted' AND "era_probe_attempts" >= 1 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND btrim("era_protocol_version") <> '' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NOT NULL)
     OR ("era_probe_status" = 'rejected' AND "era_probe_attempts" >= 1 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probed_at" IS NOT NULL AND ((btrim("era_protocol_version") <> '' AND "era_probe_failure_code" = 'unsupported_mcp_protocol_version') OR ("era_protocol_version" IS NULL AND "era_probe_failure_code" IN ('unsafe_endpoint', 'not_mcp_server', 'retry_exhausted'))))
+);
+ALTER TABLE "mcp_registration_claims" ADD CONSTRAINT "mcp_registration_claims_identity_check" CHECK (
+    btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
 );
 ALTER TABLE "oci_image_validation_claims" ADD CONSTRAINT "oci_image_validation_claims_identity_check" CHECK (
     btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'

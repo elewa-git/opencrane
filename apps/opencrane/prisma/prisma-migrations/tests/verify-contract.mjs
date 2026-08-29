@@ -66,6 +66,28 @@ for (const retiredMcpbTable of ["mcpb_validation_claims", "mcpb_validations"])
 }
 _Require(migration.includes('DROP TYPE IF EXISTS "McpbValidationState";'), "the live 0.9.3 upgrade must tolerate an absent MCPB state type");
 
+for (const eraProbeColumn of [
+	'"registration_key_digest" TEXT',
+	'"registration_digest" TEXT',
+	'"era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT \'not-required\'',
+	'"era_protocol_version" TEXT',
+	'"era_probe_evidence_digest" TEXT',
+	'"era_probe_failure_code" TEXT',
+	'"era_probe_attempts" INTEGER NOT NULL DEFAULT 0',
+	'"era_probed_at" TIMESTAMP(3)',
+])
+{
+	_Require(migration.includes(`ADD COLUMN IF NOT EXISTS ${eraProbeColumn}`), `the live 0.9.3 upgrade must carry the missing remote era-probe column ${eraProbeColumn}`);
+}
+_Require(migration.includes('CREATE TYPE "McpEraProbeStatus" AS ENUM'), "the live 0.9.3 upgrade must carry the missing remote era-probe state type");
+_Require(migration.includes('CREATE TABLE IF NOT EXISTS "mcp_registration_claims"'), "the live 0.9.3 upgrade must carry the remote registration claim table");
+_Require(migration.includes('CREATE UNIQUE INDEX IF NOT EXISTS "mcp_servers_silo_id_registration_key_digest_key"'), "the live 0.9.3 upgrade must carry the remote registration idempotency index");
+_RequireBefore('ADD COLUMN IF NOT EXISTS "era_probe_status"', 'ADD CONSTRAINT "mcp_servers_era_probe_evidence_check"', "the remote era-probe schema must exist before its authority constraint");
+_RequireBefore('CREATE TABLE IF NOT EXISTS "mcp_registration_claims"', 'ADD CONSTRAINT "mcp_registration_claims_identity_check"', "the remote registration claim table must exist before its authority constraint");
+_Require(migration.includes("WHEN btrim(\"era_protocol_version\") <> '' THEN 'unsupported_mcp_protocol_version'"), "the cutover must preserve rejected unsupported-protocol evidence under its 0.10 failure code");
+_Require(migration.includes("WHEN \"era_probe_failure_code\" = 'invalid_response' THEN 'not_mcp_server'"), "the cutover must preserve rejected non-MCP evidence under its 0.10 failure code");
+_RequireBefore('UPDATE "mcp_servers"\n   SET "era_probe_failure_code"', 'ADD CONSTRAINT "mcp_servers_era_probe_evidence_check"', "released era-probe evidence must be mapped before the stricter 0.10 authority constraint");
+
 _Require(!targetBaseline.includes("'authoring'::\"SkillWorkloadKind\""), "clean target must retire the authoring SkillWorkload enum member");
 _Require(!targetBaseline.includes('"kind" = \'authoring\''), "clean target must not retain authoring SkillWorkload authority");
 _Require(!targetBaseline.includes('skill_workloads_one_authoring_per_revision_key'), "clean target must remove the authoring workload index");
