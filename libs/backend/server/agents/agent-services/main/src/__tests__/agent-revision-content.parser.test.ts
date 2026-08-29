@@ -9,7 +9,7 @@ import { _ParseAgentRevisionContent } from "../agent-revision-content.parser";
 function _Content(toolOverrides: Record<string, unknown> = {})
 {
 	const parametersSchema = { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string" } } } as const;
-	return { promptPolicyVersion: PROMPT_COMPILER_VERSION, personaRevisionId: null, modelDefinitionId: "model-1", budget: { maxTurns: 1, maxTokens: 100, maxDurationMs: 1_000 }, skills: [], boundaryAttachments: [], integrationAssignments: [{ integrationId: "search", custodyReferenceId: "custody-1", toolDefinitions: [{ name: "query", description: "Search records", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema), ...toolOverrides }] }] };
+	return { promptPolicyVersion: PROMPT_COMPILER_VERSION, personaRevisionId: null, modelDefinitionId: "model-1", budget: { maxTurns: 1, maxTokens: 100, maxDurationMs: 1_000 }, skills: [], boundaryAttachments: [], integrationAssignments: [{ integrationId: "search", custodyReferenceId: "custody-1", toolDefinitions: [{ name: "query", description: "Search records", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema), ...toolOverrides }] }], mcpToolRevisionIds: ["mcp-tool-revision-1"] };
 }
 
 describe("agent revision content parser", function _AgentRevisionContentParserSuite()

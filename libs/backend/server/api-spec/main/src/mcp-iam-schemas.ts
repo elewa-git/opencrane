@@ -2,8 +2,8 @@
 export const _McpIamOpenapiSchemas = {
 	McpCatalogServer: {
 		type: "object",
-		description: "An MCP server exposed by the operator API. Fields other than id are optional because this shape serves both the entitled catalogue and the organisation-admin governance view.",
-		required: ["id"],
+		description: "An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no Ready OCI revision exists.",
+		required: ["id", "tools"],
 		properties: {
 			id: { type: "string", description: "Stable server identifier." },
 			name: { type: "string", description: "Display name shown in the catalogue." },
@@ -14,6 +14,22 @@ export const _McpIamOpenapiSchemas = {
 			approvalStatus: { type: "string", enum: ["pending-review", "approved", "published", "disabled"], description: "Organisation-admin review state. Only published servers appear in the user-facing catalogue; approved servers remain hidden until publication." },
 			credentialSchema: { type: "array", description: "Input fields required by an external custody flow for a single-user connection. This API describes requested values but neither receives nor returns credential material.", items: { $ref: "#/components/schemas/CredentialField" } },
 			entitlementSummary: { type: "string", description: "Human-readable summary of access grants, returned for the governance view." },
+			tools: { type: "array", description: "Tools from the newest Ready OCI server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission.", items: { $ref: "#/components/schemas/McpAssignableToolRevision" } },
+		},
+	},
+	McpAssignableToolRevision: {
+		type: "object",
+		description: "An immutable OCI-backed MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization.",
+		required: ["toolRevisionId", "serverRevisionId", "name", "description", "inputSchema", "inputSchemaDigest", "eligibility", "readiness"],
+		properties: {
+			toolRevisionId: { type: "string", description: "Immutable tool revision identifier saved during discovery." },
+			serverRevisionId: { type: "string", description: "Newest Ready server revision selected for this response." },
+			name: { type: "string", description: "Tool name reported by the MCP server." },
+			description: { type: ["string", "null"], description: "Tool description reported by the MCP server, or null when it supplied none." },
+			inputSchema: { description: "Input JSON Schema frozen during discovery." },
+			inputSchemaDigest: { type: "string", description: "Digest that binds assignment and run admission to this input schema." },
+			eligibility: { type: "string", enum: ["assignable", "governance-blocked"], description: "Whether Published and Active server governance permits assignment. It does not grant caller authority." },
+			readiness: { type: "string", enum: ["ready"], description: "Discovery state that made the immutable schema available." },
 		},
 	},
 	CredentialField: {

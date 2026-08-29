@@ -40,6 +40,7 @@ model AgentService {
   runs             AgentRun[]
   conversations    Conversation[]
   schedules        AgentServiceSchedule[]
+  mcpToolAssignments AgentRevisionMcpToolAssignment[]
   activeRevision   AgentRevision?         @relation("ActiveAgentRevision", fields: [id, activeRevisionId], references: [agentServiceId, id], onDelete: Restrict)
   principal        Principal?             @relation("ManagedAgentServicePrincipal", fields: [principalId, siloId], references: [id, siloId], onDelete: Restrict)
 
@@ -77,6 +78,7 @@ model AgentRevision {
   restoredRevisions      AgentRevision[]                      @relation("AgentRevisionRestoreSource")
   skillAssignments       AgentRevisionSkillAssignment[]
   integrationAssignments AgentRevisionIntegrationAssignment[]
+  mcpToolAssignments      AgentRevisionMcpToolAssignment[]
   boundaryAttachments    AgentRevisionBoundaryAttachment[]
   runs                   AgentRun[]
 
@@ -119,7 +121,7 @@ model AgentRevisionSkillAssignment {
   @@map("agent_revision_skill_assignments")
 }
 
-/// Immutable reviewed tool definitions for one integration on one draft AgentRevision.
+/// Legacy integration assignment retained only until the authorized cleanup applies the direct replacement.
 model AgentRevisionIntegrationAssignment {
   agentRevisionId    String                      @map("agent_revision_id")
   integrationId      String                      @map("integration_id")
@@ -133,6 +135,22 @@ model AgentRevisionIntegrationAssignment {
   @@id([agentRevisionId, integrationId])
   @@index([integrationId, siloId])
   @@map("agent_revision_integration_assignments")
+}
+
+/// Exact immutable MCP tool revision selected for one AgentRevision.
+model AgentRevisionMcpToolAssignment {
+  agentRevisionId String          @map("agent_revision_id")
+  agentServiceId  String          @map("agent_service_id")
+  toolRevisionId  String          @map("tool_revision_id")
+  siloId          String          @map("silo_id")
+  agentRevision   AgentRevision   @relation(fields: [agentServiceId, agentRevisionId], references: [agentServiceId, id], onDelete: Restrict)
+  agentService    AgentService    @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
+  toolRevision    McpToolRevision @relation(fields: [toolRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@id([agentRevisionId, toolRevisionId])
+  @@index([agentServiceId, siloId])
+  @@index([toolRevisionId, siloId])
+  @@map("agent_revision_mcp_tool_assignments")
 }
 
 /// A recurring schedule that admits managed runs of one AgentService's active revision. The

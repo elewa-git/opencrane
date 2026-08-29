@@ -25,7 +25,7 @@ goes wrong.
         Absurd saves the task in the PostgreSQL database
                 │  the change and task are saved together, or neither is saved
                 ▼
-      a worker finds the saved task and runs its handler
+      a local or remote worker finds the saved task and runs its handler
                 └── save progress · wait for input or time · start another task · stop a task
 ```
 
@@ -39,7 +39,8 @@ the server process that runs workers.
 
 ## Public surface
 
-- `IWorkflowEngine` — starts a task, sends it information, or stops it.
+- `IWorkflowEngine` — declares or registers a task, starts it, sends it information, or stops it.
+- `IWorkflowTaskDeclaration` — permits transaction-bound admission when another process owns the handler.
 - `IWorkflowTaskQueueAuthority` — chooses the approved queue, a named list of work for a worker, for each task.
 - `IWorkflowWorkerRuntime` — starts workers and lets them finish their current work before stopping.
 - `IWorkflowTaskContext` — lets a running task save progress, wait, or start and wait for another task.

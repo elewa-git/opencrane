@@ -94,6 +94,8 @@ export class ExternalActionWorker
 			if (invocation.state === ToolInvocationStates.Ready)
 			{
 				const admission = await dependencies.classAdmission.admitInvocation(invocation.id);
+				if (admission === "not_ready")
+					return _failUnavailableMcp(invocation, now, dependencies);
 				if (admission !== "not_mcp")
 					return true;
 			}
@@ -109,6 +111,17 @@ export class ExternalActionWorker
 			}
 		});
 	}
+}
+
+/** Completes a recognized but unavailable MCP revision without allowing generic provider fallback. */
+async function _failUnavailableMcp(invocation: ExternalActionWorkerInvocation, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
+{
+	const claimed = await dependencies.invocations.claim(invocation.id, ExternalActionClaimKinds.Dispatch, now, dependencies.policy.providerClaimLeaseMilliseconds);
+	if (claimed.outcome !== ToolInvocationClaimOutcomes.Claimed)
+		return claimed.outcome === ToolInvocationClaimOutcomes.Winner;
+	await dependencies.invocations.completeFailed(claimed.claim, "mcp_tool_unavailable", dependencies.clock.now());
+	dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, failureKind: "mcp_tool_unavailable" }, "recognized MCP tool revision was unavailable and did not fall through to generic execution");
+	return true;
 }
 
 /**

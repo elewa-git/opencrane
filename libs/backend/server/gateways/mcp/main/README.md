@@ -56,8 +56,10 @@ starts the imported image.
 The draft server and its background job use one database transaction. Either both are saved, or
 neither is saved. A repeated registration request returns the same draft and the same job.
 
-Individual users browse the approved directory and install servers they may use. The API never
-returns credentials and never labels an install connected before a real connection exists.
+Individual users browse the approved directory and install servers they may use. For OCI-backed
+servers, the same response lists tools from the newest Ready server revision, including the frozen
+input schema and digest an agent author must save. The API never returns credentials and never
+labels an install connected before a real connection exists.
 
 ## Rules
 
@@ -66,7 +68,10 @@ returns credentials and never labels an install connected before a real connecti
 - Network failures, timeouts, rate limits, and server errors are retried. Unsafe addresses and bad
   replies are saved as rejected so the same task cannot keep contacting an unchanged endpoint. A
   temporary failure is tried at most five times, with a longer delay before each later check.
-- A user only sees and installs servers allowed by saved access grants.
+- A user only sees and installs Published, Active servers with a Ready OCI revision when saved access
+  grants allow that server.
+- An administrator may inspect tools on an unpublished or inactive server. The response marks those
+  tools as blocked, and administrator visibility never grants execution permission.
 - The package reads saved users and groups. It does not treat raw login claims as access rights.
 - Route handlers use the authenticated user's silo. They do not accept a silo from the request body.
 
@@ -85,7 +90,8 @@ returns credentials and never labels an install connected before a real connecti
 - `PrismaMcpRuntimeAuthority` — owns the database transactions and delivery fences behind those
   public, controller, and companion routes.
 - Operator services: `listEntitledCatalog`, `listInstalled`, `installServer`, `approveServer`,
-  `publishServer`, and the access editor.
+  `publishServer`, and the access editor. Catalogue server responses include the newest Ready OCI
+  tool revisions in stable order.
 - `_McpOpenapiPaths` — the OpenAPI path descriptions for this API.
 
 ## Boundary

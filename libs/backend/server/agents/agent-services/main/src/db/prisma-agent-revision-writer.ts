@@ -10,6 +10,7 @@ import { type AgentRevisionWriterRepository, type CreateAgentRevisionWithinTrans
 export const _AGENT_REVISION_INCLUDE = {
 	skillAssignments: true,
 	integrationAssignments: true,
+	mcpToolAssignments: true,
 	boundaryAttachments: true,
 } as const;
 
@@ -43,6 +44,7 @@ export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments):
 				toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as unknown as readonly ReviewedIntegrationToolDefinition[],
 			};
 		}),
+		mcpToolRevisionIds: row.mcpToolAssignments.map(function _MapMcpTool(assignment): string { return assignment.toolRevisionId; }).sort(),
 		boundaryAttachments: row.boundaryAttachments.map(function _MapBoundary(attachment)
 		{
 			return _FromPrismaBoundary(attachment);
@@ -101,6 +103,12 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 					custodyReferenceId: assignment.custodyReferenceId,
 					toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as Prisma.InputJsonValue,
 				};
+			}),
+		},
+		mcpToolAssignments: {
+			create: command.content.mcpToolRevisionIds.map(function _MapMcpTool(toolRevisionId)
+			{
+				return { toolRevisionId, agentServiceId: command.agentServiceId, siloId: command.siloId };
 			}),
 		},
 		boundaryAttachments: {

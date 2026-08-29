@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import { McpApprovalStatus, McpServerRevisionState, McpServerStatus, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuditDecisionRecord } from "@opencrane/backend/server/iam/audit";
@@ -41,8 +41,15 @@ function _revisionRow()
 		publishedAt: null,
 		skillAssignments: [],
 		integrationAssignments: [],
+		mcpToolAssignments: [],
 		boundaryAttachments: [],
 	};
+}
+
+/** Creates one exact publication-eligible MCP assignment row. */
+function _McpToolAssignment()
+{
+	return { siloId: "silo-1", toolRevisionId: "mcp-tool-revision-1", toolRevision: { serverRevision: { state: McpServerRevisionState.Ready, server: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Published } } } };
 }
 
 /** Creates exact audit evidence accepted by the append-only target ledger. */
@@ -111,5 +118,23 @@ describe("Prisma AgentService publication adapter", function _suite()
 		await expect(repository.publishRevisionAtomically({ agentServiceId: "service-1", agentRevisionId: "revision-1", expectedServiceState: "draft", expectedActiveRevisionId: null, publishedAt: "2026-07-18T01:00:00.000Z" })).resolves.toEqual({ status: "conflict", currentActiveRevisionId: null });
 		expect(transaction.agentRevision.update).not.toHaveBeenCalled();
 		expect(transaction.auditDecision.create).not.toHaveBeenCalled();
+	});
+
+	it("refuses publication when an exact MCP tool is not Ready and published", async function _RefusesUnavailableMcpTool()
+	{
+		const serviceRow = _serviceRow();
+		const assignment = _McpToolAssignment();
+		const revisionRow = { ..._revisionRow(), mcpToolAssignments: [{ ...assignment, toolRevision: { serverRevision: { ...assignment.toolRevision.serverRevision, state: McpServerRevisionState.Discovering } } }] };
+		const transaction = {
+			$queryRaw: vi.fn().mockResolvedValue([]),
+			agentService: { findUnique: vi.fn().mockResolvedValue(serviceRow), update: vi.fn() },
+			agentRevision: { findUnique: vi.fn().mockResolvedValue(revisionRow), update: vi.fn() },
+			auditDecision: { create: vi.fn() },
+		};
+		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaAgentServicePublicationRepository(prisma, { build: vi.fn().mockReturnValue(_auditDecision()) });
+
+		await expect(repository.publishRevisionAtomically({ agentServiceId: "service-1", agentRevisionId: "revision-1", expectedServiceState: "draft", expectedActiveRevisionId: null, publishedAt: "2026-07-18T01:00:00.000Z" })).resolves.toEqual({ status: "invalid_revision" });
+		expect(transaction.agentRevision.update).not.toHaveBeenCalled();
 	});
 });

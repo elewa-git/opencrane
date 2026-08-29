@@ -79,6 +79,7 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 				boundaryAttachments: { select: { boundaryKind: true, boundaryGroupId: true, boundaryPrincipalId: true, boundaryCoverage: true } },
 				skillAssignments: { select: { skillId: true, skillRevisionId: true } },
 				integrationAssignments: { select: { integrationId: true, custodyReferenceId: true, toolDefinitions: true } },
+				mcpToolAssignments: { select: { toolRevisionId: true } },
 			},
 		});
 		if (revision === null)
@@ -135,6 +136,7 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 			budget: revision.budget,
 			skillAssignments: _CanonicalSkillAssignments(revision.skillAssignments),
 			integrationAssignments: _CanonicalIntegrationAssignments(revision.integrationAssignments),
+			mcpToolRevisionIds: revision.mcpToolAssignments.map(function _McpToolRevisionId(assignment): string { return assignment.toolRevisionId; }).sort(_CompareCanonicalCoordinate),
 		} as unknown as JsonValue);
 		return {
 			outcome: "loaded",

@@ -481,6 +481,13 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/agents/execution/inputs/main/src/prisma-mcp-tool-admission-claim-repository.ts",
+        "adapter": "PrismaMcpToolAdmissionClaimRepository",
+        "contract": "McpToolAdmissionClaimRepository",
+        "contractImportPath": "./session-assembly.types",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/agents/execution/inputs/main/src/prisma-personal-execution-identity-authority-repository.ts",
         "adapter": "PrismaPersonalExecutionIdentityAuthorityRepository",
         "contract": "PersonalExecutionIdentityAuthorityRepository",

@@ -55,6 +55,7 @@ export interface AtomicAgentRevisionPublication
  */
 export type AtomicAgentRevisionPublicationResult =
 	| { readonly status: "published"; readonly service: AgentService; readonly revision: AgentRevision }
+	| { readonly status: "invalid_revision" }
 	| { readonly status: "conflict"; readonly currentActiveRevisionId: AgentRevisionId | null };
 
 /**

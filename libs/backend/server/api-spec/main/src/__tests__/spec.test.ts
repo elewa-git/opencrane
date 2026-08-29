@@ -11,5 +11,14 @@ describe("MCP public API contract", function _Suite()
 		expect(spec.paths).not.toHaveProperty("/mcp-servers");
 		expect(spec.paths).not.toHaveProperty("/mcp-servers/{id}");
 		expect(spec.components.schemas).not.toHaveProperty("McpServerCredential");
+		expect(spec.components.schemas.McpCatalogServer.required).toContain("tools");
+		expect(spec.components.schemas.McpAssignableToolRevision).toMatchObject({
+			required: ["toolRevisionId", "serverRevisionId", "name", "description", "inputSchema", "inputSchemaDigest", "eligibility", "readiness"],
+			properties: {
+				description: { type: ["string", "null"] },
+				eligibility: { enum: ["assignable", "governance-blocked"] },
+				readiness: { enum: ["ready"] },
+			},
+		});
 	});
 });

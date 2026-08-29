@@ -32,6 +32,10 @@ export function __DigestRunInputSnapshot(snapshot: Omit<RunInputSnapshot, "diges
 				}),
 			};
 		}),
+		mcpTools: snapshot.mcpTools.map(function _McpTool(tool): JsonValue
+		{
+			return { toolRevisionId: tool.toolRevisionId, name: tool.name, description: tool.description, inputSchema: tool.inputSchema, inputSchemaDigest: tool.inputSchemaDigest };
+		}),
 		modelRoute: snapshot.modelRoute,
 		budgetPolicy: snapshot.budgetPolicy,
 		identitySnapshot: snapshot.identitySnapshot,

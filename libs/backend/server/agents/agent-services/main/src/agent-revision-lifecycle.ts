@@ -36,9 +36,11 @@ function _isContentValid(content: AgentRevisionContent): boolean
 		&& _isPositiveInteger(content.budget.maxDurationMs)
 		&& content.skills.every(skill => _isPresent(skill.skillId) && _isPresent(skill.revisionId))
 		&& content.integrationAssignments.every(assignment => _isPresent(assignment.integrationId) && _isPresent(assignment.custodyReferenceId) && __AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions))
+		&& content.mcpToolRevisionIds.every(_isPresent)
 		&& content.boundaryAttachments.every(attachment => _isPresent(attachment.boundaryId))
 		&& _isUniqueBy(content.skills, skill => skill.skillId)
 		&& _isUniqueBy(content.integrationAssignments, assignment => assignment.integrationId)
+		&& new Set(content.mcpToolRevisionIds).size === content.mcpToolRevisionIds.length
 		&& _isUniqueBy(content.boundaryAttachments, attachment => `${attachment.boundaryKind}\u0000${attachment.boundaryId}\u0000${attachment.boundaryCoverage}`);
 }
 

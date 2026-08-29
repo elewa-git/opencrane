@@ -1,4 +1,4 @@
-import { McpExecutorCommandState, McpExecutorWorkloadState, McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, McpServerTransport, OciImageValidationState } from "@prisma/client";
+import { McpApprovalStatus, McpExecutorCommandState, McpExecutorWorkloadState, McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, McpServerTransport, OciImageValidationState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { ExternalActionRecoveryModes, ToolInvocationStates } from "@opencrane/backend/server/iam/authorization";
@@ -37,13 +37,27 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 		const invocation = { id: "invocation-row-1", siloId: "silo-1", toolRevisionId: "tool-1", state: ToolInvocationStates.Ready, recoveryMode: ExternalActionRecoveryModes.Manual };
 		const transaction = {
 			mcpRuntimeExecution: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "execution-1" }) },
-			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: { state: McpServerRevisionState.Ready } }) },
+			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: { state: McpServerRevisionState.Ready, server: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Published } } }) },
 		};
 		const toolInvocations = { findById: vi.fn().mockResolvedValue(invocation), claim: vi.fn(), completeSucceeded: vi.fn(), completeFailed: vi.fn(), completeAmbiguous: vi.fn() };
 		const repository = new PrismaMcpRuntimeCatalogRepository(transaction as never, toolInvocations as never, _Options());
 
 		await expect(repository.admitInvocation("invocation-row-1")).resolves.toBe("admitted");
 		expect(transaction.mcpRuntimeExecution.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ toolInvocationId: "invocation-row-1", kind: McpRuntimeExecutionKind.Invocation }) }));
+	});
+
+	it("rejects an MCP invocation after its catalogue server is disabled", async function _RejectsDisabledServer()
+	{
+		const invocation = { id: "invocation-row-1", siloId: "silo-1", toolRevisionId: "tool-1", state: ToolInvocationStates.Ready, recoveryMode: ExternalActionRecoveryModes.Manual };
+		const transaction = {
+			mcpRuntimeExecution: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
+			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: { state: McpServerRevisionState.Ready, server: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Disabled } } }) },
+		};
+		const toolInvocations = { findById: vi.fn().mockResolvedValue(invocation), claim: vi.fn(), completeSucceeded: vi.fn(), completeFailed: vi.fn(), completeAmbiguous: vi.fn() };
+		const repository = new PrismaMcpRuntimeCatalogRepository(transaction as never, toolInvocations as never, _Options());
+
+		await expect(repository.admitInvocation("invocation-row-1")).resolves.toBe("not_ready");
+		expect(transaction.mcpRuntimeExecution.create).not.toHaveBeenCalled();
 	});
 
 	it("returns a database-fenced controller claim with the immutable imported image", async function _ClaimsForController()

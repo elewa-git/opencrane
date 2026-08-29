@@ -55,6 +55,7 @@ export function __DigestAgentRevisionContent(agentServiceId: string, revision: n
 				}),
 			};
 		}),
+		mcpToolRevisionIds: [...content.mcpToolRevisionIds].sort(),
 		boundaryAttachments: content.boundaryAttachments.map(function _MapBoundary(attachment)
 		{
 			return {

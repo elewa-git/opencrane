@@ -72,6 +72,8 @@ export interface AgentRevisionContent
 	readonly skills: readonly SkillRevisionReference[];
 	/** Immutable integration and tool assignments exposed to the runtime. */
 	readonly integrationAssignments: readonly IntegrationAssignmentReference[];
+	/** Exact immutable MCP tool revisions exposed to the runtime. */
+	readonly mcpToolRevisionIds: readonly string[];
 	/** Revision-scoped knowledge attachments authorised for the runtime. */
 	readonly boundaryAttachments: readonly RevisionBoundaryAttachment[];
 }
@@ -105,6 +107,8 @@ export interface AgentRevision
 	readonly skills: readonly SkillRevisionReference[];
 	/** Immutable integration and tool assignments available to the runtime. */
 	readonly integrationAssignments: readonly IntegrationAssignmentReference[];
+	/** Exact immutable MCP tool revisions available to the runtime. */
+	readonly mcpToolRevisionIds: readonly string[];
 	/** Immutable knowledge boundary attachments authorised for the runtime. */
 	readonly boundaryAttachments: readonly RevisionBoundaryAttachment[];
 	/** Resource ceilings applied to each run. */

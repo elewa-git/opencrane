@@ -24,6 +24,7 @@ function _PersonalSnapshot(): RunInputSnapshot
 		skillRevisionIds: [],
 		memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-1", queryText: "private recall query", maxFacts: 8 },
 		integrationAssignments: [],
+		mcpTools: [],
 		modelRoute: { alias: "model-1" },
 		budgetPolicy: {},
 		identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"b".repeat(64)}`, fleetMembershipTrustedUntil: "2026-08-13T00:00:00.000Z" },

@@ -194,6 +194,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mcp/oci-image-validations/{id}/server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create an MCP server revision from an imported OCI image and start discovery. Org-admin only */
+        post: operations["promoteOciImageValidationToMcpServer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/mcp/directory": {
         parameters: {
             query?: never;
@@ -1556,7 +1573,7 @@ export interface components {
         AcceptOrganizationInvitationResult: {
             member: components["schemas"]["OrganizationMember"];
         };
-        /** @description An MCP server exposed by the operator API. Fields other than id are optional because this shape serves both the entitled catalogue and the organisation-admin governance view. */
+        /** @description An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no Ready OCI revision exists. */
         McpCatalogServer: {
             /** @description Stable server identifier. */
             id: string;
@@ -1582,6 +1599,33 @@ export interface components {
             credentialSchema?: components["schemas"]["CredentialField"][];
             /** @description Human-readable summary of access grants, returned for the governance view. */
             entitlementSummary?: string;
+            /** @description Tools from the newest Ready OCI server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission. */
+            tools: components["schemas"]["McpAssignableToolRevision"][];
+        };
+        /** @description An immutable OCI-backed MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization. */
+        McpAssignableToolRevision: {
+            /** @description Immutable tool revision identifier saved during discovery. */
+            toolRevisionId: string;
+            /** @description Newest Ready server revision selected for this response. */
+            serverRevisionId: string;
+            /** @description Tool name reported by the MCP server. */
+            name: string;
+            /** @description Tool description reported by the MCP server, or null when it supplied none. */
+            description: string | null;
+            /** @description Input JSON Schema frozen during discovery. */
+            inputSchema: unknown;
+            /** @description Digest that binds assignment and run admission to this input schema. */
+            inputSchemaDigest: string;
+            /**
+             * @description Whether Published and Active server governance permits assignment. It does not grant caller authority.
+             * @enum {string}
+             */
+            eligibility: "assignable" | "governance-blocked";
+            /**
+             * @description Discovery state that made the immutable schema available.
+             * @enum {string}
+             */
+            readiness: "ready";
         };
         /** @description One input an external custody flow requires to connect a single-user MCP server. This API describes the input but neither receives nor returns its value. */
         CredentialField: {
@@ -2708,6 +2752,110 @@ export interface operations {
             };
             /** @description OCI image validation not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    promoteOciImageValidationToMcpServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    description: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The same imported image was already promoted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "idempotent";
+                        serverId: string;
+                        serverRevisionId: string;
+                        executionId: string;
+                    };
+                };
+            };
+            /** @description MCP server revision and discovery execution saved. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "created";
+                        serverId: string;
+                        serverRevisionId: string;
+                        executionId: string;
+                    };
+                };
+            };
+            /** @description Promotion fields are invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Authenticated principal is unavailable. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Caller is not an organisation admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description OCI image validation not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The image is not imported or its server promotion conflicts. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description MCP runtime authority is unavailable. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

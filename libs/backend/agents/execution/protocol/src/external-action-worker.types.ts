@@ -129,7 +129,7 @@ export interface ToolInvocationWorkSource
 /** Routes a ready ToolInvocation into a class-specific durable executor before generic dispatch. */
 export interface ExternalActionClassAdmission
 {
-	/** Admit one saved invocation, or report that the generic provider worker still owns it. */
+	/** Admit one saved invocation, identify a recognized but unavailable class, or report that the generic provider worker owns it. */
 	admitInvocation(toolInvocationRowId: string): Promise<"admitted" | "idempotent" | "not_ready" | "not_mcp">;
 }
 

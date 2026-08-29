@@ -14,7 +14,7 @@ const _STATE_BY_ACTION: Readonly<Record<ChangeAgentServiceStateCommand["action"]
 /** Builds valid executable content for a managed revision. */
 function _content(overrides: Partial<AgentRevisionContent> = {}): AgentRevisionContent
 {
-	return { promptPolicyVersion: "prompt-v1", personaRevisionId: null, modelDefinitionId: "model-definition-a", budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 }, skills: [], integrationAssignments: [], boundaryAttachments: [{ boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "proj-1", boundaryCoverage: RevisionBoundaryCoverages.Exact }], ...overrides };
+	return { promptPolicyVersion: "prompt-v1", personaRevisionId: null, modelDefinitionId: "model-definition-a", budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 }, skills: [], integrationAssignments: [], mcpToolRevisionIds: [], boundaryAttachments: [{ boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "proj-1", boundaryCoverage: RevisionBoundaryCoverages.Exact }], ...overrides };
 }
 
 /** Minimal in-memory definition-plane repository, silo-scoped like the Prisma adapter. */
@@ -68,7 +68,7 @@ class _Repository implements AgentRevisionLifecycleRepository
 		// Silo-scope the source lookup exactly like the Prisma adapter: a foreign-silo source is a 404.
 		const source = this.revisions.find(revision => revision.id === command.sourceRevisionId && this._siloService(revision.agentServiceId, command.siloId) !== null);
 		if (source === undefined) return { outcome: "denied", reason: "revision_not_found" };
-		const content: AgentRevisionContent = { promptPolicyVersion: source.promptPolicyVersion, personaRevisionId: source.personaRevisionId, modelDefinitionId: source.modelDefinitionId, budget: source.budget, skills: source.skills.map(skill => ({ skillId: skill.skillId, revisionId: skill.revisionId })), integrationAssignments: source.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, toolDefinitions: assignment.toolDefinitions.map(tool => ({ ...tool })) })), boundaryAttachments: source.boundaryAttachments.map(attachment => ({ ...attachment })) };
+		const content: AgentRevisionContent = { promptPolicyVersion: source.promptPolicyVersion, personaRevisionId: source.personaRevisionId, modelDefinitionId: source.modelDefinitionId, budget: source.budget, skills: source.skills.map(skill => ({ skillId: skill.skillId, revisionId: skill.revisionId })), integrationAssignments: source.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, toolDefinitions: assignment.toolDefinitions.map(tool => ({ ...tool })) })), mcpToolRevisionIds: [...source.mcpToolRevisionIds], boundaryAttachments: source.boundaryAttachments.map(attachment => ({ ...attachment })) };
 		return { outcome: "revised", revision: this._append(command.agentServiceId, head.revision + 1, head.id, source.id, content, command.authoredBy, command.changeMessage, createdAt) };
 	}
 
@@ -107,7 +107,7 @@ class _Repository implements AgentRevisionLifecycleRepository
 	/** Appends one immutable draft revision to the in-memory store. */
 	private _append(agentServiceId: string, revision: number, parentRevisionId: string | null, sourceRevisionId: string | null, content: AgentRevisionContent, authoredBy: string, changeMessage: string, createdAt: string): AgentRevision
 	{
-		const record: AgentRevision = { id: `revision-${++this.counter}`, agentServiceId, revision, parentRevisionId, sourceRevisionId, changeMessage, state: "draft", digest: `sha256:${revision}`, promptPolicyVersion: content.promptPolicyVersion, personaRevisionId: content.personaRevisionId, modelDefinitionId: content.modelDefinitionId, skills: content.skills.map(skill => ({ ...skill })), integrationAssignments: content.integrationAssignments.map(assignment => ({ ...assignment, toolDefinitions: assignment.toolDefinitions.map(tool => ({ ...tool })) })), boundaryAttachments: content.boundaryAttachments.map(attachment => ({ ...attachment })), budget: content.budget, authoredBy, createdAt, publishedAt: null };
+		const record: AgentRevision = { id: `revision-${++this.counter}`, agentServiceId, revision, parentRevisionId, sourceRevisionId, changeMessage, state: "draft", digest: `sha256:${revision}`, promptPolicyVersion: content.promptPolicyVersion, personaRevisionId: content.personaRevisionId, modelDefinitionId: content.modelDefinitionId, skills: content.skills.map(skill => ({ ...skill })), integrationAssignments: content.integrationAssignments.map(assignment => ({ ...assignment, toolDefinitions: assignment.toolDefinitions.map(tool => ({ ...tool })) })), mcpToolRevisionIds: [...content.mcpToolRevisionIds], boundaryAttachments: content.boundaryAttachments.map(attachment => ({ ...attachment })), budget: content.budget, authoredBy, createdAt, publishedAt: null };
 		this.revisions.push(record);
 		return record;
 	}

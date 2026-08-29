@@ -23,6 +23,7 @@ function _snapshot(runId: string, serviceId: string, revisionId: string, convers
 		skillRevisionIds: [],
 		memoryQueryPolicy: { scope: "none" },
 		integrationAssignments: [],
+		mcpTools: [],
 		modelRoute: { alias: "test" },
 		budgetPolicy: { maxTokens: 1_000, maxCostUsdMicros: 5_000_000 },
 		identitySnapshot: {
@@ -142,6 +143,7 @@ describe("PrismaChildRunReservationRepository", function _describeReservationRep
 			identitySnapshot: childSnapshot.identitySnapshot,
 			modelRoute: childSnapshot.modelRoute,
 			integrationAssignments: [],
+			mcpTools: [],
 			skillRevisionIds: [],
 			memoryQueryPolicy: childSnapshot.memoryQueryPolicy,
 			budgetPolicy: childSnapshot.budgetPolicy,

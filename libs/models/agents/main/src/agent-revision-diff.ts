@@ -77,6 +77,12 @@ function _integrationCustodyKeys(revision: AgentRevision): string[]
 	return revision.integrationAssignments.map(function _key(assignment) { return `${assignment.integrationId}=${assignment.custodyReferenceId}`; });
 }
 
+/** Renders exact MCP tool revisions as stable capability keys. */
+function _mcpToolRevisionKeys(revision: AgentRevision): string[]
+{
+	return [...revision.mcpToolRevisionIds];
+}
+
 /** Renders boundary attachments as stable kind, identifier, and coverage keys. */
 function _boundaryAttachmentKeys(revision: AgentRevision): string[]
 {
@@ -128,6 +134,7 @@ export function __DiffAgentRevisions(base: AgentRevision, target: AgentRevision)
 		_setChange("skills", _skillKeys(base), _skillKeys(target)),
 		_setChange("integrationTools", _integrationToolKeys(base), _integrationToolKeys(target)),
 		_setChange("integrationCustody", _integrationCustodyKeys(base), _integrationCustodyKeys(target)),
+		_setChange("mcpToolRevisionIds", _mcpToolRevisionKeys(base), _mcpToolRevisionKeys(target)),
 		_setChange("boundaryAttachments", _boundaryAttachmentKeys(base), _boundaryAttachmentKeys(target)),
 	].filter(_isPresent);
 
@@ -159,6 +166,11 @@ function _collectWidenings(base: AgentRevision, target: AgentRevision, setChange
 	if (toolChange && toolChange.added.length > 0)
 	{
 		widenings.push({ kind: "tools", field: "integrationTools", detail: `granted ${toolChange.added.length} integration tool(s): ${toolChange.added.join(", ")}` });
+	}
+	const mcpToolChange = setChanges.find(function _McpTools(change) { return change.field === "mcpToolRevisionIds"; });
+	if (mcpToolChange && mcpToolChange.added.length > 0)
+	{
+		widenings.push({ kind: "tools", field: "mcpToolRevisionIds", detail: `granted ${mcpToolChange.added.length} MCP tool revision(s): ${mcpToolChange.added.join(", ")}` });
 	}
 
 	// New credentials: any integration bound in the target that the base did not carry.

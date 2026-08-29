@@ -18,6 +18,13 @@ function _Tool(name: string)
 	return { name, description: `${name} description`, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
 }
 
+/** Build one exact immutable MCP tool snapshot. */
+function _McpTool(toolRevisionId: string, name: string)
+{
+	const inputSchema = { type: "object", additionalProperties: false } as const;
+	return { toolRevisionId, name, description: `${name} description`, inputSchema, inputSchemaDigest: ___DigestCanonicalJson(inputSchema) };
+}
+
 /** Builds fake source ports, each replaceable on its own, that return their lists out of order on purpose. */
 function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | "idempotent" | "active_run" | "persistence_unavailable", personaRevisionId: string | null = "persona-1"): SessionAssemblyAuthorities
 {
@@ -38,7 +45,7 @@ function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | 
 		conversationContext: { load: async function _load() { return { outcome: "loaded", value: { messageIds: ["message-2", "message-1"], pendingUserMessage: { id: "message-1", blocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] } } } as const; } },
 		preferenceFacts: { load: async function _load() { return { outcome: "loaded", value: [{ id: "preference-2" }, { id: "preference-1" }] } as const; } },
 		memoryScope: { load: async function _load() { return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal" } } } as const; } },
-		toolPolicy: { load: async function _load() { return { outcome: "loaded", value: { modelRoute: { alias: "target-model" }, integrationAssignments: [{ integrationId: "integration-2", toolDefinitions: [_Tool("write"), _Tool("read")] }, { integrationId: "integration-1", toolDefinitions: [_Tool("search")] }], skillRevisionIds: ["skill-2", "skill-1"], artifactRevisionIds: ["artifact-2", "artifact-1"] } } as const; } },
+		toolPolicy: { load: async function _load() { return { outcome: "loaded", value: { modelRoute: { alias: "target-model" }, integrationAssignments: [{ integrationId: "integration-2", toolDefinitions: [_Tool("write"), _Tool("read")] }, { integrationId: "integration-1", toolDefinitions: [_Tool("search")] }], mcpTools: [_McpTool("mcp-tool-revision-2", "write"), _McpTool("mcp-tool-revision-1", "search")], skillRevisionIds: ["skill-2", "skill-1"], artifactRevisionIds: ["artifact-2", "artifact-1"] } } as const; } },
 		skillEligibility: { load: async function _load() { return { outcome: "loaded", value: null } as const; } },
 		budgetPolicy: { load: async function _load() { return { outcome: "loaded", value: { budgetPolicy: { maxTokens: 1000, maxTurns: 4 } } } as const; } },
 		identityEnvelope: { load: async function _load() { return { outcome: "loaded", value: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 8, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"e".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T13:00:00.000Z", capabilitySetDigest: `sha256:${"f".repeat(64)}` } } as const; } },
@@ -60,6 +67,7 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 		expect(firstSnapshots[0]?.messageIds).toEqual(["message-2", "message-1"]);
 		expect(firstSnapshots[0]?.preferenceFactIds).toEqual(["preference-1", "preference-2"]);
 		expect(firstSnapshots[0]?.integrationAssignments).toEqual([{ integrationId: "integration-1", toolDefinitions: [_Tool("search")] }, { integrationId: "integration-2", toolDefinitions: [_Tool("read"), _Tool("write")] }]);
+		expect(firstSnapshots[0]?.mcpTools.map(function _Revision(tool) { return tool.toolRevisionId; })).toEqual(["mcp-tool-revision-1", "mcp-tool-revision-2"]);
 	});
 
 	it("fails closed before persistence when a personal service has no active approved persona", async function _deniesMissingPersona()
@@ -107,7 +115,7 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 	{
 		let admitted = false;
 		const authorities = _Authorities(function _accept() { admitted = true; return "accepted"; });
-		authorities.toolPolicy = { load: async function _load() { return { outcome: "loaded", value: { modelRoute: {}, integrationAssignments: [{ integrationId: "calendar", toolDefinitions: [_Tool("calendar:read")] }], skillRevisionIds: [], artifactRevisionIds: [] } } as const; } };
+		authorities.toolPolicy = { load: async function _load() { return { outcome: "loaded", value: { modelRoute: {}, integrationAssignments: [{ integrationId: "calendar", toolDefinitions: [_Tool("calendar:read")] }], mcpTools: [], skillRevisionIds: [], artifactRevisionIds: [] } } as const; } };
 
 		await expect(__AssembleRunInputSnapshot(_COMMAND, authorities)).resolves.toEqual({ outcome: "denied", reason: "tool_policy_unavailable" });
 		expect(admitted).toBe(false);
@@ -139,7 +147,7 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 	it("returns the snapshot selected by an earlier admission without compiling a later request timestamp", async function _returnsIdempotentSnapshot()
 	{
 		let sourceLoads = 0;
-		const previous = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: "conversation-1", messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" }, capabilitySetDigest: `sha256:${"b".repeat(64)}`, effectiveContractDigest: `sha256:${"c".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"d".repeat(64)}`, compiledAt: "2026-07-19T12:00:00.000Z" } as const;
+		const previous = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: "conversation-1", messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, integrationAssignments: [], mcpTools: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" }, capabilitySetDigest: `sha256:${"b".repeat(64)}`, effectiveContractDigest: `sha256:${"c".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"d".repeat(64)}`, compiledAt: "2026-07-19T12:00:00.000Z" } as const;
 		const authorities = _Authorities(function _accept() { return "accepted"; });
 		authorities.admission = { admit: async function _admit() { return { outcome: "idempotent", snapshot: previous } as const; } };
 		authorities.runAuthority = { load: async function _load() { sourceLoads += 1; return { outcome: "denied", reason: "run_not_admittable" } as const; } };

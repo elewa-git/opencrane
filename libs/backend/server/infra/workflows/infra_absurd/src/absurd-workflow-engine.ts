@@ -2,8 +2,8 @@ import { Absurd, FailedTask, type TaskContext } from "absurd-sdk";
 import pg, { type Pool as PgPool } from "pg";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { WorkflowError, WorkflowTaskNotRegisteredError, WorkflowTaskRetryBackoffKinds, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
-import type { IWorkflowEngine, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskReceipt, IWorkflowTaskRetryPolicy, IWorkflowTaskSpawn, IWorkflowTransaction, IWorkflowWorkerRuntime, IWorkflowWorkers, IWorkflowWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
+import { __NormalizeWorkflowTaskRetryPolicy, WorkflowError, WorkflowTaskNotDeclaredError, WorkflowTaskNotRegisteredError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import type { IWorkflowEngine, IWorkflowTaskDeclaration, IWorkflowTaskDefinition, IWorkflowTaskEvent, IWorkflowTaskEventReceipt, IWorkflowTaskReceipt, IWorkflowTaskRetryPolicy, IWorkflowTaskSpawn, IWorkflowTransaction, IWorkflowWorkerRuntime, IWorkflowWorkers, IWorkflowWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _TaskScopedIdempotencyKey, WorkflowTaskAdmission } from "./workflow-task-admission";
 import type { IAbsurdWorkflowEngineOptions } from "./absurd-workflow-engine.types";
@@ -11,6 +11,7 @@ import { _AbsurdTaskContext, _AbsurdTaskEventName } from "./absurd-task-context"
 import { _AbsurdTerminalTaskFailure } from "./absurd-terminal-task-failure";
 import type { IWorkflowTaskAdmissionRequest } from "./workflow-task-admission.types";
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
+import { _WorkflowTaskDeclarationRegistry } from "./workflow-task-declaration-registry";
 
 const { Pool } = pg;
 
@@ -59,25 +60,10 @@ function _DatabasePoolSize(value: number): number
 	return value;
 }
 
-/** Validates a task retry policy and defaults tasks that do not retry to one attempt. */
-function _RetryPolicy(policy: IWorkflowTaskRetryPolicy | undefined): IWorkflowTaskRetryPolicy
-{
-	const value = policy ?? { maximumAttempts: 1, backoff: { kind: WorkflowTaskRetryBackoffKinds.Fixed, initialDelaySeconds: 0 } };
-	if (!Number.isSafeInteger(value.maximumAttempts) || value.maximumAttempts < 1 || value.maximumAttempts > 100)
-		throw new WorkflowError("retryPolicy.maximumAttempts must be between 1 and 100.");
-	if (!Number.isSafeInteger(value.backoff.initialDelaySeconds) || value.backoff.initialDelaySeconds < 0 || value.backoff.initialDelaySeconds > 86_400)
-		throw new WorkflowError("retryPolicy.initialDelaySeconds must be between 0 and 86400.");
-	if (value.backoff.multiplier !== undefined && (!Number.isFinite(value.backoff.multiplier) || value.backoff.multiplier < 0))
-		throw new WorkflowError("retryPolicy.multiplier must be a finite non-negative number.");
-	if (value.backoff.maximumDelaySeconds !== undefined && (!Number.isSafeInteger(value.backoff.maximumDelaySeconds) || value.backoff.maximumDelaySeconds < 0 || value.backoff.maximumDelaySeconds > 86_400))
-		throw new WorkflowError("retryPolicy.maximumDelaySeconds must be between 0 and 86400.");
-	return value;
-}
-
 /** Converts the shared retry policy to the field names used by Absurd admission. */
 function _AbsurdRetryPolicy(policy: IWorkflowTaskRetryPolicy | undefined): Pick<IWorkflowTaskAdmissionRequest, "maximumAttempts" | "retryStrategy">
 {
-	const value = _RetryPolicy(policy);
+	const value = __NormalizeWorkflowTaskRetryPolicy(policy);
 	return { maximumAttempts: value.maximumAttempts, retryStrategy: { kind: value.backoff.kind, baseSeconds: value.backoff.initialDelaySeconds, factor: value.backoff.multiplier, maxSeconds: value.backoff.maximumDelaySeconds } };
 }
 
@@ -122,10 +108,12 @@ function _EnvelopeForTask(idempotencyKey: string, input: unknown): ITaskEnvelope
  * one commit decision. Work that a running task creates uses the SDK directly because it has no
  * surrounding product transaction to join.
  *
- * The engine owns task registration, queue-scoped SDK clients, and worker groups. It does not
- * choose queues: composition supplies the same reviewed authority that the workflow guard uses.
- * Call {@link close} during process shutdown; it drains workers before releasing an engine-owned
- * database pool.
+ * The engine owns admission declarations, local task registration, queue-scoped SDK clients, and
+ * worker groups. A declaration permits transactional top-level admission even when a remote
+ * controller owns the handler; a child task still needs a local handler. The engine does not choose
+ * queues: composition supplies the same reviewed authority that the workflow guard uses. Call
+ * {@link close} during process shutdown; it drains workers before releasing an engine-owned
+ * database connection pool.
  *
  * Called by: {@link _CreateWorkflowEngineQualificationSession} for the live qualification run.
  * @see ../../../../../../../docs/adr/0013-workflow-control-plane.md — records the engine boundary and transaction decision.
@@ -137,6 +125,8 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	private readonly engines = new Map<string, Absurd>();
 	/** Stores registered definitions so every admission and task context uses the same contract. */
 	private readonly definitions = new Map<string, IWorkflowTaskDefinition<unknown, unknown>>();
+	/** Stores declarations that permit admission when another process owns the handler. */
+	private readonly declarations: _WorkflowTaskDeclarationRegistry;
 	/** Stores SDK workers that must drain before a process releases this engine's resources. */
 	private readonly workerGroups = new Map<string, readonly IWorker[]>();
 	/** Stores lifecycle handles so a repeated start for one name returns the existing group. */
@@ -159,9 +149,11 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	{
 		// 1. Validate connection settings before any SDK client can use them.
 		this.options = { ...options, databaseUrl: _RequiredString("databaseUrl", options.databaseUrl), databasePoolSize: _DatabasePoolSize(options.databasePoolSize) };
-		// 2. Retain ownership so close never releases a caller-shared pool.
+		// 2. Bind declarations to the queue authority before any task can be admitted.
+		this.declarations = new _WorkflowTaskDeclarationRegistry(this.options.queueAuthority);
+		// 3. Retain ownership so close never releases a caller-shared pool.
 		this.ownsDatabasePool = options.databasePool === undefined;
-		// 3. Create the shared pool lazily used by queue-specific SDK clients.
+		// 4. Create the shared pool lazily used by queue-specific SDK clients.
 		this.databasePool = options.databasePool ?? new Pool({ connectionString: this.options.databaseUrl, max: this.options.databasePoolSize });
 	}
 
@@ -193,25 +185,44 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	/**
 	 * Registers a contract task on its reviewed Absurd queue.
 	 *
-	 * Registration precedes every admission, so the engine can reject an unknown task name instead
-	 * of persisting work that no handler owns. The stored definition also becomes the source for the
-	 * replay-safe context that {@link runTask} passes to each handler.
+	 * Registration also creates its admission declaration, then binds the local SDK handler. Use
+	 * {@link declare} instead when a remote controller owns that handler. The stored definition becomes
+	 * the source for the replay-safe context that {@link runTask} passes to each local handler.
 	 */
 	register<TInput, TResult>(definition: IWorkflowTaskDefinition<TInput, TResult>): void
 	{
 		const taskName = _RequiredString("definition.taskName", definition.taskName);
-		// 1. Refuse a duplicate before either registry can disagree about its handler.
+		// 1. Record the policy that permits both local and transaction-bound admission.
+		this.declare(definition);
+		// 2. Refuse a duplicate before either registry can disagree about its handler.
 		if (this.definitions.has(taskName))
 		{
 			throw new WorkflowError(`Workflow task ${taskName} is already registered.`);
 		}
-		// 2. Retain the definition that admissions and worker contexts will share.
+		// 3. Retain the definition that worker contexts will use after dispatch.
 		const stored = definition as unknown as IWorkflowTaskDefinition<unknown, unknown>;
-		const retryPolicy = _RetryPolicy(stored.retryPolicy);
+		const retryPolicy = __NormalizeWorkflowTaskRetryPolicy(stored.retryPolicy);
 		this.definitions.set(taskName, stored);
-		// 3. Bind the vendor handler to the same reviewed queue before any task can be admitted.
+		// 4. Bind the vendor handler to the same reviewed queue before local work can run.
 		const engine = this;
 		this.engineForQueue(this.queueForTask(taskName)).registerTask({ name: taskName, queue: this.queueForTask(taskName), defaultMaxAttempts: retryPolicy.maximumAttempts }, async function _RunTask(params: unknown, context: TaskContext): Promise<unknown> { return await engine.runTask(stored, context, params); });
+	}
+
+	/**
+	 * Declares a task for transaction-bound admission without creating a local handler.
+	 *
+	 * Use this when a remote controller registers the handler. The server can then admit work in its
+	 * product transaction, but {@link spawnFromTask} still rejects the task because child work needs
+	 * a local SDK handler. A conflicting retry policy fails instead of changing an earlier declaration.
+	 *
+	 * Called by: application composition through the workflow guard, and {@link register} for local
+	 * handlers.
+	 * @param declaration - Task name and retry policy allowed to enter transactional admission.
+	 * @throws WorkflowError when the declaration conflicts with an existing policy or queue.
+	 */
+	declare(declaration: IWorkflowTaskDeclaration): void
+	{
+		this.declarations.declare(declaration);
 	}
 
 	/**
@@ -245,18 +256,20 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	 *
 	 * The PostgreSQL procedure records the task before that transaction commits. A process crash
 	 * cannot leave a committed product change without the work it requires.
+	 * A reviewed declaration is enough here because a remote controller may register the handler.
+	 * @see declare — admits remote-controller work without installing a local handler.
 	 * @see WorkflowTaskAdmission — owns the fixed, parameterized procedure call.
 	 */
 	async spawn<TInput>(transaction: IWorkflowTransaction, task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
-		// 1. Verify the task has a handler before persisting an unserviceable receipt.
-		const definition = this.definitions.get(task.taskName);
-		if (definition === undefined)
+		// 1. Verify the task has a reviewed declaration; its handler may run in another process.
+		const declaration = this.declarations.find(task.taskName);
+		if (declaration === undefined)
 		{
-			throw new WorkflowTaskNotRegisteredError(task.taskName);
+			throw new WorkflowTaskNotDeclaredError(task.taskName);
 		}
 		// 2. Use the caller's transaction so the product write and receipt commit together.
-		return await this.spawnWithTransaction(transaction.client, task, definition);
+		return await this.spawnWithTransaction(transaction.client, task, declaration);
 	}
 
 	/**
@@ -264,14 +277,15 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	 *
 	 * A running task has no caller-owned product transaction to join. The task-scoped idempotency
 	 * key prevents two task definitions on one queue from treating the same domain key as a match.
+	 * A reviewed declaration is enough because the explicit queue may be consumed by another process.
 	 */
 	async spawnFromTask<TInput>(task: IWorkflowTaskSpawn<TInput>): Promise<IWorkflowTaskReceipt>
 	{
-		// 1. Reject a missing handler before asking the SDK to persist child work.
-		const definition = this.definitions.get(task.taskName);
-		if (definition === undefined)
+		// 1. Reject an undeclared child before asking the SDK to persist work on its reviewed queue.
+		const declaration = this.declarations.find(task.taskName);
+		if (declaration === undefined)
 		{
-			throw new WorkflowTaskNotRegisteredError(task.taskName);
+			throw new WorkflowTaskNotDeclaredError(task.taskName);
 		}
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
@@ -279,7 +293,7 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		{
 			// 2. Preserve an absent input and scope the key before it reaches the shared queue.
 			const envelope = _EnvelopeForTask(idempotencyKey, task.input);
-			const retry = _AbsurdRetryPolicy(definition.retryPolicy);
+			const retry = _AbsurdRetryPolicy(declaration.retryPolicy);
 			const queue = this.queueForTask(taskName);
 			const cmd = { queue, idempotencyKey: _TaskScopedIdempotencyKey(taskName, idempotencyKey), maxAttempts: retry.maximumAttempts, retryStrategy: retry.retryStrategy };
 			const engine = this.engineForQueue(queue);
@@ -293,11 +307,11 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	}
 
 	/** Calls the fixed, parameterized Absurd procedure on the caller's existing transaction. */
-	private async spawnWithTransaction<TInput>(transactionClient: unknown, task: IWorkflowTaskSpawn<TInput>, definition: IWorkflowTaskDefinition<unknown, unknown>): Promise<IWorkflowTaskReceipt>
+	private async spawnWithTransaction<TInput>(transactionClient: unknown, task: IWorkflowTaskSpawn<TInput>, declaration: IWorkflowTaskDeclaration): Promise<IWorkflowTaskReceipt>
 	{
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
-		const retry = _AbsurdRetryPolicy(definition.retryPolicy);
+		const retry = _AbsurdRetryPolicy(declaration.retryPolicy);
 		const cmd = { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input), ...retry };
 		const taskAdmission = new WorkflowTaskAdmission(this.queueForTask(taskName));
 		const receipt = await taskAdmission.admit(transactionClient, cmd);

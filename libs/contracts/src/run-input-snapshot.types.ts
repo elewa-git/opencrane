@@ -76,6 +76,21 @@ export interface ServiceRunInputSnapshotIdentity extends RunInputSnapshotFleetMe
 /** The run's identity — person or service — decided before the runtime receives the snapshot. */
 export type RunInputSnapshotIdentity = UserRunInputSnapshotIdentity | ServiceRunInputSnapshotIdentity;
 
+/** One exact MCP tool revision frozen when a run is admitted. */
+export interface RunInputSnapshotMcpTool
+{
+  /** Immutable McpToolRevision primary key selected by the AgentRevision. */
+  toolRevisionId: string;
+  /** Stable MCP tool name discovered with the selected server revision. */
+  name: string;
+  /** Human-readable model guidance discovered with the selected server revision. */
+  description: string | null;
+  /** Exact JSON Schema used for model input and approval validation. */
+  inputSchema: JsonValue;
+  /** Digest of the input schema, so it cannot change after admission. */
+  inputSchemaDigest: string;
+}
+
 /** One reviewed integration tool, frozen when the run was admitted. */
 export interface RunInputSnapshotToolDefinition
 {
@@ -125,6 +140,8 @@ export interface RunInputSnapshot
   skillRevisionIds: readonly SkillRevisionId[];
   /** Authorised memory retrieval policy selected for this run. */
   memoryQueryPolicy: JsonValue;
+  /** Exact immutable MCP tool revisions selected by the AgentRevision. */
+  mcpTools: readonly RunInputSnapshotMcpTool[];
   /** Immutable third-party integration tool allowances selected by the revision. */
   integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[];
   /** Server-selected model route without provider credentials. */

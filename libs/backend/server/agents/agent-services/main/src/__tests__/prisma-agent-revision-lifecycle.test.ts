@@ -30,6 +30,7 @@ describe("PrismaAgentRevisionLifecycleRepository", function _Suite()
 				publishedAt: null,
 				skillAssignments: [],
 				integrationAssignments: [],
+				mcpToolAssignments: [],
 				boundaryAttachments: [],
 			};
 		});
@@ -48,7 +49,7 @@ describe("PrismaAgentRevisionLifecycleRepository", function _Suite()
 			workloadProfile: "managed",
 			authoredBy: "principal-human",
 			changeMessage: "Initial revision",
-			content: { promptPolicyVersion: "prompt-v1", personaRevisionId: null, modelDefinitionId: "model-1", budget: { maxTurns: 5, maxTokens: 1_000, maxDurationMs: 30_000 }, skills: [], integrationAssignments: [], boundaryAttachments: [] },
+			content: { promptPolicyVersion: "prompt-v1", personaRevisionId: null, modelDefinitionId: "model-1", budget: { maxTurns: 5, maxTokens: 1_000, maxDurationMs: 30_000 }, skills: [], integrationAssignments: [], mcpToolRevisionIds: [], boundaryAttachments: [] },
 		}, "2026-08-21T12:00:00.000Z");
 
 		expect(result.outcome).toBe("created");

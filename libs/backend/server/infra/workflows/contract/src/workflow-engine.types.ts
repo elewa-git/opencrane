@@ -34,13 +34,24 @@ export enum WorkflowTaskStates
 	Cancelled = "cancelled",
 }
 
-/** One registered task handler and its stable task name. */
-export interface IWorkflowTaskDefinition<TInput, TResult>
+/**
+ * Describes a task that this process may admit even when another process runs its handler.
+ *
+ * Application composition declares remote tasks before it writes product state and admits the
+ * matching workflow task in the same database transaction. The task name and retry policy must
+ * match the handler registration in the worker process.
+ */
+export interface IWorkflowTaskDeclaration
 {
 	/** Stable engine-neutral name used by callers to select this task handler. */
 	readonly taskName: string;
 	/** Reviewed attempt limit and delay policy applied whenever the handler asks for a retry. */
 	readonly retryPolicy?: IWorkflowTaskRetryPolicy;
+}
+
+/** One locally registered task handler whose declaration also permits admission. */
+export interface IWorkflowTaskDefinition<TInput, TResult> extends IWorkflowTaskDeclaration
+{
 	/** Runs the task with replay-safe context operations supplied by the execution engine. */
 	readonly run: IWorkflowTaskRunner<TInput, TResult>;
 }
@@ -215,6 +226,14 @@ export interface IWorkflowTaskContext
  */
 export interface IWorkflowEngine
 {
+	/**
+	 * Declare a reviewed task that this process may admit without registering a local handler.
+	 *
+	 * Called by: server composition for tasks whose handler runs in a controller process.
+	 * @param declaration - Stable task name and retry behavior shared with the remote worker.
+	 * @throws WorkflowError when the name, queue policy, or retry behavior is invalid or conflicts.
+	 */
+	declare(declaration: IWorkflowTaskDeclaration): void;
 	/** Register a task handler before any caller admits tasks with its name. */
 	register<TInput, TResult>(definition: IWorkflowTaskDefinition<TInput, TResult>): void;
 	/** Admit a task through the caller's transaction, so task admission shares its commit decision. */
@@ -244,6 +263,22 @@ export class WorkflowTaskNotRegisteredError extends WorkflowError
 	{
 		super(`No workflow task is registered for ${taskName}`);
 		this.name = "WorkflowTaskNotRegisteredError";
+	}
+}
+
+/** Error raised when a caller admits a task that no reviewed declaration permits. */
+export class WorkflowTaskNotDeclaredError extends WorkflowError
+{
+	/**
+	 * Report a task name that composition did not declare for admission.
+	 *
+	 * Called by: workflow adapters before they persist top-level or child work.
+	 * @param taskName - Stable name the caller tried to admit.
+	 */
+	constructor(taskName: string)
+	{
+		super(`No workflow task is declared for ${taskName}`);
+		this.name = "WorkflowTaskNotDeclaredError";
 	}
 }
 
