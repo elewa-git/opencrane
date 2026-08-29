@@ -33,33 +33,40 @@ contract, and the scope-aware retrieval plugin can never disagree.
 ```
 
 Invariant: the scope precedence list is defined once and is the only ordering any component keys
-off. The source registry writes an audit entry on every create / update / delete, so the record of
-what feeds org memory stays traceable. If the ordering drifted, a query could pull broader context
-than the caller should see — so it stays centralised here.
+off. Every source-governance operation requires the exact organisation `administer` grant. A write,
+its central authorization evidence, and its operator audit entry share one database transaction, so
+none can commit alone. If the ordering drifted, a query could pull broader context than the caller
+should see — so it stays centralised here.
 
 ## Public surface
 
 - `DatasetScope` + `DATASET_SCOPE_RETRIEVAL_PRECEDENCE` — the scope enum and the narrow→broad relevance order.
 - `RetrievalQueryRequest`, `RetrievalResult`, `RetrievalQueryResponse`, `RetrievalErrorResponse` — the retrieval API contract shared with conformance tests.
 - `thirdPartySourcesRouter` (mounted at `/api/v1/third-party-sources`) — CRUD over the source inventory and its discovered items, plus the tenant-dataset types.
+- `PrismaThirdPartySourceUnitOfWork` and `PrismaThirdPartySourceRepository` — bind source queries,
+  writes, and central authorization to one transaction.
+- Source authority and caller types — the trusted contracts shared by route composition and tests.
 
 ## Boundary
 
 Consumed by the opencrane-server HTTP layer and by grants (dataset authorization keys off these
-scope types). It defines the retrieval contract and owns the source registry; it does not itself
-run the Cognee query or make the allow/deny decision — those live in the retrieval plugin and in
-grants respectively.
+scope types). It defines the retrieval contract and owns the source registry; the central
+`AuthorizationAuthority` makes source-governance decisions, while the retrieval plugin and grants
+retain query execution and dataset-scope authorization respectively.
 
 ## Dependency direction
 
-Tagged `scope:retrieval`: it may depend only on `scope:retrieval` and `scope:shared` — never on
-apps or sibling domains. (Note that grants depends on retrieval, not the reverse.)
+Tagged `scope:retrieval`: it may depend on authentication, authorization, retrieval, and shared
+contracts, never on apps or sibling product domains. Grants still depends on retrieval, not the
+reverse.
 
 ## Data & persistence
 
 Owns `ThirdPartySource`, `ThirdPartySourceItem`, and `TenantDatasetMembership` (with the
 `DatasetScope`, `ThirdPartySourceKind`, `ThirdPartySourceStatus`, and `ThirdPartySourceItemKind`
-enums) in `apps/opencrane/prisma/schema/retrieval.prisma`.
+enums) in `apps/opencrane/prisma/schema/retrieval.prisma`. Each source stores its owning `siloId`,
+and source names are unique inside that silo instead of globally. Item access starts from the
+silo-scoped parent source.
 
 ## See also
 

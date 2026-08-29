@@ -8,15 +8,16 @@ import { describe, expect, it } from "vitest";
 import "@opencrane/backend/server/infra/auth";
 import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
 import type { AuthUser } from "@opencrane/backend/server/infra/auth";
+import type { ModelRoutingAuthorizationFactory } from "../routes/model-routing-authorization.types";
 import { modelRoutingDefaultsRouter } from "../routes/model-routing-defaults";
 
 /** In-memory model_routing_defaults store backing the mock Prisma client. */
 type Row = Record<string, unknown>;
 
-/** Build a complete OIDC session identity accepted by the ClusterTenant scope guard. */
+/** Build a complete OIDC session identity used to select the central-authority test decision. */
 function _authUser(overrides: Partial<AuthUser> = {}): AuthUser
 {
-  return {
+	return {
     sub: "user-1",
     issuer: "https://idp.example.test",
     groups: [],
@@ -34,7 +35,7 @@ function _mockPrisma(store: Map<string, Row>, tenantClusterTenant: string | null
 {
   let seq = 0;
   function _key(scope: string, clusterTenant: string | null): string { return `${scope}:${clusterTenant ?? ""}`; }
-  return {
+	const client = {
     orgMembership: {
       findMany: async function _findMany(args: { where?: { clusterTenant?: string } })
       {
@@ -90,6 +91,20 @@ function _mockPrisma(store: Map<string, Row>, tenantClusterTenant: string | null
       },
     },
   } as unknown as PrismaClient;
+	Object.assign(client, { $transaction: async function _Transaction(operation: (transaction: PrismaClient) => Promise<unknown>) { return operation(client); } });
+	return client;
+}
+
+/** Build a central authority stub with one explicit organisation-administration decision. */
+function _Authorization(allow: boolean): ModelRoutingAuthorizationFactory<Prisma.TransactionClient>
+{
+	return (function _CreateAuthorization()
+	{
+		return {
+			admitPrincipal: async function _Admit() { return { outcome: allow ? "allow" : "deny" }; },
+			listPrincipalEntitled: async function _List(command: { resources: readonly unknown[] }) { return allow ? command.resources : []; },
+		};
+	}) as unknown as ModelRoutingAuthorizationFactory<Prisma.TransactionClient>;
 }
 
 /** Build a minimal app mounting the defaults router with a canonical authenticated session. */
@@ -105,7 +120,8 @@ function _buildApp(prisma: PrismaClient, user: AuthUser | null = _authUser({ isP
       next();
     });
   }
-  app.use("/api/v1/model-routing/defaults", modelRoutingDefaultsRouter(prisma));
+  const resolveCaller = user === null ? function _NoCaller() { return null; } : function _Caller() { return { siloId: "acme", principalId: "principal-1" }; };
+  app.use("/api/v1/model-routing/defaults", modelRoutingDefaultsRouter(prisma, resolveCaller, _Authorization(user?.isOrgAdmin === true)));
   app.use(_ErrorHandler({ warn: function _warn() {}, error: function _error() {} } as never));
   return app;
 }
@@ -158,6 +174,7 @@ describe("modelRoutingDefaultsRouter", function _suite()
         update: async function _update(args: { where: { id: string }; data: Row }) { return { ...raced, ...args.data, updatedAt: new Date() }; },
       },
     } as unknown as PrismaClient;
+	Object.assign(prisma, { $transaction: async function _Transaction(operation: (transaction: PrismaClient) => Promise<unknown>) { return operation(prisma); } });
 
     const res = await request(_buildApp(prisma)).put("/api/v1/model-routing/defaults").send({ defaultModel: "anthropic/claude" });
 
@@ -207,13 +224,13 @@ describe("modelRoutingDefaultsRouter", function _suite()
 		expect(response.body.autoConfig.futureKnob).toBe("kept");
 	});
 
-	it("runs the authorization guard before field validation", async function _AuthorizeBeforeValidation()
+	it("validates the public body before opening an authorization transaction", async function _ValidateBeforeAuthorization()
 	{
 		const app = _buildApp(_mockPrisma(new Map()), _authUser({ sub: "user-acme" }));
 		const response = await request(app).put("/api/v1/model-routing/defaults").send({ defaultModel: 42 });
 
-		expect(response.status).toBe(403);
-		expect(response.body).toEqual({ error: "Not authorized for this resource scope.", code: "FORBIDDEN_SCOPE" });
+		expect(response.status).toBe(400);
+		expect(response.body.code).toBe("VALIDATION_ERROR");
 	});
 
   it("returns 404 for an unknown default", async function _get404()
@@ -223,29 +240,29 @@ describe("modelRoutingDefaultsRouter", function _suite()
     expect(res.body.code).toBe("MODEL_ROUTING_DEFAULT_NOT_FOUND");
   });
 
-  it("scope guard: a non-operator may NOT upsert a Global default (403)", async function _guardGlobalDenied()
+  it("central authority denies Global routing-policy administration", async function _guardGlobalDenied()
   {
     const app = _buildApp(_mockPrisma(new Map()), _authUser({ sub: "user-acme" }));
     const res = await request(app).put("/api/v1/model-routing/defaults").send({ defaultModel: "x" });
     expect(res.status).toBe(403);
-    expect(res.body.code).toBe("FORBIDDEN_SCOPE");
+    expect(res.body.code).toBe("FORBIDDEN");
   });
 
-  it("scope guard: a non-operator may upsert a default for their OWN ClusterTenant", async function _guardOwnCt()
+  it("does not treat tenant membership as routing-policy administration", async function _guardOwnCt()
   {
     const store = new Map<string, Row>();
     const app = _buildApp(_mockPrisma(store, "acme"), _authUser({ sub: "user-acme" }));
     const res = await request(app).put("/api/v1/model-routing/defaults").send({ scope: "clusterTenant", clusterTenant: "acme", defaultModel: "x" });
-    expect(res.status).toBe(200);
-    expect(res.body.clusterTenant).toBe("acme");
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("FORBIDDEN");
   });
 
-  it("scope guard: a non-operator may NOT upsert a default for another ClusterTenant (403)", async function _guardOtherCt()
+  it("central authority denies another tenant's routing-policy administration", async function _guardOtherCt()
   {
     const app = _buildApp(_mockPrisma(new Map(), "acme"), _authUser({ sub: "user-acme" }));
     const res = await request(app).put("/api/v1/model-routing/defaults").send({ scope: "clusterTenant", clusterTenant: "other", defaultModel: "x" });
     expect(res.status).toBe(403);
-    expect(res.body.code).toBe("FORBIDDEN_SCOPE");
+    expect(res.body.code).toBe("FORBIDDEN");
   });
 
   it("deletes an existing default", async function _delete()
@@ -260,7 +277,7 @@ describe("modelRoutingDefaultsRouter", function _suite()
     expect(store.size).toBe(0);
   });
 
-  it("scope guard fails closed under real auth: no session -> 403 (AIR.0b)", async function _failClosed()
+  it("fails closed when no durable Principal is available", async function _failClosed()
   {
     const previousOidc = {
       issuerUrl: process.env.OIDC_ISSUER_URL,
@@ -279,7 +296,7 @@ describe("modelRoutingDefaultsRouter", function _suite()
         .send({ defaultModel: "openai/gpt-4o" });
 
       expect(res.status).toBe(403);
-      expect(res.body.code).toBe("FORBIDDEN_SCOPE");
+      expect(res.body.code).toBe("FORBIDDEN_NO_SILO");
     }
     finally
     {

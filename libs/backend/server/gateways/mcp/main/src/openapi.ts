@@ -85,11 +85,11 @@ export const _McpOpenapiPaths = {
   "/mcp/servers": {
     get: {
       operationId: "listMcpGovernanceServers",
-      summary: "List every catalogue server regardless of status (org-admin governance view)",
+      summary: "List every catalogue server after a current Organization/Administer grant check",
       tags: ["MCP Operator"],
       responses: {
         200: ok("All catalogue servers.", { type: "array", items: { $ref: "#/components/schemas/McpCatalogServer" } }),
-        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        403: { description: "Current Organization/Administer grant is required.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
       },
     },
     post: {
@@ -103,7 +103,7 @@ export const _McpOpenapiPaths = {
       responses: {
         201: created("Remote server and protocol-check job saved.", { type: "object", required: ["id", "name", "endpoint", "eraProbeStatus"], properties: { id: { type: "string" }, name: { type: "string" }, endpoint: { type: "string", format: "uri" }, eraProbeStatus: { type: "string", enum: ["Pending", "Accepted", "Rejected"] } } }),
         400: badRequest("Registration fields are invalid."),
-        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        403: { description: "Current Organization/Administer grant is required.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         409: { description: "Registration key or server name conflicts with another request.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
       },
     },
@@ -112,12 +112,12 @@ export const _McpOpenapiPaths = {
   "/mcp/servers/{id}/approve": {
     post: {
       operationId: "approveMcpServer",
-      summary: "Approve a server (pending-review → approved). Org-admin only",
+      summary: "Approve a server (pending-review → approved). Requires Organization/Administer",
       tags: ["MCP Operator"],
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
       responses: {
         200: ok("Server approved.", { $ref: "#/components/schemas/McpCatalogServer" }),
-        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        403: { description: "Current Organization/Administer grant is required.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         404: notFound("MCP server not found."),
       },
     },
@@ -126,12 +126,12 @@ export const _McpOpenapiPaths = {
   "/mcp/servers/{id}/publish": {
     post: {
       operationId: "publishMcpServer",
-      summary: "Publish a server (approved → published). Org-admin only",
+      summary: "Publish a server (approved → published). Requires Organization/Administer",
       tags: ["MCP Operator"],
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
       responses: {
         200: ok("Server published.", { $ref: "#/components/schemas/McpCatalogServer" }),
-        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        403: { description: "Current Organization/Administer grant is required.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         404: notFound("MCP server not found."),
       },
     },
@@ -140,12 +140,12 @@ export const _McpOpenapiPaths = {
   "/mcp/servers/{id}/reject": {
     post: {
       operationId: "rejectMcpServer",
-      summary: "Reject a server (→ disabled). Org-admin only",
+      summary: "Reject a server (→ disabled). Requires Organization/Administer",
       tags: ["MCP Operator"],
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
       responses: {
         200: ok("Server rejected.", { $ref: "#/components/schemas/McpCatalogServer" }),
-        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        403: { description: "Current Organization/Administer grant is required.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         404: notFound("MCP server not found."),
       },
     },
@@ -154,7 +154,7 @@ export const _McpOpenapiPaths = {
   "/mcp/servers/{id}/enabled": {
     post: {
       operationId: "setMcpServerEnabled",
-      summary: "Toggle a server's availability (true → published, false → disabled). Org-admin only",
+      summary: "Toggle a server's availability (true → published, false → disabled). Requires Organization/Administer",
       tags: ["MCP Operator"],
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
       requestBody: {
@@ -164,37 +164,7 @@ export const _McpOpenapiPaths = {
       responses: {
         200: ok("Server availability updated.", { $ref: "#/components/schemas/McpCatalogServer" }),
         400: badRequest("enabled (boolean) is required."),
-        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        404: notFound("MCP server not found."),
-      },
-    },
-  },
-
-  "/mcp/servers/{id}/access": {
-    get: {
-      operationId: "getMcpAccessPolicy",
-      summary: "Read the authorization grants for an MCP server. Org-admin only",
-      tags: ["MCP Operator"],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("Access policy.", { $ref: "#/components/schemas/McpAccessPolicy" }),
-        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        404: notFound("MCP server not found."),
-      },
-    },
-    put: {
-      operationId: "setMcpAccessPolicy",
-      summary: "Replace the authorization grants for an MCP server. Org-admin only",
-      tags: ["MCP Operator"],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-      requestBody: {
-        required: true,
-        content: { "application/json": { schema: { type: "object", required: ["groupIds", "principalIds"], properties: { groupIds: { type: "array", items: { type: "string" }, description: "Stable local Group identifiers." }, principalIds: { type: "array", items: { type: "string" }, description: "Stable local Principal identifiers." } } } } },
-      },
-      responses: {
-        200: ok("Access policy updated.", { $ref: "#/components/schemas/McpAccessPolicy" }),
-        400: badRequest("groupIds (array) and principalIds (array) are required."),
-        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        403: { description: "Current Organization/Administer grant is required.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         404: notFound("MCP server not found."),
       },
     },
@@ -203,7 +173,7 @@ export const _McpOpenapiPaths = {
   "/mcp/oci-image-validations": {
     post: {
       operationId: "submitOciImageValidation",
-      summary: "Save an OCI image admission job. Org-admin only",
+      summary: "Save an OCI image admission job. Requires Organization/Administer",
       tags: ["MCP Operator"],
       requestBody: {
         required: true,
@@ -212,7 +182,7 @@ export const _McpOpenapiPaths = {
       responses: {
         201: created("OCI image admission and background import job saved.", { $ref: "#/components/schemas/OciImageValidation" }),
         400: badRequest("OCI image admission fields are invalid."),
-        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        403: { description: "Current Organization/Administer grant is required.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         404: notFound("OCI image artifact revision not found."),
         409: { description: "Submission key conflicts with another immutable OCI image input.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
       },
@@ -222,13 +192,13 @@ export const _McpOpenapiPaths = {
   "/mcp/oci-image-validations/{id}": {
     get: {
       operationId: "getOciImageValidation",
-      summary: "Read one saved OCI image admission. Org-admin only",
+      summary: "Read one saved OCI image admission. Requires Organization/Administer",
       tags: ["MCP Operator"],
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
       responses: {
         200: ok("Saved OCI image admission.", { $ref: "#/components/schemas/OciImageValidation" }),
         400: badRequest("OCI image admission identifier is invalid."),
-        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        403: { description: "Current Organization/Administer grant is required.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         404: notFound("OCI image validation not found."),
       },
     },
@@ -237,7 +207,7 @@ export const _McpOpenapiPaths = {
   "/mcp/oci-image-validations/{id}/server": {
     post: {
       operationId: "promoteOciImageValidationToMcpServer",
-      summary: "Create an MCP server revision from an imported OCI image and start discovery. Org-admin only",
+      summary: "Create an MCP server revision from an imported OCI image and start discovery. Requires Organization/Administer",
       tags: ["MCP Operator"],
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", minLength: 1, maxLength: 256 } }],
       requestBody: {
@@ -249,22 +219,10 @@ export const _McpOpenapiPaths = {
         201: created("MCP server revision and discovery execution saved.", { type: "object", required: ["outcome", "serverId", "serverRevisionId", "executionId"], properties: { outcome: { type: "string", enum: ["created"] }, serverId: { type: "string" }, serverRevisionId: { type: "string" }, executionId: { type: "string" } } }),
         400: badRequest("Promotion fields are invalid."),
         401: { description: "Authenticated principal is unavailable.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        403: { description: "Current Organization/Administer grant is required.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         404: notFound("OCI image validation not found."),
         409: { description: "The image is not imported or its server promotion conflicts.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         503: { description: "MCP runtime authority is unavailable.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-      },
-    },
-  },
-
-  "/mcp/directory": {
-    get: {
-      operationId: "getMcpDirectory",
-      summary: "List the selectable users and groups for the access editor. Org-admin only",
-      tags: ["MCP Operator"],
-      responses: {
-        200: ok("Directory.", { $ref: "#/components/schemas/McpDirectory" }),
-        403: { description: "Caller is not an organisation admin.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
       },
     },
   },

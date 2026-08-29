@@ -28,7 +28,7 @@ export const _AuthSessionOpenapiPaths = {
 									user: {
 										type: "object",
 										nullable: true,
-										required: ["sub", "issuer", "groups", "isPlatformOperator", "isOrgAdmin"],
+										required: ["sub", "issuer", "groups", "isPlatformOperator", "isOrgAdmin", "productCapabilities"],
 										properties: {
 											sub: { type: "string" },
 											issuer: { type: "string", description: "Identity provider that authenticated the user." },
@@ -39,7 +39,15 @@ export const _AuthSessionOpenapiPaths = {
 											},
 											isOrgAdmin: {
 												type: "boolean",
-												description: "True when the authenticated middleware admitted organisation administration authority. Introspection only; the API remains the enforcement point.",
+												description: "Legacy identity-role projection. Product interfaces must use productCapabilities.administerOrganization; the API remains the enforcement point.",
+											},
+											productCapabilities: {
+												type: "object",
+												required: ["administerOrganization"],
+												description: "Current product capabilities read from the central authorization authority. These guide the UI; protected routes repeat authorization in their own transaction.",
+												properties: {
+													administerOrganization: { type: "boolean", description: "Whether the local Principal currently holds organization:administer for this silo." },
+												},
 											},
 											clusterTenant: {
 												type: ["string", "null"],

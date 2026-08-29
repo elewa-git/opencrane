@@ -2,8 +2,12 @@ import { Router } from "express";
 import { GeneratedOutputCapability, ModelRoutingScope, type ModelDefinition, type ModelDefinitionWrite } from "@opencrane/contracts";
 import type { Prisma, PrismaClient, ModelDefinition as PrismaModelDefinition } from "@prisma/client";
 
-import { _ClusterTenantScopeGuard, type ClusterTenantScopedResource } from "@opencrane/backend/server/tenancy/cluster-tenants";
+import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { _RegisterLiteLlmModel } from "@opencrane/backend/server/gateways/model-routing";
+
+import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCallerResolver } from "../provider-gateway-authority.types";
+import { _GrantProviderResourceCreatorUse, _RequireProviderGatewayAdministration, _RequireProviderGatewayCaller, _ResolveProviderGatewayCaller, _SendProviderGatewayAuthorizationError } from "../provider-gateway-authorization";
+import { PrismaProviderGatewayUnitOfWork } from "../prisma-provider-gateway-unit-of-work";
 
 /**
  * Project a persisted model-definition row into its contract DTO. The Prisma enum values map
@@ -93,7 +97,7 @@ function _validateWrite(body: Record<string, unknown>): { error: string; code: s
  *          `litellmCredentialName` means the key is in LiteLLM's credential store, so registration
  *          binds `litellm_credential_name` instead of the `os.environ` baseline.
  */
-async function _resolveCredential(prisma: PrismaClient, providerCredentialId: string | null | undefined, modelClusterTenant: string | null): Promise<{ secretRef: string | null; litellmCredentialName: string | null } | { error: string; code: string }>
+async function _resolveCredential(prisma: Prisma.TransactionClient, providerCredentialId: string | null | undefined, modelClusterTenant: string | null): Promise<{ secretRef: string | null; litellmCredentialName: string | null } | { error: string; code: string }>
 {
   if (!providerCredentialId)
   {
@@ -119,11 +123,12 @@ async function _resolveCredential(prisma: PrismaClient, providerCredentialId: st
  * `POST /model/new` (guarded by `LITELLM_ENDPOINT` + `LITELLM_MASTER_KEY`). With LiteLLM
  * unconfigured a deterministic placeholder id is stored and the create still succeeds, so the row
  * exists but will not route until it is reconciled. Update does NOT re-register, so changing
- * `upstreamModel` here leaves the LiteLLM deployment pointing at the old model. Mutations are
- * gated by the ClusterTenant scope guard (AIR.0b).
+ * `upstreamModel` here leaves the LiteLLM deployment pointing at the old model. Reads filter exact
+ * `ModelDefinition` grants; mutations explicitly admit the silo's `Organization/Administer`
+ * capability in the transaction that writes the definition.
  *
- * `GET /` returns every row, including Global ones, to every caller — which is exactly why an
- * embedding deployment must never be given a `ModelDefinition` row. See
+ * `GET /` considers Global and tenant rows but returns only the caller's entitled definitions.
+ * An embedding deployment must still never be given a `ModelDefinition` row. See
  * `ByokProviderCatalog.embeddingModel` in
  * libs/backend/server/gateways/model-routing/main/src/core/byok-default-models.types.ts.
  *
@@ -132,47 +137,42 @@ async function _resolveCredential(prisma: PrismaClient, providerCredentialId: st
  * @param prisma - Prisma client used for persistence.
  * @returns Configured Express router.
  */
-export function modelRegistryRouter(prisma: PrismaClient): Router
+export function modelRegistryRouter(prisma: PrismaClient, resolveCaller: ProviderGatewayCallerResolver = _ResolveProviderGatewayCaller, createAuthorization?: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>): Router
 {
   const router = Router();
-
-  // Mutation guard: resolve the targeted model's scope so the guard can decide. For POST the
-  // scope comes from the body; for PUT/DELETE from the persisted row.
-  const guard = _ClusterTenantScopeGuard(prisma, async function _resolveResource(req): Promise<ClusterTenantScopedResource | null>
-  {
-    if (req.method === "POST")
-    {
-      const body = (req.body ?? {}) as ModelDefinitionWrite;
-      return { scope: body.scope ?? ModelRoutingScope.Global, clusterTenant: body.clusterTenant ?? null };
-    }
-
-    const row = await prisma.modelDefinition.findUnique({ where: { id: String(req.params.id) } });
-    if (!row)
-    {
-      return null;
-    }
-    return { scope: row.scope === "ClusterTenant" ? ModelRoutingScope.ClusterTenant : ModelRoutingScope.Global, clusterTenant: row.clusterTenant };
-  });
-
-  router.post("/", guard);
-  router.put("/:id", guard);
-  router.delete("/:id", guard);
+	const models = new PrismaProviderGatewayUnitOfWork(prisma, createAuthorization);
 
   /** List model definitions, optionally filtered to one ClusterTenant. */
   router.get("/", async function _listModels(req, res)
   {
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
     const clusterTenant = typeof req.query.clusterTenant === "string" ? req.query.clusterTenant : undefined;
-    const rows = await prisma.modelDefinition.findMany({
-      where: clusterTenant ? { clusterTenant } : undefined,
-      orderBy: { createdAt: "asc" },
-    });
+	const rows = await models.run(async function _List(transaction, authorization)
+	{
+		const candidates = await transaction.modelDefinition.findMany({ where: clusterTenant ? { clusterTenant } : undefined, orderBy: { createdAt: "asc" } });
+		const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: candidates.map(row => ({ kind: ProductAuthorizationResourceKinds.ModelDefinition, id: row.id })), nowEpochMs: Date.now() });
+		const entitledIds = new Set(entitled.map(resource => resource.id));
+		return candidates.filter(row => entitledIds.has(row.id));
+	});
     res.json(rows.map(_toContract));
   });
 
   /** Get a single model definition by id. */
   router.get("/:id", async function _getModel(req, res)
   {
-    const row = await prisma.modelDefinition.findUnique({ where: { id: req.params.id } });
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
+	const row = await models.run(async function _Get(transaction, authorization)
+	{
+		const candidate = await transaction.modelDefinition.findUnique({ where: { id: req.params.id } });
+		if (candidate === null)
+			return null;
+		const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: [{ kind: ProductAuthorizationResourceKinds.ModelDefinition, id: candidate.id }], nowEpochMs: Date.now() });
+		return entitled.length === 1 ? candidate : null;
+	});
     if (!row)
     {
       res.status(404).json({ error: "Model definition not found", code: "MODEL_DEFINITION_NOT_FOUND" });
@@ -184,6 +184,9 @@ export function modelRegistryRouter(prisma: PrismaClient): Router
   /** Create a model definition, registering it best-effort with LiteLLM. */
   router.post("/", async function _createModel(req, res)
   {
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
     const body = (req.body ?? {}) as Record<string, unknown>;
 
     // 1. Validate the body before any persistence or upstream call.
@@ -198,53 +201,39 @@ export function modelRegistryRouter(prisma: PrismaClient): Router
     const scope = write.scope ?? ModelRoutingScope.Global;
 
     // 2. Resolve + scope-check the backing credential (when set) — see _resolveCredential.
-    const credentialResult = await _resolveCredential(prisma, write.providerCredentialId, scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null);
-    if ("error" in credentialResult)
-    {
-      res.status(400).json(credentialResult);
-      return;
-    }
-    const apiKeyEnvRef = credentialResult.secretRef;
-
-    // 3. Best-effort LiteLLM registration; returns a deterministic placeholder when unconfigured.
-    //    A BYOK credential name (when present) selects the dynamic path over the env baseline.
-    const litellmModelId = await _RegisterLiteLlmModel({
-      publicModelName: write.publicModelName.trim(),
-      upstreamModel: write.upstreamModel.trim(),
-      scope,
-      clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null,
-      apiBase: write.apiBase?.trim() || null,
-      apiKeyEnvRef,
-      litellmCredentialName: credentialResult.litellmCredentialName,
-    });
-
-    // 4. Persist the row with the resolved deployment id.
-    const created = await prisma.modelDefinition.create({
-      data: {
-        scope: _toPrismaScope(scope),
-        clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null,
-        publicModelName: write.publicModelName.trim(),
-        litellmModelId,
-        upstreamModel: write.upstreamModel.trim(),
-        apiBase: write.apiBase?.trim() || null,
-        isDefault: write.isDefault ?? false,
-        providerCredentialId: write.providerCredentialId ?? null,
-        generatedOutputCapabilities: write.generatedOutputCapabilities ?? [],
-      },
-    });
-    res.status(201).json(_toContract(created));
+	try
+	{
+		const created = await models.run(async function _Create(transaction, authorization)
+		{
+			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "create-model-definition", write });
+			const credentialResult = await _resolveCredential(transaction, write.providerCredentialId, scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null);
+			if ("error" in credentialResult)
+				return credentialResult;
+			const litellmModelId = await _RegisterLiteLlmModel({ publicModelName: write.publicModelName.trim(), upstreamModel: write.upstreamModel.trim(), scope, clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null, apiBase: write.apiBase?.trim() || null, apiKeyEnvRef: credentialResult.secretRef, litellmCredentialName: credentialResult.litellmCredentialName });
+			const model = await transaction.modelDefinition.create({ data: { scope: _toPrismaScope(scope), clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null, publicModelName: write.publicModelName.trim(), litellmModelId, upstreamModel: write.upstreamModel.trim(), apiBase: write.apiBase?.trim() || null, isDefault: write.isDefault ?? false, providerCredentialId: write.providerCredentialId ?? null, generatedOutputCapabilities: write.generatedOutputCapabilities ?? [] } });
+			await _GrantProviderResourceCreatorUse(authorization, caller, { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: model.id }, new Date());
+			return model;
+		});
+		if ("error" in created)
+		{
+			res.status(400).json(created);
+			return;
+		}
+		res.status(201).json(_toContract(created));
+	}
+	catch (caught)
+	{
+		if (!_SendProviderGatewayAuthorizationError(caught, res))
+			throw caught;
+	}
   });
 
   /** Update a model definition (does not re-register with LiteLLM). */
   router.put("/:id", async function _updateModel(req, res)
   {
-    const existing = await prisma.modelDefinition.findUnique({ where: { id: req.params.id } });
-    if (!existing)
-    {
-      res.status(404).json({ error: "Model definition not found", code: "MODEL_DEFINITION_NOT_FOUND" });
-      return;
-    }
-
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
     const body = (req.body ?? {}) as Record<string, unknown>;
 
     // 1. Validate the full replacement body.
@@ -261,39 +250,68 @@ export function modelRegistryRouter(prisma: PrismaClient): Router
 
     // 2. Re-validate the backing credential with the SAME scope-isolation rule as create, so a PUT
     //    cannot bind (or smuggle in) another ClusterTenant's credential.
-    const credentialResult = await _resolveCredential(prisma, write.providerCredentialId, modelClusterTenant);
-    if ("error" in credentialResult)
-    {
-      res.status(400).json(credentialResult);
-      return;
-    }
-
-    // 3. Apply the validated fields; the LiteLLM deployment id is immutable here.
-    const data: Prisma.ModelDefinitionUncheckedUpdateInput = {
-      scope: _toPrismaScope(scope),
-      clusterTenant: modelClusterTenant,
-      publicModelName: write.publicModelName.trim(),
-      upstreamModel: write.upstreamModel.trim(),
-      apiBase: write.apiBase?.trim() || null,
-      isDefault: write.isDefault ?? false,
-      providerCredentialId: write.providerCredentialId ?? null,
-      generatedOutputCapabilities: write.generatedOutputCapabilities ?? [],
-    };
-    const updated = await prisma.modelDefinition.update({ where: { id: req.params.id }, data });
-    res.json(_toContract(updated));
+	try
+	{
+		const updated = await models.run(async function _Update(transaction, authorization)
+		{
+			const existing = await transaction.modelDefinition.findUnique({ where: { id: req.params.id } });
+			if (existing === null)
+				return null;
+			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "update-model-definition", id: existing.id, write });
+			const credentialResult = await _resolveCredential(transaction, write.providerCredentialId, modelClusterTenant);
+			if ("error" in credentialResult)
+				return credentialResult;
+			const data: Prisma.ModelDefinitionUncheckedUpdateInput = { scope: _toPrismaScope(scope), clusterTenant: modelClusterTenant, publicModelName: write.publicModelName.trim(), upstreamModel: write.upstreamModel.trim(), apiBase: write.apiBase?.trim() || null, isDefault: write.isDefault ?? false, providerCredentialId: write.providerCredentialId ?? null, generatedOutputCapabilities: write.generatedOutputCapabilities ?? [] };
+			return transaction.modelDefinition.update({ where: { id: existing.id }, data });
+		});
+		if (updated === null)
+		{
+			res.status(404).json({ error: "Model definition not found", code: "MODEL_DEFINITION_NOT_FOUND" });
+			return;
+		}
+		if ("error" in updated)
+		{
+			res.status(400).json(updated);
+			return;
+		}
+		res.json(_toContract(updated));
+	}
+	catch (caught)
+	{
+		if (!_SendProviderGatewayAuthorizationError(caught, res))
+			throw caught;
+	}
   });
 
   /** Delete a model definition. */
   router.delete("/:id", async function _deleteModel(req, res)
   {
-    const existing = await prisma.modelDefinition.findUnique({ where: { id: req.params.id } });
-    if (!existing)
-    {
-      res.status(404).json({ error: "Model definition not found", code: "MODEL_DEFINITION_NOT_FOUND" });
-      return;
-    }
-    await prisma.modelDefinition.delete({ where: { id: req.params.id } });
-    res.json({ id: req.params.id, status: "deleted" });
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
+	try
+	{
+		const deleted = await models.run(async function _Delete(transaction, authorization)
+		{
+			const existing = await transaction.modelDefinition.findUnique({ where: { id: req.params.id } });
+			if (existing === null)
+				return false;
+			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "delete-model-definition", id: existing.id });
+			await transaction.modelDefinition.delete({ where: { id: existing.id } });
+			return true;
+		});
+		if (!deleted)
+		{
+			res.status(404).json({ error: "Model definition not found", code: "MODEL_DEFINITION_NOT_FOUND" });
+			return;
+		}
+		res.json({ id: req.params.id, status: "deleted" });
+	}
+	catch (caught)
+	{
+		if (!_SendProviderGatewayAuthorizationError(caught, res))
+			throw caught;
+	}
   });
 
   return router;

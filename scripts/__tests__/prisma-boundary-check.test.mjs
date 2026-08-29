@@ -174,6 +174,23 @@ test("requires transaction-scoped repository construction to match the owning po
 	assert.equal(namedRootConfig.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
 });
 
+test("treats a transaction-bound authority like a repository construction", function _AcceptsAuthorityConstruction()
+{
+	const source = _Fixture("positive-unit-of-work")
+		.replaceAll("PrismaWidgetRepository", "PrismaWidgetAuthority")
+		.replaceAll("WidgetRepository", "WidgetAuthority");
+	const owners = {
+		..._OWNERS,
+		unitsOfWork: [{
+			..._OWNERS.unitsOfWork[0],
+			constructs: [{ adapter: "PrismaWidgetAuthority", importPath: "./prisma-widget-repository.js" }],
+		}],
+	};
+	assert.doesNotThrow(function _ValidPolicy() { validatePolicy({ version: 1, owners, rawProcedureCalls: [], exemptions: [] }); });
+	const findings = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", source, ["widget"], owners);
+	assert.equal(findings.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION" || finding.rule === "PRISMA-POLICY-CONSTRUCTION"; }), false);
+});
+
 test("fails closed when live owner declarations drift from policy", function _RejectsStaleOwnerPolicy()
 {
 	const renamed = _Fixture("positive-repository").replaceAll("PrismaWidgetRepository", "PrismaRenamedRepository");

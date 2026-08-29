@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
-import { AgentRunState, WarmRuntimeReservationState, WorkloadAssignmentState, WorkloadKind, Prisma, type AgentRun, type RunProofKey, type WarmRuntimeReservation, type WorkloadAssignment, type WorkloadBootstrap } from "@prisma/client";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
+import { AgentRunState, ModelRoutingScope, WarmRuntimeReservationState, WorkloadAssignmentState, WorkloadKind, Prisma, type AgentRun, type RunModelCredentialMintAuthorization, type RunProofKey, type WarmRuntimeReservation, type WorkloadAssignment, type WorkloadBootstrap } from "@prisma/client";
 
-import type { WarmRuntimeBindingIdentity, WarmRuntimeBindingPersistenceRepository, WarmRuntimeBindingSubmission, WarmRuntimeDatabaseBindingResult } from "./warm-runtime-binding.types";
+import { __DigestCanonicalJson, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+
+import { __BuildRunAttemptKeyAlias } from "./run-attempt-credential-minting";
+import type { RunModelCredentialMintAuthorizationClaimRepository, WarmRuntimeBindingIdentity, WarmRuntimeBindingPersistenceRepository, WarmRuntimeBindingSubmission, WarmRuntimeDatabaseBindingResult } from "./warm-runtime-binding.types";
 
 /**
  * Aborts a binding transaction after an ownership check or compare-and-set no longer matches.
@@ -30,11 +34,14 @@ export class PrismaWarmRuntimeBindingRepository implements WarmRuntimeBindingPer
 {
 	/** Transaction that owns every typed fence and semantic write. */
 	private readonly transaction: Prisma.TransactionClient;
+	/** Central authority sharing the binding transaction. */
+	private readonly authorization: AuthorizationAuthority;
 
 	/** Bind this repository to the unit of work's transaction. */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority)
 	{
 		this.transaction = transaction;
+		this.authorization = authorization;
 	}
 
 	/**
@@ -73,6 +80,9 @@ export class PrismaWarmRuntimeBindingRepository implements WarmRuntimeBindingPer
 			throw new WarmRuntimeBindingConflict();
 		const proofKey = await this.transaction.runProofKey.findUnique({ where: { runId_attempt_generation: { runId: discovered.runId, attempt: discovered.attempt, generation: discovered.generation } } });
 		const now = new Date();
+		const modelAuthorization = await this._AuthorizeCurrentModelCredential(run, reservation, now);
+		if (modelAuthorization === null)
+			throw new WarmRuntimeBindingConflict();
 
 		// 3. A replay succeeds only while every saved owner, proof, and expiry still matches.
 		if (reservation.state === WarmRuntimeReservationState.Claimed)
@@ -81,7 +91,10 @@ export class PrismaWarmRuntimeBindingRepository implements WarmRuntimeBindingPer
 				throw new WarmRuntimeBindingConflict();
 			if (proofKey === null)
 				throw new WarmRuntimeBindingConflict();
-			return { outcome: "idempotent" as const, receiptId: bootstrap.receiptId, runId: run.id, attempt: run.attempt, siloId: run.siloId, modelRoute: run.inputSnapshot.modelRoute, budgetPolicy: run.inputSnapshot.budgetPolicy, credentialExpiresAt: _EarliestExpiry(reservation.idleDeadline, assignment.expiresAt, bootstrap.expiresAt, proofKey.expiresAt) };
+			const mintAuthorization = await this.transaction.runModelCredentialMintAuthorization.findUnique({ where: { runId_attempt_generation: { runId: run.id, attempt: run.attempt, generation: reservation.generation } } });
+			if (mintAuthorization === null || !_MintAuthorizationMatches(mintAuthorization, modelAuthorization, run.id, run.attempt, reservation.generation, run.siloId))
+				throw new WarmRuntimeBindingConflict();
+			return { outcome: "idempotent" as const, receiptId: bootstrap.receiptId, runId: run.id, attempt: run.attempt, siloId: run.siloId, modelRoute: run.inputSnapshot.modelRoute, budgetPolicy: run.inputSnapshot.budgetPolicy, credentialExpiresAt: mintAuthorization.expiresAt, mintAuthorizationId: mintAuthorization.id };
 		}
 		if (reservation.proofKeyThumbprint !== null || reservation.boundAt !== null || assignment.state !== WorkloadAssignmentState.PendingPod || assignment.registeredAt !== null || bootstrap.consumedAt !== null || bootstrap.consumedByPodUid !== null || bootstrap.revokedAt !== null || bootstrap.receiptId !== null || proofKey !== null)
 			throw new WarmRuntimeBindingConflict();
@@ -99,14 +112,138 @@ export class PrismaWarmRuntimeBindingRepository implements WarmRuntimeBindingPer
 			data: { consumedAt: now, consumedByPodUid: identity.podUid, receiptId },
 		}));
 		await this.transaction.runProofKey.create({ data: { id: randomUUID(), bootstrapId: bootstrap.id, runId: reservation.runId, attempt: reservation.attempt, generation: reservation.generation, workloadKind: WorkloadKind.Deployment, workloadUid: assignment.workloadUid, podUid: reservation.podUid, publicKeyJwk: submission.proofPublicJwk as unknown as Prisma.InputJsonValue, keyThumbprint: submission.proofKeyThumbprint, expiresAt: bootstrap.expiresAt } });
+		const credentialExpiresAt = _EarliestExpiry(reservation.idleDeadline, assignment.expiresAt, bootstrap.expiresAt, modelAuthorization.membershipTrustedUntil);
+		const mintAuthorization = await this.transaction.runModelCredentialMintAuthorization.create({
+			data: {
+				id: randomUUID(),
+				runId: run.id,
+				attempt: run.attempt,
+				generation: reservation.generation,
+				principalId: modelAuthorization.principalId,
+				modelDefinitionId: modelAuthorization.modelDefinitionId,
+				providerConnectionId: modelAuthorization.providerConnectionId,
+				authorizationDigest: modelAuthorization.authorizationDigest,
+				keyAlias: __BuildRunAttemptKeyAlias(run.id, run.attempt, run.siloId),
+				expiresAt: credentialExpiresAt,
+			},
+		});
 
 		// 5. Change the reservation last; losing this compare-and-set rolls back every write above.
 		await _RequireFence(this.transaction.warmRuntimeReservation.updateMany({
 			where: { runId: reservation.runId, attempt: reservation.attempt, generation: reservation.generation, siloId: reservation.siloId, namespace: identity.namespace, podUid: identity.podUid, serviceAccountName: identity.serviceAccountName, state: WarmRuntimeReservationState.Ready, proofKeyThumbprint: null, boundAt: null, deleteRequestedAt: null, deletedAt: null, idleDeadline: reservation.idleDeadline },
 			data: { state: WarmRuntimeReservationState.Claimed, proofKeyThumbprint: submission.proofKeyThumbprint, boundAt: now },
 		}));
-		return { outcome: "bound" as const, receiptId, runId: run.id, attempt: run.attempt, siloId: run.siloId, modelRoute: run.inputSnapshot.modelRoute, budgetPolicy: run.inputSnapshot.budgetPolicy, credentialExpiresAt: _EarliestExpiry(reservation.idleDeadline, assignment.expiresAt, bootstrap.expiresAt) };
+		return { outcome: "bound" as const, receiptId, runId: run.id, attempt: run.attempt, siloId: run.siloId, modelRoute: run.inputSnapshot.modelRoute, budgetPolicy: run.inputSnapshot.budgetPolicy, credentialExpiresAt, mintAuthorizationId: mintAuthorization.id };
 	}
+
+	/** Recheck the exact current model and provider grants before authorizing one post-commit mint. */
+	private async _AuthorizeCurrentModelCredential(run: AgentRun & { readonly inputSnapshot: { readonly identitySnapshot: Prisma.JsonValue; readonly modelRoute: Prisma.JsonValue } | null }, reservation: WarmRuntimeReservation, now: Date): Promise<_ModelCredentialAuthorization | null>
+	{
+		if (run.inputSnapshot === null)
+			return null;
+		const actor = _SnapshotActor(run.inputSnapshot.identitySnapshot, now);
+		const route = _SnapshotModelRoute(run.inputSnapshot.modelRoute);
+		if (actor === null || route === null)
+			return null;
+		const model = await this.transaction.modelDefinition.findUnique({ where: { id: route.modelDefinitionId }, select: { id: true, scope: true, clusterTenant: true, publicModelName: true, litellmModelId: true, providerCredential: { select: { id: true, scope: true, clusterTenant: true } } } });
+		if (model === null || !_ModelIsCurrentForSilo(model, route, run.siloId))
+			return null;
+		const argumentsValue = { runId: run.id, attempt: run.attempt, generation: reservation.generation, keyAlias: __BuildRunAttemptKeyAlias(run.id, run.attempt, run.siloId), modelDefinitionId: model.id, providerConnectionId: model.providerCredential?.id ?? null };
+		const modelAdmission = await this.authorization.admitPrincipal({ siloId: run.siloId, principalId: actor.principalId, actorKind: actor.actorKind, actorId: actor.principalId, resource: { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: model.id }, action: ProductAuthorizationActions.Use, argumentsDigest: __DigestCanonicalJson(argumentsValue), membershipRevision: actor.membershipRevision, nowEpochMs: now.getTime() });
+		if (modelAdmission.outcome !== AuthorizationDecisionOutcomes.Allow || modelAdmission.evidence === null)
+			return null;
+		let providerDecisionDigest: string | null = null;
+		if (model.providerCredential !== null)
+		{
+			const providerAdmission = await this.authorization.admitPrincipal({ siloId: run.siloId, principalId: actor.principalId, actorKind: actor.actorKind, actorId: actor.principalId, resource: { kind: ProductAuthorizationResourceKinds.ProviderConnection, id: model.providerCredential.id }, action: ProductAuthorizationActions.Use, argumentsDigest: __DigestCanonicalJson(argumentsValue), membershipRevision: actor.membershipRevision, nowEpochMs: now.getTime() });
+			if (providerAdmission.outcome !== AuthorizationDecisionOutcomes.Allow || providerAdmission.evidence === null)
+				return null;
+			providerDecisionDigest = __DigestCanonicalJson({ effectiveAuthorizationDigest: providerAdmission.evidence.effectiveAuthorizationDigest, policyRevisionHash: providerAdmission.evidence.policyRevisionHash });
+		}
+		return {
+			principalId: actor.principalId,
+			modelDefinitionId: model.id,
+			providerConnectionId: model.providerCredential?.id ?? null,
+			authorizationDigest: __DigestCanonicalJson({ modelEffectiveAuthorizationDigest: modelAdmission.evidence.effectiveAuthorizationDigest, modelPolicyRevisionHash: modelAdmission.evidence.policyRevisionHash, providerEffectiveAuthorizationDigest: providerDecisionDigest }),
+			membershipTrustedUntil: actor.membershipTrustedUntil,
+		};
+	}
+}
+
+/** Owns the second serializable transaction that spends one post-commit mint authorization. */
+export class PrismaRunModelCredentialMintAuthorizationRepository implements RunModelCredentialMintAuthorizationClaimRepository
+{
+	/** Transaction that owns the one-use compare-and-set. */
+	private readonly transaction: Prisma.TransactionClient;
+
+	/** Bind the claim repository to its caller's transaction. */
+	constructor(transaction: Prisma.TransactionClient)
+	{
+		this.transaction = transaction;
+	}
+
+	/** @inheritdoc */
+	async claim(command: { readonly authorizationId: string; readonly runId: string; readonly attempt: number; readonly keyAlias: string; readonly claimedAt: Date }): Promise<boolean>
+	{
+		const result = await this.transaction.runModelCredentialMintAuthorization.updateMany({
+			where: { id: command.authorizationId, runId: command.runId, attempt: command.attempt, keyAlias: command.keyAlias, claimedAt: null, expiresAt: { gt: command.claimedAt } },
+			data: { claimedAt: command.claimedAt },
+		});
+		return result.count === 1;
+	}
+}
+
+/** Current model and provider decision evidence saved before one external key mint. */
+interface _ModelCredentialAuthorization
+{
+	readonly principalId: string;
+	readonly modelDefinitionId: string;
+	readonly providerConnectionId: string | null;
+	readonly authorizationDigest: string;
+	readonly membershipTrustedUntil: Date;
+}
+
+/** Validate and normalize the frozen execution actor whose current grants authorize the mint. */
+function _SnapshotActor(value: Prisma.JsonValue, now: Date): { readonly principalId: string; readonly actorKind: "user" | "agent-service"; readonly membershipRevision: number; readonly membershipTrustedUntil: Date } | null
+{
+	if (value === null || typeof value !== "object" || Array.isArray(value))
+		return null;
+	const identity = value as Record<string, unknown>;
+	const kind = identity["kind"];
+	const principalId = kind === RunInputSnapshotIdentityKinds.User ? identity["principalId"] : identity["executionSubjectId"];
+	const membershipRevision = identity["fleetMembershipRevision"];
+	const trustedUntilValue = identity["fleetMembershipTrustedUntil"];
+	if ((kind !== RunInputSnapshotIdentityKinds.User && kind !== RunInputSnapshotIdentityKinds.Service) || typeof principalId !== "string" || principalId.trim().length === 0 || !Number.isSafeInteger(membershipRevision) || typeof trustedUntilValue !== "string")
+		return null;
+	const membershipTrustedUntil = new Date(trustedUntilValue);
+	if (!Number.isFinite(membershipTrustedUntil.getTime()) || membershipTrustedUntil.getTime() <= now.getTime())
+		return null;
+	return { principalId, actorKind: kind === RunInputSnapshotIdentityKinds.User ? "user" : "agent-service", membershipRevision: membershipRevision as number, membershipTrustedUntil };
+}
+
+/** Parse the exact model coordinates frozen by run admission. */
+function _SnapshotModelRoute(value: Prisma.JsonValue): { readonly modelDefinitionId: string; readonly alias: string; readonly litellmModelId: string } | null
+{
+	if (value === null || typeof value !== "object" || Array.isArray(value))
+		return null;
+	const route = value as Record<string, unknown>;
+	if (typeof route["modelDefinitionId"] !== "string" || typeof route["alias"] !== "string" || typeof route["litellmModelId"] !== "string")
+		return null;
+	return { modelDefinitionId: route["modelDefinitionId"], alias: route["alias"], litellmModelId: route["litellmModelId"] };
+}
+
+/** Require the persisted definition and provider connection to remain available to this silo. */
+function _ModelIsCurrentForSilo(model: { readonly scope: ModelRoutingScope; readonly clusterTenant: string | null; readonly publicModelName: string; readonly litellmModelId: string; readonly providerCredential: { readonly scope: ModelRoutingScope; readonly clusterTenant: string | null } | null }, route: { readonly alias: string; readonly litellmModelId: string }, siloId: string): boolean
+{
+	const modelAvailable = model.scope === ModelRoutingScope.Global ? model.clusterTenant === null : model.clusterTenant === siloId;
+	const providerAvailable = model.providerCredential === null || (model.providerCredential.scope === ModelRoutingScope.Global ? model.providerCredential.clusterTenant === null : model.providerCredential.clusterTenant === siloId);
+	return modelAvailable && providerAvailable && model.publicModelName === route.alias && model.litellmModelId === route.litellmModelId;
+}
+
+/** Ensure a replay references the same durable one-use authorization derived by the new check. */
+function _MintAuthorizationMatches(saved: RunModelCredentialMintAuthorization, current: _ModelCredentialAuthorization, runId: string, attempt: number, generation: number, siloId: string): boolean
+{
+	return saved.runId === runId && saved.attempt === attempt && saved.generation === generation && saved.principalId === current.principalId && saved.modelDefinitionId === current.modelDefinitionId && saved.providerConnectionId === current.providerConnectionId && saved.authorizationDigest === current.authorizationDigest && saved.keyAlias === __BuildRunAttemptKeyAlias(runId, attempt, siloId) && saved.expiresAt.getTime() <= current.membershipTrustedUntil.getTime();
 }
 
 /** Require one typed fence touch or abort the serializable transaction. */

@@ -5,10 +5,9 @@ import { RunInputSnapshotIdentityKinds, type ManagedRunInputBoundaryAttachment }
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import { __VerifyCurrentFleetMembershipEvidence, PrismaFleetMembershipAuthorityRepository } from "@opencrane/backend/server/iam/membership";
 import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
+import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds, type AuthorizationBoundary } from "@opencrane/models/authorization";
 import type { JsonValue } from "@opencrane/util";
 
-import { __ResolveEffectiveBoundaryAttachments } from "../boundary-attachment-authority";
-import { __CreatePrismaBoundaryGrantResolver } from "./prisma-boundary-grant.factory";
 import { __ManagedAgentServicePrincipal, MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER } from "../managed-agent-service-principal";
 import type { ManagedExecutionEvidenceAuthority, ManagedExecutionEvidenceCommand, ManagedExecutionEvidenceConfig, ManagedExecutionEvidenceResult, ManagedExecutionEvidenceTransaction } from "../managed-execution-evidence.types";
 
@@ -62,8 +61,9 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 	 */
 	async load(command: ManagedExecutionEvidenceCommand, transaction: ManagedExecutionEvidenceTransaction): Promise<ManagedExecutionEvidenceResult>
 	{
+		const prisma = transaction.prisma;
 		// 1. Re-read the active managed service and requested published revision before trusting either.
-		const revision = await transaction.prisma.agentRevision.findFirst({
+		const revision = await prisma.agentRevision.findFirst({
 			where: {
 				id: command.agentRevisionId,
 				agentServiceId: command.agentServiceId,
@@ -96,10 +96,10 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 		const principal = revision.agentService.principalId;
 
 		// 3. Require one unambiguous, signed membership assertion for the verified service principal.
-		const assertion = await _SelectMembershipAssertion(transaction.prisma, this.config.trustedIssuerId, command.siloId, principal);
+		const assertion = await _SelectMembershipAssertion(prisma, this.config.trustedIssuerId, command.siloId, principal);
 		if (assertion === null)
 			return { outcome: "denied", reason: "membership_stale" };
-		const membership = await __VerifyCurrentFleetMembershipEvidence(new PrismaFleetMembershipAuthorityRepository(transaction.prisma), this.config.verifier, {
+		const membership = await __VerifyCurrentFleetMembershipEvidence(new PrismaFleetMembershipAuthorityRepository(prisma), this.config.verifier, {
 			trustedIssuerId: this.config.trustedIssuerId,
 			siloId: command.siloId,
 			subjectId: principal,
@@ -114,13 +114,22 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 		const declared = revision.boundaryAttachments.map(_Attachment);
 		if (declared.some(_IsPersonalAttachment))
 			return { outcome: "denied", reason: "memory_scope_unavailable" };
-		const resolver = __CreatePrismaBoundaryGrantResolver(transaction.prisma);
-		const effective = await __ResolveEffectiveBoundaryAttachments(resolver, command.siloId, [principal], declared, transaction.admittedAtEpochMs);
-		if (effective.rejected.length > 0)
+		const authorization = transaction.authorization;
+		const argumentsDigest = __DigestCanonicalJson({ agentServiceId: command.agentServiceId, agentRevisionId: command.agentRevisionId, boundaryAttachments: declared } as unknown as JsonValue);
+		const admissions = [];
+		if (declared.length === 0)
+		{
+			admissions.push(await authorization.admitPrincipal({ siloId: command.siloId, principalId: principal, actorKind: "agent-service", actorId: principal, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: command.agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest, membershipRevision: membership.evidence.revision, nowEpochMs: transaction.admittedAtEpochMs }));
+		}
+		for (const attachment of declared)
+		{
+			admissions.push(await authorization.admit({ siloId: command.siloId, principalId: principal, actorKind: "agent-service", actorId: principal, boundary: _AuthorizationBoundary(attachment), requiredBoundaryCoverage: attachment.boundaryCoverage === RevisionBoundaryCoverages.Descendants ? AuthorizationBoundaryCoverages.Descendants : AuthorizationBoundaryCoverages.Exact, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: command.agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest, membershipRevision: membership.evidence.revision, nowEpochMs: transaction.admittedAtEpochMs }));
+		}
+		if (admissions.length === 0 || admissions.some(admission => admission.outcome !== AuthorizationDecisionOutcomes.Allow || admission.evidence === null))
 			return { outcome: "denied", reason: "memory_scope_unavailable" };
 
 		// 5. Sort each list before hashing, so database row order cannot change the evidence.
-		const attachments = _CanonicalAttachments(effective.authorized);
+		const attachments = _CanonicalAttachments(declared);
 		const attachmentDigest = __DigestCanonicalJson(attachments as unknown as JsonValue);
 		const capabilitySetDigest = __DigestCanonicalJson({
 			siloId: command.siloId,
@@ -130,6 +139,7 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 			executionSubjectId: principal,
 			fleetMembershipRevision: membership.evidence.revision,
 			fleetMembershipPayloadDigest: membership.evidence.payloadDigest,
+			authorizationDecisionDigests: admissions.map(admission => admission.evidence?.decisionDigest ?? "").sort(_CompareCanonicalCoordinate),
 			effectiveBoundaryAttachments: attachments,
 			modelDefinitionId: revision.modelDefinitionId,
 			budget: revision.budget,
@@ -156,6 +166,14 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 			},
 		};
 	}
+}
+
+/** Converts a stored revision attachment into the central authorization boundary vocabulary. */
+function _AuthorizationBoundary(attachment: RevisionBoundaryAttachment): AuthorizationBoundary
+{
+	return attachment.boundaryKind === RevisionBoundaryKinds.Group
+		? { kind: AuthorizationBoundaryKinds.Group, groupId: attachment.boundaryId }
+		: { kind: AuthorizationBoundaryKinds.Personal, principalId: attachment.boundaryId };
 }
 
 /**

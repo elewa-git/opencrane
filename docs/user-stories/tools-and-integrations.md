@@ -67,8 +67,8 @@ Status: `API absent`; no OAuth route exists until the full redirect and callback
 
 ## TOL-05 — Govern catalogue publication
 
-**As an** organisation admin, **I want** to review, approve, publish, reject, or disable catalogue
-entries **so that** users discover only governed tools.
+**As a** caller with the current `Organization/Administer` grant, **I want** to review, approve,
+publish, reject, or disable catalogue entries **so that** users discover only governed tools.
 
 Acceptance criteria:
 
@@ -76,12 +76,12 @@ Acceptance criteria:
 - Actions explain user-install and active-agent consequences.
 - Concurrent and already-applied transitions do not silently overwrite newer governance.
 
-APIs: `/api/v1/mcp/servers/{id}/approve|publish|reject|enabled` and admin list/directory routes.
+APIs: `/api/v1/mcp/servers/{id}/approve|publish|reject|enabled` and the admin server list.
 
 ## TOL-06 — Configure tool access policy
 
-**As an** organisation admin, **I want** to make a published tool available to everyone or selected
-groups/users **so that** entitlement matches organisational policy.
+**As a** caller with the current `Organization/Administer` grant, **I want** to make a published tool
+available to everyone or selected groups/users **so that** entitlement matches organisational policy.
 
 Acceptance criteria:
 
@@ -89,7 +89,9 @@ Acceptance criteria:
 - Effective-access preview distinguishes direct, group-derived, and organisation-wide access.
 - Removing access explains effects on existing installs and future run admission.
 
-APIs: `GET/PUT /api/v1/mcp/servers/{id}/access`.
+Status: `API blocked`; generic central grant administration replaces the deleted MCP-only access
+editor and directory. This story must use that shared authorization flow rather than add another MCP
+policy API.
 
 ## TOL-08 — Use an installed tool during a run
 

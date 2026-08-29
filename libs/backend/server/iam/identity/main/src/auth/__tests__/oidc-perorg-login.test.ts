@@ -42,6 +42,7 @@ vi.mock("openid-client", function _mockClient()
 });
 
 import { ___CreateOidcAuthService } from "../oidc.service";
+import { PrismaAuthenticatedPrincipalCapabilityUnitOfWork } from "../../authenticated-principals/prisma-authenticated-principal-capability-unit-of-work";
 import type { StandaloneFirstUserAdmissionAuditPort } from "../../standalone-first-user/standalone-first-user-admission.types";
 
 /** Minimal OIDC env so the service is enabled and uses `cid` as the masters client. */
@@ -192,6 +193,30 @@ describe("OidcAuthService.buildLoginUrl — per-org client resolution (S3b)", fu
 
     await expect(service.buildLoginUrl(req, "/")).rejects.toThrow("provisioned tenant client");
     expect(_discoveryCalls).toEqual([]);
+  });
+});
+
+describe("OidcAuthService.getStatus — product capabilities", function _CapabilitySuite()
+{
+  beforeEach(_enableOidc);
+  afterEach(function _Reset()
+  {
+    vi.restoreAllMocks();
+    _disableOidc();
+  });
+
+  it("returns organization administration from the central authorization projection", async function _ProjectsCapability()
+  {
+    const prisma = _prismaStub();
+    vi.mocked(prisma.orgMembership.findMany).mockResolvedValue([{ clusterTenant: "acme", role: OrgRole.Owner }] as never);
+    vi.spyOn(PrismaAuthenticatedPrincipalCapabilityUnitOfWork.prototype, "canAdministerOrganization").mockResolvedValue(true);
+    const service = ___CreateOidcAuthService(pino({ enabled: false }), prisma, _apiWithCr("acme", { clientId: "client-acme", orgId: "org-acme" }));
+    const req = _reqOnHost("acme.dev.opencrane.ai");
+    req.session.authUser = { sub: "user-1", issuer: "https://idp.test", groups: [], authorizationExpiresAt: new Date(Date.now() + 60_000).toISOString(), isPlatformOperator: false, isOrgAdmin: false, authenticatedAt: new Date().toISOString() };
+
+    const status = await service.getStatus(req);
+
+    expect(status.user).toMatchObject({ clusterTenant: "acme", productCapabilities: { administerOrganization: true } });
   });
 });
 

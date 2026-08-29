@@ -28,7 +28,7 @@ describe("_DeriveCapabilities", () =>
 		});
 	});
 
-	it("grants the operator console + account powers to a customer admin on the org surface, but not fleet-wide customer management", () =>
+	it("grants account powers from the central organization capability without fleet-wide customer management", () =>
 	{
 		const caps = _DeriveCapabilities(true, false, true, "org");
 
@@ -39,11 +39,11 @@ describe("_DeriveCapabilities", () =>
 		expect(caps.manageCustomers).toBe(false);
 	});
 
-	it("ignores a role claim that does not belong to the app's surface (strict domain separation)", () =>
+	it("ignores an authority input that does not belong to the app's surface", () =>
 	{
-		// A platform-operator token used on the org surface grants nothing...
+		// A platform-control claim used on the org surface grants nothing.
 		expect(_DeriveCapabilities(true, true, false, "org")).toEqual(_NONE);
-		// ...and an org-admin token used on the platform surface grants nothing.
+		// A product organization capability used on the platform surface grants nothing.
 		expect(_DeriveCapabilities(true, false, true, "platform")).toEqual(_NONE);
 	});
 
@@ -54,10 +54,9 @@ describe("_DeriveCapabilities", () =>
 		expect(_DeriveCapabilities(true, false, false, "platform").manageCustomers).toBe(false);
 	});
 
-	it("denies the operator console to an authenticated session with no operator/admin claim", () =>
+	it("denies the operator console to an authenticated session with no authority input", () =>
 	{
-		// The tightened least-privilege model: authentication alone no longer grants
-		// operator-tier access — a real platform-operator or org-admin claim is required.
+		// Authentication alone does not grant product or platform-control access.
 		expect(_DeriveCapabilities(true, false, false, "platform")).toEqual(_NONE);
 	});
 

@@ -1,12 +1,13 @@
 import express from "express";
 import type { Express } from "express";
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Side-effect import: loads the express-session SessionData.authUser augmentation.
 import "@opencrane/backend/server/infra/auth";
 import type { AuthUser } from "@opencrane/backend/server/infra/auth";
+import type { ProviderGatewayAuthorizationFactory } from "../provider-gateway-authority.types";
 import { modelRegistryRouter } from "../routes/model-registry";
 
 /** In-memory model_definitions store backing the mock Prisma client. */
@@ -31,7 +32,7 @@ function _platformOperator(): AuthUser
 function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = new Map()): PrismaClient
 {
   let seq = 0;
-  return {
+	const client = {
     modelDefinition: {
       findMany: async function _findMany(args?: { where?: { clusterTenant?: string } })
       {
@@ -60,10 +61,22 @@ function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = ne
       findUnique: async function _findCred(args: { where: { id: string } }) { return credentials.get(args.where.id) ?? null; },
     },
   } as unknown as PrismaClient;
+	Object.assign(client, { $transaction: async function _Transaction(operation: (transaction: PrismaClient) => Promise<unknown>) { return operation(client); } });
+	return client;
 }
 
+/** Central authority stub that admits mutations and returns every catalogue candidate. */
+const _ALLOW_AUTHORIZATION = (function _CreateAuthorization()
+{
+	return {
+		admitPrincipal: async function _Admit() { return { outcome: "allow" }; },
+		listPrincipalEntitled: async function _List(command: { resources: readonly unknown[] }) { return command.resources; },
+		replaceManagedGrants: async function _Replace() { return { outcome: "allow", changedCount: 1, evidence: {} }; },
+	};
+}) as unknown as ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>;
+
 /** Build a minimal app mounting the model-registry router with an authenticated operator session. */
-function _buildApp(prisma: PrismaClient, user: AuthUser | null = _platformOperator()): Express
+function _buildApp(prisma: PrismaClient, user: AuthUser | null = _platformOperator(), authorization: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient> = _ALLOW_AUTHORIZATION): Express
 {
   const app = express();
   app.use(express.json());
@@ -75,7 +88,8 @@ function _buildApp(prisma: PrismaClient, user: AuthUser | null = _platformOperat
       next();
     });
   }
-  app.use("/api/v1/models", modelRegistryRouter(prisma));
+  const resolveCaller = user === null ? function _NoCaller() { return null; } : function _Caller() { return { siloId: "acme", principalId: "principal-1" }; };
+  app.use("/api/v1/models", modelRegistryRouter(prisma, resolveCaller, authorization));
   return app;
 }
 
@@ -96,6 +110,31 @@ describe("modelRegistryRouter", function _suite()
     if (originalMasterKey !== undefined) { process.env.LITELLM_MASTER_KEY = originalMasterKey; } else { delete process.env.LITELLM_MASTER_KEY; }
     vi.restoreAllMocks();
   });
+
+	it("filters exact ModelDefinition reads and admits mutation as organisation policy", async function _CentralAuthority()
+	{
+		const store = new Map<string, Row>([
+			["model-1", { id: "model-1", scope: "Global", clusterTenant: null, publicModelName: "openai/gpt-4o", litellmModelId: "x", upstreamModel: "openai/gpt-4o", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }],
+			["model-2", { id: "model-2", scope: "Global", clusterTenant: null, publicModelName: "anthropic/claude", litellmModelId: "y", upstreamModel: "anthropic/claude", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }],
+		]);
+		const listPrincipalEntitled = vi.fn(async function _List(command: { resources: readonly { id: string }[] }) { return command.resources.filter(resource => resource.id === "model-2"); });
+		const admitPrincipal = vi.fn(async function _Admit() { return { outcome: "allow" }; });
+		const replaceManagedGrants = vi.fn(async function _Replace() { return { outcome: "allow" }; });
+		const factory = (function _CreateAuthorization() { return { listPrincipalEntitled, admitPrincipal, replaceManagedGrants }; }) as unknown as ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>;
+		const app = _buildApp(_mockPrisma(store), _platformOperator(), factory);
+
+		const list = await request(app).get("/api/v1/models");
+		const created = await request(app).post("/api/v1/models").send({ publicModelName: "gemini/gemini", upstreamModel: "gemini/gemini" });
+
+		expect(list.body.map((row: { id: string }) => row.id)).toEqual(["model-2"]);
+		expect(listPrincipalEntitled).toHaveBeenCalledWith(expect.objectContaining({ siloId: "acme", principalId: "principal-1", action: "read", resources: [{ kind: "model-definition", id: "model-1" }, { kind: "model-definition", id: "model-2" }] }));
+		expect(created.status).toBe(201);
+		expect(admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ action: "administer", resource: { kind: "organization", id: "acme" } }));
+		expect(replaceManagedGrants).toHaveBeenCalledWith(expect.objectContaining({
+			resource: { kind: "model-definition", id: expect.any(String) },
+			grants: expect.arrayContaining([expect.objectContaining({ capability: expect.objectContaining({ capabilityId: "model-definition:use" }) })]),
+		}));
+	});
 
   it("lists models", async function _list()
   {

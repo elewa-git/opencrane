@@ -38,11 +38,16 @@ does not grant permission to use a run.
 
 - A duplicate admission returns the first saved input only when the caller and request match.
 - A retry keeps the same logical run and fixed input, but starts the next attempt.
+- Status, cancellation, and retry use the current exact `AgentRun` grant. Ownership, conversation
+  participation, lifecycle state, attempt fencing, and workload proof remain separate safety facts;
+  none of them grants product permission by itself.
 - A warm Pod can be claimed once. It is never returned to the generic pool after use.
 - The assignment stays stable across runtime replacement. Its binding generation selects the current
   Pod reservation, bootstrap, and proof key; earlier generations remain revoked history.
-- The Pod receives its model key only after the database has saved the exact Pod identity and proof
-  key.
+- Before a Pod receives a model key, the binding transaction rechecks the run principal's current
+  exact `ModelDefinition/Use` grant and, when present, its exact `ProviderConnection/Use` grant.
+- The database saves one `RunModelCredentialMintAuthorization` before commit. A second serializable
+  transaction spends that row once before LiteLLM is called, so a replay cannot mint another key.
 - Runtime events are accepted only for the current run, attempt, Pod, and command.
 - Cancellation changes the database state first. The saved workflow then removes the exact used Pod
   and completes any provider output handoff.
@@ -52,22 +57,27 @@ does not grant permission to use a run.
 
 ## Public surface
 
-- `PrismaRunAdmissionRepository` saves a new run, its fixed input, and its workflow task together.
-- `PrismaAgentRunRetryUnitOfWork` starts the next attempt after checking the current terminal state.
+- `PrismaRunAdmissionUnitOfWork` saves a new run, its fixed input, and its workflow task together.
+- `PrismaAgentRunRetryUnitOfWork` starts the next attempt after checking the current terminal state,
+  current participant identity, and exact `AgentRun/Retry` grant in the write transaction.
 - `PrismaAgentRunWarmRuntimeUnitOfWork` reserves a warm Pod, records activation and readiness, and
   replaces a dead waiting runtime only after the saved continuation has been checked and fenced.
 - `AgentRunRuntimeContinuationRecoveryPort` lets the run lifecycle ask the protocol authority to
   validate the saved continuation and fence the dead runtime before advancing the binding generation.
 - `PrismaWarmRuntimeBindingUnitOfWork` binds the reviewed warm Pod to its saved reservation and returns
   the short-lived model key in memory.
+- `PrismaRunModelCredentialMintAuthorizationRepository` spends the exact saved mint authorization
+  before the post-commit LiteLLM call.
 - `__CreateWarmRuntimeBindingRouter` exposes the private warm-Pod binding route.
 - `__CreateAgentRunWorkflowControllerRouter` exposes the private controller operations used by the
   saved workflow.
 - `PrismaRuntimeEventReporter` and `PrismaRuntimeTerminalReporter` save accepted runtime progress and
   terminal results.
-- `PrismaRunCancellationUnitOfWork` owns the database transaction for the initial cancellation
-  decision; its transaction-scoped repository fences and revokes authority for the saved workflow.
-- The self-run routers expose status, retry, and cancellation to the signed-in participant.
+- `PrismaRunCancellationUnitOfWork` owns the database transaction for the exact `AgentRun/Cancel`
+  admission, attempt fence, revocations, and workflow cancellation event.
+- The self-run routers expose status, retry, and cancellation to the signed-in participant. Status
+  first finds owner-eligible runs, then filters those candidates through current exact
+  `AgentRun/Read` grants in the same database snapshot.
 
 ## Boundary
 
@@ -86,8 +96,9 @@ shared backend libraries. It never imports an application or Kubernetes client.
 ## Data and persistence
 
 The main records are `AgentRun`, `RunInputSnapshot`, `AgentRunWorkflowTask`,
-`WarmRuntimeReservation`, `WorkloadAssignment`, `WorkloadBootstrap`, `RunProofKey`, and ordered run
-events. Admission saves the run, fixed input, and workflow task together. Each
+`WarmRuntimeReservation`, `WorkloadAssignment`, `WorkloadBootstrap`, `RunProofKey`,
+`RunModelCredentialMintAuthorization`, and ordered run events. Admission saves the run, fixed input,
+and workflow task together. Each
 `WarmRuntimeReservation`, `WorkloadBootstrap`, and `RunProofKey` belongs to one binding generation.
 Warm-runtime changes are saved before the next Kubernetes step begins.
 

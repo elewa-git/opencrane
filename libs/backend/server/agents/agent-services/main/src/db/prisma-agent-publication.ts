@@ -2,8 +2,10 @@ import { AgentRevisionState, AgentServiceState, McpApprovalStatus, McpServerRevi
 
 import type { AgentRevision, AgentService } from "@opencrane/models/agents";
 
-import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
-import type { AgentPublicationAuditEvidencePort, AgentServicePublicationRepository, AtomicAgentRevisionPublication, AtomicAgentRevisionPublicationResult } from "../agent-publication.types";
+import { PrismaAuthorizationAuthority, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
+import type { AgentServicePublicationRepository, AtomicAgentRevisionPublication, AtomicAgentRevisionPublicationResult } from "../agent-publication.types";
 import { _mapRevision, _mapService, _serviceState } from "./prisma-agent-mappers";
 
 /** Signals that a conditional publication write lost ownership and must roll its transaction back. */
@@ -20,20 +22,22 @@ class _PublicationConflict extends Error {}
  */
 export class PrismaAgentServicePublicationRepository implements AgentServicePublicationRepository
 {
-	/** Transaction that owns the publication and audit row. */
+	/** Transaction that owns central admission and the publication writes. */
 	private readonly prisma: Prisma.TransactionClient;
-	/** Exact audit evidence builder supplied by the authenticated driving use case. */
-	private readonly auditEvidence: AgentPublicationAuditEvidencePort;
+	/** Central authority bound to the publication transaction. */
+	private readonly authorization: Pick<AuthorizationAuthority, "admitPrincipal">;
+	/** Authenticated management Principal and silo. */
+	private readonly caller: { readonly principalId: string; readonly siloId: string };
 
 	/**
 	 * Creates a publication adapter over the canonical Postgres authority.
 	 * @param prisma - OpenCrane Prisma client.
-	 * @param auditEvidence - Authenticated publication evidence builder.
 	 */
-	constructor(prisma: Prisma.TransactionClient, auditEvidence: AgentPublicationAuditEvidencePort)
+	constructor(prisma: Prisma.TransactionClient, authorization: Pick<AuthorizationAuthority, "admitPrincipal">, caller: { readonly principalId: string; readonly siloId: string })
 	{
 		this.prisma = prisma;
-		this.auditEvidence = auditEvidence;
+		this.authorization = authorization;
+		this.caller = caller;
 	}
 
 	/** Loads one stable service identity scoped to the caller's silo. */
@@ -66,6 +70,10 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 				|| assignment.toolRevision.serverRevision.server.approvalStatus !== McpApprovalStatus.Published;
 		}))
 			return { status: "invalid_revision" } as const;
+		const argumentsValue = { agentServiceId: publication.agentServiceId, agentRevisionId: publication.agentRevisionId, expectedActiveRevisionId: publication.expectedActiveRevisionId };
+		const admission = await this.authorization.admitPrincipal({ siloId: this.caller.siloId, principalId: this.caller.principalId, actorKind: "user", actorId: this.caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: this.caller.siloId }, action: ProductAuthorizationActions.Administer, argumentsDigest: ___DigestCanonicalJson(argumentsValue as JsonValue), nowEpochMs: new Date(publication.publishedAt).getTime() });
+		if (admission.outcome !== AuthorizationDecisionOutcomes.Allow)
+			return { status: "unauthorized" } as const;
 
 		// Claim the exact service state, then publish the exact draft. A lost second write throws so
 		// the first write also rolls back.
@@ -84,10 +92,6 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 			this.prisma.agentRevision.findUniqueOrThrow({ where: { id: publication.agentRevisionId }, include: { skillAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } }),
 		]);
 
-		// Append authenticated decision evidence before commit; audit failure rolls back publication.
-		const service = _mapService(serviceRow);
-		const revision = _mapRevision(revisionRow);
-		await __AppendAuditDecision(this.prisma, this.auditEvidence.build(publication, service, revision));
 		return { status: "published", service: _mapService(activeRow), revision: _mapRevision(publishedRow) } as const;
 	}
 
@@ -111,14 +115,17 @@ export class PrismaAgentServicePublicationUnitOfWork implements AgentServicePubl
 {
 	/** OpenCrane product-authority database client. */
 	private readonly prisma: PrismaClient;
-	/** Exact audit evidence builder supplied by the authenticated driving use case. */
-	private readonly auditEvidence: AgentPublicationAuditEvidencePort;
+	/** Authenticated management Principal and silo. */
+	private readonly caller: { readonly principalId: string; readonly siloId: string };
+	/** Test seam that still returns one authority bound to the supplied transaction. */
+	private readonly createAuthorization: ((transaction: Prisma.TransactionClient) => Pick<AuthorizationAuthority, "admitPrincipal">) | null;
 
 	/** Creates the publication unit of work over canonical Postgres. */
-	constructor(prisma: PrismaClient, auditEvidence: AgentPublicationAuditEvidencePort)
+	constructor(prisma: PrismaClient, caller: { readonly principalId: string; readonly siloId: string }, createAuthorization: ((transaction: Prisma.TransactionClient) => Pick<AuthorizationAuthority, "admitPrincipal">) | null = null)
 	{
 		this.prisma = prisma;
-		this.auditEvidence = auditEvidence;
+		this.caller = caller;
+		this.createAuthorization = createAuthorization;
 	}
 
 	/** Loads one stable service identity scoped to the caller's silo. */
@@ -152,10 +159,12 @@ export class PrismaAgentServicePublicationUnitOfWork implements AgentServicePubl
 	/** Runs one publication operation in a serializable transaction. */
 	private _Run<TResult>(operation: (repository: PrismaAgentServicePublicationRepository) => Promise<TResult>): Promise<TResult>
 	{
-		const auditEvidence = this.auditEvidence;
+		const caller = this.caller;
+		const createAuthorization = this.createAuthorization;
 		return this.prisma.$transaction(async function _Run(transaction: Prisma.TransactionClient)
 		{
-			const repository = new PrismaAgentServicePublicationRepository(transaction, auditEvidence);
+			const authorization = createAuthorization === null ? new PrismaAuthorizationAuthority(transaction) : createAuthorization(transaction);
+			const repository = new PrismaAgentServicePublicationRepository(transaction, authorization, caller);
 			return operation(repository);
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}

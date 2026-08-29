@@ -81,9 +81,9 @@ model AgentRun {
   inputSnapshot            RunInputSnapshot?
   workloadAssignments      WorkloadAssignment[]
   proofKeys                RunProofKey[]
+  modelCredentialMintAuthorizations RunModelCredentialMintAuthorization[]
   approvalRequests         ApprovalRequest[]
   elicitationRequests      ElicitationRequest[]
-  executionReceipts        ActionExecutionReceipt[]
   toolInvocations          ToolInvocation[]
   workflowTasks            AgentRunWorkflowTask[]
   steeringRequests         RuntimeSteeringRequest[]
@@ -267,7 +267,6 @@ model WorkloadAssignment {
   bootstraps               WorkloadBootstrap[]
   proofKeys                RunProofKey[]
   warmRuntimeReservations  WarmRuntimeReservation[]
-  executionReceipts        ActionExecutionReceipt[]
   approvalRequests         ApprovalRequest[]
   conversationAssetTickets ConversationAssetOutputTicket[]
 
@@ -331,7 +330,6 @@ model RunProofKey {
   assignment        WorkloadAssignment       @relation(fields: [runId, attempt, workloadKind, workloadUid], references: [runId, attempt, workloadKind, workloadUid], onDelete: Restrict, map: "run_proof_keys_assignment_fkey")
   bootstrap         WorkloadBootstrap        @relation(fields: [bootstrapId], references: [id], onDelete: Restrict)
   approvalRequests  ApprovalRequest[]
-  executionReceipts ActionExecutionReceipt[]
 
   @@unique([runId, attempt, generation])
   @@unique([runId, attempt, workloadKind, workloadUid, podUid])
@@ -341,4 +339,25 @@ model RunProofKey {
   @@index([podUid])
   @@index([expiresAt])
   @@map("run_proof_keys")
+}
+
+/// One durable, single-consumption authorization for the post-commit LiteLLM key mint.
+model RunModelCredentialMintAuthorization {
+  id                   String    @id @default(cuid())
+  runId                String    @map("run_id")
+  attempt              Int
+  generation           Int
+  principalId          String    @map("principal_id")
+  modelDefinitionId    String    @map("model_definition_id")
+  providerConnectionId String?   @map("provider_connection_id")
+  authorizationDigest  String    @map("authorization_digest")
+  keyAlias             String    @unique @map("key_alias")
+  expiresAt            DateTime  @map("expires_at")
+  claimedAt            DateTime? @map("claimed_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  run                  AgentRun  @relation(fields: [runId], references: [id], onDelete: Restrict)
+
+  @@unique([runId, attempt, generation])
+  @@index([expiresAt])
+  @@map("run_model_credential_mint_authorizations")
 }

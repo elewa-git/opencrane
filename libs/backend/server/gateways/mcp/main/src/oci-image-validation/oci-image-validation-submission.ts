@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { McpOperatorCaller } from "../core/mcp-operator.logic.types";
 import type { McpOperatorTransaction, McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
+import { __RequireMcpOrganizationAdministration, __RequireMcpOrganizationAdministrationRead } from "../core/mcp-operator-authorization";
 import type { OciImageValidationCreateResult, OciImageValidationRecord, OciImageValidationSubmissionRecord } from "./oci-image-validation-repository.types";
 import { OciImageValidationSubmissionOutcomes } from "./oci-image-validation-submission.types";
 import type { OciImageLayoutArtifactResolver, OciImageValidationSubmissionCommand, OciImageValidationSubmissionResult } from "./oci-image-validation-submission.types";
@@ -39,8 +40,7 @@ async function _CreateOrFindValidation(transaction: McpOperatorTransaction, subm
 /** Record the authenticated administrator only when this transaction created the validation row. */
 async function _AppendCreationAudit(transaction: McpOperatorTransaction, caller: McpOperatorCaller, validation: OciImageValidationRecord): Promise<void>
 {
-	const auditMetadata = { siloId: caller.siloId, actorPrincipalId: caller.principalId };
-	await transaction.mcp.appendAudit("Created", `OciImageValidation/${validation.id}`, `OCI image validation ${validation.id} submitted`, auditMetadata);
+	await transaction.mcp.appendAudit(caller.siloId, "Created", `OciImageValidation/${validation.id}`, `OCI image validation ${validation.id} submitted`, caller.principalId);
 }
 
 /** Admit the saved validation through the workflow transaction that created or replayed its row. */
@@ -69,7 +69,11 @@ export async function submitOciImageValidation(unitOfWork: McpOperatorUnitOfWork
 	if (!parsed.success)
 		throw new Error("OCI image validation fields are invalid.");
 
-	// 2. Resolve through the caller's silo so another tenant's published revision cannot be admitted.
+	// 2. Admit the read before resolving through the caller's silo, so another tenant's revision cannot be observed or admitted.
+	await unitOfWork.execute(async function _AuthorizeRead(transaction): Promise<void>
+	{
+		await __RequireMcpOrganizationAdministrationRead(transaction.authorization, caller);
+	});
 	const target = await artifacts.resolve(caller.siloId, parsed.data.artifactId, parsed.data.artifactRevisionId);
 	if (target === null)
 		return { outcome: OciImageValidationSubmissionOutcomes.ArtifactNotFound };
@@ -81,6 +85,7 @@ export async function submitOciImageValidation(unitOfWork: McpOperatorUnitOfWork
 
 	return await unitOfWork.execute(async function _Submit(transaction): Promise<OciImageValidationSubmissionResult>
 	{
+		await __RequireMcpOrganizationAdministration(transaction.authorization, caller, { operation: "mcp-oci-image-validation-submit", artifactId: target.artifactId, artifactRevisionId: target.artifactRevisionId, contentAddress: target.contentAddress, submissionDigest });
 		const stored = await _CreateOrFindValidation(transaction, submission);
 		if (stored === null || stored.validation.submissionDigest !== submissionDigest)
 			return { outcome: OciImageValidationSubmissionOutcomes.Conflict };
@@ -102,6 +107,7 @@ export function getOciImageValidation(unitOfWork: McpOperatorUnitOfWork, caller:
 {
 	return unitOfWork.execute(async function _Read(transaction): Promise<OciImageValidationRecord | null>
 	{
+		await __RequireMcpOrganizationAdministrationRead(transaction.authorization, caller);
 		return await transaction.ociImageValidations.find(caller.siloId, validationId);
 	});
 }

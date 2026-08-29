@@ -5,13 +5,15 @@
 ## What it owns
 
 This package is part of **Reporting** — the economics side of OpenCrane. It owns token-usage views
-and the global and per-account budget ceilings that cap model use.
+and each organization's global and per-account budget ceilings that cap model use.
 
-It reads the canonical usage snapshots and exposes the operator's token-usage and budget controls:
+It reads the canonical usage snapshots and exposes the operator's token-usage and budget controls.
+Budget reads and writes require the exact organisation `administer` grant. Token-usage rows are a
+catalogue: one batch decision returns only the exact rows the current Principal may read.
 
 ```
- dashboard / operator
-        │  GET token usage · manage budgets
+ authenticated Principal
+        │  exact token-usage reads · organisation budget administration
         ▼
  ┌───────────────────────────────────────────────────────────────┐
  │  spend   ◄── HERE                                               │
@@ -22,29 +24,36 @@ It reads the canonical usage snapshots and exposes the operator's token-usage an
  OpenCrane product database
 ```
 
-Invariant: budget and token-usage reads use the canonical product database. The package does not
-accept raw provider credentials or call a model provider directly.
+Invariant: authorization and each database query or budget write use the same Prisma transaction.
+A denied budget mutation writes neither the setting nor decision evidence, and a token-usage row
+without a current read grant never reaches the response. The package does not accept provider
+credentials or call a model provider directly.
 
 ## Public surface
 
 - `tokenUsageRouter` — exposes per-account token usage at `/api/v1/token-usage`.
-- `_GetGlobalBudget` / `_PutGlobalBudget`, `_GetAccountBudgets` / `_PutAccountBudget` / `_DeleteAccountBudget` — the global and per-account monthly ceilings.
 - `aiBudgetRouter` — exposes the global and per-account controls at `/api/v1/ai-budget`.
+- `PrismaSpendUnitOfWork` and `PrismaSpendRepository` — bind central authorization, budget
+  persistence, and token-usage reads to one transaction.
+- Spend authority, caller, budget, and token-usage types — the contracts used by routes and tests.
 
 ## Boundary
 
-Consumed by the opencrane-server HTTP layer. It reports token usage and controls budgets; it does
-not route model calls itself — that is LiteLLM's job.
+Consumed by the opencrane-server HTTP layer. It resolves the Principal from the authenticated
+request and delegates permission decisions to `AuthorizationAuthority`; it does not route model
+calls itself — that is LiteLLM's job.
 
 ## Dependency direction
 
-Tagged `scope:spend`: it may depend only on `scope:spend` and `scope:shared` — never on apps or
-sibling domains.
+Tagged `scope:spend`: it may depend on authentication, authorization, spend, and shared contracts,
+never on apps or sibling product domains.
 
 ## Data & persistence
 
 Owns `TokenUsageSnapshot`, `GlobalBudgetSetting`, and `AccountBudgetSetting` in
-`apps/opencrane/prisma/schema/spend.prisma`.
+`apps/opencrane/prisma/schema/spend.prisma`. Every row carries `siloId`; budget primary keys and
+token-usage uniqueness include that silo, so two organizations may use the same account and
+currency coordinates without sharing data.
 
 ## See also
 

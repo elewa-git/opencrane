@@ -591,105 +591,6 @@
           }
         }
       },
-      "EntitledUser": {
-        "type": "object",
-        "description": "A local principal displayed in the MCP access editor or its selectable directory.",
-        "required": [
-          "id",
-          "name",
-          "initials",
-          "color"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable local Principal identifier used by authorization grants."
-          },
-          "name": {
-            "type": "string",
-            "description": "Display name shown in the access editor."
-          },
-          "initials": {
-            "type": "string",
-            "description": "Initials derived from the display name for an avatar."
-          },
-          "color": {
-            "type": "string",
-            "description": "Deterministic avatar colour derived from the identifier."
-          }
-        }
-      },
-      "EntitledGroup": {
-        "type": "object",
-        "description": "A local group that can receive an MCP authorization grant.",
-        "required": [
-          "id",
-          "name"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable local Group identifier used by authorization grants."
-          },
-          "name": {
-            "type": "string",
-            "description": "Display name shown in the access editor. Authorization uses the identifier, not this value."
-          }
-        }
-      },
-      "McpAccessPolicy": {
-        "type": "object",
-        "description": "The user and group grants managed by the MCP access editor for one server. It does not list authorization grants managed by other sources.",
-        "required": [
-          "serverId",
-          "groups",
-          "users"
-        ],
-        "properties": {
-          "serverId": {
-            "type": "string",
-            "description": "Identifier of the governed server."
-          },
-          "groups": {
-            "type": "array",
-            "description": "Groups with an active allow grant managed by the MCP access editor.",
-            "items": {
-              "$ref": "#/components/schemas/EntitledGroup"
-            }
-          },
-          "users": {
-            "type": "array",
-            "description": "Principals with an active allow grant managed by the MCP access editor.",
-            "items": {
-              "$ref": "#/components/schemas/EntitledUser"
-            }
-          }
-        }
-      },
-      "McpDirectory": {
-        "type": "object",
-        "description": "The users and groups that an organisation administrator can select when editing MCP access.",
-        "required": [
-          "users",
-          "groups"
-        ],
-        "properties": {
-          "users": {
-            "type": "array",
-            "description": "All local principals eligible to receive an MCP authorization grant.",
-            "items": {
-              "$ref": "#/components/schemas/EntitledUser"
-            }
-          },
-          "groups": {
-            "type": "array",
-            "description": "All local groups eligible to receive an MCP authorization grant.",
-            "items": {
-              "$ref": "#/components/schemas/EntitledGroup"
-            }
-          }
-        }
-      },
       "OciImageValidationSubmission": {
         "type": "object",
         "description": "An organisation-admin request to admit one exact published OCI image. The idempotency key makes a retried request return the same saved record.",
@@ -2345,7 +2246,7 @@
     "/mcp/servers": {
       "get": {
         "operationId": "listMcpGovernanceServers",
-        "summary": "List every catalogue server regardless of status (org-admin governance view)",
+        "summary": "List every catalogue server after a current Organization/Administer grant check",
         "tags": [
           "MCP Operator"
         ],
@@ -2364,7 +2265,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2466,7 +2367,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2491,7 +2392,7 @@
     "/mcp/servers/{id}/approve": {
       "post": {
         "operationId": "approveMcpServer",
-        "summary": "Approve a server (pending-review → approved). Org-admin only",
+        "summary": "Approve a server (pending-review → approved). Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -2517,7 +2418,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2542,7 +2443,7 @@
     "/mcp/servers/{id}/publish": {
       "post": {
         "operationId": "publishMcpServer",
-        "summary": "Publish a server (approved → published). Org-admin only",
+        "summary": "Publish a server (approved → published). Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -2568,7 +2469,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2593,7 +2494,7 @@
     "/mcp/servers/{id}/reject": {
       "post": {
         "operationId": "rejectMcpServer",
-        "summary": "Reject a server (→ disabled). Org-admin only",
+        "summary": "Reject a server (→ disabled). Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -2619,7 +2520,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2644,7 +2545,7 @@
     "/mcp/servers/{id}/enabled": {
       "post": {
         "operationId": "setMcpServerEnabled",
-        "summary": "Toggle a server's availability (true → published, false → disabled). Org-admin only",
+        "summary": "Toggle a server's availability (true → published, false → disabled). Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -2698,147 +2599,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/mcp/servers/{id}/access": {
-      "get": {
-        "operationId": "getMcpAccessPolicy",
-        "summary": "Read the authorization grants for an MCP server. Org-admin only",
-        "tags": [
-          "MCP Operator"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Access policy.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpAccessPolicy"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not an organisation admin.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "setMcpAccessPolicy",
-        "summary": "Replace the authorization grants for an MCP server. Org-admin only",
-        "tags": [
-          "MCP Operator"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "groupIds",
-                  "principalIds"
-                ],
-                "properties": {
-                  "groupIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "Stable local Group identifiers."
-                  },
-                  "principalIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "Stable local Principal identifiers."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Access policy updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpAccessPolicy"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "groupIds (array) and principalIds (array) are required.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2863,7 +2624,7 @@
     "/mcp/oci-image-validations": {
       "post": {
         "operationId": "submitOciImageValidation",
-        "summary": "Save an OCI image admission job. Org-admin only",
+        "summary": "Save an OCI image admission job. Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -2899,7 +2660,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2934,7 +2695,7 @@
     "/mcp/oci-image-validations/{id}": {
       "get": {
         "operationId": "getOciImageValidation",
-        "summary": "Read one saved OCI image admission. Org-admin only",
+        "summary": "Read one saved OCI image admission. Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -2970,7 +2731,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2995,7 +2756,7 @@
     "/mcp/oci-image-validations/{id}/server": {
       "post": {
         "operationId": "promoteOciImageValidationToMcpServer",
-        "summary": "Create an MCP server revision from an imported OCI image and start discovery. Org-admin only",
+        "summary": "Create an MCP server revision from an imported OCI image and start discovery. Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -3125,7 +2886,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3156,37 +2917,6 @@
           },
           "503": {
             "description": "MCP runtime authority is unavailable.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/mcp/directory": {
-      "get": {
-        "operationId": "getMcpDirectory",
-        "summary": "List the selectable users and groups for the access editor. Org-admin only",
-        "tags": [
-          "MCP Operator"
-        ],
-        "responses": {
-          "200": {
-            "description": "Directory.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpDirectory"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not an organisation admin.",
             "content": {
               "application/json": {
                 "schema": {
@@ -14163,7 +13893,8 @@
                         "issuer",
                         "groups",
                         "isPlatformOperator",
-                        "isOrgAdmin"
+                        "isOrgAdmin",
+                        "productCapabilities"
                       ],
                       "properties": {
                         "sub": {
@@ -14186,7 +13917,20 @@
                         },
                         "isOrgAdmin": {
                           "type": "boolean",
-                          "description": "True when the authenticated middleware admitted organisation administration authority. Introspection only; the API remains the enforcement point."
+                          "description": "Legacy identity-role projection. Product interfaces must use productCapabilities.administerOrganization; the API remains the enforcement point."
+                        },
+                        "productCapabilities": {
+                          "type": "object",
+                          "required": [
+                            "administerOrganization"
+                          ],
+                          "description": "Current product capabilities read from the central authorization authority. These guide the UI; protected routes repeat authorization in their own transaction.",
+                          "properties": {
+                            "administerOrganization": {
+                              "type": "boolean",
+                              "description": "Whether the local Principal currently holds organization:administer for this silo."
+                            }
+                          }
                         },
                         "clusterTenant": {
                           "type": [

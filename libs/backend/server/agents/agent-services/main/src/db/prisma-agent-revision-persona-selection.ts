@@ -1,14 +1,13 @@
+import { randomUUID } from "node:crypto";
+
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, PersonaRevisionState, type Prisma } from "@prisma/client";
 
 import type { AgentRevisionContent } from "@opencrane/models/agents";
-import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
-import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 
 import { AgentRevisionPersonaSelectionMaterializationCodes, type AgentRevisionPersonaSelectionRepository, type MaterializeAgentRevisionPersonaSelectionCommand, type MaterializeAgentRevisionPersonaSelectionResult, type MaterializePersonalAgentPersonaSelectionCommand, type MaterializePersonalAgentPersonaSelectionResult } from "../agent-revision-persona-selection.types";
+import { PersonalAgentSelectedResourceKinds, type PersonalAgentProductEffects } from "../personal-agent-product-effects.types";
+import { PrismaPersonalAgentProductEffectsAuthority } from "../prisma-personal-agent-product-effects";
 import { _AGENT_REVISION_INCLUDE, _AgentRevisionContentFromRow, PrismaAgentRevisionWriterRepository } from "./prisma-agent-revision-writer";
-
-/** Capability catalogue recorded when an approved persona is published into an AgentRevision. */
-const _PERSONA_SELECTION_CATALOG_ID = "opencrane-personal-agent-persona-selection";
 
 /**
  * Prisma strategy that changes only the persona selected by a personal AgentRevision.
@@ -24,11 +23,14 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 {
 	/** Transaction-scoped ORM client supplied by the owning unit of work. */
 	private readonly transaction: Prisma.TransactionClient;
+	/** Shared product-effect adapter bound to the owning transaction. */
+	private readonly productEffects: PersonalAgentProductEffects;
 
 	/** Creates the strategy over a transaction that the caller will commit or roll back. */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, productEffects: PersonalAgentProductEffects | null = null)
 	{
 		this.transaction = transaction;
+		this.productEffects = productEffects ?? new PrismaPersonalAgentProductEffectsAuthority(transaction);
 	}
 
 	/**
@@ -36,14 +38,14 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 	 *
 	 * Called by: {@link materializeForOwner} after owner lookup and
 	 * `PrismaPersonalAgentBootstrapRepository` during completed-onboarding repair. The caller owns
-	 * the transaction, so a stale active pointer or audit failure rejects the attempt before any of
-	 * this method's writes can commit.
+	 * the transaction, so a stale active pointer or central admission failure rejects the attempt
+	 * before any of this method's writes can commit.
 	 *
-	 * @returns `Materialized` after staging the published successor and audit, `AlreadyCurrent` when
+	 * @returns `Materialized` after staging the admitted published successor, `AlreadyCurrent` when
 	 * the source already selects the target, `StaleSource` when the lineage moved, or `Unavailable`
 	 * when the persona, service, ownership, or publication evidence fails closed.
-	 * @throws When the active-pointer comparison loses after the draft write, or Prisma or audit
-	 * persistence fails; the caller must roll back the transaction.
+	 * @throws When central admission fails, the active-pointer comparison loses after the draft
+	 * write, or Prisma persistence fails; the caller must roll back the transaction.
 	 */
 	async materialize(command: MaterializeAgentRevisionPersonaSelectionCommand): Promise<MaterializeAgentRevisionPersonaSelectionResult>
 	{
@@ -82,12 +84,26 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 			return _Stale(command.expectedSourceRevisionId);
 		if (source.personaRevisionId === command.targetPersonaRevisionId)
 		{
+			await this.productEffects.reconcileCurrent({ siloId: command.siloId, principalId: command.principalId, subjectId: command.subjectId }, { agentServiceId: service.id, agentRevisionId: source.id, personaProfileId: target.personaProfileId, modelDefinitionId: source.modelDefinitionId }, command.materializedAt);
 			return { status: AgentRevisionPersonaSelectionMaterializationCodes.AlreadyCurrent, agentRevisionId: source.id, sourceRevisionId: source.id };
 		}
 
-		// 5. Copy all executable content and replace only the persona revision reference.
+		// 5. Preallocate the successor and admit through the existing service and selected Persona.
+		const agentRevisionId = randomUUID();
+		const productCommand = {
+			caller: { siloId: command.siloId, principalId: command.principalId, subjectId: command.subjectId },
+			source: { agentServiceId: service.id, agentRevisionId: source.id, personaProfileId: sourcePersona.personaProfileId, modelDefinitionId: source.modelDefinitionId },
+			target: { agentServiceId: service.id, agentRevisionId, personaProfileId: target.personaProfileId, modelDefinitionId: source.modelDefinitionId },
+			now: command.materializedAt,
+			selectedResource: PersonalAgentSelectedResourceKinds.Persona,
+			argumentsValue: { agentServiceId: command.agentServiceId, sourceRevisionId: source.id, targetPersonaRevisionId: command.targetPersonaRevisionId, materializedAt: command.materializedAt.toISOString() },
+		};
+		await this.productEffects.admitRevisionSelection(productCommand);
+
+		// 6. Copy all executable content and replace only the persona revision reference.
 		const content: AgentRevisionContent = { ..._AgentRevisionContentFromRow(source), personaRevisionId: command.targetPersonaRevisionId };
 		const cmd = {
+			agentRevisionId,
 			siloId: command.siloId,
 			agentServiceId: command.agentServiceId,
 			revision: source.revision + 1,
@@ -101,7 +117,10 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 		const task = new PrismaAgentRevisionWriterRepository(this.transaction);
 		const draft = await task.createDraft(cmd);
 
-		// 6. Publish the revision and repoint the service while the caller owns the transaction.
+		// 7. Project the successor's exact grants after persistence, then admit publication.
+		await this.productEffects.admitRevisionPublication(productCommand);
+
+		// 8. Publish the revision and repoint the service while the caller owns the transaction.
 		await this.transaction.agentRevision.update({ where: { id: draft.id }, data: { state: AgentRevisionState.Published, publishedAt: command.materializedAt } });
 		const activated = await this.transaction.agentService.updateMany({
 			where: { id: service.id, siloId: command.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: source.id },
@@ -109,7 +128,6 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 		});
 		if (activated.count !== 1)
 			throw new Error("personal Agent revision selection lost its active-revision comparison");
-		await __AppendAuditDecision(this.transaction, this._BuildAuditDecision(command, source.id, draft.id, draft.digest));
 		return { status: AgentRevisionPersonaSelectionMaterializationCodes.Materialized, agentRevisionId: draft.id, sourceRevisionId: source.id };
 	}
 
@@ -122,8 +140,8 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 	 *
 	 * @returns `NotApplicable` when the owner has no personal service, `Unavailable` when lookup is
 	 * invalid or ambiguous, or the complete result from {@link materialize} for one service.
-	 * @throws When delegated publication or audit persistence fails; the caller must roll back the
-	 * transaction.
+	 * @throws When delegated central admission or publication persistence fails; the caller must
+	 * roll back the transaction.
 	 */
 	async materializeForOwner(command: MaterializePersonalAgentPersonaSelectionCommand): Promise<MaterializePersonalAgentPersonaSelectionResult>
 	{
@@ -153,7 +171,10 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 		const service = services[0];
 		if (services.length !== 1 || service === undefined || service.activeRevisionId === null)
 			return _Unavailable("");
-		return this.materialize({ ...command, agentServiceId: service.id, expectedSourceRevisionId: service.activeRevisionId });
+		const caller = await this.productEffects.resolveCaller(command.siloId, command.subjectId);
+		if (caller === null)
+			return _Unavailable("");
+		return this.materialize({ ...command, principalId: caller.principalId, agentServiceId: service.id, expectedSourceRevisionId: service.activeRevisionId });
 	}
 
 	/** Reads one approved persona revision owned by the exact silo subject. */
@@ -165,33 +186,6 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 		});
 	}
 
-	/** Builds append-only evidence for the exact persona-only AgentRevision publication. */
-	private _BuildAuditDecision(command: MaterializeAgentRevisionPersonaSelectionCommand, sourceRevisionId: string, agentRevisionId: string, agentRevisionDigest: string)
-	{
-		const argumentsDigest = __DigestCanonicalJson({ agentServiceId: command.agentServiceId, sourceRevisionId, targetPersonaRevisionId: command.targetPersonaRevisionId, materializedAt: command.materializedAt.toISOString() });
-		const effectiveAuthorizationDigest = __DigestCanonicalJson({ actor: command.subjectId, siloId: command.siloId, sourceRevisionId, targetPersonaRevisionId: command.targetPersonaRevisionId, agentRevisionDigest });
-		const decisionDigest = __DigestCanonicalJson({ argumentsDigest, effectiveAuthorizationDigest, action: "publish", resourceId: command.agentServiceId });
-		return {
-			decisionDigest,
-			siloId: command.siloId,
-			actorKind: "user" as const,
-			actorId: command.subjectId,
-			resourceKind: "agent-service",
-			resourceId: command.agentServiceId,
-			agentServiceId: command.agentServiceId,
-			agentRevisionId,
-			action: "publish",
-			catalogId: _PERSONA_SELECTION_CATALOG_ID,
-			catalogRevision: 1,
-			catalogDigest: __DigestCanonicalJson({ catalog: _PERSONA_SELECTION_CATALOG_ID, revision: 1 }),
-			argumentsDigest,
-			policyRevisionHash: __DigestCanonicalJson({ policy: "personal-agent-persona-selection", revision: 1 }),
-			effectiveAuthorizationDigest,
-			outcome: "allow" as const,
-			reasonCode: "approved_persona_selected",
-			decidedAt: command.materializedAt,
-		};
-	}
 }
 
 /** Returns an unavailable result bound to the source the caller supplied. */
@@ -221,7 +215,7 @@ function _ValidOwnerCommand(command: MaterializePersonalAgentPersonaSelectionCom
 /** Validates the known service and source fields in addition to the common owner command. */
 function _ValidExactCommand(command: MaterializeAgentRevisionPersonaSelectionCommand): boolean
 {
-	return _ValidOwnerCommand(command) && _Present(command.agentServiceId) && _Present(command.expectedSourceRevisionId);
+	return _ValidOwnerCommand(command) && _Present(command.principalId) && _Present(command.agentServiceId) && _Present(command.expectedSourceRevisionId);
 }
 
 /** Returns whether a command field carries a non-empty identifier or message. */

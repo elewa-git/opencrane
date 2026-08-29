@@ -3,10 +3,11 @@ import { Buffer } from "node:buffer";
 import express from "express";
 import type { Express } from "express";
 import * as k8s from "@kubernetes/client-node";
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import type { ProviderGatewayAuthorizationFactory } from "../provider-gateway-authority.types";
 import { providerByokRouter } from "../routes/provider-byok";
 
 /** In-memory provider_credentials store backing the mock Prisma client. */
@@ -33,7 +34,7 @@ function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map
       && (where.clusterTenant === undefined || r.clusterTenant === where.clusterTenant)
       && (where.publicModelName === undefined || r.publicModelName === where.publicModelName)
       && (where.isDefault === undefined || r.isDefault === where.isDefault));
-  return {
+	const client = {
     modelDefinition: {
       findMany: async function _mFindMany(args: { where: Record<string, unknown>; take?: number })
       {
@@ -104,6 +105,20 @@ function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map
       },
     },
   } as unknown as PrismaClient;
+	Object.assign(client, { $transaction: async function _Transaction(operation: (transaction: PrismaClient) => Promise<unknown>) { return operation(client); } });
+	return client;
+}
+
+/** Build a central authority stub with an explicit allow or deny decision. */
+function _Authorization(allow: boolean): ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>
+{
+	return (function _CreateAuthorization()
+	{
+		return {
+			admitPrincipal: async function _Admit() { return { outcome: allow ? "allow" : "deny" }; },
+			listPrincipalEntitled: async function _List(command: { resources: readonly unknown[] }) { return allow ? command.resources : []; },
+		};
+	}) as unknown as ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>;
 }
 
 /** A k8s 404 error shaped like the client's NotFound, used to drive the create path. */
@@ -142,15 +157,15 @@ function _mockCoreApi(secrets: Map<string, k8s.V1Secret>): k8s.CoreV1Api
 }
 
 /**
- * Mount only the BYOK router over the supplied stores, seeding an org-admin session by default so
- * the `_RequireOrgAdmin`-gated mutations pass. Pass `{ isOrgAdmin: false }` to exercise the 403 path.
+ * Mount only the BYOK router over the supplied stores, granting the default caller's explicit
+ * Organization/Administer admission. Pass `{ isOrgAdmin: false }` to exercise a denied decision.
  */
 function _buildApp(store: Map<string, Row>, secrets: Map<string, k8s.V1Secret>, user: { isOrgAdmin: boolean } = { isOrgAdmin: true }, models: Map<string, Row> = new Map()): Express
 {
   const app = express();
   app.use(express.json());
   app.use(function _seedSession(req, _res, next) { (req as unknown as { session: { authUser: { isOrgAdmin: boolean } } }).session = { authUser: user }; next(); });
-  app.use("/api/v1/providers/byok", providerByokRouter(_mockPrisma(store, models), _mockCoreApi(secrets), _NS));
+  app.use("/api/v1/providers/byok", providerByokRouter(_mockPrisma(store, models), _mockCoreApi(secrets), _NS, function _Caller() { return { siloId: "acme", principalId: "principal-1" }; }, _Authorization(user.isOrgAdmin)));
   return app;
 }
 
@@ -243,7 +258,7 @@ describe("providerByokRouter", function _suite()
     expect(Buffer.from(secrets.get("byok-provider-key-gemini")!.data!.apiKey, "base64").toString("utf8")).toBe("key-2");
   });
 
-  it("denies a non-org-admin caller with 403 (mutations are org-admin only)", async function _denyNonAdmin()
+  it("denies a caller without Organization/Administer with 403", async function _denyNonAdmin()
   {
     const store = new Map<string, Row>();
     const secrets = new Map<string, k8s.V1Secret>();
@@ -251,7 +266,7 @@ describe("providerByokRouter", function _suite()
     const res = await request(app).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-live-123" });
 
     expect(res.status).toBe(403);
-    expect(res.body.code).toBe("FORBIDDEN_NOT_ORG_ADMIN");
+    expect(res.body.code).toBe("FORBIDDEN");
     expect(secrets.size).toBe(0);
     expect(store.size).toBe(0);
   });

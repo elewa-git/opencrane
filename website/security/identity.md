@@ -13,7 +13,8 @@ Current organisation membership is checked before a run is admitted. Accepted me
 delegated subject and scope evidence are frozen into the run input snapshot.
 
 A **personal** run always resolves to that one authenticated person — it can never be admitted as
-someone else, and it can never pick up a group's or another user's grants. A **managed** agent
+someone else. It may inherit grants through Groups that current product membership places that
+Principal in, but it can never pick up another person's direct grants. A **managed** agent
 never resolves to a human at all: it runs as its own `agent-service:<id>` principal, verified
 against a separately signed fleet-membership assertion, with no path back to the administrator who
 published or triggered it. See
@@ -55,9 +56,15 @@ Do not use a Kubernetes token as evidence that a run is allowed. It proves workl
 the database assignment proves which exact work that identity may perform.
 :::
 
+Product permission is decided separately through the
+[central authorization authority](/integrators/authorization-authority). NetworkPolicy and
+Kubernetes RBAC constrain infrastructure reachability; neither grants access to a skill, MCP tool,
+artifact, conversation, model, dataset, or channel target.
+
 ## Revocation and cancellation
 
-Session revocation stops new human requests. Run cancellation is a durable state transition:
+Session revocation stops new human requests. Membership or grant revocation also blocks the next
+external action admission even when a run has an older frozen ceiling. Run cancellation is a durable state transition:
 OpenCrane fences the exact attempt, sends a positive cancel command when possible and authorises
 cleanup of only the claimed Pod. Late candidates are rejected.
 

@@ -57,9 +57,14 @@ export function _CreateMaterializePersonalConfigurationChangeHandler(dependencie
 /** Maps a refusal reason to its HTTP status code. */
 function _materializationDenialStatus(reason: PersonalConfigurationMaterializationCodes): number
 {
-	if (reason === PersonalConfigurationMaterializationCodes.PersistenceUnavailable) return 503;
-	if (reason === PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner) return 404;
-	if (reason === PersonalConfigurationMaterializationCodes.NotAccepted || reason === PersonalConfigurationMaterializationCodes.StaleProposal) return 409;
+	if (reason === PersonalConfigurationMaterializationCodes.PersistenceUnavailable)
+		return 503;
+	if (reason === PersonalConfigurationMaterializationCodes.AuthorizationDenied)
+		return 403;
+	if (reason === PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner)
+		return 404;
+	if (reason === PersonalConfigurationMaterializationCodes.NotAccepted || reason === PersonalConfigurationMaterializationCodes.StaleProposal)
+		return 409;
 	return 422;
 }
 

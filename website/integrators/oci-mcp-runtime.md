@@ -5,6 +5,8 @@ image in a one-use Kubernetes Job. Registration, grants, approvals and durable r
 the control plane; an uploaded image never runs inside the generic agent runtime.
 
 > See also: [Governed agent runtime](/integrators/agent-runtime) (run and approval boundaries),
+> [Governed packages and container images](/integrators/governed-packages) (artifact and image model),
+> [Central authorization authority](/integrators/authorization-authority) (shared MCP and skill permission model),
 > [Manage tools with MCP](/guide/tools) (administrator workflow), and
 > [Identity and runtime authentication](/security/identity) (workload proof).
 
@@ -28,7 +30,7 @@ membership and grant resolution before a tool revision enters the run's frozen c
 runtime proposes an allowed tool call
        │
        ▼
-OpenCrane validates proof, arguments and approval
+OpenCrane validates assignment, current authorization, arguments and approval
        │
        ▼
 save invocation + issue claim for exact OCI digest

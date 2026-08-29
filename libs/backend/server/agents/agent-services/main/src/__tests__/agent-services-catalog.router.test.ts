@@ -11,7 +11,7 @@ function _dependencies(overrides: Partial<AgentServicesRouterDependencies> = {})
 {
 	return {
 		lifecycle: { listManagedServices: vi.fn().mockResolvedValue([]) },
-		resolveCaller: function _caller() { return { siloId: "silo-1", principalId: "principal-1", externalSubject: "user-1", isOrgAdmin: false }; },
+		resolveCaller: function _caller() { return { siloId: "silo-1", principalId: "principal-1", externalSubject: "user-1" }; },
 		logger: { error: vi.fn() } as unknown as Logger,
 		...overrides,
 	} as unknown as AgentServicesRouterDependencies;
@@ -33,7 +33,7 @@ describe("managed agent services catalogue router", function _suite()
 		const response = await request(_app(_dependencies({ lifecycle: { listManagedServices } } as unknown as Partial<AgentServicesRouterDependencies>))).get("/api/v1/agent-services/");
 		expect(response.status).toBe(200);
 		expect(response.body.services).toHaveLength(1);
-		expect(listManagedServices).toHaveBeenCalledWith("silo-1");
+		expect(listManagedServices).toHaveBeenCalledWith({ siloId: "silo-1", principalId: "principal-1", externalSubject: "user-1" });
 	});
 
 	it("requires a signed-in caller before catalogue discovery", async function _requiresCaller()

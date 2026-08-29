@@ -18,7 +18,8 @@ enum ThirdPartySourceItemKind {
 
 model ThirdPartySource {
   id           String                 @id @default(cuid())
-  name         String                 @unique
+  siloId       String                 @map("silo_id")
+  name         String
   kind         ThirdPartySourceKind
   status       ThirdPartySourceStatus @default(PendingApproval)
   originUrl    String                 @map("origin_url")
@@ -31,6 +32,8 @@ model ThirdPartySource {
   items        ThirdPartySourceItem[]
   mcpServers   McpServer[]
 
+  @@unique([siloId, name])
+  @@index([siloId, createdAt])
   @@map("third_party_sources")
 }
 

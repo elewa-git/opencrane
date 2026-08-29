@@ -75,7 +75,7 @@ export interface McpTaskRepository
 	/** Save one matching caller response idempotently. */
 	recordInput(siloId: string, principalId: string, taskId: string, response: McpTaskInputResponse): Promise<McpTaskRecord | null>;
 	/** Create the mutually exclusive task-owned ToolInvocation and move the task to queued. */
-	admitToolInvocation(siloId: string, taskId: string, callDigest: string): Promise<McpTaskRecord | null>;
+	admitAuthorizedToolInvocation(siloId: string, taskId: string, callDigest: string): Promise<McpTaskRecord | null>;
 	/** Save one bounded pre-dispatch terminal failure idempotently. */
 	recordFailure(siloId: string, taskId: string, callDigest: string, failureCode: string): Promise<McpTaskRecord | null>;
 	/** Cancel before provider dispatch and close any pending MCP execution. */

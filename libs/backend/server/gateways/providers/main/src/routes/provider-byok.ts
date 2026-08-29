@@ -1,14 +1,23 @@
 import { Router } from "express";
 import * as k8s from "@kubernetes/client-node";
 import { ByokProvider, type ProviderKeyStatus } from "@opencrane/contracts";
-import { _RequireOrgAdmin } from "@opencrane/backend/server/infra/auth";
-import type { PrismaClient, ProviderCredential as PrismaProviderCredential } from "@prisma/client";
+import type { Prisma, PrismaClient, ProviderCredential as PrismaProviderCredential } from "@prisma/client";
+import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
 import { _log } from "../log";
 import { _DeprovisionByokKey, _ProvisionByokKey } from "@opencrane/backend/server/gateways/model-routing";
+import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCallerResolver } from "../provider-gateway-authority.types";
+import { _RequireProviderGatewayAdministration, _RequireProviderGatewayCaller, _ResolveProviderGatewayCaller, _SendProviderGatewayAuthorizationError } from "../provider-gateway-authorization";
+import { PrismaProviderGatewayUnitOfWork } from "../prisma-provider-gateway-unit-of-work";
 
 /** The providers a raw BYOK key may be set for; mirrors the {@link ByokProvider} contract union. */
 const _BYOK_PROVIDERS = Object.values(ByokProvider) as readonly string[];
+
+/** Build the stable governed connection id for one silo-wide BYOK provider. */
+function _ByokProviderConnectionId(provider: string): string
+{
+	return `byok:${provider}`;
+}
 
 /**
  * Build the read-only status for one provider from its credential row, or from the absence of one.
@@ -42,31 +51,45 @@ function _toStatus(provider: string, row: PrismaProviderCredential | undefined):
  * boot-time bootstrap can reuse it; this router is the HTTP wrapper (validation + status DTO).
  * Reads return presence + timestamps only — the key is never echoed back.
  *
- * Authz: the silo-wide key spends real money and backs every model call, so mutations are gated by
- * `_RequireOrgAdmin` — only an IdP-verified org admin may set or remove it. Reads stay open.
+ * The silo-wide key spends real money and backs every model call. Reads filter stable BYOK
+ * `ProviderConnection` resources; mutations explicitly admit the silo's
+ * `Organization/Administer` capability before any custody or registration effect.
  *
  * @param prisma            - Prisma client used for the credential record.
  * @param coreApi           - Kubernetes Core V1 API client for Secret writes.
  * @param operatorNamespace - The operator's own namespace; where the key Secret is written.
  * @returns Configured Express router.
  */
-export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api, operatorNamespace: string): Router
+export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api, operatorNamespace: string, resolveCaller: ProviderGatewayCallerResolver = _ResolveProviderGatewayCaller, createAuthorization?: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>): Router
 {
   const router = Router();
+	const providers = new PrismaProviderGatewayUnitOfWork(prisma, createAuthorization);
 
   /** List BYOK key status for every supported provider (presence + timestamps, no key material). */
-  router.get("/", async function _listProviderKeys(_req, res)
+  router.get("/", async function _listProviderKeys(req, res)
   {
-    const rows = await prisma.providerCredential.findMany({
-      where: { scope: "Global", clusterTenant: null, provider: { in: [..._BYOK_PROVIDERS] } },
-    });
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
+	const result = await providers.run(async function _List(transaction, authorization)
+	{
+		const resources = _BYOK_PROVIDERS.map(provider => ({ kind: ProductAuthorizationResourceKinds.ProviderConnection, id: _ByokProviderConnectionId(provider) }));
+		const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources, nowEpochMs: Date.now() });
+		const entitledProviders = new Set(entitled.map(resource => resource.id.slice("byok:".length)));
+		const rows = await transaction.providerCredential.findMany({ where: { scope: "Global", clusterTenant: null, provider: { in: [...entitledProviders] } } });
+		return { entitledProviders, rows };
+	});
+	const rows = result.rows;
     const byProvider = new Map(rows.map(function _byProvider(row) { return [row.provider, row]; }));
-    res.json(_BYOK_PROVIDERS.map(function _status(provider) { return _toStatus(provider, byProvider.get(provider)); }));
+	res.json(_BYOK_PROVIDERS.filter(provider => result.entitledProviders.has(provider)).map(function _status(provider) { return _toStatus(provider, byProvider.get(provider)); }));
   });
 
   /** Set or refresh a provider's raw key (delegates the provisioning to {@link _ProvisionByokKey}). */
-  router.put("/:provider", _RequireOrgAdmin(), async function _setProviderKey(req, res)
+  router.put("/:provider", async function _setProviderKey(req, res)
   {
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
     const provider = String(req.params.provider ?? "").trim().toLowerCase();
     if (!_BYOK_PROVIDERS.includes(provider))
     {
@@ -80,14 +103,29 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
       return;
     }
 
-    const { litellmRegistered, row } = await _ProvisionByokKey({ prisma, coreApi, operatorNamespace, provider, apiKey, log: _log });
-    _log.info({ provider, litellmRegistered }, "byok provider key set");
-    res.json(_toStatus(provider, row));
+	try
+	{
+		const { litellmRegistered, row } = await providers.run(async function _Set(transaction, authorization)
+		{
+			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "set-byok-provider", provider });
+			return _ProvisionByokKey({ prisma: transaction, coreApi, operatorNamespace, provider, apiKey, log: _log });
+		});
+		_log.info({ provider, litellmRegistered }, "byok provider key set");
+		res.json(_toStatus(provider, row));
+	}
+	catch (caught)
+	{
+		if (!_SendProviderGatewayAuthorizationError(caught, res))
+			throw caught;
+	}
   });
 
   /** Remove a provider's key (delegates to {@link _DeprovisionByokKey}). */
-  router.delete("/:provider", _RequireOrgAdmin(), async function _deleteProviderKey(req, res)
+  router.delete("/:provider", async function _deleteProviderKey(req, res)
   {
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
     const provider = String(req.params.provider ?? "").trim().toLowerCase();
     if (!_BYOK_PROVIDERS.includes(provider))
     {
@@ -95,9 +133,21 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
       return;
     }
 
-    await _DeprovisionByokKey({ prisma, coreApi, operatorNamespace, provider });
-    _log.info({ provider }, "byok provider key removed");
-    res.status(204).send();
+	try
+	{
+		await providers.run(async function _Delete(transaction, authorization)
+		{
+			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "delete-byok-provider", provider });
+			await _DeprovisionByokKey({ prisma: transaction, coreApi, operatorNamespace, provider });
+		});
+		_log.info({ provider }, "byok provider key removed");
+		res.status(204).send();
+	}
+	catch (caught)
+	{
+		if (!_SendProviderGatewayAuthorizationError(caught, res))
+			throw caught;
+	}
   });
 
   return router;

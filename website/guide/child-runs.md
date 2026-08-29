@@ -6,8 +6,8 @@ OpenCrane every such delegation is a **child run**: a full agent run with its ow
 own budget, its own capability set, and its own audit trail, linked to the run that spawned it.
 
 ::: info Target design
-Child runs build on the run authority that is already implemented (run trees, capability proofs,
-input snapshots). The spawn tool and runtime behaviour land with the personal-agent runtime
+Child runs build on the run authority that is already implemented (run trees, central product
+authorization, input snapshots). The spawn tool and runtime behaviour land with the personal-agent runtime
 (Phase E of the [platform architecture](https://github.com/elewa-git/opencrane/blob/main/docs/design/personal-agent-platform-architecture.md);
 tracked in [#320](https://github.com/elewa-git/opencrane/issues/320)).
 :::
@@ -45,7 +45,7 @@ accountable:
   including everything it delegated" is one query. See [Manage cost](/guide/budgets).
 - **Limits are enforced at spawn time**: depth cap, fan-out cap, and child budgets carved from
   the parent's remainder. A runaway delegation tree cannot drain the parent.
-- **Audit sees the tree.** Each child's proposals, approvals, and execution receipts are recorded
+- **Audit sees the tree.** Each child's proposals, authorization decisions, approvals, and tool invocations are recorded
   against *its* identity, not blurred into the parent's. See [Review activity](/guide/audit).
 
 ## The parent brokers all context

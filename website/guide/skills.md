@@ -26,6 +26,12 @@ Published, a skill is an immutable **SkillRevision** whose content digest is wha
 contracts reference. There is no "latest" that can drift underneath a running agent: an agent
 revision pins the skill revisions it was reviewed with.
 
+Today a `SkillRevision` pins an immutable bundle in ArtifactStore; it is not itself an OCI image.
+Instruction skills need no separate container. Planned sandboxed Python skills will use a fixed
+OpenCrane runner image that loads the reviewed bundle. A future containerized-code class may instead
+pin its own governed OCI image when native libraries, another language, or custom binaries genuinely
+require one. See [Governed packages and container images](/integrators/governed-packages).
+
 ## The publication lifecycle
 
 Skills move from draft to shared ability through a governed pipeline:
@@ -100,4 +106,6 @@ department and organisation scopes. Until those surfaces are mounted, there is n
 end-user skill-publishing workflow — only the read-only catalogue above.
 
 > See also: [Agent delegation (child runs)](/guide/child-runs) ·
-> [Control access](/guide/permissions) · [Architecture](/advanced/architecture)
+> [Control access](/guide/permissions) ·
+> [Governed packages and container images](/integrators/governed-packages) ·
+> [Architecture](/advanced/architecture)

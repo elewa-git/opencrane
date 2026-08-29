@@ -76,7 +76,20 @@ identifiers are idempotent; stale, expired, out-of-order, malformed, or mismatch
 with a stable reason.
 
 Candidate admission creates durable `Preparing` work before the runtime can forget it. A process
-worker may retry provider-free preparation at most three times within five minutes. It then acquires
+cannot use the frozen snapshot as current permission: the same Serializable transaction rechecks
+the exact central effect grant and current lifecycle immediately before that row is created. MCP
+actions require the still-published `McpToolRevision/Invoke` grant, personal recall requires both
+`Dataset/Use` and `MemoryScope/Use`, and the built-in upgrade proposal requires `Persona/Use` for
+the exact profile behind the frozen revision. Revocation therefore blocks a candidate without
+accepting its id or creating its ToolInvocation.
+
+An allowed candidate carries structured evidence into that `ToolInvocation`: the local Principal,
+human-or-service actor kind, canonical resource/action coordinates, central decision digests,
+signed membership revision, exact AgentRevision/run/attempt/arguments digest, and current assignment
+digest. The evidence and candidate id commit together, so a rollback leaves neither reusable work nor
+an accepted runtime proposal.
+
+The process worker may retry provider-free preparation at most three times within five minutes. It then acquires
 a monotonic claim before calling a provider. An uncertain provider outcome is never treated as a
 failure that can be retried blindly: an adapter with a frozen idempotency key may repeat the exact
 request, an adapter with trustworthy readback may reconcile without repeating the effect, and every
@@ -121,6 +134,8 @@ before disconnecting Prisma.
   authenticated request principal into the steering caller and supplies the queue and clock. Its
   unit of work uses a server-derived request id, retries only rolled-back P2002/P2034 transactions
   three times, then verifies the committed row before reporting an idempotent replay or key conflict.
+  A new instruction also requires the current exact `AgentService/Invoke` grant in that transaction;
+  owner identity, steerable lifecycle, and the one-resume fence remain separate non-policy checks.
 - `_RuntimeSteeringOpenapiPaths` — contributes the steering contract to the server-owned API spec.
 
 Pure protocol decisions, Prisma adapters, provider executor construction, and recovery strategies

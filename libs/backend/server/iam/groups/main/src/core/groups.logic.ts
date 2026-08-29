@@ -1,8 +1,8 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import { GroupMembershipAuthorities } from "@opencrane/contracts";
 
-import type { GroupCreateCommand, GroupMutationResponse, GroupRepository, GroupResponse, GroupUpdateCommand } from "./groups.logic.types";
+import type { GroupCreateCommand, GroupMutationResponse, GroupResponse, GroupTransactionRepository, GroupUpdateCommand } from "./groups.logic.types";
 
 /** Holds the fields that become one group-management response. */
 interface _GroupRow
@@ -67,7 +67,7 @@ export class GroupReferenceNotFoundError extends Error {}
  * Called by: `PrismaGroupUnitOfWork._WithRepository`.
  * @see GroupRepository for the route-facing persistence contract.
  */
-export class PrismaGroupRepository implements GroupRepository
+export class PrismaGroupRepository implements GroupTransactionRepository
 {
 	/** Prisma transaction client for one group operation. */
 	private readonly prisma: Prisma.TransactionClient;
@@ -146,6 +146,7 @@ export class PrismaGroupRepository implements GroupRepository
 		}
 
 		const auditData = {
+			siloId,
 			action: "Created",
 			resource: `Group/${created.id}`,
 			message: `Group ${created.name} created in silo ${siloId}`,
@@ -216,6 +217,7 @@ export class PrismaGroupRepository implements GroupRepository
 
 		const parentChange = _ParentChange(current.parentId, body.parentId);
 		const auditData = {
+			siloId,
 			action: "Updated",
 			resource: `Group/${groupId}`,
 			message: `Group ${current.name} updated in silo ${siloId}; parent ${parentChange}`,
@@ -243,6 +245,7 @@ export class PrismaGroupRepository implements GroupRepository
 		await transaction.group.delete({ where: { id: groupId } });
 
 		const auditData = {
+			siloId,
 			action: "Deleted",
 			resource: `Group/${groupId}`,
 			message: `Group ${existing.name} deleted from silo ${siloId}`,
@@ -274,136 +277,6 @@ export class PrismaGroupRepository implements GroupRepository
 			throw new GroupReferenceNotFoundError("One or more principals were not found in this silo");
 		}
 	}
-}
-
-/**
- * Opens one Prisma transaction and delegates the operation to a transaction-bound repository.
- *
- * The groups router constructs this unit of work after resolving the authenticated caller's silo.
- *
- * Called by: `groupsRouter` in `../routes/groups.ts` and the function entry points below.
- * @see PrismaGroupRepository for the transaction-bound implementation.
- */
-export class PrismaGroupUnitOfWork implements GroupRepository
-{
-	/** Prisma client that creates repository transactions. */
-	private readonly prisma: PrismaClient;
-
-	/** Stores the Prisma client that opens each operation transaction. */
-	constructor(prisma: PrismaClient)
-	{
-		this.prisma = prisma;
-	}
-
-	/** Lists the caller's silo groups through one transaction-bound repository. */
-	list(siloId: string): Promise<GroupResponse[]>
-	{
-		return this._WithRepository(function _List(repository)
-		{
-			return repository.list(siloId);
-		});
-	}
-
-	/** Reads a group through one transaction-bound repository, or returns `null` when absent. */
-	get(siloId: string, groupId: string): Promise<GroupResponse | null>
-	{
-		return this._WithRepository(function _Get(repository)
-		{
-			return repository.get(siloId, groupId);
-		});
-	}
-
-	/** Creates the group, direct memberships, and audit entry through one transaction. */
-	create(siloId: string, body: GroupCreateCommand): Promise<GroupMutationResponse>
-	{
-		return this._WithRepository(function _Create(repository)
-		{
-			return repository.create(siloId, body);
-		});
-	}
-
-	/** Updates the group, direct memberships, and audit entry through one transaction. */
-	update(siloId: string, groupId: string, body: GroupUpdateCommand): Promise<GroupMutationResponse>
-	{
-		return this._WithRepository(function _Update(repository)
-		{
-			return repository.update(siloId, groupId, body);
-		});
-	}
-
-	/** Deletes the group and appends its audit entry through one transaction. */
-	delete(siloId: string, groupId: string): Promise<GroupMutationResponse>
-	{
-		return this._WithRepository(function _Delete(repository)
-		{
-			return repository.delete(siloId, groupId);
-		});
-	}
-
-	/** Binds a repository to the transaction client that Prisma passes to the callback. */
-	private _WithRepository<Result>(operation: (repository: GroupRepository) => Promise<Result>): Promise<Result>
-	{
-		return this.prisma.$transaction(async function _Run(transaction)
-		{
-			const repository = new PrismaGroupRepository(transaction);
-			return operation(repository);
-		});
-	}
-}
-
-/** Lists the groups that belong to one silo through the transaction-owning unit of work.
- *
- * Called by: package consumers that invoke the groups logic module directly.
- * @see PrismaGroupUnitOfWork.list
- */
-export function listGroups(prisma: PrismaClient, siloId: string): Promise<GroupResponse[]>
-{
-	const groups = new PrismaGroupUnitOfWork(prisma);
-	return groups.list(siloId);
-}
-
-/** Reads a group only when it belongs to the requested silo.
- *
- * Called by: package consumers that invoke the groups logic module directly.
- * @see PrismaGroupUnitOfWork.get
- */
-export function getGroup(prisma: PrismaClient, siloId: string, groupId: string): Promise<GroupResponse | null>
-{
-	const groups = new PrismaGroupUnitOfWork(prisma);
-	return groups.get(siloId, groupId);
-}
-
-/** Creates a group, its direct memberships, and its audit entry in one database transaction.
- *
- * Called by: package consumers that invoke the groups logic module directly.
- * @see PrismaGroupUnitOfWork.create
- */
-export function createGroup(prisma: PrismaClient, siloId: string, body: GroupCreateCommand): Promise<GroupMutationResponse>
-{
-	const groups = new PrismaGroupUnitOfWork(prisma);
-	return groups.create(siloId, body);
-}
-
-/** Updates a group and its direct memberships in one database transaction.
- *
- * Called by: package consumers that invoke the groups logic module directly.
- * @see PrismaGroupUnitOfWork.update
- */
-export function updateGroup(prisma: PrismaClient, siloId: string, groupId: string, body: GroupUpdateCommand): Promise<GroupMutationResponse>
-{
-	const groups = new PrismaGroupUnitOfWork(prisma);
-	return groups.update(siloId, groupId, body);
-}
-
-/** Deletes a group and records the deletion in one database transaction.
- *
- * Called by: package consumers that invoke the groups logic module directly.
- * @see PrismaGroupUnitOfWork.delete
- */
-export function deleteGroup(prisma: PrismaClient, siloId: string, groupId: string): Promise<GroupMutationResponse>
-{
-	const groups = new PrismaGroupUnitOfWork(prisma);
-	return groups.delete(siloId, groupId);
 }
 
 /** Trims, deduplicates, and sorts requested direct-member IDs before writing membership rows. */

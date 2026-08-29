@@ -73,7 +73,7 @@ async function _RecordResult(unitOfWork: McpOperatorUnitOfWork, input: McpEraPro
 				throw new WorkflowTaskTerminalError("MCP era-probe stored winner is unavailable.");
 			if (write.changed)
 			{
-				await transaction.mcp.appendAudit("Updated", `McpServer/${input.serverId}`, `MCP server era probe ${result.decision}`);
+				await transaction.mcp.appendAudit(input.siloId, "Updated", `McpServer/${input.serverId}`, `MCP server era probe ${result.decision}`);
 			}
 			return winner;
 		});
@@ -97,7 +97,7 @@ async function _RecordRetry(unitOfWork: McpOperatorUnitOfWork, input: McpEraProb
 			if (retry.exhausted && !stored)
 				throw new WorkflowTaskTerminalError("MCP era-probe exhausted result is unavailable.");
 			if (retry.exhausted && retry.changed)
-				await transaction.mcp.appendAudit("Updated", `McpServer/${input.serverId}`, "MCP server era probe retry limit exhausted");
+				await transaction.mcp.appendAudit(input.siloId, "Updated", `McpServer/${input.serverId}`, "MCP server era probe retry limit exhausted");
 			return stored;
 		});
 	});

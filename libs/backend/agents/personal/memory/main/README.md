@@ -38,6 +38,8 @@ and never calls Cognee.
 - `__SelectPersonalPreferenceFactIds(repository, unitOfWork, command)` — selects explicit,
   consented personal-preference metadata for the same coordinates.
 - `PrismaPersonalMemoryAdmissionRepository` — transaction-scoped Prisma adapter for both reads.
+- `PrismaRuntimePersonalMemoryEffectEligibilityAuthority` — rechecks that a frozen personal dataset
+  remains active on the same local Principal boundary before a recall effect is admitted.
 - `PersonalMemoryAdmissionRepository` / `PersonalMemoryAdmissionUnitOfWork` — ports that preserve
   the caller-owned admission transaction without exposing Prisma delegates to execution inputs.
 - `PersonalMemoryDatasetResolutionOutcomes` / `PersonalMemoryDatasetResolutionDenialReasons` — the

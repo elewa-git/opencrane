@@ -1,4 +1,4 @@
-/** MCP operator access and explicit resource-sharing OpenAPI components. */
+/** MCP operator and explicit resource-sharing OpenAPI components. */
 export const _McpIamOpenapiSchemas = {
 	McpCatalogServer: {
 		type: "object",
@@ -53,45 +53,6 @@ export const _McpIamOpenapiSchemas = {
 			serverId: { type: "string", description: "Identifier of the installed server." },
 			connectionStatus: { type: "string", enum: ["needs-credential", "shared-key"], description: "Recorded activation requirement: needs-credential requires an external custody flow, while shared-key records an administrator-managed shared key. This API does not activate either state." },
 			lastUsed: { type: ["string", "null"], format: "date-time", description: "ISO-8601 timestamp of the server's last use, or null when it has never been used." },
-		},
-	},
-	EntitledUser: {
-		type: "object",
-		description: "A local principal displayed in the MCP access editor or its selectable directory.",
-		required: ["id", "name", "initials", "color"],
-		properties: {
-			id: { type: "string", description: "Stable local Principal identifier used by authorization grants." },
-			name: { type: "string", description: "Display name shown in the access editor." },
-			initials: { type: "string", description: "Initials derived from the display name for an avatar." },
-			color: { type: "string", description: "Deterministic avatar colour derived from the identifier." },
-		},
-	},
-	EntitledGroup: {
-		type: "object",
-		description: "A local group that can receive an MCP authorization grant.",
-		required: ["id", "name"],
-		properties: {
-			id: { type: "string", description: "Stable local Group identifier used by authorization grants." },
-			name: { type: "string", description: "Display name shown in the access editor. Authorization uses the identifier, not this value." },
-		},
-	},
-	McpAccessPolicy: {
-		type: "object",
-		description: "The user and group grants managed by the MCP access editor for one server. It does not list authorization grants managed by other sources.",
-		required: ["serverId", "groups", "users"],
-		properties: {
-			serverId: { type: "string", description: "Identifier of the governed server." },
-			groups: { type: "array", description: "Groups with an active allow grant managed by the MCP access editor.", items: { $ref: "#/components/schemas/EntitledGroup" } },
-			users: { type: "array", description: "Principals with an active allow grant managed by the MCP access editor.", items: { $ref: "#/components/schemas/EntitledUser" } },
-		},
-	},
-	McpDirectory: {
-		type: "object",
-		description: "The users and groups that an organisation administrator can select when editing MCP access.",
-		required: ["users", "groups"],
-		properties: {
-			users: { type: "array", description: "All local principals eligible to receive an MCP authorization grant.", items: { $ref: "#/components/schemas/EntitledUser" } },
-			groups: { type: "array", description: "All local groups eligible to receive an MCP authorization grant.", items: { $ref: "#/components/schemas/EntitledGroup" } },
 		},
 	},
 	OciImageValidationSubmission: {

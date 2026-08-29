@@ -8,6 +8,7 @@ const ledgerRoot = join(prismaRoot, "prisma-migrations");
 const baseline = readFileSync(join(ledgerRoot, "20260826000000_0_9_2_baseline/migration.sql"), "utf8");
 const migration = readFileSync(join(ledgerRoot, "20260827000000_0_10_0_workflow_cutover/migration.sql"), "utf8");
 const sqlWorkloadRetirement = readFileSync(join(ledgerRoot, "20260829000000_retire_sql_workload_control_plane/migration.sql"), "utf8");
+const authorizationMigration = readFileSync(join(ledgerRoot, "20260829000000_central_authorization_authority/migration.sql"), "utf8");
 const targetBaseline = readFileSync(join(prismaRoot, "bootstrap/target-baseline.sql"), "utf8");
 const releasedCutoverChecksum = createHash("sha256").update(migration).digest("hex");
 
@@ -53,6 +54,19 @@ function _NormalizedSql(value)
 	return value.replace(/\s+/gu, " ").trim();
 }
 
+function _CanonicalJson(value)
+{
+	if (Array.isArray(value)) return `[${value.map(_CanonicalJson).join(",")}]`;
+	if (value !== null && typeof value === "object") return `{${Object.keys(value).sort().map(function _Entry(key) { return `${JSON.stringify(key)}:${_CanonicalJson(value[key])}`; }).join(",")}}`;
+	return JSON.stringify(value);
+}
+
+function _ProductAuthorizationCatalogue(sql)
+{
+	const match = /'capability-catalog-opencrane-product-authorization-v1',\s*'opencrane-product-authorization',\s*1,\s*'(sha256:[0-9a-f]{64})',\s*'(\[[^']+\])'::jsonb/su.exec(sql);
+	_Require(match !== null, "central product-authorization catalogue must be installed exactly once");
+	return { digest: match[1], payload: JSON.parse(match[2]) };
+}
 const ledgerDirectories = readdirSync(ledgerRoot, { withFileTypes: true }).filter(function _IsDirectory(entry) { return entry.isDirectory(); });
 _Require(ledgerDirectories.every(function _HasMigrationSql(entry) { return existsSync(join(ledgerRoot, entry.name, "migration.sql")); }), "every Prisma migration directory must contain migration.sql");
 
@@ -66,6 +80,56 @@ _Require(migration.startsWith("-- OpenCrane 0.9.2 to 0.10.0 workflow and OCI cut
 _Require(migration.match(/^BEGIN;$/gmu)?.length === 1, "the forward migration must open one transaction");
 _Require(migration.match(/^COMMIT;$/gmu)?.length === 1, "the forward migration must commit one transaction");
 _Require(migration.trimEnd().endsWith("COMMIT;"), "the forward migration must finish with its transaction commit");
+
+_Require(authorizationMigration.match(/^BEGIN;$/gmu)?.length === 1, "the central authorization migration must open one transaction");
+_Require(authorizationMigration.match(/^COMMIT;$/gmu)?.length === 1, "the central authorization migration must commit one transaction");
+_Require(authorizationMigration.trimEnd().endsWith("COMMIT;"), "the central authorization migration must finish with its transaction commit");
+_Require(authorizationMigration.includes('DROP TABLE "action_execution_receipts";'), "the central authorization migration must remove the replaced proof-bound receipt table");
+_Require(authorizationMigration.includes('DROP FUNCTION "enforce_action_execution_receipt_lifecycle"();'), "the central authorization migration must remove the replaced receipt trigger function");
+_Require(authorizationMigration.includes('DROP TYPE "ActionExecutionState";'), "the central authorization migration must remove the replaced receipt state type");
+_Require(authorizationMigration.includes('DROP TYPE "ActionReplayMode";'), "the central authorization migration must remove the replaced replay type");
+_Require(!targetBaseline.includes('CREATE TABLE "action_execution_receipts"'), "fresh databases must not install the replaced proof-bound receipt table");
+_Require(authorizationMigration.includes('CREATE TABLE "run_model_credential_mint_authorizations"'), "the central authorization migration must install the one-use model-key effect admission");
+_Require(targetBaseline.includes('CREATE TABLE "run_model_credential_mint_authorizations"'), "fresh databases must install the one-use model-key effect admission");
+for (const legacyTable of ["audit_log", "token_usage_snapshots", "global_budget_settings", "account_budget_settings", "third_party_sources"])
+{
+	_Require(authorizationMigration.includes(`EXISTS (SELECT 1 FROM "${legacyTable}")`), `the central authorization migration must reject unowned ${legacyTable} rows`);
+}
+_Require(authorizationMigration.includes("their silo ownership cannot be derived safely"), "the central authorization migration must explain its pre-release ownership cutoff");
+_Require(authorizationMigration.includes("ERRCODE = 'OC713'"), "the central authorization migration must expose the legacy ownership cutoff as OC713");
+for (const scopedColumn of [
+	'CREATE TABLE "audit_log" (\n    "id" SERIAL NOT NULL,\n    "silo_id" TEXT NOT NULL',
+	'CREATE TABLE "token_usage_snapshots" (\n    "id" SERIAL NOT NULL,\n    "silo_id" TEXT NOT NULL',
+	'CREATE TABLE "global_budget_settings" (\n    "id" INTEGER NOT NULL DEFAULT 1,\n    "silo_id" TEXT NOT NULL',
+	'CREATE TABLE "account_budget_settings" (\n    "silo_id" TEXT NOT NULL',
+	'CREATE TABLE "third_party_sources" (\n    "id" TEXT NOT NULL,\n    "silo_id" TEXT NOT NULL',
+])
+{
+	_Require(targetBaseline.includes(scopedColumn), `fresh databases must install scoped storage: ${scopedColumn.split("\n")[0]}`);
+}
+for (const siloKey of [
+	'audit_log_silo_id_timestamp_id_idx" ON "audit_log"("silo_id", "timestamp", "id")',
+	'token_usage_snapshots_silo_id_user_id_currency_key" ON "token_usage_snapshots"("silo_id", "user_id", "currency")',
+	'global_budget_settings_pkey" PRIMARY KEY ("silo_id", "id")',
+	'account_budget_settings_pkey" PRIMARY KEY ("silo_id", "user_id")',
+	'third_party_sources_silo_id_name_key" ON "third_party_sources"("silo_id", "name")',
+])
+{
+	const compactKey = siloKey.replace(/\s+/gu, "");
+	_Require(targetBaseline.replace(/\s+/gu, "").includes(compactKey) && authorizationMigration.replace(/\s+/gu, "").includes(compactKey), `fresh and upgraded databases must share silo key ${siloKey}`);
+}
+_Require(authorizationMigration.includes("'organization-membership-admin-bootstrap'"), "the upgrade projection must use the live organization-admin grant manager");
+_Require(authorizationMigration.includes("'organization:administer', 'organization', principal.\"silo_id\", 'allow', 0"), "the upgrade projection must match the live organization-admin grant priority");
+_Require(authorizationMigration.includes("('persona', 'persona-collection:create', 'persona-collection')"), "active members must receive the Persona creation root during upgrade");
+_Require(authorizationMigration.includes("ERRCODE = 'OC715'"), "the Persona owner projection must fail closed on ambiguous Principal identity");
+_Require(authorizationMigration.includes("'persona-creator-access'"), "existing Persona owners must receive the live creator-managed grants");
+_Require(authorizationMigration.includes("ERRCODE = 'OC716'"), "the pending approver projection must fail closed on ambiguous Principal identity");
+_Require(authorizationMigration.includes("'deferred-tool-approval-assignee'"), "pending tool approvals must receive the live assignee-managed grants");
+const targetAuthorizationCatalogue = _ProductAuthorizationCatalogue(targetBaseline);
+const migratedAuthorizationCatalogue = _ProductAuthorizationCatalogue(authorizationMigration);
+_Require(JSON.stringify(migratedAuthorizationCatalogue) === JSON.stringify(targetAuthorizationCatalogue), "fresh and upgraded databases must install the exact same product-authorization catalogue");
+const authorizationDigest = `sha256:${createHash("sha256").update(_CanonicalJson(targetAuthorizationCatalogue.payload)).digest("hex")}`;
+_Require(authorizationDigest === targetAuthorizationCatalogue.digest, "product-authorization catalogue digest must bind its canonical payload");
 _Require(!migration.includes("pg_advisory"), "the 0.10.0 migration must not restore retired migration preflights");
 _Require(!migration.includes("LOCK TABLE"), "the 0.10.0 migration must not restore write fencing");
 _RequireBefore('DROP TRIGGER IF EXISTS "run_outbox_events_monotonic"', 'DELETE FROM "run_outbox_events"', "the approved hard cutoff must disable the retired outbox deletion guard first");
@@ -240,6 +304,18 @@ for (const name of [
 ])
 {
 	_Require(migration.includes(_TargetFunction(name)), `forward migration must install exact target function ${name}`);
+}
+
+const reviewedWorkloadFunctionDigests = new Map([
+	["select_skill_workload_claim_candidate", "615c4ac4e29ef01706146071f9c6a2fca19f0cc5fb93412882b25f03b229123c"],
+	["enforce_skill_workload_bootstrap", "c8c6c1a327b27ed4959bbf354d9776c3977ba94bb3deb3d234d4d280588e2803"],
+	["enforce_skill_workload_authority", "34164554914543dde48e2a744489c9ece5724a00437a84df085f9b417c917e69"],
+	["cancel_ineligible_skill_workloads", "174601302d16d48721bdbf11dca6452e9a33d0b407ecbd4be70dd831339f6146"],
+]);
+for (const [name, reviewedDigest] of reviewedWorkloadFunctionDigests)
+{
+	const actualDigest = createHash("sha256").update(_NormalizedSql(_MigrationFunction(name))).digest("hex");
+	_Require(actualDigest === reviewedDigest, `rebuilt cutover must retain the exact reviewed workload function ${name}`);
 }
 
 console.log("0.9.2-to-0.10.0 Prisma migration contract: PASS");

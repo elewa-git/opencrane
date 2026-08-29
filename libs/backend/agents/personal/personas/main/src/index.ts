@@ -7,5 +7,7 @@ export type { PersonaAgentRevisionSelectionFactory } from "./profile/prisma-pers
 export { PersonaAgentRevisionSelectionStatuses } from "./approval/persona-authority.types";
 export type { PersonaAgentRevisionSelectionPort, SelectApprovedPersonaForPersonalAgentCommand, SelectApprovedPersonaForPersonalAgentResult } from "./approval/persona-authority.types";
 export { _CreatePersonaWorkflowEvidenceRepository } from "./profile/prisma-persona-workflow-evidence";
+export { PrismaRuntimePersonaEffectEligibilityAuthority } from "./profile/prisma-runtime-persona-effect-eligibility";
 export { PersonaWorkflowColours } from "./profile/persona-workflow-evidence.types";
 export type { PersonaWorkflowEvidenceRepository } from "./profile/persona-workflow-evidence.types";
+export type { RuntimePersonaEffectEligibility, RuntimePersonaEffectEligibilityCommand } from "./profile/runtime-persona-effect-eligibility.types";

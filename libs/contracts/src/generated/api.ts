@@ -63,7 +63,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List every catalogue server regardless of status (org-admin governance view) */
+        /** List every catalogue server after a current Organization/Administer grant check */
         get: operations["listMcpGovernanceServers"];
         put?: never;
         /** Register a remote MCP server and start its protocol check */
@@ -83,7 +83,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve a server (pending-review → approved). Org-admin only */
+        /** Approve a server (pending-review → approved). Requires Organization/Administer */
         post: operations["approveMcpServer"];
         delete?: never;
         options?: never;
@@ -100,7 +100,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Publish a server (approved → published). Org-admin only */
+        /** Publish a server (approved → published). Requires Organization/Administer */
         post: operations["publishMcpServer"];
         delete?: never;
         options?: never;
@@ -117,7 +117,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reject a server (→ disabled). Org-admin only */
+        /** Reject a server (→ disabled). Requires Organization/Administer */
         post: operations["rejectMcpServer"];
         delete?: never;
         options?: never;
@@ -134,26 +134,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Toggle a server's availability (true → published, false → disabled). Org-admin only */
+        /** Toggle a server's availability (true → published, false → disabled). Requires Organization/Administer */
         post: operations["setMcpServerEnabled"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/mcp/servers/{id}/access": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Read the authorization grants for an MCP server. Org-admin only */
-        get: operations["getMcpAccessPolicy"];
-        /** Replace the authorization grants for an MCP server. Org-admin only */
-        put: operations["setMcpAccessPolicy"];
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -169,7 +151,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Save an OCI image admission job. Org-admin only */
+        /** Save an OCI image admission job. Requires Organization/Administer */
         post: operations["submitOciImageValidation"];
         delete?: never;
         options?: never;
@@ -184,7 +166,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read one saved OCI image admission. Org-admin only */
+        /** Read one saved OCI image admission. Requires Organization/Administer */
         get: operations["getOciImageValidation"];
         put?: never;
         post?: never;
@@ -203,25 +185,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create an MCP server revision from an imported OCI image and start discovery. Org-admin only */
+        /** Create an MCP server revision from an imported OCI image and start discovery. Requires Organization/Administer */
         post: operations["promoteOciImageValidationToMcpServer"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/mcp/directory": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List the selectable users and groups for the access editor. Org-admin only */
-        get: operations["getMcpDirectory"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1729,40 +1694,6 @@ export interface components {
              */
             lastUsed?: string | null;
         };
-        /** @description A local principal displayed in the MCP access editor or its selectable directory. */
-        EntitledUser: {
-            /** @description Stable local Principal identifier used by authorization grants. */
-            id: string;
-            /** @description Display name shown in the access editor. */
-            name: string;
-            /** @description Initials derived from the display name for an avatar. */
-            initials: string;
-            /** @description Deterministic avatar colour derived from the identifier. */
-            color: string;
-        };
-        /** @description A local group that can receive an MCP authorization grant. */
-        EntitledGroup: {
-            /** @description Stable local Group identifier used by authorization grants. */
-            id: string;
-            /** @description Display name shown in the access editor. Authorization uses the identifier, not this value. */
-            name: string;
-        };
-        /** @description The user and group grants managed by the MCP access editor for one server. It does not list authorization grants managed by other sources. */
-        McpAccessPolicy: {
-            /** @description Identifier of the governed server. */
-            serverId: string;
-            /** @description Groups with an active allow grant managed by the MCP access editor. */
-            groups: components["schemas"]["EntitledGroup"][];
-            /** @description Principals with an active allow grant managed by the MCP access editor. */
-            users: components["schemas"]["EntitledUser"][];
-        };
-        /** @description The users and groups that an organisation administrator can select when editing MCP access. */
-        McpDirectory: {
-            /** @description All local principals eligible to receive an MCP authorization grant. */
-            users: components["schemas"]["EntitledUser"][];
-            /** @description All local groups eligible to receive an MCP authorization grant. */
-            groups: components["schemas"]["EntitledGroup"][];
-        };
         /** @description An organisation-admin request to admit one exact published OCI image. The idempotency key makes a retried request return the same saved record. */
         OciImageValidationSubmission: {
             /** @description Caller-chosen key that safely retries this submission. */
@@ -2433,7 +2364,7 @@ export interface operations {
                     "application/json": components["schemas"]["McpCatalogServer"][];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2488,7 +2419,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2528,7 +2459,7 @@ export interface operations {
                     "application/json": components["schemas"]["McpCatalogServer"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2568,7 +2499,7 @@ export interface operations {
                     "application/json": components["schemas"]["McpCatalogServer"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2608,7 +2539,7 @@ export interface operations {
                     "application/json": components["schemas"]["McpCatalogServer"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2663,105 +2594,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description MCP server not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getMcpAccessPolicy: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Access policy. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpAccessPolicy"];
-                };
-            };
-            /** @description Caller is not an organisation admin. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description MCP server not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    setMcpAccessPolicy: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @description Stable local Group identifiers. */
-                    groupIds: string[];
-                    /** @description Stable local Principal identifiers. */
-                    principalIds: string[];
-                };
-            };
-        };
-        responses: {
-            /** @description Access policy updated. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpAccessPolicy"];
-                };
-            };
-            /** @description groupIds (array) and principalIds (array) are required. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2812,7 +2645,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2870,7 +2703,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2956,7 +2789,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Caller is not an organisation admin. */
+            /** @description Current Organization/Administer grant is required. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2985,35 +2818,6 @@ export interface operations {
             };
             /** @description MCP runtime authority is unavailable. */
             503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getMcpDirectory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Directory. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpDirectory"];
-                };
-            };
-            /** @description Caller is not an organisation admin. */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8490,8 +8294,13 @@ export interface operations {
                             groups: string[];
                             /** @description True when the authenticated middleware admitted a platform-operator claim. Introspection only; the API remains the enforcement point. */
                             isPlatformOperator: boolean;
-                            /** @description True when the authenticated middleware admitted organisation administration authority. Introspection only; the API remains the enforcement point. */
+                            /** @description Legacy identity-role projection. Product interfaces must use productCapabilities.administerOrganization; the API remains the enforcement point. */
                             isOrgAdmin: boolean;
+                            /** @description Current product capabilities read from the central authorization authority. These guide the UI; protected routes repeat authorization in their own transaction. */
+                            productCapabilities: {
+                                /** @description Whether the local Principal currently holds organization:administer for this silo. */
+                                administerOrganization: boolean;
+                            };
                             /** @description The caller's admitted silo identifier, or null when the session has no silo projection. */
                             clusterTenant?: string | null;
                             /** @description Organisation administration projections resolved by the server. Empty when none are active. */

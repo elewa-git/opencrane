@@ -41,20 +41,9 @@ enum ApprovalRequestState {
   Cancelled @map("cancelled")
 }
 
-enum ActionExecutionState {
-  Reserved  @map("reserved")
-  Succeeded @map("succeeded")
-  Failed    @map("failed")
-}
-
-enum ActionReplayMode {
-  OneShot    @map("one_shot")
-  Idempotent @map("idempotent")
-}
-
 /// Durable lifecycle of one externally effectful runtime tool invocation. These states belong to
-/// ToolInvocation rather than ActionExecutionReceipt because provider ambiguity, approval, and
-/// recovery are properties of the runtime tool path, not proof/JTI-bound capability execution.
+/// ToolInvocation because provider ambiguity, approval, and recovery belong to the runtime tool
+/// path and its transaction-bound authorization admission.
 enum ToolInvocationState {
   Preparing        @map("preparing")
   AwaitingApproval @map("awaiting_approval")
@@ -136,7 +125,6 @@ model CapabilityCatalogRevision {
   createdAt    DateTime                 @default(now()) @map("created_at")
   grants       AuthorizationGrant[]
   approvals    ApprovalRequest[]
-  receipts     ActionExecutionReceipt[]
 
   @@unique([catalogId, revision])
   @@unique([catalogId, digest])
@@ -202,6 +190,11 @@ model ApprovalRequest {
 /// Durable work authority for one validated external-action candidate. Candidate admission creates
 /// this Preparing row atomically with acceptance; all later preparation, approval, dispatch,
 /// reconciliation, terminal result delivery, and manual recovery decisions use revision/fence CAS.
+enum ToolInvocationAuthorizationActorKind {
+  User         @map("user")
+  AgentService @map("agent-service")
+}
+
 model ToolInvocation {
   id                       String                           @id @default(cuid())
   siloId                   String                           @map("silo_id")
@@ -211,6 +204,13 @@ model ToolInvocation {
   agentRevisionId          String?                          @map("agent_revision_id")
   mcpTaskId                String?                          @unique @map("mcp_task_id")
   subjectId                String                           @map("subject_id")
+  authorizationPrincipalId String?                          @map("authorization_principal_id")
+  authorizationActorKind   ToolInvocationAuthorizationActorKind? @map("authorization_actor_kind")
+  authorizationCoordinates Json?                            @map("authorization_coordinates")
+  authorizationDecisionDigests String[]                     @default([]) @map("authorization_decision_digests")
+  authorizationMembershipRevision Int?                      @map("authorization_membership_revision")
+  authorizationAssignmentDigest String?                     @map("authorization_assignment_digest")
+  authorizationEvidenceDigest String?                       @map("authorization_evidence_digest")
   runtimeInstanceId        String                           @map("runtime_instance_id")
   commandId                String                           @map("command_id")
   candidateId              String                           @map("candidate_id")
@@ -269,47 +269,4 @@ model ToolResultDelivery {
 
   @@index([state, createdAt])
   @@map("tool_result_deliveries")
-}
-
-model ActionExecutionReceipt {
-  id                    String                    @id @default(cuid())
-  siloId                String                    @map("silo_id")
-  subjectId             String                    @map("subject_id")
-  audience              String
-  serviceAccountName    String                    @map("service_account_name")
-  namespace             String
-  workloadKind          WorkloadKind              @map("workload_kind")
-  workloadUid           String                    @map("workload_uid")
-  podUid                String                    @map("pod_uid")
-  runId                 String                    @map("run_id")
-  attempt               Int
-  agentServiceId        String                    @map("agent_service_id")
-  agentRevisionId       String                    @map("agent_revision_id")
-  proofKeyId            String                    @map("proof_key_id")
-  proofKeyThumbprint    String                    @map("proof_key_thumbprint")
-  catalogId             String                    @map("catalog_id")
-  catalogRevision       Int                       @map("catalog_revision")
-  catalogDigest         String                    @map("catalog_digest")
-  capabilityId          String                    @map("capability_id")
-  effectivePolicyDigest String                    @map("effective_policy_digest")
-  resourceKind          String                    @map("resource_kind")
-  resourceId            String                    @map("resource_id")
-  action                String
-  argumentsDigest       String                    @map("arguments_digest")
-  jti                   String                    @unique
-  replayMode            ActionReplayMode          @map("replay_mode")
-  requestFingerprint    String                    @unique @map("request_fingerprint")
-  state                 ActionExecutionState      @default(Reserved)
-  result                Json?
-  failureCode           String?                   @map("failure_code")
-  reservedAt            DateTime                  @default(now()) @map("reserved_at")
-  completedAt           DateTime?                 @map("completed_at")
-  run                   AgentRun                  @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
-  proofKey              RunProofKey               @relation(fields: [proofKeyId, runId, attempt, workloadKind, workloadUid, proofKeyThumbprint, podUid], references: [id, runId, attempt, workloadKind, workloadUid, keyThumbprint, podUid], onDelete: Restrict)
-  catalog               CapabilityCatalogRevision @relation(fields: [catalogId, catalogRevision, catalogDigest], references: [catalogId, revision, digest], onDelete: Restrict)
-  assignment            WorkloadAssignment        @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
-
-  @@index([runId, attempt, state])
-  @@index([replayMode, state])
-  @@map("action_execution_receipts")
 }

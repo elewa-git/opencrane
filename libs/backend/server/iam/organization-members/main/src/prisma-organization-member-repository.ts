@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import { OrgMemberStatus, OrgRole, OrganizationInvitationStatus, Prisma } from "@prisma/client";
 
+import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
+
 import type { OrganizationMembershipCaller } from "./authority.types";
 import { OrganizationMemberRoles, OrganizationMemberStatuses, type OrganizationMember } from "./directory.types";
 import { OrganizationInvitationStatuses, OrganizationInviteRecipientReasons, type OrganizationInviteRecipientValidation } from "./invitations.types";
@@ -64,7 +68,8 @@ function _invitationStatus(status: OrganizationInvitationStatus): OrganizationIn
 function _invitation(row: { id: string; siloId: string; email: string; role: OrgRole; status: OrganizationInvitationStatus; generation: number; tokenNonce: string; expiresAt: Date; invitedAt: Date; invitedByDisplayName: string }): OrganizationInvitationRecord
 {
 	const role = _role(row.role);
-	if (role === OrganizationMemberRoles.Owner) throw new Error("stored organization invitation cannot assign owner");
+	if (role === OrganizationMemberRoles.Owner)
+		throw new Error("stored organization invitation cannot assign owner");
 	return { invitationId: row.id, siloId: row.siloId, email: row.email, role, status: _invitationStatus(row.status), generation: row.generation, nonce: row.tokenNonce, expiresAt: row.expiresAt, invitedAt: row.invitedAt, invitedByDisplayName: row.invitedByDisplayName };
 }
 
@@ -80,7 +85,8 @@ function _member(row: { id: string; subject: string; email: string | null; displ
 /** Parses invitation identifiers stored in an idempotency JSON field. */
 function _invitationIds(value: Prisma.JsonValue): readonly string[]
 {
-	if (!Array.isArray(value) || value.some(item => typeof item !== "string")) throw new Error("invitation idempotency result is invalid");
+	if (!Array.isArray(value) || value.some(item => typeof item !== "string"))
+		throw new Error("invitation idempotency result is invalid");
 	return value as string[];
 }
 
@@ -89,11 +95,14 @@ export class PrismaOrganizationMemberRepository implements OrganizationMemberTra
 {
 	/** Transaction-scoped database surface. */
 	private readonly prisma: Prisma.TransactionClient;
+	/** Central authorization authority bound to the same transaction. */
+	private readonly authorization: AuthorizationAuthority;
 
-	/** @param prisma - Caller-owned root client for reads or transaction client for mutations. */
-	constructor(prisma: Prisma.TransactionClient)
+	/** @param prisma - Caller-owned transaction client. @param authorization - Authority bound to that client. */
+	constructor(prisma: Prisma.TransactionClient, authorization: AuthorizationAuthority)
 	{
 		this.prisma = prisma;
+		this.authorization = authorization;
 	}
 
 	/** @inheritdoc */
@@ -109,7 +118,7 @@ export class PrismaOrganizationMemberRepository implements OrganizationMemberTra
 	/** @inheritdoc */
 	async directory(caller: OrganizationMembershipCaller): Promise<OrganizationMemberDirectoryRecords>
 	{
-		await this._requireActiveAdmin(caller);
+		await this._requireAdministrationDecision(caller);
 		const now = new Date();
 		const [members, invitations, activeCount, pendingCount] = await Promise.all([
 			this.prisma.orgMembership.findMany({ where: { clusterTenant: caller.siloId }, orderBy: [{ role: "asc" }, { createdAt: "asc" }], take: _DIRECTORY_ROW_LIMIT, select: { id: true, subject: true, email: true, displayName: true, role: true, status: true, createdAt: true } }),
@@ -123,7 +132,7 @@ export class PrismaOrganizationMemberRepository implements OrganizationMemberTra
 	/** @inheritdoc */
 	async validate(caller: OrganizationMembershipCaller, emails: readonly string[], now: Date): Promise<readonly OrganizationInviteRecipientValidation[]>
 	{
-		await this._requireActiveAdmin(caller);
+		await this._requireAdministrationDecision(caller);
 		const normalized = emails.map(email => email.trim().toLowerCase());
 		const validEmails = normalized.filter(_isEmail);
 		const [members, invitations] = await Promise.all([
@@ -135,9 +144,12 @@ export class PrismaOrganizationMemberRepository implements OrganizationMemberTra
 		return emails.map(function _ValidateEmail(email, index)
 		{
 			const normalizedEmail = normalized[index] ?? "";
-			if (!_isEmail(normalizedEmail)) return { email, normalizedEmail, valid: false, reason: OrganizationInviteRecipientReasons.InvalidEmail };
-			if (memberEmails.has(normalizedEmail)) return { email, normalizedEmail, valid: false, reason: OrganizationInviteRecipientReasons.AlreadyMember };
-			if (invitedEmails.has(normalizedEmail)) return { email, normalizedEmail, valid: false, reason: OrganizationInviteRecipientReasons.AlreadyInvited };
+			if (!_isEmail(normalizedEmail))
+				return { email, normalizedEmail, valid: false, reason: OrganizationInviteRecipientReasons.InvalidEmail };
+			if (memberEmails.has(normalizedEmail))
+				return { email, normalizedEmail, valid: false, reason: OrganizationInviteRecipientReasons.AlreadyMember };
+			if (invitedEmails.has(normalizedEmail))
+				return { email, normalizedEmail, valid: false, reason: OrganizationInviteRecipientReasons.AlreadyInvited };
 			return { email, normalizedEmail, valid: true };
 		});
 	}
@@ -145,51 +157,59 @@ export class PrismaOrganizationMemberRepository implements OrganizationMemberTra
 	/** @inheritdoc */
 	async create(command: CreateStandaloneInvitationsCommand): Promise<CreateStandaloneInvitationsResult>
 	{
-		await this._requireActiveAdmin(command.caller);
+		await this._requireAdministrationAdmission(command.caller, { emails: command.drafts.map(draft => draft.email), role: command.role, payloadDigest: command.payloadDigest }, command.invitedAt);
 		const prior = await this.prisma.organizationInvitationRequest.findUnique({ where: { siloId_actorSubject_idempotencyKey: { siloId: command.caller.siloId, actorSubject: command.caller.subjectId, idempotencyKey: command.idempotencyKey } } });
 		if (prior !== null)
 		{
-			if (prior.payloadDigest !== command.payloadDigest) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "idempotency key was already used with a different invitation request");
+			if (prior.payloadDigest !== command.payloadDigest)
+				throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "idempotency key was already used with a different invitation request");
 			return { invitations: await this._loadInvitations(command.caller.siloId, _invitationIds(prior.resultInvitationIds)), createdCount: 0 };
 		}
 		await this.prisma.organizationInvitation.updateMany({ where: { siloId: command.caller.siloId, status: OrganizationInvitationStatus.Pending, activeEmail: { not: null }, expiresAt: { lte: command.invitedAt } }, data: { activeEmail: null } });
 		const validation = await this._validateInsideTransaction(command.caller.siloId, command.drafts.map(draft => draft.email), command.invitedAt);
-		if (validation.some(result => !result.valid)) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "one or more invitation recipients are no longer available");
+		if (validation.some(result => !result.valid))
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "one or more invitation recipients are no longer available");
 		for (const draft of command.drafts)
 		{
 			await this.prisma.organizationInvitation.create({ data: { id: draft.invitationId, siloId: command.caller.siloId, email: draft.email, activeEmail: draft.email, role: command.role === OrganizationMemberRoles.Admin ? OrgRole.Admin : OrgRole.Member, tokenNonce: draft.nonce, invitedBySubject: command.caller.subjectId, invitedByDisplayName: command.caller.displayName, invitedAt: command.invitedAt, expiresAt: command.expiresAt } });
 		}
 		const ids = command.drafts.map(draft => draft.invitationId);
 		await this.prisma.organizationInvitationRequest.create({ data: { siloId: command.caller.siloId, actorSubject: command.caller.subjectId, idempotencyKey: command.idempotencyKey, payloadDigest: command.payloadDigest, resultInvitationIds: [...ids], createdCount: ids.length } });
-		await this.prisma.auditEntry.create({ data: { action: "organization.invitations.created", resource: command.caller.siloId, message: "Organization invitations created", metadata: { actorSubject: command.caller.subjectId, invitationIds: ids, recipientCount: ids.length } } });
+		await this.prisma.auditEntry.create({ data: { siloId: command.caller.siloId, action: "organization.invitations.created", resource: command.caller.siloId, message: "Organization invitations created", metadata: { actorSubject: command.caller.subjectId, invitationIds: ids, recipientCount: ids.length } } });
 		return { invitations: await this._loadInvitations(command.caller.siloId, ids), createdCount: ids.length };
 	}
 
 	/** @inheritdoc */
 	async recoverCreate(command: CreateStandaloneInvitationsCommand): Promise<CreateStandaloneInvitationsResult | null>
 	{
+		await this._requireAdministrationDecision(command.caller);
 		const prior = await this.prisma.organizationInvitationRequest.findUnique({ where: { siloId_actorSubject_idempotencyKey: { siloId: command.caller.siloId, actorSubject: command.caller.subjectId, idempotencyKey: command.idempotencyKey } } });
-		if (prior === null || prior.payloadDigest !== command.payloadDigest) return null;
+		if (prior === null || prior.payloadDigest !== command.payloadDigest)
+			return null;
 		return { invitations: await this._loadInvitations(command.caller.siloId, _invitationIds(prior.resultInvitationIds)), createdCount: 0 };
 	}
 
 	/** @inheritdoc */
 	async resend(command: ResendStandaloneInvitationCommand): Promise<OrganizationInvitationRecord>
 	{
-		await this._requireActiveAdmin(command.caller);
+		await this._requireAdministrationAdmission(command.caller, { invitationId: command.invitationId }, command.invitedAt);
 		const current = await this.prisma.organizationInvitation.findUnique({ where: { id: command.invitationId }, select: { ..._INVITATION_SELECT, lastResendIdempotencyKey: true } });
-		if (current === null || current.siloId !== command.caller.siloId) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "invitation is not available");
-		if (current.status !== OrganizationInvitationStatus.Pending) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.AlreadyUsed, "invitation is no longer pending");
-		if (current.lastResendIdempotencyKey === command.idempotencyKey) return _invitation(current);
+		if (current === null || current.siloId !== command.caller.siloId)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "invitation is not available");
+		if (current.status !== OrganizationInvitationStatus.Pending)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.AlreadyUsed, "invitation is no longer pending");
+		if (current.lastResendIdempotencyKey === command.idempotencyKey)
+			return _invitation(current);
 		const changed = await this.prisma.organizationInvitation.updateMany({ where: { id: current.id, status: OrganizationInvitationStatus.Pending, generation: current.generation, tokenNonce: current.tokenNonce, lastResendIdempotencyKey: current.lastResendIdempotencyKey }, data: { generation: { increment: 1 }, tokenNonce: command.nonce, invitedAt: command.invitedAt, expiresAt: command.expiresAt, lastResendIdempotencyKey: command.idempotencyKey } });
 		if (changed.count !== 1)
 		{
 			const winner = await this.prisma.organizationInvitation.findUnique({ where: { id: current.id }, select: { ..._INVITATION_SELECT, lastResendIdempotencyKey: true } });
-			if (winner !== null && winner.lastResendIdempotencyKey === command.idempotencyKey) return _invitation(winner);
+			if (winner !== null && winner.lastResendIdempotencyKey === command.idempotencyKey)
+				return _invitation(winner);
 			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "invitation changed during resend");
 		}
 		const updated = await this.prisma.organizationInvitation.findUniqueOrThrow({ where: { id: current.id }, select: _INVITATION_SELECT });
-		await this.prisma.auditEntry.create({ data: { action: "organization.invitation.resent", resource: current.id, message: "Organization invitation link rotated", metadata: { actorSubject: command.caller.subjectId, invitationId: current.id } } });
+		await this.prisma.auditEntry.create({ data: { siloId: command.caller.siloId, action: "organization.invitation.resent", resource: current.id, message: "Organization invitation link rotated", metadata: { actorSubject: command.caller.subjectId, invitationId: current.id } } });
 		return _invitation(updated);
 	}
 
@@ -197,32 +217,53 @@ export class PrismaOrganizationMemberRepository implements OrganizationMemberTra
 	async accept(command: AcceptStandaloneInvitationCommand): Promise<OrganizationMember>
 	{
 		const current = await this.prisma.organizationInvitation.findUnique({ where: { id: command.coordinates.invitationId }, select: _INVITATION_SELECT });
-		if (current === null || current.siloId !== command.caller.siloId) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Invalid, "invitation token is invalid");
+		if (current === null || current.siloId !== command.caller.siloId)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Invalid, "invitation token is invalid");
 		if (current.status === OrganizationInvitationStatus.Accepted)
 		{
-			if (current.generation !== command.coordinates.generation || current.tokenNonce !== command.coordinates.nonce || current.acceptedBySubject !== command.caller.subjectId || current.email !== command.caller.verifiedEmail) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.AlreadyUsed, "invitation was already consumed");
+			if (current.generation !== command.coordinates.generation || current.tokenNonce !== command.coordinates.nonce || current.acceptedBySubject !== command.caller.subjectId || current.email !== command.caller.verifiedEmail)
+				throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.AlreadyUsed, "invitation was already consumed");
 			const recovered = await this.prisma.orgMembership.findUnique({ where: { clusterTenant_subject: { clusterTenant: current.siloId, subject: command.caller.subjectId } }, select: { id: true, subject: true, email: true, displayName: true, role: true, status: true, createdAt: true } });
-			if (recovered === null || recovered.subject !== current.acceptedBySubject || recovered.email !== command.caller.verifiedEmail) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.AlreadyUsed, "invitation acceptance result is unavailable");
+			if (recovered === null || recovered.subject !== current.acceptedBySubject || recovered.email !== command.caller.verifiedEmail)
+				throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.AlreadyUsed, "invitation acceptance result is unavailable");
 			return _member(recovered, command.caller);
 		}
-		if (current.status !== OrganizationInvitationStatus.Pending) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.AlreadyUsed, "invitation was already consumed");
-		if (current.generation !== command.coordinates.generation || current.tokenNonce !== command.coordinates.nonce) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.AlreadyUsed, "invitation generation is no longer current");
-		if (current.expiresAt.getTime() <= command.acceptedAt.getTime()) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Expired, "invitation has expired");
-		if (current.email !== command.caller.verifiedEmail) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.IdentityMismatch, "verified email does not match invitation recipient");
+		if (current.status !== OrganizationInvitationStatus.Pending)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.AlreadyUsed, "invitation was already consumed");
+		if (current.generation !== command.coordinates.generation || current.tokenNonce !== command.coordinates.nonce)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.AlreadyUsed, "invitation generation is no longer current");
+		if (current.expiresAt.getTime() <= command.acceptedAt.getTime())
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Expired, "invitation has expired");
+		if (current.email !== command.caller.verifiedEmail)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.IdentityMismatch, "verified email does not match invitation recipient");
 		const existing = await this.prisma.orgMembership.findUnique({ where: { clusterTenant_subject: { clusterTenant: command.caller.siloId, subject: command.caller.subjectId } } });
-		if (existing !== null) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "verified subject already has an organization membership");
+		if (existing !== null)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "verified subject already has an organization membership");
 		const changed = await this.prisma.organizationInvitation.updateMany({ where: { id: current.id, status: OrganizationInvitationStatus.Pending, generation: current.generation, tokenNonce: current.tokenNonce, activeEmail: current.email }, data: { status: OrganizationInvitationStatus.Accepted, activeEmail: null, acceptedAt: command.acceptedAt, acceptedBySubject: command.caller.subjectId } });
-		if (changed.count !== 1) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "invitation changed during acceptance");
+		if (changed.count !== 1)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "invitation changed during acceptance");
 		const membership = await this.prisma.orgMembership.create({ data: { id: randomUUID(), clusterTenant: command.caller.siloId, subject: command.caller.subjectId, email: command.caller.verifiedEmail, displayName: command.caller.displayName, role: current.role, status: OrgMemberStatus.Active }, select: { id: true, subject: true, email: true, displayName: true, role: true, status: true, createdAt: true } });
-		await this.prisma.auditEntry.create({ data: { action: "organization.invitation.accepted", resource: current.id, message: "Organization invitation accepted", metadata: { invitationId: current.id, acceptedBySubject: command.caller.subjectId, membershipId: membership.id } } });
+		await this.prisma.auditEntry.create({ data: { siloId: command.caller.siloId, action: "organization.invitation.accepted", resource: current.id, message: "Organization invitation accepted", metadata: { invitationId: current.id, acceptedBySubject: command.caller.subjectId, membershipId: membership.id } } });
 		return _member(membership, command.caller);
 	}
 
-	/** Requires current active Owner or Admin state from the host-selected silo. */
-	private async _requireActiveAdmin(caller: OrganizationMembershipCaller): Promise<void>
+	/** Requires a current central-authority decision for one read-only organization-member operation. */
+	private async _requireAdministrationDecision(caller: OrganizationMembershipCaller): Promise<void>
 	{
-		const membership = await this.prisma.orgMembership.findFirst({ where: { clusterTenant: caller.siloId, subject: caller.subjectId, status: OrgMemberStatus.Active, role: { in: [OrgRole.Owner, OrgRole.Admin] } }, select: { id: true } });
-		if (membership === null) throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "active organization administrator membership is required");
+		const resources = [{ kind: ProductAuthorizationResourceKinds.Organization, id: caller.siloId }] as const;
+		const allowed = await this.authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Administer, resources, nowEpochMs: Date.now() });
+		if (allowed.length !== 1)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "organization membership operation is not authorized");
+	}
+
+	/** Admits and records one protected organization-member mutation in this transaction. */
+	private async _requireAdministrationAdmission(caller: OrganizationMembershipCaller, argumentsValue: unknown, now: Date): Promise<void>
+	{
+		const admission = await this.authorization.admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: caller.siloId }, action: ProductAuthorizationActions.Administer, argumentsDigest: ___DigestCanonicalJson(argumentsValue as JsonValue), nowEpochMs: now.getTime() });
+		if (admission.outcome !== AuthorizationDecisionOutcomes.Allow)
+		{
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "organization membership operation is not authorized");
+		}
 	}
 
 	/** Reads ordered invitation rows and fails when an idempotency record is inconsistent. */
@@ -233,7 +274,8 @@ export class PrismaOrganizationMemberRepository implements OrganizationMemberTra
 		return ids.map(function _MapInvitationId(id)
 		{
 			const row = byId.get(id);
-			if (row === undefined) throw new Error("invitation idempotency record points to a missing invitation");
+			if (row === undefined)
+				throw new Error("invitation idempotency record points to a missing invitation");
 			return _invitation(row);
 		});
 	}
@@ -249,9 +291,12 @@ export class PrismaOrganizationMemberRepository implements OrganizationMemberTra
 		const invitedEmails = new Set(invitations.map(row => row.email));
 		return emails.map(function _Validate(email)
 		{
-			if (!_isEmail(email)) return { email, normalizedEmail: email, valid: false, reason: OrganizationInviteRecipientReasons.InvalidEmail };
-			if (memberEmails.has(email)) return { email, normalizedEmail: email, valid: false, reason: OrganizationInviteRecipientReasons.AlreadyMember };
-			if (invitedEmails.has(email)) return { email, normalizedEmail: email, valid: false, reason: OrganizationInviteRecipientReasons.AlreadyInvited };
+			if (!_isEmail(email))
+				return { email, normalizedEmail: email, valid: false, reason: OrganizationInviteRecipientReasons.InvalidEmail };
+			if (memberEmails.has(email))
+				return { email, normalizedEmail: email, valid: false, reason: OrganizationInviteRecipientReasons.AlreadyMember };
+			if (invitedEmails.has(email))
+				return { email, normalizedEmail: email, valid: false, reason: OrganizationInviteRecipientReasons.AlreadyInvited };
 			return { email, normalizedEmail: email, valid: true };
 		});
 	}

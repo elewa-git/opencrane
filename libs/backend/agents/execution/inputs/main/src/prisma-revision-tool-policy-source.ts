@@ -76,6 +76,7 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 		return {
 			outcome: "loaded",
 			value: {
+				modelDefinitionId: revision.modelDefinition.id,
 				modelRoute: { alias: revision.modelDefinition.publicModelName, modelDefinitionId: revision.modelDefinition.id, litellmModelId: revision.modelDefinition.litellmModelId },
 				mcpTools,
 				skillRevisionIds,

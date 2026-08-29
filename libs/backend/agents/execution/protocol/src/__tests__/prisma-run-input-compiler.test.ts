@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Prisma } from "@prisma/client";
 
 import { PROMPT_COMPILER_VERSION, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __CreatePrismaRunInputCompiler } from "../prisma-run-input-compiler";
+
+/** Prisma test double whose model lookup remains inspectable by the assertions. */
+type TestTransaction = Prisma.TransactionClient & { readonly modelDefinition: { readonly findFirst: ReturnType<typeof vi.fn> } };
 
 /** Build a snapshot whose frozen memory policy names the exact recall coordinates. */
 function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
@@ -22,7 +26,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		skillRevisionIds: [],
 		memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1", queryText: "private recall query", maxFacts: 8 },
 		mcpTools: [],
-		modelRoute: { alias: "silo-default" },
+		modelRoute: { alias: "silo-default", modelDefinitionId: "model-definition-1" },
 		budgetPolicy: {},
 		identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 3, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "k1", fleetMembershipAssertionId: "a1", fleetMembershipPayloadDigest: `sha256:${"c".repeat(64)}`, fleetMembershipTrustedUntil: "2026-08-05T00:00:00.000Z" },
 		capabilitySetDigest: `sha256:${"d".repeat(64)}`,
@@ -35,7 +39,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 }
 
 /** Build the fake transaction reads the compile steps perform. */
-function _transaction(modelDefinition: unknown = null): never
+function _transaction(modelDefinition: unknown = { publicModelName: "silo-default", generatedOutputCapabilities: [] }): TestTransaction
 {
 	return {
 		personaRevision: { findUnique: vi.fn().mockResolvedValue(null) },
@@ -43,7 +47,7 @@ function _transaction(modelDefinition: unknown = null): never
 		artifactRevision: { findMany: vi.fn().mockResolvedValue([]) },
 		skillRevision: { findMany: vi.fn().mockResolvedValue([]) },
 		modelDefinition: { findFirst: vi.fn().mockResolvedValue(modelDefinition) },
-	} as never;
+	} as unknown as TestTransaction;
 }
 
 describe("__CreatePrismaRunInputCompiler", function _describePrismaRunInputCompiler()
@@ -54,6 +58,14 @@ describe("__CreatePrismaRunInputCompiler", function _describePrismaRunInputCompi
 		const compiled = await __CreatePrismaRunInputCompiler()(_snapshot({ memoryQueryPolicy: { scope: "none" } }), 1, transaction);
 
 		expect(compiled.model.generatedOutputCapabilities).toEqual(["image_png", "code_execution_files"]);
+		expect(transaction.modelDefinition.findFirst).toHaveBeenCalledWith({ where: { id: "model-definition-1", OR: [{ scope: "Global", clusterTenant: null }, { scope: "ClusterTenant", clusterTenant: "silo-1" }] }, select: { publicModelName: true, generatedOutputCapabilities: true } });
+	});
+
+	it("fails closed instead of resolving a frozen model by its public name", async function _RejectsMissingExactModel()
+	{
+		const missingId = _snapshot({ modelRoute: { alias: "same-name-in-another-silo" } });
+		await expect(__CreatePrismaRunInputCompiler()(missingId, 1, _transaction())).rejects.toThrow(/exact model definition/);
+		await expect(__CreatePrismaRunInputCompiler()(_snapshot(), 1, _transaction(null))).rejects.toThrow(/unavailable in the trusted silo/);
 	});
 
 	it("never projects memory references or recall queries into compiled input", async function _ExcludesMemoryCoordinates()

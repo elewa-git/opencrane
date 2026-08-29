@@ -186,7 +186,6 @@ function _serializeValue(value: JsonValue, activeContainers: WeakSet<object>): s
  *
  * Called by: {@link ___DigestCanonicalJson}, {@link ___CloneCanonicalJson},
  * `libs/backend/artifacts/authorization/main/src/artifact-lease.ts`,
- * `libs/backend/server/iam/authorization/main/src/capability-proof.ts`,
  * `libs/backend/agents/memory/main/src/prisma-memory-catalog-repository.ts`.
  * @param value - JSON value to canonicalize.
  * @returns Canonical JSON text, ready to encode as UTF-8.

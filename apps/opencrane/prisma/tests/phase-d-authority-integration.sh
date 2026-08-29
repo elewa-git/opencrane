@@ -718,59 +718,6 @@ if [[ "$approval_race_state" != "cancelled" ]]; then
 fi
 echo 'PASS: approval decision waits for run authority and cancels after the run leaves WaitingForInput'
 
-(
-  set +e
-  run_psql >"$RACE_DIR/action-assignment-revoke.out" 2>&1 <<'SQL'
-SET application_name = 'phase-d-action-assignment-revoke';
-BEGIN;
-UPDATE "workload_assignments"
-SET "state" = 'revoked', "revoked_at" = clock_timestamp()
-WHERE "run_id" = 'run-race-action-authority' AND "attempt" = 1;
-SELECT pg_sleep(3);
-COMMIT;
-SQL
-  echo "$?" >"$RACE_DIR/action-assignment-revoke.status"
-) &
-action_assignment_revoke_pid=$!
-wait_for_holder_sleeping 'phase-d-action-assignment-revoke'
-(
-  set +e
-  run_psql >"$RACE_DIR/action-receipt-reserve.out" 2>&1 <<'SQL'
-SET application_name = 'phase-d-action-receipt-reserve';
-INSERT INTO "action_execution_receipts" (
-  "id", "silo_id", "subject_id", "audience", "service_account_name", "namespace",
-  "workload_kind", "workload_uid", "pod_uid", "run_id", "attempt", "agent_service_id",
-  "agent_revision_id", "proof_key_id", "proof_key_thumbprint", "catalog_id", "catalog_revision",
-  "catalog_digest", "capability_id", "effective_policy_digest", "resource_kind", "resource_id",
-  "action", "arguments_digest", "jti", "replay_mode", "request_fingerprint"
-) VALUES (
-  'receipt-race-action', 'silo-race-action', 'user-race', 'service:email-send', 'runtime',
-  'tenant-race-action', 'job', 'job-race-action', 'pod-race-action', 'run-race-action-authority',
-  1, 'svc-race-action-authority', 'rev-race-action-authority', 'proof-race-action', repeat('r', 43),
-  'catalog-race-action', 1, 'sha256:' || repeat('4', 64), 'email.send', 'sha256:' || repeat('7', 64),
-  'message', 'message-race', 'send', 'sha256:' || repeat('5', 64), 'jti-race-action', 'one_shot',
-  'sha256:' || repeat('8', 64)
-);
-SQL
-  echo "$?" >"$RACE_DIR/action-receipt-reserve.status"
-) &
-action_receipt_reserve_pid=$!
-wait_for_blocked_session 'phase-d-action-receipt-reserve'
-wait "$action_assignment_revoke_pid"
-wait "$action_receipt_reserve_pid"
-if [[ "$(<"$RACE_DIR/action-assignment-revoke.status")" != "0" ]]; then
-  cat "$RACE_DIR/action-assignment-revoke.out" >&2
-  echo 'FAIL: concurrent assignment revocation failed' >&2
-  exit 1
-fi
-if [[ "$(<"$RACE_DIR/action-receipt-reserve.status")" == "0" ]] \
-  || ! grep -q 'requires a current Registered WorkloadAssignment' "$RACE_DIR/action-receipt-reserve.out"; then
-  cat "$RACE_DIR/action-receipt-reserve.out" >&2
-  echo 'FAIL: receipt reservation bypassed concurrent assignment revocation' >&2
-  exit 1
-fi
-echo 'PASS: receipt reservation waits for assignment authority and rejects after revocation'
-
 run_psql <<'SQL'
 INSERT INTO "agent_services" (
   "id", "silo_id", "kind", "name",

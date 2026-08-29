@@ -105,6 +105,10 @@ its resources to the lifecycle owner.
 - `src/app/persona-approval-composition.ts` adapts agent-service persona selection to the persona
   approval port on one Serializable transaction. It maps agent outcomes but owns no persona or
   AgentRevision persistence.
+- `src/app/user-onboarding-composition.ts` binds onboarding completion, configured-default model
+  resolution, personal-agent persistence, managed grants, and the central `AuthorizationAuthority`
+  to one Serializable transaction. Owner identity remains onboarding eligibility; the app does not
+  provide a parallel permission evaluator.
 - `src/infra/artifacts/*` is one app-only artifact-broker composition slice. It binds the server's
   mounted lease keys, exact same-silo `artifact-service` route, and durable artifact authority into
   source, read, upload, and output brokers; those pieces are inseparable from this process's private

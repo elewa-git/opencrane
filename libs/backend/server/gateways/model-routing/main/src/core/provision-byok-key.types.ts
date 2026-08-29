@@ -1,6 +1,9 @@
 import type * as k8s from "@kubernetes/client-node";
 import type { Logger } from "pino";
-import type { PrismaClient, ProviderCredential as PrismaProviderCredential } from "@prisma/client";
+import type { Prisma, PrismaClient, ProviderCredential as PrismaProviderCredential } from "@prisma/client";
+
+/** Prisma surface accepted by boot composition or a request-owned transaction. */
+export type ProviderProvisioningPrisma = PrismaClient | Prisma.TransactionClient;
 
 /**
  * Everything `_ProvisionByokKey` needs to set a provider's raw BYOK key.
@@ -15,7 +18,7 @@ import type { PrismaClient, ProviderCredential as PrismaProviderCredential } fro
 export interface ProvisionByokKeyOptions
 {
   /** Prisma client for credential and model rows. */
-  prisma: PrismaClient;
+  prisma: ProviderProvisioningPrisma;
   /** Kubernetes Core V1 API used to persist the provider key Secret. */
   coreApi: k8s.CoreV1Api;
   /** Namespace containing the silo's provider key Secrets. */
@@ -49,7 +52,7 @@ export interface ProvisionByokKeyOptions
 export interface DeprovisionByokKeyOptions
 {
   /** Prisma client for the credential row. */
-  prisma: PrismaClient;
+  prisma: ProviderProvisioningPrisma;
   /** Kubernetes Core V1 API used to remove the provider key Secret. */
   coreApi: k8s.CoreV1Api;
   /** Namespace containing the silo's provider key Secrets. */

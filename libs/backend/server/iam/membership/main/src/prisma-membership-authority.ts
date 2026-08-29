@@ -3,7 +3,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { FleetMembershipAssertion, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 import type { JsonValue } from "@opencrane/util";
 
-import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
+import { PrismaAuditDecisionWriterRepository } from "@opencrane/backend/server/iam/audit-writer";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { FleetMembershipAcceptance, FleetMembershipAcceptanceResult, FleetMembershipAuthorityRepository } from "./membership-authority.types";
 
@@ -110,7 +110,7 @@ export class PrismaFleetMembershipAuthorityRepository implements FleetMembership
 
 		// 3. Write the audit row in the same transaction so the stored state and the audit log agree.
 		const decisionDigest = __DigestCanonicalJson({ issuerId: acceptance.issuerId, siloId: acceptance.siloId, revision: acceptance.revision, payloadDigest: acceptance.payloadDigest } as JsonValue);
-		await __AppendAuditDecision(this.prisma, {
+		await new PrismaAuditDecisionWriterRepository(this.prisma).append({
 			decisionDigest,
 			siloId: acceptance.siloId,
 			actorKind: "system",

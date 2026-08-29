@@ -15,8 +15,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
-- **Database upgrades now run through Prisma Migrate in a dedicated Job.** The forward 0.9.3 to
-  0.10.0 path accepts the exact released predecessor, applies the saved Prisma ledger once, and no
+- **Database upgrades now run through a dedicated migration Job.** The forward 0.9.2 to 0.10.0
+  path accepts the exact tagged predecessor, carries its 0.9.0 schema through the reviewed IAM
+  prerequisite, lets CloudNativePG install `pg_cron` and assign its schema without sharing a
+  superuser credential with the migration container, applies the saved Prisma ledger once, and no
   longer requires a backup, application write pause, or automatic recovery. Deferred migration
   hardening is tracked in #699.
 
@@ -189,8 +191,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Changed
 
-- **Operators upgrading from 0.9.0 to 0.9.3 now cut over to the same IAM model used by fresh
-  installations.** The digest-bound migration deterministically projects principals, groups,
+- **Operators upgrading tagged 0.9.2 to 0.10.0 now cut over to the same IAM model used by fresh
+  installations.** Its 0.9.0 database schema passes through a digest-bound prerequisite that
+  deterministically projects principals, groups,
   memberships, grants, and resource boundaries, then removes the superseded agent-scope and MCP
   access-policy authorities; ambiguous or populated unsupported legacy state stops before mutation,
   and recovery remains backup/restore only.

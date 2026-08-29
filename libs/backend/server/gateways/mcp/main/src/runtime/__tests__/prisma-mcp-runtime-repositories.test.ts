@@ -14,6 +14,12 @@ function _Options()
 	return { siloId: "silo-1", executorNamespace: "mcp-executors", executorServiceAccountName: "mcp-executor-default", profileName: "mcp-default", controllerClaimLeaseMilliseconds: 30_000, companionClaimLeaseMilliseconds: 60_000, log: { info: vi.fn() } as never };
 }
 
+/** Permits the current Organization/Administer grant through the central authority in promotion tests. */
+function _Authorization(): { readonly admitPrincipal: ReturnType<typeof vi.fn> }
+{
+	return { admitPrincipal: vi.fn().mockResolvedValue({ outcome: "allow", reason: "winning_allow", grantIds: ["grant-1"], evidence: { decisionDigest: `sha256:${"a".repeat(64)}`, policyRevisionHash: `sha256:${"b".repeat(64)}`, effectiveAuthorizationDigest: `sha256:${"c".repeat(64)}` } }) };
+}
+
 describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRepositories()
 {
 	it("promotes an imported image into one immutable discovery execution", async function _PromotesImportedImage()
@@ -25,11 +31,13 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 			mcpRuntimeExecution: { create: vi.fn().mockResolvedValue({ id: "execution-1" }) },
 			auditEntry: { create: vi.fn().mockResolvedValue({ id: 1 }) },
 		};
-		const repository = new PrismaMcpOciServerPromotionRepository(transaction as never, _Options());
+		const authorization = _Authorization();
+		const repository = new PrismaMcpOciServerPromotionRepository(transaction as never, authorization as never, _Options());
 
 		await expect(repository.promoteImportedValidation({ siloId: "silo-1", principalId: "principal-1" }, "validation-1", { name: "Search", description: "Search records" })).resolves.toMatchObject({ outcome: "created", serverId: "server-1", serverRevisionId: "revision-1" });
 		expect(transaction.mcpServer.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ transport: McpServerTransport.OciImage, status: McpServerStatus.Draft }) }));
 		expect(transaction.mcpRuntimeExecution.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: McpRuntimeExecutionKind.Discovery, profileName: "mcp-default" }) }));
+		expect(authorization.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ resource: { kind: "organization", id: "silo-1" }, action: "administer" }));
 	});
 
 	it("admits only a ready manual-recovery ToolInvocation selected by a ready MCP tool revision", async function _AdmitsReadyInvocation()

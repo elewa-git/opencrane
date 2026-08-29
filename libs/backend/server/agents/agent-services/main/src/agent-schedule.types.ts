@@ -82,6 +82,8 @@ export interface AgentServiceScheduleRecord
 /** Command that creates one schedule for a managed service. */
 export interface CreateAgentScheduleCommand
 {
+	/** Authenticated local Principal requesting the schedule change. */
+	readonly principalId: string;
 	/** Silo the caller is operating within; a service in another silo must not resolve. */
 	readonly siloId: SiloId;
 	/** Managed service the schedule drives. */
@@ -108,6 +110,8 @@ export interface CreateAgentScheduleCommand
 /** Command that updates one existing schedule's mutable fields. */
 export interface UpdateAgentScheduleCommand
 {
+	/** Authenticated local Principal requesting the schedule change. */
+	readonly principalId: string;
 	/** Silo the caller is operating within. */
 	readonly siloId: SiloId;
 	/** Service the schedule belongs to. */
@@ -140,6 +144,7 @@ export interface UpdateAgentScheduleCommand
  */
 export type AgentScheduleDenial =
 	| "invalid_command"
+	| "unauthorized"
 	| "invalid_cron"
 	| "invalid_timezone"
 	| "service_not_found"
@@ -165,7 +170,7 @@ export type AgentScheduleDeletionResult =
  * foreign services. This port only stores rows; the scheduler in
  * libs/backend/server/agents/scheduling reads them and decides when runs happen.
  *
- * Implemented by: `PrismaAgentScheduleRepository` in `db/prisma-agent-schedule.ts`.
+ * Implemented by: `PrismaAgentScheduleUnitOfWork` in `db/prisma-agent-schedule.ts`.
  * Called by: {@link __CreateAgentSchedule} and {@link __UpdateAgentSchedule} in `agent-schedule.ts`;
  * `deleteSchedule` and `listSchedules` are called straight from the schedule handlers in
  * `agent-revision.router.ts`.
@@ -177,7 +182,7 @@ export interface AgentScheduleRepository
 	/** Updates one schedule's mutable fields, silo-scoped. */
 	updateSchedule(command: UpdateAgentScheduleCommand, updatedAt: string): Promise<AgentScheduleMutationResult>;
 	/** Deletes one schedule, silo-scoped. */
-	deleteSchedule(agentServiceId: AgentServiceId, scheduleId: string, siloId: SiloId): Promise<AgentScheduleDeletionResult>;
+	deleteSchedule(command: { readonly principalId: string; readonly agentServiceId: AgentServiceId; readonly scheduleId: string; readonly siloId: SiloId }, deletedAt: string): Promise<AgentScheduleDeletionResult>;
 	/** Lists the schedules of one service, silo-scoped. */
-	listSchedules(agentServiceId: AgentServiceId, siloId: SiloId): Promise<readonly AgentServiceScheduleRecord[]>;
+	listSchedules(agentServiceId: AgentServiceId, caller: { readonly principalId: string; readonly siloId: SiloId }): Promise<readonly AgentServiceScheduleRecord[]>;
 }

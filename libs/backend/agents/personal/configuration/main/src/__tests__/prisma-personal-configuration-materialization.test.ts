@@ -55,7 +55,17 @@ function _SourceRevision()
 /** Composes the application materializer with its Prisma unit-of-work adapter. */
 function _Materializer(prisma: never, logger?: never): _PersonalConfigurationMaterializer
 {
-	return new _PersonalConfigurationMaterializer(new PrismaPersonalConfigurationMaterializationUnitOfWork(prisma), logger);
+	return new _PersonalConfigurationMaterializer(new PrismaPersonalConfigurationMaterializationUnitOfWork(prisma, function _ProductEffects()
+	{
+		return {
+			resolveCaller: vi.fn().mockResolvedValue({ siloId: "silo-1", subjectId: "user-1", principalId: "principal-1" }),
+			reconcileCurrent: vi.fn().mockResolvedValue(undefined),
+			admitInitialCreation: vi.fn().mockResolvedValue(undefined),
+			admitInitialPublication: vi.fn().mockResolvedValue(undefined),
+			admitRevisionSelection: vi.fn().mockResolvedValue(undefined),
+			admitRevisionPublication: vi.fn().mockResolvedValue(undefined),
+		};
+	}), logger);
 }
 
 /** Build a complete transaction mock for one serializable materialization attempt. */
@@ -78,6 +88,12 @@ function _Transaction(options: { readonly proposal?: unknown; readonly activePer
 			findFirst: vi.fn(async function _FindProfile()
 			{
 				return { activeRevisionId: options.activePersonaRevisionId ?? "persona-1" };
+			}),
+		},
+		personaRevision: {
+			findFirst: vi.fn(async function _FindPersona()
+			{
+				return { personaProfileId: "profile-1" };
 			}),
 		},
 		agentService: {

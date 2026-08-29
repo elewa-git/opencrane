@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 
 import * as k8s from "@kubernetes/client-node";
 import type { Logger } from "pino";
-import { Prisma, type ModelDefinition as PrismaModelDefinition, type PrismaClient, type ProviderCredential as PrismaProviderCredential } from "@prisma/client";
+import { Prisma, type ModelDefinition as PrismaModelDefinition, type ProviderCredential as PrismaProviderCredential } from "@prisma/client";
 
 import { ModelRoutingScope } from "@opencrane/contracts";
 import { _DeleteLiteLlmCredential, _UpsertLiteLlmCredential } from "./litellm-credential-registration";
@@ -11,7 +11,7 @@ import { _RegisterLiteLlmModel } from "./litellm-model-registration";
 import { _BYOK_PROVIDER_CATALOG } from "./byok-default-models";
 import type { ByokProviderCatalog } from "./byok-default-models.types";
 import { _EnsureProviderEmbeddingModels } from "./provider-embedding-models";
-import type { DeprovisionByokKeyOptions, ProvisionByokKeyOptions, ProvisionByokKeyResult } from "./provision-byok-key.types";
+import type { DeprovisionByokKeyOptions, ProviderProvisioningPrisma, ProvisionByokKeyOptions, ProvisionByokKeyResult } from "./provision-byok-key.types";
 
 export { _AUTO_EMBEDDING_MODEL_NAME } from "./provider-embedding-models";
 
@@ -86,7 +86,7 @@ export function _byokCredentialName(provider: string): string
  * The raw key is written only to the Secret and to LiteLLM. It is never logged and never returned.
  *
  * Called by: the `PUT /:provider` handler in `providerByokRouter`
- * (libs/backend/server/gateways/providers/main/src/routes/provider-byok.ts, org-admin gated), and
+ * (libs/backend/server/gateways/providers/main/src/routes/provider-byok.ts, centrally admitted), and
  * apps/opencrane/src/app/initial-model-bootstrap.ts, which passes `requireLiveModels: true`.
  *
  * @param opts.prisma            - Prisma client for the credential + model rows.
@@ -162,8 +162,7 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
  * Any `ModelDefinition` rows that referenced the credential are left in place; they simply stop
  * resolving until a key is set again.
  *
- * Called by: the `DELETE /:provider` handler in `providerByokRouter`
- * (libs/backend/server/gateways/providers/main/src/routes/provider-byok.ts, org-admin gated).
+ * Called by: the centrally admitted `DELETE /:provider` handler in `providerByokRouter`.
  *
  * @param opts.prisma            - Prisma client.
  * @param opts.coreApi           - Kubernetes Core V1 API.
@@ -261,7 +260,7 @@ function _k8sStatus(err: unknown): number | undefined
  * carries a null `clusterTenant`. A concurrent create trips P2002 on the second writer; that is
  * caught and converged into an update so two simultaneous sets never 500.
  */
-async function _upsertCredentialRow(prisma: PrismaClient, provider: string, secretRef: string, litellmCredentialName: string | null): Promise<PrismaProviderCredential>
+async function _upsertCredentialRow(prisma: ProviderProvisioningPrisma, provider: string, secretRef: string, litellmCredentialName: string | null): Promise<PrismaProviderCredential>
 {
   const where = { scope: "Global" as const, clusterTenant: null, provider };
   const existing = await prisma.providerCredential.findFirst({ where });
@@ -306,7 +305,7 @@ async function _upsertCredentialRow(prisma: PrismaClient, provider: string, secr
  * @throws Whatever `_RegisterLiteLlmModel` throws under `requireLiveModels`; `_ProvisionByokKey`
  *         re-throws it at boot and only logs a warning otherwise.
  */
-async function _ensureProviderModels(prisma: PrismaClient, catalog: ByokProviderCatalog | undefined, providerCredentialId: string, litellmCredentialName: string | null, requireLiveModels: boolean): Promise<void>
+async function _ensureProviderModels(prisma: ProviderProvisioningPrisma, catalog: ByokProviderCatalog | undefined, providerCredentialId: string, litellmCredentialName: string | null, requireLiveModels: boolean): Promise<void>
 {
   if (!catalog)
   {
@@ -389,7 +388,7 @@ async function _ensureProviderModels(prisma: PrismaClient, catalog: ByokProvider
  * @returns The unchanged qualified definition, or the repaired unreferenced definition.
  * @throws When referenced evidence is absent from LiteLLM or any qualification step fails.
  */
-async function _qualifyOrReconcileModelDefinition(prisma: PrismaClient, model: PrismaModelDefinition, upstreamModel: string, litellmCredentialName: string | null): Promise<PrismaModelDefinition>
+async function _qualifyOrReconcileModelDefinition(prisma: ProviderProvisioningPrisma, model: PrismaModelDefinition, upstreamModel: string, litellmCredentialName: string | null): Promise<PrismaModelDefinition>
 {
   const referenced = await prisma.agentRevision.findFirst({ where: { modelDefinitionId: model.id }, select: { id: true } });
   if (referenced || !model.litellmModelId.startsWith("placeholder:"))
@@ -407,7 +406,7 @@ async function _qualifyOrReconcileModelDefinition(prisma: PrismaClient, model: P
  * The partial database index admits one row whose tenant is null. A concurrent provider setup may
  * still win between the read and create, so this helper accepts only a confirmed `P2002` winner.
  */
-async function _ensureGlobalRoutingDefault(prisma: PrismaClient, publicModelName: string): Promise<void>
+async function _ensureGlobalRoutingDefault(prisma: ProviderProvisioningPrisma, publicModelName: string): Promise<void>
 {
   const where = { scope: "Global" as const, clusterTenant: null };
   if (await prisma.modelRoutingDefault.findFirst({ where })) return;
@@ -423,7 +422,7 @@ async function _ensureGlobalRoutingDefault(prisma: PrismaClient, publicModelName
 }
 
 /** Apply a narrow mutable ModelDefinition reconciliation patch through the existing Prisma authority. */
-async function _updateModelDefinition(prisma: PrismaClient, id: string, data: { providerCredentialId?: string; litellmModelId?: string; isDefault?: boolean })
+async function _updateModelDefinition(prisma: ProviderProvisioningPrisma, id: string, data: { providerCredentialId?: string; litellmModelId?: string; isDefault?: boolean })
 {
   return prisma.modelDefinition.update({ where: { id }, data });
 }

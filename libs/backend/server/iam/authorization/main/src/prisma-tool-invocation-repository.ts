@@ -1,29 +1,67 @@
-import { ExternalActionClaimKind, ExternalActionRecoveryMode, McpTaskState, Prisma, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
+import { ExternalActionClaimKind, ExternalActionRecoveryMode, McpTaskState, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
 
 import type { JsonValue } from "@opencrane/util";
 
 import { __DigestCanonicalJson } from "./canonical-json-digest";
-import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents } from "./tool-invocation-lifecycle.types";
-import { _ToolInvocationClaimKindFromPersistence, _ToolInvocationCompletionEvent, _ToolInvocationIsMcpTaskOwned, _ToolInvocationPlan, _ToolInvocationPreparationPolicyIsFixed, _ToolInvocationRecoveryKeyIsValid, _ToolInvocationRecoveryModeFromPersistence, _ToolInvocationSafeFailureCode, _ToolInvocationStateFromPersistence } from "./tool-invocation-persistence-policy";
-import { ToolInvocationAdmissionOutcomes, ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolResultDeliveryOutcomes, type ToolInvocationAdmissionResult, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationTransactionRepository, type ToolInvocationTransitionResult, type ToolResultDeliveryPayload } from "./tool-invocation.types";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents } from "./tool-invocation-lifecycle.types";
+import { _ToolInvocationAuthorizationEvidenceIsValid, _ToolInvocationClaimKindFromPersistence, _ToolInvocationCompletionEvent, _ToolInvocationIsMcpTaskOwned, _ToolInvocationPlan, _ToolInvocationPreparationPolicyIsFixed, _ToolInvocationRecoveryKeyIsValid, _ToolInvocationRecoveryModeFromPersistence, _ToolInvocationSafeFailureCode, _ToolInvocationStateFromPersistence } from "./tool-invocation-persistence-policy";
+import { ToolInvocationAdmissionOutcomes, ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolResultDeliveryOutcomes, type ToolInvocationAdmissionResult, type ToolInvocationAuthorizationCoordinate, type ToolInvocationAuthorizationEvidence, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationTransactionRepository, type ToolInvocationTransitionResult, type ToolResultDeliveryPayload } from "./tool-invocation.types";
 
-/** Map our recovery modes onto Prisma's generated enum. */
+/** Maps package recovery modes onto Prisma's generated enum. */
 const _RECOVERY_TO_PRISMA: Readonly<Record<ExternalActionRecoveryModes, ExternalActionRecoveryMode>> = {
 	[ExternalActionRecoveryModes.ProviderIdempotency]: ExternalActionRecoveryMode.ProviderIdempotency,
 	[ExternalActionRecoveryModes.Reconciliation]: ExternalActionRecoveryMode.Reconciliation,
 	[ExternalActionRecoveryModes.Manual]: ExternalActionRecoveryMode.Manual,
 };
 
-/** Convert this package's claim-kind enum into the name stored in the database. */
+/** Maps package claim kinds onto Prisma's generated enum. */
 const _CLAIM_TO_PRISMA: Readonly<Record<ExternalActionClaimKinds, ExternalActionClaimKind>> = {
 	[ExternalActionClaimKinds.Dispatch]: ExternalActionClaimKind.Dispatch,
 	[ExternalActionClaimKinds.Reconcile]: ExternalActionClaimKind.Reconcile,
 };
 
-/** Stored row shape accepted by lifecycle planning. */
+/** Maps the two runtime actor classes onto their persisted names. */
+const _AUTHORIZATION_ACTOR_TO_PRISMA = {
+	user: ToolInvocationAuthorizationActorKind.User,
+	"agent-service": ToolInvocationAuthorizationActorKind.AgentService,
+} as const;
+
+/** Stored row shape translated without leaking generated Prisma types to callers. */
 type ToolInvocationRow = Prisma.ToolInvocationGetPayload<Record<string, never>>;
 
-/** Convert one ToolInvocation row into the package record without leaking generated types. */
+/** Maps the all-or-none runtime authorization columns into the package contract. */
+function _authorizationEvidence(row: ToolInvocationRow): ToolInvocationAuthorizationEvidence | null
+{
+	const decisionDigests = row.authorizationDecisionDigests ?? [];
+	const hasEvidence = !_isMissing(row.authorizationPrincipalId)
+		|| !_isMissing(row.authorizationActorKind)
+		|| !_isMissing(row.authorizationCoordinates)
+		|| decisionDigests.length > 0
+		|| !_isMissing(row.authorizationMembershipRevision)
+		|| !_isMissing(row.authorizationAssignmentDigest)
+		|| !_isMissing(row.authorizationEvidenceDigest);
+	if (!hasEvidence)
+		return null;
+	if (_isMissing(row.authorizationPrincipalId) || _isMissing(row.authorizationActorKind) || _isMissing(row.authorizationCoordinates) || decisionDigests.length === 0 || _isMissing(row.authorizationMembershipRevision) || _isMissing(row.authorizationAssignmentDigest) || _isMissing(row.authorizationEvidenceDigest))
+		throw new Error(`ToolInvocation ${row.id} has incomplete authorization evidence`);
+	return {
+		principalId: row.authorizationPrincipalId,
+		actorKind: row.authorizationActorKind === ToolInvocationAuthorizationActorKind.User ? "user" : "agent-service",
+		coordinates: row.authorizationCoordinates as unknown as readonly ToolInvocationAuthorizationCoordinate[],
+		decisionDigests: decisionDigests as `sha256:${string}`[],
+		membershipRevision: row.authorizationMembershipRevision,
+		assignmentDigest: row.authorizationAssignmentDigest as `sha256:${string}`,
+		evidenceDigest: row.authorizationEvidenceDigest as `sha256:${string}`,
+	};
+}
+
+/** Returns whether a persistence field is absent from a row or an older test fixture. */
+function _isMissing(value: unknown): value is null | undefined
+{
+	return value === null || value === undefined;
+}
+
+/** Converts one ToolInvocation row into the package record without leaking generated types. */
 function _record(row: ToolInvocationRow): ToolInvocationRecord
 {
 	return {
@@ -31,6 +69,7 @@ function _record(row: ToolInvocationRow): ToolInvocationRecord
 		siloId: row.siloId,
 		agentRevisionId: row.agentRevisionId,
 		subjectId: row.subjectId,
+		authorizationEvidence: _authorizationEvidence(row),
 		runId: row.runId,
 		attempt: row.attempt,
 		mcpTaskId: row.mcpTaskId,
@@ -59,19 +98,19 @@ function _record(row: ToolInvocationRow): ToolInvocationRecord
 	};
 }
 
-/** Return the exact persistence state owned by one claim kind. */
+/** Returns the database state owned by one claim kind. */
 function _claimedState(kind: ExternalActionClaimKinds): ToolInvocationState
 {
 	return kind === ExternalActionClaimKinds.Dispatch ? ToolInvocationState.Claimed : ToolInvocationState.Reconciling;
 }
 
-/** Convert a nullable canonical result into Prisma's explicit JSON-null vocabulary. */
+/** Converts a nullable provider result into Prisma's JSON-null vocabulary. */
 function _resultInput(result: JsonValue): Prisma.InputJsonValue | typeof Prisma.JsonNull
 {
 	return result === null ? Prisma.JsonNull : result as Prisma.InputJsonValue;
 }
 
-/** Map a planner-owned action onto its sole durable target state. */
+/** Maps a planner action onto the database state that action may write. */
 function _targetState(action: ToolInvocationLifecycleActions): ToolInvocationState | null
 {
 	if (action === ToolInvocationLifecycleActions.MarkReady || action === ToolInvocationLifecycleActions.Approve || action === ToolInvocationLifecycleActions.Redispatch || action === ToolInvocationLifecycleActions.RedispatchIdempotently)
@@ -128,7 +167,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	/** Admit one candidate inside an existing caller-owned serializable transaction. */
 	static async admitInTransaction(transaction: Prisma.TransactionClient, intent: ToolInvocationIntent, now: Date, policy: ToolInvocationPreparationPolicy): Promise<ToolInvocationAdmissionResult>
 	{
-		if (!_ToolInvocationRecoveryKeyIsValid(intent) || !_ToolInvocationPreparationPolicyIsFixed(policy))
+		if (!_ToolInvocationRecoveryKeyIsValid(intent) || !_ToolInvocationAuthorizationEvidenceIsValid(intent) || !_ToolInvocationPreparationPolicyIsFixed(policy))
 			return { outcome: ToolInvocationAdmissionOutcomes.Conflict };
 		const key = { runId: intent.runId, attempt: intent.attempt, candidateId: intent.requestIdentity.candidateId };
 		const existing = await transaction.toolInvocation.findUnique({ where: { runId_attempt_candidateId: key } });
@@ -145,6 +184,13 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 				agentServiceId: intent.agentServiceId,
 				agentRevisionId: intent.agentRevisionId,
 				subjectId: intent.subjectId,
+				authorizationPrincipalId: intent.authorizationEvidence.principalId,
+				authorizationActorKind: _AUTHORIZATION_ACTOR_TO_PRISMA[intent.authorizationEvidence.actorKind],
+				authorizationCoordinates: intent.authorizationEvidence.coordinates as unknown as Prisma.InputJsonValue,
+				authorizationDecisionDigests: [...intent.authorizationEvidence.decisionDigests],
+				authorizationMembershipRevision: intent.authorizationEvidence.membershipRevision,
+				authorizationAssignmentDigest: intent.authorizationEvidence.assignmentDigest,
+				authorizationEvidenceDigest: intent.authorizationEvidence.evidenceDigest,
 				runtimeInstanceId: intent.requestIdentity.runtimeInstanceId,
 				commandId: intent.requestIdentity.commandId,
 				candidateId: intent.requestIdentity.candidateId,
@@ -192,6 +238,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		const rows = await this._transaction.toolInvocation.findMany({
 			where: {
 				mcpRuntimeExecution: { is: null },
+				authorizationEvidenceDigest: { not: null },
 				OR: [
 					{
 						run: { is: { state: "Running" } },
@@ -433,64 +480,4 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		await this._transaction.toolResultDelivery.create({ data: { toolInvocationId: invocationId, state: ToolResultDeliveryState.Pending, payload: payload as unknown as Prisma.InputJsonValue, payloadDigest: __DigestCanonicalJson(payload as unknown as JsonValue), createdAt: now } });
 	}
 
-}
-
-/**
- * Record one accepted tool-call candidate as a new invocation, in the caller's transaction.
- *
- * Exported as a plain function so the runtime-dispatch code can admit an invocation without
- * importing this class. Idempotent on `(runId, attempt, candidateId)`.
- *
- * Called by: libs/backend/agents/execution/protocol/src/prisma-runtime-dispatch-authority.ts.
- * @param transaction - Transaction already accepting the runtime candidate.
- * @param intent - Frozen candidate facts.
- * @param now - Trusted server time; sets the retry deadline.
- * @param policy - Must be exactly {@link TOOL_INVOCATION_PREPARATION_POLICY}, or the result is
- *   `conflict`.
- * @returns `admitted`, `idempotent`, or a permanent `conflict`. See
- *   {@link ToolInvocationAdmissionResult}.
- */
-export async function __AdmitPreparingToolInvocationInTransaction(transaction: Prisma.TransactionClient, intent: ToolInvocationIntent, now: Date, policy: ToolInvocationPreparationPolicy): Promise<ToolInvocationAdmissionResult>
-{
-	return PrismaToolInvocationRepository.admitInTransaction(transaction, intent, now, policy);
-}
-
-/**
- * Read one tool call by database id, using the caller's transaction.
- *
- * Called by: ./deferred-tool-approval.ts and ./prisma-deferred-tool-approval-opener.ts, which need
- * the row inside the transaction that is deciding an approval.
- * @returns The stored row, or null when it does not exist. Callers must also re-check that the
- *   row's run, attempt, tool revision, and arguments digest match the approval.
- */
-export async function __FindToolInvocationInTransaction(transaction: Prisma.TransactionClient, invocationId: string): Promise<ToolInvocationRecord | null>
-{
-	return PrismaToolInvocationRepository.findByIdInTransaction(transaction, invocationId);
-}
-
-/**
- * Move one approved tool call to `Ready` with the reviewer's arguments.
- *
- * Called by: ./deferred-tool-approval.ts (`__DecideDeferredToolRequest`).
- * @returns True when applied. False means the tool call was no longer awaiting approval on a
- *   waiting run, or its stored arguments did not match what the reviewer was shown — the caller
- *   throws, because approving arguments nobody reviewed must never commit.
- */
-export async function __MarkToolInvocationApprovedInTransaction(transaction: Prisma.TransactionClient, invocationId: string, expectedArguments: JsonValue, expectedArgumentsDigest: string, effectiveArguments: JsonValue, effectiveArgumentsDigest: string): Promise<boolean>
-{
-	return PrismaToolInvocationRepository.markApprovedInTransaction(transaction, invocationId, expectedArguments, expectedArgumentsDigest, effectiveArguments, effectiveArgumentsDigest);
-}
-
-/**
- * Fail one tool call whose approval was refused or expired, and store its result delivery.
- *
- * Called by: ./deferred-tool-approval.ts (denial and expiry) and
- * ./prisma-deferred-tool-approval-opener.ts (when an approval could not be opened at all).
- * @param failureCode - Short code recorded and delivered, for example `approval_denied` or
- *   `approval_expired`. Anything not matching the safe pattern is replaced.
- * @returns True when failed. False means the row was no longer awaiting approval; callers throw.
- */
-export async function __MarkToolInvocationApprovalRejectedInTransaction(transaction: Prisma.TransactionClient, invocationId: string, now: Date, failureCode: string): Promise<boolean>
-{
-	return PrismaToolInvocationRepository.markApprovalRejectedInTransaction(transaction, invocationId, now, failureCode);
 }

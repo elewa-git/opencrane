@@ -48,11 +48,11 @@ export function authorizedOwner(owner, imports, allowedContracts, path)
 	});
 }
 
-/** Finds repository constructions and resolves their exact import source. */
+/** Finds transaction-scoped repository and authority constructions and resolves their import. */
 export function repositoryConstructions(source, classCandidates, imports)
 {
 	const constructions = [];
-	const pattern = /\bnew\s+([A-Za-z_$][\w$]*Repository)\s*\(/gu;
+	const pattern = /\bnew\s+([A-Za-z_$][\w$]*(?:Repository|Authority))\s*\(/gu;
 	for (const match of source.matchAll(pattern))
 	{
 		const owner = enclosingClass(classCandidates, match.index ?? 0);
@@ -87,10 +87,32 @@ export function isTransactionScopedConstruction(source, construction, imports)
 		const property = construction.argument.slice("this.".length);
 		return _TransactionClientProperties(source, construction.owner, imports).has(property);
 	}
+	if (_TransactionConstructorParameters(source, construction.owner, imports).has(construction.argument)) return true;
 	return _TransactionCallbackBindings(source).some(function _OwnsBinding(binding)
 	{
 		return binding.name === construction.argument && binding.start <= construction.index && construction.index <= binding.end;
 	});
+}
+
+/** Finds constructor parameters whose imported type is exactly Prisma.TransactionClient. */
+function _TransactionConstructorParameters(source, owner, imports)
+{
+	const names = new Set();
+	if (owner === undefined) return names;
+	const types = _TransactionClientTypes(imports);
+	if (types.length === 0) return names;
+	const body = source.slice(owner.start, owner.end + 1);
+	const constructor = /\bconstructor\s*\(/u.exec(body);
+	if (constructor === null) return names;
+	const open = constructor.index + constructor[0].lastIndexOf("(");
+	const close = _MatchingDelimiter(body, open, "(", ")");
+	const transactionPattern = new RegExp(`^\\s*(?:readonly\\s+)?([A-Za-z_$][\\w$]*)\\s*:\\s*(?:${types.join("|")})\\b`, "u");
+	for (const parameter of _SplitTopLevel(body.slice(open + 1, close)))
+	{
+		const match = transactionPattern.exec(parameter);
+		if (match !== null) names.add(match[1]);
+	}
+	return names;
 }
 
 /** Returns whether a repository constructor accepts an imported Prisma TransactionClient. */

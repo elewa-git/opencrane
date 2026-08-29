@@ -44,8 +44,8 @@ traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`
 ## Public surface
 
 - `modelRoutingDefaultsRouter` — the routing-defaults router, mounted at
-  `/api/v1/model-routing/defaults`; writes run the tenant-scope guard before the shared Zod request
-  boundary and return field paths for authorized validation failures.
+  `/api/v1/model-routing/defaults`; reads and writes require the exact
+  `Organization/<silo>/Administer` capability through the transaction-bound central authority.
 - `_ResolveSkillModel` — resolve a skill's effective model by the locked precedence chain.
 - `DefaultModelDefinitionResolutionStatuses` and
   `PrismaDefaultModelDefinitionResolverRepository` — the closed result vocabulary and Postgres
@@ -67,10 +67,13 @@ The application layer mounts the routers, supplies a `PrismaClient`, and may con
 model repository with an already-open transaction. The provider gateway imports the provisioning
 helpers. This package sets and resolves routing policy — it does not commit another domain's
 transaction, execute model calls, or hold provider secrets (LiteLLM and the provider gateway do).
+`ModelRoutingDefault` is organisation policy, not a governed model instance, so the API checks the
+organisation capability explicitly instead of inventing a fake `ModelDefinition` resource id. A
+write commits its authorization evidence and routing row through the same database transaction.
 
 ## Dependency direction
 
-Tagged `scope:model-routing`: it may depend only on `scope:auth`, `scope:cluster-tenants`,
+Tagged `scope:model-routing`: it may depend only on `scope:auth`, `scope:authorization`, `scope:cluster-tenants`,
 `scope:http`, `scope:model-routing`, and `scope:shared` — never on apps or other server domains.
 
 ## Data & persistence

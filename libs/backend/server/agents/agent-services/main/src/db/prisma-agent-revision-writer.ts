@@ -53,6 +53,7 @@ export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments):
 function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionCommand): Prisma.AgentRevisionCreateInput
 {
 	return {
+		id: command.agentRevisionId,
 		agentService: { connect: { id: command.agentServiceId } },
 		revision: command.revision,
 		parentRevision: command.parentRevisionId === null

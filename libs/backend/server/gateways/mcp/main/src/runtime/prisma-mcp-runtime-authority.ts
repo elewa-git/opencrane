@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { McpCompanionClaimResponse, McpCompanionCompletionRequest, McpCompanionFailureRequest } from "@opencrane/backend/agents/runtime/mcp-executor/companion";
 import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
+import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
 import { PrismaMcpTaskToolInvocationLifecycleRepository } from "../mcp-tasks/prisma-mcp-task-tool-invocation-lifecycle";
@@ -133,8 +134,9 @@ export class PrismaMcpRuntimeUnitOfWork implements McpRuntimeAuthority, McpTaskW
 						// 1. Bind authorization and every MCP repository to the same transaction.
 						const mcpTasks = new PrismaMcpTaskToolInvocationLifecycleRepository(transaction);
 						const toolInvocations = dependencies.toolInvocations.__ForTransaction(transaction, mcpTasks);
+						const authorization = new PrismaAuthorizationAuthority(transaction);
 						const repositories = {
-							ociPromotion: new PrismaMcpOciServerPromotionRepository(transaction, dependencies.options),
+							ociPromotion: new PrismaMcpOciServerPromotionRepository(transaction, authorization, dependencies.options),
 							invocationAdmission: new PrismaMcpToolInvocationAdmissionRepository(transaction, toolInvocations, dependencies.options),
 							controller: new PrismaMcpRuntimeControllerRepository(transaction, dependencies.options),
 							companion: new PrismaMcpRuntimeCompanionRepository(transaction, toolInvocations, dependencies.options),

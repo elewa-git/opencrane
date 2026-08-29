@@ -76,7 +76,11 @@ contract and unit of work, plus the narrow persona-refresh bridge.
 The package does not synthesise persona content, execute the agent, change an active run, or accept
 raw instructions, credentials, budgets, policy identifiers, skills, tools, or revision identifiers
 from the browser. Persona approval owns persona-refresh application; agent services owns revision
-cloning and activation for an accepted model alias.
+cloning and activation for an accepted model alias. The accepted proposal and owner match remain
+non-delegable lifecycle eligibility, not a permission decision. Before agent-services writes the
+successor revision, its transaction-bound adapter projects the owner relation through the shared
+managed-grant mechanism and asks the central `AuthorizationAuthority` to admit the AgentService edit,
+AgentRevision create/publish, and selected model use. A denial rolls back the whole transaction.
 
 ## Dependency direction
 
@@ -88,7 +92,7 @@ does not import a deployable app or another personal specialisation.
 
 Owns `PersonalConfigurationChange`. Proposal insertion and model materialisation use separate UoWs;
 the latter binds personal-configuration and agent-service repositories to one serialisable Prisma
-transaction. Persona refresh uses a configuration-owned repository bound to the persona aggregate's
+transaction, including the central authorization decisions and managed-grant projection. Persona refresh uses a configuration-owned repository bound to the persona aggregate's
 transaction. The proposal repository is an insert-only adapter; the locking database trigger owns
 its atomic provenance fence. Queries and owner decisions use capability-specific repositories with no shared
 multi-purpose Prisma adapter.

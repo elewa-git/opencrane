@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { ModelRoutingScope, type Prisma } from "@prisma/client";
 
 import { GeneratedOutputCapability, type CompiledMessage, type CompiledModelRoute, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshot, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import { ___CloneCanonicalJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -37,7 +37,7 @@ function _repositories(transaction: Prisma.TransactionClient): PromptCompilerRep
 		loadToolDefinitions(mcpTools: readonly RunInputSnapshotMcpTool[]): Promise<readonly CompiledToolDefinition[]> { return _loadMcpToolDefinitions(mcpTools); },
 		loadArtifactSummaries(artifactRevisionIds: readonly string[]): Promise<readonly string[]> { return _loadArtifactSummaries(transaction, artifactRevisionIds); },
 		loadSkillSummaries(skillRevisionIds: readonly string[]): Promise<readonly string[]> { return _loadSkillSummaries(transaction, skillRevisionIds); },
-		resolveModelRoute(modelRoute: JsonValue): Promise<CompiledModelRoute> { return _resolveModelRoute(transaction, modelRoute); },
+		resolveModelRoute(siloId: string, modelRoute: JsonValue): Promise<CompiledModelRoute> { return _resolveModelRoute(transaction, siloId, modelRoute); },
 	};
 }
 
@@ -116,14 +116,17 @@ async function _loadSkillSummaries(transaction: Prisma.TransactionClient, skillR
 	return rows.map(function _summary(row) { return `skill ${row.skillId} revision ${row.id}`; }).sort();
 }
 
-/** Turn the snapshot's model route into a model name and an output-token limit; never a credential. */
-async function _resolveModelRoute(transaction: Prisma.TransactionClient, modelRoute: JsonValue): Promise<CompiledModelRoute>
+/** Resolve the snapshot's exact model definition inside its trusted silo; never return a credential. */
+async function _resolveModelRoute(transaction: Prisma.TransactionClient, siloId: string, modelRoute: JsonValue): Promise<CompiledModelRoute>
 {
 	const route: { readonly [key: string]: JsonValue } = modelRoute && typeof modelRoute === "object" && !Array.isArray(modelRoute) ? modelRoute as { readonly [key: string]: JsonValue } : {};
-	const publicModelName = typeof route["publicModelName"] === "string" ? route["publicModelName"] : "";
-	const requested = typeof route["alias"] === "string" ? route["alias"] : publicModelName;
+	const modelDefinitionId = typeof route["modelDefinitionId"] === "string" ? route["modelDefinitionId"].trim() : "";
 	const maxOutputTokens = typeof route["maxOutputTokens"] === "number" && Number.isSafeInteger(route["maxOutputTokens"]) && route["maxOutputTokens"] > 0 ? route["maxOutputTokens"] : null;
-	const definition = requested.length > 0 ? await transaction.modelDefinition.findFirst({ where: { publicModelName: requested } }) : null;
-	const generatedOutputCapabilities = definition?.generatedOutputCapabilities.filter(function _SupportedCapability(capability): capability is GeneratedOutputCapability { return capability === GeneratedOutputCapability.ImagePng || capability === GeneratedOutputCapability.CodeExecutionFiles; }) ?? [];
-	return { modelAlias: definition?.publicModelName ?? requested, maxOutputTokens, generatedOutputCapabilities };
+	if (!siloId.trim() || !modelDefinitionId)
+		throw new Error("snapshot model route requires an exact model definition in a trusted silo");
+	const definition = await transaction.modelDefinition.findFirst({ where: { id: modelDefinitionId, OR: [{ scope: ModelRoutingScope.Global, clusterTenant: null }, { scope: ModelRoutingScope.ClusterTenant, clusterTenant: siloId }] }, select: { publicModelName: true, generatedOutputCapabilities: true } });
+	if (definition === null)
+		throw new Error("snapshot model definition is unavailable in the trusted silo");
+	const generatedOutputCapabilities = definition.generatedOutputCapabilities.filter(function _SupportedCapability(capability): capability is GeneratedOutputCapability { return capability === GeneratedOutputCapability.ImagePng || capability === GeneratedOutputCapability.CodeExecutionFiles; });
+	return { modelAlias: definition.publicModelName, maxOutputTokens, generatedOutputCapabilities };
 }

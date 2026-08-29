@@ -1,65 +1,75 @@
-# @opencrane/models/authorization — capabilities, proofs, and the pure allow/deny function
+# @opencrane/models/authorization — one product permission vocabulary
 
 > [models](../../README.md) › authorization
 
 ## What it owns
 
-A **model** package is shared TypeScript types plus pure decision functions — no database, no
-network. This one is the heart of **authorization**: deciding whether an action is allowed. It owns
-the vocabulary and the one deterministic function that says **allow** or **deny**, so every part of
-the platform decides the same way.
+This model package defines OpenCrane's shared **authorization** vocabulary and its pure, deterministic
+allow-or-deny function. It gives every product domain the same typed resource kinds, actions,
+capability catalogue, grant shape, boundary rules, and evidence classes without importing a database
+or server framework.
 
-Three ideas run through it:
+The product catalogue distinguishes stable resources such as an agent, skill, or MCP server from
+their immutable revisions. It also distinguishes an `McpTask`, which may wait for required input,
+from the `ToolInvocation` created only after the effect arguments are complete. Each supported
+`resource kind × action` pair declares one evidence class:
 
-- A **capability** is a named permission drawn from an immutable, versioned catalogue (for example
-  "write this file"). References pin the exact catalogue revision by digest, so nobody can quietly
-  redefine what a capability means.
-- A **grant** hands one Principal or Group a capability on one exact resource and one stored product
-  boundary. A Group boundary may cover only that Group or its persisted descendants; a Personal
-  boundary is always exact. The grant also records its effect, priority, and validity times.
-- A **proof of possession** is how a running workload proves it is the one entitled to act. The
-  types describe a short-lived, signed request-binding envelope (DPoP-style: a signature that ties
-  the request to a key the workload holds) carrying the exact silo, service account, pod, run, and
-  argument digest the policy-enforcement point (the component that checks the proof and enforces the decision) must independently match.
+| Evidence class | Meaning |
+|---|---|
+| `Read` | A short transaction may filter or return data without appending one record per visible item. |
+| `Decision` | The protected database change and its authorization evidence must commit together. |
+| `Effect` | The transaction creates a one-use admitted command before an external worker performs the effect. |
 
-The load-bearing function is `__DecideAuthorization(request, grants)`. It is **fail-closed and
-deterministic**: it filters grants to those that structurally match the request, rejects any with
-malformed validity or priority, drops future/expired/revoked grants, then lets only the highest-
-priority survivors decide — and **deny always wins** a tie. No matching grant means deny. Helpers
-`__AuthorizationBoundaryCovers`, `__AuthorizationResourcesEqual` (exact, never wildcard or
-hierarchical), and `fleet-membership` (trust of a signed membership revision) enforce the same
-strictness. Group membership is direct: a parent relationship affects descendant boundary coverage,
-not who belongs to the parent.
+```
+ product domain supplies a typed resource, action, boundary and Principal
+                              │
+                              ▼
+ ┌─────────────────────────────────────────────────────────┐
+ │ models/authorization  ◄── HERE                          │
+ │ catalogue rule → matching grants → allow or deny        │
+ └─────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+       evidence requirement returned with the decision
+```
 
-Used by the authorization/grants/membership backends and re-exported through `@opencrane/contracts`.
-A mistake here can only ever refuse a legitimate request — never grant access it should not.
+**In this flow:** the [server authorization authority](../../../backend/server/iam/authorization/main/README.md)
+loads current membership, grants, and boundary facts before calling these pure rules.
+
+`__DecideAuthorization` is fail-closed. It rejects malformed grants, drops future, expired, or
+revoked grants, selects the highest-priority matches, and lets deny win a tie. A Group grant applies
+only through stored membership and boundary facts; resource identifiers never imply hierarchy.
+The server authority may additionally require `Descendants` coverage for a subtree assignment; that
+requirement is part of the typed command and decision digest, not an informal caller-side check.
 
 ## Public surface
 
-- `__DecideAuthorization` and `AuthorizationRequest`, `AuthorizationGrant`, `AuthorizationDecision`,
-  `AuthorizationDecisionOutcomes` — the stable allow/deny vocabulary used by consumers of the
-  deterministic decision.
-- Capability types: `CapabilityReference`, `CapabilityCatalogReference`, `ActionCapability`.
-- Proof types: `CapabilityProof*`, `Es256PublicJwk`, `ValidCapabilityProof`/`InvalidCapabilityProof`.
-- Subjects and boundaries: `AuthorizationSubject`, `AuthorizationBoundary`,
-  `AuthorizationBoundaryCoverages`, `AuthorizationBoundaryContext`, and
-  `__AuthorizationBoundaryCovers`.
-- Resources: `AuthorizationResourceLocator`, `__AuthorizationResourcesEqual`, and
-  `__IsAuthorizationResourceLocator`.
-- Fleet membership: `SignedFleetMembershipRevision`, `FleetMembershipTrustDecision`, and its evaluator.
+- `ProductAuthorizationResourceKinds`, `ProductAuthorizationActions`, and
+  `ProductAuthorizationEvidenceKinds` name the reviewed product policy vocabulary.
+- `PRODUCT_AUTHORIZATION_RULES`, its immutable catalogue coordinates, and
+  `__ProductAuthorizationCapability` bind a resource action to one capability and evidence class.
+- `__DecideAuthorization`, `AuthorizationRequest`, `AuthorizationGrant`, and
+  `AuthorizationDecision` implement the deterministic grant decision.
+- `AuthorizationBoundary`, `AuthorizationSubject`, `AuthorizationResourceLocator`, and their
+  matching helpers keep subjects, resources, and exact Personal or Group boundaries explicit.
+- Fleet-membership types and `Es256PublicJwk` describe independently verified identity evidence
+  consumed at server enforcement points; they do not perform cryptography or I/O here. The retired
+  DPoP capability verifier and its separate action-receipt model are not part of this package.
 
 ## Boundary
 
-Pure and I/O-free: it decides from inputs the caller supplies (grants, trusted time, verified
-evidence). It performs no cryptography, no clock reads, and no I/O — a policy-enforcement point wires
-the actual signature checks and current time, then calls these functions.
+This package owns policy vocabulary and pure evaluation only. It does not load membership, expand
+Groups, open a database transaction, write audit evidence, execute an external action, or decide
+whether a domain resource is in a usable lifecycle state. Callers must supply trusted current time
+and verified facts; missing or unsupported inputs deny.
 
 ## Dependency direction
 
 Tagged `scope:authorization` (`layer:model`): it may depend only on `scope:authorization`,
-`scope:audit`, and `scope:shared` packages — never on apps, backend domains, or other model domains.
+`scope:audit`, and `scope:shared` packages — never on apps, backend domains, or infrastructure.
 
 ## See also
 
 - Parent index: [models](../../README.md)
+- Runtime owner: [server authorization](../../../backend/server/iam/authorization/main/README.md)
 - Siblings: [agents](../../agents/main/README.md) · [artifacts](../../artifacts/main/README.md)

@@ -78,8 +78,8 @@ other's authority.
 Model routing (via LiteLLM), OCI MCP execution, skill publication, content-addressed
 artifacts and organisation memory (via the memory gateway, backed by Cognee) are control-plane
 services. They expose narrow, authenticated boundaries and do not become alternate run or policy
-authorities — a personal or managed run only ever reaches them through the frozen, admitted
-snapshot for that run.
+authorities. A frozen run snapshot is a maximum; the control plane rechecks current authorization
+before admitting the next external effect.
 
 ## Module structure
 
@@ -94,5 +94,7 @@ shortcut. See [`docs/agents/monorepo.md`](https://github.com/elewa-git/opencrane
 for the full placement and dependency rules.
 
 → [Governed agent runtime](/integrators/agent-runtime) ·
+[Central authorization authority](/integrators/authorization-authority) ·
+[Governed packages and container images](/integrators/governed-packages) ·
 [Organisation boundary](/operators/organisation-boundary) ·
 [Running multiple instances](/advanced/multi-instance)

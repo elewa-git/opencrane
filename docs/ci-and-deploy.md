@@ -141,7 +141,10 @@ flowchart TD
   the old server build looks healthy and behaves like the old release.
 - Cluster-wide prerequisites (ingress-nginx, cert-manager, CloudNativePG) are installed once per
   cluster by `bootstrap-prerequisites.sh` and are never part of a silo release.
-- A reviewed Prisma migration runs from an immutable image in a bounded Helm hook Job. A failure is returned directly;
+- The tagged 0.9.2 upgrade runs its reviewed IAM prerequisite and then Prisma from one immutable
+  image in a bounded Helm hook Job. CloudNativePG first reconciles `pg_cron`, then reconciles the
+  `cron` schema owner in a second observed `Database` generation, so the migration image receives
+  only the OpenCrane application credential. A failure is returned directly;
   the deployer does not require a migration backup, inspect the source schema, pause writes, or roll
   back the application.
 - After the umbrella upgrade, the engine stamps a checksum of the published database connection

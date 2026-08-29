@@ -34,12 +34,13 @@ function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | 
 			},
 		},
 		runAuthority: { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Personal, effectiveContractDigest: "sha256:contract", promptCompilerVersion: "prompt-v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null } } as const; } },
-		approvedPersona: { load: async function _load() { return { outcome: "loaded", value: { personaRevisionId } } as const; } },
+		approvedPersona: { load: async function _load() { return { outcome: "loaded", value: { personaRevisionId, personaId: personaRevisionId === null ? null : "persona-profile-1" } } as const; } },
 		conversationContext: { load: async function _load() { return { outcome: "loaded", value: { messageIds: ["message-2", "message-1"], pendingUserMessage: { id: "message-1", blocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] } } } as const; } },
 		preferenceFacts: { load: async function _load() { return { outcome: "loaded", value: [{ id: "preference-2" }, { id: "preference-1" }] } as const; } },
-		memoryScope: { load: async function _load() { return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal" } } } as const; } },
-		toolPolicy: { load: async function _load() { return { outcome: "loaded", value: { modelRoute: { alias: "target-model" }, mcpTools: [_McpTool("mcp-tool-revision-2", "write"), _McpTool("mcp-tool-revision-1", "search")], skillRevisionIds: ["skill-2", "skill-1"], artifactRevisionIds: ["artifact-2", "artifact-1"] } } as const; } },
+		memoryScope: { load: async function _load() { return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal" }, datasetId: "dataset-1" } } as const; } },
+		toolPolicy: { load: async function _load() { return { outcome: "loaded", value: { modelDefinitionId: "model-definition-1", modelRoute: { alias: "target-model" }, mcpTools: [_McpTool("mcp-tool-revision-2", "write"), _McpTool("mcp-tool-revision-1", "search")], skillRevisionIds: ["skill-2", "skill-1"], artifactRevisionIds: ["artifact-2", "artifact-1"] } } as const; } },
 		skillEligibility: { load: async function _load() { return { outcome: "loaded", value: null } as const; } },
+		productAuthorization: { load: async function _load() { return { outcome: "loaded", value: null } as const; } },
 		budgetPolicy: { load: async function _load() { return { outcome: "loaded", value: { budgetPolicy: { maxTokens: 1000, maxTurns: 4 } } } as const; } },
 		identityEnvelope: { load: async function _load() { return { outcome: "loaded", value: { kind: RunInputSnapshotIdentityKinds.User, executionIssuer: "https://issuer.test", executionSubjectId: "user-1", principalId: "principal-1", fleetMembershipRevision: 8, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"e".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T13:00:00.000Z", capabilitySetDigest: `sha256:${"f".repeat(64)}` } } as const; } },
 	};
@@ -78,7 +79,7 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 		authorities.runAuthority = { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Managed, effectiveContractDigest: "sha256:contract", promptCompilerVersion: "prompt-v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null } } as const; } };
 		authorities.identityEnvelope = { load: async function _load() { return { outcome: "loaded", value: { kind: RunInputSnapshotIdentityKinds.Service, executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", fleetMembershipRevision: 8, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"e".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T13:00:00.000Z", effectiveBoundaryAttachments: [], effectiveBoundaryAttachmentDigest: `sha256:${"a".repeat(64)}`, capabilitySetDigest: `sha256:${"f".repeat(64)}` } } as const; } };
 
-		const result = await __AssembleRunInputSnapshot({ runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "service", trigger: "managed_invocation", requestIdempotencyKey: "request-1" }, authorities);
+		const result = await __AssembleRunInputSnapshot({ runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "service", requestingPrincipalId: "principal-1", trigger: "managed_invocation", requestIdempotencyKey: "request-1" }, authorities);
 
 		expect(result).toEqual({ outcome: "denied", reason: "persona_unavailable" });
 		expect(admitted).toBe(false);

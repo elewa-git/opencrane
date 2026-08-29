@@ -398,33 +398,6 @@ export interface components {
              */
             lastUsed?: string | null;
         };
-        McpAccessPolicy: {
-            serverId: string;
-            /** @description Stable local groups with an active MCP authorization grant. */
-            groups?: components["schemas"]["EntitledGroup"][];
-            users?: components["schemas"]["EntitledUser"][];
-        };
-        EntitledGroup: {
-            /** @description Stable local Group identifier. */
-            id: string;
-            /** @description Human-readable group name. */
-            name: string;
-        };
-        EntitledUser: {
-            /** @description Stable user identifier (sub or email). */
-            id: string;
-            /** @description Display name. */
-            name: string;
-            /** @description Two-letter initials derived from the name. */
-            initials: string;
-            /** @description Deterministic avatar colour derived from the identifier. */
-            color: string;
-        };
-        /** @description The selectable universe of users and groups for the admin access editor. */
-        McpDirectory: {
-            users: components["schemas"]["EntitledUser"][];
-            groups: components["schemas"]["EntitledGroup"][];
-        };
         ClusterTenant: {
             /** @description Stable cluster-scoped identifier (the customer key). */
             name: string;

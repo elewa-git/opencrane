@@ -45,6 +45,7 @@ const _AgentRevisionContentSchema: z.ZodType<AgentRevisionContent> = z.object({
 
 /** Validates a managed-service creation command, including its no-persona content rule. */
 const _CreateManagedAgentServiceCommandSchema = z.object({
+	principalId: _NonBlankStringSchema,
 	siloId: _NonBlankStringSchema,
 	name: _NonBlankStringSchema,
 	workloadProfile: z.literal(MANAGED_AGENT_RUNTIME_PROFILE_NAME),
@@ -55,6 +56,7 @@ const _CreateManagedAgentServiceCommandSchema = z.object({
 
 /** Validates an immutable revision append command. */
 const _ReviseAgentRevisionCommandSchema = z.object({
+	principalId: _NonBlankStringSchema,
 	siloId: _NonBlankStringSchema,
 	agentServiceId: _NonBlankStringSchema,
 	expectedParentRevisionId: _NonBlankStringSchema.nullable(),
@@ -65,6 +67,7 @@ const _ReviseAgentRevisionCommandSchema = z.object({
 
 /** Validates a restore command that names an immutable source revision. */
 const _RestoreAgentRevisionCommandSchema = z.object({
+	principalId: _NonBlankStringSchema,
 	siloId: _NonBlankStringSchema,
 	agentServiceId: _NonBlankStringSchema,
 	sourceRevisionId: _NonBlankStringSchema,
@@ -75,6 +78,7 @@ const _RestoreAgentRevisionCommandSchema = z.object({
 
 /** Validates a service-state command before transition policy evaluates it. */
 const _ChangeAgentServiceStateCommandSchema = z.object({
+	principalId: _NonBlankStringSchema,
 	siloId: _NonBlankStringSchema,
 	agentServiceId: _NonBlankStringSchema,
 	expectedState: z.nativeEnum(AgentServiceStates),
@@ -91,8 +95,8 @@ const _ManagedRunNowCommandFields = {
 
 /** Validates the trigger-specific scheduled-slot invariant for managed run admission. */
 const _ManagedRunNowCommandSchema = z.discriminatedUnion("trigger", [
-	z.object({ ..._ManagedRunNowCommandFields, trigger: z.literal("managed_invocation"), scheduledSlot: z.null() }).strict(),
-	z.object({ ..._ManagedRunNowCommandFields, trigger: z.literal("schedule"), scheduledSlot: _InstantSchema }).strict(),
+	z.object({ ..._ManagedRunNowCommandFields, requestedByPrincipalId: _NonBlankStringSchema, trigger: z.literal("managed_invocation"), scheduledSlot: z.null() }).strict(),
+	z.object({ ..._ManagedRunNowCommandFields, requestedByPrincipalId: z.null(), trigger: z.literal("schedule"), scheduledSlot: _InstantSchema }).strict(),
 ]);
 
 /** Validates revision comparison coordinates without allowing blank silo or revision identifiers. */

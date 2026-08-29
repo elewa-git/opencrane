@@ -67,6 +67,9 @@
       "@opencrane/backend/server/iam/audit": [
         "./libs/backend/server/iam/audit/main/src/index.ts"
       ],
+      "@opencrane/backend/server/iam/audit-writer": [
+        "./libs/backend/server/iam/audit-writer/main/src/index.ts"
+      ],
       "@opencrane/backend/server/iam/authorization": [
         "./libs/backend/server/iam/authorization/main/src/index.ts"
       ],

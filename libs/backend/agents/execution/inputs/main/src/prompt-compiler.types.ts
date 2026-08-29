@@ -27,6 +27,6 @@ export interface PromptCompilerRepositories
 	loadArtifactSummaries(artifactRevisionIds: readonly string[]): Promise<readonly string[]>;
 	/** Resolve one-line availability summaries for the immutable skill revisions offered to the run. */
 	loadSkillSummaries(skillRevisionIds: readonly string[]): Promise<readonly string[]>;
-	/** Resolve the model route without provider credentials for the snapshot's server-selected route. */
-	resolveModelRoute(modelRoute: JsonValue): Promise<CompiledModelRoute>;
+	/** Resolve the exact frozen model definition within the snapshot's trusted silo. */
+	resolveModelRoute(siloId: string, modelRoute: JsonValue): Promise<CompiledModelRoute>;
 }

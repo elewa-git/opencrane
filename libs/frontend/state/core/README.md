@@ -13,8 +13,9 @@ the HTTP or WebSocket calls is an **adapter**, and adapters live in the sibling 
 This package defines the shared ports and the app-wide identity state everyone else builds on.
 
 It owns one thing: **`SessionStore`**, the signal-based store of who is logged in and what they may do. It reads
-  the authenticated session through the typed API client and derives coarse **`Capabilities`**
-  flags. The **`PLATFORM_SURFACE`** token binds those capabilities to the organisation UI.
+the authenticated session through the typed API client and derives coarse **`Capabilities`** flags.
+Organisation-management flags come from the server's central `organization:administer` decision;
+the **`PLATFORM_SURFACE`** token keeps that product capability separate from platform control.
 
 ```
  core (identity state)              a feature
@@ -25,14 +26,16 @@ It owns one thing: **`SessionStore`**, the signal-based store of who is logged i
 
 **In this flow:** [gateways](../gateways/README.md)
 
-Invariant: `Capabilities` are **fail-closed** — an operator/admin power requires an explicit `true`
-claim from the server; a missing claim grants nothing rather than elevating the session. These flags
+Invariant: `Capabilities` are **fail-closed** — organisation power requires an explicit central
+authorization result, while platform control requires its separate operator claim. A missing value
+grants nothing rather than elevating the session. These flags
 only hide or disable controls in the UI; the API stays the real enforcement point.
 
 ## Public surface
 
 - `SessionStore` — app-wide identity and capability signals.
-- `SessionUser` / `Capabilities` — the identity and capability read models.
+- `SessionUser` / `SessionProductCapabilities` / `Capabilities` — the identity, central product
+  authorization hint, and browser capability read models.
 - `PlatformSurface`, `PLATFORM_SURFACE` — which strictly-separated surface (platform vs org) this build serves.
 
 ## Boundary

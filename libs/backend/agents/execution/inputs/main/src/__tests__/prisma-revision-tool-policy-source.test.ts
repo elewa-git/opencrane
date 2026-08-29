@@ -10,7 +10,7 @@ import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from
 /** The active managed run facts these tests share. */
 const _RUN = { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Managed, effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null } as const;
 /** Fixed session-assembly command scoped to the active managed service. */
-const _COMMAND: RunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "service", trigger: "managed_invocation", requestIdempotencyKey: "request-1" };
+const _COMMAND: RunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "service", requestingPrincipalId: "principal-1", trigger: "managed_invocation", requestIdempotencyKey: "request-1" };
 
 /** Creates one MCP tool assignment backed by a Ready revision on an active, published server. */
 function _McpToolAssignment(overrides: Record<string, unknown> = {})
@@ -48,7 +48,7 @@ describe("PrismaRevisionToolPolicySource", function _DescribePrismaRevisionToolP
 	it("freezes only live model, MCP, skill, and artifact references", async function _LoadsLivePolicy()
 	{
 		const transaction = _Transaction(_Revision(), [_Skill()], [{ id: "artifact-revision-1", state: ArtifactRevisionState.Published }]);
-		await expect(_ToolPolicySource().load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "loaded", value: { modelRoute: { alias: "tenant-model", modelDefinitionId: "model-definition-1", litellmModelId: "litellm-deployment-1" }, mcpTools: [{ toolRevisionId: "mcp-tool-revision-1", name: "calendar.read", description: "Read a calendar", inputSchema: { type: "object", additionalProperties: false }, inputSchemaDigest: ___DigestCanonicalJson({ type: "object", additionalProperties: false }) }], skillRevisionIds: ["skill-revision-1"], artifactRevisionIds: ["artifact-revision-1"] } });
+		await expect(_ToolPolicySource().load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "loaded", value: { modelDefinitionId: "model-definition-1", modelRoute: { alias: "tenant-model", modelDefinitionId: "model-definition-1", litellmModelId: "litellm-deployment-1" }, mcpTools: [{ toolRevisionId: "mcp-tool-revision-1", name: "calendar.read", description: "Read a calendar", inputSchema: { type: "object", additionalProperties: false }, inputSchemaDigest: ___DigestCanonicalJson({ type: "object", additionalProperties: false }) }], skillRevisionIds: ["skill-revision-1"], artifactRevisionIds: ["artifact-revision-1"] } });
 		expect(transaction.prisma.mcpToolAdmissionClaim.upsert).toHaveBeenCalledWith({ where: { agentRevisionId_siloId: { agentRevisionId: "revision-1", siloId: "silo-1" } }, create: { agentRevisionId: "revision-1", siloId: "silo-1", touchedAt: new Date("2026-07-26T00:00:00.000Z") }, update: { touchedAt: new Date("2026-07-26T00:00:00.000Z") } });
 	});
 

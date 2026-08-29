@@ -121,6 +121,8 @@ export default defineConfig({
         text: 'Deep dives',
         collapsed: true,
         items: [
+          { text: 'Central authorization authority', link: '/integrators/authorization-authority' },
+          { text: 'Governed packages & container images', link: '/integrators/governed-packages' },
           { text: 'Governed agent runtime', link: '/integrators/agent-runtime' },
           { text: 'OCI MCP runtime', link: '/integrators/oci-mcp-runtime' },
           { text: 'Memory write, manage & read', link: '/integrators/retrieval-memory' },

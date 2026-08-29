@@ -29,7 +29,8 @@ workload behind a **language-neutral** `AgentRuntimeProtocol v2` ([ADR 0010](doc
    `own-personal-ai-agent-setup`; independent
    work lanes inside the active phase run in parallel where their dependency graph allows.
 4. **Architecture:** Postgres is product authority; artifacts live behind `ArtifactStore` on PVC;
-   authorization is per silo with proof-bound run/action capabilities; runtimes receive no
+   authorization is per silo through the central durable authority and one-use ToolInvocation
+   admissions; runtimes receive no
    Kubernetes mutation RBAC; Cilium/default-deny enforces workload isolation; Python Jobs are
    isolated; controller and channel-proxy trust boundaries are separate apps; legacy CRDs and
    OpenClaw authorities disappear.
@@ -84,7 +85,7 @@ path and ownership refactor; it adds no compatibility aliases and changes no run
 Build the target Postgres models for AgentService/Revision, Conversation/Message/canonical timeline,
 conditional AgentRun/RunEvent, Approval, Persona, Artifact, SkillRevision, audit, and membership
 projection. Build the authorization facade,
-proof-bound capabilities, channel proxy, agent controller, ArtifactStore CAS, outbox, app-owned
+central product grants, channel proxy, agent controller, ArtifactStore CAS, outbox, app-owned
 Cognee/Obot adapters, default-deny Cilium profiles, workload identities, and deterministic creation
 of fresh application stores and credentials. Every durable store uses an expandable mounted volume;
 agent-runtime storage is mounted scratch and never the long-term home for user data.
@@ -177,9 +178,9 @@ composed (authenticated custody provisioning plus server-owned, allow-listed act
 provider addressing and credentials never enter a runtime Job), the scoped-memory
 contract freezes the gateway-native dataset selected by admitted authority while the authenticated
 read transport returns through the same durable attempt-fenced result delivery, and the
-attach-authority + runtime
-effective-access intersection over the grant compiler (closes the slice-5 deferral; scope-isolation
-tested). Scoped injection and personal record/correct/forget remain fail-closed pending a durable,
+attach authority plus the central runtime authorization/grant intersection (closes the slice-5
+deferral; scope isolation tested). Scoped injection and personal record/correct/forget remain
+fail-closed pending a durable,
 recoverable gateway write lifecycle. NOT done — a NAMED LATER GATE: **create and qualify the harvesting central agent against
 live Obot**, tracked under [#337](https://github.com/elewa-git/opencrane/issues/337); the composed
 custody and server action data plane validates Obot responses defensively until that live
@@ -262,6 +263,79 @@ manual plan.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.
+
+### Cross-cutting track — central durable authorization authority
+
+**Status: IN PROGRESS — follow-up to #745; blocks code-skill execution and complete package-authority convergence.**
+
+Replace the repository's separate product-authorization paths with one logical
+`AuthorizationAuthority`. The authority is a transaction-bound application port backed by the silo
+PostgreSQL database, not a separate network service: the authorization decision, protected product
+write, and one-use effect admission must commit or roll back together.
+
+Authentication, workload identity, lifecycle eligibility, and product authorization remain distinct:
+
+- OIDC and membership prove which human or service is calling;
+- Kubernetes TokenReview proves the controller or Pod identity assigned to admitted work;
+- domain owners decide whether a revision is operationally eligible, such as an MCP revision being
+  Ready or a skill revision being Published;
+- the central authority alone decides whether a principal may perform the product action; and
+- NetworkPolicy and Kubernetes RBAC constrain infrastructure reachability but never grant product
+  permission.
+
+Humans, Groups, managed `AgentService` principals, and personal-agent runs use the same grant
+semantics. A managed agent's resource grants and a human caller's permission to invoke or administer
+that agent are separate decisions. A personal agent uses its human principal's current grants
+intersected with its approved revision and frozen run ceilings. Frozen state is a maximum, not a
+permanent grant: revocation or membership loss denies the next external effect.
+
+#### Adoption and deletion chain
+
+Deliver the track in this one follow-up PR through internally gated waves and commits. Each wave
+adopts a bounded caller set and deletes what it replaces before the next wave starts.
+
+1. Inventory every route, use case, background consumer, and executor that makes a product
+   permission decision. Record its actor, resource, action, current guard, target authority call,
+   eligibility owner, and receipt need. Add a checked enforcement inventory and forbid new raw role,
+   owner, silo, visibility, or product-specific entitlement guards.
+2. Harden the common authorization kernel with typed resources and actions, principal and Group
+   resolution, deny precedence, expiry, batch catalogue filtering, transaction-bound effect
+   admission, durable decision evidence, and safe decision explanations.
+3. Adopt human and agent management. Gate agent discovery, creation, revision, publication,
+   invocation, scheduling, delegation, retirement, and administration through the authority. Treat
+   managed agents as durable Principals and personal runs as the human-principal intersection.
+4. Converge governed packages. Move MCP and skill discovery, assignment, publication, installation,
+   and use to the shared authority. Keep their lifecycle and executor rules separate. Delete MCP-only
+   access reconciliation, owner-only skill execution, and silo-wide skill visibility as their callers
+   move.
+5. Adopt artifacts, conversations, datasets and memory, models, provider connections, channel
+   targets, schedules, budgets, approvals, and child-run delegation. Recheck current grants before
+   every external effect and bind the principal, revision, arguments, approval subject, and workload
+   assignment into a one-use admission record.
+6. Reduce workload authorization to assignment proof. Controllers and Pods may exercise the exact
+   admitted action or fail closed; they may not reinterpret grants, membership, ownership, or roles.
+7. Delete `_RequireOrgAdmin`, owner-or-silo shortcuts, visibility-as-permission checks,
+   package-specific entitlement engines, duplicate evaluators, direct product role checks, and every
+   stale schema, configuration, API, UI, test, export, dependency, and document they leave behind.
+   Bootstrap ordinary owner/admin product powers as managed grants. Retain only separately documented
+   cluster bootstrap or operator controls that are not product authorization.
+8. Qualify direct humans, inherited Groups, managed agents, personal runs, delegated runs, and
+   workloads. Cover wrong silo/principal/agent, stale membership, deny precedence, expiry, nested
+   Groups, revocation, lifecycle changes, altered arguments, replay, cancellation, approval mismatch,
+   and transaction failure. Prove grant → attach → publish → invoke → revoke → next effect denied,
+   plus clean installation and the supported predecessor upgrade for any schema change.
+
+Each wave names its survivor and deletion sets before implementation, reads
+`docs/agents/versioning.md`, updates fresh and upgrade paths together, runs architecture and reaper
+before and after structural work, and closes with focused tests. The PR closes with independent
+review, residue cleanup, and the comments gate. Do not add compatibility shims, dual policy
+evaluation, or delayed cleanup.
+
+Exit: every product permission decision uses the central authority port; humans and agents share one
+grant model; external effects have replay-safe ToolInvocation admissions and durable authorization
+evidence; revocation takes effect at
+the next external boundary; CI rejects bypasses; and no replaced authorization code, data,
+configuration, API, UI, test, or documentation remains.
 
 ### Phase F — product and operator surfaces
 
@@ -490,8 +564,11 @@ finishes the move from SQL pollers and locks to Absurd workflows in this order:
 5. Delete MCPB routes, schema, workers, old SQL locks and pollers, and unreachable AgentRun residue
    ([#695](https://github.com/elewa-git/opencrane/issues/695),
    [#740](https://github.com/elewa-git/opencrane/issues/740)).
-6. As the final integration step, run the forward 0.9.3-to-0.10.0 change with Prisma Migrate as the
-   only database-change record and one dedicated migration Job. The 0.10.0 release closes
+6. As the final integration step, run the forward 0.9.2-to-0.10.0 change with one dedicated
+   migration Job. It carries the tagged release's 0.9.0 schema through the reviewed IAM prerequisite,
+   after CloudNativePG has installed `pg_cron` and assigned its schema to the application owner in
+   two observed `Database` generations. The Job receives no superuser credential and then uses
+   Prisma Migrate as the database-change ledger from 0.10.0 onward. The 0.10.0 release closes
    [#592](https://github.com/elewa-git/opencrane/issues/592),
    [#695](https://github.com/elewa-git/opencrane/issues/695),
    [#736](https://github.com/elewa-git/opencrane/issues/736),
@@ -519,7 +596,7 @@ finishes the move from SQL pollers and locks to Absurd workflows in this order:
 | [#513](https://github.com/elewa-git/opencrane/issues/513) | Low priority: evaluate LiteLLM-native OTLP GenAI spans through an operator-supplied collector, with message content disabled by default |
 | [#592](https://github.com/elewa-git/opencrane/issues/592) | OCI admission, immutable import, MCP executor claims, and Obot retirement are complete in the 0.10 review stack. Keep the issue open for the pre-started generic runtime pool, reconciliation, and live latency qualification. |
 | **0.10.0 workflow execution order** | **1.** Let product database transactions declare work that remote workflow workers execute. **2.** Run MCP tools from imported immutable OCI images through an MCP-specific executor and `RuntimeWorkloadClaim`; never put an uploaded image in the fixed generic agent Pod. **3.** Move skill validation, artifact preprocessing, and AgentRun lifecycle onto durable tasks. **4.** Remove each replaced polling, locking, lease, dispatch, MCPB, and Obot path after its durable owner exists. **5.** Finish with the forward database migration and dedicated migration Job. **6.** Run live pickup-latency and deployment qualification on the frozen candidate. The separate legacy integration API remains an explicit retirement decision. |
-| **0.10.0 forward workflow cutover** | Move from the released 0.9.3 schema to 0.10.0 with Prisma Migrate as the only record of database changes and one dedicated migration Job. OCI Image Layout ZIP admission accepts MCP `2026-07-28` only. Keep the remote v2 era-probe workflow and remove the MCPB routes, schema, and workers. This is a new version-to-version migration; it does not rewrite released 0.9.3 history. |
+| **0.10.0 forward workflow cutover** | Move directly from tagged release 0.9.2 to 0.10.0 with one dedicated migration Job. Carry its 0.9.0 database schema through the reviewed IAM prerequisite, then use Prisma Migrate as the ledger from 0.10.0 onward. OCI Image Layout ZIP admission accepts MCP `2026-07-28` only. Keep the remote v2 era-probe workflow and remove the MCPB routes, schema, and workers. The untagged 0.9.3 candidate is not a supported release boundary. |
 | [#600](https://github.com/elewa-git/opencrane/issues/600) | Build immutable conversation modes, strategy ownership, ordinary messaging, and the mixed canonical timeline |
 | [#601](https://github.com/elewa-git/opencrane/issues/601) | Build group `@agent` child sessions, immediate-parent delivery, compact summaries, and breadcrumb navigation |
 | [#602](https://github.com/elewa-git/opencrane/issues/602) | Retain completed onboarding as closed/read-only workspace history |

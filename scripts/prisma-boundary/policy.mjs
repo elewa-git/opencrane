@@ -63,8 +63,8 @@ export function validatePolicy(policy, allowLegacyRawProcedure = false)
 		throw new Error("invalid Prisma-boundary policy schema");
 	}
 	const entries = [
-		...policy.owners.repositories.map(function _Repository(entry) { return { ...entry, expectedAdapterSuffix: "Repository" }; }),
-		...policy.owners.unitsOfWork.map(function _UnitOfWork(entry) { return { ...entry, expectedAdapterSuffix: "UnitOfWork" }; }),
+		...policy.owners.repositories.map(function _Repository(entry) { return { ...entry, expectedAdapterPattern: /(?:Repository|Authority)$/u }; }),
+		...policy.owners.unitsOfWork.map(function _UnitOfWork(entry) { return { ...entry, expectedAdapterPattern: /UnitOfWork$/u }; }),
 	];
 	const keys = new Set();
 	for (const entry of entries)
@@ -72,7 +72,7 @@ export function validatePolicy(policy, allowLegacyRawProcedure = false)
 		const valid = _IsExactTypeScriptPath(entry?.path)
 			&& typeof entry?.adapter === "string"
 			&& /^[A-Za-z_$][\w$]*$/u.test(entry.adapter)
-			&& entry.adapter.endsWith(entry.expectedAdapterSuffix)
+			&& entry.expectedAdapterPattern.test(entry.adapter)
 			&& typeof entry?.contract === "string"
 			&& /^[A-Za-z_$][\w$]*$/u.test(entry.contract)
 			&& _IsExactImportPath(entry?.contractImportPath)
@@ -186,10 +186,10 @@ function _IsExactImportPath(path)
 	return typeof path === "string" && path.length > 0 && !/[?*\[\]{}]/u.test(path);
 }
 
-/** Returns whether one transaction-scoped repository construction is exact. */
+/** Returns whether one transaction-scoped repository or authority construction is exact. */
 function _IsExactConstruction(construction)
 {
 	return typeof construction?.adapter === "string"
-		&& /^[A-Za-z_$][\w$]*Repository$/u.test(construction.adapter)
+		&& /^[A-Za-z_$][\w$]*(?:Repository|Authority)$/u.test(construction.adapter)
 		&& _IsExactImportPath(construction?.importPath);
 }

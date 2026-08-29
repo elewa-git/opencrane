@@ -5,6 +5,20 @@ import { describe, expect, it, vi } from "vitest";
 import { PrismaConversationAssetOutputRepository } from "../prisma-conversation-asset-output-repository";
 import { PrismaConversationAssetOutputUnitOfWork } from "../prisma-conversation-asset-output-unit-of-work";
 
+vi.mock("@opencrane/backend/server/iam/authorization", function _MockAuthorization()
+{
+	return {
+		PrismaAuthorizationAuthority: class
+		{
+			async admitPrincipal() { return { outcome: "allow", evidence: { decisionDigest: "digest" } }; }
+		},
+		PrismaManagedAuthorizationGrantRepository: class
+		{
+			async reconcileManagedResourceGrants() { return undefined; }
+		},
+	};
+});
+
 const _IDENTITY = { namespace: "runtime-ns", serviceAccountName: "agent-runtime-default", podUid: "pod-1" } as const;
 const _ADDRESS = `sha256:${"a".repeat(64)}`;
 const _COMMAND = { runId: "run-1", runAttempt: 2, messageId: "message-1", idempotencyKey: "output-1", displayName: "report.pdf", mediaType: "application/pdf", byteLength: 5, contentAddress: _ADDRESS } as const;

@@ -5,7 +5,13 @@ import { PrismaSteeringRequestRepository } from "../prisma-steering-request-repo
 import { PrismaSteeringRequestUnitOfWork } from "../prisma-steering-request-unit-of-work";
 
 /** Defines the owner-bound steering request reused across transaction and retry assertions. */
-const _COMMAND = { runId: "run-1", siloId: "silo-1", subjectId: "user-1", content: { text: "Focus." }, idempotencyDigest: "sha256:key", digest: "sha256:key:sha256:text", submittedAt: new Date("2026-07-26T12:00:00.000Z") } as const;
+const _COMMAND = { runId: "run-1", siloId: "silo-1", subjectId: "user-1", principalId: "principal-1", content: { text: "Focus." }, idempotencyDigest: "sha256:key", digest: "sha256:key:sha256:text", submittedAt: new Date("2026-07-26T12:00:00.000Z") } as const;
+
+/** Allows the exact AgentService invocation in repository-focused lifecycle tests. */
+function _Authorization()
+{
+	return { admitPrincipal: vi.fn().mockResolvedValue({ outcome: "allow" }) } as never;
+}
 
 /** Builds the smallest transaction double used by the owner-bound steering queue. */
 function _transaction(priorResume: boolean, priorSteering: { readonly id: string; readonly runId: string; readonly siloId: string; readonly subjectId: string; readonly attempt: number; readonly digest: string } | null = null)
@@ -23,7 +29,7 @@ describe("PrismaSteeringRequestRepository", function _suite()
 	it("refuses a later request once the attempt has minted its sole resume", async function _refusesLaterRequest()
 	{
 		const transaction = _transaction(true);
-		const repository = new PrismaSteeringRequestRepository(transaction as never);
+		const repository = new PrismaSteeringRequestRepository(transaction as never, _Authorization());
 		await expect(repository.submit(_COMMAND, "steering-id")).resolves.toEqual({ outcome: "run_not_steerable" });
 		expect(transaction.runtimeSteeringRequest.create).not.toHaveBeenCalled();
 	});
@@ -31,7 +37,7 @@ describe("PrismaSteeringRequestRepository", function _suite()
 	it("returns the existing row for an exact retry without queueing twice", async function _ReturnsIdempotent()
 	{
 		const transaction = _transaction(false, { id: "steer-1", runId: "run-1", siloId: "silo-1", subjectId: "user-1", attempt: 3, digest: "sha256:key:sha256:text" });
-		const repository = new PrismaSteeringRequestRepository(transaction as never);
+		const repository = new PrismaSteeringRequestRepository(transaction as never, _Authorization());
 
 		await expect(repository.submit(_COMMAND, "steer-1")).resolves.toEqual({ outcome: "idempotent", steeringRequestId: "steer-1", attempt: 3 });
 		expect(transaction.runtimeSteeringRequest.create).not.toHaveBeenCalled();

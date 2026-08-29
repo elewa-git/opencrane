@@ -33,26 +33,30 @@ operators own those rows, so one authority never overwrites the other.
 
 Invariant: a group is a silo-bound named set of direct Principal memberships with optional hierarchy
 metadata. It neither inherits membership or grants from its parent nor makes access decisions. The
-database rejects hierarchy cycles and refuses to delete a parent while it still has children.
-Authorization grants are created and evaluated by their owning domains. Mounted at `/api/v1/groups`.
+database rejects hierarchy cycles and refuses to delete a parent while it still has children. Reads
+are filtered through the central authorization authority, while management writes require the exact
+organisation `administer` grant and record that decision in the group transaction. Mounted at
+`/api/v1/groups`.
 
 ## Public surface
 
 - `groupsRouter` and its route types — the `/api/v1/groups` management API.
-- The group logic in `core/groups.logic` — silo-bound hierarchy and normalized local membership create, update, delete, and response shapes.
+- `core/groups.logic` — silo-bound hierarchy and normalized local membership persistence.
+- `core/prisma-group-unit-of-work` — transaction ownership and central authorization for group reads and writes.
 - `_GroupsOpenapiPaths` and `_GroupsOpenapiSchemas` — the OpenAPI paths and response schemas this domain contributes to the aggregated spec.
 
 ## Boundary
 
 Consumed by the server's HTTP composition root and by [api-spec](../../../api-spec/main/README.md).
 It owns group definitions and normalized direct memberships. It deliberately does not persist or
-resolve effective access. Those entitlements belong to [authorization](../../authorization/main/README.md).
+resolve effective access. Its UnitOfWork supplies the same Prisma transaction to group persistence
+and [authorization](../../authorization/main/README.md), which owns those decisions and receipts.
 
 ## Dependency direction
 
-Tagged `scope:groups`: it may depend on its own scope, shared contracts, the authentication scope that
-supplies the organisation-admin route guard, and the HTTP scope's validated-body adapter. It never
-imports an app or another IAM domain's persistence or policy decisions.
+Tagged `scope:groups`: it may depend on its own scope, shared contracts, authentication for the
+admitted local Principal, authorization for product decisions, and the HTTP scope's validated-body
+adapter. It never imports an app or another IAM domain's persistence.
 
 ## Data & persistence
 

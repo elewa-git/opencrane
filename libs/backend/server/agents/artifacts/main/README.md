@@ -44,6 +44,14 @@ relations before minting a short-lived lease from catalogue-owned facts:
                          five-minute-maximum signed read lease
 ```
 
+The signed-in artifact catalogue is entitlement-based rather than owner-filtered. It lets the
+central authority evaluate the caller's current Principal and direct stored Group memberships over
+the same candidate set, so a live Group Discover grant exposes an artifact exactly as a direct
+Principal Discover grant would. Ownership remains durable artifact metadata and never becomes a
+parallel visibility decision. The catalogue scans stable bounded candidate pages until it collects
+fifty authorized artifacts or reaches the end, so newer unrelated artifacts cannot hide an older
+entitlement.
+
 Published PDFs also create one durable preprocessing job and admit its workflow task in the same
 transaction. The workflow controller claims that exact task, binds one Kubernetes Job and its
 first Pod, and gives the dedicated worker only the fenced delivery and source length. OpenCrane brokers the PDF to it,
@@ -147,6 +155,10 @@ The personal catalogue is discovery only. It returns kind, lifecycle, current-re
 size, indexing state, and timestamps. It never returns bytes, a content address, provenance,
 leases, promotion receipts, or outbox records, and it cannot upload, download, mutate, or delete an
 asset.
+
+The catalogue first selects owner-eligible rows, then filters those candidates through the central
+`Artifact/Discover` authority inside the same repeatable-read transaction. Ownership remains a
+durable projection source and lifecycle bound; it is not an alternate permission decision engine.
 
 The preprocessor router is mounted only on the internal listener when the worker is enabled.
 NetworkPolicy admits the exact dedicated namespace, and TokenReview binds the fixed ServiceAccount

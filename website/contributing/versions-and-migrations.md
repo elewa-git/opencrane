@@ -56,14 +56,19 @@ chart-bearing application is missing there.
 
 ## Database migrations
 
-A database schema change updates the clean target baseline and adds one adjacent, reviewed SQL
-transition under
-[`apps/opencrane/prisma/migrations/<from>-to-<to>/`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/prisma/migrations),
-bound by digest.
+A database schema change updates the clean target baseline and adds one reviewed Prisma migration
+under
+[`apps/opencrane/prisma/prisma-migrations/`](https://github.com/elewa-git/opencrane/tree/main/apps/opencrane/prisma/prisma-migrations).
+Tagged 0.9.2 is the direct predecessor of 0.10.0 and still records schema 0.9.0, so its bounded
+migration Job first runs the digest-bound IAM prerequisite and then starts the Prisma ledger.
+CloudNativePG prepares the required `pg_cron` extension before that Job runs: one observed
+`Database` generation installs the extension and the next assigns the existing `cron` schema to the
+OpenCrane owner. The migration container receives only the application credential.
 
-- **Adjacent minor trains** (`0.8.x → 0.9.0`) are the only automatic transition.
-- **Patch, skipped-minor, and major transitions** require an approved `manualTransition` with a
-  reason recorded in the manifest — tooling never guesses the upgrade path.
+- The release manifest names the exact tagged predecessor and commit.
+- Fresh databases use the target baseline and skip the migration Job.
+- Development databases that ran the untagged 0.9.3 candidate need a reset or reviewed forward
+  repair; the release tooling never treats that candidate as published history.
 
 ## CI enforces the whole scheme
 

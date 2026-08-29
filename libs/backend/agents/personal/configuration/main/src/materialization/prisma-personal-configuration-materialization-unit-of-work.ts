@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { PrismaAgentRevisionModelSelectionRepository } from "@opencrane/backend/server/agents/agent-services";
+import { PrismaAgentRevisionModelSelectionRepository, PrismaPersonalAgentProductEffectsAuthority, type PersonalAgentProductEffects } from "@opencrane/backend/server/agents/agent-services";
 
 import type { PersonalConfigurationMaterializationTransaction, PersonalConfigurationMaterializationUnitOfWork, PersonalConfigurationMaterializationWork } from "./personal-configuration-materialization-unit-of-work.types";
 import { PrismaPersonalConfigurationMaterializationRepository } from "./prisma-personal-configuration-materialization";
@@ -10,6 +10,9 @@ const _MATERIALIZATION_ATTEMPT_LIMIT = 3;
 
 /** Prisma/PostgreSQL conflict codes that are safe to retry because the transaction rolled back. */
 const _RETRYABLE_MATERIALIZATION_CODES = new Set(["P0001", "P2002", "P2004", "P2034"]);
+
+/** Test seam that still returns a product-effect adapter bound to the supplied transaction. */
+type _PersonalAgentProductEffectsFactory = (transaction: Prisma.TransactionClient) => PersonalAgentProductEffects;
 
 /**
  * Opens the Serializable transaction in which the proposal and the agent revision both change.
@@ -24,11 +27,14 @@ export class PrismaPersonalConfigurationMaterializationUnitOfWork implements Per
 {
 	/** Canonical product-authority database client. */
 	private readonly prisma: PrismaClient;
+	/** Optional factory used by focused tests to observe central effect admission. */
+	private readonly createProductEffects: _PersonalAgentProductEffectsFactory | null;
 
 	/** Creates the Prisma-backed unit of work. */
-	constructor(prisma: PrismaClient)
+	constructor(prisma: PrismaClient, createProductEffects: _PersonalAgentProductEffectsFactory | null = null)
 	{
 		this.prisma = prisma;
+		this.createProductEffects = createProductEffects;
 	}
 
 	/**
@@ -46,6 +52,7 @@ export class PrismaPersonalConfigurationMaterializationUnitOfWork implements Per
 	 */
 	async run<Result>(work: PersonalConfigurationMaterializationWork<Result>): Promise<Result>
 	{
+		const createProductEffects = this.createProductEffects;
 		for (let attempt = 1; attempt <= _MATERIALIZATION_ATTEMPT_LIMIT; attempt += 1)
 		{
 			try
@@ -53,9 +60,10 @@ export class PrismaPersonalConfigurationMaterializationUnitOfWork implements Per
 				// 1. Build both repositories on one transaction, so neither can commit without the other.
 				return await this.prisma.$transaction(async function _RunTransaction(transaction): Promise<Result>
 				{
+					const productEffects = createProductEffects === null ? new PrismaPersonalAgentProductEffectsAuthority(transaction) : createProductEffects(transaction);
 					const repositories: PersonalConfigurationMaterializationTransaction = {
 						proposals: new PrismaPersonalConfigurationMaterializationRepository(transaction),
-						agentRevisions: new PrismaAgentRevisionModelSelectionRepository(transaction),
+						agentRevisions: new PrismaAgentRevisionModelSelectionRepository(transaction, productEffects),
 					};
 					return work(repositories);
 				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

@@ -2,7 +2,11 @@ import { Router } from "express";
 import { ModelRoutingScope, type ProviderCredential, type ProviderCredentialWrite } from "@opencrane/contracts";
 import type { Prisma, PrismaClient, ProviderCredential as PrismaProviderCredential } from "@prisma/client";
 
-import { _ClusterTenantScopeGuard, type ClusterTenantScopedResource } from "@opencrane/backend/server/tenancy/cluster-tenants";
+import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+
+import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCallerResolver } from "../provider-gateway-authority.types";
+import { _GrantProviderResourceCreatorUse, _RequireProviderGatewayAdministration, _RequireProviderGatewayCaller, _ResolveProviderGatewayCaller, _SendProviderGatewayAuthorizationError } from "../provider-gateway-authorization";
+import { PrismaProviderGatewayUnitOfWork } from "../prisma-provider-gateway-unit-of-work";
 
 /** Raw-key field names that must never be accepted or stored (keys live in k8s Secrets). */
 const _RAW_KEY_FIELDS = ["apiKey", "keyValue", "key"] as const;
@@ -91,52 +95,48 @@ function _validateWrite(body: Record<string, unknown>): { error: string; code: s
  * Credentials are owned at installation or ClusterTenant scope. The body carries only a
  * `secretRef` (the External-Secrets-synced Kubernetes
  * Secret name) plus an optional `litellmCredentialName`; a request carrying a raw key is
- * rejected with 400. Mutations are gated by the ClusterTenant scope guard (AIR.0b).
+ * rejected with 400. Reads filter exact `ProviderConnection` grants; mutations explicitly admit
+ * the silo's `Organization/Administer` capability in the transaction that writes the reference.
  *
  * @param prisma - Prisma client used for persistence.
  * @returns Configured Express router.
  */
-export function providerCredentialsRouter(prisma: PrismaClient): Router
+export function providerCredentialsRouter(prisma: PrismaClient, resolveCaller: ProviderGatewayCallerResolver = _ResolveProviderGatewayCaller, createAuthorization?: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>): Router
 {
   const router = Router();
-
-  // Mutation guard: resolve the targeted credential's scope so the guard can decide.
-  // For POST the scope comes from the body; for PUT/DELETE from the persisted row.
-  const guard = _ClusterTenantScopeGuard(prisma, async function _resolveResource(req): Promise<ClusterTenantScopedResource | null>
-  {
-    if (req.method === "POST")
-    {
-      const body = (req.body ?? {}) as ProviderCredentialWrite;
-      return { scope: body.scope ?? ModelRoutingScope.Global, clusterTenant: body.clusterTenant ?? null };
-    }
-
-    const row = await prisma.providerCredential.findUnique({ where: { id: String(req.params.id) } });
-    if (!row)
-    {
-      return null;
-    }
-    return { scope: row.scope === "ClusterTenant" ? ModelRoutingScope.ClusterTenant : ModelRoutingScope.Global, clusterTenant: row.clusterTenant };
-  });
-
-  router.post("/", guard);
-  router.put("/:id", guard);
-  router.delete("/:id", guard);
+	const providers = new PrismaProviderGatewayUnitOfWork(prisma, createAuthorization);
 
   /** List provider credentials, optionally filtered to one ClusterTenant. */
   router.get("/", async function _listProviderCredentials(req, res)
   {
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
     const clusterTenant = typeof req.query.clusterTenant === "string" ? req.query.clusterTenant : undefined;
-    const rows = await prisma.providerCredential.findMany({
-      where: clusterTenant ? { clusterTenant } : undefined,
-      orderBy: { createdAt: "asc" },
-    });
+	const rows = await providers.run(async function _List(transaction, authorization)
+	{
+		const candidates = await transaction.providerCredential.findMany({ where: clusterTenant ? { clusterTenant } : undefined, orderBy: { createdAt: "asc" } });
+		const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: candidates.map(row => ({ kind: ProductAuthorizationResourceKinds.ProviderConnection, id: row.id })), nowEpochMs: Date.now() });
+		const entitledIds = new Set(entitled.map(resource => resource.id));
+		return candidates.filter(row => entitledIds.has(row.id));
+	});
     res.json(rows.map(_toContract));
   });
 
   /** Get a single provider credential by id. */
   router.get("/:id", async function _getProviderCredential(req, res)
   {
-    const row = await prisma.providerCredential.findUnique({ where: { id: req.params.id } });
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
+	const row = await providers.run(async function _Get(transaction, authorization)
+	{
+		const candidate = await transaction.providerCredential.findUnique({ where: { id: req.params.id } });
+		if (candidate === null)
+			return null;
+		const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: [{ kind: ProductAuthorizationResourceKinds.ProviderConnection, id: candidate.id }], nowEpochMs: Date.now() });
+		return entitled.length === 1 ? candidate : null;
+	});
     if (!row)
     {
       res.status(404).json({ error: "Provider credential not found", code: "PROVIDER_CREDENTIAL_NOT_FOUND" });
@@ -148,6 +148,9 @@ export function providerCredentialsRouter(prisma: PrismaClient): Router
   /** Create a provider credential (reference only — never a raw key). */
   router.post("/", async function _createProviderCredential(req, res)
   {
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
     const body = (req.body ?? {}) as Record<string, unknown>;
 
     // 1. Validate identity + the raw-key rejection up front before touching the DB.
@@ -161,28 +164,30 @@ export function providerCredentialsRouter(prisma: PrismaClient): Router
     // 2. Persist the reference row; default scope to Global when omitted.
     const write = body as unknown as ProviderCredentialWrite;
     const scope = write.scope ?? ModelRoutingScope.Global;
-    const created = await prisma.providerCredential.create({
-      data: {
-        scope: _toPrismaScope(scope),
-        clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null,
-        provider: write.provider.trim(),
-        secretRef: write.secretRef.trim(),
-        litellmCredentialName: write.litellmCredentialName?.trim() || null,
-      },
-    });
-    res.status(201).json(_toContract(created));
+	try
+	{
+		const created = await providers.run(async function _Create(transaction, authorization)
+		{
+			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "create-provider-credential", write });
+			const credential = await transaction.providerCredential.create({ data: { scope: _toPrismaScope(scope), clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null, provider: write.provider.trim(), secretRef: write.secretRef.trim(), litellmCredentialName: write.litellmCredentialName?.trim() || null } });
+			await _GrantProviderResourceCreatorUse(authorization, caller, { kind: ProductAuthorizationResourceKinds.ProviderConnection, id: credential.id }, new Date());
+			return credential;
+		});
+		res.status(201).json(_toContract(created));
+	}
+	catch (caught)
+	{
+		if (!_SendProviderGatewayAuthorizationError(caught, res))
+			throw caught;
+	}
   });
 
   /** Update a provider credential. */
   router.put("/:id", async function _updateProviderCredential(req, res)
   {
-    const existing = await prisma.providerCredential.findUnique({ where: { id: req.params.id } });
-    if (!existing)
-    {
-      res.status(404).json({ error: "Provider credential not found", code: "PROVIDER_CREDENTIAL_NOT_FOUND" });
-      return;
-    }
-
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
     const body = (req.body ?? {}) as Record<string, unknown>;
 
     // 1. Validate the full replacement body, including the raw-key rejection.
@@ -196,28 +201,60 @@ export function providerCredentialsRouter(prisma: PrismaClient): Router
     // 2. Apply the validated fields; scope defaults to Global when omitted.
     const write = body as unknown as ProviderCredentialWrite;
     const scope = write.scope ?? ModelRoutingScope.Global;
-    const data: Prisma.ProviderCredentialUpdateInput = {
-      scope: _toPrismaScope(scope),
-      clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null,
-      provider: write.provider.trim(),
-      secretRef: write.secretRef.trim(),
-      litellmCredentialName: write.litellmCredentialName?.trim() || null,
-    };
-    const updated = await prisma.providerCredential.update({ where: { id: req.params.id }, data });
-    res.json(_toContract(updated));
+	try
+	{
+		const updated = await providers.run(async function _Update(transaction, authorization)
+		{
+			const existing = await transaction.providerCredential.findUnique({ where: { id: req.params.id } });
+			if (existing === null)
+				return null;
+			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "update-provider-credential", id: existing.id, write });
+			const data: Prisma.ProviderCredentialUpdateInput = { scope: _toPrismaScope(scope), clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null, provider: write.provider.trim(), secretRef: write.secretRef.trim(), litellmCredentialName: write.litellmCredentialName?.trim() || null };
+			return transaction.providerCredential.update({ where: { id: existing.id }, data });
+		});
+		if (updated === null)
+		{
+			res.status(404).json({ error: "Provider credential not found", code: "PROVIDER_CREDENTIAL_NOT_FOUND" });
+			return;
+		}
+		res.json(_toContract(updated));
+	}
+	catch (caught)
+	{
+		if (!_SendProviderGatewayAuthorizationError(caught, res))
+			throw caught;
+	}
   });
 
   /** Delete a provider credential. */
   router.delete("/:id", async function _deleteProviderCredential(req, res)
   {
-    const existing = await prisma.providerCredential.findUnique({ where: { id: req.params.id } });
-    if (!existing)
-    {
-      res.status(404).json({ error: "Provider credential not found", code: "PROVIDER_CREDENTIAL_NOT_FOUND" });
-      return;
-    }
-    await prisma.providerCredential.delete({ where: { id: req.params.id } });
-    res.json({ id: req.params.id, status: "deleted" });
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
+	try
+	{
+		const deleted = await providers.run(async function _Delete(transaction, authorization)
+		{
+			const existing = await transaction.providerCredential.findUnique({ where: { id: req.params.id } });
+			if (existing === null)
+				return false;
+			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "delete-provider-credential", id: existing.id });
+			await transaction.providerCredential.delete({ where: { id: existing.id } });
+			return true;
+		});
+		if (!deleted)
+		{
+			res.status(404).json({ error: "Provider credential not found", code: "PROVIDER_CREDENTIAL_NOT_FOUND" });
+			return;
+		}
+		res.json({ id: req.params.id, status: "deleted" });
+	}
+	catch (caught)
+	{
+		if (!_SendProviderGatewayAuthorizationError(caught, res))
+			throw caught;
+	}
   });
 
   return router;

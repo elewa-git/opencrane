@@ -32,6 +32,15 @@ The route receives a local Principal resolved from the verified OIDC issuer and
 subject; it never queries Prisma or accepts caller identity from the request body. Revocation soft-
 revokes the grant for audit and recovery while removing the live recipient relation.
 
+Listing and revocation also pass through the central transaction-bound authority on the
+`ResourceShare` coordinate. The owner receives exact Read and Revoke grants; each recipient has a
+separately managed exact Read grant. A current direct or inherited Group Revoke grant may delegate
+revocation without changing the stored owner. The owner relation remains only the integrity
+coordinate for finding the manager-owned recipient grant; it is not a second authorization rule.
+Revoking one recipient removes the relation, soft-revokes the linked underlying-resource grant, and
+soft-revokes that recipient's ResourceShare projection in the same transaction, without affecting
+other recipients.
+
 ## Public surface
 
 - `ResourceShareService` — the atomic list and revoke authority.

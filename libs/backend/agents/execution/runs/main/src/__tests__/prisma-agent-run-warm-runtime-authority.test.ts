@@ -39,7 +39,8 @@ function _Database(initialActiveClaims: number)
 			async count() { return activeClaims; },
 		},
 		elicitationRequest: { updateMany: cancelElicitation },
-		approvalRequest: { updateMany: cancelApproval },
+		approvalRequest: { findMany: vi.fn().mockResolvedValue([{ id: "approval-1", siloId: "silo-1" }]), updateMany: cancelApproval },
+		authorizationGrant: { findMany: vi.fn().mockResolvedValue([]) },
 		agentRun: {
 			async updateMany(args: { where: { state: AgentRunState }; data: { state: AgentRunState; terminalReason: AgentRunTerminalReason; finishedAt: Date } })
 			{

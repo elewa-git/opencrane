@@ -3,12 +3,14 @@ import { AgentRunState, AgentServiceKind, AgentServiceState, AgentThreadDelivery
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates, type MessageContentBlock } from "@opencrane/models/conversations";
 import { AgentThreadDeliveryKinds, type AgentThreadParentDelivery } from "@opencrane/backend/conversations/agent-threads";
 import { __EncodeConversationProjectionCursor } from "@opencrane/backend/conversations/projection";
+import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 
 import { AgentThreadRunViewStates, type AgentThreadMessageView, type AgentThreadRunView, type AgentThreadSnapshotView } from "../types/agent-thread-view.types";
 import type { ConversationCaller } from "../types/conversation-caller.types";
 import { PersonalAgentDirectoryStatuses, type ConversationCreationDirectory } from "../types/conversation-directory.types";
 import type { ConversationDetail, ConversationMessageView, ConversationSummary } from "../types/conversation-view.types";
 import type { ConversationCommandContext, ConversationQueryRepository } from "./prisma-conversation-query-repository.types";
+import { PrismaConversationProductAuthorizationRepository } from "./conversation-product-authorization";
 
 /** Maximum message rows returned by one participant-bound open operation. */
 const _MESSAGE_LIMIT = 100;
@@ -76,11 +78,13 @@ const _STATE_BY_PERSISTED_STATE: Readonly<Record<ConversationMessageState, Messa
 export class PrismaConversationQueryRepository implements ConversationQueryRepository
 {
 	private readonly prisma: Prisma.TransactionClient;
+	private readonly authorization: PrismaConversationProductAuthorizationRepository;
 
 	/** Binds reads to either the root client or the current authority transaction. */
 	constructor(prisma: Prisma.TransactionClient)
 	{
 		this.prisma = prisma;
+		this.authorization = new PrismaConversationProductAuthorizationRepository(prisma);
 	}
 
 	/** Proves current active organisation membership inside the repository's exact transaction snapshot. */
@@ -149,16 +153,18 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 		// 2. Read only participant coordinates from the same repeatable snapshot as membership.
 		// The global sequence records allocation order; rollback gaps are valid and commit order never rewrites it.
 		const participants = await this.prisma.conversationParticipant.findMany({
-			where: { userId: caller.subjectId, conversation: _ConversationAccess(caller), ...(includeArchived ? {} : { archivedAt: null }) },
+			where: { userId: caller.subjectId, conversation: { siloId: caller.siloId, OR: [{ originAgentThread: { is: null } }, { originAgentThread: { is: { parentConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } }] }, ...(includeArchived ? {} : { archivedAt: null }) },
 			include: { conversation: { include: { participants: { select: { userId: true } } } } },
 			orderBy: [{ conversation: { activitySequence: "desc" } }, { conversationId: "desc" }],
 		});
+		const entitledIds = await this.authorization.entitledIds(caller, participants.map(participant => participant.conversationId), ProductAuthorizationActions.Discover);
+		const authorizedParticipants = participants.filter(participant => entitledIds.has(participant.conversationId));
 
 		// 3. Project the summaries, first translating every participant subject into its opaque
 		// membership reference. One extra query covers the whole page instead of one per conversation.
-		const subjects = participants.flatMap(function _Subjects(participant): readonly string[] { return participant.conversation.participants.map(function _Subject(row): string { return row.userId; }); });
+		const subjects = authorizedParticipants.flatMap(function _Subjects(participant): readonly string[] { return participant.conversation.participants.map(function _Subject(row): string { return row.userId; }); });
 		const references = await this._membershipReferences(caller.siloId, subjects);
-		return participants.map(function _Summary(participant): ConversationSummary { return _summary(participant.conversation, participant, references); });
+		return authorizedParticipants.map(function _Summary(participant): ConversationSummary { return _summary(participant.conversation, participant, references); });
 	}
 
 	/** Returns the exact participant-visible aggregate and latest canonical message window. */
@@ -166,9 +172,11 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 	{
 		// 1. Membership revocation denies the aggregate before its existence can be disclosed.
 		if (!await this.hasActiveCallerMembership(caller)) return null;
+		if (!await this.authorization.canAccess(caller, conversationId, ProductAuthorizationActions.Read))
+			return null;
 
 		// 2. Resolve the exact participant visibility coordinates inside this membership snapshot.
-		const participant = await this.prisma.conversationParticipant.findFirst({ where: { conversationId, userId: caller.subjectId, conversation: _ConversationAccess(caller) }, include: { conversation: { include: { participants: { select: { userId: true } } } } } });
+		const participant = await this.prisma.conversationParticipant.findFirst({ where: { conversationId, userId: caller.subjectId, conversation: { siloId: caller.siloId, OR: [{ originAgentThread: { is: null } }, { originAgentThread: { is: { parentConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } }] } }, include: { conversation: { include: { participants: { select: { userId: true } } } } } });
 		if (participant === null) return null;
 
 		// 3. Clip canonical messages to the durable participant bounds before projecting detail. Both
@@ -201,6 +209,8 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 	async openAgentThread(caller: ConversationCaller, parentConversationId: string, childConversationId: string): Promise<AgentThreadSnapshotView | null>
 	{
 		if (!await this.hasActiveCallerMembership(caller)) return null;
+		if (!await this.authorization.canAccess(caller, parentConversationId, ProductAuthorizationActions.Read) || !await this.authorization.canAccess(caller, childConversationId, ProductAuthorizationActions.Read))
+			return null;
 		const thread = await this.prisma.conversationAgentThread.findFirst({
 			where: {
 				parentConversationId,
@@ -265,9 +275,11 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 	{
 		// 1. Current silo membership is a command prerequisite, not cached participant evidence.
 		if (!await this.hasActiveCallerMembership(caller)) return null;
+		if (!await this.authorization.canAccess(caller, conversationId, ProductAuthorizationActions.Use))
+			return null;
 
 		// 2. Load mode, lifecycle, binding, and active-run facts with continuing participant access.
-		const conversation = await this.prisma.conversation.findFirst({ where: { id: conversationId, ..._ConversationAccess(caller), participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } }, select: { mode: true, lifecycle: true, agentServiceId: true, runs: { where: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed, AgentRunState.Cancelled] } }, select: { id: true }, take: 2 } } });
+		const conversation = await this.prisma.conversation.findFirst({ where: { id: conversationId, ...{ siloId: caller.siloId, OR: [{ originAgentThread: { is: null } }, { originAgentThread: { is: { parentConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } }] }, participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } }, select: { mode: true, lifecycle: true, agentServiceId: true, runs: { where: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed, AgentRunState.Cancelled] } }, select: { id: true }, take: 2 } } });
 		if (conversation === null || conversation.runs.length > 1) return null;
 
 		// 3. Return only unambiguous durable strategy facts to the pure command decision.
@@ -278,10 +290,11 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 	async findOwnMessage(caller: ConversationCaller, conversationId: string, idempotencyKey: string): Promise<ConversationMessageView | null>
 	{
 		// 1. Revoked organisation membership invalidates even an otherwise exact retry key.
-		if (!await this.hasActiveCallerMembership(caller)) return null;
+		if (!await this.hasActiveCallerMembership(caller) || !await this.authorization.canAccess(caller, conversationId, ProductAuthorizationActions.Use))
+			return null;
 
 		// 2. Resolve the key only while the caller retains active participant access.
-		const entry = await this.prisma.conversationTimelineEntry.findFirst({ where: { conversationId, message: { is: { idempotencyKey, userId: caller.subjectId, conversation: { ..._ConversationAccess(caller), participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } }, include: { message: { include: { invokedAgentThread: true } } } });
+		const entry = await this.prisma.conversationTimelineEntry.findFirst({ where: { conversationId, message: { is: { idempotencyKey, userId: caller.subjectId, conversation: { ...{ siloId: caller.siloId, OR: [{ originAgentThread: { is: null } }, { originAgentThread: { is: { parentConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } }] }, participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } }, include: { message: { include: { invokedAgentThread: true } } } });
 
 		// 3. Project no foreign or access-ended durable message facts.
 		if (entry?.message === null || entry?.message === undefined) return null;
@@ -293,10 +306,11 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 	async hasMessageIdempotencyKey(caller: ConversationCaller, conversationId: string, idempotencyKey: string): Promise<boolean>
 	{
 		// 1. A revoked caller cannot probe whether any participant owns the selected key.
-		if (!await this.hasActiveCallerMembership(caller)) return false;
+		if (!await this.hasActiveCallerMembership(caller) || !await this.authorization.canAccess(caller, conversationId, ProductAuthorizationActions.Use))
+			return false;
 
 		// 2. Search only while the caller still has participant access to the conversation.
-		const message = await this.prisma.conversationMessage.findFirst({ where: { conversationId, idempotencyKey, conversation: { ..._ConversationAccess(caller), participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } }, select: { id: true } });
+		const message = await this.prisma.conversationMessage.findFirst({ where: { conversationId, idempotencyKey, conversation: { ...{ siloId: caller.siloId, OR: [{ originAgentThread: { is: null } }, { originAgentThread: { is: { parentConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } }] }, participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } }, select: { id: true } });
 
 		// 3. Reveal only the collision boolean required by bounded conflict handling.
 		return message !== null;

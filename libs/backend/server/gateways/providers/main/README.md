@@ -10,7 +10,7 @@ external models agents may use. It owns the **provider keys** and the **model re
 (bring your own key): a customer supplies their own upstream API key, and OpenCrane wires it into
 its model proxy without exposing the raw key afterwards.
 
-It is the entry point that turns a supplied key into usable models. When an org admin sets a BYOK
+It is the entry point that turns a supplied key into usable models. When an authorised administrator sets a BYOK
 key, this package stores it as a Kubernetes Secret, registers it with LiteLLM (the model proxy),
 records a credential row, and seeds the provider's default models. It also owns the model registry —
 the definitions the routing layer later resolves against. A model definition may explicitly admit
@@ -18,7 +18,7 @@ PNG image generation; that allowlist is frozen into each compiled run before the
 the provider-native image tool.
 
 ```
- org admin sets a raw provider key   (OpenAI · Anthropic · …)
+ authorised administrator sets a raw provider key   (OpenAI · Anthropic · …)
         │
         ▼
  ┌────────────────────────────────────┐
@@ -40,6 +40,16 @@ this domain is the HTTP wrapper plus the reference-only credential variant that 
 Model registration is best-effort against LiteLLM: a rejected model fails to route until corrected
 but never corrupts the stored key.
 
+Authorization has one path. Credential and model catalogues load lifecycle-eligible rows and then
+filter exact `ProviderConnection/Read` or `ModelDefinition/Read` resources through the central
+`AuthorizationAuthority`. Credential, BYOK, and model-definition mutations explicitly request
+`Organization/<silo>/Administer`. The decision evidence and Postgres mutation use the same database
+transaction; there is no session-role or tenant-scope policy engine beside it.
+
+Creating a provider connection or model definition also writes exact `Discover`, `Read`, and `Use`
+grants for its creator in that transaction. Organisation administration permits creation; it does
+not become an implicit grant to use every provider or model.
+
 ## Public surface
 
 - `providerByokRouter`, `providerCredentialsRouter`, `modelRegistryRouter` —
@@ -56,7 +66,7 @@ invalid key or unknown provider is rejected before anything is stored.
 ## Dependency direction
 
 Tagged `scope:providers`: it may depend only on `scope:auth`, `scope:cluster-tenants`,
-`scope:model-routing`, `scope:providers`, and `scope:shared` — never on apps or other server
+`scope:authorization`, `scope:model-routing`, `scope:providers`, and `scope:shared` — never on apps or other server
 domains.
 
 ## Data & persistence

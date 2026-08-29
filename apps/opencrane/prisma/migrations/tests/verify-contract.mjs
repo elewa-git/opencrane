@@ -116,7 +116,9 @@ for (const source of [targetBaseline, sql])
 }
 requireContract(sql.includes('DROP TABLE "runtime_external_action_retries"'), "migration must drop the superseded retry authority");
 requireContract(sql.includes('DELETE FROM "tool_invocations"'), "migration must explicitly discard the unfinished pre-release invocation format");
-requireContract(sql.includes('DROP TYPE "ActionExecutionState"') === false, "migration must retain ActionExecutionState for proof-bound action receipts");
+requireContract(!targetBaseline.includes('CREATE TABLE "action_execution_receipts"'), "target baseline must not retain the replaced proof-bound action receipt table");
+requireContract(!authorizationSchema.includes("enum ActionExecutionState"), "target schema must not retain the replaced action receipt state type");
+requireContract(!authorizationSchema.includes("enum ActionReplayMode"), "target schema must not retain the replaced action receipt replay type");
 for (const source of [targetBaseline, sql])
 {
 	requireContract(

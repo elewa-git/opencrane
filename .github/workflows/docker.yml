@@ -276,6 +276,12 @@ jobs:
       - name: Prove the Prisma-boundary classifier
         run: npm run test:prisma-boundaries
 
+      - name: Enforce central authorization adoption
+        run: npm run check:authorization-enforcement
+
+      - name: Prove the authorization-enforcement classifier
+        run: npm run test:authorization-enforcement
+
       - name: Enforce workflow engine boundaries
         run: npm run check:workflow-boundary
 
