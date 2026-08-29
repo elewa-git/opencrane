@@ -75,9 +75,10 @@ publication, download, or execution API.
 
 ## Dependency direction
 
-Tagged `scope:skills`: it may depend only on `scope:artifacts`, `scope:cluster-tenants`,
-`scope:auth`, `scope:grants`, `scope:skills`, and `scope:shared` — never on apps, gateways, or other agent
-domains directly.
+Tagged `scope:skills`: it may depend only on artifacts, authentication, cluster tenants, grants,
+runtime workload claims, shared code, the skill domain, skill workflow contracts, workload
+identity, and shared workflows. It never depends on apps, gateways, or other agent domains
+directly.
 
 ## Data & persistence
 

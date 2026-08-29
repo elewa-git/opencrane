@@ -15,7 +15,7 @@ around organisation silos, immutable agent revisions and governed run attempts.
                     │ agent controller                 │
                     │ exact Kubernetes projection      │
                     └───────────────┬──────────────────┘
-                                    │ fresh Job per attempt
+                                    │ claim one warm Pod per attempt
                     ┌───────────────▼──────────────────┐
                     │ agent runtime                    │
                     │ bounded loop, no durable state   │
@@ -26,8 +26,8 @@ around organisation silos, immutable agent revisions and governed run attempts.
                     └──────────────────────────────────┘
 ```
 
-The server admits a run and freezes its accepted inputs before Kubernetes work exists.
-The controller can project only the assigned workload shape. The runtime can emit candidates,
+The server admits a run and freezes its accepted inputs before a warm Pod receives attempt authority
+or execution material. The controller can project only the assigned workload shape. The runtime can emit candidates,
 but it cannot approve or execute external actions by itself.
 
 ## Durable run model

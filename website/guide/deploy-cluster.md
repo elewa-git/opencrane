@@ -7,7 +7,7 @@ admission features required by the silo chart.
 
 | Requirement | Why it matters |
 |---|---|
-| Kubernetes 1.30+ | Stable validating-admission policy for runtime Jobs |
+| Kubernetes 1.30+ | Stable validating-admission policy for warm runtime Pod claims and worker Jobs |
 | Default StorageClass | Persistent trusted services |
 | NetworkPolicy-enforcing CNI | Deny-by-default namespace floor |
 | Reachable image registry | Immutable controller and runtime images |
@@ -30,7 +30,7 @@ apps/_infra/deploy-k8s/deploy.sh \
 ```
 
 The `opencrane-silo` chart composes the trusted control plane, supporting services,
-agent controller and separate restricted Job namespaces. Cluster-wide controllers remain
+agent controller, warm runtime pools and separate restricted worker namespaces. Cluster-wide controllers remain
 external prerequisites. Create the three named PostgreSQL bootstrap Secrets in the target
 namespace before running the script; each must hold distinct credentials.
 
@@ -43,9 +43,9 @@ After installation:
 
 1. check that the trusted, personal-runtime and managed-runtime namespaces are distinct;
 2. inspect their Pod Security labels, quotas and default-deny policies;
-3. confirm the runtime image is absent from long-lived Deployments;
+3. confirm the personal and managed warm Deployments use the fixed generic profiles;
 4. confirm the controller and runtime images use immutable digests; and
-5. start one run and verify it receives a fresh Job assignment.
+5. start one run, verify it claims one exact Pod UID, and verify that UID is deleted afterwards.
 
 ::: tip
 Managed Kubernetes services are hosting choices, not different OpenCrane architectures.

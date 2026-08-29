@@ -15,8 +15,9 @@ workload and namespace map is in [`cluster-architecture.md`](./cluster-architect
 - Apply default-deny ingress and egress before adding named service paths.
 - Bound Jobs with quotas, deadlines, immutable images, read-only roots, and ephemeral scratch.
 
-Runtime, authoring, tool, and preprocessing Jobs must not receive general Kubernetes mutation rights.
-The agent controller is the only general creator and releaser of runtime Jobs.
+Runtime Pods and authoring, tool, MCP, and preprocessing Jobs must not receive general Kubernetes
+mutation rights. The agent controller is the only mutator of claimed warm runtime Pods and the
+governed worker Jobs assigned to it.
 
 ## Workload identity
 
@@ -62,7 +63,7 @@ workload needs, such as:
 - the configured telemetry collector.
 
 Do not use a broad namespace selector when a service-account or workload label can name the caller.
-Do not add public ingress to a runtime Job.
+Do not add public ingress to a runtime Pod or worker Job.
 
 ## Resource ownership
 

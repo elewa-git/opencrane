@@ -73,7 +73,7 @@ Consumed by the OpenCrane server composition root, which creates one shared gate
 the conversation authority, managed run-now path, and scheduler. This package has no public browser
 router or OpenAPI path: interactive execution begins only at
 `POST /api/v1/me/conversations/:conversationId/messages`. It does not authenticate HTTP requests,
-authorise agent service publication, schedule work, dispatch Kubernetes Jobs, or execute a run. It
+authorise agent service publication, schedule work, activate Kubernetes Pods, or execute a run. It
 accepts server-owned identity evidence and delegates durable snapshot and run rules to their owning
 packages.
 
@@ -85,7 +85,7 @@ restart may clear waiting work but cannot admit an unauthorized run or rewrite a
 
 Tagged `scope:execution-admission`: it may depend only on `scope:execution-admission`,
 `scope:execution-inputs`, `scope:execution-runs`, `scope:agent-services`, and `scope:shared` — never
-on apps, transport adapters, runtime Jobs, or unrelated backend domains.
+on apps, transport adapters, runtime infrastructure, or unrelated backend domains.
 
 ## Runtime & config
 

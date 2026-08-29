@@ -31,7 +31,7 @@ their concrete adapters, mounts their routers, and starts and stops them in the 
                      agent-controller
                               │
                               ▼
-                     isolated runtime Job
+                    claimed warm runtime Pod
 ```
 
 **In this flow:** [opencrane-ui](../opencrane-ui/README.md) ·
@@ -205,8 +205,8 @@ are:
 | `OPENCRANE_INITIAL_MODEL_*` | Optional first provider key; the server persists its custody reference and requires LiteLLM registration before readiness | disabled |
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL`, `CHANNEL_PROXY_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
-| `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal runtime Job boundary | required |
-| `AGENT_RUNTIME_MANAGED_NAMESPACE` | Managed runtime Job boundary | required |
+| `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal warm runtime Pod boundary | required |
+| `AGENT_RUNTIME_MANAGED_NAMESPACE` | Managed warm runtime Pod boundary | required |
 | `AGENT_RUN_ADMISSION_*` | Active and queued personal-and-managed admission limits | bounded defaults |
 | `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` starts without a Fleet key and denies run admission | required |
 | `OPENCRANE_INVITATION_SIGNING_KEY_PATH`, `OPENCRANE_PUBLIC_BASE_URL`, `OPENCRANE_INVITATION_TTL_SECONDS` | Standalone invitation-link signing, public link origin, and bounded lifetime | required in standalone mode |

@@ -28,8 +28,8 @@ apps/_infra/deploy-k8s/deploy.sh \
   --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap
 ```
 
-The chart installs trusted services and distinct restricted namespaces for personal,
-managed and worker Jobs. A single-node cluster does not collapse those boundaries. Create the
+The chart installs trusted services, distinct personal and managed warm runtime namespaces, and
+restricted worker Job namespaces. A single-node cluster does not collapse those boundaries. Create the
 three PostgreSQL bootstrap Secrets in the target namespace first, using distinct credentials.
 
 Point the public host at the ingress address before installing so Let's Encrypt HTTP-01 can issue the
@@ -39,7 +39,7 @@ report diagnostics without turning a completed installation into a failed releas
 
 ::: warning
 Single-node does not mean single namespace. OpenCrane refuses a deployment that places
-untrusted runtime Jobs beside the trusted server.
+untrusted runtime Pods beside the trusted server.
 :::
 
 ## Next

@@ -25,9 +25,10 @@ PostgreSQL is authoritative for agents, revisions, runs, conversations, approval
 grants, budgets, and audit evidence. Artifact bytes live behind `ArtifactStore`; database records
 own their identity, version, authorization, and lineage.
 
-A runtime Job is an attempt-scoped worker. It receives a frozen snapshot, reports candidates and
-events, and owns no durable product state. Kubernetes objects project an already-authorised attempt;
-they do not authorize a run by existing.
+A claimed runtime Pod is an attempt-scoped worker. It receives a frozen snapshot, reports candidates
+and events, and owns no durable product state. A generic warm Pod has no attempt authority until the
+database reserves it and the controller activates its fixed profile. Kubernetes objects project an
+already-authorised attempt; they do not authorise a run by existing.
 
 ## Organisation boundary
 
@@ -55,9 +56,9 @@ possession of a database identifier.
 
 ## Runtime boundary
 
-Each accepted run attempt has one isolated Job and one fenced workload assignment. The agent
-controller is the sole general creator and releaser of those Jobs. Runtime service accounts have no
-Kubernetes mutation rights.
+Each accepted run attempt has one fenced reservation for an exact Pod from the fixed personal or
+managed warm pool. The agent controller is the sole mutator of those Pods. Runtime service accounts
+have no Kubernetes API permission, and every used Pod is deleted instead of returning to the pool.
 
 Runtime commands and output candidates must bind the current run, attempt, assignment, sequence,
 expiry, and proof key. Cancellation closes command, approval, and output admission before workload

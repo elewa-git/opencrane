@@ -2,12 +2,15 @@
 
 - **Status:** Accepted; artifact-read and prompt-compiler placement clarified by
   [ADR 0011](0011-single-run-input-and-artifact-read-authorities.md); the universal `Thread` aggregate
-  and run-hierarchy clause superseded by [ADR 0012](0012-conversation-modes-and-agent-thread-authority.md)
+  and run-hierarchy clause superseded by [ADR 0012](0012-conversation-modes-and-agent-thread-authority.md);
+  the Job-only runtime-controller clause superseded by
+  [ADR 0014](0014-claimed-warm-runtime-pool.md)
 - **Date:** 2026-07-18
 - **Task:** `#245`
 - **Related:** [product contract](../design/personal-agent-platform-product-contract.md) ·
   [platform architecture](../design/personal-agent-platform-architecture.md) ·
-  [ADR 0012](0012-conversation-modes-and-agent-thread-authority.md)
+  [ADR 0012](0012-conversation-modes-and-agent-thread-authority.md) ·
+  [ADR 0014](0014-claimed-warm-runtime-pool.md)
 
 ## Context
 
@@ -44,16 +47,18 @@ Every workload class has a fixed owner, service account, projected token audienc
 network profile. Default service-account token automount is disabled. A workload receives Kubernetes
 API access only when its owner requires explicit verbs.
 
-The [`agent-controller`](../../apps/agent-controller) is the sole mutator of warm runtime Pods.
-Personal and managed runtime Pods have no Kubernetes RBAC. An Absurd claim binds the exact Pod UID,
-run, attempt, agent revision, silo, and subject before the controller sends execution material.
+The [`agent-controller`](../../apps/agent-controller) is the sole mutator of runtime Jobs. Personal
+and managed runtime Pods have no Kubernetes RBAC. Assignment admission binds the Pod UID, namespace,
+service account, audience, run, attempt, agent revision, silo, and subject before a one-use bootstrap
+exchange returns scoped execution material.
 
 | Workload | Identity and authority |
 |----------|------------------------|
 | [`apps/opencrane`](../../apps/opencrane) | Control-plane API; owns product composition and database access |
 | [`apps/channel-proxy`](../../apps/channel-proxy) | Channel ingress boundary; no product database authority |
-| [`apps/agent-controller`](../../apps/agent-controller) | Warm runtime Pod claim, activation, and discard |
-| [`apps/agent-runtime`](../../apps/agent-runtime) | Fixed personal and managed warm pools; no RBAC or database access |
+| [`apps/agent-controller`](../../apps/agent-controller) | Runtime-namespace Job mutation only |
+| [`apps/agent-runtime`](../../apps/agent-runtime) | Projected personal-runtime identity; no RBAC or database access |
+| [`apps/managed-agent-runtime`](../../apps/managed-agent-runtime) | Projected managed-runtime identity; no RBAC or database access |
 | [`apps/artifact-service`](../../apps/artifact-service) | Private immutable-byte service behind signed leases |
 | [`apps/artifact-preprocessor`](../../apps/artifact-preprocessor) | Assigned artifact-processing Job with brokered bytes |
 | [`apps/skill-authoring`](../../apps/skill-authoring) | Assigned skill-authoring Job with brokered inputs |

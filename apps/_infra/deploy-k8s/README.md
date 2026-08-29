@@ -97,7 +97,7 @@ outside its deletion surface.
 ## Boundary
 
 The umbrella renders no business logic and installs no cluster-wide controller. It composes app-owned
-templates, the server and runtime namespaces, per-silo `NetworkPolicies`, and the runtime Job's
+templates, the server and runtime namespaces, per-silo `NetworkPolicies`, and the warm runtime Pod's
 release-scoped `ValidatingAdmissionPolicy`; it does not own the workloads themselves (each app does) or
 the shared substrate helpers (the `k8s-platform` library does). Self-service ClusterTenant management and
 billing are OFF — a silo serves exactly one ClusterTenant.

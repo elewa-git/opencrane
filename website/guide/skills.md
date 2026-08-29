@@ -83,7 +83,7 @@ When a skill demands more than instructions, execution crosses a real boundary:
 - A skill that needs **capabilities the agent shouldn't hold open**, **its own budget**, or a
   **lifetime beyond the conversation** runs as a [child run](/guide/child-runs) — its own
   identity, its own (smaller) capability set, its own audit trail.
-- **Organisation-authored Python never executes inside an agent runtime Job.** Trusted image-baked
+- **Organisation-authored Python never executes inside a claimed agent runtime Pod.** Trusted image-baked
   tools may run in-process, but user-authored code executes through an isolated tool Job with
   exactly the capability its declared requirements were reviewed against.
 

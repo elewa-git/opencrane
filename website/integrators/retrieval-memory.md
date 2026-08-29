@@ -115,7 +115,7 @@ authorised conversation history + current grants
                         │ compiled non-memory context
                         ▼
                 ┌───────────────┐
-                │ runtime Job   │
+                │ claimed Pod   │
                 │ bounded loop  │
                 └───────┬───────┘
                         │ proposes memory_recall
@@ -166,7 +166,7 @@ saved result may return to the same active attempt.
                                   ▲       │
         attempt-scoped LiteLLM request    │ model output
                                   │       ▼
-                                agent-runtime Job
+                              claimed runtime Pod
                                         │
       ┌──────────────┬──────────────────┼─────────────────┬────────────────┐
       │              │                  │                 │                │
