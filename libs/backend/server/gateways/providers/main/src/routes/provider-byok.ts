@@ -56,8 +56,8 @@ function _toStatus(provider: string, row: ProviderByokStatusRecord | undefined):
  * Unlike {@link providerCredentialsRouter} (reference-only, raw keys rejected), this is the BYOK
  * "dynamic no-restart path". The router atomically admits a durable command, then asks the shared
  * application-root executor to reconcile Secret custody, LiteLLM credentials/models, and the final
- * credential/catalogue projection. Startup bootstrap remains a separate strict readiness path.
- * Reads return presence + timestamps only — the key is never echoed back.
+ * credential/catalogue projection. No startup bootstrap mutates provider state. Reads return
+ * presence + timestamps only — the key is never echoed back.
  *
  * The silo-wide key spends real money and backs every model call. Reads filter stable BYOK
  * `ProviderConnection` resources; mutations explicitly admit the silo's

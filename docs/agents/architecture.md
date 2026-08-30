@@ -109,7 +109,6 @@ Model, tool, memory, and artifact access passes through OpenCrane-owned ports:
 - LiteLLM provides model access under attempt-scoped policy;
 - admitted immutable OCI images execute Model Context Protocol calls in isolated executor Jobs;
 - memory access uses explicit organisation and subject scopes;
-- sandboxed tools run in isolated Jobs; and
 - artifact bytes use short-lived, purpose-bound leases.
 
 A runtime never receives provider master keys, integration credentials, storage master keys, or
@@ -125,14 +124,14 @@ OCI supply-chain language also calls images artifacts.
 MCP admission starts from an OCI Image Layout ZIP held by an `ArtifactRevision`, validates and
 imports it, then records the immutable registry reference on `McpServerRevision`. A current
 `SkillRevision` instead points to an immutable artifact bundle. Reviewed instructions are loaded as
-content; sandboxed Python is loaded by the fixed OpenCrane tool-runner image. A future
-containerized-code skill class may point at its own governed OCI digest, but it must not turn the
-current artifact-backed skill record into an image record.
+content. Sandboxed code-skill execution is not implemented; a future fixed OpenCrane runner may
+load a reviewed bundle. A future containerized-code skill class may point at its own governed OCI
+digest, but it must not turn the current artifact-backed skill record into an image record.
 
-Platform images such as the agent runtime, MCP companion, tool runner, scanner, and controllers
-belong to an OpenCrane release. Governed images such as uploaded MCP servers belong to product
-revisions. Operators may store both classes in OCI registries, but release authorization and product
-authorization remain separate.
+Platform images such as the agent runtime, MCP companion, scanner, controllers, and a future skill
+runner belong to an OpenCrane release. Governed images such as uploaded MCP servers belong to
+product revisions. Operators may store both classes in OCI registries, but release authorization
+and product authorization remain separate.
 
 ## Change checklist
 

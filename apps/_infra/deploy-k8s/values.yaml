@@ -569,10 +569,9 @@ clustertenantManager:
       # -- "openai" matches Cognee's own default AND this platform's litellm-proxy
       #    convention (api: openai-completions) for an OpenAI-compatible upstream.
       provider: "openai"
-      # -- "auto" is this platform's own stable model-selection alias (byok-default-models.ts),
-      #    seeded by the BYOK bootstrap alongside every provider's chat models — it currently
-      #    resolves to openai/gpt-5.4-nano on opencrane-dev, but re-points automatically if the
-      #    catalog's cheapest tier changes, so this stays correct without a values.yaml edit.
+      # -- "auto" is this platform's stable model-selection alias (byok-default-models.ts).
+      #    An authorised provider-effect command registers it beside the selected provider's chat
+      #    models and re-points it when the governed global routing default changes.
       #
       #    MUST carry the `openai/` prefix. Cognee's chat path (remember / cognify / graph-
       #    improvement) calls `litellm.acompletion(model=LLM_MODEL, api_base=LLM_ENDPOINT)`
@@ -595,8 +594,8 @@ clustertenantManager:
       #    `.../v1` → `.../v1/embeddings`, which our LiteLLM proxy serves).
       provider: "openai_compatible"
       # -- "auto-embedding" is this platform's stable embedding-selection alias, the embedding-side
-      #    mirror of the chat "auto" above. Registered by the BYOK bootstrap flow
-      #    (`_AUTO_EMBEDDING_MODEL_NAME` and `_EnsureProviderEmbeddingModels` in
+      #    mirror of the chat "auto" above. Registered by the authorised Set-BYOK provider-effect
+      #    command (`_AUTO_EMBEDDING_MODEL_NAME` and `_EnsureProviderEmbeddingModels` in
       #    provider-embedding-models.ts),
       #    pointing at the configured provider's real embedding model — NOT a tenant-selectable
       #    ModelDefinition. This exact string MUST match that constant; re-pointing the backing
