@@ -41,10 +41,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   shares create auditable exact-recipient grants without becoming a parallel authorization model.
 - **People, personal assistants, and managed agents now use one product authorization authority.**
   Reads filter the catalogue against current grants, protected mutations commit their decision
-  evidence in the same database transaction, and external effects first create a one-use
+  evidence in the same database transaction, and runtime tool effects first create a one-use
   `ToolInvocation` bound to the principal, run, resource revision, arguments, approval, and workload
-  assignment. Revocation and cancellation therefore close future effects without letting a runtime
-  reinterpret grants.
+  assignment. Revocation and cancellation therefore close future runtime effects without letting a
+  runtime reinterpret grants.
 - **Platform developers can now add durable, transactionally admitted work without coupling product
   logic to a scheduler engine.** The engine-neutral workflow contract and scheduling kit preserve
   idempotency, cancellation, and respawn evidence, while the Absurd adapter admits a task and its
@@ -135,13 +135,14 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   physical recovery reuses the schema in the backup, and a protected in-database digest prevents an
   incompatible backup from being relabelled as current. A changed target requires a clean database.
 
-- **Org admins can supply their own upstream provider key and get a full tier-structured model
-  catalog from a single credential.** Calling `PUT /api/v1/providers/byok/:provider` (org-admin
-  gated) stores one raw key in a Kubernetes Secret, registers it with the silo's LiteLLM instance
-  over the dynamic `/credentials` path without a restart, and seeds a catalog of flagship, balanced,
-  and fast model classes — all routed through that single key. From that point, the org's tenants
-  can call any of those model tiers without the platform operator having to register individual
-  models. The route is `_RequireOrgAdmin`-gated; LiteLLM-only routing is the enforcement layer.
+- **Authorized administrators can configure provider keys and models through recoverable,
+  revocation-aware commands.** Calling `PUT /api/v1/providers/byok/:provider` turns one raw key into
+  a tier-structured model catalogue, but OpenCrane first commits the protected intent, central
+  authorization evidence, and a non-secret provider-effect command together. Resumed and background
+  delivery rechecks current authority, while leased and desired-generation fences prevent an older
+  key, deletion, or model registration from replacing newer intent. A key that did not reach Secret
+  custody can be resubmitted against its returned command ID without persisting the raw key in the
+  database.
 
 - **The gateway WebSocket is now reachable at `/gateway` so the org's SPA can own the root path.**
   Upgrading to `wss://<org>.<base>/gateway` routes to the tenant's OpenClaw pod (the proxy strips
@@ -199,11 +200,12 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 - **Operators upgrading tagged 0.9.2 to 0.10.0 now receive the same clean authorization and workflow
   model as a fresh installation.** The migration projects current principals, groups, memberships,
-  grants, and resource boundaries, then removes pre-central runtime history and the superseded
-  authorization, workload, outbox, and memory tables. Development databases that ran the untagged
-  0.9.3 candidate can use the checksum-bound forward repair or be reset; 0.9.3 is never presented as
-  a supported release boundary. This destructive pre-1.0 cutover avoids carrying compatibility
-  state into the 0.10 architecture.
+  grants, and resource boundaries, then deletes every pre-0.10 `ToolInvocation` and its approval,
+  result, memory, and MCP execution dependants before dropping the superseded DPoP, action-receipt,
+  runtime-authority, Obot, workload, outbox, and memory tables. Development databases that ran the
+  untagged 0.9.3 candidate must accept the checksum-bound forward repair or be reset; 0.9.3 is never
+  presented as a supported release boundary. This destructive pre-1.0 cutover avoids carrying
+  compatibility state into the 0.10 architecture.
 
 - **Maintainers now carry durable compatibility and transition evidence with every release-affecting
   change.** Each directly changed or dependency-adapted Nx application records the immutable root
@@ -323,8 +325,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 ### Removed
 
 - **Operators no longer deploy or maintain Obot or MCPB alongside the supported MCP runtime.** The
-  Obot workload, integration authority, MCPB upload and validation surfaces, and replaced SQL
-  pollers, locks, and outbox kinds are removed after their OCI and Absurd owners take over.
+  Obot workload, logical database and login, generated custody objects, integration authority, MCPB
+  upload and validation surfaces, and replaced SQL pollers, locks, and outbox kinds are removed only
+  after their OCI and Absurd owners are ready.
 
 - **Operators can now run the OpenCrane stack without the bundled Langfuse data plane.** The
   Langfuse workloads, database and credentials, LiteLLM callback, metrics proxy, and unused
