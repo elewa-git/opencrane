@@ -27,8 +27,13 @@ oversized, redirected, or timed-out exchange fails closed without exposing argum
 
 ## Public surface
 
-- `__CreateMcpCompanionRemote` creates the projected-token OpenCrane adapter.
-- `__CreateMcpCompanionServer` creates the fixed loopback MCP adapter.
+- `__CreateMcpCompanionRemote` creates the authenticated companion-to-OpenCrane control channel.
+  It rereads the companion's projected token on every request, sends only the Pod identity to the
+  fixed in-cluster executor route, receives one server-selected command, and reports through that
+  command's `executionId` and `claimFence`. It never contacts the uploaded MCP server or gives that
+  server the projected token or opaque execution reference.
+- `__CreateMcpCompanionServer` creates the separate fixed loopback adapter used to speak to the
+  uploaded MCP server. That server-facing adapter has no OpenCrane credential.
 - `__ReadMcpCompanionIdentity` reads and checks the mounted reference and Pod UID.
 - `__RunMcpCompanion` waits for controller Pod registration, runs one claim, and sends one terminal report.
   It exits without calling the uploaded server when OpenCrane reports that cancellation already ended the saved work.

@@ -1,5 +1,6 @@
 import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 
+import { _ParseMcpRuntimeAssignment as _ParseAssignment, _ParseMcpRuntimeClaimId } from "./mcp-runtime-wire.validator";
 import type { McpOciServerPromotionCommand, McpRuntimePodRegistrationCommand, McpRuntimeReleaseCommand } from "./mcp-runtime.types";
 
 /** Parse the bounded administrator fields accepted by OCI server promotion. */
@@ -10,13 +11,33 @@ export function __ParseMcpOciServerPromotionCommand(value: unknown): McpOciServe
 	return { name: value["name"].trim(), description: value["description"].trim() };
 }
 
-/** Parse one controller assignment and require the path and body claim IDs to agree. */
+/**
+ * Parses controller assignment evidence and binds its body claim ID to the route claim ID.
+ *
+ * The router calls this before the authoritative repository writes the binding. It rejects an
+ * extra server-owned field and rejects a valid body sent through another claim URL, so callers get
+ * either one fenced binding or an error to map to a bad request.
+ *
+ * Called by: mcp-runtime-controller.router.ts.
+ * @param claimId - The controller-supplied claim coordinate from the request path.
+ * @param value - The controller-supplied assignment body.
+ * @returns The strict assignment binding whose claim ID matches the request path.
+ * @throws Error When the path, body, unknown fields, or claim-ID correlation is invalid.
+ */
 export function __ParseMcpRuntimeAssignment(claimId: string, value: unknown): RuntimeWorkloadBinding
 {
-	const keys = ["claimId", "claimedAt", "deliveryCount", "profileName", "workloadUid"];
-	if (!_Coordinate(claimId, 256) || !_Exact(value, keys) || value["claimId"] !== claimId || !_Instant(value["claimedAt"]) || !_PositiveInteger(value["deliveryCount"]) || !_Coordinate(value["profileName"], 128) || !_Coordinate(value["workloadUid"], 256))
+	// 1. Parse a strict body so the controller cannot inject a silo, image, class, or other server-owned field.
+	const assignment = _ParseAssignment(value);
+
+	// 2. Validate the path independently because it is supplied by the same untrusted controller request.
+	const routeClaimId = _ParseMcpRuntimeClaimId(claimId);
+
+	// 3. Bind both claim IDs so a valid controller body cannot be retargeted through another claim URL.
+	if (assignment.claimId !== routeClaimId)
 		throw new Error("MCP runtime assignment has an invalid shape");
-	return value as unknown as RuntimeWorkloadBinding;
+
+	// 4. Keep the delivery, time, profile, and Job UID fence intact for the authoritative repository write.
+	return assignment;
 }
 
 /** Parse one release fence without accepting a caller-selected silo, image, or profile. */
