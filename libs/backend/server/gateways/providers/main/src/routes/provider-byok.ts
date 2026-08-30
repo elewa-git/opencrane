@@ -12,7 +12,8 @@ import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCaller, Provid
 import { _RequireProviderGatewayAdministration, _RequireProviderGatewayCaller, _ResolveProviderGatewayCaller, _SendProviderGatewayAuthorizationError } from "../provider-gateway-authorization";
 import { _CreateProviderEffectCommandExecutor, _PROVIDER_EFFECT_EXECUTOR_PROFILE } from "../provider-effect-command-composition";
 import { _ProviderKeyMaterialVerifier } from "../provider-effect-command-executor";
-import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandExecutor, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
+import { _SendProviderEffectBusy } from "../provider-effect-command-http";
+import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandExecutor, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 import { PrismaProviderGatewayUnitOfWork } from "../prisma-provider-gateway-unit-of-work";
 
 /** The providers a raw BYOK key may be set for; mirrors the {@link ByokProvider} contract union. */
@@ -121,11 +122,16 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
 		if (!resumeCommandId)
 		{
 			const materialVerifier = _ProviderKeyMaterialVerifier(commandId, provider, apiKey);
-			await providers.runDatabaseMutation(async function _Set(_transaction, authorization, effects)
+			const admission = await providers.runDatabaseMutation(async function _Set(_transaction, authorization, effects)
 			{
-				const admission = await _RequireProviderGatewayAdministration(authorization, caller, { operation: "set-byok-provider", provider, commandId, materialVerifier });
-				return effects.admit({ id: commandId, siloId: caller.siloId, principalId: caller.principalId, payload: { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider, secretRef: _byokSecretName(provider), litellmCredentialName: _byokCredentialName(provider) } }, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: _ByokProviderConnectionId(provider), resourceRevision: commandId, argumentsDigest: admission.argumentsDigest, materialVerifier, authorization: admission.evidence, approvalId: null, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey });
+				const authorizationAdmission = await _RequireProviderGatewayAdministration(authorization, caller, { operation: "set-byok-provider", provider, commandId, materialVerifier });
+				return effects.admit({ id: commandId, siloId: caller.siloId, principalId: caller.principalId, payload: { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider, secretRef: _byokSecretName(provider), litellmCredentialName: _byokCredentialName(provider) } }, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: _ByokProviderConnectionId(provider), resourceRevision: commandId, argumentsDigest: authorizationAdmission.argumentsDigest, materialVerifier, authorization: authorizationAdmission.evidence, approvalId: null, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey });
 			});
+			if (admission.status === ProviderEffectAdmissionStatuses.Busy)
+			{
+				_SendProviderEffectBusy(res, admission.blocker, "Another provider effect still owns this resource.");
+				return;
+			}
 		}
 		const delivered = await effectExecutor.execute(commandId, { provider, providerKey: apiKey }, _effectContext(caller, provider));
 		const effectResult = delivered.result;
@@ -171,13 +177,18 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
 		const commandId = resumeCommandId || randomUUID();
 		if (!resumeCommandId)
 		{
-			await providers.runDatabaseMutation(async function _Delete(transaction, authorization, effects)
+			const admission = await providers.runDatabaseMutation(async function _Delete(transaction, authorization, effects)
 			{
 				const current = await transaction.providerCredential.findFirst({ where: { scope: "Global", clusterTenant: null, provider } });
 				const resourceRevision = `${current?.updatedAt.toISOString() ?? "absent"}:${commandId}`;
 				const admission = await _RequireProviderGatewayAdministration(authorization, caller, { operation: "delete-byok-provider", provider, commandId, resourceRevision });
 				return effects.admit({ id: commandId, siloId: caller.siloId, principalId: caller.principalId, payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider, secretRef: _byokSecretName(provider), litellmCredentialName: _byokCredentialName(provider) } }, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: _ByokProviderConnectionId(provider), resourceRevision, argumentsDigest: admission.argumentsDigest, materialVerifier: null, authorization: admission.evidence, approvalId: null, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None });
 			});
+			if (admission.status === ProviderEffectAdmissionStatuses.Busy)
+			{
+				_SendProviderEffectBusy(res, admission.blocker, "Another provider effect still owns this resource.");
+				return;
+			}
 		}
 		const delivered = await effectExecutor.execute(commandId, undefined, _effectContext(caller, provider));
 		if (delivered.status !== ProviderEffectExecutionStatuses.Succeeded && delivered.status !== ProviderEffectExecutionStatuses.AlreadySucceeded)

@@ -39,6 +39,14 @@ function pending(description: string, includeModelDefinitionId = false)
   };
 }
 
+function providerEffectBusy(description: string)
+{
+  return {
+    description,
+    content: { "application/json": { schema: { type: "object", required: ["error", "code", "commandId"], properties: { error: { type: "string" }, code: { type: "string", enum: ["PROVIDER_EFFECT_BUSY"] }, commandId: { type: "string", format: "uuid", description: "Existing command that owns the resource barrier." } } } } },
+  };
+}
+
 /** OpenAPI path fragments owned by the providers domain (composed into the opencrane-ui spec). */
 export const _ProvidersOpenapiPaths = {
   "/providers/byok": {
@@ -65,6 +73,7 @@ export const _ProvidersOpenapiPaths = {
       responses: {
         200: ok("Key set; returns the provider's status.", { $ref: "#/components/schemas/ByokProviderKeyStatus" }),
         400: badRequest("Unsupported provider (code UNSUPPORTED_PROVIDER) or missing apiKey (code VALIDATION_ERROR)."),
+		409: providerEffectBusy("Another claimed provider command owns this provider resource; retry or resume the returned command first."),
 		503: pending("The command is durable but needs a later retry. Resubmit the returned commandId with the same raw key."),
       },
     },
@@ -79,6 +88,7 @@ export const _ProvidersOpenapiPaths = {
       responses: {
         204: { description: "Key removed (idempotent — 204 even when no key was set)." },
         400: badRequest("Unsupported provider (code UNSUPPORTED_PROVIDER)."),
+		409: providerEffectBusy("Another claimed provider command owns this provider resource; retry or resume the returned command first."),
 		503: pending("The removal is durable and the background reconciler or this exact command retry may resume it."),
       },
     },
@@ -201,6 +211,7 @@ export const _ProvidersOpenapiPaths = {
         200: ok("Model definition updated.", { $ref: "#/components/schemas/ModelDefinition" }),
         400: badRequest("Request body failed validation."),
         403: { description: "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE).", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+		409: providerEffectBusy("The model's registration command must settle before its lifecycle can change."),
         404: notFound("Model definition not found."),
       },
     },
@@ -212,6 +223,7 @@ export const _ProvidersOpenapiPaths = {
       responses: {
         200: ok("Model definition deleted.", { type: "object", properties: { id: { type: "string" }, status: { type: "string" } } }),
         403: { description: "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE).", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+		409: providerEffectBusy("The model's registration command must settle before its lifecycle can change."),
         404: notFound("Model definition not found."),
       },
     },

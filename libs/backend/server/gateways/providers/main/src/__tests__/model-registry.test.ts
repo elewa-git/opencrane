@@ -65,10 +65,17 @@ function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = ne
     },
     providerEffectCommand: {
       _commands: commands,
-	  findFirst: async function _findCurrentCommand(args: { where: { siloId: string; resourceKind: string; resourceId: string } })
+	  findFirst: async function _findCurrentCommand(args: { where: { siloId: string; resourceKind: string; resourceId: string; state?: string | { in: string[] } } })
 	  {
 		return Array.from(commands.values())
-			.filter(function _Same(row) { return row.siloId === args.where.siloId && row.resourceKind === args.where.resourceKind && row.resourceId === args.where.resourceId; })
+			.filter(function _Same(row)
+			{
+				if (row.siloId !== args.where.siloId || row.resourceKind !== args.where.resourceKind || row.resourceId !== args.where.resourceId)
+					return false;
+				if (typeof args.where.state === "string")
+					return row.state === args.where.state;
+				return args.where.state === undefined || args.where.state.in.includes(row.state as string);
+			})
 			.sort(function _Newest(left, right) { return Number(right.desiredGeneration ?? 0) - Number(left.desiredGeneration ?? 0); })[0] ?? null;
 	  },
       create: async function _createCommand(args: { data: Row })
@@ -328,6 +335,23 @@ describe("modelRegistryRouter", function _suite()
     expect(res.body).toEqual({ id: "model-1", status: "deleted" });
     expect(store.has("model-1")).toBe(false);
   });
+
+	it.each([
+		{ method: "put", state: "Pending" },
+		{ method: "delete", state: "Claimed" },
+	] as const)("returns 409 when $method races a $state model registration", async function _BlocksRegistrationLifecycle({ method, state })
+	{
+		const store = new Map<string, Row>([["model-1", { id: "model-1", scope: "Global", clusterTenant: null, publicModelName: "openai/gpt-4o", litellmModelId: "pending:command-a", upstreamModel: "openai/gpt-4o", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }]]);
+		const commands = new Map<string, Row>([["command-a", { id: "command-a", siloId: "acme", resourceKind: "model-definition", resourceId: "model-1", desiredGeneration: 1, state }]]);
+		const app = _buildApp(_mockPrisma(store, new Map(), commands));
+		const response = method === "put"
+			? await request(app).put("/api/v1/models/model-1").send({ publicModelName: "openai/gpt-4o", upstreamModel: "openai/changed" })
+			: await request(app).delete("/api/v1/models/model-1");
+
+		expect(response.status).toBe(409);
+		expect(response.body).toEqual({ error: "Model registration is still active.", code: "PROVIDER_EFFECT_BUSY", commandId: "command-a" });
+		expect(store.get("model-1")?.upstreamModel).toBe("openai/gpt-4o");
+	});
 
   it("rejects a PUT that rebinds a credential owned by another ClusterTenant (400)", async function _putCredentialScopeMismatch()
   {

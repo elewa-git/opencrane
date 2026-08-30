@@ -3843,6 +3843,37 @@
               }
             }
           },
+          "409": {
+            "description": "Another claimed provider command owns this provider resource; retry or resume the returned command first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_BUSY"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "description": "Existing command that owns the resource barrier."
+                    }
+                  }
+                }
+              }
+            }
+          },
           "503": {
             "description": "The command is durable but needs a later retry. Resubmit the returned commandId with the same raw key.",
             "content": {
@@ -3919,6 +3950,37 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another claimed provider command owns this provider resource; retry or resume the returned command first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_BUSY"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "description": "Existing command that owns the resource barrier."
+                    }
+                  }
                 }
               }
             }
@@ -4431,6 +4493,37 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "The model's registration command must settle before its lifecycle can change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_BUSY"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "description": "Existing command that owns the resource barrier."
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -4485,6 +4578,37 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The model's registration command must settle before its lifecycle can change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_BUSY"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "description": "Existing command that owns the resource barrier."
+                    }
+                  }
                 }
               }
             }

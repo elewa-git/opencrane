@@ -60,10 +60,14 @@ filter exact `ProviderConnection/Read` or `ModelDefinition/Read` resources throu
 `Organization/<silo>/Administer`. Database mutations and provider-effect admissions commit decision
 evidence, protected intent, and the command through the same Serializable transaction. Kubernetes
 and LiteLLM run only after that transaction commits. Every governed resource has a monotonic desired
-generation: admitting a newer Set, Delete, or Register command supersedes older inactive work, while
-an older active claim must release before the newer generation can run. The executor re-admits the
-saved subject through the current central authority during claim, immediately before external I/O,
-and during finalization. It also rechecks the current model lifecycle and desired generation. The
+generation: admitting a newer Set, Delete, or Register command supersedes older inactive work. A
+claimed command is the external resource's serialization barrier, even after its lease expires, so
+a conflicting admission returns `409 PROVIDER_EFFECT_BUSY` with that existing command id instead of
+creating a newer generation. Only that exact command may be reclaimed after expiry. Model update and
+delete use the same barrier while registration is Pending, AwaitingMaterial, or Claimed. The executor
+re-admits the saved subject through the current central authority during claim, immediately before
+external I/O, and during finalization. It also rechecks the current model lifecycle and desired
+generation. The
 background reconciler receives its fixed system executor profile from application composition; it
 never trusts a profile stored on a command as its own identity. There is no session-role or
 tenant-scope policy engine beside it.

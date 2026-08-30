@@ -110,10 +110,17 @@ function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map
       },
     },
     providerEffectCommand: {
-	  findFirst: async function _findCurrentCommand(args: { where: { siloId: string; resourceKind: string; resourceId: string } })
+	  findFirst: async function _findCurrentCommand(args: { where: { siloId: string; resourceKind: string; resourceId: string; state?: string | { in: string[] } } })
 	  {
 		return Array.from(commands.values())
-			.filter(function _Same(row) { return row.siloId === args.where.siloId && row.resourceKind === args.where.resourceKind && row.resourceId === args.where.resourceId; })
+			.filter(function _Same(row)
+			{
+				if (row.siloId !== args.where.siloId || row.resourceKind !== args.where.resourceKind || row.resourceId !== args.where.resourceId)
+					return false;
+				if (typeof args.where.state === "string")
+					return row.state === args.where.state;
+				return args.where.state === undefined || args.where.state.in.includes(row.state as string);
+			})
 			.sort(function _Newest(left, right) { return Number(right.desiredGeneration ?? 0) - Number(left.desiredGeneration ?? 0); })[0] ?? null;
 	  },
       create: async function _createCommand(args: { data: Row })
@@ -186,10 +193,9 @@ function _mockCoreApi(secrets: Map<string, k8s.V1Secret>): k8s.CoreV1Api
  * Mount only the BYOK router over the supplied stores, granting the default caller's explicit
  * Organization/Administer admission. Pass `{ authorized: false }` to exercise a denied decision.
  */
-function _buildApp(store: Map<string, Row>, secrets: Map<string, k8s.V1Secret>, user: { authorized: boolean } = { authorized: true }, models: Map<string, Row> = new Map()): Express
+function _buildApp(store: Map<string, Row>, secrets: Map<string, k8s.V1Secret>, user: { authorized: boolean } = { authorized: true }, models: Map<string, Row> = new Map(), commands: Map<string, Row> = new Map()): Express
 {
   const app = express();
-  const commands = new Map<string, Row>();
   const prisma = _mockPrisma(store, models, commands);
   const coreApi = _mockCoreApi(secrets);
   const executor = {
@@ -301,6 +307,21 @@ describe("providerByokRouter", function _suite()
     expect(Array.from(store.values()).filter(function _g(r) { return r.provider === "gemini"; })).toHaveLength(1);
     expect(Buffer.from(secrets.get("byok-provider-key-gemini")!.data!.apiKey, "base64").toString("utf8")).toBe("key-2");
   });
+
+	it.each(["put", "delete"] as const)("returns 409 for a conflicting %s while a provider command is claimed", async function _ProviderConflict(method)
+	{
+		const commands = new Map<string, Row>([["command-a", { id: "command-a", siloId: "acme", resourceKind: "provider-connection", resourceId: "byok:openai", desiredGeneration: 1, state: "Claimed", claimExpiresAt: new Date("2026-06-30T12:00:00.000Z") }]]);
+		const secrets = new Map<string, k8s.V1Secret>();
+		const app = _buildApp(new Map(), secrets, { authorized: true }, new Map(), commands);
+		const response = method === "put"
+			? await request(app).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-new" })
+			: await request(app).delete("/api/v1/providers/byok/openai");
+
+		expect(response.status).toBe(409);
+		expect(response.body).toEqual({ error: "Another provider effect still owns this resource.", code: "PROVIDER_EFFECT_BUSY", commandId: "command-a" });
+		expect(commands.size).toBe(1);
+		expect(secrets.size).toBe(0);
+	});
 
   it("denies a caller without Organization/Administer with 403", async function _denyNonAdmin()
   {

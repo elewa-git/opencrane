@@ -9,6 +9,7 @@ import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "
 import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCaller, ProviderGatewayCallerResolver } from "../provider-gateway-authority.types";
 import { _GrantProviderResourceCreatorUse, _RequireProviderGatewayAdministration, _RequireProviderGatewayCaller, _ResolveProviderGatewayCaller, _SendProviderGatewayAuthorizationError } from "../provider-gateway-authorization";
 import { _CreateProviderEffectCommandExecutor, _PROVIDER_EFFECT_EXECUTOR_PROFILE } from "../provider-effect-command-composition";
+import { _RequireProviderEffectAdmission, _SendProviderEffectBusy } from "../provider-effect-command-http";
 import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandExecutor, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 import { PrismaProviderGatewayUnitOfWork } from "../prisma-provider-gateway-unit-of-work";
 
@@ -226,7 +227,7 @@ export function modelRegistryRouter(prisma: PrismaClient, resolveCaller: Provide
 			const admission = await _RequireProviderGatewayAdministration(authorization, caller, { operation: "create-model-definition", commandId, modelDefinitionId, scope, clusterTenant, publicModelName, upstreamModel, apiBase, providerCredentialId: write.providerCredentialId ?? null, generatedOutputCapabilities: write.generatedOutputCapabilities ?? [] });
 			const model = await transaction.modelDefinition.create({ data: { id: modelDefinitionId, scope: _toPrismaScope(scope), clusterTenant, publicModelName, litellmModelId: `pending:${commandId}`, upstreamModel, apiBase, isDefault: write.isDefault ?? false, providerCredentialId: write.providerCredentialId ?? null, generatedOutputCapabilities: write.generatedOutputCapabilities ?? [] } });
 			await _GrantProviderResourceCreatorUse(authorization, caller, { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: model.id }, new Date());
-			const command = await effects.admit({ id: commandId, siloId: caller.siloId, principalId: caller.principalId, payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: model.id, publicModelName, upstreamModel, scope, clusterTenant, apiBase, apiKeyEnvRef: credentialResult.secretRef, litellmCredentialName: credentialResult.litellmCredentialName } }, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: model.id, resourceRevision: commandId, argumentsDigest: admission.argumentsDigest, materialVerifier: null, authorization: admission.evidence, approvalId: null, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None });
+			const command = _RequireProviderEffectAdmission(await effects.admit({ id: commandId, siloId: caller.siloId, principalId: caller.principalId, payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: model.id, publicModelName, upstreamModel, scope, clusterTenant, apiBase, apiKeyEnvRef: credentialResult.secretRef, litellmCredentialName: credentialResult.litellmCredentialName } }, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: model.id, resourceRevision: commandId, argumentsDigest: admission.argumentsDigest, materialVerifier: null, authorization: admission.evidence, approvalId: null, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None }));
 			return { command, model };
 		});
 		if ("error" in admitted)
@@ -305,12 +306,15 @@ export function modelRegistryRouter(prisma: PrismaClient, resolveCaller: Provide
     //    cannot bind (or smuggle in) another ClusterTenant's credential.
 	try
 	{
-		const updated = await models.runDatabaseMutation(async function _Update(transaction, authorization)
+		const updated = await models.runDatabaseMutation(async function _Update(transaction, authorization, effects)
 		{
 			const existing = await transaction.modelDefinition.findUnique({ where: { id: req.params.id } });
 			if (existing === null)
 				return null;
 			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "update-model-definition", id: existing.id, write });
+			const blocker = await effects.findResourceBlocker(caller.siloId, ProductAuthorizationResourceKinds.ModelDefinition, existing.id);
+			if (blocker !== null)
+				return { providerEffectBlocker: blocker } as const;
 			const credentialResult = await _resolveCredential(transaction, write.providerCredentialId, modelClusterTenant);
 			if ("error" in credentialResult)
 				return credentialResult;
@@ -320,6 +324,11 @@ export function modelRegistryRouter(prisma: PrismaClient, resolveCaller: Provide
 		if (updated === null)
 		{
 			res.status(404).json({ error: "Model definition not found", code: "MODEL_DEFINITION_NOT_FOUND" });
+			return;
+		}
+		if ("providerEffectBlocker" in updated)
+		{
+			_SendProviderEffectBusy(res, updated.providerEffectBlocker, "Model registration is still active.");
 			return;
 		}
 		if ("error" in updated)
@@ -344,16 +353,24 @@ export function modelRegistryRouter(prisma: PrismaClient, resolveCaller: Provide
 		return;
 	try
 	{
-		const deleted = await models.runDatabaseMutation(async function _Delete(transaction, authorization)
+		const deleted = await models.runDatabaseMutation(async function _Delete(transaction, authorization, effects)
 		{
 			const existing = await transaction.modelDefinition.findUnique({ where: { id: req.params.id } });
 			if (existing === null)
-				return false;
+				return { deleted: false, blocker: null } as const;
 			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "delete-model-definition", id: existing.id });
+			const blocker = await effects.findResourceBlocker(caller.siloId, ProductAuthorizationResourceKinds.ModelDefinition, existing.id);
+			if (blocker !== null)
+				return { deleted: false, blocker } as const;
 			await transaction.modelDefinition.delete({ where: { id: existing.id } });
-			return true;
+			return { deleted: true, blocker: null } as const;
 		});
-		if (!deleted)
+		if (deleted.blocker !== null)
+		{
+			_SendProviderEffectBusy(res, deleted.blocker, "Model registration is still active.");
+			return;
+		}
+		if (!deleted.deleted)
 		{
 			res.status(404).json({ error: "Model definition not found", code: "MODEL_DEFINITION_NOT_FOUND" });
 			return;

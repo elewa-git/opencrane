@@ -29,7 +29,7 @@ export enum ProviderEffectCommandStates
 	Pending = "Pending",
 	/** The command needs the matching provider key supplied in memory before it can run. */
 	AwaitingMaterial = "AwaitingMaterial",
-	/** One executor holds the command until its claim lease expires. */
+	/** An executor holds the command; lease expiry permits reclaim of this command but does not release its resource barrier. */
 	Claimed = "Claimed",
 	/** The external change and its database result have both completed. Terminal. */
 	Succeeded = "Succeeded",
@@ -63,7 +63,7 @@ export enum ProviderEffectExecutionStatuses
 	Claimed = "claimed",
 	/** This call completed the external effect and its database finalization. */
 	Succeeded = "succeeded",
-	/** Another executor owns an unexpired claim, so this caller should try later. */
+	/** A claim or concurrent state change prevents this delivery attempt, so the caller should try the same command later. */
 	Busy = "busy",
 	/** The caller must resubmit the provider key that admitted this exact command. */
 	AwaitingMaterial = "awaiting_material",
@@ -73,6 +73,24 @@ export enum ProviderEffectExecutionStatuses
 	AlreadySucceeded = "already_succeeded",
 	/** The command exhausted its delivery budget, so an operator must make a new request. */
 	Failed = "failed",
+}
+
+/**
+ * Outcomes returned before a new desired generation is persisted.
+ *
+ * Route admission uses this state to distinguish a durable command from an existing claimed
+ * resource barrier without inventing a replacement command id.
+ *
+ * Called by: BYOK and model-registration admission routes.
+ *
+ * @see ProviderEffectAdmissionResult
+ */
+export enum ProviderEffectAdmissionStatuses
+{
+	/** The transaction persisted the command as the resource's next durable desired generation. */
+	Admitted = "admitted",
+	/** No command was persisted because a claimed command still owns the external resource barrier. */
+	Busy = "busy",
 }
 
 /** Non-secret payload persisted for a raw BYOK key write. */
@@ -166,9 +184,39 @@ export interface ProviderEffectCommandRecord extends AdmitProviderEffectCommand
 	readonly deliveryCount: number;
 	/** Fence held by the current executor, or null outside a claim. */
 	readonly claimFence: string | null;
-	/** Time after which another executor may replace a crashed claim. */
+	/** Time after which another executor may reclaim this command after a crashed delivery. */
 	readonly claimExpiresAt: Date | null;
 }
+
+/**
+ * Identifies unfinished provider work that prevents a conflicting resource mutation.
+ *
+ * The repository returns this safe coordinate to authorized routes. Routes expose the command id
+ * with `PROVIDER_EFFECT_BUSY` so an operator can wait for or resume the exact existing command.
+ *
+ * Called by: provider effect admission and model lifecycle conflict checks.
+ */
+export interface ProviderEffectResourceBlocker
+{
+	/** Durable command that must complete or fail before the conflicting mutation may proceed. */
+	readonly commandId: string;
+	/** Current unfinished state of the blocking command. */
+	readonly state: ProviderEffectCommandStates;
+}
+
+/**
+ * Closes provider-effect admission over durable success or an existing claimed barrier.
+ *
+ * A Busy result always carries the existing blocker and never a new command. Callers must return a
+ * conflict instead of invoking the executor with the requested replacement command id.
+ *
+ * Called by: provider-effect repositories and provider mutation routes.
+ *
+ * @see ProviderEffectAdmissionStatuses
+ */
+export type ProviderEffectAdmissionResult =
+	| { readonly status: ProviderEffectAdmissionStatuses.Admitted; readonly command: ProviderEffectCommandRecord; readonly blocker: null }
+	| { readonly status: ProviderEffectAdmissionStatuses.Busy; readonly command: null; readonly blocker: ProviderEffectResourceBlocker };
 
 /** Ephemeral values accepted by the executor and never written to the database. */
 export interface ProviderEffectEphemeralMaterial
@@ -216,8 +264,10 @@ export type ProviderEffectHandlerResult =
 /** Transaction-scoped persistence used to admit and deliver provider commands. */
 export interface ProviderEffectCommandRepository
 {
-	/** Saves one command beside the protected database intent and central decision evidence. */
-	admit(command: AdmitProviderEffectCommand): Promise<ProviderEffectCommandRecord>;
+	/** Saves one command unless a claimed generation still owns the external resource barrier. */
+	admit(command: AdmitProviderEffectCommand): Promise<ProviderEffectAdmissionResult>;
+	/** Finds unfinished provider work that prevents a model lifecycle mutation. */
+	findResourceBlocker(siloId: string, resourceKind: string, resourceId: string): Promise<ProviderEffectResourceBlocker | null>;
 	/** Selects the oldest database-complete command that a background pass may safely resume. */
 	nextRecoverable(now: Date): Promise<ProviderEffectCommandRecord | null>;
 	/** Claims one command after checking delivery state and any in-memory material verifier. */

@@ -6,7 +6,7 @@ import { AuthorizationDecisionOutcomes, ProductAuthorizationResourceKinds } from
 import { ModelRoutingScope } from "@opencrane/contracts";
 
 import { PrismaProviderEffectCommandRepository } from "../prisma-provider-effect-command-repository";
-import { ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandPayload, type ProviderEffectCommandRecord, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
+import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandPayload, type ProviderEffectCommandRecord, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 
 /** Stable executor profile shared by current-authority repository tests. */
 const _PROFILE = "opencrane-control-plane/provider-effect-v1";
@@ -104,7 +104,7 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		const updateMany = vi.fn(async function _UpdateMany() { return { count: 1 }; });
 		const transaction = {
 			providerEffectCommand: {
-				findFirst: vi.fn(async function _FindFirst() { return rowA; }),
+				findFirst: vi.fn(async function _FindFirst(args: { where?: { state?: string } }) { return args.where?.state === ProviderEffectCommandStates.Claimed ? null : rowA; }),
 				create,
 				updateMany,
 			},
@@ -113,9 +113,62 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 
 		const result = await repository.admit({ id: "command-b", siloId: "acme", principalId: "principal-1", payload: _DELETE, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: "byok:openai", resourceRevision: "revision-b", argumentsDigest: "sha256:arguments-b", materialVerifier: null, authorization: { decisionDigest: "sha256:decision-b", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective-b" }, approvalId: null, executorProfile: _PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None });
 
-		expect(result.desiredGeneration).toBe(2);
+		expect(result.status).toBe(ProviderEffectAdmissionStatuses.Admitted);
+		if (result.status !== ProviderEffectAdmissionStatuses.Admitted)
+			throw new Error("expected generation B to be admitted");
+		expect(result.command.desiredGeneration).toBe(2);
 		expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ desiredGeneration: 2 }) }));
 		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ desiredGeneration: { lt: 2 }, OR: expect.arrayContaining([{ state: ProviderEffectCommandStates.Pending }, { state: ProviderEffectCommandStates.AwaitingMaterial }]) }), data: expect.objectContaining({ state: ProviderEffectCommandStates.Failed, failureCode: "superseded" }) }));
+	});
+
+	it.each([_SET, _DELETE])("rejects $kind generation B admitted between generation A preflight and external delivery", async function _BlocksInterleavedAdmission(payload)
+	{
+		const rowA = _row(payload, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-a", claimExpiresAt: new Date("2026-08-30T02:00:00.000Z") });
+		const create = vi.fn();
+		const transaction = {
+			providerEffectCommand: {
+				findUnique: vi.fn(async function _FindUnique() { return rowA; }),
+				findFirst: vi.fn(async function _FindFirst() { return rowA; }),
+				create,
+				updateMany: vi.fn(async function _UpdateMany() { return { count: 1 }; }),
+			},
+		} as unknown as Prisma.TransactionClient;
+		const repository = new PrismaProviderEffectCommandRepository(transaction);
+		const handler = vi.fn();
+
+		await expect(repository.preflight(_record(rowA, payload), _context(), _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(true);
+		const requiresMaterial = payload.kind === ProviderEffectCommandKinds.SetByokKey;
+		const materialVerifier = requiresMaterial ? "sha256:material-b" as const : null;
+		const materialRequirement = requiresMaterial ? ProviderEffectMaterialRequirements.EphemeralProviderKey : ProviderEffectMaterialRequirements.None;
+		const result = await repository.admit({ id: "command-b", siloId: "acme", principalId: "principal-1", payload, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: "byok:openai", resourceRevision: "revision-b", argumentsDigest: "sha256:arguments-b", materialVerifier, authorization: { decisionDigest: "sha256:decision-b", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective-b" }, approvalId: null, executorProfile: _PROFILE, materialRequirement });
+		handler();
+
+		expect(result).toEqual({ status: ProviderEffectAdmissionStatuses.Busy, command: null, blocker: { commandId: "command-a", state: ProviderEffectCommandStates.Claimed } });
+		expect(create).not.toHaveBeenCalled();
+		expect(handler).toHaveBeenCalledOnce();
+	});
+
+	it("keeps an expired claim as the admission barrier while allowing that exact command to be reclaimed", async function _ExpiredClaimBarrier()
+	{
+		const expired = _row(_DELETE, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-old", claimExpiresAt: new Date("2026-08-30T00:30:00.000Z") });
+		const create = vi.fn();
+		const admissionTransaction = {
+			providerEffectCommand: {
+				findFirst: vi.fn(async function _FindFirst() { return expired; }),
+				create,
+			},
+		} as unknown as Prisma.TransactionClient;
+		const admissionRepository = new PrismaProviderEffectCommandRepository(admissionTransaction);
+
+		const admission = await admissionRepository.admit({ id: "command-b", siloId: "acme", principalId: "principal-1", payload: _DELETE, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: "byok:openai", resourceRevision: "revision-b", argumentsDigest: "sha256:arguments-b", materialVerifier: null, authorization: { decisionDigest: "sha256:decision-b", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective-b" }, approvalId: null, executorProfile: _PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None });
+		expect(admission.status).toBe(ProviderEffectAdmissionStatuses.Busy);
+		expect(create).not.toHaveBeenCalled();
+
+		const database = _transaction(expired, expired);
+		const claimRepository = new PrismaProviderEffectCommandRepository(database.transaction);
+		const reclaimed = await claimRepository.claim("command-a", null, _context(), _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"));
+		expect(reclaimed.status).toBe(ProviderEffectExecutionStatuses.Claimed);
+		expect(database.updateCommands).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ProviderEffectCommandStates.Claimed, deliveryCount: { increment: 1 }, claimFence: expect.any(String) }) }));
 	});
 
 	it.each(["user", "system"] as const)("refuses a %s delivery after organisation administration is revoked", async function _Revoked(actorKind)

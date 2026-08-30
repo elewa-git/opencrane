@@ -5,7 +5,7 @@ import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/autho
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type AdmitProviderEffectCommand, type ProviderEffectClaimResult, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectExecutionContext, type ProviderEffectHandlerResult } from "./provider-effect-command.types";
+import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type AdmitProviderEffectCommand, type ProviderEffectAdmissionResult, type ProviderEffectClaimResult, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectExecutionContext, type ProviderEffectHandlerResult, type ProviderEffectResourceBlocker } from "./provider-effect-command.types";
 import { _ParseProviderEffectCommandPayload, _ValidateProviderEffectCommandResourceBinding } from "./provider-effect-command.validator";
 
 /** Maximum number of external deliveries before a command needs a fresh administrator request. */
@@ -39,15 +39,25 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 	}
 
 	/** @inheritdoc */
-	async admit(command: AdmitProviderEffectCommand): Promise<ProviderEffectCommandRecord>
+	async admit(command: AdmitProviderEffectCommand): Promise<ProviderEffectAdmissionResult>
 	{
 		_ValidateProviderEffectCommandResourceBinding(command.payload, command.resourceKind, command.resourceId);
+		const claimed = await this.transaction.providerEffectCommand.findFirst({ where: { siloId: command.siloId, resourceKind: command.resourceKind, resourceId: command.resourceId, state: ProviderEffectCommandState.Claimed }, orderBy: { desiredGeneration: "desc" } });
+		if (claimed !== null)
+			return { status: ProviderEffectAdmissionStatuses.Busy, command: null, blocker: { commandId: claimed.id, state: ProviderEffectCommandStates.Claimed } };
 		const previous = await this.transaction.providerEffectCommand.findFirst({ where: { siloId: command.siloId, resourceKind: command.resourceKind, resourceId: command.resourceId }, orderBy: { desiredGeneration: "desc" } });
 		const desiredGeneration = (previous?.desiredGeneration ?? 0) + 1;
 		const now = new Date();
 		const row = await this.transaction.providerEffectCommand.create({ data: { id: command.id, siloId: command.siloId, principalId: command.principalId, kind: command.payload.kind, resourceKind: command.resourceKind, resourceId: command.resourceId, resourceRevision: command.resourceRevision, desiredGeneration, argumentsDigest: command.argumentsDigest, materialVerifier: command.materialVerifier, authorizationDecisionDigest: command.authorization.decisionDigest, authorizationPolicyRevisionHash: command.authorization.policyRevisionHash, effectiveAuthorizationDigest: command.authorization.effectiveAuthorizationDigest, approvalId: command.approvalId, executorProfile: command.executorProfile, materialRequirement: command.materialRequirement, payload: command.payload.value as unknown as Prisma.InputJsonValue } });
 		await this.transaction.providerEffectCommand.updateMany({ where: { siloId: command.siloId, resourceKind: command.resourceKind, resourceId: command.resourceId, desiredGeneration: { lt: desiredGeneration }, OR: [{ state: ProviderEffectCommandState.Pending }, { state: ProviderEffectCommandState.AwaitingMaterial }, { state: ProviderEffectCommandState.Claimed, claimExpiresAt: { lte: now } }] }, data: { state: ProviderEffectCommandState.Failed, failureCode: "superseded", claimFence: null, claimExpiresAt: null, completedAt: now } });
-		return _toRecord(row);
+		return { status: ProviderEffectAdmissionStatuses.Admitted, command: _toRecord(row), blocker: null };
+	}
+
+	/** @inheritdoc */
+	async findResourceBlocker(siloId: string, resourceKind: string, resourceId: string): Promise<ProviderEffectResourceBlocker | null>
+	{
+		const row = await this.transaction.providerEffectCommand.findFirst({ where: { siloId, resourceKind, resourceId, state: { in: [ProviderEffectCommandState.Pending, ProviderEffectCommandState.AwaitingMaterial, ProviderEffectCommandState.Claimed] } }, orderBy: { desiredGeneration: "desc" } });
+		return row === null ? null : { commandId: row.id, state: row.state as ProviderEffectCommandStates };
 	}
 
 	/** @inheritdoc */
@@ -107,7 +117,7 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 			await this.transaction.providerEffectCommand.updateMany({ where: { id: current.id, state: current.state, updatedAt: current.updatedAt }, data: { state: ProviderEffectCommandState.Failed, failureCode: "delivery_budget_exhausted", claimFence: null, claimExpiresAt: null, completedAt: now } });
 			return { status: ProviderEffectExecutionStatuses.Failed, command: null };
 		}
-		const activeOlder = await this.transaction.providerEffectCommand.findFirst({ where: { siloId: current.siloId, resourceKind: current.resourceKind, resourceId: current.resourceId, id: { not: current.id }, state: ProviderEffectCommandState.Claimed, claimExpiresAt: { gt: now } } });
+		const activeOlder = await this.transaction.providerEffectCommand.findFirst({ where: { siloId: current.siloId, resourceKind: current.resourceKind, resourceId: current.resourceId, id: { not: current.id }, state: ProviderEffectCommandState.Claimed } });
 		if (activeOlder !== null)
 			return { status: ProviderEffectExecutionStatuses.Busy, command: null };
 		const claimFence = randomUUID();
