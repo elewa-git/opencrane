@@ -104,6 +104,7 @@ EXPECTED_RELEASE="opencrane-${CLUSTER_TENANT}"
 # Silo value profile: a per-ClusterTenant install in its own namespace. Shared cluster
 # controllers remain external.
 PROFILE_SET=(
+  --cluster-tenant "$CLUSTER_TENANT"
   --namespace "$NAMESPACE"
   --release "$RELEASE"
   --set "multiInstance.enabled=false"

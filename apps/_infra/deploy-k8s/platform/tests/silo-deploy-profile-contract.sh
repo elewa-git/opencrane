@@ -20,6 +20,7 @@ grep -Fq -- 'ensure_provider_key_secrets' "$PROVIDER_SECRET_HELPER"
 grep -Fq -- 'ACME_EMAIL="${OPENCRANE_ACME_EMAIL:-}"' "$DEPLOY_SCRIPT"
 grep -Fq -- 'OIDC_ISSUER_URL="$2"; PASSTHROUGH+=(--oidc-issuer-url "$2")' "$DEPLOY_SCRIPT"
 grep -Fq -- 'OIDC_CLIENT_ID="$2"; PASSTHROUGH+=(--oidc-client-id "$2")' "$DEPLOY_SCRIPT"
+grep -Fq -- '--cluster-tenant "$CLUSTER_TENANT"' "$DEPLOY_SCRIPT"
 grep -Fq -- '--acme-email is required to issue a browser-trusted certificate' "$DEPLOY_SCRIPT"
 grep -Fq -- '--first-user-email is required to claim this standalone silo' "$DEPLOY_SCRIPT"
 grep -Fq -- '--set "certManager.mode=acme"' "$DEPLOY_SCRIPT"
@@ -170,6 +171,7 @@ cp "$DEPLOY_SCRIPT" "$wrapper_test_dir/deploy.sh"
 cat >"$wrapper_test_dir/platform/k8s-deploy.sh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$@" >"$WRAPPER_ARGS_FILE"
+exit "${WRAPPER_CORE_EXIT_CODE:-0}"
 EOF
 cat >"$wrapper_test_dir/bin/kubectl" <<'EOF'
 #!/usr/bin/env bash
@@ -187,6 +189,19 @@ PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
     --oidc-client-id test-client >/dev/null
 wrapper_args="$(tr '\n' ' ' <"$wrapper_args_file")"
 [[ "$wrapper_args" == *"--namespace opencrane-testv4 --release opencrane-testv4"* ]]
+[[ "$wrapper_args" == *"--cluster-tenant testv4"* ]]
+set +e
+PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" WRAPPER_CORE_EXIT_CODE=47 \
+  bash "$wrapper_test_dir/deploy.sh" \
+    --base-domain dev.opencrane.ai \
+    --cluster-tenant testv4 \
+    --acme-email operator@example.com \
+    --first-user-email owner@example.com \
+    --oidc-issuer-url https://issuer.example.com/ \
+    --oidc-client-id test-client >/dev/null
+wrapper_status="$?"
+set -e
+[[ "$wrapper_status" -eq 47 ]]
 if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
   bash "$wrapper_test_dir/deploy.sh" \
     --base-domain dev.opencrane.ai \

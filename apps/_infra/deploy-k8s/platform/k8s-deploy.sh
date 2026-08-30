@@ -14,7 +14,8 @@
 # WeOwnAI repo, elewa-git/opencrane#150) or apps/_infra/deploy-k8s/deploy.sh — which preset
 # the value flags and exec this core):
 #   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --release-version VERSION
-#     --from-release-version fresh|VERSION [--base-domain DOMAIN] [--namespace NS] [--release NAME]
+#     --from-release-version fresh|VERSION --cluster-tenant CLUSTER_TENANT
+#                            [--base-domain DOMAIN] [--namespace NS] [--release NAME]
 #                            [--image-tag TAG] [--storage-class SC]
 #                            [--opencrane-server-tag TAG] [--opencrane-ui-tag TAG]
 #                            [--opencrane-ui-digest sha256:DIGEST]
@@ -135,6 +136,7 @@ if [[ ! -f "$POSTGRES_BASELINE_PUBLISHER" || ! -s "$POSTGRES_BASELINE_FILE" ]]; 
 fi
 NAMESPACE="opencrane-system"
 RELEASE="opencrane"
+CLUSTER_TENANT=""
 IMAGE_TAG="latest"
 IMAGE_TAG_SUPPLIED=0    # 1 → this run stated a tag, so it moves the server past any prior pin
 CONTROL_PLANE_TAG=""    # empty → falls back to IMAGE_TAG
@@ -237,6 +239,7 @@ err()  { echo -e "\033[0;31m[k8s-deploy]\033[0m $1" >&2; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --base-domain)   BASE_DOMAIN="$2"; shift 2 ;;
+    --cluster-tenant) CLUSTER_TENANT="$2"; shift 2 ;;
     --namespace)     NAMESPACE="$2"; shift 2 ;;
     --release)       RELEASE="$2"; shift 2 ;;
     --image-tag)        IMAGE_TAG="$2"; IMAGE_TAG_SUPPLIED=1; shift 2 ;;
@@ -283,6 +286,12 @@ done
 for c in kubectl helm jq; do command -v "$c" >/dev/null 2>&1 || { err "Missing required command: $c"; exit 1; }; done
 if [[ ! "$TIMEOUT" =~ ^[1-9][0-9]{0,3}$ ]] || (( TIMEOUT > 3600 )); then
   err "TIMEOUT_SECONDS must be an integer from 1 through 3600."
+  exit 1
+fi
+# The profile derives Kubernetes names from this tenant, and the migration writes the same value
+# into silo-scoped IAM rows. Validate it before PostgreSQL changes.
+if (( ${#CLUSTER_TENANT} > 63 )) || [[ ! "$CLUSTER_TENANT" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
+  err "--cluster-tenant must identify the target silo with a DNS label."
   exit 1
 fi
 if [[ -z "$RELEASE_VERSION" || -z "$FROM_RELEASE_VERSION" ]]; then
@@ -639,13 +648,13 @@ POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
-prepare_database_release_transition
+prepare_database_release_transition || exit $?
 # Publish the pooler URI before enabling the Job because the migrator reads this Secret as DATABASE_URL.
 # Five OpenCrane connections keep PgBouncer's thirty-connection logical-database budget authoritative.
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
-finish_database_release_transition
+finish_database_release_transition || exit $?
 
 _assert_distinct_cnpg_app_credentials() {
   local app_secrets=("$@")
