@@ -15,6 +15,8 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_material_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_claim_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_completion_check"',
+	'"state" = \'claimed\' AND "completed_at" IS NULL AND "result" IS NOT NULL AND "failure_code" = \'provider_effect_finalization_blocked\'',
+	'"failure_code" <> \'provider_effect_finalization_blocked\'',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_payload_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_resource_binding_check"',
 	'"material_verifier" IS NOT NULL AND "material_verifier" ~ \'^sha256:[0-9a-f]{64}$\'',

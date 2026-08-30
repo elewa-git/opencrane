@@ -54,6 +54,15 @@ function _NormalizedSql(value)
 	return value.replace(/\s+/gu, " ").trim();
 }
 
+function _NamedCheckConstraint(source, name)
+{
+	const marker = `ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "${name}" CHECK (`;
+	const start = source.indexOf(marker);
+	const end = source.indexOf("\n);", start) + 3;
+	_Require(start >= 0 && end > 2, `provider effect constraint ${name} must exist`);
+	return source.slice(start, end);
+}
+
 function _CanonicalJson(value)
 {
 	if (Array.isArray(value)) return `[${value.map(_CanonicalJson).join(",")}]`;
@@ -156,6 +165,19 @@ for (const invariant of [
 {
 	_Require(authorizationMigration.includes(invariant), `the provider effect upgrade is missing authority invariant: ${invariant}`);
 	_Require(targetBaseline.includes(invariant), `the fresh provider effect table is missing authority invariant: ${invariant}`);
+}
+const providerEffectCompletionConstraint = `ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_completion_check" CHECK (
+    ("state" = 'succeeded' AND "completed_at" IS NOT NULL AND "result" IS NOT NULL AND "failure_code" IS NULL)
+    OR ("state" = 'failed' AND "completed_at" IS NOT NULL AND "result" IS NULL AND "failure_code" IS NOT NULL AND btrim("failure_code") <> '')
+    OR ("state" = 'claimed' AND "completed_at" IS NULL AND "result" IS NOT NULL AND "failure_code" = 'provider_effect_finalization_blocked')
+    OR ("state" IN ('pending', 'awaiting_material', 'claimed') AND "completed_at" IS NULL AND "result" IS NULL AND ("failure_code" IS NULL OR (btrim("failure_code") <> '' AND "failure_code" <> 'provider_effect_finalization_blocked')))
+);`;
+for (const [source, label] of [[authorizationMigration, "upgrade"], [targetBaseline, "fresh baseline"]])
+{
+	_Require(
+		_NormalizedSql(_NamedCheckConstraint(source, "provider_effect_commands_completion_check")) === _NormalizedSql(providerEffectCompletionConstraint),
+		`${label} provider effect completion authority must retain blocked finalization evidence only on an unfinished claimed command`,
+	);
 }
 _RequireBeforeIn(authorizationMigration, 'CREATE TYPE "ProviderEffectCommandKind"', 'CREATE TABLE "provider_effect_commands"', "provider effect enums must exist before the upgrade creates its command table");
 _RequireBeforeIn(authorizationMigration, 'CREATE TABLE "provider_effect_commands"', 'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_payload_check"', "the provider effect table must exist before the upgrade installs its payload authority");
