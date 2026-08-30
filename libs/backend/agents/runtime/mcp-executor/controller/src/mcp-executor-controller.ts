@@ -1,48 +1,90 @@
 import { __BuildSuspendedMcpExecutorJob, type McpExecutorJobProfile } from "@opencrane/backend/agents/runtime/mcp-executor/k8s-launcher";
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { __ReconcileNextMcpExecutorWorkload } from "./mcp-executor-assignment-reconciler";
-import { __ReconcileNextMcpExecutorRelease } from "./mcp-executor-release-reconciler";
-import { McpExecutorControllerOutcomes, type McpExecutorControllerOptions } from "./mcp-executor-controller.types";
-import { _ParseMcpExecutorControllerProfile } from "./mcp-executor-controller.validator";
+import { McpExecutorControllerOutcomes, type McpExecutorControllerOptions, type McpExecutorControllerReconcileResult, type McpExecutorControllerReleaseResult } from "./mcp-executor-controller.types";
 
-/** Re-exports assignment reconciliation at the original controller module seam. */
-export { __ReconcileNextMcpExecutorWorkload } from "./mcp-executor-assignment-reconciler";
-/** Re-exports release reconciliation at the original controller module seam. */
-export { __ReconcileNextMcpExecutorRelease } from "./mcp-executor-release-reconciler";
+/** Returns one Kubernetes UID and refuses a missing value. */
+function _RequiredUid(value: string | undefined, kind: "Job" | "Pod"): string
+{
+	if (!value || value.trim().length === 0)
+		throw new Error(`Kubernetes did not return an immutable UID for the MCP executor ${kind}`);
+	return value;
+}
 
-/**
- * Validates the deployment profile that the MCP executor Job builder will consume.
- *
- * Startup uses this before polling so a JSON value that passes its field checks but cannot build a
- * Job stops the controller before it claims work.
- *
- * Called by: apps/agent-controller/src/config.ts.
- * @param value - Parsed deployment configuration for the MCP executor profile.
- * @returns The checked profile ready for controller reconciliation.
- * @throws Error When the profile has unknown fields or the Job builder rejects its configuration.
- */
+/** Checks the complete deployment profile by asking the pure Job builder to consume it. */
 export function __ValidateMcpExecutorControllerProfile(value: unknown): McpExecutorJobProfile
 {
-	const profile = _ParseMcpExecutorControllerProfile(value);
+	if (typeof value !== "object" || value === null || Array.isArray(value))
+		throw new Error("MCP executor controller profile must be one object");
+	const expectedKeys = ["companionImage", "imagePullPolicy", "serverNamespace", "namespace", "serviceAccountName", "opencraneInternalUrl", "projectedTokenTtlSeconds", "scratchSize", "activeDeadlineSeconds", "serverResources", "companionResources"];
+	if (Object.keys(value).length !== expectedKeys.length || !expectedKeys.every(function _HasKey(key): boolean { return Object.hasOwn(value, key); }))
+		throw new Error("MCP executor controller profile must contain only its deployment-owned fields");
+	const profile = structuredClone(value) as McpExecutorJobProfile;
 	const now = new Date("2026-01-01T00:00:00.000Z");
 	__BuildSuspendedMcpExecutorJob({ claim: { claimId: "profile-validation", siloId: "profile-validation", workloadClass: RuntimeWorkloadClaimClasses.McpExecutor, profileName: "mcp-isolated", idempotencyKey: "profile-validation", claimedAt: now.toISOString(), deliveryCount: 1, expiresAt: new Date(now.getTime() + 60_000).toISOString(), executionReference: "profile-validation" }, registryReference: `registry.invalid/opencrane/mcp@sha256:${"a".repeat(64)}`, namespace: profile.namespace }, profile, now);
 	return profile;
 }
 
-/**
- * Runs assignment and release reconciliation until process shutdown.
- *
- * Each pass logs an assignment or release failure and continues with the other kind of work. It
- * waits only after both passes find no work, so a queued release does not wait behind an idle
- * assignment poll.
- *
- * Called by: apps/agent-controller/src/controller-runtime.ts.
- * @param options - The server authority, Kubernetes store, deployment profile, poll interval, and logger.
- * @param signal - The process drain signal that stops requests and polling.
- * @returns A promise that settles after the signal aborts the polling loop.
- * @throws Error When the configured poll interval is outside the supported range.
- */
+/** Creates or adopts one suspended MCP Job and records its Kubernetes UID. */
+export async function __ReconcileNextMcpExecutorWorkload(options: McpExecutorControllerOptions, signal: AbortSignal): Promise<McpExecutorControllerReconcileResult>
+{
+	return ___DoWithTrace("agent_controller.mcp_executor.reconcile", {}, async function _Reconcile(): Promise<McpExecutorControllerReconcileResult>
+	{
+		// 1. Take one database claim so Kubernetes never chooses an image or unit of work.
+		const claimed = await options.authority.__Claim(signal);
+		if (claimed === null)
+			return { outcome: McpExecutorControllerOutcomes.Idle };
+
+		// 2. Rebuild the suspended Job from the imported digest and deployment-owned profile.
+		// Rebuild from the assignment instant because the later release lease, not the expired assignment
+		// lease, now authorises the saved manifest to run.
+		const job = __BuildSuspendedMcpExecutorJob({ claim: claimed.claim, registryReference: claimed.registryReference, namespace: options.profile.namespace }, options.profile, new Date(claimed.claim.claimedAt));
+		const persisted = await options.kubernetes.ensureSuspendedJob(job);
+		const workloadUid = _RequiredUid(persisted.metadata?.uid, "Job");
+
+		// 3. Fence the assignment against the same claim delivery before the Job can be released.
+		const binding = { claimId: claimed.claim.claimId, claimedAt: claimed.claim.claimedAt, deliveryCount: claimed.claim.deliveryCount, profileName: claimed.claim.profileName, workloadUid };
+		const outcome = await options.authority.__CommitAssignment(binding, signal);
+		if (outcome === "conflict")
+			throw new Error("MCP executor assignment lost its database claim fence");
+		options.log.info({ claimId: claimed.claim.claimId, workloadUid, outcome }, "MCP executor assigned to suspended Job");
+		return { outcome: outcome === "assigned" ? McpExecutorControllerOutcomes.Assigned : McpExecutorControllerOutcomes.Idempotent, claimId: claimed.claim.claimId, workloadUid };
+	});
+}
+
+/** Releases one assigned MCP Job and records its first Kubernetes Pod. */
+export async function __ReconcileNextMcpExecutorRelease(options: McpExecutorControllerOptions, signal: AbortSignal): Promise<McpExecutorControllerReleaseResult>
+{
+	return ___DoWithTrace("agent_controller.mcp_executor.release.reconcile", {}, async function _ReconcileRelease(): Promise<McpExecutorControllerReleaseResult>
+	{
+		// 1. Take a database-fenced release claim and rebuild the same expected Job.
+		const claimed = await options.authority.__ClaimRelease(signal);
+		if (claimed === null)
+			return { outcome: McpExecutorControllerOutcomes.Idle };
+		const job = __BuildSuspendedMcpExecutorJob({ claim: claimed.claim, registryReference: claimed.registryReference, namespace: options.profile.namespace }, options.profile, new Date(claimed.claim.claimedAt));
+
+		// 2. Release the saved Job UID, then record that external update against the release claim.
+		await options.kubernetes.releaseJob(job, claimed.workloadUid, claimed.releaseExpiresAt);
+		const command = { releaseClaimedAt: claimed.releaseClaimedAt, releaseDeliveryCount: claimed.releaseDeliveryCount, workloadUid: claimed.workloadUid };
+		const releaseOutcome = await options.authority.__CommitRelease(claimed.claim.claimId, command, signal);
+		if (releaseOutcome === "conflict")
+			throw new Error("MCP executor release lost its database claim fence");
+
+		// 3. Accept only the first Pod owned by that Job and persist its Kubernetes UID.
+		const pod = await options.kubernetes.findFirstPod(job, claimed.workloadUid, options.profile.serviceAccountName);
+		if (pod === null)
+			return { outcome: McpExecutorControllerOutcomes.PendingPod, claimId: claimed.claim.claimId, workloadUid: claimed.workloadUid };
+		const podUid = _RequiredUid(pod.metadata?.uid, "Pod");
+		const registration = await options.authority.__RegisterFirstPod(claimed.claim.claimId, { ...command, podUid }, signal);
+		if (registration === "conflict")
+			throw new Error("MCP executor Pod registration lost its database release fence");
+		options.log.info({ claimId: claimed.claim.claimId, workloadUid: claimed.workloadUid, podUid, outcome: registration }, "MCP executor released and first Pod registered");
+		return { outcome: registration === "registered" ? McpExecutorControllerOutcomes.Registered : McpExecutorControllerOutcomes.Idempotent, claimId: claimed.claim.claimId, workloadUid: claimed.workloadUid, podUid };
+	});
+}
+
+/** Runs assignment and release reconciliation until process shutdown. */
 export async function __RunMcpExecutorController(options: McpExecutorControllerOptions, signal: AbortSignal): Promise<void>
 {
 	if (!Number.isSafeInteger(options.pollIntervalMilliseconds) || options.pollIntervalMilliseconds < 100 || options.pollIntervalMilliseconds > 60_000)
