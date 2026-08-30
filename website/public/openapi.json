@@ -1211,6 +1211,11 @@
           "apiKey": {
             "type": "string",
             "description": "The raw upstream provider API key. Accepted only over HTTPS; written to a k8s Secret + LiteLLM and never returned by any read."
+          },
+          "commandId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Command id returned by a previous PROVIDER_EFFECT_PENDING response. Resubmitting it supplies ephemeral key material to that exact admitted command."
           }
         }
       },
@@ -3785,7 +3790,7 @@
     "/providers/byok/{provider}": {
       "put": {
         "operationId": "setByokProviderKey",
-        "summary": "Set or refresh a provider's raw key (writes a k8s Secret + LiteLLM credential)",
+        "summary": "Admit and deliver a provider key change through the durable effect authority",
         "tags": [
           "Provider Keys"
         ],
@@ -3837,12 +3842,42 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "The command is durable but needs a later retry. Resubmit the returned commandId with the same raw key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_PENDING"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
       "delete": {
         "operationId": "deleteByokProviderKey",
-        "summary": "Remove a provider's key (deletes the Secret, LiteLLM credential, and record)",
+        "summary": "Admit and deliver durable removal of a provider key",
         "tags": [
           "Provider Keys"
         ],
@@ -3862,6 +3897,16 @@
                 "glm"
               ]
             }
+          },
+          {
+            "name": "commandId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Command id returned by a previous PROVIDER_EFFECT_PENDING response."
           }
         ],
         "responses": {
@@ -3874,6 +3919,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The removal is durable and the background reconciler or this exact command retry may resume it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_PENDING"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
                 }
               }
             }
@@ -4168,7 +4243,7 @@
       },
       "post": {
         "operationId": "createModel",
-        "summary": "Create a model definition and register it best-effort with LiteLLM",
+        "summary": "Create a model definition and durably register it with LiteLLM",
         "tags": [
           "Model Registry"
         ],
@@ -4209,6 +4284,40 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The model definition and registration command are durable but registration has not completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_PENDING"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "modelDefinitionId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
                 }
               }
             }
@@ -4376,6 +4485,81 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{id}/registration-commands/{commandId}": {
+      "post": {
+        "operationId": "resumeModelRegistration",
+        "summary": "Resume one exact durable LiteLLM model registration",
+        "tags": [
+          "Model Registry"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "commandId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Model registration completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelDefinition"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The exact model registration remains pending.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_PENDING"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "modelDefinitionId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
                 }
               }
             }
