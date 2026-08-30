@@ -6,6 +6,15 @@ const _MINIMUM_TRIGGERS = 101;
 const _MINIMUM_CONSTRAINTS = 235;
 const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE FUNCTION "enforce_authorization_grant_update"()',
+	'CREATE TABLE "provider_effect_commands"',
+	'CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_material_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_claim_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_completion_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_payload_check"',
+	'"material_verifier" IS NOT NULL AND "material_verifier" ~ \'^sha256:[0-9a-f]{64}$\'',
+	'"payload" - ARRAY[\'provider\', \'secretRef\', \'litellmCredentialName\'] = \'{}\'::jsonb',
 	'NEW."subject_kind" IS DISTINCT FROM OLD."subject_kind"',
 	'NEW."boundary_coverage" IS DISTINCT FROM OLD."boundary_coverage"',
 	'NEW."manager_id" IS DISTINCT FROM OLD."manager_id"',

@@ -116,6 +116,102 @@ CREATE INDEX "run_model_credential_mint_authorizations_expires_at_idx" ON "run_m
 CREATE UNIQUE INDEX "run_model_credential_mint_authorizations_run_id_attempt_gen_key" ON "run_model_credential_mint_authorizations"("run_id", "attempt", "generation");
 ALTER TABLE "run_model_credential_mint_authorizations" ADD CONSTRAINT "run_model_credential_mint_authorizations_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
+-- Commit each provider-side Kubernetes or LiteLLM operation before an executor performs external
+-- I/O. Raw keys remain process-only: the row stores a command-bound verifier and non-secret payload.
+CREATE TYPE "ProviderEffectCommandKind" AS ENUM ('set_byok_key', 'delete_byok_key', 'register_model');
+CREATE TYPE "ProviderEffectCommandState" AS ENUM ('pending', 'awaiting_material', 'claimed', 'succeeded', 'failed');
+CREATE TYPE "ProviderEffectMaterialRequirement" AS ENUM ('none', 'ephemeral_provider_key');
+CREATE TABLE "provider_effect_commands" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "kind" "ProviderEffectCommandKind" NOT NULL,
+    "resource_kind" TEXT NOT NULL,
+    "resource_id" TEXT NOT NULL,
+    "resource_revision" TEXT NOT NULL,
+    "arguments_digest" TEXT NOT NULL,
+    "material_verifier" TEXT,
+    "authorization_decision_digest" TEXT NOT NULL,
+    "authorization_policy_revision_hash" TEXT NOT NULL,
+    "effective_authorization_digest" TEXT NOT NULL,
+    "approval_id" TEXT,
+    "executor_profile" TEXT NOT NULL,
+    "material_requirement" "ProviderEffectMaterialRequirement" NOT NULL DEFAULT 'none',
+    "payload" JSONB NOT NULL,
+    "state" "ProviderEffectCommandState" NOT NULL DEFAULT 'pending',
+    "delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "claim_fence" TEXT,
+    "claim_expires_at" TIMESTAMP(3),
+    "result" JSONB,
+    "failure_code" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "completed_at" TIMESTAMP(3),
+
+    CONSTRAINT "provider_effect_commands_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX "provider_effect_commands_state_claim_expires_at_idx" ON "provider_effect_commands"("state", "claim_expires_at");
+CREATE INDEX "provider_effect_commands_silo_id_created_at_idx" ON "provider_effect_commands"("silo_id", "created_at");
+CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key" ON "provider_effect_commands"("kind", "resource_id", "resource_revision");
+ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check" CHECK (
+    btrim("id") <> ''
+    AND btrim("silo_id") <> ''
+    AND btrim("principal_id") <> ''
+    AND btrim("resource_kind") <> ''
+    AND btrim("resource_id") <> ''
+    AND btrim("resource_revision") <> ''
+    AND "arguments_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND "authorization_decision_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND "authorization_policy_revision_hash" ~ '^sha256:[0-9a-f]{64}$'
+    AND "effective_authorization_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND ("approval_id" IS NULL OR btrim("approval_id") <> '')
+    AND btrim("executor_profile") <> ''
+    AND "delivery_count" BETWEEN 0 AND 3
+);
+ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_material_check" CHECK (
+    ("kind" = 'set_byok_key' AND "material_requirement" = 'ephemeral_provider_key' AND "material_verifier" IS NOT NULL AND "material_verifier" ~ '^sha256:[0-9a-f]{64}$')
+    OR ("kind" IN ('delete_byok_key', 'register_model') AND "material_requirement" = 'none' AND "material_verifier" IS NULL)
+);
+ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_claim_check" CHECK (
+    ("state" = 'claimed' AND "claim_fence" IS NOT NULL AND btrim("claim_fence") <> '' AND "claim_expires_at" IS NOT NULL AND "delivery_count" BETWEEN 1 AND 3)
+    OR ("state" <> 'claimed' AND "claim_fence" IS NULL AND "claim_expires_at" IS NULL)
+);
+ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_completion_check" CHECK (
+    ("state" = 'succeeded' AND "completed_at" IS NOT NULL AND "result" IS NOT NULL AND "failure_code" IS NULL)
+    OR ("state" = 'failed' AND "completed_at" IS NOT NULL AND "result" IS NULL AND "failure_code" IS NOT NULL AND btrim("failure_code") <> '')
+    OR ("state" IN ('pending', 'awaiting_material', 'claimed') AND "completed_at" IS NULL AND "result" IS NULL AND ("failure_code" IS NULL OR btrim("failure_code") <> ''))
+);
+ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_payload_check" CHECK (
+    jsonb_typeof("payload") = 'object'
+    AND (
+        ("kind" IN ('set_byok_key', 'delete_byok_key')
+            AND "payload" ?& ARRAY['provider', 'secretRef', 'litellmCredentialName']
+            AND "payload" - ARRAY['provider', 'secretRef', 'litellmCredentialName'] = '{}'::jsonb
+            AND jsonb_typeof("payload"->'provider') = 'string'
+            AND jsonb_typeof("payload"->'secretRef') = 'string'
+            AND jsonb_typeof("payload"->'litellmCredentialName') = 'string'
+            AND COALESCE(btrim("payload"->>'provider'), '') <> ''
+            AND COALESCE(btrim("payload"->>'secretRef'), '') <> ''
+            AND COALESCE(btrim("payload"->>'litellmCredentialName'), '') <> '')
+        OR ("kind" = 'register_model'
+            AND "payload" ?& ARRAY['modelDefinitionId', 'publicModelName', 'upstreamModel', 'scope', 'clusterTenant', 'apiBase', 'apiKeyEnvRef', 'litellmCredentialName']
+            AND "payload" - ARRAY['modelDefinitionId', 'publicModelName', 'upstreamModel', 'scope', 'clusterTenant', 'apiBase', 'apiKeyEnvRef', 'litellmCredentialName'] = '{}'::jsonb
+            AND jsonb_typeof("payload"->'modelDefinitionId') = 'string'
+            AND jsonb_typeof("payload"->'publicModelName') = 'string'
+            AND jsonb_typeof("payload"->'upstreamModel') = 'string'
+            AND jsonb_typeof("payload"->'scope') = 'string'
+            AND COALESCE(btrim("payload"->>'modelDefinitionId'), '') <> ''
+            AND COALESCE(btrim("payload"->>'publicModelName'), '') <> ''
+            AND COALESCE(btrim("payload"->>'upstreamModel'), '') <> ''
+            AND "payload"->>'scope' IN ('global', 'clusterTenant')
+            AND (("payload"->>'scope' = 'global' AND jsonb_typeof("payload"->'clusterTenant') = 'null')
+                OR ("payload"->>'scope' = 'clusterTenant' AND jsonb_typeof("payload"->'clusterTenant') = 'string' AND COALESCE(btrim("payload"->>'clusterTenant'), '') <> ''))
+            AND (jsonb_typeof("payload"->'apiBase') = 'null' OR (jsonb_typeof("payload"->'apiBase') = 'string' AND COALESCE(btrim("payload"->>'apiBase'), '') <> ''))
+            AND (jsonb_typeof("payload"->'apiKeyEnvRef') = 'null' OR (jsonb_typeof("payload"->'apiKeyEnvRef') = 'string' AND COALESCE(btrim("payload"->>'apiKeyEnvRef'), '') <> ''))
+            AND (jsonb_typeof("payload"->'litellmCredentialName') = 'null' OR (jsonb_typeof("payload"->'litellmCredentialName') = 'string' AND COALESCE(btrim("payload"->>'litellmCredentialName'), '') <> '')))
+    )
+);
+
 -- Enforce the pre-release hard cutoff for rows whose organization owner cannot be derived.
 -- The app-owned untagged-candidate repair attributes invitation audit rows from exact product
 -- references before this migration. Spend and source rows still fail closed instead of guessing.

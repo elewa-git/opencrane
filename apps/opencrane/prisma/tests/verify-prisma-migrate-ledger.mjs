@@ -120,6 +120,37 @@ _RequireBeforeIn(authorizationMigration, 'DELETE FROM "tool_invocations"', 'CREA
 _Require(authorizationMigration.includes("pre-central ToolInvocation cleanup left durable runtime residue"), "the migration must fail if a pre-central invocation or dependent runtime row survives cleanup");
 _Require(authorizationMigration.includes('CREATE TABLE "run_model_credential_mint_authorizations"'), "the central authorization migration must install the one-use model-key effect admission");
 _Require(targetBaseline.includes('CREATE TABLE "run_model_credential_mint_authorizations"'), "fresh databases must install the one-use model-key effect admission");
+for (const marker of [
+	'CREATE TYPE "ProviderEffectCommandKind" AS ENUM (\'set_byok_key\', \'delete_byok_key\', \'register_model\')',
+	'CREATE TYPE "ProviderEffectCommandState" AS ENUM (\'pending\', \'awaiting_material\', \'claimed\', \'succeeded\', \'failed\')',
+	'CREATE TYPE "ProviderEffectMaterialRequirement" AS ENUM (\'none\', \'ephemeral_provider_key\')',
+	'CREATE TABLE "provider_effect_commands"',
+	'CREATE INDEX "provider_effect_commands_state_claim_expires_at_idx"',
+	'CREATE INDEX "provider_effect_commands_silo_id_created_at_idx"',
+	'CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_material_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_claim_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_completion_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_payload_check"',
+])
+{
+	_Require(authorizationMigration.includes(marker), `the 0.9.2-to-0.10.0 path must install provider effect authority: ${marker}`);
+	_Require(targetBaseline.includes(marker), `fresh databases must install provider effect authority: ${marker}`);
+}
+for (const invariant of [
+	'"arguments_digest" ~ \'^sha256:[0-9a-f]{64}$\'',
+	'"material_verifier" IS NOT NULL AND "material_verifier" ~ \'^sha256:[0-9a-f]{64}$\'',
+	'"state" = \'claimed\' AND "claim_fence" IS NOT NULL',
+	'"state" = \'succeeded\' AND "completed_at" IS NOT NULL AND "result" IS NOT NULL',
+	'"payload" - ARRAY[\'provider\', \'secretRef\', \'litellmCredentialName\'] = \'{}\'::jsonb',
+])
+{
+	_Require(authorizationMigration.includes(invariant), `the provider effect upgrade is missing authority invariant: ${invariant}`);
+	_Require(targetBaseline.includes(invariant), `the fresh provider effect table is missing authority invariant: ${invariant}`);
+}
+_RequireBeforeIn(authorizationMigration, 'CREATE TYPE "ProviderEffectCommandKind"', 'CREATE TABLE "provider_effect_commands"', "provider effect enums must exist before the upgrade creates its command table");
+_RequireBeforeIn(authorizationMigration, 'CREATE TABLE "provider_effect_commands"', 'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_payload_check"', "the provider effect table must exist before the upgrade installs its payload authority");
 for (const legacyTable of ["token_usage_snapshots", "global_budget_settings", "account_budget_settings", "third_party_sources"])
 {
 	_Require(authorizationMigration.includes(`EXISTS (SELECT 1 FROM "${legacyTable}")`), `the central authorization migration must reject unowned ${legacyTable} rows`);
