@@ -127,8 +127,10 @@ _RequireBeforeIn(authorizationMigration, 'DELETE FROM "tool_invocations"', 'CREA
 _RequireBeforeIn(authorizationMigration, 'DELETE FROM "tool_invocations"', 'CREATE FUNCTION "enforce_tool_invocation_authorization_evidence"', "pre-central invocations must be removed before central evidence becomes mandatory");
 _Require(authorizationMigration.includes("pre-central ToolInvocation cleanup left durable runtime residue"), "the migration must fail if a pre-central invocation or dependent runtime row survives cleanup");
 for (const globalModelIndex of [
-	'CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key" ON "model_definitions"("public_model_name") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
-	'CREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions"("scope") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL AND "is_default"',
+	'CREATE UNIQUE INDEX "provider_credentials_global_provider_key" ON "provider_credentials"("silo_id", "provider") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
+	'CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key" ON "model_definitions"("silo_id", "public_model_name") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
+	'CREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions"("silo_id") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL AND "is_default"',
+	'CREATE UNIQUE INDEX "model_routing_defaults_global_key" ON "model_routing_defaults"("silo_id") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
 ])
 {
 	_Require(authorizationMigration.includes(globalModelIndex), `the upgrade must install global model authority: ${globalModelIndex}`);
@@ -138,6 +140,18 @@ _Require(authorizationMigration.includes("cannot install global model alias auth
 _Require(authorizationMigration.includes("cannot install global model default authority: multiple global defaults exist"), "the upgrade must reject multiple global defaults before installing authority");
 _RequireBeforeIn(authorizationMigration, "cannot install global model alias authority: duplicate public model names exist", 'CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key"', "the upgrade must check global alias duplicates before creating its index");
 _RequireBeforeIn(authorizationMigration, "cannot install global model default authority: multiple global defaults exist", 'CREATE UNIQUE INDEX "model_definitions_global_default_key"', "the upgrade must check global defaults before creating its index");
+_Require(authorizationMigration.includes("expected one admitted silo"), "the upgrade must fail closed when unreferenced provider rows cannot be mapped to one admitted silo");
+for (const siloFence of [
+	'ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_agent_service_id_silo_id_fkey"',
+	'ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_id_silo_id_fkey"',
+	'ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_parent_revision_id_silo_id_fkey"',
+	'ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_source_revision_id_silo_id_fkey"',
+	'ALTER TABLE "model_definitions" ADD CONSTRAINT "model_definitions_provider_credential_id_silo_id_fkey"',
+])
+{
+	_Require(authorizationMigration.includes(siloFence), `the upgrade must install the cross-silo fence: ${siloFence}`);
+	_Require(targetBaseline.includes(siloFence), `fresh databases must install the cross-silo fence: ${siloFence}`);
+}
 _Require(authorizationMigration.includes('CREATE TABLE "run_model_credential_mint_authorizations"'), "the central authorization migration must install the one-use model-key effect admission");
 _Require(targetBaseline.includes('CREATE TABLE "run_model_credential_mint_authorizations"'), "fresh databases must install the one-use model-key effect admission");
 for (const marker of [

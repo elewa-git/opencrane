@@ -93,30 +93,173 @@ BEGIN
     END IF;
 END $$;
 
--- Fail closed instead of choosing among duplicate global routing rows. PostgreSQL treats NULLs as
--- distinct in the Prisma-generated compound key, so the product-owned Global scope needs explicit
--- partial indexes before concurrent provider commands can rely on one stable alias and default.
+-- Move legacy provider and model-routing rows under an explicit silo authority. A revision derives
+-- its silo from its owning service; model and credential rows inherit that authority when referenced.
+-- Unreferenced legacy rows can only be retained when the database admits exactly one silo.
+ALTER TABLE "agent_revisions" ADD COLUMN "silo_id" TEXT;
+ALTER TABLE "provider_credentials" ADD COLUMN "silo_id" TEXT;
+ALTER TABLE "model_definitions" ADD COLUMN "silo_id" TEXT;
+ALTER TABLE "model_routing_defaults" ADD COLUMN "silo_id" TEXT;
+
+UPDATE "agent_revisions" revision
+   SET "silo_id" = service."silo_id"
+  FROM "agent_services" service
+ WHERE service."id" = revision."agent_service_id";
+
 DO $$
 BEGIN
     IF EXISTS (
-        SELECT 1
-          FROM "model_definitions"
-         WHERE "scope" = 'global' AND "cluster_tenant" IS NULL
-         GROUP BY "public_model_name"
-        HAVING count(*) > 1
+        SELECT revision."model_definition_id"
+          FROM "agent_revisions" revision
+         GROUP BY revision."model_definition_id"
+        HAVING count(DISTINCT revision."silo_id") > 1
     ) THEN
-        RAISE EXCEPTION 'cannot install global model alias authority: duplicate public model names exist';
-    END IF;
-    IF 1 < (
-        SELECT count(*)
-          FROM "model_definitions"
-         WHERE "scope" = 'global' AND "cluster_tenant" IS NULL AND "is_default"
-    ) THEN
-        RAISE EXCEPTION 'cannot install global model default authority: multiple global defaults exist';
+        RAISE EXCEPTION 'cannot silo model authority: one model definition is referenced by multiple silos';
     END IF;
 END $$;
-CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key" ON "model_definitions"("public_model_name") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL;
-CREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions"("scope") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL AND "is_default";
+UPDATE "model_definitions" definition
+   SET "silo_id" = authority."silo_id"
+  FROM (
+      SELECT revision."model_definition_id", min(revision."silo_id") AS "silo_id"
+        FROM "agent_revisions" revision
+       GROUP BY revision."model_definition_id"
+  ) authority
+ WHERE authority."model_definition_id" = definition."id";
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT definition."provider_credential_id"
+          FROM "model_definitions" definition
+         WHERE definition."provider_credential_id" IS NOT NULL
+         GROUP BY definition."provider_credential_id"
+        HAVING count(DISTINCT definition."silo_id") > 1
+    ) THEN
+        RAISE EXCEPTION 'cannot silo provider authority: one provider credential is referenced by multiple silos';
+    END IF;
+END $$;
+UPDATE "provider_credentials" credential
+   SET "silo_id" = authority."silo_id"
+  FROM (
+      SELECT definition."provider_credential_id", min(definition."silo_id") AS "silo_id"
+        FROM "model_definitions" definition
+       WHERE definition."provider_credential_id" IS NOT NULL
+       GROUP BY definition."provider_credential_id"
+  ) authority
+ WHERE authority."provider_credential_id" = credential."id";
+
+CREATE TEMP TABLE "provider_scope_admitted_silos" (
+    "silo_id" TEXT PRIMARY KEY
+) ON COMMIT DROP;
+INSERT INTO "provider_scope_admitted_silos" ("silo_id")
+SELECT "silo_id" FROM "principals" WHERE btrim("silo_id") <> ''
+UNION
+SELECT "silo_id" FROM "agent_services" WHERE btrim("silo_id") <> '';
+
+DO $$
+DECLARE
+    admitted_silo_count INTEGER;
+    admitted_silo_id TEXT;
+BEGIN
+    IF EXISTS (SELECT 1 FROM "agent_revisions" WHERE "silo_id" IS NULL OR btrim("silo_id") = '') THEN
+        RAISE EXCEPTION 'cannot silo agent revisions: an owning service has no admitted silo';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM "model_definitions" WHERE "silo_id" IS NULL)
+        OR EXISTS (SELECT 1 FROM "provider_credentials" WHERE "silo_id" IS NULL)
+        OR EXISTS (SELECT 1 FROM "model_routing_defaults" WHERE "silo_id" IS NULL) THEN
+        SELECT count(*), min("silo_id")
+          INTO admitted_silo_count, admitted_silo_id
+          FROM "provider_scope_admitted_silos";
+        IF admitted_silo_count <> 1 THEN
+            RAISE EXCEPTION 'cannot map unscoped provider authority: expected one admitted silo, found %', admitted_silo_count;
+        END IF;
+        UPDATE "model_definitions" SET "silo_id" = admitted_silo_id WHERE "silo_id" IS NULL;
+        UPDATE "provider_credentials" SET "silo_id" = admitted_silo_id WHERE "silo_id" IS NULL;
+        UPDATE "model_routing_defaults" SET "silo_id" = admitted_silo_id WHERE "silo_id" IS NULL;
+    END IF;
+END $$;
+
+ALTER TABLE "agent_revisions" ALTER COLUMN "silo_id" SET NOT NULL;
+ALTER TABLE "provider_credentials" ALTER COLUMN "silo_id" SET NOT NULL;
+ALTER TABLE "model_definitions" ALTER COLUMN "silo_id" SET NOT NULL;
+ALTER TABLE "model_routing_defaults" ALTER COLUMN "silo_id" SET NOT NULL;
+
+ALTER TABLE "agent_revisions" DROP CONSTRAINT "agent_revisions_agent_service_id_fkey";
+ALTER TABLE "agent_revisions" DROP CONSTRAINT "agent_revisions_model_definition_id_fkey";
+ALTER TABLE "agent_revisions" DROP CONSTRAINT "agent_revisions_parent_revision_id_fkey";
+ALTER TABLE "agent_revisions" DROP CONSTRAINT "agent_revisions_source_revision_id_fkey";
+ALTER TABLE "model_definitions" DROP CONSTRAINT "model_definitions_provider_credential_id_fkey";
+
+DROP INDEX "model_routing_defaults_scope_cluster_tenant_key";
+DROP INDEX IF EXISTS "model_routing_defaults_global_key";
+DROP INDEX "provider_credentials_cluster_tenant_idx";
+DROP INDEX "provider_credentials_scope_cluster_tenant_provider_key";
+DROP INDEX "model_definitions_cluster_tenant_idx";
+DROP INDEX "model_definitions_scope_cluster_tenant_public_model_name_key";
+
+CREATE UNIQUE INDEX "agent_revisions_id_silo_id_key" ON "agent_revisions"("id", "silo_id");
+CREATE INDEX "agent_revisions_silo_id_model_definition_id_idx" ON "agent_revisions"("silo_id", "model_definition_id");
+CREATE UNIQUE INDEX "provider_credentials_id_silo_id_key" ON "provider_credentials"("id", "silo_id");
+CREATE INDEX "provider_credentials_silo_id_cluster_tenant_idx" ON "provider_credentials"("silo_id", "cluster_tenant");
+CREATE UNIQUE INDEX "provider_credentials_silo_id_scope_cluster_tenant_provider_key" ON "provider_credentials"("silo_id", "scope", "cluster_tenant", "provider");
+CREATE UNIQUE INDEX "model_definitions_id_silo_id_key" ON "model_definitions"("id", "silo_id");
+CREATE INDEX "model_definitions_silo_id_cluster_tenant_idx" ON "model_definitions"("silo_id", "cluster_tenant");
+CREATE UNIQUE INDEX "model_definitions_silo_id_scope_cluster_tenant_public_model_key" ON "model_definitions"("silo_id", "scope", "cluster_tenant", "public_model_name");
+CREATE UNIQUE INDEX "model_routing_defaults_id_silo_id_key" ON "model_routing_defaults"("id", "silo_id");
+CREATE UNIQUE INDEX "model_routing_defaults_silo_id_scope_cluster_tenant_key" ON "model_routing_defaults"("silo_id", "scope", "cluster_tenant");
+
+-- PostgreSQL treats NULLs as distinct in Prisma compound keys. These partial indexes enforce one
+-- global credential, alias, default, and routing row per silo while preserving tenant overrides.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT "silo_id", "provider"
+          FROM "provider_credentials"
+         WHERE "scope" = 'global' AND "cluster_tenant" IS NULL
+         GROUP BY "silo_id", "provider"
+        HAVING count(*) > 1
+    ) THEN
+        RAISE EXCEPTION 'cannot install global provider authority: duplicate providers exist within one silo';
+    END IF;
+    IF EXISTS (
+        SELECT "silo_id", "public_model_name"
+          FROM "model_definitions"
+         WHERE "scope" = 'global' AND "cluster_tenant" IS NULL
+         GROUP BY "silo_id", "public_model_name"
+        HAVING count(*) > 1
+    ) THEN
+        RAISE EXCEPTION 'cannot install global model alias authority: duplicate public model names exist within one silo';
+    END IF;
+    IF EXISTS (
+        SELECT "silo_id"
+          FROM "model_definitions"
+         WHERE "scope" = 'global' AND "cluster_tenant" IS NULL AND "is_default"
+         GROUP BY "silo_id"
+        HAVING count(*) > 1
+    ) THEN
+        RAISE EXCEPTION 'cannot install global model default authority: multiple global defaults exist within one silo';
+    END IF;
+    IF EXISTS (
+        SELECT "silo_id"
+          FROM "model_routing_defaults"
+         WHERE "scope" = 'global' AND "cluster_tenant" IS NULL
+         GROUP BY "silo_id"
+        HAVING count(*) > 1
+    ) THEN
+        RAISE EXCEPTION 'cannot install global model routing authority: multiple global routing rows exist within one silo';
+    END IF;
+END $$;
+CREATE UNIQUE INDEX "provider_credentials_global_provider_key" ON "provider_credentials"("silo_id", "provider") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL;
+CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key" ON "model_definitions"("silo_id", "public_model_name") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL;
+CREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions"("silo_id") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL AND "is_default";
+CREATE UNIQUE INDEX "model_routing_defaults_global_key" ON "model_routing_defaults"("silo_id") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL;
+
+ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_id_silo_id_fkey" FOREIGN KEY ("model_definition_id", "silo_id") REFERENCES "model_definitions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_parent_revision_id_silo_id_fkey" FOREIGN KEY ("parent_revision_id", "silo_id") REFERENCES "agent_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_source_revision_id_silo_id_fkey" FOREIGN KEY ("source_revision_id", "silo_id") REFERENCES "agent_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "model_definitions" ADD CONSTRAINT "model_definitions_provider_credential_id_silo_id_fkey" FOREIGN KEY ("provider_credential_id", "silo_id") REFERENCES "provider_credentials"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- Persist one-use authorization for the model-key mint effect after the central authority has
 -- admitted the exact run attempt, model definition, provider connection, and authorization digest.

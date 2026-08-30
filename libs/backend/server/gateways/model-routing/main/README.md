@@ -12,7 +12,8 @@ decides *which* model each request should use and keeps LiteLLM's catalogue in s
 It sits between the provider gateway (which registers a tenant's models into LiteLLM) and the agent
 runtime (which calls LiteLLM). Its core job is resolving the *effective* model for a request:
 a skill may pin a model, or ask for `auto`, or defer — and the default is resolved by scope, with a
-ClusterTenant (one customer's tenancy) default taking precedence over the platform-wide Global one.
+ClusterTenant (one customer's tenancy) default taking precedence over the organisation-wide Global
+default in the same silo. No provider or model-routing Global row crosses a silo boundary.
 It also holds per-tenant model allowlists and the maths for evaluating candidate routing policies.
 
 ```

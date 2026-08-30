@@ -1,5 +1,5 @@
 /// Scope at which a provider credential or model definition is owned (Track AIR).
-/// Provider keys are installation-wide (Global) or owned by one ClusterTenant.
+/// Provider keys are organisation-wide within one silo (Global) or owned by one ClusterTenant.
 enum ModelRoutingScope {
   Global        @map("global")
   ClusterTenant @map("clusterTenant")
@@ -27,12 +27,13 @@ enum ProviderEffectMaterialRequirement {
   EphemeralProviderKey @map("ephemeral_provider_key")
 }
 
-/// A provider API credential owned at opencrane-ui (Global) or ClusterTenant scope.
+/// A provider API credential owned at silo-global or ClusterTenant scope.
 /// OpenCrane stores only a REFERENCE to the External-Secrets-synced k8s Secret holding the key —
 /// never the raw key. `litellmCredentialName` is set only when registered via LiteLLM /credentials
 /// for the dynamic no-restart path; the baseline rides `os.environ/<KEY>` from the synced Secret.
 model ProviderCredential {
   id                    String            @id @default(cuid())
+  siloId                String            @map("silo_id")
   scope                 ModelRoutingScope @default(Global)
   clusterTenant         String?           @map("cluster_tenant")
   provider              String
@@ -43,8 +44,9 @@ model ProviderCredential {
 
   models ModelDefinition[]
 
-  @@unique([scope, clusterTenant, provider])
-  @@index([clusterTenant])
+  @@unique([id, siloId])
+  @@unique([siloId, scope, clusterTenant, provider])
+  @@index([siloId, clusterTenant])
   @@map("provider_credentials")
 }
 
@@ -53,6 +55,7 @@ model ProviderCredential {
 /// deployment id here; access is scoped per tenant via the virtual key's `models[]` allowlist.
 model ModelDefinition {
   id                          String            @id @default(cuid())
+  siloId                      String            @map("silo_id")
   scope                       ModelRoutingScope @default(Global)
   clusterTenant               String?           @map("cluster_tenant")
   publicModelName             String            @map("public_model_name")
@@ -65,11 +68,12 @@ model ModelDefinition {
   createdAt                   DateTime          @default(now()) @map("created_at")
   updatedAt                   DateTime          @updatedAt @map("updated_at")
 
-  providerCredential ProviderCredential? @relation(fields: [providerCredentialId], references: [id], onDelete: SetNull)
+  providerCredential ProviderCredential? @relation(fields: [providerCredentialId, siloId], references: [id, siloId], onDelete: Restrict)
   agentRevisions     AgentRevision[]
 
-  @@unique([scope, clusterTenant, publicModelName])
-  @@index([clusterTenant])
+  @@unique([id, siloId])
+  @@unique([siloId, scope, clusterTenant, publicModelName])
+  @@index([siloId, clusterTenant])
   @@map("model_definitions")
 }
 
@@ -98,16 +102,21 @@ model ProviderEffectCommand {
   deliveryCount                   Int                               @default(0) @map("delivery_count")
   claimFence                      String?                           @map("claim_fence")
   claimExpiresAt                  DateTime?                         @map("claim_expires_at")
+  followUpCommandId               String?                           @map("follow_up_command_id")
   result                          Json?
   failureCode                     String?                           @map("failure_code")
   createdAt                       DateTime                          @default(now()) @map("created_at")
   updatedAt                       DateTime                          @updatedAt @map("updated_at")
   completedAt                     DateTime?                         @map("completed_at")
 
+  followUpCommand ProviderEffectCommand?  @relation("ProviderEffectCommandFollowUp", fields: [followUpCommandId], references: [id], onDelete: Restrict)
+  followUpParents ProviderEffectCommand[] @relation("ProviderEffectCommandFollowUp")
+
   @@unique([kind, resourceId, resourceRevision])
   @@unique([siloId, resourceKind, resourceId, desiredGeneration])
   @@index([siloId, resourceKind, resourceId, desiredGeneration(sort: Desc)])
   @@index([state, claimExpiresAt])
+  @@index([followUpCommandId])
   @@index([siloId, createdAt])
   @@map("provider_effect_commands")
 }

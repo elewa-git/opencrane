@@ -299,6 +299,7 @@ CREATE TABLE "agent_services" (
 -- CreateTable
 CREATE TABLE "agent_revisions" (
     "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
     "agent_service_id" TEXT NOT NULL,
     "revision" INTEGER NOT NULL,
     "parent_revision_id" TEXT,
@@ -1336,6 +1337,7 @@ CREATE TABLE "memory_fact_catalog" (
 -- CreateTable
 CREATE TABLE "model_routing_defaults" (
     "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
     "scope" "ModelRoutingScope" NOT NULL DEFAULT 'global',
     "cluster_tenant" TEXT,
     "default_model" TEXT,
@@ -1650,6 +1652,7 @@ CREATE TABLE "persona_insights" (
 -- CreateTable
 CREATE TABLE "provider_credentials" (
     "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
     "scope" "ModelRoutingScope" NOT NULL DEFAULT 'global',
     "cluster_tenant" TEXT,
     "provider" TEXT NOT NULL,
@@ -1664,6 +1667,7 @@ CREATE TABLE "provider_credentials" (
 -- CreateTable
 CREATE TABLE "model_definitions" (
     "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
     "scope" "ModelRoutingScope" NOT NULL DEFAULT 'global',
     "cluster_tenant" TEXT,
     "public_model_name" TEXT NOT NULL,
@@ -2281,6 +2285,9 @@ CREATE UNIQUE INDEX "agent_services_id_silo_id_key" ON "agent_services"("id", "s
 CREATE UNIQUE INDEX "agent_services_principal_id_silo_id_key" ON "agent_services"("principal_id", "silo_id");
 
 -- CreateIndex
+CREATE INDEX "agent_revisions_silo_id_model_definition_id_idx" ON "agent_revisions"("silo_id", "model_definition_id");
+
+-- CreateIndex
 CREATE INDEX "agent_revisions_digest_idx" ON "agent_revisions"("digest");
 
 -- CreateIndex
@@ -2297,6 +2304,9 @@ CREATE UNIQUE INDEX "agent_revisions_agent_service_id_id_key" ON "agent_revision
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_revisions_agent_service_id_digest_key" ON "agent_revisions"("agent_service_id", "digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_revisions_id_silo_id_key" ON "agent_revisions"("id", "silo_id");
 
 -- CreateIndex
 CREATE INDEX "agent_revision_boundary_attachments_agent_revision_id_bound_idx" ON "agent_revision_boundary_attachments"("agent_revision_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage");
@@ -2883,7 +2893,10 @@ CREATE UNIQUE INDEX "memory_fact_catalog_dataset_id_cognee_external_id_key" ON "
 CREATE UNIQUE INDEX "memory_fact_catalog_id_dataset_id_key" ON "memory_fact_catalog"("id", "dataset_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "model_routing_defaults_scope_cluster_tenant_key" ON "model_routing_defaults"("scope", "cluster_tenant");
+CREATE UNIQUE INDEX "model_routing_defaults_id_silo_id_key" ON "model_routing_defaults"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "model_routing_defaults_silo_id_scope_cluster_tenant_key" ON "model_routing_defaults"("silo_id", "scope", "cluster_tenant");
 
 -- CreateIndex
 CREATE INDEX "org_memberships_subject_idx" ON "org_memberships"("subject");
@@ -2988,23 +3001,33 @@ CREATE UNIQUE INDEX "persona_insights_persona_revision_id_id_key" ON "persona_in
 CREATE UNIQUE INDEX "persona_insights_persona_revision_id_answer_id_key" ON "persona_insights"("persona_revision_id", "answer_id");
 
 -- CreateIndex
-CREATE INDEX "provider_credentials_cluster_tenant_idx" ON "provider_credentials"("cluster_tenant");
+CREATE INDEX "provider_credentials_silo_id_cluster_tenant_idx" ON "provider_credentials"("silo_id", "cluster_tenant");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "provider_credentials_scope_cluster_tenant_provider_key" ON "provider_credentials"("scope", "cluster_tenant", "provider");
+CREATE UNIQUE INDEX "provider_credentials_id_silo_id_key" ON "provider_credentials"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "provider_credentials_silo_id_scope_cluster_tenant_provider_key" ON "provider_credentials"("silo_id", "scope", "cluster_tenant", "provider");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "model_definitions_litellm_model_id_key" ON "model_definitions"("litellm_model_id");
 
 -- CreateIndex
-CREATE INDEX "model_definitions_cluster_tenant_idx" ON "model_definitions"("cluster_tenant");
+CREATE INDEX "model_definitions_silo_id_cluster_tenant_idx" ON "model_definitions"("silo_id", "cluster_tenant");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "model_definitions_scope_cluster_tenant_public_model_name_key" ON "model_definitions"("scope", "cluster_tenant", "public_model_name");
+CREATE UNIQUE INDEX "model_definitions_id_silo_id_key" ON "model_definitions"("id", "silo_id");
 
-CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key" ON "model_definitions"("public_model_name") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL;
+-- CreateIndex
+CREATE UNIQUE INDEX "model_definitions_silo_id_scope_cluster_tenant_public_model_key" ON "model_definitions"("silo_id", "scope", "cluster_tenant", "public_model_name");
 
-CREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions"("scope") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL AND "is_default";
+CREATE UNIQUE INDEX "provider_credentials_global_provider_key" ON "provider_credentials"("silo_id", "provider") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL;
+
+CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key" ON "model_definitions"("silo_id", "public_model_name") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL;
+
+CREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions"("silo_id") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL AND "is_default";
+
+CREATE UNIQUE INDEX "model_routing_defaults_global_key" ON "model_routing_defaults"("silo_id") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL;
 
 -- CreateIndex
 CREATE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__idx" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation" DESC);
@@ -3325,16 +3348,16 @@ ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_id_active_revision_i
 ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_principal_id_silo_id_fkey" FOREIGN KEY ("principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_agent_service_id_fkey" FOREIGN KEY ("agent_service_id") REFERENCES "agent_services"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_id_fkey" FOREIGN KEY ("model_definition_id") REFERENCES "model_definitions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_id_silo_id_fkey" FOREIGN KEY ("model_definition_id", "silo_id") REFERENCES "model_definitions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_parent_revision_id_fkey" FOREIGN KEY ("parent_revision_id") REFERENCES "agent_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_parent_revision_id_silo_id_fkey" FOREIGN KEY ("parent_revision_id", "silo_id") REFERENCES "agent_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_source_revision_id_fkey" FOREIGN KEY ("source_revision_id") REFERENCES "agent_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_source_revision_id_silo_id_fkey" FOREIGN KEY ("source_revision_id", "silo_id") REFERENCES "agent_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "agent_revision_boundary_attachments" ADD CONSTRAINT "agent_revision_boundary_attachments_agent_revision_id_fkey" FOREIGN KEY ("agent_revision_id") REFERENCES "agent_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3712,7 +3735,7 @@ ALTER TABLE "persona_revisions" ADD CONSTRAINT "persona_revisions_previous_revis
 ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_persona_revision_id_fkey" FOREIGN KEY ("persona_revision_id") REFERENCES "persona_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "model_definitions" ADD CONSTRAINT "model_definitions_provider_credential_id_fkey" FOREIGN KEY ("provider_credential_id") REFERENCES "provider_credentials"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "model_definitions" ADD CONSTRAINT "model_definitions_provider_credential_id_silo_id_fkey" FOREIGN KEY ("provider_credential_id", "silo_id") REFERENCES "provider_credentials"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_follow_up_command_id_fkey" FOREIGN KEY ("follow_up_command_id") REFERENCES "provider_effect_commands"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3945,8 +3968,6 @@ ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_persona_revision_i
 CREATE UNIQUE INDEX "memory_datasets_exact_boundary_key"
     ON "memory_datasets"("silo_id", "boundary_kind", COALESCE("boundary_group_id", ''), COALESCE("boundary_principal_id", ''));
 
-CREATE UNIQUE INDEX "model_routing_defaults_global_key"
-    ON "model_routing_defaults"("scope") WHERE "cluster_tenant" IS NULL;
 CREATE UNIQUE INDEX "org_memberships_one_owner_per_org"
     ON "org_memberships"("cluster_tenant") WHERE "role" = 'owner';
 

@@ -80,7 +80,9 @@ tenant-scope policy engine beside it.
 
 Creating a provider connection or model definition also writes exact `Discover`, `Read`, and `Use`
 grants for its creator in that transaction. Organisation administration permits creation; it does
-not become an implicit grant to use every provider or model.
+not become an implicit grant to use every provider or model. Provider credentials, model
+definitions, and routing defaults are all silo-bound; `Global` means organisation-wide inside the
+caller's silo, never installation-wide.
 
 ## Public surface
 

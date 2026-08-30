@@ -55,6 +55,7 @@ model AgentService {
 /// lifecycle, but changing executable content always creates the next revision.
 model AgentRevision {
   id                     String                               @id @default(cuid())
+  siloId                 String                               @map("silo_id")
   agentServiceId         String                               @map("agent_service_id")
   revision               Int
   parentRevisionId       String?                              @map("parent_revision_id")
@@ -69,12 +70,12 @@ model AgentRevision {
   authoredBy             String                               @map("authored_by")
   createdAt              DateTime                             @default(now()) @map("created_at")
   publishedAt            DateTime?                            @map("published_at")
-  agentService           AgentService                         @relation("AgentServiceRevisions", fields: [agentServiceId], references: [id], onDelete: Restrict)
-  modelDefinition        ModelDefinition                      @relation(fields: [modelDefinitionId], references: [id], onDelete: Restrict)
+  agentService           AgentService                         @relation("AgentServiceRevisions", fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
+  modelDefinition        ModelDefinition                      @relation(fields: [modelDefinitionId, siloId], references: [id, siloId], onDelete: Restrict)
   activeFor              AgentService[]                       @relation("ActiveAgentRevision")
-  parentRevision         AgentRevision?                       @relation("AgentRevisionLineage", fields: [parentRevisionId], references: [id], onDelete: Restrict)
+  parentRevision         AgentRevision?                       @relation("AgentRevisionLineage", fields: [parentRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
   childRevisions         AgentRevision[]                      @relation("AgentRevisionLineage")
-  sourceRevision         AgentRevision?                       @relation("AgentRevisionRestoreSource", fields: [sourceRevisionId], references: [id], onDelete: Restrict)
+  sourceRevision         AgentRevision?                       @relation("AgentRevisionRestoreSource", fields: [sourceRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
   restoredRevisions      AgentRevision[]                      @relation("AgentRevisionRestoreSource")
   skillAssignments       AgentRevisionSkillAssignment[]
   mcpToolAssignments      AgentRevisionMcpToolAssignment[]
@@ -84,6 +85,8 @@ model AgentRevision {
   @@unique([agentServiceId, revision])
   @@unique([agentServiceId, id])
   @@unique([agentServiceId, digest])
+  @@unique([id, siloId])
+  @@index([siloId, modelDefinitionId])
   @@index([digest])
   @@index([parentRevisionId])
   @@index([sourceRevisionId])
