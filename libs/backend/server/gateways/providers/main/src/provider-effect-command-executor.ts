@@ -57,33 +57,30 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 		const fields = { commandId, siloId: command.siloId, resourceKind: command.resourceKind, resourceId: command.resourceId, executorProfile: command.executorProfile, kind: command.payload.kind, deliveryCount: command.deliveryCount, deliverySource };
 
 		// 2. Perform the typed external operation after the claim transaction commits.
-		let result;
-		try
+		const delivery = await ___DoWithTrace("provider.effect.deliver", fields, async function _Deliver()
 		{
-			result = await ___DoWithTrace("provider.effect.deliver", fields, async function _Deliver()
+			try
 			{
-				try
-				{
-					return await self.handler.execute(command, material);
-				}
-				catch (error)
-				{
-					___MarkActiveSpanFailed();
-					throw error;
-				}
-			});
-		}
-		catch (error)
+				return { failed: false, result: await self.handler.execute(command, material) } as const;
+			}
+			catch (error)
+			{
+				___MarkActiveSpanFailed();
+				return { failed: true, error } as const;
+			}
+		});
+		if (delivery.failed)
 		{
 			const failureCode = "provider_effect_failed";
 			const status = await ___DoWithTrace("provider.effect.fail", { ...fields, failureCode }, function _Fail() { return self.unitOfWork.run(function _PersistFailure(repository) { return repository.fail(command, failureCode); }); });
-			const logFields = { err: _redactedError(error), ...fields, failureCode, status };
+			const logFields = { err: _redactedError(delivery.error), ...fields, failureCode, status };
 			if (status === ProviderEffectExecutionStatuses.Failed)
 				_log.error(logFields, "provider effect delivery failed terminally");
 			else
 				_log.warn(logFields, "provider effect delivery failed and remains recoverable");
 			return { status, result: null };
 		}
+		const result = delivery.result;
 
 		// 3. Save the result only for the fence that performed the effect, so a stale worker cannot overwrite a retry.
 		const completed = await ___DoWithTrace("provider.effect.complete", fields, function _Complete() { return self.unitOfWork.run(function _PersistResult(repository) { return repository.complete(command, result, new Date()); }); });
@@ -107,16 +104,15 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 	}
 }
 
-/** Keep error class and protocol code while dropping messages and stacks that may contain provider material. */
-function _redactedError(error: unknown): { readonly type: string; readonly code?: string | number }
+/** Keep only fixed error classification and an optional numeric protocol code. */
+function _redactedError(error: unknown): { readonly type: string; readonly code?: number }
 {
 	if (typeof error !== "object" || error === null)
 		return { type: "unknown" };
-	const candidate = error as { readonly name?: unknown; readonly code?: unknown };
-	const type = typeof candidate.name === "string" ? candidate.name : "Error";
-	if (typeof candidate.code === "string" || typeof candidate.code === "number")
-		return { type, code: candidate.code };
-	return { type };
+	const candidate = error as { readonly code?: unknown };
+	if (typeof candidate.code === "number")
+		return { type: error instanceof Error ? "Error" : "unknown", code: candidate.code };
+	return { type: error instanceof Error ? "Error" : "unknown" };
 }
 
 /**

@@ -1,5 +1,35 @@
 import { describe, expect, it, vi } from "vitest";
 
+const _TELEMETRY = vi.hoisted(function _Telemetry()
+{
+	return { traceThrown: [] as unknown[], error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
+});
+
+vi.mock("@opencrane/backend/observability", async function _Observability(importOriginal: () => Promise<typeof import("@opencrane/backend/observability")>)
+{
+	return {
+		...await importOriginal(),
+		___DoWithTrace: async function _Trace<Result>(_name: string, _fields: Readonly<Record<string, unknown>>, operation: () => Promise<Result>): Promise<Result>
+		{
+			try
+			{
+				return await operation();
+			}
+			catch (error)
+			{
+				_TELEMETRY.traceThrown.push(error);
+				throw error;
+			}
+		},
+		___MarkActiveSpanFailed: vi.fn(),
+	};
+});
+
+vi.mock("../log", function _Log()
+{
+	return { _log: { error: _TELEMETRY.error, warn: _TELEMETRY.warn, info: _TELEMETRY.info, debug: _TELEMETRY.debug } };
+});
+
 import { DefaultProviderEffectCommandExecutor, _ProviderKeyMaterialVerifier } from "../provider-effect-command-executor";
 import { DefaultProviderEffectCommandHandler } from "../provider-effect-command-handler";
 import { ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandHandler, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectCommandUnitOfWork, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
@@ -98,5 +128,23 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		const handler = new DefaultProviderEffectCommandHandler({} as never, {} as never, "opencrane-system");
 
 		await expect(handler.execute(command, {})).rejects.toThrow("invalid custody coordinates");
+	});
+
+	it("keeps raw adapter errors outside trace and log boundaries", async function _RedactsRawFailure()
+	{
+		_TELEMETRY.traceThrown.length = 0;
+		_TELEMETRY.warn.mockClear();
+		const command = _command();
+		const repository = {
+			claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.Claimed, command }; }),
+			fail: vi.fn(async function _Fail() { return ProviderEffectExecutionStatuses.AwaitingMaterial; }),
+		} as unknown as ProviderEffectCommandRepository;
+		const handler = { execute: vi.fn(async function _Execute() { throw new Error("raw Secret body contains sk-provider-material"); }) } as ProviderEffectCommandHandler;
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler);
+
+		await expect(executor.execute(command.id, { provider: "openai", providerKey: "sk-provider-material" }, _CONTEXT)).resolves.toEqual({ status: ProviderEffectExecutionStatuses.AwaitingMaterial, result: null });
+		expect(_TELEMETRY.traceThrown).toEqual([]);
+		expect(JSON.stringify(_TELEMETRY.warn.mock.calls)).not.toContain("sk-provider-material");
+		expect(_TELEMETRY.warn).toHaveBeenCalledWith(expect.objectContaining({ err: { type: "Error" } }), "provider effect delivery failed and remains recoverable");
 	});
 });
