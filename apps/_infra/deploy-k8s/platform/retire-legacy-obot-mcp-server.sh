@@ -91,9 +91,10 @@ _delete_legacy_obot_resource()
   local current_uid
   local current_resource_version
   local current_metadata
+  local delete_options
   api_path="$(_legacy_obot_api_path "$resource" "$namespace")" || return 1
-  if ! printf '{"apiVersion":"v1","kind":"DeleteOptions","preconditions":{"uid":"%s","resourceVersion":"%s"}}\n' "$uid" "$resource_version" \
-    | kubectl delete --raw "$api_path" -f - --request-timeout="${timeout}s" >/dev/null; then
+  printf -v delete_options '{"apiVersion":"v1","kind":"DeleteOptions","preconditions":{"uid":"%s","resourceVersion":"%s"}}' "$uid" "$resource_version"
+  if ! kubectl delete --raw "$api_path" -f - --request-timeout="${timeout}s" <<<"$delete_options" >/dev/null; then
     current_metadata="$(kubectl get "$resource" --namespace "$namespace" --ignore-not-found -o 'custom-columns=UID:.metadata.uid,RV:.metadata.resourceVersion' --no-headers --request-timeout="${timeout}s" 2>/dev/null)" || return 1
     if [[ -z "$current_metadata" ]]; then
       return 0

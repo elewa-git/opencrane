@@ -29,20 +29,94 @@ log()
   :
 }
 
-_count_calls_with_prefix()
+_assert_prefix_count()
 {
-  local prefix="$1"
-  awk -v prefix="$prefix" 'index($0, prefix) == 1 { count += 1 } END { print count + 0 }' "$CALLS"
+  local expected="$1"
+  local prefix="$2"
+  awk -v expected="$expected" -v prefix="$prefix" '
+    index($0, prefix) == 1 { count += 1 }
+    END {
+      if (count + 0 != expected) {
+        printf "Expected %s call(s) prefixed by %s, found %s.\n", expected, prefix, count + 0 > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$CALLS"
 }
 
-_count_identity_preconditioned_deletes()
+_assert_identity_preconditioned_delete_count()
 {
-  awk '
+  local expected="$1"
+  awk -v expected="$expected" '
     index($0, "delete-options ") == 1 &&
     index($0, "\"preconditions\":{\"uid\":\"uid-") > 0 &&
     index($0, "\",\"resourceVersion\":\"rv-1\"") > 0 { count += 1 }
-    END { print count + 0 }
+    END {
+      if (count + 0 != expected) {
+        printf "Expected %s identity-preconditioned delete(s), found %s.\n", expected, count + 0 > "/dev/stderr"
+        exit 1
+      }
+    }
   ' "$CALLS"
+}
+
+_assert_file_contains()
+{
+  local file="$1"
+  local needle="$2"
+  awk -v needle="$needle" '
+    index($0, needle) > 0 { found = 1 }
+    END {
+      if (!found) {
+        printf "Expected file to contain: %s\n", needle > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$file"
+}
+
+_assert_file_excludes()
+{
+  local file="$1"
+  local needle="$2"
+  awk -v needle="$needle" '
+    index($0, needle) > 0 { found = 1 }
+    END {
+      if (found) {
+        printf "Expected file to exclude: %s\n", needle > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$file"
+}
+
+_assert_inventory_precedes_delete()
+{
+  awk '
+    index($0, "get secret/sms1obot-mcp-server-mcp-run-shim ") == 1 && index($0, "custom-columns=") > 0 { snapshot = NR }
+    index($0, "delete --raw ") == 1 && !first_delete { first_delete = NR }
+    END {
+      if (!snapshot || !first_delete || snapshot >= first_delete) {
+        print "Expected the complete retirement inventory before the first delete." > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$CALLS"
+}
+
+_assert_deploy_order()
+{
+  awk '
+    index($0, "verify_legacy_obot_replacement_ready ") > 0 { ready = NR }
+    index($0, "retire_legacy_obot_mcp_server_resources ") > 0 { retire = NR }
+    index($0, "_post_deploy_verify ") == 1 { advisory = NR }
+    END {
+      if (!ready || !retire || !advisory || ready >= retire || retire >= advisory) {
+        print "Expected replacement readiness, retirement, and advisory verification in order." > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$DEPLOY"
 }
 
 _expect_retirement_success()
@@ -84,7 +158,7 @@ kubectl()
     local deleted_resource
     local delete_options
     deleted_resource="$(_resource_from_uri "$3")"
-    delete_options="$(<&0)"
+    IFS= read -r delete_options
     printf 'delete-options %s %s\n' "$deleted_resource" "$delete_options" >>"$CALLS"
     if [[ "$deleted_resource" == "$RAW_DELETE_FAILURE_RESOURCE" ]]; then
       return 1
@@ -145,17 +219,17 @@ kubectl()
 source "$RETIREMENT"
 
 : >"$CALLS"
-[[ "$(_count_calls_with_prefix 'delete --raw ')" == "0" ]]
+_assert_prefix_count 0 'delete --raw '
 
 verify_legacy_obot_replacement_ready opencrane-testv4 opencrane-testv4 30 "$SERVER_IMAGE" "$CONTROLLER_IMAGE" "$SCANNER_IMAGE" "$RUNTIME_IMAGE" opencrane-testv4-artifact-scanning opencrane-testv4-runtime opencrane-testv4-managed-runtime || {
   printf '%s\n' "Expected legacy Obot replacement readiness to succeed." >&2
   exit 1
 }
-grep -Fq 'rollout status deployment/opencrane-testv4-opencrane-server --namespace opencrane-testv4 --timeout=30s' "$CALLS"
-grep -Fq 'rollout status deployment/opencrane-testv4-agent-controller --namespace opencrane-testv4 --timeout=30s' "$CALLS"
-grep -Fq 'rollout status deployment/opencrane-testv4-artifact-scanner --namespace opencrane-testv4-artifact-scanning --timeout=30s' "$CALLS"
-grep -Fq 'rollout status deployment/opencrane-testv4-personal-warm --namespace opencrane-testv4-runtime --timeout=30s' "$CALLS"
-grep -Fq 'rollout status deployment/opencrane-testv4-managed-warm --namespace opencrane-testv4-managed-runtime --timeout=30s' "$CALLS"
+_assert_file_contains "$CALLS" 'rollout status deployment/opencrane-testv4-opencrane-server --namespace opencrane-testv4 --timeout=30s'
+_assert_file_contains "$CALLS" 'rollout status deployment/opencrane-testv4-agent-controller --namespace opencrane-testv4 --timeout=30s'
+_assert_file_contains "$CALLS" 'rollout status deployment/opencrane-testv4-artifact-scanner --namespace opencrane-testv4-artifact-scanning --timeout=30s'
+_assert_file_contains "$CALLS" 'rollout status deployment/opencrane-testv4-personal-warm --namespace opencrane-testv4-runtime --timeout=30s'
+_assert_file_contains "$CALLS" 'rollout status deployment/opencrane-testv4-managed-warm --namespace opencrane-testv4-managed-runtime --timeout=30s'
 if verify_legacy_obot_replacement_ready opencrane-testv4 opencrane-testv4 30 "$SERVER_IMAGE" "$CONTROLLER_IMAGE" wrong-scanner-image "$RUNTIME_IMAGE" opencrane-testv4-artifact-scanning opencrane-testv4-runtime opencrane-testv4-managed-runtime; then
   echo "Obot replacement readiness accepted the wrong scanner image" >&2
   exit 1
@@ -163,18 +237,16 @@ fi
 
 : >"$CALLS"
 _expect_retirement_success
-! grep -q '^delete --raw ' "$CALLS"
+_assert_prefix_count 0 'delete --raw '
 
 : >"$CALLS"
 FOUND_RESOURCES="deployment/sms1obot-mcp-server,service/sms1obot-mcp-server,secret/sms1obot-mcp-server-mcp-config,secret/sms1obot-mcp-server-mcp-config-shim,secret/sms1obot-mcp-server-mcp-files,secret/sms1obot-mcp-server-mcp-run-shim"
 _expect_retirement_success
-[[ "$(_count_calls_with_prefix 'delete --raw ')" == "6" ]]
-[[ "$(_count_identity_preconditioned_deletes)" == "6" ]]
-grep -Fq -- '--request-timeout=30s' "$CALLS"
-! grep -q -- '-o json ' "$CALLS"
-last_snapshot_line="$(grep -n 'get secret/sms1obot-mcp-server-mcp-run-shim .*custom-columns=' "$CALLS" | cut -d: -f1)"
-first_delete_line="$(grep -n '^delete --raw ' "$CALLS" | head -1 | cut -d: -f1)"
-[[ "$last_snapshot_line" -lt "$first_delete_line" ]]
+_assert_prefix_count 6 'delete --raw '
+_assert_identity_preconditioned_delete_count 6
+_assert_file_contains "$CALLS" '--request-timeout=30s'
+_assert_file_excludes "$CALLS" '-o json '
+_assert_inventory_precedes_delete
 
 : >"$CALLS"
 MISMATCH_RESOURCE="service/sms1obot-mcp-server"
@@ -183,7 +255,7 @@ if retire_legacy_obot_mcp_server_resources opencrane-testv4 30; then
   echo "Obot retirement accepted a foreign owner" >&2
   exit 1
 fi
-! grep -q '^delete --raw ' "$CALLS"
+_assert_prefix_count 0 'delete --raw '
 
 : >"$CALLS"
 MISMATCH_FIELD="hash"
@@ -191,7 +263,7 @@ if retire_legacy_obot_mcp_server_resources opencrane-testv4 30; then
   echo "Obot retirement accepted a foreign Acorn hash" >&2
   exit 1
 fi
-! grep -q '^delete --raw ' "$CALLS"
+_assert_prefix_count 0 'delete --raw '
 
 : >"$CALLS"
 MISMATCH_FIELD="missing-hash"
@@ -199,7 +271,7 @@ if retire_legacy_obot_mcp_server_resources opencrane-testv4 30; then
   echo "Obot retirement accepted missing ownership evidence" >&2
   exit 1
 fi
-! grep -q '^delete --raw ' "$CALLS"
+_assert_prefix_count 0 'delete --raw '
 
 : >"$CALLS"
 MISMATCH_FIELD="missing-owner"
@@ -207,7 +279,7 @@ if retire_legacy_obot_mcp_server_resources opencrane-testv4 30; then
   echo "Obot retirement accepted a missing owner" >&2
   exit 1
 fi
-! grep -q '^delete --raw ' "$CALLS"
+_assert_prefix_count 0 'delete --raw '
 
 : >"$CALLS"
 MISMATCH_FIELD="name"
@@ -215,7 +287,7 @@ if retire_legacy_obot_mcp_server_resources opencrane-testv4 30; then
   echo "Obot retirement accepted the wrong resource name" >&2
   exit 1
 fi
-! grep -q '^delete --raw ' "$CALLS"
+_assert_prefix_count 0 'delete --raw '
 
 : >"$CALLS"
 MISMATCH_FIELD="missing-uid"
@@ -223,7 +295,7 @@ if retire_legacy_obot_mcp_server_resources opencrane-testv4 30; then
   echo "Obot retirement accepted a missing UID" >&2
   exit 1
 fi
-! grep -q '^delete --raw ' "$CALLS"
+_assert_prefix_count 0 'delete --raw '
 
 : >"$CALLS"
 MISMATCH_FIELD="missing-rv"
@@ -231,7 +303,7 @@ if retire_legacy_obot_mcp_server_resources opencrane-testv4 30; then
   echo "Obot retirement accepted a missing resource version" >&2
   exit 1
 fi
-! grep -q '^delete --raw ' "$CALLS"
+_assert_prefix_count 0 'delete --raw '
 
 : >"$CALLS"
 MISMATCH_RESOURCE=""
@@ -241,18 +313,18 @@ if retire_legacy_obot_mcp_server_resources opencrane-testv4 30; then
   echo "Obot retirement ignored an inventory failure" >&2
   exit 1
 fi
-! grep -q '^delete --raw ' "$CALLS"
+_assert_prefix_count 0 'delete --raw '
 
 : >"$CALLS"
 INSPECTION_FAILURE_RESOURCE=""
 FOUND_RESOURCES="secret/sms1obot-mcp-server-mcp-files"
 _expect_retirement_success
-[[ "$(_count_calls_with_prefix 'delete --raw ')" == "1" ]]
+_assert_prefix_count 1 'delete --raw '
 
 : >"$CALLS"
 REPLACEMENT_RESOURCE="secret/sms1obot-mcp-server-mcp-files"
 _expect_retirement_success
-[[ "$(_count_calls_with_prefix 'delete --raw ')" == "1" ]]
+_assert_prefix_count 1 'delete --raw '
 
 : >"$CALLS"
 RAW_DELETE_FAILURE_RESOURCE="secret/sms1obot-mcp-server-mcp-files"
@@ -261,7 +333,7 @@ if retire_legacy_obot_mcp_server_resources opencrane-testv4 30; then
   echo "Obot retirement ignored a same-name UID replacement" >&2
   exit 1
 fi
-[[ "$(_count_calls_with_prefix 'delete --raw ')" == "1" ]]
+_assert_prefix_count 1 'delete --raw '
 
 : >"$CALLS"
 REPLACEMENT_RESOURCE=""
@@ -270,7 +342,7 @@ if retire_legacy_obot_mcp_server_resources opencrane-testv4 30; then
   echo "Obot retirement ignored a same-UID resource update" >&2
   exit 1
 fi
-[[ "$(_count_calls_with_prefix 'delete --raw ')" == "1" ]]
+_assert_prefix_count 1 'delete --raw '
 
 : >"$CALLS"
 UPDATED_RESOURCE=""
@@ -281,15 +353,12 @@ fi
 FOUND_RESOURCES=""
 RAW_DELETE_FAILURE_RESOURCE=""
 _expect_retirement_success
-[[ "$(_count_calls_with_prefix 'delete --raw ')" == "1" ]]
-grep -Fq '/api/v1/namespaces/opencrane-testv4/secrets/sms1obot-mcp-server-mcp-files' "$CALLS"
-! grep -q '^delete-options secret/sms1obot-mcp-server-mcp-config ' "$CALLS"
+_assert_prefix_count 1 'delete --raw '
+_assert_file_contains "$CALLS" '/api/v1/namespaces/opencrane-testv4/secrets/sms1obot-mcp-server-mcp-files'
+_assert_file_excludes "$CALLS" 'delete-options secret/sms1obot-mcp-server-mcp-config '
 
-grep -Fq '[[ "$RELEASE_VERSION" == "0.10.0" && "$FROM_RELEASE_VERSION" == "0.9.2" && "$ALLOW_TAG_FLOAT" != "1" ]]' "$DEPLOY"
-grep -Fq '[[ -z "$FINAL_SERVER_REPOSITORY" || -z "$FINAL_CONTROLLER_REPOSITORY" || -z "$FINAL_SCANNER_REPOSITORY" || -z "$FINAL_RUNTIME_REPOSITORY" ]]' "$DEPLOY"
-ready_line="$(grep -n 'verify_legacy_obot_replacement_ready ' "$DEPLOY" | tail -1 | cut -d: -f1)"
-retire_line="$(grep -n 'retire_legacy_obot_mcp_server_resources ' "$DEPLOY" | tail -1 | cut -d: -f1)"
-advisory_line="$(grep -n '^_post_deploy_verify ' "$DEPLOY" | tail -1 | cut -d: -f1)"
-[[ "$ready_line" -lt "$retire_line" && "$retire_line" -lt "$advisory_line" ]]
+_assert_file_contains "$DEPLOY" '[[ "$RELEASE_VERSION" == "0.10.0" && "$FROM_RELEASE_VERSION" == "0.9.2" && "$ALLOW_TAG_FLOAT" != "1" ]]'
+_assert_file_contains "$DEPLOY" '[[ -z "$FINAL_SERVER_REPOSITORY" || -z "$FINAL_CONTROLLER_REPOSITORY" || -z "$FINAL_SCANNER_REPOSITORY" || -z "$FINAL_RUNTIME_REPOSITORY" ]]'
+_assert_deploy_order
 
 echo "legacy Obot retirement contract: PASS"
