@@ -8,17 +8,14 @@ import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "
 
 import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCaller, ProviderGatewayCallerResolver } from "../provider-gateway-authority.types";
 import { _GrantProviderResourceCreatorUse, _RequireProviderGatewayAdministration, _RequireProviderGatewayCaller, _ResolveProviderGatewayCaller, _SendProviderGatewayAuthorizationError } from "../provider-gateway-authorization";
-import { _CreateProviderEffectCommandExecutor } from "../provider-effect-command-composition";
+import { _CreateProviderEffectCommandExecutor, _PROVIDER_EFFECT_EXECUTOR_PROFILE } from "../provider-effect-command-composition";
 import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandExecutor, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 import { PrismaProviderGatewayUnitOfWork } from "../prisma-provider-gateway-unit-of-work";
-
-/** Control-plane profile that may consume model-registration commands created by this route. */
-const _PROVIDER_EFFECT_EXECUTOR_PROFILE = "opencrane-control-plane/provider-effect-v1";
 
 /** Bind model delivery to the current caller, exact definition, and control-plane executor profile. */
 function _effectContext(caller: ProviderGatewayCaller, modelDefinitionId: string): ProviderEffectExecutionContext
 {
-	return { siloId: caller.siloId, principalId: caller.principalId, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: modelDefinitionId, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE };
+	return { siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: modelDefinitionId, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE };
 }
 
 /**

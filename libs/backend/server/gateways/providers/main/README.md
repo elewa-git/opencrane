@@ -59,9 +59,14 @@ filter exact `ProviderConnection/Read` or `ModelDefinition/Read` resources throu
 `AuthorizationAuthority`. Credential, BYOK, and model-definition mutations explicitly request
 `Organization/<silo>/Administer`. Database mutations and provider-effect admissions commit decision
 evidence, protected intent, and the command through the same Serializable transaction. Kubernetes
-and LiteLLM run only after that transaction commits. Delivery claims are leased and fenced; the
-saved executor profile, caller, silo, resource, and central evidence digests must all match before
-execution. There is no session-role or tenant-scope policy engine beside it.
+and LiteLLM run only after that transaction commits. Every governed resource has a monotonic desired
+generation: admitting a newer Set, Delete, or Register command supersedes older inactive work, while
+an older active claim must release before the newer generation can run. The executor re-admits the
+saved subject through the current central authority during claim, immediately before external I/O,
+and during finalization. It also rechecks the current model lifecycle and desired generation. The
+background reconciler receives its fixed system executor profile from application composition; it
+never trusts a profile stored on a command as its own identity. There is no session-role or
+tenant-scope policy engine beside it.
 
 Creating a provider connection or model definition also writes exact `Discover`, `Read`, and `Use`
 grants for its creator in that transaction. Organisation administration permits creation; it does

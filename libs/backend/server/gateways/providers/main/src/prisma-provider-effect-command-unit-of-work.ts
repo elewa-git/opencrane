@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import { PrismaAuthorizationAuthority, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 
 import { PrismaProviderEffectCommandRepository } from "./prisma-provider-effect-command-repository";
 import type { ProviderEffectCommandRepository, ProviderEffectCommandUnitOfWork } from "./provider-effect-command.types";
@@ -30,7 +31,7 @@ export class PrismaProviderEffectCommandUnitOfWork implements ProviderEffectComm
 	}
 
 	/** @inheritdoc */
-	async run<Result>(operation: (repository: ProviderEffectCommandRepository) => Promise<Result>): Promise<Result>
+	async run<Result>(operation: (repository: ProviderEffectCommandRepository, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>
 	{
 		for (let attempt = 1; attempt <= _MAX_SERIALIZABLE_ATTEMPTS; attempt += 1)
 		{
@@ -39,7 +40,8 @@ export class PrismaProviderEffectCommandUnitOfWork implements ProviderEffectComm
 				return await this.prisma.$transaction(async function _Run(transaction): Promise<Result>
 				{
 					const repository = new PrismaProviderEffectCommandRepository(transaction);
-					return operation(repository);
+					const authorization = new PrismaAuthorizationAuthority(transaction);
+					return operation(repository, authorization);
 				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 			}
 			catch (error)

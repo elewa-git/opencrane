@@ -6,6 +6,9 @@ import { DefaultProviderEffectCommandHandler } from "./provider-effect-command-h
 import type { ProviderEffectCommandExecutor } from "./provider-effect-command.types";
 import { PrismaProviderEffectCommandUnitOfWork } from "./prisma-provider-effect-command-unit-of-work";
 
+/** Trusted control-plane profile allowed to claim durable provider-effect commands. */
+export const _PROVIDER_EFFECT_EXECUTOR_PROFILE = "opencrane-control-plane/provider-effect-v1";
+
 /**
  * Composes the post-commit provider executor used by HTTP routes.
  *
@@ -21,5 +24,5 @@ export function _CreateProviderEffectCommandExecutor(prisma: PrismaClient, coreA
 {
 	const unitOfWork = new PrismaProviderEffectCommandUnitOfWork(prisma);
 	const handler = new DefaultProviderEffectCommandHandler(prisma, coreApi, operatorNamespace);
-	return new DefaultProviderEffectCommandExecutor(unitOfWork, handler);
+	return new DefaultProviderEffectCommandExecutor(unitOfWork, handler, _PROVIDER_EFFECT_EXECUTOR_PROFILE);
 }

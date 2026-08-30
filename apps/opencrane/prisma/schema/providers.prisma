@@ -84,6 +84,7 @@ model ProviderEffectCommand {
   resourceKind                    String                            @map("resource_kind")
   resourceId                      String                            @map("resource_id")
   resourceRevision                String                            @map("resource_revision")
+  desiredGeneration               Int                               @map("desired_generation")
   argumentsDigest                 String                            @map("arguments_digest")
   materialVerifier                String?                           @map("material_verifier")
   authorizationDecisionDigest     String                            @map("authorization_decision_digest")
@@ -104,6 +105,8 @@ model ProviderEffectCommand {
   completedAt                     DateTime?                         @map("completed_at")
 
   @@unique([kind, resourceId, resourceRevision])
+  @@unique([siloId, resourceKind, resourceId, desiredGeneration])
+  @@index([siloId, resourceKind, resourceId, desiredGeneration(sort: Desc)])
   @@index([state, claimExpiresAt])
   @@index([siloId, createdAt])
   @@map("provider_effect_commands")

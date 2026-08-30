@@ -32,21 +32,22 @@ vi.mock("../log", function _Log()
 
 import { DefaultProviderEffectCommandExecutor, _ProviderKeyMaterialVerifier } from "../provider-effect-command-executor";
 import { DefaultProviderEffectCommandHandler } from "../provider-effect-command-handler";
+import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandHandler, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectCommandUnitOfWork, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 
 /** Trusted route coordinates shared by executor tests. */
-const _CONTEXT: ProviderEffectExecutionContext = { siloId: "acme", principalId: "principal-1", resourceKind: "provider-connection", resourceId: "byok:openai", executorProfile: "opencrane-control-plane/provider-effect-v1" };
+const _CONTEXT: ProviderEffectExecutionContext = { siloId: "acme", principalId: "principal-1", actorKind: "user", actorId: "principal-1", resourceKind: "provider-connection", resourceId: "byok:openai", executorProfile: "opencrane-control-plane/provider-effect-v1" };
 
 /** Build one claimed Set-BYOK command without placing raw material in the record. */
 function _command(): ProviderEffectCommandRecord
 {
-	return { id: "command-1", siloId: "acme", principalId: "principal-1", payload: { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } }, resourceKind: "provider-connection", resourceId: "byok:openai", resourceRevision: "revision-1", argumentsDigest: "sha256:arguments", materialVerifier: _ProviderKeyMaterialVerifier("command-1", "openai", "sk-test"), authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _CONTEXT.executorProfile, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey, state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-1", claimExpiresAt: new Date("2099-01-01T00:00:00.000Z") };
+	return { id: "command-1", siloId: "acme", principalId: "principal-1", payload: { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } }, resourceKind: "provider-connection", resourceId: "byok:openai", resourceRevision: "revision-1", desiredGeneration: 1, argumentsDigest: "sha256:arguments", materialVerifier: _ProviderKeyMaterialVerifier("command-1", "openai", "sk-test"), authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _CONTEXT.executorProfile, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey, state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-1", claimExpiresAt: new Date("2099-01-01T00:00:00.000Z") };
 }
 
 /** Build a UnitOfWork that forwards every transaction callback to one fake repository. */
 function _unitOfWork(repository: ProviderEffectCommandRepository): ProviderEffectCommandUnitOfWork
 {
-	return { run: async function _Run<Result>(operation: (value: ProviderEffectCommandRepository) => Promise<Result>): Promise<Result> { return operation(repository); } };
+	return { run: async function _Run<Result>(operation: (value: ProviderEffectCommandRepository, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result> { return operation(repository, {} as AuthorizationAuthority); } };
 }
 
 describe("DefaultProviderEffectCommandExecutor", function _Suite()
@@ -55,21 +56,21 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 	{
 		const order: string[] = [];
 		const command = _command();
-		const repository = { claim: vi.fn(async function _Claim() { order.push("claim-committed"); return { status: ProviderEffectExecutionStatuses.Claimed, command }; }), complete: vi.fn(async function _Complete() { order.push("result-committed"); return true; }) } as unknown as ProviderEffectCommandRepository;
+		const repository = { claim: vi.fn(async function _Claim() { order.push("claim-committed"); return { status: ProviderEffectExecutionStatuses.Claimed, command }; }), preflight: vi.fn(async function _Preflight() { order.push("preflight-committed"); return true; }), complete: vi.fn(async function _Complete() { order.push("result-committed"); return ProviderEffectExecutionStatuses.Succeeded; }) } as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn(async function _Execute() { order.push("external-effect"); return { kind: ProviderEffectCommandKinds.SetByokKey, providerCredentialId: "credential-1", litellmRegistered: true } as const; }) } as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
 
 		const result = await executor.execute(command.id, { provider: "openai", providerKey: "sk-test" }, _CONTEXT);
 
 		expect(result.status).toBe(ProviderEffectExecutionStatuses.Succeeded);
-		expect(order).toEqual(["claim-committed", "external-effect", "result-committed"]);
+		expect(order).toEqual(["claim-committed", "preflight-committed", "external-effect", "result-committed"]);
 	});
 
 	it("does not call an external adapter when claim admission rolls back", async function _RollbackStopsEffect()
 	{
 		const repository = { claim: vi.fn(async function _Claim() { throw new Error("transaction rolled back"); }) } as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
 
 		await expect(executor.execute("command-1", { provider: "openai", providerKey: "sk-test" }, _CONTEXT)).rejects.toThrow("rolled back");
 		expect(handler.execute).not.toHaveBeenCalled();
@@ -79,7 +80,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 	{
 		const repository = { claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.AwaitingMaterial, command: null }; }) } as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
 
 		const result = await executor.execute("command-1", undefined, _CONTEXT);
 
@@ -102,23 +103,64 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
 		const repository = {
 			nextRecoverable: vi.fn(async function _Next() { return command; }),
-			claim: vi.fn(async function _Claim(_id, _verifier, context) { expect(context).toEqual(_CONTEXT); return { status: ProviderEffectExecutionStatuses.Claimed, command }; }),
-			complete: vi.fn(async function _Complete() { return true; }),
+			claim: vi.fn(async function _Claim(_id, _verifier, context) { expect(context).toEqual({ ..._CONTEXT, actorKind: "system", actorId: _CONTEXT.executorProfile }); return { status: ProviderEffectExecutionStatuses.Claimed, command }; }),
+			preflight: vi.fn(async function _Preflight() { return true; }),
+			complete: vi.fn(async function _Complete() { return ProviderEffectExecutionStatuses.Succeeded; }),
 		} as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn(async function _Execute() { return { kind: ProviderEffectCommandKinds.DeleteByokKey } as const; }) } as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
 
 		await expect(executor.reconcileNext()).resolves.toBe(true);
 		expect(handler.execute).toHaveBeenCalledOnce();
+	});
+
+	it("refuses reconciliation when a saved command names a different executor profile", async function _RejectsSavedProfile()
+	{
+		const command = { ..._command(), executorProfile: "untrusted/provider-effect-v1", payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
+		const repository = {
+			nextRecoverable: vi.fn(async function _Next() { return command; }),
+			claim: vi.fn(async function _Claim(_id, _verifier, context)
+			{
+				expect(context).toEqual({ ..._CONTEXT, actorKind: "system", actorId: _CONTEXT.executorProfile });
+				return { status: ProviderEffectExecutionStatuses.Failed, command: null };
+			}),
+		} as unknown as ProviderEffectCommandRepository;
+		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
+
+		await expect(executor.reconcileNext()).resolves.toBe(true);
+		expect(handler.execute).not.toHaveBeenCalled();
 	});
 
 	it("does not call an external adapter after the delivery budget is exhausted", async function _HonoursBoundedDelivery()
 	{
 		const repository = { claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.Failed, command: null }; }) } as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
 
 		await expect(executor.execute("command-1", undefined, _CONTEXT)).resolves.toEqual({ status: ProviderEffectExecutionStatuses.Failed, result: null });
+		expect(handler.execute).not.toHaveBeenCalled();
+	});
+
+	it("does not resume external I/O after current authority is revoked", async function _RevokedResume()
+	{
+		const command = _command();
+		const repository = { claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.Claimed, command }; }), preflight: vi.fn(async function _Preflight() { return false; }) } as unknown as ProviderEffectCommandRepository;
+		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
+
+		await expect(executor.execute(command.id, { provider: "openai", providerKey: "sk-test" }, _CONTEXT)).resolves.toEqual({ status: ProviderEffectExecutionStatuses.Failed, result: null });
+		expect(handler.execute).not.toHaveBeenCalled();
+	});
+
+	it("does not reconcile external I/O after current authority is revoked", async function _RevokedReconcile()
+	{
+		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
+		const repository = { nextRecoverable: vi.fn(async function _Next() { return command; }), claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.Claimed, command }; }), preflight: vi.fn(async function _Preflight() { return false; }) } as unknown as ProviderEffectCommandRepository;
+		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
+
+		await expect(executor.reconcileNext()).resolves.toBe(true);
 		expect(handler.execute).not.toHaveBeenCalled();
 	});
 
@@ -137,10 +179,11 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		const command = _command();
 		const repository = {
 			claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.Claimed, command }; }),
+			preflight: vi.fn(async function _Preflight() { return true; }),
 			fail: vi.fn(async function _Fail() { return ProviderEffectExecutionStatuses.AwaitingMaterial; }),
 		} as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn(async function _Execute() { throw new Error("raw Secret body contains sk-provider-material"); }) } as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
 
 		await expect(executor.execute(command.id, { provider: "openai", providerKey: "sk-provider-material" }, _CONTEXT)).resolves.toEqual({ status: ProviderEffectExecutionStatuses.AwaitingMaterial, result: null });
 		expect(_TELEMETRY.traceThrown).toEqual([]);

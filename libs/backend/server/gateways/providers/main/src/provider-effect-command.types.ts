@@ -1,5 +1,5 @@
 import type { ModelRoutingScope } from "@opencrane/contracts";
-import type { ProductAuthorizationAdmissionEvidence } from "@opencrane/backend/server/iam/authorization";
+import type { AuthorizationAuthority, ProductAuthorizationActorKind, ProductAuthorizationAdmissionEvidence } from "@opencrane/backend/server/iam/authorization";
 
 /**
  * External provider operations that must be admitted and saved before another system is changed.
@@ -158,6 +158,8 @@ export interface AdmitProviderEffectCommand
 /** Saved provider command returned through the repository boundary. */
 export interface ProviderEffectCommandRecord extends AdmitProviderEffectCommand
 {
+	/** Monotonic desired-state position within this exact governed resource. */
+	readonly desiredGeneration: number;
 	/** Current delivery state. */
 	readonly state: ProviderEffectCommandStates;
 	/** Number of external delivery claims made so far. */
@@ -184,6 +186,10 @@ export interface ProviderEffectExecutionContext
 	readonly siloId: string;
 	/** Principal derived from the current authenticated session. */
 	readonly principalId: string;
+	/** Trusted class of actor causing this delivery attempt. */
+	readonly actorKind: ProductAuthorizationActorKind;
+	/** Trusted request Principal or fixed system executor identity. */
+	readonly actorId: string;
 	/** Resource kind expected by the route that resumes delivery. */
 	readonly resourceKind: string;
 	/** Resource identifier expected by the route that resumes delivery. */
@@ -215,9 +221,11 @@ export interface ProviderEffectCommandRepository
 	/** Selects the oldest database-complete command that a background pass may safely resume. */
 	nextRecoverable(now: Date): Promise<ProviderEffectCommandRecord | null>;
 	/** Claims one command after checking delivery state and any in-memory material verifier. */
-	claim(commandId: string, materialVerifier: `sha256:${string}` | null, context: ProviderEffectExecutionContext, now: Date): Promise<ProviderEffectClaimResult>;
+	claim(commandId: string, materialVerifier: `sha256:${string}` | null, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, now: Date): Promise<ProviderEffectClaimResult>;
+	/** Rechecks current authority, lifecycle, generation, and claim immediately before external I/O. */
+	preflight(command: ProviderEffectCommandRecord, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, now: Date): Promise<boolean>;
 	/** Commits the effect result only when the caller still owns the saved fence. */
-	complete(command: ProviderEffectCommandRecord, result: ProviderEffectHandlerResult, completedAt: Date): Promise<boolean>;
+	complete(command: ProviderEffectCommandRecord, result: ProviderEffectHandlerResult, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, completedAt: Date): Promise<ProviderEffectExecutionStatuses>;
 	/** Releases a failed delivery for retry or marks it terminal when its budget is spent. */
 	fail(command: ProviderEffectCommandRecord, failureCode: string): Promise<ProviderEffectExecutionStatuses>;
 }
@@ -226,7 +234,7 @@ export interface ProviderEffectCommandRepository
 export interface ProviderEffectCommandUnitOfWork
 {
 	/** Runs one repository operation with bounded serialization retries. */
-	run<Result>(operation: (repository: ProviderEffectCommandRepository) => Promise<Result>): Promise<Result>;
+	run<Result>(operation: (repository: ProviderEffectCommandRepository, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>;
 }
 
 /** External adapter called only after a provider command claim has committed. */

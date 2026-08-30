@@ -20,17 +20,21 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 	private readonly unitOfWork: ProviderEffectCommandUnitOfWork;
 	/** Performs typed Kubernetes and LiteLLM operations after a claim commits. */
 	private readonly handler: ProviderEffectCommandHandler;
+	/** Trusted process profile supplied by composition rather than persisted command data. */
+	private readonly trustedExecutorProfile: string;
 
 	/**
 	 * Composes provider-command persistence with its external adapter.
 	 *
 	 * @param unitOfWork - Transaction owner for claims and finalization.
 	 * @param handler - External adapter that consumes a committed claim.
+	 * @param trustedExecutorProfile - Fixed process identity allowed to claim provider commands.
 	 */
-	constructor(unitOfWork: ProviderEffectCommandUnitOfWork, handler: ProviderEffectCommandHandler)
+	constructor(unitOfWork: ProviderEffectCommandUnitOfWork, handler: ProviderEffectCommandHandler, trustedExecutorProfile: string)
 	{
 		this.unitOfWork = unitOfWork;
 		this.handler = handler;
+		this.trustedExecutorProfile = trustedExecutorProfile;
 	}
 
 	/** @inheritdoc */
@@ -47,14 +51,20 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 		{
 		// 1. Derive a command-bound verifier in memory, so the database can match a retry without storing or correlating raw keys.
 		const verifier = _materialVerifier(commandId, material);
-		const claim = await ___DoWithTrace("provider.effect.claim", { commandId, deliverySource }, function _Claim() { return self.unitOfWork.run(function _PersistClaim(repository) { return repository.claim(commandId, verifier, context, new Date()); }); });
+		const claim = await ___DoWithTrace("provider.effect.claim", { commandId, deliverySource }, function _Claim() { return self.unitOfWork.run(function _PersistClaim(repository, authorization) { return repository.claim(commandId, verifier, context, authorization, new Date()); }); });
 		if (claim.status !== ProviderEffectExecutionStatuses.Claimed || claim.command === null)
 		{
 			_log.debug({ commandId, deliverySource, status: claim.status }, "provider effect delivery did not claim command");
 			return { status: claim.status, result: null };
 		}
 		const command = claim.command;
-		const fields = { commandId, siloId: command.siloId, resourceKind: command.resourceKind, resourceId: command.resourceId, executorProfile: command.executorProfile, kind: command.payload.kind, deliveryCount: command.deliveryCount, deliverySource };
+		const fields = { commandId, siloId: command.siloId, resourceKind: command.resourceKind, resourceId: command.resourceId, executorProfile: command.executorProfile, kind: command.payload.kind, desiredGeneration: command.desiredGeneration, deliveryCount: command.deliveryCount, deliverySource };
+		const preflight = await ___DoWithTrace("provider.effect.preflight", fields, function _Preflight() { return self.unitOfWork.run(function _Verify(repository, authorization) { return repository.preflight(command, context, authorization, new Date()); }); });
+		if (!preflight)
+		{
+			_log.warn(fields, "provider effect delivery became stale or unauthorized before external I/O");
+			return { status: ProviderEffectExecutionStatuses.Failed, result: null };
+		}
 
 		// 2. Perform the typed external operation after the claim transaction commits.
 		const delivery = await ___DoWithTrace("provider.effect.deliver", fields, async function _Deliver()
@@ -83,12 +93,12 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 		const result = delivery.result;
 
 		// 3. Save the result only for the fence that performed the effect, so a stale worker cannot overwrite a retry.
-		const completed = await ___DoWithTrace("provider.effect.complete", fields, function _Complete() { return self.unitOfWork.run(function _PersistResult(repository) { return repository.complete(command, result, new Date()); }); });
-		if (completed)
+		const completed = await ___DoWithTrace("provider.effect.complete", fields, function _Complete() { return self.unitOfWork.run(function _PersistResult(repository, authorization) { return repository.complete(command, result, context, authorization, new Date()); }); });
+		if (completed === ProviderEffectExecutionStatuses.Succeeded)
 			_log.info(fields, "provider effect delivery completed");
 		else
-			_log.warn(fields, "provider effect result lost its claim fence");
-		return completed ? { status: ProviderEffectExecutionStatuses.Succeeded, result } : { status: ProviderEffectExecutionStatuses.Busy, result: null };
+			_log.warn({ ...fields, status: completed }, "provider effect result was fenced from current state");
+		return completed === ProviderEffectExecutionStatuses.Succeeded ? { status: completed, result } : { status: completed, result: null };
 		});
 	}
 
@@ -98,7 +108,7 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 		const command = await this.unitOfWork.run(function _Next(repository) { return repository.nextRecoverable(new Date()); });
 		if (command === null)
 			return false;
-		const context: ProviderEffectExecutionContext = { siloId: command.siloId, principalId: command.principalId, resourceKind: command.resourceKind, resourceId: command.resourceId, executorProfile: command.executorProfile };
+		const context: ProviderEffectExecutionContext = { siloId: command.siloId, principalId: command.principalId, actorKind: "system", actorId: this.trustedExecutorProfile, resourceKind: command.resourceKind, resourceId: command.resourceId, executorProfile: this.trustedExecutorProfile };
 		await this._execute(command.id, {}, context, "reconciler");
 		return true;
 	}

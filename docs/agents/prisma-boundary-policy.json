@@ -1471,6 +1471,10 @@
         "contractImportPath": "./provider-effect-command.types",
         "constructs": [
           {
+            "adapter": "PrismaAuthorizationAuthority",
+            "importPath": "@opencrane/backend/server/iam/authorization"
+          },
+          {
             "adapter": "PrismaProviderEffectCommandRepository",
             "importPath": "./prisma-provider-effect-command-repository"
           }

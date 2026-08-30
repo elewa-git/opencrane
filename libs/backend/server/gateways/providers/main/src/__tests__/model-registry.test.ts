@@ -65,6 +65,12 @@ function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = ne
     },
     providerEffectCommand: {
       _commands: commands,
+	  findFirst: async function _findCurrentCommand(args: { where: { siloId: string; resourceKind: string; resourceId: string } })
+	  {
+		return Array.from(commands.values())
+			.filter(function _Same(row) { return row.siloId === args.where.siloId && row.resourceKind === args.where.resourceKind && row.resourceId === args.where.resourceId; })
+			.sort(function _Newest(left, right) { return Number(right.desiredGeneration ?? 0) - Number(left.desiredGeneration ?? 0); })[0] ?? null;
+	  },
       create: async function _createCommand(args: { data: Row })
       {
         const now = new Date("2026-06-18T00:00:00.000Z");
@@ -72,6 +78,7 @@ function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = ne
         commands.set(row.id as string, row);
         return row;
       },
+	  updateMany: async function _supersedeCommands() { return { count: 0 }; },
     },
   } as unknown as PrismaClient;
 	Object.assign(client, { $transaction: async function _Transaction(operation: (transaction: PrismaClient) => Promise<unknown>) { return operation(client); } });
