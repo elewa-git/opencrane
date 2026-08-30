@@ -55,9 +55,3 @@ export interface ModelDefinitionService
 	/** Retry the exact durable registration command returned by creation. */
 	resume(caller: ProviderGatewayCaller, modelDefinitionId: string, commandId: string): Promise<ModelDefinitionRegistrationResult>;
 }
-
-/** Stable refusal used until update and unregister have their own durable external-effect commands. */
-export const MODEL_DEFINITION_MUTATION_GOVERNED = Object.freeze({
-	error: "Model definition updates and deletion require a durable provider command.",
-	code: "MODEL_DEFINITION_GOVERNED",
-});

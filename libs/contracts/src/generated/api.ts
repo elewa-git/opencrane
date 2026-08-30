@@ -378,10 +378,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Set or refresh a provider's raw key (writes a k8s Secret + LiteLLM credential) */
+        /** Admit and deliver a provider key change through the durable effect authority */
         put: operations["setByokProviderKey"];
         post?: never;
-        /** Remove a provider's key (deletes the Secret, LiteLLM credential, and record) */
+        /** Admit and deliver durable removal of a provider key */
         delete: operations["deleteByokProviderKey"];
         options?: never;
         head?: never;
@@ -435,7 +435,7 @@ export interface paths {
         /** List model definitions */
         get: operations["listModels"];
         put?: never;
-        /** Create a model definition and register it best-effort with LiteLLM */
+        /** Create a model definition and durably register it with LiteLLM */
         post: operations["createModel"];
         delete?: never;
         options?: never;
@@ -452,11 +452,26 @@ export interface paths {
         };
         /** Get a single model definition by id */
         get: operations["getModel"];
-        /** Update a model definition */
-        put: operations["updateModel"];
+        put?: never;
         post?: never;
-        /** Delete a model definition */
-        delete: operations["deleteModel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/models/{id}/registration-commands/{commandId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume one exact durable LiteLLM model registration */
+        post: operations["resumeModelRegistration"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1916,6 +1931,11 @@ export interface components {
         ProviderKeySetRequest: {
             /** @description The raw upstream provider API key. Accepted only over HTTPS; written to a k8s Secret + LiteLLM and never returned by any read. */
             apiKey: string;
+            /**
+             * Format: uuid
+             * @description Command id returned by a previous PROVIDER_EFFECT_PENDING response. Resubmitting it supplies ephemeral key material to that exact admitted command.
+             */
+            commandId?: string;
         };
         ProviderCredential: {
             /** @description Stable identifier. */
@@ -3500,11 +3520,47 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Another claimed provider command owns this provider resource; retry or resume the returned command first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_BUSY";
+                        /**
+                         * Format: uuid
+                         * @description Existing command that owns the resource barrier.
+                         */
+                        commandId: string;
+                    };
+                };
+            };
+            /** @description The command is durable but needs a later retry. Resubmit the returned commandId with the same raw key. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_PENDING";
+                        /** Format: uuid */
+                        commandId: string;
+                    };
+                };
+            };
         };
     };
     deleteByokProviderKey: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Command id returned by a previous PROVIDER_EFFECT_PENDING response. */
+                commandId?: string;
+            };
             header?: never;
             path: {
                 provider: "openai" | "anthropic" | "gemini" | "mistral" | "deepseek" | "glm";
@@ -3527,6 +3583,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Another provider command owns this resource, or selected/frozen deployments still govern the connection. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_BUSY";
+                        /** Format: uuid */
+                        commandId: string;
+                    } | {
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_CONNECTION_GOVERNED";
+                    };
+                };
+            };
+            /** @description The removal is durable and the background reconciler or this exact command retry may resume it. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_PENDING";
+                        /** Format: uuid */
+                        commandId: string;
+                    };
                 };
             };
         };
@@ -3786,6 +3876,41 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description The selected provider has an unsettled custody command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_BUSY";
+                        /**
+                         * Format: uuid
+                         * @description Existing command that owns the resource barrier.
+                         */
+                        commandId: string;
+                    };
+                };
+            };
+            /** @description The model definition and registration command are durable but registration has not completed. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_PENDING";
+                        /** Format: uuid */
+                        commandId: string;
+                        /** Format: uuid */
+                        modelDefinitionId?: string;
+                    };
+                };
+            };
         };
     };
     getModel: {
@@ -3819,22 +3944,19 @@ export interface operations {
             };
         };
     };
-    updateModel: {
+    resumeModelRegistration: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 id: string;
+                commandId: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ModelDefinitionWrite"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Model definition updated. */
+            /** @description Model registration completed. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3843,74 +3965,21 @@ export interface operations {
                     "application/json": components["schemas"]["ModelDefinition"];
                 };
             };
-            /** @description Request body failed validation. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE). */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Model definition not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    deleteModel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Model definition deleted. */
-            200: {
+            /** @description The exact model registration remains pending. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        id?: string;
-                        status?: string;
+                        error: string;
+                        /** @enum {string} */
+                        code: "PROVIDER_EFFECT_PENDING";
+                        /** Format: uuid */
+                        commandId: string;
+                        /** Format: uuid */
+                        modelDefinitionId?: string;
                     };
-                };
-            };
-            /** @description Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE). */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Model definition not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

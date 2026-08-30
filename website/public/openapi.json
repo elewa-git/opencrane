@@ -3955,32 +3955,53 @@
             }
           },
           "409": {
-            "description": "Another claimed provider command owns this provider resource; retry or resume the returned command first.",
+            "description": "Another provider command owns this resource, or selected/frozen deployments still govern the connection.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "error",
-                    "code",
-                    "commandId"
-                  ],
-                  "properties": {
-                    "error": {
-                      "type": "string"
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "code",
+                        "commandId"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "PROVIDER_EFFECT_BUSY"
+                          ]
+                        },
+                        "commandId": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
                     },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "PROVIDER_EFFECT_BUSY"
-                      ]
-                    },
-                    "commandId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "description": "Existing command that owns the resource barrier."
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "code"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "PROVIDER_CONNECTION_GOVERNED"
+                          ]
+                        }
+                      }
                     }
-                  }
+                  ]
                 }
               }
             }
@@ -4350,6 +4371,37 @@
               }
             }
           },
+          "409": {
+            "description": "The selected provider has an unsettled custody command.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_BUSY"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "description": "Existing command that owns the resource barrier."
+                    }
+                  }
+                }
+              }
+            }
+          },
           "503": {
             "description": "The model definition and registration command are durable but registration has not completed.",
             "content": {
@@ -4421,194 +4473,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "updateModel",
-        "summary": "Update a model definition",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ModelDefinitionWrite"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Model definition updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ModelDefinition"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Request body failed validation.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Model definition not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The model's registration command must settle before its lifecycle can change.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "error",
-                    "code",
-                    "commandId"
-                  ],
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "PROVIDER_EFFECT_BUSY"
-                      ]
-                    },
-                    "commandId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "description": "Existing command that owns the resource barrier."
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteModel",
-        "summary": "Delete a model definition",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Model definition deleted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Model definition not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The model's registration command must settle before its lifecycle can change.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "error",
-                    "code",
-                    "commandId"
-                  ],
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "PROVIDER_EFFECT_BUSY"
-                      ]
-                    },
-                    "commandId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "description": "Existing command that owns the resource barrier."
-                    }
-                  }
                 }
               }
             }

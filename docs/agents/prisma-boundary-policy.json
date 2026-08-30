@@ -2166,6 +2166,7 @@
       "libs/backend/server/gateways/providers/main/src/provider-effect-command-composition.ts",
       "libs/backend/server/gateways/providers/main/src/provider-effect-command-repository.factory.ts",
 	  "libs/backend/server/gateways/providers/main/src/provider-byok-repository.factory.ts",
+	  "libs/backend/server/gateways/providers/main/src/model-registry-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 		"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
 		"libs/backend/agents/personal/personas/main/src/profile/prisma-persona-workflow-evidence.ts",

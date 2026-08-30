@@ -65,9 +65,8 @@ and LiteLLM run only after that transaction commits. Every governed resource has
 generation: admitting a newer Set, Delete, or Register command supersedes older inactive work. A
 claimed command is the external resource's serialization barrier, even after its lease expires, so
 a conflicting admission returns `409 PROVIDER_EFFECT_BUSY` with that existing command id instead of
-creating a newer generation. Only that exact command may be reclaimed after expiry. Model-definition
-`PUT` and `DELETE` return `409 MODEL_DEFINITION_GOVERNED` until durable update and unregister commands
-can converge Postgres and LiteLLM; neither route performs a database-only mutation. The executor
+creating a newer generation. Only that exact command may be reclaimed after expiry. Model update and
+unregister routes remain absent until durable commands can converge Postgres and LiteLLM. The executor
 does not spend the terminal delivery budget or release the barrier when LiteLLM may still complete a
 timed-out fixed-name mutation; the route `commandId` resume must positively converge that same desired
 state before another Set or Delete is admitted. The executor

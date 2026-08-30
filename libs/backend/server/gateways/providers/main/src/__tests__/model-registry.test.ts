@@ -11,7 +11,7 @@ import "@opencrane/backend/server/infra/auth";
 import type { AuthUser } from "@opencrane/backend/server/infra/auth";
 import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, type ProviderEffectCommandExecutor } from "../provider-effect-command.types";
 import type { ProviderGatewayAuthorizationFactory } from "../provider-gateway-authority.types";
-import { modelRegistryRouter } from "../routes/model-registry";
+import { modelRegistryRouter } from "../model-registry-composition";
 
 /** In-memory model_definitions store backing the mock Prisma client. */
 type Row = Record<string, unknown>;
@@ -306,29 +306,6 @@ describe("modelRegistryRouter", function _suite()
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("MODEL_DEFINITION_NOT_FOUND");
   });
-
-	it.each([
-		{ method: "put", path: "/api/v1/models/model-1", body: { publicModelName: "custom/changed", upstreamModel: "openai/changed" } },
-		{ method: "put", path: "/api/v1/models/missing", body: { apiBase: 42 } },
-		{ method: "delete", path: "/api/v1/models/model-1", body: undefined },
-		{ method: "delete", path: "/api/v1/models/missing", body: undefined },
-	] as const)("returns governed 409 for $method $path without DB or LiteLLM drift", async function _BlocksUnsupportedMutation({ method, path, body })
-	{
-		const store = new Map<string, Row>([["model-1", { id: "model-1", siloId: "acme", scope: "Global", clusterTenant: null, publicModelName: "custom/openai", litellmModelId: "deployment-1", upstreamModel: "openai/gpt-4o", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }]]);
-		const prisma = _mockPrisma(store);
-		const execute = vi.fn();
-		const executor = { execute, reconcileNext: vi.fn().mockResolvedValue(false) } as unknown as ProviderEffectCommandExecutor;
-		const app = _buildApp(prisma, _platformOperator(), _ALLOW_AUTHORIZATION, executor);
-		const operation = request(app)[method](path);
-		const response = body === undefined ? await operation : await operation.send(body);
-
-		expect(response.status).toBe(409);
-		expect(response.body).toEqual({ error: "Model definition updates and deletion require a durable provider command.", code: "MODEL_DEFINITION_GOVERNED" });
-		expect(prisma.modelDefinition.update).not.toHaveBeenCalled();
-		expect(prisma.modelDefinition.delete).not.toHaveBeenCalled();
-		expect(execute).not.toHaveBeenCalled();
-		expect(store.get("model-1")?.upstreamModel).toBe("openai/gpt-4o");
-	});
 
 	it.each(["auto", "auto-embedding", "openai/gpt-5.5", "openai/text-embedding-3-large"])("reserves the governed global model name %s", async function _ReservesGovernedNames(publicModelName)
 	{

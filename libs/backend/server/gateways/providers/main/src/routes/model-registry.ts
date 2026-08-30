@@ -1,11 +1,8 @@
 import { Router } from "express";
-import type { Prisma, PrismaClient } from "@prisma/client";
 
-import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCallerResolver } from "../provider-gateway-authority.types";
+import type { ProviderGatewayCallerResolver } from "../provider-gateway-authority.types";
 import { _RequireProviderGatewayCaller, _ResolveProviderGatewayCaller, _SendProviderGatewayAuthorizationError } from "../provider-gateway-authorization";
-import { MODEL_DEFINITION_MUTATION_GOVERNED } from "../model-definition-service.types";
-import type { ProviderEffectCommandExecutor } from "../provider-effect-command.types";
-import { PrismaModelDefinitionUnitOfWork } from "../prisma-model-definition-service";
+import type { ModelDefinitionService } from "../model-definition-service.types";
 
 /**
  * Mount the model registry's HTTP transport over the durable model-definition service.
@@ -14,23 +11,22 @@ import { PrismaModelDefinitionUnitOfWork } from "../prisma-model-definition-serv
  * application-root executor registers the model globally with LiteLLM after commit and replaces
  * the pending deployment id only in its final authorization transaction. A failed delivery returns
  * a resumable command id rather than treating incomplete durable registration as success. Reads filter
- * exact `ModelDefinition` grants. PUT and DELETE fail closed until they have durable commands that
- * converge Postgres and LiteLLM together.
+ * exact `ModelDefinition` grants. Update and unregister routes are absent until their durable
+ * commands can converge Postgres and LiteLLM together.
  *
  * `GET /` considers Global and tenant rows but returns only the caller's entitled definitions.
  * An embedding deployment must still never be given a `ModelDefinition` row. See
  * `ByokProviderCatalog.embeddingModel` in
  * libs/backend/server/gateways/model-routing/main/src/core/byok-default-models.types.ts.
  *
- * Called by: apps/opencrane/src/app/routes.ts, mounted at `/api/v1/models`.
+ * Called by: model-registry-composition.ts after it constructs the persistence owner.
  *
- * @param prisma - Prisma client used for persistence.
+ * @param models - Transactional model-definition application boundary.
  * @returns Configured Express router.
  */
-export function modelRegistryRouter(prisma: PrismaClient, effectExecutor: ProviderEffectCommandExecutor, resolveCaller: ProviderGatewayCallerResolver = _ResolveProviderGatewayCaller, createAuthorization?: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>): Router
+export function _CreateModelRegistryRouter(models: ModelDefinitionService, resolveCaller: ProviderGatewayCallerResolver = _ResolveProviderGatewayCaller): Router
 {
   const router = Router();
-	const models = new PrismaModelDefinitionUnitOfWork(prisma, effectExecutor, createAuthorization);
 
   /** List model definitions, optionally filtered to one ClusterTenant. */
   router.get("/", async function _listModels(req, res)
@@ -112,22 +108,6 @@ export function modelRegistryRouter(prisma: PrismaClient, effectExecutor: Provid
 			throw caught;
 	}
   });
-
-	/** Refuse DB-only updates until a durable update command converges the external deployment. */
-	router.put("/:id", function _RefuseModelUpdate(req, res)
-	{
-		if (_RequireProviderGatewayCaller(req, res, resolveCaller) === null)
-			return;
-		res.status(409).json(MODEL_DEFINITION_MUTATION_GOVERNED);
-	});
-
-	/** Refuse DB-only deletion until a durable unregister command converges the external deployment. */
-	router.delete("/:id", function _RefuseModelDeletion(req, res)
-	{
-		if (_RequireProviderGatewayCaller(req, res, resolveCaller) === null)
-			return;
-		res.status(409).json(MODEL_DEFINITION_MUTATION_GOVERNED);
-	});
 
   return router;
 }

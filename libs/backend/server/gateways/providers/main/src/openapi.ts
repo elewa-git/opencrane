@@ -47,6 +47,17 @@ function providerEffectBusy(description: string)
   };
 }
 
+function providerDeletionConflict(description: string)
+{
+  return {
+    description,
+    content: { "application/json": { schema: { oneOf: [
+      { type: "object", required: ["error", "code", "commandId"], properties: { error: { type: "string" }, code: { type: "string", enum: ["PROVIDER_EFFECT_BUSY"] }, commandId: { type: "string", format: "uuid" } } },
+      { type: "object", required: ["error", "code"], properties: { error: { type: "string" }, code: { type: "string", enum: ["PROVIDER_CONNECTION_GOVERNED"] } } },
+    ] } } },
+  };
+}
+
 /** OpenAPI path fragments owned by the providers domain (composed into the opencrane-ui spec). */
 export const _ProvidersOpenapiPaths = {
   "/providers/byok": {
@@ -88,7 +99,7 @@ export const _ProvidersOpenapiPaths = {
       responses: {
         204: { description: "Key removed (idempotent — 204 even when no key was set)." },
         400: badRequest("Unsupported provider (code UNSUPPORTED_PROVIDER)."),
-		409: providerEffectBusy("Another claimed provider command owns this provider resource; retry or resume the returned command first."),
+		409: providerDeletionConflict("Another provider command owns this resource, or selected/frozen deployments still govern the connection."),
 		503: pending("The removal is durable and the background reconciler or this exact command retry may resume it."),
       },
     },
@@ -182,6 +193,7 @@ export const _ProvidersOpenapiPaths = {
         201: created("Model definition created.", { $ref: "#/components/schemas/ModelDefinition" }),
         400: badRequest("Request body failed validation, or the providerCredentialId is missing or owned by another ClusterTenant (code CREDENTIAL_SCOPE_MISMATCH)."),
         403: { description: "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE).", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+		409: providerEffectBusy("The selected provider has an unsettled custody command."),
 		503: pending("The model definition and registration command are durable but registration has not completed.", true),
       },
     },
@@ -195,35 +207,6 @@ export const _ProvidersOpenapiPaths = {
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
       responses: {
         200: ok("Model definition detail.", { $ref: "#/components/schemas/ModelDefinition" }),
-        404: notFound("Model definition not found."),
-      },
-    },
-    put: {
-      operationId: "updateModel",
-      summary: "Update a model definition",
-      tags: ["Model Registry"],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-      requestBody: {
-        required: true,
-        content: { "application/json": { schema: { $ref: "#/components/schemas/ModelDefinitionWrite" } } },
-      },
-      responses: {
-        200: ok("Model definition updated.", { $ref: "#/components/schemas/ModelDefinition" }),
-        400: badRequest("Request body failed validation."),
-        403: { description: "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE).", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-		409: providerEffectBusy("The model's registration command must settle before its lifecycle can change."),
-        404: notFound("Model definition not found."),
-      },
-    },
-    delete: {
-      operationId: "deleteModel",
-      summary: "Delete a model definition",
-      tags: ["Model Registry"],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("Model definition deleted.", { type: "object", properties: { id: { type: "string" }, status: { type: "string" } } }),
-        403: { description: "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE).", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-		409: providerEffectBusy("The model's registration command must settle before its lifecycle can change."),
         404: notFound("Model definition not found."),
       },
     },
