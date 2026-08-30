@@ -38,6 +38,21 @@ function _TargetFunction(name)
 	return targetBaseline.slice(start, end);
 }
 
+function _MigrationFunction(name)
+{
+	const marker = `FUNCTION "${name}"`;
+	const markerIndex = migration.indexOf(marker);
+	const start = migration.lastIndexOf("CREATE", markerIndex);
+	const end = migration.indexOf("$$;", markerIndex) + 3;
+	_Require(markerIndex >= 0 && start >= 0 && end > 2, `cutover function ${name} must exist`);
+	return migration.slice(start, end);
+}
+
+function _NormalizedSql(value)
+{
+	return value.replace(/\s+/gu, " ").trim();
+}
+
 const ledgerDirectories = readdirSync(ledgerRoot, { withFileTypes: true }).filter(function _IsDirectory(entry) { return entry.isDirectory(); });
 _Require(ledgerDirectories.every(function _HasMigrationSql(entry) { return existsSync(join(ledgerRoot, entry.name, "migration.sql")); }), "every Prisma migration directory must contain migration.sql");
 
@@ -45,7 +60,7 @@ const baselineStatements = baseline
 	.split("\n")
 	.filter(function _IsSql(line) { return line.trim() !== "" && !line.trimStart().startsWith("--"); });
 _Require(baselineStatements.length === 0, "the released 0.9.3 Prisma baseline must remain a no-op");
-_Require(releasedCutoverChecksum === "6a4256041ba5a78c6e849531c4d9fffea2cad5afef509344c088e566bcfa0004", "the applied 0.10.0 cutover migration must retain its released checksum");
+_Require(releasedCutoverChecksum === "10663a74ff1c6256e64aa141b646a80e0f8e38dc9ec2b9c99242ed27df1e35b4", "the applied 0.10.0 cutover migration must retain its released checksum");
 
 _Require(migration.startsWith("-- OpenCrane 0.9.3 to 0.10.0 workflow and OCI cutover."), "the forward migration must name its exact release boundary");
 _Require(migration.match(/^BEGIN;$/gmu)?.length === 1, "the forward migration must open one transaction");
@@ -165,6 +180,32 @@ for (const retiredTable of ["agent_revision_integration_assignments", "integrati
 for (const replacementTable of ["agent_revision_mcp_tool_assignments", "oci_image_validations", "mcp_server_revisions", "mcp_runtime_executions", "skill_authoring_validations", "agent_run_workflow_tasks"])
 {
 	_Require(migration.includes(`CREATE TABLE "${replacementTable}"`), `replacement table ${replacementTable} must be installed`);
+}
+
+for (const marker of [
+	'CREATE VIEW "mcp_runtime_clock" AS',
+	'CREATE VIEW "mcp_runtime_claim_candidates" AS SELECT * FROM "select_mcp_runtime_claim_candidate"();',
+	'CREATE VIEW "mcp_runtime_release_claim_candidates" AS SELECT * FROM "select_mcp_runtime_release_claim_candidate"();',
+	'FOR UPDATE OF execution SKIP LOCKED',
+	'CREATE TRIGGER "mcp_runtime_executions_authority"',
+	'CREATE TRIGGER "mcp_server_revisions_runtime_completion"',
+	'ADD CONSTRAINT "mcp_runtime_executions_identity_check"',
+	'McpRuntimeExecution controller claim requires an expired prior fence and a bounded lease proposal',
+	'McpRuntimeExecution release claim requires an expired prior fence and a bounded lease proposal',
+	'McpRuntimeExecution companion claim requires its registered Pod and bounded lease proposal',
+])
+{
+	_Require(migration.includes(marker), `0.10.0 cutover must install MCP runtime database authority: ${marker}`);
+	_Require(targetBaseline.includes(marker), `fresh target must install MCP runtime database authority: ${marker}`);
+}
+for (const name of [
+	"select_mcp_runtime_claim_candidate",
+	"select_mcp_runtime_release_claim_candidate",
+	"enforce_mcp_runtime_execution_authority",
+	"enforce_mcp_server_revision_runtime_completion",
+])
+{
+	_Require(_NormalizedSql(_MigrationFunction(name)) === _NormalizedSql(_TargetFunction(name)), `fresh and upgraded databases must install the exact MCP runtime function ${name}`);
 }
 
 for (const queue of ["control-plane", "artifact-preprocessing", "skill-authoring", "agent-runs"])

@@ -34,7 +34,7 @@ describe("public health production composition", function _Suite()
 		expect(fetch.mock.calls.map(function _Url(call) { return String(call[0]); }).sort()).toEqual([
 			"http://artifact-service.svc:8080/readyz",
 			"http://channel-proxy.svc:8080/readyz",
-			"http://litellm.svc:4000/model/info",
+			"http://litellm.svc:4000/v1/models",
 			"http://memory-gateway.svc:8080/readyz",
 		]);
 		vi.unstubAllGlobals();

@@ -59,13 +59,13 @@ def _input_url(base_url: str, workload_id: str) -> str:
     """Derive the sole authoring input URL after validating the deployment-owned internal base URL."""
     if not bootstrap._workload_id(workload_id):
         raise RuntimeError("authoring workload identifier is invalid")
-    bootstrap._acknowledgement_url(base_url)
+    bootstrap._authoring_acknowledgement_url(base_url)
     return f"{base_url}/skill-authoring-validations/{workload_id}/input"
 
 
 def _completion_url(base_url: str) -> str:
     """Derive the sole terminal authoring completion URL after validating the deployment-owned internal base URL."""
-    bootstrap._acknowledgement_url(base_url)
+    bootstrap._authoring_acknowledgement_url(base_url)
     return f"{base_url}/skill-authoring-validations:complete"
 
 

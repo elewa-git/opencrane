@@ -1,13 +1,13 @@
 {
   "$schema": "./release-manifest.schema.json",
   "repositoryVersion": "0.10.0",
-  "previousRepositoryVersion": "0.9.3",
-  "previousRepositoryCommit": "abc7a62a5c7d6d1c9601ded46a18015cfedb4cd4",
+  "previousRepositoryVersion": "0.9.2",
+  "previousRepositoryCommit": "390c9c7a1af29630ae5d1d3eee5402bb163056b3",
   "adoptionBaseline": false,
   "database": {
     "schemaVersion": "0.10.0",
     "baselinePath": "apps/opencrane/prisma/bootstrap/target-baseline.sql",
-    "baselineSha256": "4fed281fa0f928b98a80ecf56faf17038c03233ab5039218ba77197601a28b9e",
+    "baselineSha256": "b322ff849c0636e128a0faccf6dbc7c8e5ad1cab1bc286538f1557bc6fa4eb77",
     "operandImage": "ghcr.io/elewa-git/opencrane-postgres:17.5-sha-be461113253b9cd6d51532cf007775ec8385bfe7@sha256:9c27816e67b9f0b23e771a4c8a8a4c8eb4c84abeefead14f727747d21d7d70c7"
   },
   "projects": {
