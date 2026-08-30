@@ -164,7 +164,8 @@ function _PrismaFixture(markCompleted: boolean): { readonly prisma: PrismaClient
 				}),
 				updateMany: vi.fn(async function _Complete()
 				{
-					if (!markCompleted || state.onboardingState !== UserOnboardingState.BootstrapChatInProgress) return { count: 0 };
+						if (!markCompleted || state.onboardingState !== UserOnboardingState.BootstrapChatInProgress)
+							return { count: 0 };
 					state.onboardingState = UserOnboardingState.Completed;
 					state.completionProvenance = UserOnboardingCompletionProvenance.BootstrapConcluded;
 					return { count: 1 };
@@ -215,26 +216,31 @@ function _PrismaFixture(markCompleted: boolean): { readonly prisma: PrismaClient
 				}),
 				update: vi.fn(async function _ActivateService(input: { data: { state: AgentServiceState; activeRevisionId: string } })
 				{
-					if (state.agentService === null) throw new Error("service missing");
+						if (state.agentService === null)
+							throw new Error("service missing");
 					state.agentService = { ...state.agentService, state: input.data.state, activeRevisionId: input.data.activeRevisionId };
 					return state.agentService;
 				}),
 			},
 			agentRevision: {
-				create: vi.fn(async function _CreateRevision(input: { data: { id: string; digest: string; personaRevisionId: string; modelDefinition: { connect: { id: string } } } })
+				create: vi.fn(async function _CreateRevision(input: { data: { id: string; digest: string; personaRevisionId: string; modelDefinition: { connect: { id_siloId: { id: string } } } } })
 				{
-					state.agentRevision = { id: input.data.id, state: AgentRevisionState.Draft, personaRevisionId: input.data.personaRevisionId, modelDefinitionId: input.data.modelDefinition.connect.id, digest: input.data.digest };
+					state.agentRevision = { id: input.data.id, state: AgentRevisionState.Draft, personaRevisionId: input.data.personaRevisionId, modelDefinitionId: input.data.modelDefinition.connect.id_siloId.id, digest: input.data.digest };
 					return { ...state.agentRevision, skillAssignments: [] };
 				}),
 				update: vi.fn(async function _PublishRevision(input: { data: { state: AgentRevisionState } })
 				{
-					if (state.agentRevision === null) throw new Error("revision missing");
+						if (state.agentRevision === null)
+							throw new Error("revision missing");
 					state.agentRevision = { ...state.agentRevision, state: input.data.state };
 					return state.agentRevision;
 				}),
 			},
 			modelRoutingDefault: { findMany: vi.fn(async function _FindDefault() { return [{ scope: ModelRoutingScope.Global, defaultModel: "openai/gpt-5" }]; }) },
-			modelDefinition: { findMany: vi.fn(async function _FindModel() { return [{ id: "model-definition-1", scope: ModelRoutingScope.Global }]; }) },
+			modelDefinition: {
+				findMany: vi.fn(async function _FindModel() { return [{ id: "model-definition-1", scope: ModelRoutingScope.Global }]; }),
+				findUnique: vi.fn(async function _FindModelBySilo() { return { id: "model-definition-1" }; }),
+			},
 			auditDecision: { create: vi.fn(async function _Audit() { state.auditCount += 1; return {}; }) },
 		};
 		if (!transactional)
