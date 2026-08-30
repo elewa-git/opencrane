@@ -400,7 +400,7 @@ _assert_ingress_health()
     --resolve "${CONTROL_PLANE_HOST}:8443:127.0.0.1" "$health_url" 2>/dev/null)" \
     && jq -e '
       .ready == true
-      and (.services | keys == ["api", "channels", "database", "files", "integrations", "memory", "models"])
+      and (.services | keys == ["api", "channels", "database", "files", "memory", "models"])
       and ([.services | to_entries[] | select(.key != "models") | .value]
         | all(. == "available" or . == "disabled"))
       and (.services.models == "available" or .services.models == "unavailable")
