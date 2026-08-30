@@ -20,7 +20,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   prerequisite, lets CloudNativePG install `pg_cron` and assign its schema without sharing a
   superuser credential with the migration container, applies the saved Prisma ledger once, and no
   longer requires a backup, application write pause, or automatic recovery. Deferred migration
-  hardening is tracked in #699.
+  hardening is tracked in #699. The same upgrade now removes residual SQL workload and run-outbox
+  authority from untagged development candidates, so repaired and fresh 0.10 databases converge on
+  the same runtime schema.
 
 - **Invited users can now complete standalone registration after the first Owner has claimed the
   silo.** A verified invited identity keeps its OIDC session long enough to accept its signed link,

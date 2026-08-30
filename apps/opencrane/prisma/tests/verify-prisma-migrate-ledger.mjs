@@ -216,11 +216,42 @@ const precentralToolCapture = authorizationMigration.slice(
 	authorizationMigration.indexOf('CREATE TEMP TABLE "precentral_approval_requests"'),
 );
 _Require(!precentralToolCapture.includes('"state" NOT IN'), "the pre-1.0 cutoff must not retain terminal ToolInvocation compatibility");
-_Require(authorizationMigration.includes("to_regclass('skill_workloads') IS NOT NULL"), "the ToolInvocation cutoff must tolerate a repaired candidate that already lacks legacy SQL workloads");
-_Require(authorizationMigration.includes("to_regclass('skill_workload_bootstraps') IS NOT NULL"), "the ToolInvocation cutoff must tolerate a repaired candidate that already lacks legacy SQL workload bootstraps");
+for (const retiredRuntimeTable of ["skill_workload_bootstraps", "skill_workloads", "run_outbox_events"])
+{
+	_Require(authorizationMigration.includes(`DROP TABLE IF EXISTS "${retiredRuntimeTable}";`), `the central cutover must retire candidate table ${retiredRuntimeTable}`);
+}
+for (const retiredRuntimeView of ["skill_workload_claim_candidates", "skill_workload_release_claim_candidates"])
+{
+	_Require(authorizationMigration.includes(`DROP VIEW IF EXISTS "${retiredRuntimeView}";`), `the central cutover must retire candidate view ${retiredRuntimeView}`);
+}
+for (const retiredRuntimeFunction of [
+	"select_skill_workload_claim_candidate",
+	"select_skill_workload_release_claim_candidate",
+	"enforce_skill_workload_bootstrap",
+	"enforce_skill_workload_authority",
+	"cancel_ineligible_skill_workloads",
+	"enforce_accepted_outbox_attempt",
+	"enforce_run_outbox_event_update",
+])
+{
+	_Require(authorizationMigration.includes(`DROP FUNCTION IF EXISTS "${retiredRuntimeFunction}"();`), `the central cutover must retire candidate function ${retiredRuntimeFunction}`);
+}
+for (const retiredRuntimeType of ["SkillWorkloadKind", "SkillWorkloadState", "RunOutboxEventKind"])
+{
+	_Require(authorizationMigration.includes(`DROP TYPE IF EXISTS "${retiredRuntimeType}";`), `the central cutover must retire candidate type ${retiredRuntimeType}`);
+}
+_RequireBeforeIn(authorizationMigration, 'DROP TRIGGER IF EXISTS "cancel_ineligible_skill_workloads_on_revision"', 'DROP VIEW IF EXISTS "skill_workload_claim_candidates"', "external workload cancellation triggers must be removed before their views and functions");
+_RequireBeforeIn(authorizationMigration, 'DROP VIEW IF EXISTS "skill_workload_release_claim_candidates"', 'DROP FUNCTION IF EXISTS "select_skill_workload_claim_candidate"()', "candidate workload views must release their selector functions before those functions are removed");
+_RequireBeforeIn(authorizationMigration, 'DROP FUNCTION IF EXISTS "select_skill_workload_release_claim_candidate"()', 'DROP TABLE IF EXISTS "skill_workload_bootstraps"', "candidate workload selectors must release their table row types before the source tables are removed");
+_RequireBeforeIn(authorizationMigration, 'DROP TABLE IF EXISTS "skill_workload_bootstraps"', 'DROP TABLE IF EXISTS "skill_workloads"', "candidate workload bootstrap rows must be dropped before their parent workloads");
+_RequireBeforeIn(authorizationMigration, 'DROP TABLE IF EXISTS "skill_workloads"', 'DROP FUNCTION IF EXISTS "enforce_skill_workload_bootstrap"()', "candidate workload tables must release their trigger dependencies before their enforcement functions are dropped");
+_Require(
+	_NormalizedSql(_AuthorizationMigrationFunction("enforce_agent_run_authority_update").replace("CREATE OR REPLACE FUNCTION", "CREATE FUNCTION")) === _NormalizedSql(_TargetFunction("enforce_agent_run_authority_update")),
+	"the central cutover must replace candidate AgentRun outbox authority with the exact target workflow authority",
+);
+_RequireBeforeIn(authorizationMigration, 'CREATE OR REPLACE FUNCTION "enforce_agent_run_authority_update"()', 'DROP TABLE IF EXISTS "run_outbox_events"', "AgentRun authority must stop querying the legacy outbox before that table and enum are removed");
+_RequireBeforeIn(authorizationMigration, 'DROP TABLE IF EXISTS "run_outbox_events"', 'DROP TYPE IF EXISTS "RunOutboxEventKind"', "the legacy run outbox table must release its enum before the enum is removed");
 for (const dependentDelete of [
-	'DELETE FROM "skill_workload_bootstraps"',
-	'DELETE FROM "skill_workloads"',
 	'DELETE FROM "personal_memory_permission_receipts"',
 	'DELETE FROM "approval_requests"',
 	'DELETE FROM "tool_result_deliveries"',

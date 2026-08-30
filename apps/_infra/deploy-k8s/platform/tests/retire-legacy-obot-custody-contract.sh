@@ -18,6 +18,112 @@ log()
   :
 }
 
+assert_prefix_count()
+{
+  local expected="$1"
+  local prefix="$2"
+  awk -v expected="$expected" -v prefix="$prefix" '
+    index($0, prefix) == 1 { count += 1 }
+    END {
+      if (count + 0 != expected) {
+        printf "Expected %s call(s) prefixed by %s, found %s.\n", expected, prefix, count + 0 > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$CALLS"
+}
+
+assert_prefix_present()
+{
+  local prefix="$1"
+  awk -v prefix="$prefix" '
+    index($0, prefix) == 1 { found = 1 }
+    END {
+      if (!found) {
+        printf "Expected a call prefixed by %s.\n", prefix > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$CALLS"
+}
+
+assert_identity_preconditioned_delete_count()
+{
+  local expected="$1"
+  awk -v expected="$expected" '
+    index($0, "delete-options ") == 1 &&
+    index($0, "\"preconditions\":{\"uid\":") > 0 { count += 1 }
+    END {
+      if (count + 0 != expected) {
+        printf "Expected %s identity-preconditioned delete(s), found %s.\n", expected, count + 0 > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$CALLS"
+}
+
+assert_delete_calls_exclude()
+{
+  local needle="$1"
+  awk -v needle="$needle" '
+    index($0, "delete --raw ") == 1 && index($0, needle) > 0 { found = 1 }
+    END {
+      if (found) {
+        printf "Expected raw delete calls to exclude %s.\n", needle > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$CALLS"
+}
+
+assert_file_contains()
+{
+  local file="$1"
+  local needle="$2"
+  awk -v needle="$needle" '
+    index($0, needle) > 0 { found = 1 }
+    END {
+      if (!found) {
+        printf "Expected file to contain: %s\n", needle > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$file"
+}
+
+assert_custody_call_order()
+{
+  awk '
+    index($0, "patch database.postgresql.cnpg.io/opencrane-testv4-postgres-obot ") == 1 && !database_patch { database_patch = NR }
+    index($0, "exec opencrane-testv4-postgres-1 ") == 1 && !proof { proof = NR }
+    index($0, "patch cluster.postgresql.cnpg.io/opencrane-testv4-postgres ") == 1 { role_patch = NR }
+    index($0, "delete --raw ") == 1 && !first_delete { first_delete = NR }
+    END {
+      if (!database_patch || !proof || !role_patch || !first_delete ||
+          database_patch >= proof || proof >= role_patch || role_patch >= first_delete) {
+        print "Expected Database retirement, SQL proof, role retirement, and raw deletes in order." > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$CALLS"
+}
+
+assert_deploy_order()
+{
+  awk '
+    index($0, "retire_legacy_obot_mcp_server_resources ") > 0 { server_retire = NR }
+    index($0, "retire_legacy_obot_database_custody ") > 0 { custody_retire = NR }
+    index($0, "_post_deploy_verify ") == 1 { advisory = NR }
+    END {
+      if (!server_retire || !custody_retire || !advisory ||
+          server_retire >= custody_retire || custody_retire >= advisory) {
+        print "Expected server retirement, custody retirement, and advisory verification in order." > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$DEPLOY"
+}
+
 reset_fixture()
 {
   : >"$CALLS"
@@ -93,7 +199,7 @@ kubectl()
     local deleted_resource
     local delete_options
     deleted_resource="$(resource_from_uri "$3")"
-    delete_options="$(<&0)"
+    IFS= read -r delete_options
     printf 'delete-options %s %s\n' "$deleted_resource" "$delete_options" >>"$CALLS"
     touch "$(deleted_marker "$deleted_resource")"
     return 0
@@ -161,20 +267,17 @@ retire_legacy_obot_database_custody opencrane-testv4 opencrane-testv4 30
 [[ -e "$(deleted_marker database.postgresql.cnpg.io/opencrane-testv4-postgres-obot)" ]]
 [[ -e "$(deleted_marker secret/opencrane-testv4-obot)" ]]
 [[ -e "$(deleted_marker secret/opencrane-testv4-postgres-obot-app)" ]]
-[[ "$(grep -c '^delete --raw ' "$CALLS")" == "3" ]]
-[[ "$(grep -c '^delete-options .*\"preconditions\":{\"uid\":' "$CALLS")" == "3" ]]
-patch_line="$(grep -n '^patch database.postgresql.cnpg.io/opencrane-testv4-postgres-obot ' "$CALLS" | cut -d: -f1)"
-proof_line="$(grep -n '^exec opencrane-testv4-postgres-1 ' "$CALLS" | head -1 | cut -d: -f1)"
-last_role_patch_line="$(grep -n '^patch cluster.postgresql.cnpg.io/opencrane-testv4-postgres ' "$CALLS" | tail -1 | cut -d: -f1)"
-first_delete_line="$(grep -n '^delete --raw ' "$CALLS" | head -1 | cut -d: -f1)"
-[[ "$patch_line" -lt "$proof_line" && "$proof_line" -lt "$last_role_patch_line" && "$last_role_patch_line" -lt "$first_delete_line" ]]
-[[ "$(grep -c '^patch cluster.postgresql.cnpg.io/opencrane-testv4-postgres ' "$CALLS")" == "2" ]]
-! grep -Fq 'opencrane-testv4-obot-postgres-bootstrap' <(grep '^delete --raw ' "$CALLS")
+assert_prefix_count 3 'delete --raw '
+assert_identity_preconditioned_delete_count 3
+assert_custody_call_order
+assert_prefix_count 2 'patch cluster.postgresql.cnpg.io/opencrane-testv4-postgres '
+assert_delete_calls_exclude 'opencrane-testv4-obot-postgres-bootstrap'
 
 : >"$CALLS"
 retire_legacy_obot_database_custody opencrane-testv4 opencrane-testv4 30
-grep -q '^exec ' "$CALLS"
-! grep -q '^patch\|^delete --raw ' "$CALLS"
+assert_prefix_present 'exec '
+assert_prefix_count 0 'patch '
+assert_prefix_count 0 'delete --raw '
 
 reset_fixture
 DATABASE_CHART="postgres-foreign"
@@ -182,7 +285,9 @@ if retire_legacy_obot_database_custody opencrane-testv4 opencrane-testv4 30; the
   echo "Obot custody retirement accepted a foreign Database authority" >&2
   exit 1
 fi
-! grep -q '^patch\|^exec\|^delete --raw ' "$CALLS"
+assert_prefix_count 0 'patch '
+assert_prefix_count 0 'exec '
+assert_prefix_count 0 'delete --raw '
 
 reset_fixture
 DATABASE_WAIT_UID="replacement-uid"
@@ -190,8 +295,9 @@ if retire_legacy_obot_database_custody opencrane-testv4 opencrane-testv4 30; the
   echo "Obot custody retirement ignored a changed Database UID" >&2
   exit 1
 fi
-grep -q '^patch ' "$CALLS"
-! grep -q '^exec\|^delete --raw ' "$CALLS"
+assert_prefix_present 'patch '
+assert_prefix_count 0 'exec '
+assert_prefix_count 0 'delete --raw '
 
 reset_fixture
 DATABASE_ENSURE="absent"
@@ -201,8 +307,8 @@ if retire_legacy_obot_database_custody opencrane-testv4 opencrane-testv4 30; the
   echo "Obot custody retirement deleted objects before the logical database was absent" >&2
   exit 1
 fi
-grep -q '^exec ' "$CALLS"
-! grep -q '^delete --raw ' "$CALLS"
+assert_prefix_present 'exec '
+assert_prefix_count 0 'delete --raw '
 
 reset_fixture
 DATABASE_PRESENT=0
@@ -213,7 +319,8 @@ if retire_legacy_obot_database_custody opencrane-testv4 opencrane-testv4 30; the
   echo "Obot custody retirement ignored an unmanaged logical database residue" >&2
   exit 1
 fi
-! grep -q '^patch\|^delete --raw ' "$CALLS"
+assert_prefix_count 0 'patch '
+assert_prefix_count 0 'delete --raw '
 
 reset_fixture
 DATABASE_PRESENT=0
@@ -222,13 +329,10 @@ APP_SECRET_PRESENT=0
 LOGICAL_DATABASE_COUNT="0"
 LOGICAL_ROLE_COUNT="1"
 retire_legacy_obot_database_custody opencrane-testv4 opencrane-testv4 30
-[[ "$(grep -c '^patch cluster.postgresql.cnpg.io/opencrane-testv4-postgres ' "$CALLS")" == "2" ]]
-! grep -q '^delete --raw ' "$CALLS"
+assert_prefix_count 2 'patch cluster.postgresql.cnpg.io/opencrane-testv4-postgres '
+assert_prefix_count 0 'delete --raw '
 
-grep -Fq 'retire_legacy_obot_database_custody "$NAMESPACE" "$RELEASE" "$TIMEOUT"' "$DEPLOY"
-server_retire_line="$(grep -n 'retire_legacy_obot_mcp_server_resources ' "$DEPLOY" | tail -1 | cut -d: -f1)"
-custody_retire_line="$(grep -n 'retire_legacy_obot_database_custody ' "$DEPLOY" | tail -1 | cut -d: -f1)"
-advisory_line="$(grep -n '^_post_deploy_verify ' "$DEPLOY" | tail -1 | cut -d: -f1)"
-[[ "$server_retire_line" -lt "$custody_retire_line" && "$custody_retire_line" -lt "$advisory_line" ]]
+assert_file_contains "$DEPLOY" 'retire_legacy_obot_database_custody "$NAMESPACE" "$RELEASE" "$TIMEOUT"'
+assert_deploy_order
 
 echo "legacy Obot custody retirement contract: PASS"
