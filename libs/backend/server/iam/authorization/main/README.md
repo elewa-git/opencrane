@@ -34,10 +34,12 @@ membership, [audit](../../audit/main/README.md) retains decision evidence, and t
 domain supplies lifecycle facts and performs the protected change.
 
 Transaction binding prevents a check-then-write gap: authorization reads and the protected write
-share one commit boundary. The authority is deliberately an in-process port, not a separate network
-service. External work cannot run inside that open transaction, so effectful actions first create a
-one-use durable command bound to the Principal, resource revision, arguments digest, and workload
-profile.
+share one Serializable commit boundary. The shared Prisma transaction runner repeats the complete
+operation at most three times, and only after a P2034 proves PostgreSQL rolled back every write in
+the losing attempt; each retry constructs a fresh transaction-scoped authority. The authority is
+deliberately an in-process port, not a separate network service. External work cannot run inside
+that open transaction, so effectful actions first create a one-use durable command bound to the
+Principal, resource revision, arguments digest, and workload profile.
 
 Personal agents act through their human Principal, limited by their admitted agent revision and run
 ceiling. Managed agents act through their own `AgentService` Principal. A human's permission to
@@ -52,6 +54,10 @@ the ordinary exact boundary-matching rules.
 
 - `AuthorizationAuthority` decides one typed action or batch-filters a lifecycle-eligible catalogue.
 - `PrismaAuthorizationAuthority` binds that port to the caller's existing Prisma transaction.
+- `___RunSerializableAuthorizationTransaction` gives database-only product UnitOfWorks one bounded
+  P2034-only retry policy for authorization reads, protected writes, and audit evidence. Its
+  callback must not contain Kubernetes, provider, filesystem, or other effects that can survive a
+  database rollback.
 - The transaction-internal authorization grant repository loads the Principal, verifies current
   external membership, expands direct Group subjects, loads matching grants, and resolves stored
   boundary context.

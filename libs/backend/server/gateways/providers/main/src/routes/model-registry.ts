@@ -252,7 +252,7 @@ export function modelRegistryRouter(prisma: PrismaClient, resolveCaller: Provide
     //    cannot bind (or smuggle in) another ClusterTenant's credential.
 	try
 	{
-		const updated = await models.run(async function _Update(transaction, authorization)
+		const updated = await models.runDatabaseMutation(async function _Update(transaction, authorization)
 		{
 			const existing = await transaction.modelDefinition.findUnique({ where: { id: req.params.id } });
 			if (existing === null)
@@ -291,7 +291,7 @@ export function modelRegistryRouter(prisma: PrismaClient, resolveCaller: Provide
 		return;
 	try
 	{
-		const deleted = await models.run(async function _Delete(transaction, authorization)
+		const deleted = await models.runDatabaseMutation(async function _Delete(transaction, authorization)
 		{
 			const existing = await transaction.modelDefinition.findUnique({ where: { id: req.params.id } });
 			if (existing === null)

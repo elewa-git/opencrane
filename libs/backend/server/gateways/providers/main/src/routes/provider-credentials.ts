@@ -166,7 +166,7 @@ export function providerCredentialsRouter(prisma: PrismaClient, resolveCaller: P
     const scope = write.scope ?? ModelRoutingScope.Global;
 	try
 	{
-		const created = await providers.run(async function _Create(transaction, authorization)
+		const created = await providers.runDatabaseMutation(async function _Create(transaction, authorization)
 		{
 			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "create-provider-credential", write });
 			const credential = await transaction.providerCredential.create({ data: { scope: _toPrismaScope(scope), clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null, provider: write.provider.trim(), secretRef: write.secretRef.trim(), litellmCredentialName: write.litellmCredentialName?.trim() || null } });
@@ -203,7 +203,7 @@ export function providerCredentialsRouter(prisma: PrismaClient, resolveCaller: P
     const scope = write.scope ?? ModelRoutingScope.Global;
 	try
 	{
-		const updated = await providers.run(async function _Update(transaction, authorization)
+		const updated = await providers.runDatabaseMutation(async function _Update(transaction, authorization)
 		{
 			const existing = await transaction.providerCredential.findUnique({ where: { id: req.params.id } });
 			if (existing === null)
@@ -234,7 +234,7 @@ export function providerCredentialsRouter(prisma: PrismaClient, resolveCaller: P
 		return;
 	try
 	{
-		const deleted = await providers.run(async function _Delete(transaction, authorization)
+		const deleted = await providers.runDatabaseMutation(async function _Delete(transaction, authorization)
 		{
 			const existing = await transaction.providerCredential.findUnique({ where: { id: req.params.id } });
 			if (existing === null)

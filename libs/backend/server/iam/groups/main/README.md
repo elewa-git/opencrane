@@ -35,8 +35,9 @@ Invariant: a group is a silo-bound named set of direct Principal memberships wit
 metadata. It neither inherits membership or grants from its parent nor makes access decisions. The
 database rejects hierarchy cycles and refuses to delete a parent while it still has children. Reads
 are filtered through the central authorization authority, while management writes require the exact
-organisation `administer` grant and record that decision in the group transaction. Mounted at
-`/api/v1/groups`.
+organisation `administer` grant and record that decision in the group transaction. The transaction
+uses Serializable isolation and retries the whole operation, with fresh repositories and authority,
+at most three times and only after a P2034 rollback. Mounted at `/api/v1/groups`.
 
 ## Public surface
 

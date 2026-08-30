@@ -24,10 +24,11 @@ catalogue: one batch decision returns only the exact rows the current Principal 
  OpenCrane product database
 ```
 
-Invariant: authorization and each database query or budget write use the same Prisma transaction.
-A denied budget mutation writes neither the setting nor decision evidence, and a token-usage row
-without a current read grant never reaches the response. The package does not accept provider
-credentials or call a model provider directly.
+Invariant: authorization and each database query or budget write use the same Serializable Prisma
+transaction. A denied budget mutation writes neither the setting nor decision evidence. Only a
+P2034 rollback retries the complete operation, with fresh adapters and a three-attempt limit. A
+token-usage row without a current read grant never reaches the response. The package does not
+accept provider credentials or call a model provider directly.
 
 ## Public surface
 

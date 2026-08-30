@@ -19,8 +19,10 @@ export type ProviderGatewayAuthorizationFactory<Transaction> = (transaction: Tra
 /** Opens the transaction shared by provider persistence and central authorization. */
 export interface ProviderGatewayUnitOfWork<Transaction>
 {
-	/** Runs one operation with a transaction-scoped authority over the same client. */
+	/** Runs one operation that may contain an external effect without automatic transaction retries. */
 	run<Result>(operation: (transaction: Transaction, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>;
+	/** Runs one database-only mutation at Serializable isolation with bounded P2034 retries. */
+	runDatabaseMutation<Result>(operation: (transaction: Transaction, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>;
 }
 
 /** Signals that the central product authority denied a provider-gateway operation. */

@@ -1,7 +1,7 @@
 import { ThirdPartySourceItemKind, ThirdPartySourceKind, ThirdPartySourceStatus, type Prisma, type PrismaClient } from "@prisma/client";
 
 import { ThirdPartySourceItemKind as ContractThirdPartySourceItemKind, ThirdPartySourceKind as ContractThirdPartySourceKind, ThirdPartySourceStatus as ContractThirdPartySourceStatus, ThirdPartySourceSyncMode, type ThirdPartySource, type ThirdPartySourceItem } from "@opencrane/contracts";
-import { PrismaAuthorizationAuthority, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { ___RunSerializableAuthorizationTransaction, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -147,12 +147,11 @@ export class PrismaThirdPartySourceUnitOfWork implements ThirdPartySourceAuthori
 	private _WithAuthority<Result>(operation: (repository: PrismaThirdPartySourceRepository, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>
 	{
 		const createAuthorization = this.createAuthorization;
-		return this.prisma.$transaction(async function _Run(transaction)
+		return ___RunSerializableAuthorizationTransaction(this.prisma, async function _Run(transaction, authorization)
 		{
 			const repository = new PrismaThirdPartySourceRepository(transaction);
-			const authorization = createAuthorization === null ? new PrismaAuthorizationAuthority(transaction) : createAuthorization(transaction);
 			return operation(repository, authorization);
-		});
+		}, createAuthorization ?? undefined);
 	}
 }
 

@@ -88,7 +88,7 @@ export function isTransactionScopedConstruction(source, construction, imports)
 		return _TransactionClientProperties(source, construction.owner, imports).has(property);
 	}
 	if (_TransactionConstructorParameters(source, construction.owner, imports).has(construction.argument)) return true;
-	return _TransactionCallbackBindings(source).some(function _OwnsBinding(binding)
+	return _TransactionCallbackBindings(source, imports).some(function _OwnsBinding(binding)
 	{
 		return binding.name === construction.argument && binding.start <= construction.index && construction.index <= binding.end;
 	});
@@ -351,7 +351,7 @@ function _PrismaClientTypes(imports)
 }
 
 /** Finds the exact callback parameter and body for each direct Prisma transaction. */
-function _TransactionCallbackBindings(source)
+function _TransactionCallbackBindings(source, imports)
 {
 	const bindings = [];
 	const pattern = /\.\$transaction\s*\(\s*async\s+(?:function\s+[A-Za-z_$][\w$]*\s*)?\(\s*([A-Za-z_$][\w$]*)(?:\s*:[^,)]+)?\s*\)\s*(?::\s*[^={]+)?(?:=>\s*)?\{/gu;
@@ -359,6 +359,38 @@ function _TransactionCallbackBindings(source)
 	{
 		const open = (match.index ?? 0) + match[0].lastIndexOf("{");
 		bindings.push({ name: match[1], start: open, end: _MatchingBrace(source, open) });
+	}
+	bindings.push(..._SerializableAuthorizationTransactionCallbackBindings(source, imports));
+	return bindings;
+}
+
+/**
+ * Finds callbacks passed to the one reviewed central authorization transaction helper.
+ *
+ * Import resolution is exact so a local function or another package cannot gain transaction-client
+ * authority by copying the helper's name.
+ */
+function _SerializableAuthorizationTransactionCallbackBindings(source, imports)
+{
+	const bindings = [];
+	const helperNames = [...imports.entries()].filter(function _ExactHelper([, binding])
+	{
+		return binding.imported === "___RunSerializableAuthorizationTransaction"
+			&& binding.importPath === "@opencrane/backend/server/iam/authorization";
+	}).map(function _LocalName([local]) { return local; });
+	for (const helperName of helperNames)
+	{
+		const invocation = new RegExp(`\\b${_EscapeRegex(helperName)}\\s*\\(`, "gu");
+		for (const match of source.matchAll(invocation))
+		{
+			const openCall = (match.index ?? 0) + match[0].lastIndexOf("(");
+			const closeCall = _MatchingDelimiter(source, openCall, "(", ")");
+			const argumentsSource = source.slice(openCall + 1, closeCall);
+			const callback = /^\s*(?:this\.)?[A-Za-z_$][\w$]*\s*,\s*async\s+function\s+[A-Za-z_$][\w$]*\s*\(\s*([A-Za-z_$][\w$]*)\s*,[^)]*\)\s*(?::\s*[^={]+)?\{/u.exec(argumentsSource);
+			if (callback === null) continue;
+			const openBody = openCall + 1 + (callback.index ?? 0) + callback[0].lastIndexOf("{");
+			bindings.push({ name: callback[1], start: openBody, end: _MatchingBrace(source, openBody) });
+		}
 	}
 	return bindings;
 }

@@ -35,8 +35,9 @@ contract, and the scope-aware retrieval plugin can never disagree.
 Invariant: the scope precedence list is defined once and is the only ordering any component keys
 off. Every source-governance operation requires the exact organisation `administer` grant. A write,
 its central authorization evidence, and its operator audit entry share one database transaction, so
-none can commit alone. If the ordering drifted, a query could pull broader context than the caller
-should see — so it stays centralised here.
+none can commit alone. That boundary is Serializable and repeats the whole operation at most three
+times only when a P2034 proves the prior attempt rolled back. If the ordering drifted, a query could
+pull broader context than the caller should see — so it stays centralised here.
 
 ## Public surface
 

@@ -69,7 +69,9 @@ helpers. This package sets and resolves routing policy — it does not commit an
 transaction, execute model calls, or hold provider secrets (LiteLLM and the provider gateway do).
 `ModelRoutingDefault` is organisation policy, not a governed model instance, so the API checks the
 organisation capability explicitly instead of inventing a fake `ModelDefinition` resource id. A
-write commits its authorization evidence and routing row through the same database transaction.
+write commits its authorization evidence and routing row through the same Serializable database
+transaction. Only a P2034 retries that complete transaction, with a fresh authority on each of at
+most three attempts.
 
 ## Dependency direction
 

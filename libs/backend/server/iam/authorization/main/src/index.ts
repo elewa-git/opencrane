@@ -30,5 +30,7 @@ export { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle";
 export { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
 export type { ToolInvocationLifecycleInput } from "./tool-invocation-lifecycle.types";
 export { PrismaAuthorizationAuthority } from "./prisma-authorization-authority";
+export { ___RunSerializableAuthorizationTransaction } from "./prisma-authorization-transaction";
+export type { PrismaAuthorizationTransactionAuthorityFactory, PrismaAuthorizationTransactionWork } from "./prisma-authorization-transaction.types";
 export { PrismaShareAuthorizationRepository } from "./prisma-share-authorization-repository";
 export type { CreateOrFindShareAuthorizationGrantResult, CreateShareAuthorizationGrant, ShareAuthorizationGrant, ShareAuthorizationRepository, ShareCapabilityCatalogRevision } from "./share-authorization-repository.types";

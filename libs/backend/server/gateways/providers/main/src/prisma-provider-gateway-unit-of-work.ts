@@ -1,6 +1,6 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
-import { PrismaAuthorizationAuthority, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { PrismaAuthorizationAuthority, ___RunSerializableAuthorizationTransaction, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 
 import type { ProviderGatewayAuthorizationFactory, ProviderGatewayUnitOfWork } from "./provider-gateway-authority.types";
 
@@ -19,7 +19,7 @@ export class PrismaProviderGatewayUnitOfWork implements ProviderGatewayUnitOfWor
 		this.createAuthorization = createAuthorization ?? null;
 	}
 
-	/** Runs one operation with the same transaction client supplied to its authority. */
+	/** Runs one operation that may contain an external effect without retrying the callback. */
 	run<Result>(operation: (transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>
 	{
 		const createAuthorization = this.createAuthorization;
@@ -28,5 +28,11 @@ export class PrismaProviderGatewayUnitOfWork implements ProviderGatewayUnitOfWor
 			const authorization = createAuthorization === null ? new PrismaAuthorizationAuthority(transaction) : createAuthorization(transaction);
 			return operation(transaction, authorization);
 		});
+	}
+
+	/** Runs one database-only protected mutation with bounded Serializable conflict retries. */
+	runDatabaseMutation<Result>(operation: (transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>
+	{
+		return ___RunSerializableAuthorizationTransaction(this.prisma, operation, this.createAuthorization ?? undefined);
 	}
 }

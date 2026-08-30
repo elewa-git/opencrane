@@ -1238,10 +1238,6 @@
           {
             "adapter": "PrismaGroupRepository",
             "importPath": "./groups.logic"
-          },
-          {
-            "adapter": "PrismaAuthorizationAuthority",
-            "importPath": "@opencrane/backend/server/iam/authorization"
           }
         ]
       },
@@ -1266,10 +1262,6 @@
           {
             "adapter": "PrismaSpendRepository",
             "importPath": "<same-file>"
-          },
-          {
-            "adapter": "PrismaAuthorizationAuthority",
-            "importPath": "@opencrane/backend/server/iam/authorization"
           }
         ]
       },
@@ -1282,10 +1274,6 @@
           {
             "adapter": "PrismaThirdPartySourceRepository",
             "importPath": "<same-file>"
-          },
-          {
-            "adapter": "PrismaAuthorizationAuthority",
-            "importPath": "@opencrane/backend/server/iam/authorization"
           }
         ]
       },
@@ -1474,12 +1462,7 @@
         "adapter": "PrismaModelRoutingUnitOfWork",
         "contract": "ModelRoutingUnitOfWork",
         "contractImportPath": "./model-routing-authorization.types",
-        "constructs": [
-          {
-            "adapter": "PrismaAuthorizationAuthority",
-            "importPath": "@opencrane/backend/server/iam/authorization"
-          }
-        ]
+        "constructs": []
       },
       {
         "path": "libs/backend/server/agents/skills/main/src/prisma-skill-catalogue-unit-of-work.ts",
@@ -1744,15 +1727,23 @@
             "importPath": "./prisma-resource-share-repository"
           },
           {
-            "adapter": "PrismaAuthorizationAuthority",
-            "importPath": "@opencrane/backend/server/iam/authorization"
-          },
-          {
             "adapter": "PrismaManagedAuthorizationGrantRepository",
             "importPath": "@opencrane/backend/server/iam/authorization"
           }
         ]
       },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/prisma-authorization-transaction.ts",
+		"adapter": "PrismaAuthorizationTransactionUnitOfWork",
+		"contract": "PrismaAuthorizationTransactionRunner",
+		"contractImportPath": "./prisma-authorization-transaction.types",
+		"constructs": [
+		  {
+			"adapter": "PrismaAuthorizationAuthority",
+			"importPath": "./prisma-authorization-authority"
+		  }
+		]
+	  },
 	  {
 		"path": "libs/backend/server/iam/authorization/main/src/prisma-deferred-tool-approval-opener.ts",
 		"adapter": "PrismaDeferredToolApprovalOpenUnitOfWork",

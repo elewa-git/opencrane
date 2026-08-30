@@ -1,6 +1,6 @@
 import { type Prisma, type PrismaClient } from "@prisma/client";
 
-import { PrismaAuthorizationAuthority, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { ___RunSerializableAuthorizationTransaction, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -177,12 +177,11 @@ export class PrismaSpendUnitOfWork implements SpendAuthority
 	private _WithAuthority<Result>(operation: (repository: PrismaSpendRepository, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>
 	{
 		const createAuthorization = this.createAuthorization;
-		return this.prisma.$transaction(async function _Run(transaction)
+		return ___RunSerializableAuthorizationTransaction(this.prisma, async function _Run(transaction, authorization)
 		{
 			const repository = new PrismaSpendRepository(transaction);
-			const authorization = createAuthorization === null ? new PrismaAuthorizationAuthority(transaction) : createAuthorization(transaction);
 			return operation(repository, authorization);
-		});
+		}, createAuthorization ?? undefined);
 	}
 }
 

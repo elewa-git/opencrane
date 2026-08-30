@@ -44,6 +44,35 @@ test("allows imported repository and unit-of-work contract owners", function _Al
 	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work"), ["widget"], _OWNERS), []);
 });
 
+test("recognizes only the exact central authorization transaction helper import", function _AuthorizationTransactionHelper()
+{
+	const exactHelper = `
+import type { Prisma, PrismaClient } from "@prisma/client";
+import { ___RunSerializableAuthorizationTransaction } from "@opencrane/backend/server/iam/authorization";
+import { PrismaWidgetRepository } from "./prisma-widget-repository.js";
+import type { WidgetUnitOfWork } from "./widget.types.js";
+
+export class PrismaWidgetUnitOfWork implements WidgetUnitOfWork
+{
+	private readonly prisma: PrismaClient;
+	constructor(prisma: PrismaClient) { this.prisma = prisma; }
+	run(): Promise<unknown>
+	{
+		return ___RunSerializableAuthorizationTransaction(this.prisma, async function _Run(transaction, _authorization)
+		{
+			return new PrismaWidgetRepository(transaction);
+		});
+	}
+}
+`;
+	const lookalikeHelper = exactHelper.replace('from "@opencrane/backend/server/iam/authorization"', 'from "@lookalike/authorization"');
+	const exactFindings = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", exactHelper, ["widget"], _OWNERS);
+	const lookalikeFindings = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", lookalikeHelper, ["widget"], _OWNERS);
+
+	assert.equal(exactFindings.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), false);
+	assert.equal(lookalikeFindings.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
+});
+
 test("treats an older base policy as having no approved raw procedures", function _AllowsOlderBasePolicy()
 {
 	const basePolicy = prepareBasePolicyForComparison({ version: 1, owners: _OWNERS, exemptions: [] });

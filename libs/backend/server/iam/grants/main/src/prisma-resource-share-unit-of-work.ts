@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository, PrismaShareAuthorizationRepository } from "@opencrane/backend/server/iam/authorization";
+import { PrismaManagedAuthorizationGrantRepository, PrismaShareAuthorizationRepository, ___RunSerializableAuthorizationTransaction } from "@opencrane/backend/server/iam/authorization";
 import { PrismaResourceShareRepository } from "./prisma-resource-share-repository";
 import type { ResourceShareTransaction, ResourceShareUnitOfWork } from "./resource-share-unit-of-work.types";
 
@@ -16,10 +16,10 @@ export class PrismaResourceShareUnitOfWork implements ResourceShareUnitOfWork
 	/** Executes one procedure with all authority adapters bound to the same transaction. */
 	async execute<Result>(procedure: (transaction: ResourceShareTransaction) => Promise<Result>): Promise<Result>
 	{
-		return this._prisma.$transaction(async function _resourceShareTransaction(transaction): Promise<Result>
+		return ___RunSerializableAuthorizationTransaction(this._prisma, async function _ResourceShareTransaction(transaction, authorization): Promise<Result>
 		{
 			return procedure({
-				authorization: new PrismaAuthorizationAuthority(transaction),
+				authorization,
 				authorizationShares: new PrismaShareAuthorizationRepository(transaction),
 				managedAuthorizationGrants: new PrismaManagedAuthorizationGrantRepository(transaction),
 				resourceShares: new PrismaResourceShareRepository(transaction),

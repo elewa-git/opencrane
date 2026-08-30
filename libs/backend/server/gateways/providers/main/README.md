@@ -43,8 +43,12 @@ but never corrupts the stored key.
 Authorization has one path. Credential and model catalogues load lifecycle-eligible rows and then
 filter exact `ProviderConnection/Read` or `ModelDefinition/Read` resources through the central
 `AuthorizationAuthority`. Credential, BYOK, and model-definition mutations explicitly request
-`Organization/<silo>/Administer`. The decision evidence and Postgres mutation use the same database
-transaction; there is no session-role or tenant-scope policy engine beside it.
+`Organization/<silo>/Administer`. Database-only credential and model mutations commit decision
+evidence and Postgres state through the same Serializable transaction. A P2034 retries that complete
+database-only operation with fresh transaction-scoped adapters, up to three attempts; no other
+failure is retried. BYOK custody and model registration callbacks may call Kubernetes or LiteLLM,
+so they are never automatically repeated by the transaction layer. There is no session-role or
+tenant-scope policy engine beside it.
 
 Creating a provider connection or model definition also writes exact `Discover`, `Read`, and `Use`
 grants for its creator in that transaction. Organisation administration permits creation; it does

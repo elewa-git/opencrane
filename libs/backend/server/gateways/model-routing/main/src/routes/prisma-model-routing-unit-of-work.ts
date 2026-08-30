@@ -1,6 +1,6 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
-import { PrismaAuthorizationAuthority, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { ___RunSerializableAuthorizationTransaction, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 
 import type { ModelRoutingAuthorizationFactory, ModelRoutingUnitOfWork } from "./model-routing-authorization.types";
 
@@ -22,11 +22,6 @@ export class PrismaModelRoutingUnitOfWork implements ModelRoutingUnitOfWork<Pris
 	/** Runs one operation with the same transaction supplied to its central authority. */
 	run<Result>(operation: (transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>
 	{
-		const createAuthorization = this.createAuthorization;
-		return this.prisma.$transaction(async function _Run(transaction): Promise<Result>
-		{
-			const authorization = createAuthorization === null ? new PrismaAuthorizationAuthority(transaction) : createAuthorization(transaction);
-			return operation(transaction, authorization);
-		});
+		return ___RunSerializableAuthorizationTransaction(this.prisma, operation, this.createAuthorization ?? undefined);
 	}
 }

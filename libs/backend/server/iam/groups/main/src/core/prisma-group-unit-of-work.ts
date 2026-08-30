@@ -1,6 +1,6 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
-import { PrismaAuthorizationAuthority, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { ___RunSerializableAuthorizationTransaction, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -107,12 +107,11 @@ export class PrismaGroupUnitOfWork implements GroupRepository
 	private _WithRepository<Result>(operation: (repository: PrismaGroupRepository, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>
 	{
 		const createAuthorization = this.createAuthorization;
-		return this.prisma.$transaction(async function _Run(transaction)
+		return ___RunSerializableAuthorizationTransaction(this.prisma, async function _Run(transaction, authorization)
 		{
 			const repository = new PrismaGroupRepository(transaction);
-			const authorization = createAuthorization === undefined ? new PrismaAuthorizationAuthority(transaction) : createAuthorization(transaction);
 			return operation(repository, authorization);
-		});
+		}, createAuthorization);
 	}
 }
 

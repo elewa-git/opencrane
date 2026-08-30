@@ -39,7 +39,8 @@ revocation without changing the stored owner. The owner relation remains only th
 coordinate for finding the manager-owned recipient grant; it is not a second authorization rule.
 Revoking one recipient removes the relation, soft-revokes the linked underlying-resource grant, and
 soft-revokes that recipient's ResourceShare projection in the same transaction, without affecting
-other recipients.
+other recipients. That complete transaction runs at Serializable isolation; only a P2034 rollback
+can repeat it, with fresh adapters and a three-attempt limit.
 
 ## Public surface
 
