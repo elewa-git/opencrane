@@ -611,6 +611,10 @@ if [[ "$FROM_RELEASE_VERSION" != "fresh" && "$FROM_RELEASE_VERSION" != "$EXPECTE
 fi
 if [[ "$FROM_RELEASE_VERSION" != "fresh" ]]; then
   DATABASE_MIGRATION_ENABLED=true
+  if [[ -z "$OIDC_ISSUER_URL" ]]; then
+    err "The 0.9.2-to-0.10.0 database prerequisite requires --oidc-issuer-url to bind legacy subjects to their exact issuer."
+    exit 1
+  fi
   if [[ ! "$PRISMA_MIGRATOR_IMAGE" =~ ^ghcr\.io/elewa-git/opencrane-prisma-migrator@sha256:[0-9a-f]{64}$ ]]; then
     err "Database migration requires --prisma-migrator-image with the exact OpenCrane Prisma migrator digest."
     exit 1
@@ -1037,7 +1041,7 @@ wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
 
 _wait_for_release_certificate || exit $?
-if [[ "$RELEASE_VERSION" == "0.10.0" && "$FROM_RELEASE_VERSION" == "0.9.3" && "$ALLOW_TAG_FLOAT" != "1" ]]; then
+if [[ "$RELEASE_VERSION" == "0.10.0" && "$FROM_RELEASE_VERSION" == "0.9.2" && "$ALLOW_TAG_FLOAT" != "1" ]]; then
   FINAL_RELEASE_VALUES="$(helm get values "$RELEASE" --namespace "$NAMESPACE" --all -o json)" || exit $?
   FINAL_SERVER_REPOSITORY="$(jq -r '.clustertenantManager.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
   FINAL_CONTROLLER_REPOSITORY="$(jq -r '.agentController.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"

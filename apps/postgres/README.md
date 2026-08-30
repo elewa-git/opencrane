@@ -28,9 +28,13 @@ and LiteLLM. It also creates a PgBouncer connection pool and database privilege 
 **In this flow:** [OpenCrane server](../opencrane/README.md) ·
 [LiteLLM](../_infra/litellm/README.md)
 
-For the 0.9.3-to-0.10.0 upgrade, the deployer publishes the pooled OpenCrane database connection and
-runs the bounded Prisma migration Job. Prisma Migrate is the only ordered record of upgrade changes.
-A failure is returned directly. Deployment does not require a migration backup, inspect the existing
+For the 0.9.2-to-0.10.0 upgrade, the deployer publishes the pooled OpenCrane database connection and
+runs the bounded migration Job. The Job applies the reviewed IAM prerequisite to tagged 0.9.2's
+0.9.0 schema, then starts the Prisma ledger used from 0.10.0 onward. Before that Job starts,
+CloudNativePG first installs `pg_cron` through the OpenCrane `Database` resource and then assigns
+the existing `cron` schema to the application owner in a second observed generation. The migration
+Job never receives a database superuser credential. A failure is returned directly.
+Deployment does not require a migration backup, inspect the existing
 schema, pause application writes, or restore an earlier application release. Issue #699 tracks that
 deferred hardening work.
 

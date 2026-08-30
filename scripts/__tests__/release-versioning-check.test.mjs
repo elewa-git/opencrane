@@ -578,6 +578,37 @@ test("accepts restoring a historical manifest to its exact tagged bytes", async 
 	), []);
 });
 
+test("accepts removing an untagged historical candidate manifest", async () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.8.0",
+		previousRepositoryVersion: "0.7.0",
+		adaptedVersion: "0.8.0",
+	});
+	assert.deepEqual(await validateWorkspace(
+		fixture.root,
+		["releases/0.7.1.json"],
+		fixture.graph,
+		[],
+		[],
+		null,
+		["releases/0.7.1.json"],
+		[],
+		["releases/0.7.1.json"],
+	), []);
+});
+
+test("rejects removing a historical manifest without proof that it is untagged", async () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.8.0",
+		previousRepositoryVersion: "0.7.0",
+		adaptedVersion: "0.8.0",
+	});
+	const errors = await validateWorkspace(fixture.root, ["releases/0.7.1.json"], fixture.graph);
+	assert.ok(errors.some((error) => error.includes("is immutable")));
+});
+
 test("allows a newly introduced historical adoption manifest", async () =>
 {
 	const fixture = _Fixture({

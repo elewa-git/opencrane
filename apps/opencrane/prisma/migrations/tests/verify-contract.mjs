@@ -17,12 +17,13 @@ const conversationUpdatedAtField = conversationSchema.split("\n").find(line => l
 const conversationActivitySequenceField = conversationSchema.split("\n").find(line => line.trimStart().startsWith("activitySequence ")) ?? "";
 const runtimeSchema = readFileSync(join(migrationRoot, "../schema/runtime.prisma"), "utf8");
 const digest = createHash("sha256").update(sql).digest("hex");
-const released093 = JSON.parse(readFileSync(join(migrationRoot, "../../../../releases/0.9.3.json"), "utf8"));
+const tagged092 = JSON.parse(readFileSync(join(migrationRoot, "../../../../releases/0.9.2.json"), "utf8"));
+const iamPrerequisiteTargetBaselineSha256 = "4a2da895e60744aa2fe85cdaf3729a7439cd29e57a3ca6ec463898593c6b00f5";
 const organizationTransitionRoot = join(migrationRoot, "0.8.0-to-0.9.0");
 const organizationSql = readFileSync(join(organizationTransitionRoot, "migration.sql"), "utf8");
 const organizationManifest = JSON.parse(readFileSync(join(organizationTransitionRoot, "manifest.json"), "utf8"));
 const organizationSqlDigest = createHash("sha256").update(organizationSql).digest("hex");
-const groupHierarchyTransitionRoot = join(migrationRoot, "0.9.0-to-0.9.3");
+const groupHierarchyTransitionRoot = join(migrationRoot, "0.9.0-to-0.10.0-prerequisite");
 const groupHierarchySql = readFileSync(join(groupHierarchyTransitionRoot, "migration.sql"), "utf8");
 const groupHierarchyManifest = JSON.parse(readFileSync(join(groupHierarchyTransitionRoot, "manifest.json"), "utf8"));
 const groupHierarchySqlDigest = createHash("sha256").update(groupHierarchySql).digest("hex");
@@ -261,19 +262,21 @@ requireContract(organizationSql.trimEnd().endsWith("\\endif"), "organization-mem
 console.log("0.8.0-to-0.9.0 migration contract: PASS");
 
 requireContract(groupHierarchyManifest.fromSchemaVersion === "0.9.0", "group-hierarchy migration source version must be exact");
-requireContract(groupHierarchyManifest.toSchemaVersion === "0.9.3", "group-hierarchy migration target version must be exact");
+requireContract(groupHierarchyManifest.toSchemaVersion === "0.10.0-prerequisite", "IAM prerequisite target version must be exact");
 requireContract(groupHierarchyManifest.sqlSha256 === groupHierarchySqlDigest, "group-hierarchy migration SQL digest must match its manifest");
-requireContract(groupHierarchyManifest.sourceTargetBaselineSha256 === organizationManifest.targetBaselineSha256, "0.9.3 migration must name the immutable 0.9.0 source baseline");
-requireContract(groupHierarchyManifest.targetBaselineSha256 === released093.database.baselineSha256, "0.9.3 migration target digest must remain bound to the released 0.9.3 baseline");
-requireContract(groupHierarchyManifest.privilegedExtension === "pg_cron", "0.9.3 migration must bind its reviewed privileged pg_cron prerequisite");
+requireContract(groupHierarchyManifest.sourceTargetBaselineSha256 === organizationManifest.targetBaselineSha256, "IAM prerequisite must name the immutable 0.9.0 source baseline");
+requireContract(groupHierarchyManifest.sourceTargetBaselineSha256 === tagged092.database.baselineSha256, "IAM prerequisite must start from the database schema recorded by tagged 0.9.2");
+requireContract(groupHierarchyManifest.targetBaselineSha256 === iamPrerequisiteTargetBaselineSha256, "IAM prerequisite target digest must remain exact without inventing a release boundary");
+requireContract(groupHierarchyManifest.privilegedExtension === "pg_cron", "IAM prerequisite must bind its reviewed privileged pg_cron requirement");
 requireContract(groupHierarchySql.includes("pg_advisory_lock"), "group-hierarchy migration must acquire the session migration lock");
 requireContract(groupHierarchySql.includes("pg_advisory_xact_lock"), "group-hierarchy migration must serialize hierarchy mutation");
 requireContract(groupHierarchySql.includes("BEGIN;"), "group-hierarchy migration must run transactionally");
 requireContract(groupHierarchySql.includes("migration_already_applied"), "group-hierarchy migration must support exact idempotent retry");
-requireContract(groupHierarchySql.includes("pg_cron extension is missing after the privileged migration prerequisite"), "0.9.3 migration must require pg_cron before mutating application authority");
-requireContract(groupHierarchySql.includes("application owner lacks pg_cron schema access after the privileged migration prerequisite"), "0.9.3 migration must require application-owner cron access");
-requireContract(groupHierarchySql.includes("create schema if not exists absurd"), "0.9.3 migration must install the reviewed Absurd schema");
-requireContract(groupHierarchySql.includes('ADD COLUMN "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT \'not-required\''), "0.9.3 migration must keep existing MCP rows outside remote registration checks");
+requireContract(groupHierarchySql.includes("The untagged 0.9.3 candidate migration is present"), "IAM prerequisite must reject an already-applied untagged candidate instead of relabelling it");
+requireContract(groupHierarchySql.includes("pg_cron extension is missing after the privileged migration prerequisite"), "IAM prerequisite must require pg_cron before mutating application authority");
+requireContract(groupHierarchySql.includes("application owner lacks pg_cron schema access after the privileged migration prerequisite"), "IAM prerequisite must require application-owner cron access");
+requireContract(groupHierarchySql.includes("create schema if not exists absurd"), "IAM prerequisite must install the reviewed Absurd schema");
+requireContract(groupHierarchySql.includes('ADD COLUMN "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT \'not-required\''), "IAM prerequisite must keep existing MCP rows outside remote registration checks");
 requireContract(targetBaseline.includes('"era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT \'not-required\''), "clean schema must require remote registration to opt into protocol checks");
 for (const source of [targetBaseline, groupHierarchySql])
 {
@@ -290,7 +293,7 @@ for (const [pattern, expected, description] of [
 	[/^COMMIT;$/gmu, 1, "one transaction commit"],
 ])
 {
-	requireContract((groupHierarchySql.match(pattern) ?? []).length === expected, `0.9.3 migration must contain ${description}`);
+	requireContract((groupHierarchySql.match(pattern) ?? []).length === expected, `IAM prerequisite must contain ${description}`);
 }
 for (const input of ["migration_silo_id", "migration_oidc_issuer"])
 {
@@ -377,4 +380,4 @@ for (const retired of ["AuthorizationScopeKind", "GrantScope", "GrantSubjectType
 	requireContract(groupHierarchySql.includes(`DROP TYPE "${retired}"`), `IAM cutover must drop retired ${retired}`);
 }
 
-console.log("0.9.0-to-0.9.3 migration contract: PASS");
+console.log("0.9.0-to-0.10.0 prerequisite migration contract: PASS");

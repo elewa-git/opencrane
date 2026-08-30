@@ -1,4 +1,4 @@
--- OpenCrane 0.9.3 to 0.10.0 workflow and OCI cutover.
+-- OpenCrane 0.9.2 to 0.10.0 workflow and OCI cutover after the reviewed IAM prerequisite.
 -- This forward-only migration keeps released history unchanged and uses Prisma Migrate as the sole ledger.
 BEGIN;
 
@@ -43,7 +43,7 @@ DROP FUNCTION IF EXISTS "select_skill_workload_claim_candidate"();
 DROP FUNCTION IF EXISTS "enforce_skill_workload_bootstrap"();
 DROP INDEX IF EXISTS "skill_workloads_one_authoring_per_revision_key";
 
--- Released 0.9.3 databases may not have the remote MCP era-probe columns. Add them before the
+-- Tagged 0.9.2 databases may not have the remote MCP era-probe columns. Add them before the
 -- 0.10.0 constraints refer to era_probe_status, or PostgreSQL stops with an undefined-column error
 -- (SQLSTATE 42703).
 DO $cutover$
@@ -81,7 +81,7 @@ DELETE FROM "run_outbox_events" WHERE "kind"::text IN ('run.attempt_requested', 
 DELETE FROM "agent_revision_integration_assignments";
 DELETE FROM "integration_custody_references";
 DELETE FROM "integrations";
--- Some released 0.9.3 databases lack the retired MCPB tables, so delete them only when present.
+-- Some tagged 0.9.2 databases lack the retired MCPB tables, so delete them only when present.
 DO $cutover$
 BEGIN
     IF to_regclass('mcpb_validation_claims') IS NOT NULL THEN

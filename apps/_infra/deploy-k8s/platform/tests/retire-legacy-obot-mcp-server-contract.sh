@@ -255,7 +255,7 @@ retire_legacy_obot_mcp_server_resources opencrane-testv4 30
 grep -Fq '/api/v1/namespaces/opencrane-testv4/secrets/sms1obot-mcp-server-mcp-files' "$CALLS"
 ! grep -q '^delete-options secret/sms1obot-mcp-server-mcp-config ' "$CALLS"
 
-grep -Fq '[[ "$RELEASE_VERSION" == "0.10.0" && "$FROM_RELEASE_VERSION" == "0.9.3" && "$ALLOW_TAG_FLOAT" != "1" ]]' "$DEPLOY"
+grep -Fq '[[ "$RELEASE_VERSION" == "0.10.0" && "$FROM_RELEASE_VERSION" == "0.9.2" && "$ALLOW_TAG_FLOAT" != "1" ]]' "$DEPLOY"
 grep -Fq '[[ -z "$FINAL_SERVER_REPOSITORY" || -z "$FINAL_CONTROLLER_REPOSITORY" || -z "$FINAL_SCANNER_REPOSITORY" || -z "$FINAL_RUNTIME_REPOSITORY" ]]' "$DEPLOY"
 ready_line="$(grep -n 'verify_legacy_obot_replacement_ready ' "$DEPLOY" | tail -1 | cut -d: -f1)"
 retire_line="$(grep -n 'retire_legacy_obot_mcp_server_resources ' "$DEPLOY" | tail -1 | cut -d: -f1)"

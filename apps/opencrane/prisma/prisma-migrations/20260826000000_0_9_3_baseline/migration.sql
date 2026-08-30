@@ -1,2 +1,0 @@
--- OpenCrane 0.9.3 already owns this schema when the 0.10.0 migration Job starts.
--- This no-op migration starts Prisma's sole migration ledger without rewriting released history.

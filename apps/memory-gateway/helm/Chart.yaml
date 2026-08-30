@@ -3,4 +3,4 @@ name: opencrane-memory-gateway
 description: App-owned named-template library for the private Cognee boundary.
 type: library
 version: 0.9.2
-appVersion: "0.9.3"
+appVersion: "0.10.0"

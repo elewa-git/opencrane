@@ -80,8 +80,12 @@ ledger, and `apps/postgres` owns the bounded Job that runs `prisma migrate deplo
 image. A failed migration is repaired forward. It does not require a backup, separate schema version
 check, write pause, or automatic recovery. Issue #699 tracks those deferred hardening controls.
 
-Released migration history stays where it was published. The 0.10.0 cutover starts the Prisma ledger
-from the released 0.9.3 database and moves forward; it does not rewrite older release artifacts.
+Released migration history stays where it was published. Because `0.9.3` was never tagged, the
+0.10.0 cutover starts from the tagged 0.9.2 release and carries its 0.9.0 database schema through the
+reviewed IAM prerequisite before Prisma applies the 0.10.0 cutover. The deployment must first let
+CloudNativePG reconcile `pg_cron`, then observe a second `Database` generation that assigns the
+existing `cron` schema to the application owner. The migration Job must never receive the
+CloudNativePG superuser credential.
 
 ## Required gate
 

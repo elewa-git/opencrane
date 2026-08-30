@@ -10,7 +10,7 @@ These files help an operator install, upgrade, verify, or retire an OpenCrane si
 assemble raw Helm and Kubernetes commands by hand. Each script has one job and stops when the live
 cluster does not match the assumptions needed to do that job safely.
 
-During the exact public 0.9.3-to-0.10.0 upgrade, the deploy engine removes the six named Acorn
+During the exact public 0.9.2-to-0.10.0 upgrade, the deploy engine removes the six named Acorn
 resources from the retired `sms1obot-mcp-server` after the five replacement deployments are ready.
 It checks each resource's Acorn hash and owner, then fences deletion with its UID and resource
 version. Missing resources are treated as an already-completed retry.
@@ -27,7 +27,7 @@ version. Missing resources are treated as an already-completed retry.
 | `database-migration-orchestrator.sh` | Runs the dedicated Prisma Migrate Job and waits for it to finish before application rollout. |
 | `qualify-workflow-engine.sh` | Proves on a live silo that newly queued agent work is picked up within the expected time. It opens a temporary connection to the database proxy, runs the application-owned timing check, and keeps the application password out of its output. |
 | `database-release-finalization.sh` | Restarts database consumers when connection details change and waits for the normal application rollout. |
-| `retire-legacy-obot-mcp-server.sh` | Removes the six named Obot MCP resources during the exact public 0.9.3-to-0.10.0 upgrade after the replacement deployments are ready and each resource's identity and Acorn ownership match. |
+| `retire-legacy-obot-mcp-server.sh` | Removes the six named Obot MCP resources during the exact public 0.9.2-to-0.10.0 upgrade after the replacement deployments are ready and each resource's identity and Acorn ownership match. |
 | `k8s-teardown.sh` | Retires one standalone silo without touching shared cluster services or another tenant. It requires the exact cluster, tenant name, and expected release ownership, blocks protected tenants, and can inventory the planned deletion before removing anything. |
 | `bootstrap-prerequisites.sh` | Prepares a development cluster with the shared ingress, certificate, and PostgreSQL controllers OpenCrane expects. It validates the selected cluster and network address first and refuses to take over resources it does not own. A normal silo deployment never runs it automatically. |
 | `prerequisite-chart-lock.sh` | Pins the exact upstream controller packages accepted by the bootstrap. Checksums and expected cluster resources make downloaded dependencies reproducible and tamper-evident. |
@@ -57,10 +57,11 @@ belong in sibling `apps/_infra/<service>` projects.
 
 ## Database deployment
 
-Every invocation supplies a release version and the version it is upgrading from. The 0.9.3-to-0.10.0
+Every invocation supplies a release version and the version it is upgrading from. The 0.9.2-to-0.10.0
 upgrade first publishes the OpenCrane connection to the release-local database pool, then runs the
-bounded Prisma migration Job before the ordinary application rollout. Prisma Migrate is the sole
-ordered migration record. A failed Job returns its failure directly. It does not create a backup,
+bounded migration Job before the ordinary application rollout. The Job receives the exact silo and
+OIDC issuer, applies the reviewed IAM prerequisite, and then starts the Prisma ledger used from
+0.10.0 onward. A failed Job returns its failure directly. It does not create a backup,
 inspect the existing schema, pause application writes, or restore a previous release.
 
 Operational backup and restore configuration remains available in the PostgreSQL chart, but it is not

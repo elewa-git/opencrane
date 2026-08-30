@@ -1,6 +1,6 @@
-# Database schema 0.9.0 to 0.9.3
+# Database schema 0.9.0 to the 0.10.0 prerequisite
 
-This manually approved patch transition replaces categorical IAM scopes with the 0.9.3 Principal,
+This reviewed prerequisite carries tagged 0.9.2's 0.9.0 schema into the Principal,
 hierarchical Group, normalized membership, generic grant-boundary, MCP entitlement, and explicit
 resource-share authorities. It preserves stable Group identifiers, records the exact OIDC claim
 rewrite from each externally managed legacy group to `group:<Group.id>`, and binds every mapping row
@@ -26,10 +26,10 @@ groups remain hierarchy roots because 0.9.0 stored no defensible parent relation
 serialises later parent changes per silo and rejects cycles.
 
 The deployment migration Job supplies this SQL file's manifest-bound digest, the silo, and the
-issuer. It records 0.9.3 only after the whole cutover commits. If it fails, repair the database
+issuer. It records the 0.10.0 prerequisite only after the whole cutover commits. If it fails, repair the database
 forward; deployment does not create a backup, inspect the source schema, pause writes, or restore a
 previous release. Those safeguards are deferred to issue #699.
 
-The same 0.9.3 transition also adds MCP bundle validation records. Each record pins one immutable
+The same prerequisite also adds MCP bundle validation records. Each record pins one immutable
 artifact revision and stores only its manifest and trusted-signature decision. Absurd keeps the job
 attempts and checkpoints in its own tables; these MCP rows hold the result shown to administrators.

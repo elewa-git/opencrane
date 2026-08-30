@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const prismaRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ledgerRoot = join(prismaRoot, "prisma-migrations");
-const baseline = readFileSync(join(ledgerRoot, "20260826000000_0_9_3_baseline/migration.sql"), "utf8");
+const baseline = readFileSync(join(ledgerRoot, "20260826000000_0_9_2_baseline/migration.sql"), "utf8");
 const migration = readFileSync(join(ledgerRoot, "20260827000000_0_10_0_workflow_cutover/migration.sql"), "utf8");
 const sqlWorkloadRetirement = readFileSync(join(ledgerRoot, "20260829000000_retire_sql_workload_control_plane/migration.sql"), "utf8");
 const targetBaseline = readFileSync(join(prismaRoot, "bootstrap/target-baseline.sql"), "utf8");
@@ -59,10 +59,10 @@ _Require(ledgerDirectories.every(function _HasMigrationSql(entry) { return exist
 const baselineStatements = baseline
 	.split("\n")
 	.filter(function _IsSql(line) { return line.trim() !== "" && !line.trimStart().startsWith("--"); });
-_Require(baselineStatements.length === 0, "the released 0.9.3 Prisma baseline must remain a no-op");
-_Require(releasedCutoverChecksum === "10663a74ff1c6256e64aa141b646a80e0f8e38dc9ec2b9c99242ed27df1e35b4", "the applied 0.10.0 cutover migration must retain its released checksum");
+_Require(baselineStatements.length === 0, "the tagged 0.9.2 Prisma bridge must remain a no-op");
+_Require(releasedCutoverChecksum === "c1d171fc5b6cc1b5f7c8549e5a1726966aa25d60c18fd2a5555182e3fac60e4c", "the rebuilt untagged 0.10.0 cutover migration must retain its reviewed checksum");
 
-_Require(migration.startsWith("-- OpenCrane 0.9.3 to 0.10.0 workflow and OCI cutover."), "the forward migration must name its exact release boundary");
+_Require(migration.startsWith("-- OpenCrane 0.9.2 to 0.10.0 workflow and OCI cutover after the reviewed IAM prerequisite."), "the forward migration must name its exact release boundary");
 _Require(migration.match(/^BEGIN;$/gmu)?.length === 1, "the forward migration must open one transaction");
 _Require(migration.match(/^COMMIT;$/gmu)?.length === 1, "the forward migration must commit one transaction");
 _Require(migration.trimEnd().endsWith("COMMIT;"), "the forward migration must finish with its transaction commit");
@@ -127,11 +127,11 @@ _Require(sqlWorkloadRetirement.includes(runAuthorityReplacement), "SQL workload 
 
 for (const retiredMcpbTable of ["mcpb_validation_claims", "mcpb_validations"])
 {
-	_Require(migration.includes(`IF to_regclass('${retiredMcpbTable}') IS NOT NULL THEN`), `the live 0.9.3 upgrade must tolerate absent ${retiredMcpbTable}`);
+	_Require(migration.includes(`IF to_regclass('${retiredMcpbTable}') IS NOT NULL THEN`), `the live 0.9.2 upgrade must tolerate absent ${retiredMcpbTable}`);
 	_Require(migration.includes(`EXECUTE 'DELETE FROM "${retiredMcpbTable}";'`), `the cutover must delete ${retiredMcpbTable} when the released database contains it`);
 	_Require(migration.includes(`DROP TABLE IF EXISTS "${retiredMcpbTable}";`), `the cutover must remove ${retiredMcpbTable} when present`);
 }
-_Require(migration.includes('DROP TYPE IF EXISTS "McpbValidationState";'), "the live 0.9.3 upgrade must tolerate an absent MCPB state type");
+_Require(migration.includes('DROP TYPE IF EXISTS "McpbValidationState";'), "the live 0.9.2 upgrade must tolerate an absent MCPB state type");
 
 for (const eraProbeColumn of [
 	'"registration_key_digest" TEXT',
@@ -144,11 +144,11 @@ for (const eraProbeColumn of [
 	'"era_probed_at" TIMESTAMP(3)',
 ])
 {
-	_Require(migration.includes(`ADD COLUMN IF NOT EXISTS ${eraProbeColumn}`), `the live 0.9.3 upgrade must carry the missing remote era-probe column ${eraProbeColumn}`);
+	_Require(migration.includes(`ADD COLUMN IF NOT EXISTS ${eraProbeColumn}`), `the live 0.9.2 upgrade must carry the missing remote era-probe column ${eraProbeColumn}`);
 }
-_Require(migration.includes('CREATE TYPE "McpEraProbeStatus" AS ENUM'), "the live 0.9.3 upgrade must carry the missing remote era-probe state type");
-_Require(migration.includes('CREATE TABLE IF NOT EXISTS "mcp_registration_claims"'), "the live 0.9.3 upgrade must carry the remote registration claim table");
-_Require(migration.includes('CREATE UNIQUE INDEX IF NOT EXISTS "mcp_servers_silo_id_registration_key_digest_key"'), "the live 0.9.3 upgrade must carry the remote registration idempotency index");
+_Require(migration.includes('CREATE TYPE "McpEraProbeStatus" AS ENUM'), "the live 0.9.2 upgrade must carry the missing remote era-probe state type");
+_Require(migration.includes('CREATE TABLE IF NOT EXISTS "mcp_registration_claims"'), "the live 0.9.2 upgrade must carry the remote registration claim table");
+_Require(migration.includes('CREATE UNIQUE INDEX IF NOT EXISTS "mcp_servers_silo_id_registration_key_digest_key"'), "the live 0.9.2 upgrade must carry the remote registration idempotency index");
 _RequireBefore('ADD COLUMN IF NOT EXISTS "era_probe_status"', 'ADD CONSTRAINT "mcp_servers_era_probe_evidence_check"', "the remote era-probe schema must exist before its authority constraint");
 _RequireBefore('CREATE TABLE IF NOT EXISTS "mcp_registration_claims"', 'ADD CONSTRAINT "mcp_registration_claims_identity_check"', "the remote registration claim table must exist before its authority constraint");
 _Require(migration.includes("WHEN btrim(\"era_protocol_version\") <> '' THEN 'unsupported_mcp_protocol_version'"), "the cutover must preserve rejected unsupported-protocol evidence under its 0.10 failure code");
@@ -242,4 +242,4 @@ for (const name of [
 	_Require(migration.includes(_TargetFunction(name)), `forward migration must install exact target function ${name}`);
 }
 
-console.log("0.9.3-to-0.10.0 Prisma migration contract: PASS");
+console.log("0.9.2-to-0.10.0 Prisma migration contract: PASS");

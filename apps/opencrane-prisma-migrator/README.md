@@ -9,7 +9,7 @@ A database migration is a small, ordered database change. It runs before the Ope
 starts, so server startup never changes tables by itself.
 
 ```
- released 0.9.3 database
+ tagged 0.9.2 database (schema 0.9.0)
                     │
                     ▼
   postgres chart ── creates the bounded migration Job
@@ -17,7 +17,7 @@ starts, so server startup never changes tables by itself.
                     ▼
  ┌──────────────────────────────────────┐
  │ opencrane-prisma-migrator ◄── HERE    │
- │ records and applies Prisma migrations │
+ │ IAM prerequisite, then Prisma ledger  │
  └──────────────────────────────────────┘
                     │
                     ▼
@@ -29,14 +29,15 @@ starts, so server startup never changes tables by itself.
 
 The image contains Prisma and the versioned migration folders from the same source build. It has no
 HTTP server, Kubernetes permissions, or product request handling. The Job receives the application
-database URL and the admitted source release, then records the known 0.9.3 starting point before
-applying later changes.
+database URL, admitted source release, exact silo, and OIDC issuer. It applies the reviewed IAM
+prerequisite before recording the Prisma bridge and applying later changes.
 
 ## Public surface
 
-Entrypoint: `run-migrations.sh` records the released 0.9.3 baseline, resolves a fully rolled-back
-0.10.0 workflow-cutover attempt when a repaired image retries it, and runs `prisma migrate deploy`.
-Other migration failures are returned immediately for a forward code or migration repair.
+Entrypoint: `run-migrations.sh` accepts only tagged 0.9.2, runs the digest-bound IAM prerequisite,
+records the `20260826000000_0_9_2_baseline` Prisma bridge, resolves a fully rolled-back 0.10.0
+workflow-cutover attempt when a repaired image retries it, and runs `prisma migrate deploy`. Other
+migration failures are returned immediately for a forward code or migration repair.
 
 ## Boundary
 
@@ -50,8 +51,13 @@ not import another app at runtime.
 
 ## Runtime & config
 
-The Job supplies `DATABASE_URL` and `OPENCRANE_MIGRATION_SOURCE_VERSION=0.9.3`. Fresh databases use
-the reviewed target baseline instead and do not run this upgrade image.
+The Job supplies `DATABASE_URL`, `OPENCRANE_MIGRATION_SOURCE_VERSION=0.9.2`,
+`OPENCRANE_MIGRATION_SILO_ID`, and `OPENCRANE_MIGRATION_OIDC_ISSUER`. Fresh databases use the
+reviewed target baseline instead and do not run this upgrade image.
+
+The `0.9.3` candidate was never tagged. A development database that already recorded its old
+candidate migration IDs must be reset or receive an explicitly reviewed forward repair; this image
+will not relabel it as the supported path.
 
 ## See also
 

@@ -25,6 +25,14 @@ SELECT pg_advisory_lock(hashtextextended('opencrane:database-schema-migration', 
 
 SELECT to_regclass('opencrane_migrations.schema_history') IS NOT NULL AS migration_history_exists \gset
 \if :migration_history_exists
+SELECT EXISTS (
+    SELECT 1 FROM "opencrane_migrations"."schema_history"
+    WHERE "migration_id" = '0.9.0-to-0.9.3'
+) AS untagged_candidate_already_applied \gset
+\if :untagged_candidate_already_applied
+\echo 'The untagged 0.9.3 candidate migration is present; reset this development database or apply an explicitly reviewed forward repair.'
+\quit
+\endif
 SELECT (
     to_regclass('absurd.queues') IS NOT NULL
     AND EXISTS (
@@ -33,7 +41,7 @@ SELECT (
     )
     AND EXISTS (
         SELECT 1 FROM "opencrane_migrations"."schema_history"
-        WHERE "migration_id" = '0.9.0-to-0.9.3'
+        WHERE "migration_id" = '0.9.0-to-0.10.0-prerequisite'
     )
 ) AS migration_already_applied \gset
 \else
@@ -45,7 +53,7 @@ SELECT pg_advisory_unlock(hashtextextended('opencrane:database-schema-migration'
 \else
 
 BEGIN;
-SELECT pg_advisory_xact_lock(hashtextextended('opencrane:database-schema-migration:0.9.0-to-0.9.3', 0));
+SELECT pg_advisory_xact_lock(hashtextextended('opencrane:database-schema-migration:0.9.0-to-0.10.0-prerequisite', 0));
 SELECT set_config('opencrane.expected_migration_sql_sha256', :'migration_sql_sha256', true);
 SELECT set_config('opencrane.migration_silo_id', :'migration_silo_id', true);
 SELECT set_config('opencrane.migration_oidc_issuer', :'migration_oidc_issuer', true);
@@ -3491,7 +3499,7 @@ INSERT INTO "opencrane_migrations"."group_claim_cutover" (
     "silo_id", "issuer", "source_claim", "target_claim", "group_id", "migration_id", "migration_sql_sha256"
 )
 SELECT group_row."silo_id", current_setting('opencrane.migration_oidc_issuer'), group_row."name", 'group:' || group_row."id",
-       group_row."id", '0.9.0-to-0.9.3', current_setting('opencrane.expected_migration_sql_sha256')
+       group_row."id", '0.9.0-to-0.10.0-prerequisite', current_setting('opencrane.expected_migration_sql_sha256')
 FROM "groups" group_row
 WHERE group_row."membership_authority" = 'external';
 
@@ -3874,7 +3882,7 @@ BEGIN
            OR ("id" = 'capability-catalog-resource-sharing-v1' AND "catalog_id" <> 'opencrane-resource-sharing')
            OR ("id" = 'capability-catalog-opencrane-core-v1' AND "catalog_id" <> 'opencrane-core')
     ) THEN
-        RAISE EXCEPTION 'existing capability catalog rows conflict with the reviewed 0.9.3 seeds' USING ERRCODE = 'OC900';
+        RAISE EXCEPTION 'existing capability catalog rows conflict with the reviewed IAM prerequisite seeds' USING ERRCODE = 'OC900';
     END IF;
 END;
 $$;
@@ -3893,7 +3901,7 @@ SELECT 'migration-mcp-user-' || md5(policy."id" || ':' || access_user."user_id")
        'principal', NULL, principal_reference."principal_id", 'group', organization_group."group_id", NULL, 'exact', 'mcp-access-editor',
        'opencrane-core', 1, 'sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6',
        'mcp-server:use', 'mcp-server', server."id", 'allow', 0, policy."created_at", false,
-       'migration:0.9.0-to-0.9.3', policy."created_at"
+       'migration:0.9.0-to-0.10.0-prerequisite', policy."created_at"
 FROM "mcp_server_access_policies" policy
 JOIN "mcp_servers" server ON server."id" = policy."mcp_server_id"
 JOIN "mcp_server_access_users" access_user ON access_user."access_policy_id" = policy."id"
@@ -3913,7 +3921,7 @@ SELECT 'migration-mcp-group-' || md5(policy."id" || ':' || group_name."reference
        'group', group_reference."group_id", NULL, 'group', organization_group."group_id", NULL, 'exact', 'mcp-access-editor',
        'opencrane-core', 1, 'sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6',
        'mcp-server:use', 'mcp-server', server."id", 'allow', 0, policy."created_at", false,
-       'migration:0.9.0-to-0.9.3', policy."created_at"
+       'migration:0.9.0-to-0.10.0-prerequisite', policy."created_at"
 FROM "mcp_server_access_policies" policy
 JOIN "mcp_servers" server ON server."id" = policy."mcp_server_id"
 CROSS JOIN LATERAL unnest(COALESCE(policy."groups", ARRAY[]::TEXT[])) group_name("reference")
@@ -4322,9 +4330,9 @@ INSERT INTO "opencrane_migrations"."schema_history" (
     "schema_version", "source_schema_version", "source_baseline_sha256",
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
-    '0.9.3', '0.9.0', :'source_baseline_sha256',
+    '0.10.0-prerequisite', '0.9.0', :'source_baseline_sha256',
     '7fa60a4bb68888a69ff2c9cdf23cd85e972c9521f9a51dacd564dead15b0c949',
-    :'migration_sql_sha256', '0.9.0-to-0.9.3'
+    :'migration_sql_sha256', '0.9.0-to-0.10.0-prerequisite'
 );
 
 COMMIT;

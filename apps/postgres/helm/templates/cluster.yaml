@@ -27,8 +27,11 @@ upgrade, while the digest keeps the selected bytes immutable.
 {{- if not (regexMatch "^ghcr\\.io/elewa-git/opencrane-prisma-migrator@sha256:[0-9a-f]{64}$" .Values.migration.image) -}}
 {{- fail "migration.image must use the OpenCrane Prisma migrator at an exact sha256 OCI digest" -}}
 {{- end -}}
-{{- if ne .Values.migration.sourceVersion "0.9.3" -}}
-{{- fail "migration.sourceVersion must name the released 0.9.3 starting point" -}}
+{{- if ne .Values.migration.sourceVersion "0.9.2" -}}
+{{- fail "migration.sourceVersion must name the tagged 0.9.2 starting point" -}}
+{{- end -}}
+{{- if or (not .Values.migration.siloId) (not .Values.migration.oidcIssuer) -}}
+{{- fail "migration.siloId and migration.oidcIssuer must bind the tagged 0.9.2 IAM prerequisite" -}}
 {{- end -}}
 {{- if or (lt (int .Values.migration.timeoutSeconds) 1) (lt (int .Values.migration.jobDeadlineGraceSeconds) 10) (lt (int .Values.migration.ttlSecondsAfterFinished) 3600) -}}
 {{- fail "migration Job requires a positive timeout, at least 10 seconds diagnostic grace, and at least one hour log retention" -}}

@@ -6,6 +6,7 @@ build_postgres_release_args()
 {
   local migration_enabled="$1"
   local privileges_enabled="$2"
+  local pg_cron_schema_owner_enabled="$3"
   local job_deadline_grace_seconds=30
   local helm_timeout_seconds="$((TIMEOUT + job_deadline_grace_seconds + 30))"
   local pooler_client_selectors_json='[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"agent-controller"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-migration"}}]'
@@ -21,6 +22,7 @@ build_postgres_release_args()
     --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=$POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP_KEY"
     --set "migration.enabled=$migration_enabled"
     --set "privileges.enabled=$privileges_enabled"
+    --set "pgCron.assignSchemaOwnership=$pg_cron_schema_owner_enabled"
     --set-json "pooler.clientPodSelectors=$pooler_client_selectors_json"
     --wait
     --timeout "${helm_timeout_seconds}s"
@@ -30,7 +32,9 @@ build_postgres_release_args()
       --set "migration.timeoutSeconds=$TIMEOUT"
       --set "migration.jobDeadlineGraceSeconds=$job_deadline_grace_seconds"
       --set-string "migration.image=$PRISMA_MIGRATOR_IMAGE"
-      --set-string "migration.sourceVersion=$FROM_RELEASE_VERSION")
+      --set-string "migration.sourceVersion=$FROM_RELEASE_VERSION"
+      --set-string "migration.siloId=$CLUSTER_TENANT"
+      --set-string "migration.oidcIssuer=$OIDC_ISSUER_URL")
   fi
   if [[ "$privileges_enabled" == "true" ]]; then
     POSTGRES_ARGS+=(
@@ -55,17 +59,43 @@ wait_for_postgres_resource()
   fi
 }
 
+wait_for_postgres_database_applied()
+{
+  local resource="$1"
+  local message="$2"
+  local deadline="$(( $(date +%s) + TIMEOUT ))"
+  local state
+  local generation
+  local observed_generation
+  local applied
+  while true; do
+    state="$(kubectl get "$resource" -n "$NAMESPACE" -o jsonpath='{.metadata.generation}{" "}{.status.observedGeneration}{" "}{.status.applied}' 2>/dev/null || true)"
+    read -r generation observed_generation applied <<<"$state"
+    if [[ -n "$generation" && "$generation" == "$observed_generation" && "$applied" == "true" ]]; then
+      return
+    fi
+    if [[ "$(date +%s)" -ge "$deadline" ]]; then
+      kubectl get "$resource" -n "$NAMESPACE" -o yaml >&2 || true
+      err "$message"
+      return 1
+    fi
+    sleep 2
+  done
+}
+
 install_postgres_release()
 {
   local migration_enabled="$1"
   local privileges_enabled="$2"
-  build_postgres_release_args "$migration_enabled" "$privileges_enabled"
+  local pg_cron_schema_owner_enabled="$3"
+  build_postgres_release_args "$migration_enabled" "$privileges_enabled" "$pg_cron_schema_owner_enabled"
   log "Reconciling PostgreSQL server…"
   helm "${POSTGRES_ARGS[@]}" || { err "PostgreSQL Helm reconciliation failed."; return 1; }
   wait_for_postgres_resource condition=Ready "cluster/${POSTGRES_RELEASE}" "PostgreSQL Cluster did not become Ready." || return $?
   wait_for_postgres_resource create "deployment/${POSTGRES_RELEASE}-pooler" "PostgreSQL pooler Deployment was not created." || return $?
   wait_for_postgres_resource condition=available "deployment/${POSTGRES_RELEASE}-pooler" "PostgreSQL pooler Deployment did not become Available." || return $?
-  wait_for_postgres_resource "jsonpath={.status.applied}=true" "database/${POSTGRES_RELEASE}-litellm" "LiteLLM database was not applied." || return $?
+  wait_for_postgres_database_applied "database/${POSTGRES_RELEASE}-opencrane" "OpenCrane database objects were not applied." || return $?
+  wait_for_postgres_database_applied "database/${POSTGRES_RELEASE}-litellm" "LiteLLM database was not applied." || return $?
   if [[ "$migration_enabled" == "true" ]]; then
     wait_for_postgres_resource condition=complete "job/${POSTGRES_RELEASE}-database-migration" "Database migration Job did not complete." || return $?
   fi
@@ -78,10 +108,11 @@ install_postgres_release()
 prepare_database_release_transition()
 {
   if [[ "${DATABASE_MIGRATION_ENABLED:-false}" != "true" ]]; then
-    install_postgres_release false true
+    install_postgres_release false true true
     return
   fi
-  install_postgres_release false false || return $?
+  install_postgres_release false false false || return $?
+  install_postgres_release false false true || return $?
 }
 
 # Enables the migration Job after the caller has published its pooler connection Secret.
@@ -90,5 +121,5 @@ finish_database_release_transition()
   if [[ "${DATABASE_MIGRATION_ENABLED:-false}" != "true" ]]; then
     return
   fi
-  install_postgres_release true true
+  install_postgres_release true true true
 }

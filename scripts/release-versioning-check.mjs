@@ -105,6 +105,16 @@ function _RestoredHistoricalManifestFiles(repositoryRoot, rootVersion, changedFi
 	return restored;
 }
 
+/** Selects deleted candidate manifests only when no immutable release tag exists for them. */
+function _RemovedUntaggedHistoricalManifestFiles(repositoryRoot, rootVersion, changedFiles)
+{
+	return changedFiles.filter(function _IsRemovedUntaggedManifest(file)
+	{
+		const version = /^releases\/(?<version>\d+\.\d+\.\d+)\.json$/u.exec(file)?.groups?.version;
+		return Boolean(version && version !== rootVersion && !existsSync(join(repositoryRoot, file)) && !_ExistingReleaseTag(version));
+	});
+}
+
 const repositoryRoot = resolve(new URL(".", import.meta.url).pathname, "..");
 const base = _Argument("--base");
 if (!base) throw new Error("--base requires an exact Git commit or ref");
@@ -152,7 +162,7 @@ const releasedVersionTag = releaseTag && _Commit(releaseTag) !== currentCommit ?
 const comparisonBase = __SelectDirectReleaseComparisonBase(base, previousReleaseTag ?? previousRepositoryCommit);
 const directChangedFiles = _ChangedFiles([comparisonBase]);
 const changedFiles = _ChangedFiles([...new Set([base, previousReleaseTag, previousRepositoryCommit, releaseTag].filter(Boolean))]);
-const newFiles = changedFiles.filter((file) => _BaseText(base, file) === null);
+const newFiles = changedFiles.filter((file) => existsSync(join(repositoryRoot, file)) && _BaseText(base, file) === null);
 const errors = await validateWorkspace(
 	repositoryRoot,
 	changedFiles,
@@ -162,6 +172,7 @@ const errors = await validateWorkspace(
 	releasedVersionTag,
 	directChangedFiles,
 	_RestoredHistoricalManifestFiles(repositoryRoot, rootVersion, directChangedFiles),
+	_RemovedUntaggedHistoricalManifestFiles(repositoryRoot, rootVersion, directChangedFiles),
 );
 if (errors.length > 0)
 {

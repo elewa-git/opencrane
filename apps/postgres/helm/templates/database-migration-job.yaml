@@ -65,6 +65,10 @@ spec:
                   key: uri
             - name: OPENCRANE_MIGRATION_SOURCE_VERSION
               value: {{ .Values.migration.sourceVersion | quote }}
+            - name: OPENCRANE_MIGRATION_SILO_ID
+              value: {{ .Values.migration.siloId | quote }}
+            - name: OPENCRANE_MIGRATION_OIDC_ISSUER
+              value: {{ .Values.migration.oidcIssuer | quote }}
             - name: TMPDIR
               value: /scratch
           volumeMounts:
