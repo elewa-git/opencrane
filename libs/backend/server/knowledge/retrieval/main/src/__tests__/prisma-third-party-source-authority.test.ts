@@ -16,6 +16,7 @@ function _Authorization(allow: boolean): AuthorizationAuthority
 		decide: vi.fn().mockResolvedValue(decision),
 		admit: vi.fn().mockResolvedValue(decision),
 		admitPrincipal: vi.fn().mockResolvedValue(decision),
+		admitPrincipalBatch: vi.fn(async function _AdmitBatch(commands) { return commands.map(function _Decision() { return decision; }); }),
 		listEntitled: vi.fn(async command => allow ? command.resources : []),
 		listPrincipalEntitled: vi.fn(async command => allow ? command.resources : []),
 		listManagedGrants: vi.fn().mockResolvedValue([]),
