@@ -95,7 +95,7 @@ export class PrismaSpendUnitOfWork implements SpendAuthority
 	{
 		return this._WithAuthority(async function _Get(repository, authorization)
 		{
-			await _RequireOrganizationAdministration(authorization, caller);
+			await _AdmitOrganizationAdministration(authorization, caller, { operation: "list-global-budget" });
 			return repository.getGlobalBudget(caller.siloId);
 		});
 	}
@@ -115,7 +115,7 @@ export class PrismaSpendUnitOfWork implements SpendAuthority
 	{
 		return this._WithAuthority(async function _List(repository, authorization)
 		{
-			await _RequireOrganizationAdministration(authorization, caller);
+			await _AdmitOrganizationAdministration(authorization, caller, { operation: "list-account-budgets" });
 			return repository.listAccountBudgets(caller.siloId);
 		});
 	}
@@ -182,17 +182,6 @@ export class PrismaSpendUnitOfWork implements SpendAuthority
 			const repository = new PrismaSpendRepository(transaction);
 			return operation(repository, authorization);
 		}, createAuthorization ?? undefined);
-	}
-}
-
-/** Requires the exact organisation administration grant for a protected read. */
-async function _RequireOrganizationAdministration(authorization: AuthorizationAuthority, caller: SpendRouteCaller): Promise<void>
-{
-	const resources = [{ kind: ProductAuthorizationResourceKinds.Organization, id: caller.siloId }] as const;
-	const allowed = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Administer, resources, nowEpochMs: Date.now() });
-	if (allowed.length !== 1)
-	{
-		throw new SpendAuthorizationError("Organisation administration authority is required");
 	}
 }
 

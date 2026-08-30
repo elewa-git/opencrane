@@ -44,7 +44,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, createdByUserId: caller.subjectId, state: ConversationAssetState.Uploading }, include: { uploadLease: true } });
 		const lease = asset?.uploadLease;
 		if (lease === null || lease === undefined || lease.state !== ArtifactUploadLeaseState.Active || lease.expiresAt <= new Date() || lease.expectedContentAddress === null || lease.expectedByteLength === null) return null;
-		if (!await this.authorization.canAccess(caller, { kind: ProductAuthorizationResourceKinds.Artifact, id: lease.artifactId }, ProductAuthorizationActions.Edit))
+		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Artifact, id: lease.artifactId }, ProductAuthorizationActions.Edit, { operation: "read-upload-target", conversationId, assetId, leaseId: lease.id }))
 			return null;
 		return { lease: { leaseId: lease.id, siloId: lease.siloId, artifactId: lease.artifactId, action: "artifact.write", expiresAtEpochSeconds: Math.floor(lease.expiresAt.getTime() / 1_000), expectedContentAddress: lease.expectedContentAddress, expectedByteLength: Number(lease.expectedByteLength), mediaType: lease.mediaType } };
 	}
@@ -119,7 +119,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	private async _canMutateConversation(caller: ConversationAssetCaller, conversationId: string): Promise<boolean>
 	{
 		const participant = await this.transaction.conversationParticipant.findFirst({ where: { conversationId, userId: caller.subjectId, accessEndedPosition: null, conversation: { ...{ siloId: caller.siloId, OR: [{ originAgentThread: { is: null } }, { originAgentThread: { is: { parentConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } }] }, lifecycle: ConversationLifecycle.Open } } });
-		return participant !== null && await this._isActiveMember(caller) && await this.authorization.canAccess(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }, ProductAuthorizationActions.Use);
+		return participant !== null && await this._isActiveMember(caller) && await this.authorization.canAccess(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }, ProductAuthorizationActions.Read);
 	}
 
 	/** Confirm the caller remains one active member of the selected silo. */

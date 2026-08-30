@@ -116,13 +116,13 @@ export class PrismaThirdPartySourceUnitOfWork implements ThirdPartySourceAuthori
 	/** Lists sources after checking current organisation administration. */
 	list(caller: ThirdPartySourceRouteCaller): Promise<readonly ThirdPartySource[]>
 	{
-		return this._WithAuthority(async function _List(repository, authorization) { await _RequireOrganizationAdministration(authorization, caller); return repository.list(caller.siloId); });
+		return this._WithAuthority(async function _List(repository, authorization) { await _AdmitOrganizationAdministration(authorization, caller, { operation: "list-third-party-sources" }); return repository.list(caller.siloId); });
 	}
 
 	/** Reads one source after checking current organisation administration. */
 	get(caller: ThirdPartySourceRouteCaller, sourceId: string): Promise<ThirdPartySource | null>
 	{
-		return this._WithAuthority(async function _Get(repository, authorization) { await _RequireOrganizationAdministration(authorization, caller); return repository.get(caller.siloId, sourceId); });
+		return this._WithAuthority(async function _Get(repository, authorization) { await _AdmitOrganizationAdministration(authorization, caller, { operation: "get-third-party-source", sourceId }); return repository.get(caller.siloId, sourceId); });
 	}
 
 	/** Creates one source after transaction-bound organisation administration admission. */
@@ -152,17 +152,6 @@ export class PrismaThirdPartySourceUnitOfWork implements ThirdPartySourceAuthori
 			const repository = new PrismaThirdPartySourceRepository(transaction);
 			return operation(repository, authorization);
 		}, createAuthorization ?? undefined);
-	}
-}
-
-/** Requires the exact organisation administration grant for a protected source read. */
-async function _RequireOrganizationAdministration(authorization: AuthorizationAuthority, caller: ThirdPartySourceRouteCaller): Promise<void>
-{
-	const resources = [{ kind: ProductAuthorizationResourceKinds.Organization, id: caller.siloId }] as const;
-	const allowed = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Administer, resources, nowEpochMs: Date.now() });
-	if (allowed.length !== 1)
-	{
-		throw new ThirdPartySourceAuthorizationError("Organisation administration authority is required");
 	}
 }
 

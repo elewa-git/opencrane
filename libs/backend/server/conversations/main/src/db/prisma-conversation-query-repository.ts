@@ -275,7 +275,7 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 	{
 		// 1. Current silo membership is a command prerequisite, not cached participant evidence.
 		if (!await this.hasActiveCallerMembership(caller)) return null;
-		if (!await this.authorization.canAccess(caller, conversationId, ProductAuthorizationActions.Use))
+		if (!await this.authorization.canAccess(caller, conversationId, ProductAuthorizationActions.Read))
 			return null;
 
 		// 2. Load mode, lifecycle, binding, and active-run facts with continuing participant access.
@@ -290,7 +290,7 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 	async findOwnMessage(caller: ConversationCaller, conversationId: string, idempotencyKey: string): Promise<ConversationMessageView | null>
 	{
 		// 1. Revoked organisation membership invalidates even an otherwise exact retry key.
-		if (!await this.hasActiveCallerMembership(caller) || !await this.authorization.canAccess(caller, conversationId, ProductAuthorizationActions.Use))
+		if (!await this.hasActiveCallerMembership(caller) || !await this.authorization.canAccess(caller, conversationId, ProductAuthorizationActions.Read))
 			return null;
 
 		// 2. Resolve the key only while the caller retains active participant access.
@@ -306,7 +306,7 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 	async hasMessageIdempotencyKey(caller: ConversationCaller, conversationId: string, idempotencyKey: string): Promise<boolean>
 	{
 		// 1. A revoked caller cannot probe whether any participant owns the selected key.
-		if (!await this.hasActiveCallerMembership(caller) || !await this.authorization.canAccess(caller, conversationId, ProductAuthorizationActions.Use))
+		if (!await this.hasActiveCallerMembership(caller) || !await this.authorization.canAccess(caller, conversationId, ProductAuthorizationActions.Read))
 			return false;
 
 		// 2. Search only while the caller still has participant access to the conversation.
