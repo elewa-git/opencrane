@@ -244,8 +244,8 @@ describe("managed agent revision lifecycle", function _suite()
 		const seed = await _seedService(repository);
 		repository.services.set(seed.serviceId, { ...repository.services.get(seed.serviceId)!, state: "active", activeRevisionId: seed.revisionId });
 
-		expect(await __AdmitManagedRunNow(repository, port, { agentServiceId: seed.serviceId, siloId: _SILO, requestedBy: "admin-1", requestIdempotencyKey: "req-invalid-1", trigger: "managed_invocation", scheduledSlot: _NOW })).toEqual({ outcome: "denied", reason: "invalid_command" });
-		expect(await __AdmitManagedRunNow(repository, port, { agentServiceId: seed.serviceId, siloId: _SILO, requestedBy: "admin-1", requestIdempotencyKey: "req-invalid-2", trigger: "schedule", scheduledSlot: null })).toEqual({ outcome: "denied", reason: "invalid_command" });
+		expect(await __AdmitManagedRunNow(repository, port, { agentServiceId: seed.serviceId, siloId: _SILO, requestedByPrincipalId: "principal-1", requestedBy: "admin-1", requestIdempotencyKey: "req-invalid-1", trigger: "managed_invocation", scheduledSlot: _NOW })).toEqual({ outcome: "denied", reason: "invalid_command" });
+		expect(await __AdmitManagedRunNow(repository, port, { agentServiceId: seed.serviceId, siloId: _SILO, requestedByPrincipalId: null, requestedBy: "admin-1", requestIdempotencyKey: "req-invalid-2", trigger: "schedule", scheduledSlot: null })).toEqual({ outcome: "denied", reason: "invalid_command" });
 		expect(port.lastCommand).toBeNull();
 	});
 
