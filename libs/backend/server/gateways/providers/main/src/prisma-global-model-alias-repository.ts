@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
-import { ModelRoutingScope } from "@opencrane/contracts";
+import { ModelRoutingScope, type AutoRoutingConfig } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { _BYOK_PROVIDER_CATALOG } from "@opencrane/backend/server/gateways/model-routing";
 
-import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectMaterialRequirements, type ProviderEffectCommandOwner, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectExecutionContext, type ProviderEffectHandlerResult, type ProviderGlobalModelAliasRepository } from "./provider-effect-command.types";
+import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectMaterialRequirements, type ProviderEffectCommandOwner, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectExecutionContext, type ProviderEffectHandlerResult, type ProviderGlobalModelAliasRepository, type ProviderGlobalRoutingDefaultResult } from "./provider-effect-command.types";
 import { _ParseProviderEffectCommandPayload } from "./provider-effect-command.validator";
 import { ProviderEffectFinalizationBlockedError } from "./provider-effect-command-errors";
 
@@ -38,6 +38,26 @@ export class PrismaGlobalModelAliasRepository implements ProviderGlobalModelAlia
 	{
 		this.transaction = transaction;
 		this.effects = effects;
+	}
+
+	/** @inheritdoc */
+	async reconcileGlobalRoutingDefault(owner: ProviderEffectCommandOwner, defaultModel: string, autoConfig: AutoRoutingConfig | null, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, now: Date): Promise<ProviderGlobalRoutingDefaultResult>
+	{
+		const selected = await this.transaction.modelDefinition.findFirst({ where: { siloId: owner.siloId, scope: "Global", clusterTenant: null, publicModelName: defaultModel } });
+		if (selected === null || selected.publicModelName === _GLOBAL_AUTO_MODEL_NAME || selected.publicModelName === _GLOBAL_AUTO_EMBEDDING_MODEL_NAME || selected.litellmModelId.startsWith("pending:"))
+			throw new ProviderEffectFinalizationBlockedError();
+		const argumentsDigest = ___DigestCanonicalJson({ operation: "upsert-global-model-routing-default", siloId: owner.siloId, defaultModel, autoConfig } as JsonValue);
+		const admission = await authorization.admitPrincipal({ siloId: owner.siloId, principalId: owner.principalId, actorKind: context.actorKind, actorId: context.actorId, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: owner.siloId }, action: ProductAuthorizationActions.Administer, argumentsDigest, nowEpochMs: now.getTime() });
+		if (admission.outcome !== AuthorizationDecisionOutcomes.Allow || admission.evidence === null)
+			throw new ProviderEffectFinalizationBlockedError();
+		let routing = await this.transaction.modelRoutingDefault.findFirst({ where: { siloId: owner.siloId, scope: "Global", clusterTenant: null } });
+		const autoConfigValue = autoConfig === null ? Prisma.JsonNull : autoConfig as unknown as Prisma.InputJsonValue;
+		if (routing === null)
+			routing = await this.transaction.modelRoutingDefault.create({ data: { siloId: owner.siloId, scope: "Global", clusterTenant: null, defaultModel, autoConfig: autoConfigValue } });
+		else
+			routing = await this.transaction.modelRoutingDefault.update({ where: { id_siloId: { id: routing.id, siloId: owner.siloId } }, data: { defaultModel, autoConfig: autoConfigValue } });
+		const child = await this.reconcileRoutingDefault(owner, routing.id, context, authorization, now);
+		return { value: { id: routing.id, scope: ModelRoutingScope.Global, clusterTenant: null, defaultModel: routing.defaultModel, autoConfig: routing.autoConfig as AutoRoutingConfig | null, createdAt: routing.createdAt.toISOString(), updatedAt: routing.updatedAt.toISOString() }, child };
 	}
 
 	/**

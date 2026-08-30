@@ -1089,8 +1089,19 @@
 		  {
 			"adapter": "PrismaGlobalModelAliasRepository",
 			"importPath": "./prisma-global-model-alias-repository"
+		  },
+		  {
+			"adapter": "PrismaProviderEffectProjectionRepository",
+			"importPath": "./prisma-provider-effect-projection-repository"
 		  }
 		]
+	  },
+	  {
+		"path": "libs/backend/server/gateways/providers/main/src/prisma-provider-effect-projection-repository.ts",
+		"adapter": "PrismaProviderEffectProjectionRepository",
+		"contract": "ProviderEffectProjectionRepository",
+		"contractImportPath": "./provider-effect-projection.types",
+		"constructs": []
 	  },
 	  {
 		"path": "libs/backend/server/gateways/providers/main/src/prisma-global-model-alias-repository.ts",

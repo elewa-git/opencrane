@@ -298,6 +298,8 @@ export type ProviderEffectHandlerResult =
 /** Transaction-scoped planner for the one global-within-silo chat-model alias. */
 export interface ProviderGlobalModelAliasRepository
 {
+	/** Authorizes and projects one silo-global routing selection before admitting its alias child. */
+	reconcileGlobalRoutingDefault(owner: ProviderEffectCommandOwner, defaultModel: string, autoConfig: AutoRoutingConfig | null, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, now: Date): Promise<ProviderGlobalRoutingDefaultResult>;
 	/** Resolves the silo routing winner and returns the exact durable registration child, if needed. */
 	reconcileAfterSet(parent: ProviderEffectCommandRecord, result: Extract<ProviderEffectHandlerResult, { readonly kind: ProviderEffectCommandKinds.SetByokKey }>, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, now: Date): Promise<ProviderEffectCommandRecord | null>;
 	/** Reconciles one already-selected silo routing default through the same durable child path. */
