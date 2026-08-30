@@ -17,8 +17,8 @@ function _Authorization(allowedId: string): AuthorizationAuthority
 		admitPrincipalBatch: vi.fn(async function _AdmitBatch(commands) { return commands.map(function _Decision() { return decision; }); }),
 		listEntitled: vi.fn().mockResolvedValue([]),
 		listPrincipalEntitled: vi.fn(async (command: { readonly resources: readonly ProductAuthorizationResourceLocator[] }) => command.resources.filter(resource => resource.id === allowedId)),
-		listManagedGrants: vi.fn().mockResolvedValue([]),
 		replaceManagedGrants: vi.fn().mockResolvedValue({ ...decision, changedCount: 0 }),
+		retireResourceGrants: vi.fn().mockResolvedValue({ ...decision, changedCount: 0 }),
 	};
 }
 

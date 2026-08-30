@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { PrismaManagedAuthorizationGrantRepository, PrismaShareAuthorizationRepository, ___RunSerializableAuthorizationTransaction } from "@opencrane/backend/server/iam/authorization";
+import { PrismaManagedAuthorizationGrantRepository, PrismaManagedShareRevocationRepository, ___RunSerializableAuthorizationTransaction } from "@opencrane/backend/server/iam/authorization";
 import { PrismaResourceShareRepository } from "./prisma-resource-share-repository";
 import type { ResourceShareTransaction, ResourceShareUnitOfWork } from "./resource-share-unit-of-work.types";
 
@@ -20,7 +20,7 @@ export class PrismaResourceShareUnitOfWork implements ResourceShareUnitOfWork
 		{
 			return procedure({
 				authorization,
-				authorizationShares: new PrismaShareAuthorizationRepository(transaction),
+				managedShareRevocations: new PrismaManagedShareRevocationRepository(transaction),
 				managedAuthorizationGrants: new PrismaManagedAuthorizationGrantRepository(transaction),
 				resourceShares: new PrismaResourceShareRepository(transaction),
 			});

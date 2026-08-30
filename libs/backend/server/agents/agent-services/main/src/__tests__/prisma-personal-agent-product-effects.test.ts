@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuthorizationAuthority, ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
-import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
 import { PersonalAgentSelectedResourceKinds } from "../personal-agent-product-effects.types";
 import { PrismaPersonalAgentProductEffectsAuthority } from "../prisma-personal-agent-product-effects";
@@ -57,5 +57,26 @@ describe("PrismaPersonalAgentProductEffectsAuthority", function _ProductEffectsS
 		const effects = new PrismaPersonalAgentProductEffectsAuthority(dependencies.transaction, dependencies.authorization, dependencies.managedGrants);
 
 		await expect(effects.admitRevisionSelection({ caller: _CALLER, source: _RESOURCES, target: { ..._RESOURCES, agentRevisionId: "revision-3", modelDefinitionId: "model-2" }, now: new Date("2026-08-29T08:00:00.000Z"), selectedResource: PersonalAgentSelectedResourceKinds.Model, argumentsValue: { modelAlias: "careful-model" } })).rejects.toThrow("not authorized");
+	});
+
+	it("keeps two personal owners isolated when their revisions share one ModelDefinition", async function _IsolatesSharedModel()
+	{
+		// 1. Use distinct owners with one shared model so the test reproduces the former manager collision.
+		const dependencies = _Dependencies();
+		const effects = new PrismaPersonalAgentProductEffectsAuthority(dependencies.transaction, dependencies.authorization, dependencies.managedGrants);
+		const secondCaller = { siloId: _CALLER.siloId, subjectId: "user-2", principalId: "principal-2" } as const;
+		const secondResources = { agentServiceId: "service-2", agentRevisionId: "revision-3", personaProfileId: "profile-2", modelDefinitionId: _RESOURCES.modelDefinitionId } as const;
+		const now = new Date("2026-08-29T08:00:00.000Z");
+
+		// 2. Reconcile both owners so each must retain an independent desired set for the shared model.
+		await effects.reconcileCurrent(_CALLER, _RESOURCES, now);
+		await effects.reconcileCurrent(secondCaller, secondResources, now);
+
+		// 3. Verify each shared-model write uses a Principal-scoped manager and subject.
+		const modelCalls = vi.mocked(dependencies.managedGrants.reconcileManagedResourceGrants).mock.calls.map(call => call[0]).filter(command => command.resource.kind === ProductAuthorizationResourceKinds.ModelDefinition);
+		expect(modelCalls).toEqual([
+			expect.objectContaining({ managerId: "personal-agent-owner-access:principal-1", resource: { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: _RESOURCES.modelDefinitionId }, grants: expect.arrayContaining([expect.objectContaining({ subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "principal-1" } })]) }),
+			expect.objectContaining({ managerId: "personal-agent-owner-access:principal-2", resource: { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: _RESOURCES.modelDefinitionId }, grants: expect.arrayContaining([expect.objectContaining({ subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "principal-2" } })]) }),
+		]);
 	});
 });

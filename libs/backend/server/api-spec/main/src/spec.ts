@@ -146,33 +146,6 @@ const ProviderKeySetRequestSchema = {
   },
 };
 
-const ProviderCredentialSchema = {
-  type: "object" as const,
-  required: ["id", "scope", "provider", "secretRef"],
-  properties: {
-    id: { type: "string", description: "Stable identifier." },
-    scope: { type: "string", enum: ["global", "clusterTenant"], description: "Whether the credential is platform-wide or owned by one ClusterTenant." },
-    clusterTenant: { type: "string", nullable: true, description: "Owning ClusterTenant when scope is clusterTenant; null for Global." },
-    provider: { type: "string", description: "Free-text provider key (e.g. openai, anthropic, bedrock)." },
-    secretRef: { type: "string", description: "Name of the External-Secrets-synced k8s Secret carrying the provider key (never the raw key)." },
-    litellmCredentialName: { type: "string", nullable: true, description: "LiteLLM /credentials name when registered for the dynamic path; null for the env baseline." },
-    createdAt: { type: "string", format: "date-time" },
-    updatedAt: { type: "string", format: "date-time" },
-  },
-};
-
-const ProviderCredentialWriteSchema = {
-  type: "object" as const,
-  required: ["provider", "secretRef"],
-  properties: {
-    scope: { type: "string", enum: ["global", "clusterTenant"], description: "Defaults to global when omitted." },
-    clusterTenant: { type: "string", description: "Required when scope is clusterTenant." },
-    provider: { type: "string", description: "Free-text provider key." },
-    secretRef: { type: "string", description: "Name of the External-Secrets-synced k8s Secret carrying the provider key. A raw key field (apiKey/keyValue/key) is rejected with 400." },
-    litellmCredentialName: { type: "string", description: "Optional LiteLLM /credentials name for the dynamic no-restart path." },
-  },
-};
-
 const AutoRoutingConfigSchema = {
   type: "object" as const,
   required: ["objective", "sessionPin", "explorationRate"],
@@ -292,8 +265,6 @@ export const spec = {
       AuditEntry: AuditEntrySchema,
       ByokProviderKeyStatus: ByokProviderKeyStatusSchema,
       ProviderKeySetRequest: ProviderKeySetRequestSchema,
-      ProviderCredential: ProviderCredentialSchema,
-      ProviderCredentialWrite: ProviderCredentialWriteSchema,
       ModelDefinition: _ModelDefinitionSchema,
       ModelDefinitionWrite: _ModelDefinitionWriteSchema,
       AutoRoutingConfig: AutoRoutingConfigSchema,

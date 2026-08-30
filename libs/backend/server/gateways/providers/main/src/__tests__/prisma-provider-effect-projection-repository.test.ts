@@ -40,7 +40,8 @@ describe("PrismaProviderEffectProjectionRepository", function _Suite()
 	it("updates the same-silo credential and keeps embedding evidence out of chat ModelDefinition", async function _ProjectsProviderModels()
 	{
 		const credentialUpdate = vi.fn(async function _UpdateCredential() { return {}; });
-		const modelCreate = vi.fn(async function _CreateModel() { return {}; });
+		let modelSequence = 0;
+		const modelCreate = vi.fn(async function _CreateModel() { modelSequence += 1; return { id: `model-${modelSequence}` }; });
 		const transaction = {
 			providerCredential: {
 				findFirst: vi.fn(async function _FindCredential() { return { id: "byok:silo-a:openai" }; }),
@@ -52,12 +53,18 @@ describe("PrismaProviderEffectProjectionRepository", function _Suite()
 			},
 		} as unknown as Prisma.TransactionClient;
 
-		await new PrismaProviderEffectProjectionRepository(transaction).persist(_command(), _result());
+		const resources = await new PrismaProviderEffectProjectionRepository(transaction).persist(_command(), _result());
 
 		expect(credentialUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id_siloId: { id: "byok:silo-a:openai", siloId: "silo-a" } } }));
 		expect(modelCreate).toHaveBeenCalledTimes(3);
 		expect(modelCreate).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ publicModelName: "auto-embedding" }) }));
 		expect(modelCreate).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ publicModelName: "openai/text-embedding-3-large" }) }));
+		expect(resources).toEqual([
+			{ kind: "provider-connection", id: "byok:silo-a:openai" },
+			{ kind: "model-definition", id: "model-1" },
+			{ kind: "model-definition", id: "model-2" },
+			{ kind: "model-definition", id: "model-3" },
+		]);
 	});
 
 	it("rejects embedding evidence that does not match the fixed provider catalogue", async function _RejectsEmbeddingMismatch()

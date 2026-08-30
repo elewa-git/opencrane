@@ -817,6 +817,10 @@
             "importPath": "./prisma-managed-authorization-grant-repository"
           },
           {
+            "adapter": "PrismaAuthorizationResourceGrantRetirementRepository",
+            "importPath": "./prisma-authorization-resource-grant-retirement-repository"
+          },
+          {
             "adapter": "PrismaAuditDecisionWriterRepository",
             "importPath": "@opencrane/backend/server/iam/audit-writer"
           }
@@ -827,6 +831,13 @@
         "adapter": "PrismaManagedAuthorizationGrantRepository",
         "contract": "ManagedAuthorizationGrantRepository",
         "contractImportPath": "./managed-authorization-grants.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/iam/authorization/main/src/prisma-authorization-resource-grant-retirement-repository.ts",
+        "adapter": "PrismaAuthorizationResourceGrantRetirementRepository",
+        "contract": "AuthorizationResourceGrantRetirementRepository",
+        "contractImportPath": "./authorization-resource-grant-retirement.types",
         "constructs": []
       },
       {
@@ -957,10 +968,10 @@
 		"constructs": []
 	  },
       {
-        "path": "libs/backend/server/iam/authorization/main/src/prisma-share-authorization-repository.ts",
-        "adapter": "PrismaShareAuthorizationRepository",
-        "contract": "ShareAuthorizationRepository",
-        "contractImportPath": "./share-authorization-repository.types",
+        "path": "libs/backend/server/iam/authorization/main/src/prisma-managed-share-revocation-repository.ts",
+        "adapter": "PrismaManagedShareRevocationRepository",
+        "contract": "ManagedShareRevocationRepository",
+        "contractImportPath": "./managed-share-revocation-repository.types",
         "constructs": []
       },
       {
@@ -1796,7 +1807,7 @@
         "contractImportPath": "./resource-share-unit-of-work.types",
         "constructs": [
           {
-            "adapter": "PrismaShareAuthorizationRepository",
+            "adapter": "PrismaManagedShareRevocationRepository",
             "importPath": "@opencrane/backend/server/iam/authorization"
           },
           {
@@ -2142,7 +2153,9 @@
       }
     ],
     "compositions": [
+      "libs/backend/agents/execution/protocol/src/production-runtime-dispatch.ts",
       "libs/backend/agents/execution/protocol/src/prisma-runtime-external-action-authorization.ts",
+      "libs/backend/server/gateways/providers/main/src/provider-byok-composition.ts",
       "libs/backend/server/agents/agent-services/main/src/db/prisma-managed-agent-service-principal.factory.ts",
       "libs/backend/server/agents/agent-services/main/src/prisma-agent-services.router.ts",
       "apps/opencrane/src/app/routes.ts",

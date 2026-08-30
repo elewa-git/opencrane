@@ -5,7 +5,7 @@ import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, Authorizati
 import type { OrganizationAdminGrantBootstrapRepository, ReconcileOrganizationAdminGrantCommand } from "./organization-admin-grant-bootstrap.types";
 import { PrismaManagedAuthorizationGrantRepository } from "./prisma-managed-authorization-grant-repository";
 
-/** Identifies grants maintained from the current organisation membership role. */
+/** Prefixes grants maintained from one Principal's current organisation membership role. */
 const _ORGANIZATION_ADMIN_GRANT_MANAGER_ID = "organization-membership-admin-bootstrap";
 
 /** Reports whether the stored membership currently delegates organisation administration. */
@@ -69,6 +69,7 @@ export class PrismaOrganizationAdminGrantBootstrapRepository implements Organiza
 			? capabilities.map(function _Grant(capability) { return { subject: { kind: AuthorizationSubjectKinds.Principal, principalId: command.principalId }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: command.principalId }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource, priority: 0, createdByPrincipalId: command.principalId } as const; })
 			: [];
 		const repository = new PrismaManagedAuthorizationGrantRepository(this.transaction);
-		return repository.reconcileManagedResourceGrants({ siloId: command.siloId, managerId: _ORGANIZATION_ADMIN_GRANT_MANAGER_ID, resource, grants, now: command.now });
+		const managerId = `${_ORGANIZATION_ADMIN_GRANT_MANAGER_ID}:${command.principalId}`;
+		return repository.reconcileManagedResourceGrants({ siloId: command.siloId, managerId, resource, grants, now: command.now });
 	}
 }

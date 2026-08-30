@@ -6,7 +6,7 @@ import type { ManagedAuthorizationGrantSpec } from "./managed-authorization-gran
 import type { OrganizationMemberProductGrantBootstrapRepository, ReconcileOrganizationMemberProductGrantsCommand } from "./organization-member-product-grant-bootstrap.types";
 import { PrismaManagedAuthorizationGrantRepository } from "./prisma-managed-authorization-grant-repository";
 
-/** Isolates collection-root grants derived from active organisation membership. */
+/** Prefixes collection-root grants derived from one Principal's active organisation membership. */
 export const ORGANIZATION_MEMBER_PRODUCT_GRANT_MANAGER_ID = "organization-membership-product-bootstrap";
 
 /** Reconciles narrow creation-root grants without treating an organisation role as runtime policy. */
@@ -29,6 +29,7 @@ export class PrismaOrganizationMemberProductGrantBootstrapRepository implements 
 		const membership = await this.transaction.orgMembership.findUnique({ where: { clusterTenant_subject: { clusterTenant: command.siloId, subject: command.subject } }, select: { status: true } });
 		const active = membership?.status === OrgMemberStatus.Active;
 		const repository = new PrismaManagedAuthorizationGrantRepository(this.transaction);
+		const managerId = `${ORGANIZATION_MEMBER_PRODUCT_GRANT_MANAGER_ID}:${command.principalId}`;
 		let changedCount = 0;
 		for (const kind of [ProductAuthorizationResourceKinds.AgentServiceCollection, ProductAuthorizationResourceKinds.ConversationCollection, ProductAuthorizationResourceKinds.ArtifactCollection, ProductAuthorizationResourceKinds.PersonaCollection] as const)
 		{
@@ -45,7 +46,7 @@ export class PrismaOrganizationMemberProductGrantBootstrapRepository implements 
 				priority: 0,
 				createdByPrincipalId: command.principalId,
 			}] : [];
-			changedCount += await repository.reconcileManagedResourceGrants({ siloId: command.siloId, managerId: ORGANIZATION_MEMBER_PRODUCT_GRANT_MANAGER_ID, resource, grants, now: command.now });
+			changedCount += await repository.reconcileManagedResourceGrants({ siloId: command.siloId, managerId, resource, grants, now: command.now });
 		}
 		return changedCount;
 	}

@@ -105,6 +105,48 @@ _Require(authorizationMigration.includes('DROP FUNCTION "enforce_action_executio
 _Require(authorizationMigration.includes('DROP TYPE "ActionExecutionState";'), "the central authorization migration must remove the replaced receipt state type");
 _Require(authorizationMigration.includes('DROP TYPE "ActionReplayMode";'), "the central authorization migration must remove the replaced replay type");
 _Require(!targetBaseline.includes('CREATE TABLE "action_execution_receipts"'), "fresh databases must not install the replaced proof-bound receipt table");
+_Require(!targetBaseline.includes('"require_approval"'), "fresh AuthorizationGrant rows must not retain the unused approval flag");
+_Require(!targetBaseline.includes('"resume_token_hash"'), "fresh ApprovalRequest rows must not retain the unused resume token hash");
+_Require(authorizationMigration.match(/"require_approval"/gu)?.length === 1 && authorizationMigration.includes('ALTER TABLE "authorization_grants" DROP COLUMN "require_approval";'), "the upgrade must delete AuthorizationGrant.requireApproval without writing new values");
+_Require(authorizationMigration.match(/"resume_token_hash"/gu)?.length === 1 && authorizationMigration.includes('ALTER TABLE "approval_requests" DROP COLUMN "resume_token_hash";'), "the upgrade must delete ApprovalRequest.resumeTokenHash without retaining token lifecycle logic");
+_Require(!targetBaseline.includes('"catalog_id" TEXT,\n    "catalog_revision" INTEGER,\n    "catalog_digest" TEXT,\n    "capability_id" TEXT,\n    "resource_kind" TEXT NOT NULL'), "fresh ApprovalRequest rows must not duplicate capability-catalog coordinates");
+for (const requiredApprovalField of ["elicitation_request_id", "tool_invocation_row_id", "reviewed_tool_arguments", "reviewed_tool_schema", "reviewed_tool_schema_digest", "safe_proposed_arguments", "response_schema"])
+{
+	_Require(new RegExp(`"${requiredApprovalField}" (?:TEXT|JSONB) NOT NULL`).test(targetBaseline), `fresh ApprovalRequest rows must require ${requiredApprovalField}`);
+	_Require(authorizationMigration.includes(`ALTER TABLE "approval_requests" ALTER COLUMN "${requiredApprovalField}" SET NOT NULL;`), `the upgrade must require ${requiredApprovalField} after deleting pre-cutover approvals`);
+}
+_Require(authorizationMigration.includes('CREATE TEMP TABLE "precentral_approval_requests"'), "the upgrade must snapshot every pre-cutover ApprovalRequest");
+_Require(authorizationMigration.includes('SELECT "id", "elicitation_request_id"\n  FROM "approval_requests";'), "the approval cutoff must include linked and callerless legacy ApprovalRequest rows");
+_Require(authorizationMigration.includes('CREATE TEMP TABLE "precentral_elicitation_requests"'), "the upgrade must snapshot every elicitation owned by removed approval and personal-memory work");
+_Require(authorizationMigration.includes('JOIN "precentral_tool_invocations" invocation ON invocation."id" = receipt."tool_invocation_id"'), "the elicitation cutoff must include personal-memory requests linked to removed invocations");
+_Require(authorizationMigration.includes('request_row."purpose_payload"->>\'toolInvocationId\'') && authorizationMigration.includes('request_row."purpose" = \'personal_memory_permission\'::"ElicitationPurpose"'), "the elicitation cutoff must include unresolved personal-memory requests whose only invocation link is purpose payload JSON");
+_Require(authorizationMigration.includes('request_row."purpose_payload"->>\'approvalRequestId\'') && authorizationMigration.includes('request_row."purpose" = \'tool_approval\'::"ElicitationPurpose"'), "the elicitation cutoff must include legacy tool approvals whose only approval link is purpose payload JSON");
+for (const approvalColumn of ["catalog_id", "catalog_revision", "catalog_digest", "capability_id"])
+{
+	_Require(authorizationMigration.includes(`ALTER TABLE "approval_requests" DROP COLUMN "${approvalColumn}";`), `the upgrade must remove callerless ApprovalRequest field ${approvalColumn}`);
+}
+for (const dependentDelete of [
+	'DELETE FROM "elicitation_response_attempts"',
+	'DELETE FROM "elicitation_result_deliveries"',
+	'DELETE FROM "authorization_grants"\n WHERE "resource_kind" = \'approval-request\'',
+	'DELETE FROM "approval_requests"\n WHERE "id" IN (SELECT "id" FROM "precentral_approval_requests")',
+	'DELETE FROM "elicitation_requests"\n WHERE "id" IN (SELECT "id" FROM "precentral_elicitation_requests")',
+])
+{
+	_Require(authorizationMigration.includes(dependentDelete), `pre-cutover approval cleanup is missing dependency step ${dependentDelete}`);
+}
+_RequireBeforeIn(authorizationMigration, 'DELETE FROM "elicitation_response_attempts"', 'DELETE FROM "elicitation_requests"', "response attempts must be deleted before their elicitation requests");
+_RequireBeforeIn(authorizationMigration, 'DELETE FROM "elicitation_result_deliveries"', 'DELETE FROM "elicitation_requests"', "result deliveries must be deleted before their elicitation requests");
+_RequireBeforeIn(authorizationMigration, 'DELETE FROM "authorization_grants"\n WHERE "resource_kind" = \'approval-request\'', 'DELETE FROM "approval_requests"\n WHERE "id" IN (SELECT "id" FROM "precentral_approval_requests")', "approval grants must be deleted before their pre-cutover resources");
+_RequireBeforeIn(authorizationMigration, 'DELETE FROM "approval_requests"\n WHERE "id" IN (SELECT "id" FROM "precentral_approval_requests")', 'DELETE FROM "elicitation_requests"', "ApprovalRequest rows must be deleted before their elicitation requests");
+_Require(authorizationMigration.includes('OR "request_id" IN (SELECT "id" FROM "precentral_elicitation_requests")'), "personal-memory receipts must be deleted by the captured elicitation relation as well as the invocation relation");
+_Require(authorizationMigration.includes('receipt JOIN "precentral_elicitation_requests" legacy ON legacy."id" = receipt."request_id"'), "the residue assertion must reject a personal-memory receipt left behind through an elicitation relation");
+_Require(authorizationMigration.includes('DELETE FROM "authorization_grants"\nWHERE "catalog_id" = \'opencrane-core\''), "the central authorization migration must remove translated legacy MCP grants");
+_Require(authorizationMigration.includes('DELETE FROM "capability_catalog_revisions"\nWHERE "catalog_id" = \'opencrane-core\''), "the central authorization migration must remove the superseded legacy MCP catalogue");
+_RequireBeforeIn(authorizationMigration, "-- Translate the legacy MCP-use grant", 'DELETE FROM "authorization_grants"\nWHERE "catalog_id" = \'opencrane-core\'', "legacy MCP grants must be translated before their source rows are deleted");
+_RequireBeforeIn(authorizationMigration, 'DELETE FROM "authorization_grants"\nWHERE "catalog_id" = \'opencrane-core\'', 'DELETE FROM "capability_catalog_revisions"\nWHERE "catalog_id" = \'opencrane-core\'', "legacy MCP grants must be deleted before their catalogue revision");
+_Require(!targetBaseline.includes("'capability-catalog-opencrane-core-v1'"), "fresh databases must not seed the retired legacy MCP catalogue");
+_Require(!targetBaseline.includes("'opencrane-core'"), "fresh databases must not retain the retired legacy MCP catalogue identifier");
 _Require(authorizationMigration.includes('CREATE TEMP TABLE "precentral_tool_invocations"'), "the central authorization migration must identify every pre-central ToolInvocation");
 _Require(authorizationMigration.includes('SELECT "id"\n  FROM "tool_invocations";'), "the hard cutoff must include terminal and task-owned pre-central ToolInvocation rows");
 _Require(!authorizationMigration.includes('"state" NOT IN'), "the pre-1.0 cutoff must not retain terminal ToolInvocation compatibility");
@@ -193,6 +235,10 @@ for (const invariant of [
 	'"follow_up_command_id" IS NULL',
 	'"kind" = \'set_byok_key\' AND "state" = \'succeeded\' AND "follow_up_command_id" <> "id"',
 	'"payload" - ARRAY[\'provider\', \'secretRef\', \'litellmCredentialName\'] = \'{}\'::jsonb',
+	'"payload" - ARRAY[\'provider\', \'secretRef\', \'litellmCredentialName\', \'litellmRegistered\', \'modelDefinitionIds\', \'deployments\'] = \'{}\'::jsonb',
+	'jsonb_typeof("payload"->\'litellmRegistered\') = \'boolean\'',
+	'jsonb_typeof("payload"->\'modelDefinitionIds\') = \'array\'',
+	'jsonb_typeof("payload"->\'deployments\') = \'array\'',
 	'"payload" - ARRAY[\'modelDefinitionId\', \'publicModelName\', \'upstreamModel\', \'scope\', \'clusterTenant\', \'apiBase\', \'apiKeyEnvRef\', \'litellmCredentialName\', \'routingDefaultId\', \'selectedModelDefinitionId\'] = \'{}\'::jsonb',
 	'jsonb_typeof("payload"->\'routingDefaultId\') = \'null\' AND jsonb_typeof("payload"->\'selectedModelDefinitionId\') = \'null\'',
 	'"payload"->>\'selectedModelDefinitionId\' <> "payload"->>\'modelDefinitionId\'',
@@ -269,14 +315,38 @@ for (const siloKey of [
 	const compactKey = siloKey.replace(/\s+/gu, "");
 	_Require(targetBaseline.replace(/\s+/gu, "").includes(compactKey) && authorizationMigration.replace(/\s+/gu, "").includes(compactKey), `fresh and upgraded databases must share silo key ${siloKey}`);
 }
-_Require(authorizationMigration.includes("'organization-membership-admin-bootstrap'"), "the upgrade projection must use the live organization-admin grant manager");
+_Require(authorizationMigration.includes("'organization-membership-admin-bootstrap:' || principal.\"id\""), "the upgrade projection must use a principal-scoped organization-admin grant manager");
+_Require(!authorizationMigration.includes("'organization-membership-admin-bootstrap',"), "the upgrade projection must not retain the shared organization-admin grant manager");
+_Require(authorizationMigration.includes("ERRCODE = 'OC717'") && authorizationMigration.includes('HAVING count(principal."id") <> 1'), "membership-derived grants must fail closed when an active membership does not resolve to exactly one Principal");
+_RequireBeforeIn(authorizationMigration, "ERRCODE = 'OC717'", "-- Project current Owner/Admin roles", "active membership identity must be validated before administrator grants are projected");
 _Require(authorizationMigration.includes("('read', 'organization:read')") && authorizationMigration.includes("('administer', 'organization:administer')"), "the upgrade projection must install both read and administration grants for current organization administrators");
 _Require(authorizationMigration.includes("action.\"capability_id\", 'organization', principal.\"silo_id\", 'allow', 0"), "the upgrade projection must match the live organization-admin grant priority");
 _Require(authorizationMigration.includes("('persona', 'persona-collection:create', 'persona-collection')"), "active members must receive the Persona creation root during upgrade");
+_Require(authorizationMigration.includes("'organization-membership-product-bootstrap:' || principal.\"id\""), "the upgrade projection must use a principal-scoped member-product grant manager");
+_Require(!authorizationMigration.includes("'organization-membership-product-bootstrap',"), "the upgrade projection must not retain the shared member-product grant manager");
 _Require(authorizationMigration.includes("ERRCODE = 'OC715'"), "the Persona owner projection must fail closed on ambiguous Principal identity");
 _Require(authorizationMigration.includes("'persona-creator-access'"), "existing Persona owners must receive the live creator-managed grants");
-_Require(authorizationMigration.includes("ERRCODE = 'OC716'"), "the pending approver projection must fail closed on ambiguous Principal identity");
-_Require(authorizationMigration.includes("'deferred-tool-approval-assignee'"), "pending tool approvals must receive the live assignee-managed grants");
+_Require(!authorizationMigration.includes("ERRCODE = 'OC716'") && !authorizationMigration.includes("'central-approval-"), "the destructive approval cutoff must not validate or seed deleted pending approvals");
+_Require(!authorizationMigration.includes("'deferred-tool-approval-assignee'"), "the upgrade must leave approval grant creation to post-cutover runtime admission");
+const activeExactGrantIndex = `CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"(
+    "silo_id", "subject_kind", COALESCE("subject_group_id", ''), COALESCE("subject_principal_id", ''),
+    "boundary_kind", COALESCE("boundary_group_id", ''), COALESCE("boundary_principal_id", ''), "boundary_coverage",
+    "catalog_id", "catalog_revision", "capability_id", "resource_kind", COALESCE("resource_id", ''), "effect", "priority", COALESCE("manager_id", '')
+) WHERE "revoked_at" IS NULL;`;
+for (const [source, label] of [[authorizationMigration, "upgrade"], [targetBaseline, "fresh baseline"]])
+{
+	_Require(_NormalizedSql(source).includes(_NormalizedSql(activeExactGrantIndex)), `${label} must fence only active exact authorization grants`);
+}
+const providerProjectionStart = authorizationMigration.indexOf("-- Give each active Owner and Admin exact Read and Use authority over every retained silo-global");
+const providerProjectionEnd = authorizationMigration.indexOf("-- Translate the legacy MCP-use grant", providerProjectionStart);
+_Require(providerProjectionStart >= 0 && providerProjectionEnd > providerProjectionStart, "the retained provider-resource projection must have exact review boundaries");
+const providerProjection = authorizationMigration.slice(providerProjectionStart, providerProjectionEnd);
+_Require((providerProjection.match(/'provider-resource-0-10-cutover:' \|\| principal\."id"/gu) ?? []).length === 2, "provider and model cutover grants must use the dedicated principal-scoped manager");
+_Require(providerProjection.includes("('read', 'provider-connection:read')") && providerProjection.includes("('use', 'provider-connection:use')"), "retained provider connections must grant exact Read and Use actions");
+_Require(providerProjection.includes("('read', 'model-definition:read')") && providerProjection.includes("('use', 'model-definition:use')"), "retained model definitions must grant exact Read and Use actions");
+_Require(providerProjection.includes("action.\"capability_id\", 'provider-connection', credential.\"id\"") && providerProjection.includes("action.\"capability_id\", 'model-definition', definition.\"id\""), "retained provider grants must bind canonical exact resource ids");
+_Require((providerProjection.match(/"scope" = 'global'/gu) ?? []).length === 2 && (providerProjection.match(/"cluster_tenant" IS NULL/gu) ?? []).length === 2, "retained provider grants must project only silo-global resources");
+_Require(!providerProjection.includes("provider-connection:discover") && !providerProjection.includes("model-definition:discover") && !providerProjection.includes("'*'"), "retained provider grants must not project Discover or broad resource coordinates");
 const targetAuthorizationCatalogue = _ProductAuthorizationCatalogue(targetBaseline);
 const migratedAuthorizationCatalogue = _ProductAuthorizationCatalogue(authorizationMigration);
 _Require(JSON.stringify(migratedAuthorizationCatalogue) === JSON.stringify(targetAuthorizationCatalogue), "fresh and upgraded databases must install the exact same product-authorization catalogue");

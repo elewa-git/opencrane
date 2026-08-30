@@ -23,7 +23,6 @@ const _TARGET_AUTHORITIES = new Set([
 	"AuthorizationAuthority.admitPrincipalBatch",
 	"AuthorizationAuthority.decide",
 	"AuthorizationAuthority.listEntitled",
-	"AuthorizationAuthority.listManagedGrants",
 	"AuthorizationAuthority.listPrincipalEntitled",
 	"AuthorizationAuthority.replaceManagedGrants",
 	"IdentityAuthority.authenticate",
@@ -201,14 +200,14 @@ function _TargetMatchesReceipt(targetAuthority, receiptClass)
 {
 	if (!targetAuthority.startsWith("AuthorizationAuthority.")) return true;
 	const method = targetAuthority.slice("AuthorizationAuthority.".length);
-	if (receiptClass === "read") return ["decide", "listEntitled", "listManagedGrants", "listPrincipalEntitled"].includes(method);
+	if (receiptClass === "read") return ["decide", "listEntitled", "listPrincipalEntitled"].includes(method);
 	return ["admit", "admitPrincipal", "admitPrincipalBatch", "replaceManagedGrants"].includes(method);
 }
 
 /** Read an exact authority method from an anchor that directly names one. */
 function _AnchoredAuthorityMethod(anchor)
 {
-	const match = anchor.match(/\.(admitPrincipalBatch|admitPrincipal|admit|decide|listManagedGrants|listPrincipalEntitled|listEntitled|replaceManagedGrants)\s*\(/u);
+	const match = anchor.match(/\.(admitPrincipalBatch|admitPrincipal|admit|decide|listPrincipalEntitled|listEntitled|replaceManagedGrants)\s*\(/u);
 	return match?.[1] ?? null;
 }
 

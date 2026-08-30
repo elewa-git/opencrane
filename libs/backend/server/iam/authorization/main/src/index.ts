@@ -1,5 +1,7 @@
 export { __DigestCanonicalJson } from "./canonical-json-digest";
-export type { AdmitPrincipalProductAuthorizationCommand, AdmitProductAuthorizationCommand, AdmitProductAuthorizationResult, AuthorizationAuthority, ListEntitledProductResourcesCommand, ListManagedProductAuthorizationGrantsCommand, ListPrincipalEntitledProductResourcesCommand, ProductAuthorizationActorKind, ProductAuthorizationAdmissionEvidence, ReplaceManagedProductAuthorizationGrantsCommand, ReplaceManagedProductAuthorizationGrantsResult } from "./authorization-authority.types";
+export type { AdmitPrincipalProductAuthorizationCommand, AdmitProductAuthorizationCommand, AdmitProductAuthorizationResult, AuthorizationAuthority, ListEntitledProductResourcesCommand, ListPrincipalEntitledProductResourcesCommand, ProductAuthorizationActorKind, ProductAuthorizationAdmissionEvidence, ReplaceManagedProductAuthorizationGrantsCommand, ReplaceManagedProductAuthorizationGrantsResult, RetireProductAuthorizationResourceGrantsCommand, RetireProductAuthorizationResourceGrantsResult } from "./authorization-authority.types";
+export type { AuthorizationResourceGrantRetirementRepository, RetireAuthorizationResourceGrantsCommand } from "./authorization-resource-grant-retirement.types";
+export { PrismaAuthorizationResourceGrantRetirementRepository } from "./prisma-authorization-resource-grant-retirement-repository";
 export type { ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantSpec, ReconcileManagedAuthorizationGrantsCommand } from "./managed-authorization-grants.types";
 export { PrismaManagedAuthorizationGrantRepository } from "./prisma-managed-authorization-grant-repository";
 export type { OrganizationAdminGrantBootstrapRepository, ReconcileOrganizationAdminGrantCommand } from "./organization-admin-grant-bootstrap.types";
@@ -32,5 +34,5 @@ export type { ToolInvocationLifecycleInput } from "./tool-invocation-lifecycle.t
 export { PrismaAuthorizationAuthority } from "./prisma-authorization-authority";
 export { ___RunSerializableAuthorizationTransaction } from "./prisma-authorization-transaction";
 export type { PrismaAuthorizationTransactionAuthorityFactory, PrismaAuthorizationTransactionWork } from "./prisma-authorization-transaction.types";
-export { PrismaShareAuthorizationRepository } from "./prisma-share-authorization-repository";
-export type { CreateOrFindShareAuthorizationGrantResult, CreateShareAuthorizationGrant, ShareAuthorizationGrant, ShareAuthorizationRepository, ShareCapabilityCatalogRevision } from "./share-authorization-repository.types";
+export { PrismaManagedShareRevocationRepository } from "./prisma-managed-share-revocation-repository";
+export type { ManagedShareRevocationRepository } from "./managed-share-revocation-repository.types";

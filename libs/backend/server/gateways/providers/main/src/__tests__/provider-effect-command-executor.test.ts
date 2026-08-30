@@ -26,11 +26,6 @@ vi.mock("@opencrane/backend/observability", async function _Observability(import
 	};
 });
 
-vi.mock("../log", function _Log()
-{
-	return { _log: { error: _TELEMETRY.error, warn: _TELEMETRY.warn, info: _TELEMETRY.info, debug: _TELEMETRY.debug } };
-});
-
 import { DefaultProviderEffectCommandExecutor, _ProviderKeyMaterialVerifier } from "../provider-effect-command-executor";
 import { DefaultProviderEffectCommandHandler } from "../provider-effect-command-handler";
 import { ProviderEffectFinalizationBlockedError, ProviderEffectOutcomeUncertainError, _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "../provider-effect-command-errors";
@@ -157,6 +152,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 
 	it("saves a rolled-back alias result and finalizes it without repeating provider I/O", async function _RecoversAliasPlanningDenial()
 	{
+		_TELEMETRY.traceNames.length = 0;
 		const result = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], embedding: { status: ProviderEmbeddingReconciliationStatuses.NotApplicable, deployments: [] } } as const;
 		const initial = _command();
 		const recovered = { ...initial, deliveryCount: 1, failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, result };
@@ -179,6 +175,28 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		expect(handler.execute).toHaveBeenCalledOnce();
 		expect(repository.blockFinalization).toHaveBeenCalledWith(initial, result);
 		expect(repository.preflight).toHaveBeenCalledOnce();
+		expect(_TELEMETRY.traceNames).toContain("provider.effect.finalization.block");
+	});
+
+	it("traces the durable follow-up read before resuming a succeeded parent", async function _TracesFollowUpRead()
+	{
+		_TELEMETRY.traceNames.length = 0;
+		const parent = { ..._command(), state: ProviderEffectCommandStates.Succeeded, followUpCommandId: "command-child" };
+		const child = { ..._command(), id: "command-child", payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-auto", publicModelName: "auto", upstreamModel: "openai/gpt", scope: "global", clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null, routingDefaultId: "routing-1", selectedModelDefinitionId: "model-selected" } } as const, resourceKind: "model-definition", resourceId: "model-auto", materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None, state: ProviderEffectCommandStates.Succeeded, followUpCommandId: null };
+		const repository = {
+			claim: vi.fn()
+				.mockResolvedValueOnce({ status: ProviderEffectExecutionStatuses.AlreadySucceeded, command: parent })
+				.mockResolvedValueOnce({ status: ProviderEffectExecutionStatuses.AlreadySucceeded, command: child }),
+			findFollowUp: vi.fn(async function _FindFollowUp() { return child; }),
+		} as unknown as ProviderEffectCommandRepository;
+		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
+
+		await expect(executor.execute(parent.id, undefined, _CONTEXT)).resolves.toEqual({ status: ProviderEffectExecutionStatuses.AlreadySucceeded, result: null });
+
+		expect(repository.findFollowUp).toHaveBeenCalledWith(parent);
+		expect(_TELEMETRY.traceNames).toContain("provider.effect.follow-up.read");
+		expect(handler.execute).not.toHaveBeenCalled();
 	});
 
 	it("refuses reconciliation when a saved command names a different executor profile", async function _RejectsSavedProfile()

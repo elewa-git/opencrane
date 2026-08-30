@@ -185,15 +185,15 @@ model SkillAuthoringValidationBootstrap {
 /// The server records this inbox row before the task's recovery heartbeat can apply it. The
 /// validation trigger requires its outcome and, for failure, its code before terminal state.
 model SkillAuthoringValidationCompletionInbox {
-  id               String                                       @id @default(cuid())
-  validationId     String                                       @unique @map("validation_id")
-  completionDigest String                                       @map("completion_digest")
+  id               String                                    @id @default(cuid())
+  validationId     String                                    @unique @map("validation_id")
+  completionDigest String                                    @map("completion_digest")
   outcome          SkillAuthoringValidationCompletionOutcome
-  testReport       Json?                                        @map("test_report")
-  scanResult       Json?                                        @map("scan_result")
-  failureCode      String?                                      @map("failure_code")
-  receivedAt       DateTime                                     @default(now()) @map("received_at")
-  validation       SkillAuthoringValidation                     @relation(fields: [validationId], references: [id], onDelete: Restrict)
+  testReport       Json?                                     @map("test_report")
+  scanResult       Json?                                     @map("scan_result")
+  failureCode      String?                                   @map("failure_code")
+  receivedAt       DateTime                                  @default(now()) @map("received_at")
+  validation       SkillAuthoringValidation                  @relation(fields: [validationId], references: [id], onDelete: Restrict)
 
   @@map("skill_authoring_validation_completion_inbox")
 }

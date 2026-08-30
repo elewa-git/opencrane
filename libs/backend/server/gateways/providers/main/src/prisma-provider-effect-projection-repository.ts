@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { _BYOK_PROVIDER_CATALOG, ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
+import { ProductAuthorizationResourceKinds, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
 
 import { PrismaProviderByokRepository } from "./prisma-provider-byok-repository";
 import { ProviderEffectCommandKinds, type ProviderEffectCommandRecord, type ProviderEffectHandlerResult } from "./provider-effect-command.types";
@@ -64,7 +65,7 @@ export class PrismaProviderEffectProjectionRepository implements ProviderEffectP
 	}
 
 	/** @inheritdoc */
-	async persist(command: ProviderEffectCommandRecord, result: ProviderEffectHandlerResult): Promise<void>
+	async persist(command: ProviderEffectCommandRecord, result: ProviderEffectHandlerResult): Promise<readonly ProductAuthorizationResourceLocator[]>
 	{
 		switch (result.kind)
 		{
@@ -80,20 +81,21 @@ export class PrismaProviderEffectProjectionRepository implements ProviderEffectP
 				if (existing === null)
 				{
 					const credential = await this.transaction.providerCredential.create({ data: { id: providerConnectionId, ...where, secretRef: result.secretRef, litellmCredentialName: result.litellmCredentialName } });
-					await this._persistProviderModels(command.siloId, result, credential.id);
+					const modelResources = await this._persistProviderModels(command.siloId, result, credential.id);
+					return [{ kind: ProductAuthorizationResourceKinds.ProviderConnection, id: providerConnectionId }, ...modelResources];
 				}
 				else
 				{
 					await this.transaction.providerCredential.update({ where: { id_siloId: { id: existing.id, siloId: command.siloId } }, data: { secretRef: result.secretRef, litellmCredentialName: result.litellmCredentialName } });
-					await this._persistProviderModels(command.siloId, result, existing.id);
+					const modelResources = await this._persistProviderModels(command.siloId, result, existing.id);
+					return [{ kind: ProductAuthorizationResourceKinds.ProviderConnection, id: providerConnectionId }, ...modelResources];
 				}
-				return;
 			}
 			case ProviderEffectCommandKinds.DeleteByokKey:
 				if (command.payload.kind !== ProviderEffectCommandKinds.DeleteByokKey || result.provider !== command.payload.value.provider)
 					throw new Error("provider credential removal does not match its claimed command");
 				await this.byok.persistRetirement(command.siloId, command.payload.value);
-				return;
+				return [];
 			case ProviderEffectCommandKinds.RegisterModel:
 			{
 				if (command.payload.kind !== ProviderEffectCommandKinds.RegisterModel)
@@ -101,12 +103,13 @@ export class PrismaProviderEffectProjectionRepository implements ProviderEffectP
 				const model = await this.transaction.modelDefinition.updateMany({ where: { id: command.payload.value.modelDefinitionId, siloId: command.siloId, litellmModelId: `pending:${command.id}` }, data: { litellmModelId: result.litellmModelId } });
 				if (model.count !== 1)
 					throw new Error("current model registration command lost its pending projection");
+				return [];
 			}
 		}
 	}
 
 	/** Validates and saves only the provider-specific catalogue in this transaction. */
-	private async _persistProviderModels(siloId: string, result: Extract<ProviderEffectHandlerResult, { readonly kind: ProviderEffectCommandKinds.SetByokKey }>, providerCredentialId: string): Promise<void>
+	private async _persistProviderModels(siloId: string, result: Extract<ProviderEffectHandlerResult, { readonly kind: ProviderEffectCommandKinds.SetByokKey }>, providerCredentialId: string): Promise<readonly ProductAuthorizationResourceLocator[]>
 	{
 		const catalog = _BYOK_PROVIDER_CATALOG[result.provider];
 		const expected = [...(catalog?.models.map(function _Model(model) { return { publicModelName: model.slug, upstreamModel: model.slug }; }) ?? [])];
@@ -114,18 +117,22 @@ export class PrismaProviderEffectProjectionRepository implements ProviderEffectP
 		if (JSON.stringify(actual) !== JSON.stringify(expected))
 			throw new Error("provider model projection does not match the fixed provider catalogue");
 		this._validateEmbeddingProjection(result, catalog?.embeddingModel?.slug ?? null);
+		const resources: ProductAuthorizationResourceLocator[] = [];
 		for (const projection of result.models)
 		{
 			const existing = await this.transaction.modelDefinition.findFirst({ where: { siloId, scope: "Global", clusterTenant: null, publicModelName: projection.publicModelName } });
 			if (existing === null)
 			{
-				await this.transaction.modelDefinition.create({ data: { siloId, scope: "Global", clusterTenant: null, publicModelName: projection.publicModelName, upstreamModel: projection.upstreamModel, litellmModelId: projection.litellmModelId, apiBase: null, isDefault: false, providerCredentialId } });
+				const created = await this.transaction.modelDefinition.create({ data: { siloId, scope: "Global", clusterTenant: null, publicModelName: projection.publicModelName, upstreamModel: projection.upstreamModel, litellmModelId: projection.litellmModelId, apiBase: null, isDefault: false, providerCredentialId } });
+				resources.push({ kind: ProductAuthorizationResourceKinds.ModelDefinition, id: created.id });
 				continue;
 			}
 			if (existing.upstreamModel !== projection.upstreamModel || existing.apiBase !== null)
 				throw new Error(`provider model '${projection.publicModelName}' conflicts with its fixed catalogue projection`);
 			await this.transaction.modelDefinition.update({ where: { id_siloId: { id: existing.id, siloId } }, data: { litellmModelId: projection.litellmModelId, providerCredentialId } });
+			resources.push({ kind: ProductAuthorizationResourceKinds.ModelDefinition, id: existing.id });
 		}
+		return resources;
 	}
 
 	/** Validates durable embedding evidence against the same fixed provider catalogue. */

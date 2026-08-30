@@ -5,6 +5,7 @@ import { AuthorizationDecisionOutcomes, __ProductAuthorizationCapability } from 
 
 import { __AuthorizationAuthority } from "./authorization-authority";
 import type { AdmitProductAuthorizationCommand, AdmitProductAuthorizationResult, AuthorizationAuthority, ProductAuthorizationDecisionRecorder } from "./authorization-authority.types";
+import { PrismaAuthorizationResourceGrantRetirementRepository } from "./prisma-authorization-resource-grant-retirement-repository";
 import { PrismaAuthorizationGrantRepository } from "./prisma-authorization-grants";
 import { PrismaManagedAuthorizationGrantRepository } from "./prisma-managed-authorization-grant-repository";
 
@@ -65,6 +66,7 @@ export class PrismaAuthorizationAuthority extends __AuthorizationAuthority imple
 		const repository = new PrismaAuthorizationGrantRepository(transaction);
 		const recorder = new _PrismaProductAuthorizationDecisionRecorder(new PrismaAuditDecisionWriterRepository(transaction));
 		const managedGrants = new PrismaManagedAuthorizationGrantRepository(transaction);
-		super(repository, recorder, managedGrants);
+		const resourceGrantRetirement = new PrismaAuthorizationResourceGrantRetirementRepository(transaction);
+		super(repository, recorder, managedGrants, resourceGrantRetirement);
 	}
 }

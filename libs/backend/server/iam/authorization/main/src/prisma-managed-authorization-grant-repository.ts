@@ -81,12 +81,6 @@ export class PrismaManagedAuthorizationGrantRepository implements ManagedAuthori
 		return changedCount;
 	}
 
-	async listManagedResourceGrants(siloId: string, managerId: string, resource: AuthorizationResourceLocator): Promise<readonly ManagedAuthorizationGrantSpec[]>
-	{
-		const rows = await this._transaction.authorizationGrant.findMany({ where: { siloId, managerId, resourceKind: resource.kind, resourceId: resource.id, effect: "Allow", revokedAt: null }, orderBy: { id: "asc" }, select: _SELECT });
-		return rows.map(_Spec);
-	}
-
 	async reconcileManagedResourceGrants(command: ReconcileManagedAuthorizationGrantsCommand): Promise<number>
 	{
 		return PrismaManagedAuthorizationGrantRepository.reconcileInTransaction(this._transaction, command);

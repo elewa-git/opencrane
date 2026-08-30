@@ -21,8 +21,8 @@ function _Authorization()
 		admitPrincipalBatch: vi.fn(async function _AdmitBatch(commands) { return commands.map(function _Decision() { return admission; }); }),
 		listEntitled: vi.fn(async (command: { resources: readonly ProductAuthorizationResourceLocator[] }) => command.resources),
 		listPrincipalEntitled: vi.fn(async (command: { resources: readonly ProductAuthorizationResourceLocator[] }) => command.resources),
-		listManagedGrants: vi.fn().mockResolvedValue([]),
 		replaceManagedGrants: vi.fn().mockResolvedValue({ ...admission, changedCount: 0 }),
+		retireResourceGrants: vi.fn().mockResolvedValue({ ...admission, changedCount: 0 }),
 	};
 }
 

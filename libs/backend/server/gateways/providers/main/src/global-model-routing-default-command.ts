@@ -1,4 +1,5 @@
 import type { GlobalModelRoutingDefaultCommandPort, GlobalModelRoutingDefaultCommandResult, ModelRoutingCaller } from "@opencrane/backend/server/gateways/model-routing";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { AutoRoutingConfig } from "@opencrane/contracts";
 import { ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
@@ -29,9 +30,13 @@ export class DefaultGlobalModelRoutingDefaultCommandPort implements GlobalModelR
 		const context = { ...owner, actorKind: "user" as const, actorId: caller.principalId, resourceKind: ProductAuthorizationResourceKinds.Organization, resourceId: caller.siloId };
 		try
 		{
-			const admitted = await this.unitOfWork.runDatabaseMutation(function _Admit(_transaction, authorization, effects)
+			const self = this;
+			const admitted = await ___DoWithTrace("provider.routing-default.admit", { siloId: caller.siloId, principalId: caller.principalId }, function _AdmitRoutingDefault()
 			{
-				return effects.reconcileGlobalRoutingDefault(owner, command.defaultModel, command.autoConfig, context, authorization, new Date());
+				return self.unitOfWork.runDatabaseMutation(function _Admit(_transaction, authorization, effects)
+				{
+					return effects.reconcileGlobalRoutingDefault(owner, command.defaultModel, command.autoConfig, context, authorization, new Date());
+				});
 			});
 			if (admitted.child === null)
 				return { status: "succeeded", value: admitted.value };

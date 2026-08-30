@@ -4,8 +4,7 @@
  * Silo ownership remains a separate database and authorization coordinate, so the same provider
  * name can safely exist in different silos without creating another identity format.
  *
- * Called by: BYOK routes, provider-credential creation, provider-effect projection, and model
- * registration blocker checks.
+ * Called by: BYOK routes, provider-effect projection, and model-registration blocker checks.
  *
  * @param siloId - Silo that owns the provider connection and its globally unique database row.
  * @param provider - Normalized external provider name.

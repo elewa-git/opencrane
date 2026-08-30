@@ -11,6 +11,7 @@ import { _BYOK_PROVIDER_CATALOG } from "@opencrane/backend/server/gateways/model
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectMaterialRequirements, type ProviderEffectCommandOwner, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectExecutionContext, type ProviderEffectHandlerResult, type ProviderGlobalModelAliasRepository, type ProviderGlobalRoutingDefaultResult } from "./provider-effect-command.types";
 import { _ParseProviderEffectCommandPayload } from "./provider-effect-command.validator";
 import { ProviderEffectFinalizationBlockedError } from "./provider-effect-command-errors";
+import { _ProjectProviderResourceCreatorUse } from "./provider-gateway-authorization";
 
 /** Public name reserved for the one global chat-model alias. */
 export const _GLOBAL_AUTO_MODEL_NAME = "auto";
@@ -135,6 +136,10 @@ export class PrismaGlobalModelAliasRepository implements ProviderGlobalModelAlia
 		{
 			await this.transaction.modelDefinition.update({ where: { id_siloId: { id: aliasId, siloId: owner.siloId } }, data: { upstreamModel: selected.upstreamModel, litellmModelId: pendingId, apiBase: selected.apiBase, isDefault: false, providerCredentialId: selected.providerCredentialId, generatedOutputCapabilities: selected.generatedOutputCapabilities } });
 		}
+		const aliasResource = { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: aliasId } as const;
+		const creatorProjected = await _ProjectProviderResourceCreatorUse(authorization, { siloId: owner.siloId, principalId: owner.principalId }, aliasResource, now, context.actorKind, context.actorId);
+		if (!creatorProjected)
+			throw new ProviderEffectFinalizationBlockedError();
 		const payload = { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: aliasId, publicModelName: _GLOBAL_AUTO_MODEL_NAME, upstreamModel: selected.upstreamModel, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: selected.apiBase, apiKeyEnvRef: selected.providerCredential?.secretRef ?? null, litellmCredentialName: selected.providerCredential?.litellmCredentialName ?? null, routingDefaultId: routingDefault.id, selectedModelDefinitionId: selected.id } } as const;
 		const admitted = await this.effects.admit({ id: commandId, siloId: owner.siloId, principalId: owner.principalId, payload, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: aliasId, resourceRevision, argumentsDigest, materialVerifier: null, authorization: admission.evidence, executorProfile: owner.executorProfile, materialRequirement: ProviderEffectMaterialRequirements.None });
 		if (admitted.status !== ProviderEffectAdmissionStatuses.Admitted)

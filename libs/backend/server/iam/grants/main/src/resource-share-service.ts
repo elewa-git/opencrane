@@ -46,7 +46,7 @@ export class ResourceShareService
 			// 2. Remove the relation and soft-revoke its exact linked grant in one transaction. Either
 			// mismatch throws and rolls the whole procedure back.
 			const relationRevoked = await transaction.resourceShares.revokeRecipient(command.caller.siloId, command.shareId, command.recipientPrincipalId);
-			const grantRevoked = await transaction.authorizationShares.revokeManagedShare(command.caller.siloId, _RESOURCE_SHARE_MANAGER_ID, recipient.ownerPrincipalId, recipient.grantId);
+			const grantRevoked = await transaction.managedShareRevocations.revokeManagedShare(command.caller.siloId, _RESOURCE_SHARE_MANAGER_ID, recipient.ownerPrincipalId, recipient.grantId);
 			if (!relationRevoked || !grantRevoked)
 			{
 				throw new Error("resource recipient and linked grant diverged during revocation");

@@ -25,7 +25,7 @@ function _Authorization(outcome: "allow" | "deny" = "allow", readAllowed = true)
 /** Return a managed-grant writer that records creator grant reconciliation without Prisma delegates. */
 function _ManagedGrants(): ManagedAuthorizationGrantRepository
 {
-	return { listManagedResourceGrants: vi.fn().mockResolvedValue([]), reconcileManagedResourceGrants: vi.fn().mockResolvedValue(3) };
+	return { reconcileManagedResourceGrants: vi.fn().mockResolvedValue(3) };
 }
 
 /** Return the immutable public call submitted by every repository test. */

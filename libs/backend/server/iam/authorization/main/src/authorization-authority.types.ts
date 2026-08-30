@@ -45,38 +45,59 @@ export interface ProductAuthorizationDecisionRecorder
 	record(command: AdmitProductAuthorizationCommand, result: AdmitProductAuthorizationResult): Promise<void>;
 }
 
-/** Reads one product editor's centrally owned grant projection. */
-export interface ListManagedProductAuthorizationGrantsCommand
+/** Replaces one product editor's grant projection under central root authorization. */
+export interface ReplaceManagedProductAuthorizationGrantsCommand
 {
 	/** Silo containing the resource and grant rows. */
 	readonly siloId: string;
 	/** Authenticated local Principal requesting grant administration. */
 	readonly principalId: string;
-	/** Stable editor that exclusively owns the returned rows. */
-	readonly managerId: string;
-	/** Exact resource whose managed grants are requested. */
-	readonly resource: ProductAuthorizationResourceLocator;
-	/** Trusted server time used for current root-administration authorization. */
-	readonly nowEpochMs: number;
-}
-
-/** Replaces one product editor's grant projection under central root authorization. */
-export interface ReplaceManagedProductAuthorizationGrantsCommand extends ListManagedProductAuthorizationGrantsCommand
-{
 	/** Actor class persisted with the root authorization decision. */
 	readonly actorKind: ProductAuthorizationActorKind;
 	/** Stable local actor identifier persisted with the decision. */
 	readonly actorId: string;
+	/** Stable editor that exclusively owns the replaced rows. */
+	readonly managerId: string;
+	/** Exact resource whose managed grants are replaced. */
+	readonly resource: ProductAuthorizationResourceLocator;
 	/** Exact desired grant set for the named manager and resource. */
 	readonly grants: readonly ManagedAuthorizationGrantSpec[];
 	/** Database-aligned timestamp applied to revocations and new rows. */
 	readonly now: Date;
+	/** Trusted server time used for current root-administration authorization. */
+	readonly nowEpochMs: number;
 }
 
 /** Outcome of one generic managed-grant replacement. */
 export interface ReplaceManagedProductAuthorizationGrantsResult extends AdmitProductAuthorizationResult
 {
 	/** Number of grants created or revoked, or zero when authorization denied. */
+	readonly changedCount: number;
+}
+
+/** Retires every live grant attached to exact product resources under current root authorization. */
+export interface RetireProductAuthorizationResourceGrantsCommand
+{
+	/** Silo containing both the retiring resources and their grants. */
+	readonly siloId: string;
+	/** Authenticated local Principal requesting resource retirement. */
+	readonly principalId: string;
+	/** Actor class persisted with the root authorization decision. */
+	readonly actorKind: ProductAuthorizationActorKind;
+	/** Stable local actor identifier persisted with the decision. */
+	readonly actorId: string;
+	/** Exact resource coordinates that will cease to exist in the same transaction. */
+	readonly resources: readonly ProductAuthorizationResourceLocator[];
+	/** Database-aligned timestamp applied to every active matching grant. */
+	readonly now: Date;
+	/** Trusted server time used for current root-administration authorization. */
+	readonly nowEpochMs: number;
+}
+
+/** Outcome of one exact-resource grant retirement. */
+export interface RetireProductAuthorizationResourceGrantsResult extends AdmitProductAuthorizationResult
+{
+	/** Number of active grants soft-revoked, or zero when authorization was denied. */
 	readonly changedCount: number;
 }
 
@@ -127,8 +148,8 @@ export interface AuthorizationAuthority
 	listEntitled(command: ListEntitledProductResourcesCommand): Promise<readonly ProductAuthorizationResourceLocator[]>;
 	/** Filters candidates across the Principal's stored personal and Group boundaries. */
 	listPrincipalEntitled(command: ListPrincipalEntitledProductResourcesCommand): Promise<readonly ProductAuthorizationResourceLocator[]>;
-	/** Lists one editor's managed grants after current root authorization. */
-	listManagedGrants(command: ListManagedProductAuthorizationGrantsCommand): Promise<readonly ManagedAuthorizationGrantSpec[]>;
 	/** Replaces one editor's managed grants inside the caller's protected transaction. */
 	replaceManagedGrants(command: ReplaceManagedProductAuthorizationGrantsCommand): Promise<ReplaceManagedProductAuthorizationGrantsResult>;
+	/** Soft-revokes every live grant on exact resources that retire in the caller's transaction. */
+	retireResourceGrants(command: RetireProductAuthorizationResourceGrantsCommand): Promise<RetireProductAuthorizationResourceGrantsResult>;
 }

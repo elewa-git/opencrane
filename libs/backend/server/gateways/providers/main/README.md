@@ -58,7 +58,7 @@ removal returned by a pending response.
 
 Authorization has one path. Credential and model catalogues load lifecycle-eligible rows and then
 filter exact `ProviderConnection/Read` or `ModelDefinition/Read` resources through the central
-`AuthorizationAuthority`. Credential, BYOK, and model-definition mutations explicitly request
+`AuthorizationAuthority`. BYOK and model-definition mutations explicitly request
 `Organization/<silo>/Administer`. Database mutations and provider-effect admissions commit decision
 evidence, protected intent, and the command through the same Serializable transaction. Kubernetes
 and LiteLLM run only after that transaction commits. Every governed resource has a monotonic desired
@@ -86,8 +86,8 @@ caller's silo, never installation-wide.
 
 ## Public surface
 
-- `providerByokRouter`, `providerCredentialsRouter`, `modelRegistryRouter` —
-  the routers, mounted at `/api/v1/providers/*` and `/api/v1/models`.
+- `providerByokRouter`, `modelRegistryRouter` — the routers mounted at
+  `/api/v1/providers/byok` and `/api/v1/models`.
 - `_ProvidersOpenapiPaths` — the OpenAPI (REST API description) path fragments for this surface.
 - `_CreateProviderEffectCommandExecutor` — the shared route and background-reconciler composition.
 
@@ -107,6 +107,10 @@ The application layer mounts the routers and supplies a `PrismaClient`, the Kube
 client, and the operator namespace. This package does not resolve which model a request uses
 (that is `model-routing`) and does not run model calls (that is LiteLLM). It fails closed: an
 invalid key or unknown provider is rejected before anything is stored.
+
+`ProviderCredential` is an internal projection of a completed provider command. There is no
+reference-only credential CRUD route that can create or remove the row without reconciling the
+matching Secret and LiteLLM state.
 
 ## Dependency direction
 

@@ -25,13 +25,15 @@ function _resourceShares(state: _State): ResourceShareRepository
 		findRecipient: vi.fn(async function _findRecipient(siloId, shareId, recipientPrincipalId)
 		{
 			const grantId = state.recipients.get(recipientPrincipalId);
-			if (!grantId || state.share === null) return null;
+			if (!grantId || state.share === null)
+				return null;
 			return { shareId, siloId, ownerPrincipalId: state.share.ownerPrincipalId, recipientPrincipalId, grantId };
 		}),
 		revokeRecipient: vi.fn(async function _revokeRecipient(_siloId, _shareId, recipientPrincipalId)
 		{
 			const removed = state.recipients.delete(recipientPrincipalId);
-			if (state.share !== null) state.share = { ...state.share, recipientPrincipalIds: [...state.recipients.keys()].sort() };
+			if (state.share !== null)
+				state.share = { ...state.share, recipientPrincipalIds: [...state.recipients.keys()].sort() };
 			return removed;
 		}),
 		listVisible: vi.fn(async function _listVisible() { return state.share === null ? [] : [state.share]; }),
@@ -49,11 +51,10 @@ function _authority(): { service: ResourceShareService; state: _State; execute: 
 			listPrincipalEntitled: vi.fn(async function _List(command) { return command.resources; }),
 			admitPrincipal,
 		} as unknown as ResourceShareTransaction["authorization"],
-		authorizationShares: {
+		managedShareRevocations: {
 			revokeManagedShare,
 		},
 		managedAuthorizationGrants: {
-			listManagedResourceGrants: vi.fn().mockResolvedValue([]),
 			reconcileManagedResourceGrants: vi.fn().mockResolvedValue(1),
 		},
 		resourceShares: _resourceShares(state),

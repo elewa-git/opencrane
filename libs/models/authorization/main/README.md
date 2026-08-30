@@ -53,8 +53,7 @@ requirement is part of the typed command and decision digest, not an informal ca
 - `AuthorizationBoundary`, `AuthorizationSubject`, `AuthorizationResourceLocator`, and their
   matching helpers keep subjects, resources, and exact Personal or Group boundaries explicit.
 - Fleet-membership types and `Es256PublicJwk` describe independently verified identity evidence
-  consumed at server enforcement points; they do not perform cryptography or I/O here. The retired
-  DPoP capability verifier and its separate action-receipt model are not part of this package.
+  consumed at server enforcement points; they do not perform cryptography or I/O here.
 
 ## Boundary
 

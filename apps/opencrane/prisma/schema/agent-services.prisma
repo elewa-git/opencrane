@@ -26,23 +26,23 @@ enum AgentScheduleOverlapPolicy {
 }
 
 model AgentService {
-  id               String                 @id @default(cuid())
-  siloId           String                 @map("silo_id")
-  kind             AgentServiceKind
-  name             String
-  state            AgentServiceState      @default(Draft)
-  activeRevisionId String?                @map("active_revision_id")
-  workloadProfile  String                 @map("workload_profile")
-  principalId      String?                @map("principal_id")
-  createdAt        DateTime               @default(now()) @map("created_at")
-  updatedAt        DateTime               @updatedAt @map("updated_at")
-  revisions        AgentRevision[]        @relation("AgentServiceRevisions")
-  runs             AgentRun[]
-  conversations    Conversation[]
-  schedules        AgentServiceSchedule[]
+  id                 String                           @id @default(cuid())
+  siloId             String                           @map("silo_id")
+  kind               AgentServiceKind
+  name               String
+  state              AgentServiceState                @default(Draft)
+  activeRevisionId   String?                          @map("active_revision_id")
+  workloadProfile    String                           @map("workload_profile")
+  principalId        String?                          @map("principal_id")
+  createdAt          DateTime                         @default(now()) @map("created_at")
+  updatedAt          DateTime                         @updatedAt @map("updated_at")
+  revisions          AgentRevision[]                  @relation("AgentServiceRevisions")
+  runs               AgentRun[]
+  conversations      Conversation[]
+  schedules          AgentServiceSchedule[]
   mcpToolAssignments AgentRevisionMcpToolAssignment[]
-  activeRevision   AgentRevision?         @relation("ActiveAgentRevision", fields: [id, activeRevisionId], references: [agentServiceId, id], onDelete: Restrict)
-  principal        Principal?             @relation("ManagedAgentServicePrincipal", fields: [principalId, siloId], references: [id, siloId], onDelete: Restrict)
+  activeRevision     AgentRevision?                   @relation("ActiveAgentRevision", fields: [id, activeRevisionId], references: [agentServiceId, id], onDelete: Restrict)
+  principal          Principal?                       @relation("ManagedAgentServicePrincipal", fields: [principalId, siloId], references: [id, siloId], onDelete: Restrict)
 
   @@unique([id, activeRevisionId])
   @@unique([id, siloId])
@@ -54,33 +54,33 @@ model AgentService {
 /// Executable revision fields are immutable. Publication metadata may move through the closed
 /// lifecycle, but changing executable content always creates the next revision.
 model AgentRevision {
-  id                     String                               @id @default(cuid())
-  siloId                 String                               @map("silo_id")
-  agentServiceId         String                               @map("agent_service_id")
-  revision               Int
-  parentRevisionId       String?                              @map("parent_revision_id")
-  sourceRevisionId       String?                              @map("source_revision_id")
-  changeMessage          String                               @default("") @map("change_message")
-  state                  AgentRevisionState                   @default(Draft)
-  digest                 String
-  promptPolicyVersion    String                               @map("prompt_policy_version")
-  personaRevisionId      String?                              @map("persona_revision_id")
-  modelDefinitionId      String                               @map("model_definition_id")
-  budget                 Json
-  authoredBy             String                               @map("authored_by")
-  createdAt              DateTime                             @default(now()) @map("created_at")
-  publishedAt            DateTime?                            @map("published_at")
-  agentService           AgentService                         @relation("AgentServiceRevisions", fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
-  modelDefinition        ModelDefinition                      @relation(fields: [modelDefinitionId, siloId], references: [id, siloId], onDelete: Restrict)
-  activeFor              AgentService[]                       @relation("ActiveAgentRevision")
-  parentRevision         AgentRevision?                       @relation("AgentRevisionLineage", fields: [parentRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
-  childRevisions         AgentRevision[]                      @relation("AgentRevisionLineage")
-  sourceRevision         AgentRevision?                       @relation("AgentRevisionRestoreSource", fields: [sourceRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
-  restoredRevisions      AgentRevision[]                      @relation("AgentRevisionRestoreSource")
-  skillAssignments       AgentRevisionSkillAssignment[]
-  mcpToolAssignments      AgentRevisionMcpToolAssignment[]
-  boundaryAttachments    AgentRevisionBoundaryAttachment[]
-  runs                   AgentRun[]
+  id                  String                            @id @default(cuid())
+  siloId              String                            @map("silo_id")
+  agentServiceId      String                            @map("agent_service_id")
+  revision            Int
+  parentRevisionId    String?                           @map("parent_revision_id")
+  sourceRevisionId    String?                           @map("source_revision_id")
+  changeMessage       String                            @default("") @map("change_message")
+  state               AgentRevisionState                @default(Draft)
+  digest              String
+  promptPolicyVersion String                            @map("prompt_policy_version")
+  personaRevisionId   String?                           @map("persona_revision_id")
+  modelDefinitionId   String                            @map("model_definition_id")
+  budget              Json
+  authoredBy          String                            @map("authored_by")
+  createdAt           DateTime                          @default(now()) @map("created_at")
+  publishedAt         DateTime?                         @map("published_at")
+  agentService        AgentService                      @relation("AgentServiceRevisions", fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
+  modelDefinition     ModelDefinition                   @relation(fields: [modelDefinitionId, siloId], references: [id, siloId], onDelete: Restrict)
+  activeFor           AgentService[]                    @relation("ActiveAgentRevision")
+  parentRevision      AgentRevision?                    @relation("AgentRevisionLineage", fields: [parentRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
+  childRevisions      AgentRevision[]                   @relation("AgentRevisionLineage")
+  sourceRevision      AgentRevision?                    @relation("AgentRevisionRestoreSource", fields: [sourceRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
+  restoredRevisions   AgentRevision[]                   @relation("AgentRevisionRestoreSource")
+  skillAssignments    AgentRevisionSkillAssignment[]
+  mcpToolAssignments  AgentRevisionMcpToolAssignment[]
+  boundaryAttachments AgentRevisionBoundaryAttachment[]
+  runs                AgentRun[]
 
   @@unique([agentServiceId, revision])
   @@unique([agentServiceId, id])

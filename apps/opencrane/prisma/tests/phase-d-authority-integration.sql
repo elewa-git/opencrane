@@ -933,298 +933,39 @@ SET "state" = 'running', "started_at" = clock_timestamp()
 WHERE "id" = 'run-action';
 UPDATE "agent_runs" SET "state" = 'waiting_for_input' WHERE "id" = 'run-action';
 
-SELECT pg_temp.expect_failure(
-    'new ApprovalRequest cannot begin Approved',
-    $statement$
-        INSERT INTO "approval_requests" (
-            "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-            "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-            "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-            "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-            "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-            "approver_policy_revision", "effective_policy_digest", "state", "expires_at",
-            "decided_at", "decided_by", "resume_token_hash"
-        ) VALUES (
-            'approval-invalid-initial', 'run-action', 1, 'rev-published', 'svc-main', 'silo-1',
-            'proof-key-1', repeat('k', 43), 'user-1', 'opencrane-agent-runtime',
-            'runtime', 'tenant-silo-1', 'job', 'job-uid-1', 'pod-uid-1',
-            'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send',
-            'message', 'message-1', 'send', 'sha256:' || repeat('8', 64), 'sha256:' || repeat('a', 64),
-            'approver-v1', 'sha256:' || repeat('7', 64), 'approved', clock_timestamp() + interval '1 hour',
-            clock_timestamp(), 'approver-1', 'resume-invalid'
-        )
-    $statement$,
-    'must begin pending'
-);
-
-SELECT pg_temp.expect_failure(
-    'new ApprovalRequest cannot carry a pre-created decided_at while otherwise Pending',
-    $statement$
-        INSERT INTO "approval_requests" (
-            "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-            "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-            "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-            "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-            "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-            "approver_policy_revision", "effective_policy_digest", "expires_at", "decided_at"
-        ) VALUES (
-            'approval-pre-decided', 'run-action', 1, 'rev-published', 'svc-main', 'silo-1',
-            'proof-key-1', repeat('k', 43), 'user-1', 'opencrane-agent-runtime',
-            'runtime', 'tenant-silo-1', 'job', 'job-uid-1', 'pod-uid-1',
-            'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send',
-            'message', 'message-pre-decided', 'send', 'sha256:' || repeat('8', 64), 'sha256:' || repeat('9', 64),
-            'approver-v1', 'sha256:' || repeat('7', 64), clock_timestamp() + interval '1 hour', clock_timestamp()
-        )
-    $statement$,
-    'must begin pending'
-);
-
-SELECT pg_temp.expect_failure(
-    'new ApprovalRequest cannot already be expired',
-    $statement$
-        INSERT INTO "approval_requests" (
-            "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-            "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-            "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-            "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-            "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-            "approver_policy_revision", "effective_policy_digest", "expires_at", "created_at"
-        ) VALUES (
-            'approval-expired-initial', 'run-action', 1, 'rev-published', 'svc-main', 'silo-1',
-            'proof-key-1', repeat('k', 43), 'user-1', 'opencrane-agent-runtime',
-            'runtime', 'tenant-silo-1', 'job', 'job-uid-1', 'pod-uid-1',
-            'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send',
-            'message', 'message-expired', 'send', 'sha256:' || repeat('8', 64), 'sha256:' || repeat('b', 64),
-            'approver-v1', 'sha256:' || repeat('7', 64),
-            clock_timestamp() - interval '1 second', clock_timestamp() - interval '2 seconds'
-        )
-    $statement$,
-    'must have a current, future expiry'
-);
-
-INSERT INTO "approval_requests" (
-    "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-    "approver_policy_revision", "effective_policy_digest", "expires_at"
-) VALUES (
-    'approval-1', 'run-action', 1, 'rev-published', 'svc-main', 'silo-1',
-    'proof-key-1', repeat('k', 43), 'user-1', 'opencrane-agent-runtime',
-    'runtime', 'tenant-silo-1', 'job', 'job-uid-1', 'pod-uid-1',
-    'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send',
-    'message', 'message-approval', 'send', 'sha256:' || repeat('8', 64), 'sha256:' || repeat('c', 64),
-    'approver-v1', 'sha256:' || repeat('7', 64), clock_timestamp() + interval '1 hour'
-);
-
-SELECT pg_temp.expect_failure(
-    'ApprovalRequest subject must match the exact workload assignment',
-    $statement$
-        INSERT INTO "approval_requests" (
-            "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-            "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-            "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-            "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-            "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-            "approver_policy_revision", "effective_policy_digest", "expires_at"
-        ) SELECT
-            'approval-forged-subject', "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-            "proof_key_id", "proof_key_thumbprint", 'user-other', "workload_audience",
-            "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-            "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-            "resource_kind", 'message-forged', "action", "arguments_digest", 'sha256:' || repeat('e', 64),
-            "approver_policy_revision", "effective_policy_digest", clock_timestamp() + interval '1 hour'
-        FROM "approval_requests" WHERE "id" = 'approval-1'
-    $statement$,
-    'requires current WaitingForInput run, assignment, and proof authority'
-);
-
-SELECT pg_temp.expect_failure(
-    'ApprovalRequest cannot expire before its deadline',
-    $statement$
-        UPDATE "approval_requests"
-        SET "state" = 'expired', "decided_at" = clock_timestamp()
-        WHERE "id" = 'approval-1'
-    $statement$,
-    'may expire only after its deadline'
-);
-
-UPDATE "approval_requests"
-SET "state" = 'approved', "decided_at" = '2099-01-01T00:00:00Z',
-    "decided_by" = 'approver-1', "resume_token_hash" = 'resume-approval-1'
-WHERE "id" = 'approval-1';
 SELECT pg_temp.assert_true(
-    'ApprovalRequest decision time is database-owned and before expiry',
-    (SELECT "decided_at" <= clock_timestamp() AND "decided_at" < "expires_at"
-     FROM "approval_requests" WHERE "id" = 'approval-1')
-);
-UPDATE "approval_requests"
-SET "resume_token_hash" = NULL
-WHERE "id" = 'approval-1';
-SELECT pg_temp.assert_true(
-    'approved ApprovalRequest consumes its resume token exactly once',
-    (SELECT "state" = 'approved' AND "resume_token_hash" IS NULL
-     FROM "approval_requests" WHERE "id" = 'approval-1')
-);
-SELECT pg_temp.expect_failure(
-    'approved ApprovalRequest cannot mutate after its resume token is consumed',
-    $statement$
-        UPDATE "approval_requests"
-        SET "decided_by" = 'replacement-approver'
-        WHERE "id" = 'approval-1'
-    $statement$,
-    'may only consume its resume token once'
+    'ApprovalRequest requires exact live tool and elicitation coordinates',
+    (SELECT count(*) = 7 AND bool_and("is_nullable" = 'NO')
+       FROM information_schema.columns
+      WHERE "table_schema" = current_schema()
+        AND "table_name" = 'approval_requests'
+        AND "column_name" IN (
+            'elicitation_request_id', 'tool_invocation_row_id', 'reviewed_tool_arguments',
+            'reviewed_tool_schema', 'reviewed_tool_schema_digest', 'safe_proposed_arguments',
+            'response_schema'
+        ))
 );
 
-INSERT INTO "approval_requests" (
-    "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-    "approver_policy_revision", "effective_policy_digest", "expires_at"
-) SELECT
-    'approval-denied', "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", 'message-denied', "action", "arguments_digest", 'sha256:' || repeat('1', 64),
-    "approver_policy_revision", "effective_policy_digest", clock_timestamp() + interval '1 hour'
-FROM "approval_requests" WHERE "id" = 'approval-1';
-UPDATE "approval_requests"
-SET "state" = 'denied', "decided_by" = 'approver-1', "resume_token_hash" = 'resume-denied'
-WHERE "id" = 'approval-denied';
-UPDATE "approval_requests" SET "resume_token_hash" = NULL WHERE "id" = 'approval-denied';
 SELECT pg_temp.assert_true(
-    'denied ApprovalRequest retains a durable marker until one-time consumption',
-    (SELECT "state" = 'denied' AND "decided_by" = 'approver-1' AND "resume_token_hash" IS NULL
-     FROM "approval_requests" WHERE "id" = 'approval-denied')
+    'ApprovalRequest no longer duplicates capability-catalog coordinates',
+    NOT EXISTS (
+        SELECT 1
+          FROM information_schema.columns
+         WHERE "table_schema" = current_schema()
+           AND "table_name" = 'approval_requests'
+           AND "column_name" IN ('catalog_id', 'catalog_revision', 'catalog_digest', 'capability_id')
+    )
 );
 
-INSERT INTO "approval_requests" (
-    "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-    "approver_policy_revision", "effective_policy_digest", "expires_at"
-) VALUES (
-    'approval-expiring', 'run-action', 1, 'rev-published', 'svc-main', 'silo-1',
-    'proof-key-1', repeat('k', 43), 'user-1', 'opencrane-agent-runtime',
-    'runtime', 'tenant-silo-1', 'job', 'job-uid-1', 'pod-uid-1',
-    'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send',
-    'message', 'message-expiring', 'send', 'sha256:' || repeat('8', 64), 'sha256:' || repeat('d', 64),
-    'approver-v1', 'sha256:' || repeat('7', 64), clock_timestamp() + interval '300 milliseconds'
-);
-SELECT pg_sleep(0.4);
-SELECT pg_temp.expect_failure(
-    'ApprovalRequest cannot be approved after its deadline',
-    $statement$
-        UPDATE "approval_requests"
-        SET "state" = 'approved', "decided_at" = clock_timestamp(),
-            "decided_by" = 'approver-1', "resume_token_hash" = 'resume-too-late'
-        WHERE "id" = 'approval-expiring'
-    $statement$,
-    'decisions must be recorded before expiry'
-);
-UPDATE "approval_requests"
-SET "state" = 'expired', "decided_at" = clock_timestamp(), "resume_token_hash" = 'resume-expired'
-WHERE "id" = 'approval-expiring';
 SELECT pg_temp.assert_true(
-    'ApprovalRequest expires only after its deadline',
-    (SELECT "state" = 'expired' AND "decided_at" >= "expires_at"
-     FROM "approval_requests" WHERE "id" = 'approval-expiring')
-);
-UPDATE "approval_requests" SET "resume_token_hash" = NULL WHERE "id" = 'approval-expiring';
-SELECT pg_temp.assert_true(
-    'expired ApprovalRequest consumes its durable result marker exactly once',
-    (SELECT "state" = 'expired' AND "decided_by" IS NULL AND "resume_token_hash" IS NULL
-     FROM "approval_requests" WHERE "id" = 'approval-expiring')
-);
-
-INSERT INTO "approval_requests" (
-    "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-    "approver_policy_revision", "effective_policy_digest", "expires_at"
-) SELECT
-    'approval-stale-cancellation', "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", 'message-stale-cancellation', "action", "arguments_digest", 'sha256:' || repeat('e', 64),
-    "approver_policy_revision", "effective_policy_digest", clock_timestamp() + interval '300 milliseconds'
-FROM "approval_requests" WHERE "id" = 'approval-1';
-SELECT pg_sleep(0.4);
-CREATE TEMP TABLE cancellation_test_clock (
-    cancelled_at TIMESTAMP(3) NOT NULL
-) ON COMMIT DROP;
-INSERT INTO cancellation_test_clock VALUES (clock_timestamp()::timestamp(3));
-SELECT pg_temp.expect_failure(
-    'ApprovalRequest cancellation requires the shared caller-owned instant',
-    $statement$
-        UPDATE "approval_requests"
-        SET "state" = 'cancelled'
-        WHERE "id" = 'approval-stale-cancellation'
-    $statement$,
-    'requires a caller-supplied decision time between creation and now'
-);
-SELECT pg_temp.expect_failure(
-    'ApprovalRequest cancellation cannot predate its own creation',
-    $statement$
-        UPDATE "approval_requests"
-        SET "state" = 'cancelled', "decided_at" = '2000-01-01T00:00:00Z'
-        WHERE "id" = 'approval-stale-cancellation'
-    $statement$,
-    'requires a caller-supplied decision time between creation and now'
-);
-UPDATE "approval_requests"
-SET "state" = 'cancelled', "decided_at" = cancellation_test_clock.cancelled_at,
-    "decided_by" = 'must-be-cleared', "resume_token_hash" = 'must-be-cleared'
-FROM cancellation_test_clock
-WHERE "id" = 'approval-stale-cancellation';
-SELECT pg_temp.assert_true(
-    'cancellation preserves one caller-owned instant while closing a stale Pending ApprovalRequest',
-    (SELECT "state" = 'cancelled' AND "decided_at" >= "expires_at"
-        AND "decided_at" = cancellation_test_clock.cancelled_at
-        AND "decided_by" IS NULL AND "resume_token_hash" IS NULL
-     FROM "approval_requests" CROSS JOIN cancellation_test_clock
-     WHERE "id" = 'approval-stale-cancellation')
-);
-
-INSERT INTO "approval_requests" (
-    "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-    "approver_policy_revision", "effective_policy_digest", "expires_at"
-) SELECT
-    'approval-stale-state', "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", 'message-stale', "action", "arguments_digest", 'sha256:' || repeat('f', 64),
-    "approver_policy_revision", "effective_policy_digest", clock_timestamp() + interval '1 hour'
-FROM "approval_requests" WHERE "id" = 'approval-1';
-
-UPDATE "agent_runs" SET "state" = 'running' WHERE "id" = 'run-action';
-SELECT pg_temp.expect_failure(
-    'approval decision fails when the run is no longer WaitingForInput',
-    $statement$
-        UPDATE "approval_requests"
-        SET "state" = 'approved', "decided_by" = 'approver-1', "resume_token_hash" = 'resume-stale-state'
-        WHERE "id" = 'approval-stale-state'
-    $statement$,
-    'decision authority is no longer current'
-);
-SELECT pg_temp.assert_true(
-    'stale approval remains pending for the caller to resolve as a conflict',
-    (SELECT "state" = 'pending' AND "resume_token_hash" IS NULL
-     FROM "approval_requests" WHERE "id" = 'approval-stale-state')
+    'central authorization rows do not retain callerless approval flags or resume tokens',
+    NOT EXISTS (
+        SELECT 1
+          FROM information_schema.columns
+         WHERE "table_schema" = current_schema()
+           AND (("table_name" = 'authorization_grants' AND "column_name" = 'require_approval')
+             OR ("table_name" = 'approval_requests' AND "column_name" = 'resume_token_hash'))
+    )
 );
 
 INSERT INTO "authorization_grants" (
@@ -1240,7 +981,7 @@ INSERT INTO "authorization_grants" (
 );
 
 SELECT pg_temp.expect_failure(
-    'duplicate personal-boundary grant is rejected',
+    'duplicate active personal-boundary grant is rejected',
     $statement$
         INSERT INTO "authorization_grants" (
             "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
@@ -1249,6 +990,40 @@ SELECT pg_temp.expect_failure(
             "resource_id", "effect", "priority", "created_by"
         ) VALUES (
             'grant-personal-2', 'silo-1', 'principal', NULL, 'user-1',
+            'personal', NULL, 'user-1', 'exact',
+            'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send', 'message',
+            'message-1', 'allow', 100, 'user-1'
+        )
+    $statement$,
+    'authorization_grant_exact_authority_key'
+);
+
+UPDATE "authorization_grants"
+   SET "revoked_at" = clock_timestamp()
+ WHERE "id" = 'grant-personal-1';
+
+INSERT INTO "authorization_grants" (
+    "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
+    "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
+    "catalog_id", "catalog_revision", "catalog_digest", "capability_id", "resource_kind",
+    "resource_id", "effect", "priority", "created_by"
+) VALUES (
+    'grant-personal-2', 'silo-1', 'principal', NULL, 'user-1',
+    'personal', NULL, 'user-1', 'exact',
+    'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send', 'message',
+    'message-1', 'allow', 100, 'user-1'
+);
+
+SELECT pg_temp.expect_failure(
+    'a new active duplicate is rejected after revoke and recreate',
+    $statement$
+        INSERT INTO "authorization_grants" (
+            "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
+            "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
+            "catalog_id", "catalog_revision", "catalog_digest", "capability_id", "resource_kind",
+            "resource_id", "effect", "priority", "created_by"
+        ) VALUES (
+            'grant-personal-3', 'silo-1', 'principal', NULL, 'user-1',
             'personal', NULL, 'user-1', 'exact',
             'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send', 'message',
             'message-1', 'allow', 100, 'user-1'

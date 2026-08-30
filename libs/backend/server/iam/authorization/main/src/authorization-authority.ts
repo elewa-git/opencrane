@@ -1,7 +1,8 @@
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationEvidenceKinds, ProductAuthorizationResourceKinds, __DecideAuthorization, __ProductAuthorizationCapability, __ProductAuthorizationRule, type AuthorizationBoundaryContext, type AuthorizationGrant, type AuthorizationSubject, type ProductAuthorizationCommand, type ProductAuthorizationResourceLocator, type ProductAuthorizationResult } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { AdmitPrincipalProductAuthorizationCommand, AdmitProductAuthorizationCommand, AdmitProductAuthorizationResult, AuthorizationAuthority, ListEntitledProductResourcesCommand, ListManagedProductAuthorizationGrantsCommand, ListPrincipalEntitledProductResourcesCommand, ProductAuthorizationDecisionRecorder, ReplaceManagedProductAuthorizationGrantsCommand, ReplaceManagedProductAuthorizationGrantsResult } from "./authorization-authority.types";
+import type { AdmitPrincipalProductAuthorizationCommand, AdmitProductAuthorizationCommand, AdmitProductAuthorizationResult, AuthorizationAuthority, ListEntitledProductResourcesCommand, ListPrincipalEntitledProductResourcesCommand, ProductAuthorizationDecisionRecorder, ReplaceManagedProductAuthorizationGrantsCommand, ReplaceManagedProductAuthorizationGrantsResult, RetireProductAuthorizationResourceGrantsCommand, RetireProductAuthorizationResourceGrantsResult } from "./authorization-authority.types";
+import type { AuthorizationResourceGrantRetirementRepository } from "./authorization-resource-grant-retirement.types";
 import type { AuthorizationContextRepository } from "./authorization-resolution.types";
 import type { ManagedAuthorizationGrantRepository } from "./managed-authorization-grants.types";
 
@@ -34,16 +35,19 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 	private readonly recorder: ProductAuthorizationDecisionRecorder | null;
 	/** Generic managed-grant writer bound to the same transaction, when mutation is supported. */
 	private readonly managedGrants: ManagedAuthorizationGrantRepository | null;
+	/** Exact-resource grant retirement writer bound to the same product transaction. */
+	private readonly resourceGrantRetirement: AuthorizationResourceGrantRetirementRepository | null;
 
 	/**
 	 * Creates the authority over a repository owned by the caller's transaction.
 	 * @param repository - Reads current Principal, Group, boundary, and grant facts.
 	 */
-	constructor(repository: AuthorizationContextRepository, recorder: ProductAuthorizationDecisionRecorder | null = null, managedGrants: ManagedAuthorizationGrantRepository | null = null)
+	constructor(repository: AuthorizationContextRepository, recorder: ProductAuthorizationDecisionRecorder | null = null, managedGrants: ManagedAuthorizationGrantRepository | null = null, resourceGrantRetirement: AuthorizationResourceGrantRetirementRepository | null = null)
 	{
 		this.repository = repository;
 		this.recorder = recorder;
 		this.managedGrants = managedGrants;
+		this.resourceGrantRetirement = resourceGrantRetirement;
 	}
 
 	/** @inheritdoc */
@@ -189,22 +193,6 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 	}
 
 	/** @inheritdoc */
-	async listManagedGrants(command: ListManagedProductAuthorizationGrantsCommand)
-	{
-		if (this.managedGrants === null)
-		{
-			throw new Error("managed grant reads require a transaction-bound repository");
-		}
-		const argumentsDigest = ___DigestCanonicalJson({ managerId: command.managerId, resource: command.resource } as unknown as JsonValue);
-		const admission = await this.admitPrincipal({ siloId: command.siloId, principalId: command.principalId, actorKind: "user", actorId: command.principalId, action: ProductAuthorizationActions.Administer, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: command.siloId }, argumentsDigest, nowEpochMs: command.nowEpochMs });
-		if (admission.outcome !== AuthorizationDecisionOutcomes.Allow)
-		{
-			return [];
-		}
-		return this.managedGrants.listManagedResourceGrants(command.siloId, command.managerId, command.resource);
-	}
-
-	/** @inheritdoc */
 	async replaceManagedGrants(command: ReplaceManagedProductAuthorizationGrantsCommand): Promise<ReplaceManagedProductAuthorizationGrantsResult>
 	{
 		if (this.managedGrants === null)
@@ -218,6 +206,30 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 			return { ...admission, changedCount: 0 };
 		}
 		const changedCount = await this.managedGrants.reconcileManagedResourceGrants({ siloId: command.siloId, managerId: command.managerId, resource: command.resource, grants: command.grants, now: command.now });
+		return { ...admission, changedCount };
+	}
+
+	/** @inheritdoc */
+	async retireResourceGrants(command: RetireProductAuthorizationResourceGrantsCommand): Promise<RetireProductAuthorizationResourceGrantsResult>
+	{
+		if (this.resourceGrantRetirement === null)
+		{
+			throw new Error("resource grant retirement requires a transaction-bound repository");
+		}
+
+		// 1. Normalize exact coordinates so duplicate or reordered input cannot change retirement evidence.
+		const resources = _NormalizeRetiringResources(command.resources);
+		if (resources.length === 0)
+			throw new Error("resource grant retirement requires at least one exact resource");
+
+		// 2. Recheck root administration and record its complete retirement intent before changing grants.
+		const argumentsDigest = ___DigestCanonicalJson({ operation: "retire-product-resource-grants", resources } as unknown as JsonValue);
+		const admission = await this.admitPrincipal({ siloId: command.siloId, principalId: command.principalId, actorKind: command.actorKind, actorId: command.actorId, action: ProductAuthorizationActions.Administer, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: command.siloId }, argumentsDigest, nowEpochMs: command.nowEpochMs });
+		if (admission.outcome !== AuthorizationDecisionOutcomes.Allow)
+			return { ...admission, changedCount: 0 };
+
+		// 3. Revoke every manager's active grant before the owning domain deletes these same resources.
+		const changedCount = await this.resourceGrantRetirement.retireResourceGrants({ siloId: command.siloId, resources, now: command.now });
 		return { ...admission, changedCount };
 	}
 
@@ -296,4 +308,21 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 				throw new Error(`authorization catalogue filtering requires a Read-class rule: ${resource.kind}:${action}`);
 		}
 	}
+}
+
+/** Deduplicates and sorts exact resource coordinates before evidence or persistence uses them. */
+function _NormalizeRetiringResources(resources: readonly ProductAuthorizationResourceLocator[]): readonly ProductAuthorizationResourceLocator[]
+{
+	const unique = new Map<string, ProductAuthorizationResourceLocator>();
+	for (const resource of resources)
+	{
+		if (resource.kind.length === 0 || resource.id.length === 0)
+			throw new Error("resource grant retirement received an empty resource coordinate");
+		unique.set(`${resource.kind}\0${resource.id}`, resource);
+	}
+	return [...unique.values()].sort(function _Compare(left, right)
+	{
+		const kind = left.kind.localeCompare(right.kind);
+		return kind === 0 ? left.id.localeCompare(right.id) : kind;
+	});
 }

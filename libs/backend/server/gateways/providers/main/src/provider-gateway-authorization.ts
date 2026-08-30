@@ -1,13 +1,13 @@
 import type { Request, Response } from "express";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
-import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import type { AuthorizationAuthority, ProductAuthorizationActorKind } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ProviderGatewayAuthorizationError, type ProviderGatewayAdministrationAdmission, type ProviderGatewayCaller, type ProviderGatewayCallerResolver } from "./provider-gateway-authority.types";
 
-/** Isolates exact creator grants for model and provider resources. */
+/** Prefixes manager ids with the creator Principal so one creator's reconciliation cannot revoke another's grants. */
 const _PROVIDER_RESOURCE_CREATOR_MANAGER_ID = "provider-resource-creator-bootstrap";
 
 /** Resolve a provider-gateway caller from the admitted local Principal and trusted request host. */
@@ -37,8 +37,27 @@ export async function _RequireProviderGatewayAdministration(authorization: Autho
 	return { argumentsDigest, evidence: admission.evidence };
 }
 
-/** Projects exact read and use grants for a newly created provider resource. */
+/**
+ * Gives the creating Principal Discover, Read, and Use grants for one provider resource.
+ *
+ * This user-actor wrapper converts a denied root-administration check into the gateway's fixed
+ * authorization error. Provider-command finalization uses {@link _ProjectProviderResourceCreatorUse}
+ * directly so it can keep its saved result pending when grant projection is denied.
+ */
 export async function _GrantProviderResourceCreatorUse(authorization: AuthorizationAuthority, caller: ProviderGatewayCaller, resource: ProductAuthorizationResourceLocator, now: Date): Promise<void>
+{
+	const projected = await _ProjectProviderResourceCreatorUse(authorization, caller, resource, now, "user", caller.principalId);
+	if (!projected)
+		throw new ProviderGatewayAuthorizationError();
+}
+
+/**
+ * Rechecks organisation administration and reconciles one creator's resource grants.
+ *
+ * @returns `true` when the central authority allowed and reconciled the grants, or `false` when it
+ * denied the root-administration decision and changed no grants.
+ */
+export async function _ProjectProviderResourceCreatorUse(authorization: AuthorizationAuthority, caller: ProviderGatewayCaller, resource: ProductAuthorizationResourceLocator, now: Date, actorKind: ProductAuthorizationActorKind, actorId: string): Promise<boolean>
 {
 	const grants = [ProductAuthorizationActions.Discover, ProductAuthorizationActions.Read, ProductAuthorizationActions.Use].map(function _Grant(action)
 	{
@@ -47,9 +66,9 @@ export async function _GrantProviderResourceCreatorUse(authorization: Authorizat
 			throw new Error(`provider creator capability is missing for ${resource.kind}:${action}`);
 		return { subject: { kind: AuthorizationSubjectKinds.Principal, principalId: caller.principalId }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: caller.principalId }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource, priority: 0, createdByPrincipalId: caller.principalId } as const;
 	});
-	const replacement = await authorization.replaceManagedGrants({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, managerId: _PROVIDER_RESOURCE_CREATOR_MANAGER_ID, resource, grants, now, nowEpochMs: now.getTime() });
-	if (replacement.outcome !== AuthorizationDecisionOutcomes.Allow)
-		throw new ProviderGatewayAuthorizationError();
+	const managerId = `${_PROVIDER_RESOURCE_CREATOR_MANAGER_ID}:${caller.principalId}`;
+	const replacement = await authorization.replaceManagedGrants({ siloId: caller.siloId, principalId: caller.principalId, actorKind, actorId, managerId, resource, grants, now, nowEpochMs: now.getTime() });
+	return replacement.outcome === AuthorizationDecisionOutcomes.Allow;
 }
 
 /** Convert the central authority's deny result into the fixed gateway response. */

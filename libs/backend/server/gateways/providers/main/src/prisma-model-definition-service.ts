@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { GeneratedOutputCapability, ModelRoutingScope, type ModelDefinition } from "@opencrane/contracts";
 
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___RunSerializableAuthorizationTransaction, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
@@ -77,28 +78,36 @@ export class PrismaModelDefinitionUnitOfWork implements ModelDefinitionService
 			return { status: "invalid", failure: write };
 		const commandId = randomUUID();
 		const modelDefinitionId = randomUUID();
-		const admitted = await this._AdmitCreate(caller, commandId, modelDefinitionId, write);
-		if ("error" in admitted)
-			return { status: "invalid", failure: admitted };
-		if ("providerEffectBlocker" in admitted)
-			return { status: "busy", blocker: admitted.providerEffectBlocker };
-		const delivered = await this.effectExecutor.execute(admitted.commandId, undefined, _EffectContext(caller, admitted.modelDefinitionId));
-		if (delivered.status !== ProviderEffectExecutionStatuses.Succeeded)
-			return { status: "pending", commandId: admitted.commandId, modelDefinitionId: admitted.modelDefinitionId };
-		const created = await this._ReadPersisted(caller, admitted.modelDefinitionId);
-		if (created === null)
-			throw new Error("completed model registration command has no model definition");
-		return { status: "created", model: created };
+		const self = this;
+		return ___DoWithTrace("provider.model.register", { siloId: caller.siloId, principalId: caller.principalId, commandId, modelDefinitionId }, async function _RegisterModel()
+		{
+			const admitted = await self._AdmitCreate(caller, commandId, modelDefinitionId, write);
+			if ("error" in admitted)
+				return { status: "invalid", failure: admitted };
+			if ("providerEffectBlocker" in admitted)
+				return { status: "busy", blocker: admitted.providerEffectBlocker };
+			const delivered = await self.effectExecutor.execute(admitted.commandId, undefined, _EffectContext(caller, admitted.modelDefinitionId));
+			if (delivered.status !== ProviderEffectExecutionStatuses.Succeeded)
+				return { status: "pending", commandId: admitted.commandId, modelDefinitionId: admitted.modelDefinitionId };
+			const created = await self._ReadPersisted(caller, admitted.modelDefinitionId);
+			if (created === null)
+				throw new Error("completed model registration command has no model definition");
+			return { status: "created", model: created };
+		});
 	}
 
 	/** Retry one exact admitted registration and return only positively finalized state. */
 	async resume(caller: ProviderGatewayCaller, modelDefinitionId: string, commandId: string): Promise<ModelDefinitionRegistrationResult>
 	{
-		const delivered = await this.effectExecutor.execute(commandId, undefined, _EffectContext(caller, modelDefinitionId));
-		if (delivered.status !== ProviderEffectExecutionStatuses.Succeeded && delivered.status !== ProviderEffectExecutionStatuses.AlreadySucceeded)
-			return { status: "pending", commandId, modelDefinitionId };
-		const model = await this._ReadPersisted(caller, modelDefinitionId);
-		return model === null || model.litellmModelId.startsWith("pending:") ? { status: "pending", commandId, modelDefinitionId } : { status: "completed", model };
+		const self = this;
+		return ___DoWithTrace("provider.model.register.resume", { siloId: caller.siloId, principalId: caller.principalId, commandId, modelDefinitionId }, async function _ResumeRegistration()
+		{
+			const delivered = await self.effectExecutor.execute(commandId, undefined, _EffectContext(caller, modelDefinitionId));
+			if (delivered.status !== ProviderEffectExecutionStatuses.Succeeded && delivered.status !== ProviderEffectExecutionStatuses.AlreadySucceeded)
+				return { status: "pending", commandId, modelDefinitionId };
+			const model = await self._ReadPersisted(caller, modelDefinitionId);
+			return model === null || model.litellmModelId.startsWith("pending:") ? { status: "pending", commandId, modelDefinitionId } : { status: "completed", model };
+		});
 	}
 
 	/** Commit the pending definition and its authorization-bound registration command together. */
@@ -126,16 +135,20 @@ export class PrismaModelDefinitionUnitOfWork implements ModelDefinitionService
 	/** Read one final model projection without granting broader catalogue visibility. */
 	private _ReadPersisted(caller: ProviderGatewayCaller, modelDefinitionId: string): Promise<ModelDefinition | null>
 	{
-		return this._Run(async function _Read(_transaction, authorization, _effects, repository)
+		const self = this;
+		return ___DoWithTrace("provider.model.finalized.read", { siloId: caller.siloId, principalId: caller.principalId, modelDefinitionId }, function _ReadFinalizedModel()
 		{
-			const row = await repository.find(caller.siloId, modelDefinitionId);
-			if (row === null)
-				return null;
-			const resource = { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: row.id } as const;
-			const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: [resource], nowEpochMs: Date.now() });
-			if (entitled.length !== 1)
-				throw new ProviderGatewayAuthorizationError();
-			return row === null ? null : _ToContract(row);
+			return self._Run(async function _Read(_transaction, authorization, _effects, repository)
+			{
+				const row = await repository.find(caller.siloId, modelDefinitionId);
+				if (row === null)
+					return null;
+				const resource = { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: row.id } as const;
+				const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: [resource], nowEpochMs: Date.now() });
+				if (entitled.length !== 1)
+					throw new ProviderGatewayAuthorizationError();
+				return _ToContract(row);
+			});
 		});
 	}
 

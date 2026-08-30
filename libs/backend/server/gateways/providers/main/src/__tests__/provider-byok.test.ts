@@ -1,21 +1,21 @@
 import express from "express";
 import type { Express } from "express";
-import * as k8s from "@kubernetes/client-node";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import request from "supertest";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import type { Logger } from "@opencrane/backend/observability";
 import { _BYOK_PROVIDER_CATALOG, ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
 
 import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, type ProviderEffectCommandExecutor } from "../provider-effect-command.types";
 import type { ProviderGatewayAuthorizationFactory } from "../provider-gateway-authority.types";
-import { providerByokRouter } from "../routes/provider-byok";
+import { providerByokRouter } from "../provider-byok-composition";
 
 /** In-memory provider_credentials store backing the mock Prisma client. */
 type Row = Record<string, unknown>;
 
-/** The operator namespace the router writes Secrets into, in tests. */
-const _NS = "opencrane-acme";
+/** Process logger injected into the BYOK composition under test. */
+const _LOGGER = { info: vi.fn() } as unknown as Logger;
 
 /**
  * Builds a Prisma stub for the credential, model, and routing-default calls made while a BYOK key
@@ -165,52 +165,14 @@ function _Authorization(allow: boolean): ProviderGatewayAuthorizationFactory<Pri
 	}) as unknown as ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>;
 }
 
-/** A k8s 404 error shaped like the client's NotFound, used to drive the create path. */
-function _notFound(): Error & { code: number }
-{
-  return Object.assign(new Error("not found"), { code: 404 });
-}
-
-/** Build a CoreV1Api stub backed by an in-memory Secret store keyed by name. */
-function _mockCoreApi(secrets: Map<string, k8s.V1Secret>): k8s.CoreV1Api
-{
-  return {
-    readNamespacedSecret: async function _read(args: { name: string })
-    {
-      const s = secrets.get(args.name);
-		  if (!s)
-			throw _notFound();
-      return s;
-    },
-    createNamespacedSecret: async function _create(args: { body: k8s.V1Secret })
-    {
-      secrets.set(args.body.metadata!.name!, args.body);
-      return args.body;
-    },
-    replaceNamespacedSecret: async function _replace(args: { name: string; body: k8s.V1Secret })
-    {
-      secrets.set(args.name, args.body);
-      return args.body;
-    },
-    deleteNamespacedSecret: async function _delete(args: { name: string })
-    {
-		  if (!secrets.has(args.name))
-			throw _notFound();
-      secrets.delete(args.name);
-      return {};
-    },
-  } as unknown as k8s.CoreV1Api;
-}
-
 /**
  * Mount only the BYOK router over the supplied stores, granting the default caller's explicit
  * Organization/Administer admission. Pass `{ authorized: false }` to exercise a denied decision.
  */
-function _buildApp(store: Map<string, Row>, secrets: Map<string, k8s.V1Secret>, user: { authorized: boolean } = { authorized: true }, models: Map<string, Row> = new Map(), commands: Map<string, Row> = new Map()): Express
+function _buildApp(store: Map<string, Row>, user: { authorized: boolean } = { authorized: true }, models: Map<string, Row> = new Map(), commands: Map<string, Row> = new Map(), createAuthorization: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient> = _Authorization(user.authorized), principalId = "principal-1"): Express
 {
   const app = express();
   const prisma = _mockPrisma(store, models, commands);
-  const coreApi = _mockCoreApi(secrets);
   const executor = {
 	reconcileNext: async function _ReconcileNext() { return false; },
     execute: async function _Execute(commandId: string, material = {})
@@ -240,7 +202,7 @@ function _buildApp(store: Map<string, Row>, secrets: Map<string, k8s.V1Secret>, 
     },
   } as ProviderEffectCommandExecutor;
   app.use(express.json());
-  app.use("/api/v1/providers/byok", providerByokRouter(prisma, coreApi, _NS, executor, function _Caller() { return { siloId: "acme", principalId: "principal-1" }; }, _Authorization(user.authorized)));
+  app.use("/api/v1/providers/byok", providerByokRouter(prisma, executor, _LOGGER, function _Caller() { return { siloId: "acme", principalId }; }, createAuthorization));
   return app;
 }
 
@@ -267,7 +229,7 @@ describe("providerByokRouter", function _suite()
 
   it("never echoes the raw key back in the response body", async function _noEcho()
   {
-    const res = await request(_buildApp(new Map(), new Map())).put("/api/v1/providers/byok/anthropic").send({ apiKey: "sk-secret-xyz" });
+    const res = await request(_buildApp(new Map())).put("/api/v1/providers/byok/anthropic").send({ apiKey: "sk-secret-xyz" });
 
     expect(JSON.stringify(res.body)).not.toContain("sk-secret-xyz");
   });
@@ -275,7 +237,7 @@ describe("providerByokRouter", function _suite()
   it("returns only after the injected executor projects usable provider models", async function _ProjectsModels()
 	{
 		const models = new Map<string, Row>();
-		const response = await request(_buildApp(new Map(), new Map(), { authorized: true }, models)).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-live-123" });
+		const response = await request(_buildApp(new Map(), { authorized: true }, models)).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-live-123" });
 
 		expect(response.status).toBe(200);
 		expect(Array.from(models.values()).find(function _Flagship(model) { return model.publicModelName === "openai/gpt-5.5"; })).toMatchObject({ isDefault: false, providerCredentialId: "byok:acme:openai", litellmModelId: "deployment:openai/gpt-5.5" });
@@ -286,7 +248,7 @@ describe("providerByokRouter", function _suite()
 		const store = new Map<string, Row>([["cred-1", { id: "cred-1", scope: "Global", clusterTenant: null, provider: "openai", updatedAt: new Date() }]]);
 		const models = new Map<string, Row>([["model-1", { id: "model-1", scope: "Global", clusterTenant: null, publicModelName: "openai/gpt-5.5", upstreamModel: "openai/gpt-5.5", litellmModelId: "deployment-1", apiBase: null, providerCredentialId: "cred-1", isDefault: false, agentRevisions: [{ id: "revision-1" }] }]]);
 		const commands = new Map<string, Row>();
-		const response = await request(_buildApp(store, new Map(), { authorized: true }, models, commands)).delete("/api/v1/providers/byok/openai");
+		const response = await request(_buildApp(store, { authorized: true }, models, commands)).delete("/api/v1/providers/byok/openai");
 
 		expect(response.status).toBe(409);
 		expect(response.body.code).toBe("PROVIDER_CONNECTION_GOVERNED");
@@ -297,8 +259,7 @@ describe("providerByokRouter", function _suite()
 	it.each(["put", "delete"] as const)("returns 409 for a conflicting %s while a provider command is claimed", async function _ProviderConflict(method)
 	{
 		const commands = new Map<string, Row>([["command-a", { id: "command-a", siloId: "acme", resourceKind: "provider-connection", resourceId: "byok:acme:openai", desiredGeneration: 1, state: "Claimed", claimExpiresAt: new Date("2026-06-30T12:00:00.000Z") }]]);
-		const secrets = new Map<string, k8s.V1Secret>();
-		const app = _buildApp(new Map(), secrets, { authorized: true }, new Map(), commands);
+		const app = _buildApp(new Map(), { authorized: true }, new Map(), commands);
 		const response = method === "put"
 			? await request(app).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-new" })
 			: await request(app).delete("/api/v1/providers/byok/openai");
@@ -306,19 +267,33 @@ describe("providerByokRouter", function _suite()
 		expect(response.status).toBe(409);
 		expect(response.body).toEqual({ error: "Another provider effect still owns this resource.", code: "PROVIDER_EFFECT_BUSY", commandId: "command-a" });
 		expect(commands.size).toBe(1);
-		expect(secrets.size).toBe(0);
+	});
+
+	it("leaves administrator A's grants untouched when administrator B's Set is busy", async function _BusySetPreservesCreatorGrants()
+	{
+		const commands = new Map<string, Row>([["command-a", { id: "command-a", siloId: "acme", principalId: "administrator-a", resourceKind: "provider-connection", resourceId: "byok:acme:openai", desiredGeneration: 1, state: "Claimed", claimExpiresAt: new Date("2026-06-30T12:00:00.000Z") }]]);
+		const replaceManagedGrants = vi.fn();
+		const admitPrincipal = vi.fn(async function _Admit() { return { outcome: "allow", evidence: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } }; });
+		const createAuthorization = (function _CreateAuthorization() { return { admitPrincipal, replaceManagedGrants }; }) as unknown as ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>;
+		const app = _buildApp(new Map(), { authorized: true }, new Map(), commands, createAuthorization, "administrator-b");
+
+		const response = await request(app).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-new" });
+
+		expect(response.status).toBe(409);
+		expect(response.body.commandId).toBe("command-a");
+		expect(admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ principalId: "administrator-b" }));
+		expect(replaceManagedGrants).not.toHaveBeenCalled();
+		expect(commands.get("command-a")?.principalId).toBe("administrator-a");
 	});
 
   it("denies a caller without Organization/Administer with 403", async function _denyNonAdmin()
   {
     const store = new Map<string, Row>();
-    const secrets = new Map<string, k8s.V1Secret>();
-    const app = _buildApp(store, secrets, { authorized: false });
+    const app = _buildApp(store, { authorized: false });
     const res = await request(app).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-live-123" });
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("FORBIDDEN");
-    expect(secrets.size).toBe(0);
     expect(store.size).toBe(0);
   });
 
@@ -327,7 +302,7 @@ describe("providerByokRouter", function _suite()
 		const commandId = "command-succeeded";
 		const store = new Map<string, Row>([["byok:acme:openai", { id: "byok:acme:openai", siloId: "acme", scope: "Global", clusterTenant: null, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", createdAt: new Date(), updatedAt: new Date() }]]);
 		const commands = new Map<string, Row>([[commandId, { id: commandId, siloId: "acme", kind: ProviderEffectCommandKinds.SetByokKey, payload: { provider: "openai" }, resourceKind: "provider-connection", resourceId: "byok:acme:openai", desiredGeneration: 1, state: "Succeeded" }]]);
-		const app = _buildApp(store, new Map(), { authorized: false }, new Map(), commands);
+		const app = _buildApp(store, { authorized: false }, new Map(), commands);
 
 		const response = await request(app).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-retry", commandId });
 
@@ -337,7 +312,7 @@ describe("providerByokRouter", function _suite()
 
   it("rejects an unsupported provider with 400", async function _badProvider()
   {
-    const res = await request(_buildApp(new Map(), new Map())).put("/api/v1/providers/byok/cohere").send({ apiKey: "x" });
+    const res = await request(_buildApp(new Map())).put("/api/v1/providers/byok/cohere").send({ apiKey: "x" });
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("UNSUPPORTED_PROVIDER");
@@ -345,7 +320,7 @@ describe("providerByokRouter", function _suite()
 
   it("rejects a missing apiKey with 400", async function _missingKey()
   {
-    const res = await request(_buildApp(new Map(), new Map())).put("/api/v1/providers/byok/openai").send({});
+    const res = await request(_buildApp(new Map())).put("/api/v1/providers/byok/openai").send({});
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("VALIDATION_ERROR");
@@ -356,7 +331,7 @@ describe("providerByokRouter", function _suite()
     const store = new Map<string, Row>([
       ["cred-1", { id: "cred-1", scope: "Global", clusterTenant: null, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", updatedAt: new Date("2026-06-30T00:00:00.000Z") }],
     ]);
-    const res = await request(_buildApp(store, new Map())).get("/api/v1/providers/byok");
+    const res = await request(_buildApp(store)).get("/api/v1/providers/byok");
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(6);

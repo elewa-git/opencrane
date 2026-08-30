@@ -51,13 +51,13 @@ INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_principal_id", "boundary_kind",
     "boundary_principal_id", "boundary_coverage", "manager_id", "catalog_id",
     "catalog_revision", "catalog_digest", "capability_id", "resource_kind", "resource_id",
-    "effect", "priority", "require_approval", "created_by"
+    "effect", "priority", "created_by"
 ) VALUES (
     'channel-participant-send', 'silo-channel', 'principal', 'channel-user-principal', 'personal',
     'channel-user-principal', 'exact', 'channel-target-participant-access',
     'opencrane-product-authorization', 1,
     'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    'channel-target:send', 'channel-target', 'route-events', 'allow', 0, FALSE,
+    'channel-target:send', 'channel-target', 'route-events', 'allow', 0,
     'channel-user-principal'
 );
 UPDATE "conversation_participants"

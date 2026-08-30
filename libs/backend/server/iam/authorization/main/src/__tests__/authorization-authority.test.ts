@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { __AuthorizationAuthority } from "../authorization-authority";
 import type { ProductAuthorizationDecisionRecorder } from "../authorization-authority.types";
+import type { AuthorizationResourceGrantRetirementRepository } from "../authorization-resource-grant-retirement.types";
 import type { ManagedAuthorizationGrantRepository } from "../managed-authorization-grants.types";
 import type { AuthorizationContextRepository } from "../authorization-resolution.types";
 
@@ -149,10 +150,45 @@ describe("central authorization authority", function _Suite()
 			throw new Error("organization administration capability is missing");
 		vi.mocked(repository.listSubjectGrants).mockResolvedValue([{ grantId: "grant-admin", siloId: "silo-1", subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "principal-1" }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: "principal-1" }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: "silo-1" }, effect: AuthorizationGrantEffects.Allow, priority: 100, validFromEpochMs: 0, expiresAtEpochMs: null, revokedAtEpochMs: null }]);
 		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue(undefined) };
-		const managedGrants: ManagedAuthorizationGrantRepository = { listManagedResourceGrants: vi.fn().mockResolvedValue([]), reconcileManagedResourceGrants: vi.fn().mockResolvedValue(2) };
+		const managedGrants: ManagedAuthorizationGrantRepository = { reconcileManagedResourceGrants: vi.fn().mockResolvedValue(2) };
 		const authority = new __AuthorizationAuthority(repository, recorder, managedGrants);
 		const result = await authority.replaceManagedGrants({ siloId: "silo-1", principalId: "principal-1", actorKind: "user", actorId: "principal-1", managerId: "test-editor", resource: { kind: ProductAuthorizationResourceKinds.McpServer, id: "server-1" }, grants: [], now: new Date(1), nowEpochMs: 1 });
 		expect(result).toMatchObject({ outcome: AuthorizationDecisionOutcomes.Allow, changedCount: 2, evidence: { decisionDigest: expect.stringMatching(/^sha256:/) } });
 		expect(managedGrants.reconcileManagedResourceGrants).toHaveBeenCalledWith(expect.objectContaining({ managerId: "test-editor", resource: { kind: ProductAuthorizationResourceKinds.McpServer, id: "server-1" } }));
+	});
+
+	it("retires every grant on normalized exact resources only after root administration admission", async function _RetireResourceGrants()
+	{
+		const repository = _Repository();
+		const capability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.Organization, ProductAuthorizationActions.Administer);
+		if (capability === null)
+			throw new Error("organization administration capability is missing");
+		vi.mocked(repository.listSubjectGrants).mockResolvedValue([{ grantId: "grant-admin", siloId: "silo-1", subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "principal-1" }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: "principal-1" }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: "silo-1" }, effect: AuthorizationGrantEffects.Allow, priority: 100, validFromEpochMs: 0, expiresAtEpochMs: null, revokedAtEpochMs: null }]);
+		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue(undefined) };
+		const retirement: AuthorizationResourceGrantRetirementRepository = { retireResourceGrants: vi.fn().mockResolvedValue(4) };
+		const authority = new __AuthorizationAuthority(repository, recorder, null, retirement);
+		const model = { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: "model-1" } as const;
+		const provider = { kind: ProductAuthorizationResourceKinds.ProviderConnection, id: "provider-1" } as const;
+
+		const result = await authority.retireResourceGrants({ siloId: "silo-1", principalId: "principal-1", actorKind: "system", actorId: "provider-effect-v1", resources: [provider, model, model], now: new Date(1), nowEpochMs: 1 });
+
+		expect(result).toMatchObject({ outcome: AuthorizationDecisionOutcomes.Allow, changedCount: 4, evidence: { decisionDigest: expect.stringMatching(/^sha256:/) } });
+		expect(retirement.retireResourceGrants).toHaveBeenCalledWith({ siloId: "silo-1", resources: [model, provider], now: new Date(1) });
+		expect(recorder.record).toHaveBeenCalledWith(expect.objectContaining({ actorKind: "system", actorId: "provider-effect-v1", resource: { kind: ProductAuthorizationResourceKinds.Organization, id: "silo-1" } }), expect.any(Object));
+	});
+
+	it("leaves exact resource grants active when current root administration is denied", async function _DenyResourceRetirement()
+	{
+		const repository = _Repository();
+		vi.mocked(repository.listSubjectGrants).mockResolvedValue([]);
+		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue(undefined) };
+		const retirement: AuthorizationResourceGrantRetirementRepository = { retireResourceGrants: vi.fn().mockResolvedValue(1) };
+		const authority = new __AuthorizationAuthority(repository, recorder, null, retirement);
+
+		const result = await authority.retireResourceGrants({ siloId: "silo-1", principalId: "principal-1", actorKind: "user", actorId: "principal-1", resources: [{ kind: ProductAuthorizationResourceKinds.ProviderConnection, id: "provider-1" }], now: new Date(1), nowEpochMs: 1 });
+
+		expect(result).toMatchObject({ outcome: AuthorizationDecisionOutcomes.Deny, changedCount: 0, evidence: null });
+		expect(retirement.retireResourceGrants).not.toHaveBeenCalled();
+		expect(recorder.record).not.toHaveBeenCalled();
 	});
 });

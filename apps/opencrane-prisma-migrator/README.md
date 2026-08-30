@@ -39,6 +39,10 @@ repair, runs the IAM prerequisite, records the `20260826000000_0_9_2_baseline` P
 a fully rolled-back 0.10.0 workflow-cutover attempt when a repaired image retries it, and runs
 `prisma migrate deploy`. Other migration failures are returned immediately for a forward repair.
 
+The Nx `build` contract checks that the migration image still copies and starts this entrypoint with
+the reviewed Prisma ledger. `lint` checks every app-owned shell entrypoint and contract before CI
+selects the independently publishable `container` target.
+
 ## Boundary
 
 The PostgreSQL chart chooses when this image runs. This app does not decide which database it is

@@ -3,14 +3,15 @@ import { randomUUID } from "node:crypto";
 import { Prisma, ProviderEffectCommandState } from "@prisma/client";
 import type { AutoRoutingConfig } from "@opencrane/contracts";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
-import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type AdmitProviderEffectCommand, type ProviderEffectAdmissionResult, type ProviderEffectClaimResult, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectCompletionResult, type ProviderEffectExecutionContext, type ProviderEffectHandlerResult, type ProviderEffectResourceBlocker } from "./provider-effect-command.types";
-import { _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "./provider-effect-command-errors";
+import { ProviderEffectFinalizationBlockedError, _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "./provider-effect-command-errors";
 import { _ParseProviderEffectCommandPayload, _ParseProviderEffectHandlerResult, _ValidateProviderEffectCommandResourceBinding } from "./provider-effect-command.validator";
 import { PrismaGlobalModelAliasRepository } from "./prisma-global-model-alias-repository";
 import { PrismaProviderEffectProjectionRepository } from "./prisma-provider-effect-projection-repository";
+import { _ProjectProviderResourceCreatorUse } from "./provider-gateway-authorization";
 
 /** Maximum number of external deliveries before a command needs a fresh administrator request. */
 const _MAX_DELIVERIES = 3;
@@ -228,10 +229,13 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Claimed, claimFence: command.claimFence, deliveryCount: command.deliveryCount }, data: { state: ProviderEffectCommandState.Succeeded, result: validatedResult as unknown as Prisma.InputJsonValue, failureCode: null, claimFence: null, claimExpiresAt: null, completedAt } });
 		if (updated.count !== 1)
 			return { status: ProviderEffectExecutionStatuses.Busy, followUpCommand: null };
-		await this.projections.persist(command, validatedResult);
+		if (validatedResult.kind === ProviderEffectCommandKinds.DeleteByokKey)
+			await this._retireProviderResourceGrants(command, context, authorization, completedAt);
+		const projectedResources = await this.projections.persist(command, validatedResult);
 		let followUpCommand: ProviderEffectCommandRecord | null = null;
 		if (validatedResult.kind === ProviderEffectCommandKinds.SetByokKey)
 		{
+			await this._projectCreatorGrants(command, context, authorization, projectedResources, completedAt);
 			const alias = this._globalAlias();
 			followUpCommand = await alias.reconcileAfterSet(command, validatedResult, context, authorization, completedAt);
 			if (followUpCommand !== null)
@@ -242,6 +246,31 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 			}
 		}
 		return { status: ProviderEffectExecutionStatuses.Succeeded, followUpCommand };
+	}
+
+	/** Projects current creator grants on the exact provider and catalogue models written by Set-BYOK. */
+	private async _projectCreatorGrants(command: ProviderEffectCommandRecord, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, resources: readonly ProductAuthorizationResourceLocator[], now: Date): Promise<void>
+	{
+		for (const resource of resources)
+		{
+			const projected = await _ProjectProviderResourceCreatorUse(authorization, { siloId: command.siloId, principalId: command.principalId }, resource, now, context.actorKind, context.actorId);
+			if (!projected)
+				throw new ProviderEffectFinalizationBlockedError();
+		}
+	}
+
+	/** Revokes every live grant on exact provider and model identities before deleting their rows. */
+	private async _retireProviderResourceGrants(command: ProviderEffectCommandRecord, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, now: Date): Promise<void>
+	{
+		if (command.payload.kind !== ProviderEffectCommandKinds.DeleteByokKey)
+			throw new Error("provider grant retirement requires a Delete-BYOK command");
+		const resources: ProductAuthorizationResourceLocator[] = [
+			{ kind: ProductAuthorizationResourceKinds.ProviderConnection, id: command.resourceId },
+			...command.payload.value.modelDefinitionIds.map(function _ModelResource(id) { return { kind: ProductAuthorizationResourceKinds.ModelDefinition, id }; }),
+		];
+		const retirement = await authorization.retireResourceGrants({ siloId: command.siloId, principalId: command.principalId, actorKind: context.actorKind, actorId: context.actorId, resources, now, nowEpochMs: now.getTime() });
+		if (retirement.outcome !== AuthorizationDecisionOutcomes.Allow)
+			throw new ProviderEffectFinalizationBlockedError();
 	}
 
 	/** Opens the transaction-scoped alias planner used by Set and explicit routing writes. */

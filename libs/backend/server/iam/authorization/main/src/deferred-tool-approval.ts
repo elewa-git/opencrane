@@ -60,9 +60,8 @@ function _approvalRunState(state: AgentRunState): DeferredToolApprovalRunStates 
  * This is the create half of the deferred-tool lifecycle: when the runtime external-action authority
  * returns `deferred` for an approval-gated tool, the composition root calls this to open the pending
  * {@link ApprovalRequest} bound to the awaiting ToolInvocation (`toolInvocationRowId`). It reuses the
- * existing approval table rather than creating a second approval model —
- * the workload/proof-key binding is copied from the live run so the approval is still bound to the
- * exact executing Pod, while the catalog columns stay null because a tool is not a signed capability.
+ * existing approval table rather than creating a second approval model. The workload/proof-key
+ * binding is copied from the live run so the approval is still bound to the exact executing Pod.
  * Deferral is idempotent through the `(runId, attempt, actionDigest)` key: a repeated defer returns
  * the existing pending row rather than opening a second approval.
  *
@@ -337,7 +336,7 @@ export async function __ExpireDeferredToolApprovalBatch(transaction: Prisma.Tran
 	const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
 	if (run === null || run.attempt !== command.attempt || run.state !== AgentRunState.WaitingForInput)
 		return { expiredCount: 0, resumed: false };
-	const due = await transaction.approvalRequest.findMany({ where: { runId: command.runId, attempt: command.attempt, state: ApprovalRequestState.Pending, expiresAt: { lte: command.now }, toolInvocationRowId: { not: null } }, orderBy: { id: "asc" } });
+	const due = await transaction.approvalRequest.findMany({ where: { runId: command.runId, attempt: command.attempt, state: ApprovalRequestState.Pending, expiresAt: { lte: command.now } }, orderBy: { id: "asc" } });
 	let expiredCount = 0;
 	for (const approval of due)
 	{
@@ -354,10 +353,8 @@ export async function __ExpireDeferredToolApprovalBatch(transaction: Prisma.Tran
  *
  * Returns false without writing anything when the row was already decided by someone else.
  */
-async function _ExpireDeferredToolApproval(transaction: Prisma.TransactionClient, approval: { id: string; siloId: string; runId: string; attempt: number; toolInvocationRowId: string | null; elicitationRequestId: string | null }, now: Date): Promise<boolean>
+async function _ExpireDeferredToolApproval(transaction: Prisma.TransactionClient, approval: { id: string; siloId: string; runId: string; attempt: number; toolInvocationRowId: string; elicitationRequestId: string }, now: Date): Promise<boolean>
 {
-	if (approval.toolInvocationRowId === null)
-		return false;
 	const expired = await transaction.approvalRequest.updateMany({ where: { id: approval.id, state: ApprovalRequestState.Pending, expiresAt: { lte: now } }, data: { state: ApprovalRequestState.Expired, decidedAt: now, decidedBy: null } });
 	if (expired.count !== 1)
 		return false;

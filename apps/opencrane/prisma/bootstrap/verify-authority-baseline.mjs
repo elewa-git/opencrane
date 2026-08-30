@@ -49,7 +49,6 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'ResourceShareRecipient must link its exact active manager-owned grant',
 	'ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check"',
 	"'capability-catalog-resource-sharing-v1',\n    'opencrane-resource-sharing',\n    1,\n    'sha256:03c84ee77c531ddc95d5c379e195e12d94aed9129783a07105066a875d24c775'",
-	"'capability-catalog-opencrane-core-v1',\n    'opencrane-core',\n    1,\n    'sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6'",
 	'CREATE FUNCTION "enforce_agent_revision_assignment_immutability"()',
 	'CREATE TRIGGER "agent_revision_mcp_tool_assignments_immutable"',
 	'CREATE CONSTRAINT TRIGGER agent_runs_input_snapshot_complete',
@@ -90,7 +89,7 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'jsonb_typeof("mcp_tools") = \'array\'',
 	'CREATE UNIQUE INDEX "conversations_activity_sequence_key"',
 	'CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"',
-	'CREATE UNIQUE INDEX "authorization_grant_exact_authority_key"',
+	'CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"(\n  "silo_id", "subject_kind", COALESCE("subject_group_id", \'\'), COALESCE("subject_principal_id", \'\'),\n  "boundary_kind", COALESCE("boundary_group_id", \'\'), COALESCE("boundary_principal_id", \'\'), "boundary_coverage",\n  "catalog_id", "catalog_revision", "capability_id", "resource_kind", COALESCE("resource_id", \'\'), "effect", "priority", COALESCE("manager_id", \'\')\n) WHERE "revoked_at" IS NULL',
 	'CONSTRAINT "model_definitions_generated_output_capabilities_check"',
 	'CREATE TYPE "ToolInvocationState" AS ENUM (\'preparing\', \'awaiting_approval\', \'ready\', \'claimed\', \'reconciling\', \'succeeded\', \'failed\', \'recovery_required\');',
 	'CREATE TABLE "tool_result_deliveries"',
@@ -148,6 +147,8 @@ const _FORBIDDEN_AUTHORITY_MARKERS = [
 	'runtime_external_action_retries',
 	'run.attempt_requested',
 	'run.workload_release_requested',
+	"'capability-catalog-opencrane-core-v1'",
+	"'opencrane-core'",
 ];
 
 /** Counts statements which begin at a SQL line boundary. */

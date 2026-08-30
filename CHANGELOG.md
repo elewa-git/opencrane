@@ -39,9 +39,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   boundaries.** Grants distinguish exact from descendant coverage without inheriting group
   membership through the hierarchy, managed editors revoke only grants they own, and resource
   shares create auditable exact-recipient grants without becoming a parallel authorization model.
-- **People, personal assistants, and managed agents now use one product authorization authority.**
-  Reads filter the catalogue against current grants, protected mutations commit their decision
-  evidence in the same database transaction, and runtime tool effects first create a one-use
+- **People, personal assistants, and managed agents now use one transaction-bound product
+  authorization authority.** Reads filter the catalogue against current grants, protected mutations
+  commit their decision evidence and product change in the same database transaction, and runtime
+  tool effects first create a one-use
   `ToolInvocation` bound to the principal, run, resource revision, arguments, approval, and workload
   assignment. Revocation and cancellation therefore close future runtime effects without letting a
   runtime reinterpret grants.
@@ -136,13 +137,12 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   incompatible backup from being relabelled as current. A changed target requires a clean database.
 
 - **Authorized administrators can configure provider keys and models through recoverable,
-  revocation-aware commands.** Calling `PUT /api/v1/providers/byok/:provider` turns one raw key into
-  a tier-structured model catalogue, but OpenCrane first commits the protected intent, central
-  authorization evidence, and a non-secret provider-effect command together. Resumed and background
-  delivery rechecks current authority, while leased and desired-generation fences prevent an older
-  key, deletion, or model registration from replacing newer intent. A key that did not reach Secret
-  custody can be resubmitted against its returned command ID without persisting the raw key in the
-  database.
+  revocation-aware commands.** `PUT /api/v1/providers/byok/:provider` commits protected intent,
+  central decision evidence, and a secret-free provider-effect command together; resumed delivery
+  rechecks authority and cannot let older work replace newer intent. New resources grant their
+  creator exact `Discover`, `Read`, and `Use`; the 0.10 cutover gives active owners and admins only
+  exact `Read` and `Use` over retained silo-global providers and models. Raw keys never persist in
+  the database.
 
 - **The gateway WebSocket is now reachable at `/gateway` so the org's SPA can own the root path.**
   Upgrading to `wss://<org>.<base>/gateway` routes to the tenant's OpenClaw pod (the proxy strips
@@ -207,6 +207,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   presented as a supported release boundary. This destructive pre-1.0 cutover avoids carrying
   compatibility state into the 0.10 architecture.
 
+- **Readers can now distinguish package governance, OCI storage, and product authorization.** The
+  website explains what artifact, MCP, skill, image, grant, `ToolInvocation`, and workload-assignment
+  records each prove, and marks incomplete skill execution classes as planned rather than shipped.
+
 - **Maintainers now carry durable compatibility and transition evidence with every release-affecting
   change.** Each directly changed or dependency-adapted Nx application records the immutable root
   train where its production contract was last adapted; changed charts carry a reviewed Helm
@@ -219,8 +223,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   under `libs/backend/server`, and server-process support lives under `libs/backend/server/infra`.
 
 - **Operators can now identify and release every deployed workload from its owning app package.**
-  OpenCrane server and UI definitions stay with their product apps; Cognee, LiteLLM, and Obot live
-  under `apps/_infra`; and `apps/_infra/deploy-k8s` composes those app-owned charts.
+  OpenCrane server and UI definitions stay with their product apps; Cognee and LiteLLM live under
+  `apps/_infra`; governed MCP servers execute from admitted OCI revisions; and
+  `apps/_infra/deploy-k8s` composes the surviving app-owned charts without an Obot workload.
 
 - **Platform developers can reuse functional server capabilities without importing an app root.**
   Tenant reconciliation, identity, projection, connection auth, policy reconciliation, channel
@@ -263,8 +268,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   database whose migration already completed can now finish convergence and privilege
   reconciliation because the proof query binds its validated history values through psql's script
   input instead of treating them as literal placeholders, allowing the fence to clear. Deployments
-  that omit `--initial-model-provider` can also complete Helm argument construction under strict
-  shell checks instead of aborting on an unset optional argument array. The path is contract-tested;
+  that omitted the former `--initial-model-provider` could also complete Helm argument construction
+  under strict shell checks instead of aborting on an unset optional argument array. That bootstrap
+  option is now retired. The path is contract-tested;
   live-cluster redeployment qualification remains pending.
 
 - **BYOK model calls no longer return 401 when the operator fetches the tenant model list.**

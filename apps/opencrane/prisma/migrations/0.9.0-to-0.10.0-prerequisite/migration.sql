@@ -3679,7 +3679,7 @@ CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_
     "silo_id", "subject_kind", COALESCE("subject_group_id", ''), COALESCE("subject_principal_id", ''),
     "boundary_kind", COALESCE("boundary_group_id", ''), COALESCE("boundary_principal_id", ''), "boundary_coverage",
     "catalog_id", "catalog_revision", "capability_id", "resource_kind", COALESCE("resource_id", ''), "effect", "priority", COALESCE("manager_id", '')
-);
+) WHERE "revoked_at" IS NULL;
 CREATE INDEX "authorization_grants_silo_id_subject_kind_subject_group_id__idx" ON "authorization_grants"("silo_id", "subject_kind", "subject_group_id", "subject_principal_id");
 CREATE INDEX "authorization_grants_silo_id_boundary_kind_boundary_group_i_idx" ON "authorization_grants"("silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage");
 CREATE INDEX "authorization_grants_silo_id_manager_id_idx" ON "authorization_grants"("silo_id", "manager_id");
@@ -3913,12 +3913,12 @@ INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage", "manager_id",
     "catalog_id", "catalog_revision", "catalog_digest", "capability_id", "resource_kind", "resource_id",
-    "effect", "priority", "valid_from", "require_approval", "created_by", "created_at"
+    "effect", "priority", "valid_from", "created_by", "created_at"
 )
 SELECT 'migration-mcp-user-' || md5(policy."id" || ':' || access_user."user_id"), server."silo_id",
        'principal', NULL, principal_reference."principal_id", 'group', organization_group."group_id", NULL, 'exact', 'mcp-access-editor',
        'opencrane-core', 1, 'sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6',
-       'mcp-server:use', 'mcp-server', server."id", 'allow', 0, policy."created_at", false,
+       'mcp-server:use', 'mcp-server', server."id", 'allow', 0, policy."created_at",
        'migration:0.9.0-to-0.10.0-prerequisite', policy."created_at"
 FROM "mcp_server_access_policies" policy
 JOIN "mcp_servers" server ON server."id" = policy."mcp_server_id"
@@ -3933,12 +3933,12 @@ INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage", "manager_id",
     "catalog_id", "catalog_revision", "catalog_digest", "capability_id", "resource_kind", "resource_id",
-    "effect", "priority", "valid_from", "require_approval", "created_by", "created_at"
+    "effect", "priority", "valid_from", "created_by", "created_at"
 )
 SELECT 'migration-mcp-group-' || md5(policy."id" || ':' || group_name."reference"), server."silo_id",
        'group', group_reference."group_id", NULL, 'group', organization_group."group_id", NULL, 'exact', 'mcp-access-editor',
        'opencrane-core', 1, 'sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6',
-       'mcp-server:use', 'mcp-server', server."id", 'allow', 0, policy."created_at", false,
+       'mcp-server:use', 'mcp-server', server."id", 'allow', 0, policy."created_at",
        'migration:0.9.0-to-0.10.0-prerequisite', policy."created_at"
 FROM "mcp_server_access_policies" policy
 JOIN "mcp_servers" server ON server."id" = policy."mcp_server_id"
@@ -3980,13 +3980,13 @@ WHERE group_row."name" LIKE 'resource:%';
 INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_principal_id", "boundary_kind", "boundary_principal_id", "boundary_coverage", "manager_id",
     "catalog_id", "catalog_revision", "catalog_digest", "capability_id", "resource_kind", "resource_id",
-    "effect", "priority", "valid_from", "require_approval", "created_by", "created_at"
+    "effect", "priority", "valid_from", "created_by", "created_at"
 )
 SELECT 'migration-resource-share-' || md5(group_row."id" || ':' || recipient_reference."principal_id"), group_row."silo_id",
        'principal', recipient_reference."principal_id", 'personal', owner_reference."principal_id", 'exact', 'resource-share-editor',
        'opencrane-resource-sharing', 1, 'sha256:03c84ee77c531ddc95d5c379e195e12d94aed9129783a07105066a875d24c775',
        'resource:read', split_part(group_row."name", ':', 2), substring(group_row."name" from '^[^:]+:[^:]+:(.+)$'),
-       'allow', 0, group_row."created_at", false, owner_reference."principal_id", group_row."created_at"
+       'allow', 0, group_row."created_at", owner_reference."principal_id", group_row."created_at"
 FROM "groups" group_row
 CROSS JOIN LATERAL jsonb_array_elements(group_row."members") WITH ORDINALITY owner_member(value, ordinal)
 JOIN "_iam_principal_reference" owner_reference ON owner_reference."reference" = (owner_member.value #>> '{}') AND owner_member.ordinal = 1

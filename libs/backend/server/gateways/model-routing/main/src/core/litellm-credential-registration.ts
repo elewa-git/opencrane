@@ -4,9 +4,9 @@ import { _log } from "../log";
 import { LiteLlmCredentialMutationOutcomes, type LiteLlmCredentialUpsert } from "./litellm-credential-registration.types";
 
 /**
- * Per-request timeout for the LiteLLM `/credentials` calls. Bounds the boot-time bootstrap (which
- * awaits these) so a hung or unreachable LiteLLM cannot wedge silo controller startup. A timeout
- * yields an uncertain result because the fixed-name mutation may still complete upstream.
+ * Per-request timeout for the LiteLLM `/credentials` calls. It bounds each provider-command
+ * delivery so an unreachable LiteLLM cannot hold the claim forever. A timeout yields an uncertain
+ * result because the fixed-name mutation may still complete upstream and require reconciliation.
  */
 const _LITELLM_HTTP_TIMEOUT_MS = 10_000;
 

@@ -130,7 +130,10 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 		{
 			if (!_IsProviderEffectFinalizationBlocked(error))
 				throw error;
-			const status = await self.unitOfWork.run(function _Block(repository) { return repository.blockFinalization(command, result); });
+			const status = await ___DoWithTrace("provider.effect.finalization.block", fields, function _BlockFinalization()
+			{
+				return self.unitOfWork.run(function _Block(repository) { return repository.blockFinalization(command, result); });
+			});
 			___MarkActiveSpanFailed();
 			self.log.warn({ ...fields, status }, "provider effect result remains blocked after protected finalization rolled back");
 			return { status, result: null };
@@ -159,7 +162,11 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 	{
 		if (parent.followUpCommandId === null)
 			return null;
-		const child = await this.unitOfWork.run(function _Find(repository) { return repository.findFollowUp(parent); });
+		const self = this;
+		const child = await ___DoWithTrace("provider.effect.follow-up.read", { commandId: parent.id, followUpCommandId: parent.followUpCommandId, siloId: parent.siloId, resourceKind: parent.resourceKind, resourceId: parent.resourceId, deliverySource }, function _ReadFollowUp()
+		{
+			return self.unitOfWork.run(function _Find(repository) { return repository.findFollowUp(parent); });
+		});
 		if (child === null)
 			throw new Error("provider effect parent references a missing follow-up command");
 		return this._executeFollowUp(child, context, deliverySource);

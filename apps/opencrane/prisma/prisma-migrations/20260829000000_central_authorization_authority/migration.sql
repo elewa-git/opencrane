@@ -35,10 +35,52 @@ INSERT INTO "precentral_tool_invocations" ("id")
 SELECT "id"
   FROM "tool_invocations";
 
+-- Snapshot every pre-cutover approval and each elicitation it or a removed personal-memory
+-- invocation owns. The snapshots keep this cleanup exact even if later statements admit new rows.
+CREATE TEMP TABLE "precentral_approval_requests" (
+    "id" TEXT PRIMARY KEY,
+    "elicitation_request_id" TEXT
+) ON COMMIT DROP;
+INSERT INTO "precentral_approval_requests" ("id", "elicitation_request_id")
+SELECT "id", "elicitation_request_id"
+  FROM "approval_requests";
+
+CREATE TEMP TABLE "precentral_elicitation_requests" (
+    "id" TEXT PRIMARY KEY
+) ON COMMIT DROP;
+INSERT INTO "precentral_elicitation_requests" ("id")
+SELECT DISTINCT "elicitation_request_id"
+  FROM "precentral_approval_requests"
+ WHERE "elicitation_request_id" IS NOT NULL;
+INSERT INTO "precentral_elicitation_requests" ("id")
+SELECT DISTINCT receipt."request_id"
+  FROM "personal_memory_permission_receipts" receipt
+  JOIN "precentral_tool_invocations" invocation ON invocation."id" = receipt."tool_invocation_id"
+ON CONFLICT ("id") DO NOTHING;
+INSERT INTO "precentral_elicitation_requests" ("id")
+SELECT request_row."id"
+  FROM "elicitation_requests" request_row
+  JOIN "precentral_tool_invocations" invocation
+    ON invocation."id" = request_row."purpose_payload"->>'toolInvocationId'
+ WHERE request_row."purpose" = 'personal_memory_permission'::"ElicitationPurpose"
+ON CONFLICT ("id") DO NOTHING;
+INSERT INTO "precentral_elicitation_requests" ("id")
+SELECT request_row."id"
+  FROM "elicitation_requests" request_row
+  JOIN "precentral_approval_requests" approval
+    ON approval."id" = request_row."purpose_payload"->>'approvalRequestId'
+ WHERE request_row."purpose" = 'tool_approval'::"ElicitationPurpose"
+ON CONFLICT ("id") DO NOTHING;
+
 DROP TRIGGER IF EXISTS "personal_memory_permission_receipts_authority" ON "personal_memory_permission_receipts";
 DROP TRIGGER IF EXISTS "approval_requests_immutable" ON "approval_requests";
+DROP TRIGGER IF EXISTS "elicitation_response_attempts_authority" ON "elicitation_response_attempts";
+DROP TRIGGER IF EXISTS "elicitation_requests_authority" ON "elicitation_requests";
 DROP TRIGGER IF EXISTS "mcp_runtime_executions_authority" ON "mcp_runtime_executions";
 DROP TRIGGER IF EXISTS "tool_invocations_lifecycle_guard" ON "tool_invocations";
+DROP TRIGGER IF EXISTS "authorization_grants_immutable" ON "authorization_grants";
+DROP TRIGGER IF EXISTS "capability_catalog_revisions_immutable" ON "capability_catalog_revisions";
+ALTER TABLE "authorization_grants" DROP COLUMN "require_approval";
 
 DO $$
 BEGIN
@@ -57,9 +99,18 @@ BEGIN
     END IF;
 END $$;
 DELETE FROM "personal_memory_permission_receipts"
- WHERE "tool_invocation_id" IN (SELECT "id" FROM "precentral_tool_invocations");
+ WHERE "tool_invocation_id" IN (SELECT "id" FROM "precentral_tool_invocations")
+    OR "request_id" IN (SELECT "id" FROM "precentral_elicitation_requests");
+DELETE FROM "elicitation_response_attempts"
+ WHERE "request_id" IN (SELECT "id" FROM "precentral_elicitation_requests");
+DELETE FROM "elicitation_result_deliveries"
+ WHERE "request_id" IN (SELECT "id" FROM "precentral_elicitation_requests");
+DELETE FROM "authorization_grants"
+ WHERE "resource_kind" = 'approval-request';
 DELETE FROM "approval_requests"
- WHERE "tool_invocation_row_id" IN (SELECT "id" FROM "precentral_tool_invocations");
+ WHERE "id" IN (SELECT "id" FROM "precentral_approval_requests");
+DELETE FROM "elicitation_requests"
+ WHERE "id" IN (SELECT "id" FROM "precentral_elicitation_requests");
 DELETE FROM "tool_result_deliveries"
  WHERE "tool_invocation_id" IN (SELECT "id" FROM "precentral_tool_invocations");
 DELETE FROM "mcp_runtime_executions"
@@ -67,19 +118,180 @@ DELETE FROM "mcp_runtime_executions"
 DELETE FROM "tool_invocations"
  WHERE "id" IN (SELECT "id" FROM "precentral_tool_invocations");
 
+-- Make every post-cutover approval an exact deferred-tool approval. Capability coordinates already
+-- live on the ToolInvocation authorization evidence and are not duplicated on its review row.
+ALTER TABLE "approval_requests" DROP CONSTRAINT IF EXISTS "approval_requests_catalog_id_catalog_revision_catalog_dige_fkey";
+ALTER TABLE "approval_requests" DROP CONSTRAINT IF EXISTS "approval_requests_exact_check";
+ALTER TABLE "approval_requests" DROP CONSTRAINT IF EXISTS "approval_requests_decision_check";
+ALTER TABLE "approval_requests" DROP COLUMN "catalog_id";
+ALTER TABLE "approval_requests" DROP COLUMN "catalog_revision";
+ALTER TABLE "approval_requests" DROP COLUMN "catalog_digest";
+ALTER TABLE "approval_requests" DROP COLUMN "capability_id";
+ALTER TABLE "approval_requests" DROP COLUMN "resume_token_hash";
+ALTER TABLE "approval_requests" ALTER COLUMN "elicitation_request_id" SET NOT NULL;
+ALTER TABLE "approval_requests" ALTER COLUMN "tool_invocation_row_id" SET NOT NULL;
+ALTER TABLE "approval_requests" ALTER COLUMN "reviewed_tool_arguments" SET NOT NULL;
+ALTER TABLE "approval_requests" ALTER COLUMN "reviewed_tool_schema" SET NOT NULL;
+ALTER TABLE "approval_requests" ALTER COLUMN "reviewed_tool_schema_digest" SET NOT NULL;
+ALTER TABLE "approval_requests" ALTER COLUMN "safe_proposed_arguments" SET NOT NULL;
+ALTER TABLE "approval_requests" ALTER COLUMN "response_schema" SET NOT NULL;
+
+ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" CHECK (
+    "attempt" > 0 AND btrim("agent_revision_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("silo_id") <> '' AND
+    "proof_key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$' AND btrim("subject_id") <> '' AND
+    btrim("workload_audience") <> '' AND btrim("service_account_name") <> '' AND btrim("namespace") <> '' AND
+    btrim("workload_uid") <> '' AND btrim("pod_uid") <> '' AND
+    btrim("resource_kind") NOT IN ('', '*') AND btrim("resource_id") NOT IN ('', '*') AND btrim("action") <> '' AND
+    "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND "action_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+    btrim("approver_policy_revision") <> '' AND "effective_policy_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+    "expires_at" > "created_at" AND btrim("elicitation_request_id") <> '' AND btrim("tool_invocation_row_id") <> '' AND
+    "reviewed_tool_arguments" IS NOT NULL AND jsonb_typeof("reviewed_tool_arguments") = 'object' AND
+    "reviewed_tool_schema" IS NOT NULL AND jsonb_typeof("reviewed_tool_schema") = 'object' AND
+    "reviewed_tool_schema_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+    "safe_proposed_arguments" IS NOT NULL AND "response_schema" IS NOT NULL AND jsonb_typeof("response_schema") = 'object'
+);
+ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check" CHECK (
+    ("state" = 'pending' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+    ("state" = 'approved' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND
+     jsonb_typeof("final_arguments") = 'object' AND "final_arguments_digest" ~ '^sha256:[0-9a-f]{64}$') OR
+    ("state" = 'denied' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND
+     "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+    ("state" = 'expired' AND "decided_at" IS NOT NULL AND "decided_by" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+    ("state" = 'cancelled' AND "decided_at" IS NOT NULL AND "decided_by" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL)
+);
+
+CREATE OR REPLACE FUNCTION "enforce_approval_request_update"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    decision_time TIMESTAMP(3) := clock_timestamp();
+    current_attempt INTEGER;
+    current_run_state "AgentRunState";
+    assignment_state "WorkloadAssignmentState";
+    assignment_expires_at TIMESTAMP(3);
+    proof_expires_at TIMESTAMP(3);
+    proof_revoked_at TIMESTAMP(3);
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL
+            OR NEW."decided_by" IS NOT NULL THEN
+            RAISE EXCEPTION 'a new ApprovalRequest must begin pending';
+        END IF;
+        IF NEW."created_at" > decision_time OR NEW."expires_at" <= decision_time THEN
+            RAISE EXCEPTION 'a new ApprovalRequest must have a current, future expiry';
+        END IF;
+        SELECT "attempt", "state" INTO current_attempt, current_run_state
+        FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+        SELECT "state", "expires_at" INTO assignment_state, assignment_expires_at
+        FROM "workload_assignments"
+        WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
+          AND "agent_service_id" = NEW."agent_service_id" AND "agent_revision_id" = NEW."agent_revision_id"
+          AND "silo_id" = NEW."silo_id" AND "subject_id" = NEW."subject_id"
+          AND "audience" = NEW."workload_audience" AND "service_account_name" = NEW."service_account_name"
+          AND "namespace" = NEW."namespace" AND "workload_kind" = NEW."workload_kind"
+          AND "workload_uid" = NEW."workload_uid" AND "pod_uid" = NEW."pod_uid"
+        FOR UPDATE;
+        SELECT "expires_at", "revoked_at" INTO proof_expires_at, proof_revoked_at
+        FROM "run_proof_keys"
+        WHERE "id" = NEW."proof_key_id" AND "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
+          AND "workload_kind" = NEW."workload_kind" AND "workload_uid" = NEW."workload_uid"
+          AND "key_thumbprint" = NEW."proof_key_thumbprint" AND "pod_uid" = NEW."pod_uid"
+        FOR UPDATE;
+        IF current_attempt IS DISTINCT FROM NEW."attempt"
+            OR current_run_state IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
+            OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
+            OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
+            OR proof_expires_at <= decision_time THEN
+            RAISE EXCEPTION 'ApprovalRequest requires current WaitingForInput run, assignment, and proof authority';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ApprovalRequest rows cannot be deleted'; END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
+        OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
+        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."proof_key_id" IS DISTINCT FROM OLD."proof_key_id" OR NEW."proof_key_thumbprint" IS DISTINCT FROM OLD."proof_key_thumbprint"
+        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id" OR NEW."workload_audience" IS DISTINCT FROM OLD."workload_audience"
+        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name" OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
+        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind" OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
+        OR NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid" OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind"
+        OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id" OR NEW."action" IS DISTINCT FROM OLD."action"
+        OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest" OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest"
+        OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
+        OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
+        OR NEW."elicitation_request_id" IS DISTINCT FROM OLD."elicitation_request_id"
+        OR NEW."tool_invocation_row_id" IS DISTINCT FROM OLD."tool_invocation_row_id"
+        OR NEW."reviewed_tool_arguments" IS DISTINCT FROM OLD."reviewed_tool_arguments"
+        OR NEW."reviewed_tool_schema" IS DISTINCT FROM OLD."reviewed_tool_schema"
+        OR NEW."reviewed_tool_schema_digest" IS DISTINCT FROM OLD."reviewed_tool_schema_digest"
+        OR NEW."safe_proposed_arguments" IS DISTINCT FROM OLD."safe_proposed_arguments"
+        OR NEW."response_schema" IS DISTINCT FROM OLD."response_schema"
+        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'ApprovalRequest proof and action bindings are immutable';
+    END IF;
+    IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
+        RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
+    END IF;
+    IF NEW."state" = 'cancelled' THEN
+        IF NEW."decided_at" IS NULL OR NEW."decided_at" > decision_time OR NEW."decided_at" < OLD."created_at" THEN
+            RAISE EXCEPTION 'ApprovalRequest cancellation requires a caller-supplied decision time between creation and now';
+        END IF;
+    ELSE
+        NEW."decided_at" := decision_time;
+    END IF;
+    IF NEW."state" IN ('approved', 'denied') THEN
+        SELECT "attempt", "state" INTO current_attempt, current_run_state
+        FROM "agent_runs" WHERE "id" = OLD."run_id" FOR UPDATE;
+        SELECT "state", "expires_at" INTO assignment_state, assignment_expires_at
+        FROM "workload_assignments"
+        WHERE "run_id" = OLD."run_id" AND "attempt" = OLD."attempt"
+          AND "agent_service_id" = OLD."agent_service_id" AND "agent_revision_id" = OLD."agent_revision_id"
+          AND "silo_id" = OLD."silo_id" AND "subject_id" = OLD."subject_id"
+          AND "audience" = OLD."workload_audience" AND "service_account_name" = OLD."service_account_name"
+          AND "namespace" = OLD."namespace" AND "workload_kind" = OLD."workload_kind"
+          AND "workload_uid" = OLD."workload_uid" AND "pod_uid" = OLD."pod_uid"
+        FOR UPDATE;
+        SELECT "expires_at", "revoked_at" INTO proof_expires_at, proof_revoked_at
+        FROM "run_proof_keys" WHERE "id" = OLD."proof_key_id" FOR UPDATE;
+        IF current_attempt IS DISTINCT FROM OLD."attempt"
+            OR current_run_state IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
+            OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
+            OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
+            OR proof_expires_at <= decision_time THEN
+            RAISE EXCEPTION 'ApprovalRequest decision authority is no longer current';
+        END IF;
+    END IF;
+    IF NEW."state" = 'cancelled' THEN
+        NEW."decided_by" := NULL;
+    ELSIF NEW."state" = 'expired' THEN
+        IF decision_time < OLD."expires_at" THEN
+            RAISE EXCEPTION 'ApprovalRequest may expire only after its deadline';
+        END IF;
+    ELSIF NEW."state" IN ('approved', 'denied') AND decision_time >= OLD."expires_at" THEN
+        RAISE EXCEPTION 'ApprovalRequest decisions must be recorded before expiry';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
 CREATE TRIGGER "tool_invocations_lifecycle_guard" BEFORE INSERT OR UPDATE OR DELETE ON "tool_invocations" FOR EACH ROW EXECUTE FUNCTION "enforce_tool_invocation_lifecycle"();
 CREATE TRIGGER "mcp_runtime_executions_authority" BEFORE INSERT OR UPDATE OR DELETE ON "mcp_runtime_executions" FOR EACH ROW EXECUTE FUNCTION "enforce_mcp_runtime_execution_authority"();
 CREATE TRIGGER "approval_requests_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "approval_requests" FOR EACH ROW EXECUTE FUNCTION "enforce_approval_request_update"();
+CREATE TRIGGER "elicitation_requests_authority" BEFORE INSERT OR UPDATE OR DELETE ON "elicitation_requests" FOR EACH ROW EXECUTE FUNCTION "enforce_elicitation_request_authority"();
+CREATE TRIGGER "elicitation_response_attempts_authority" BEFORE INSERT OR UPDATE OR DELETE ON "elicitation_response_attempts" FOR EACH ROW EXECUTE FUNCTION "enforce_elicitation_response_attempt_authority"();
 CREATE TRIGGER "personal_memory_permission_receipts_authority" BEFORE INSERT OR UPDATE OR DELETE ON "personal_memory_permission_receipts" FOR EACH ROW EXECUTE FUNCTION "enforce_personal_memory_permission_authority"();
 DO $$
 DECLARE
     has_residue BOOLEAN;
 BEGIN
     IF EXISTS (SELECT 1 FROM "tool_invocations" invocation JOIN "precentral_tool_invocations" legacy ON legacy."id" = invocation."id")
-        OR EXISTS (SELECT 1 FROM "approval_requests" approval JOIN "precentral_tool_invocations" legacy ON legacy."id" = approval."tool_invocation_row_id")
+        OR EXISTS (SELECT 1 FROM "approval_requests" approval JOIN "precentral_approval_requests" legacy ON legacy."id" = approval."id")
         OR EXISTS (SELECT 1 FROM "tool_result_deliveries" delivery JOIN "precentral_tool_invocations" legacy ON legacy."id" = delivery."tool_invocation_id")
         OR EXISTS (SELECT 1 FROM "personal_memory_permission_receipts" receipt JOIN "precentral_tool_invocations" legacy ON legacy."id" = receipt."tool_invocation_id")
-        OR EXISTS (SELECT 1 FROM "mcp_runtime_executions" execution JOIN "precentral_tool_invocations" legacy ON legacy."id" = execution."tool_invocation_id") THEN
+        OR EXISTS (SELECT 1 FROM "personal_memory_permission_receipts" receipt JOIN "precentral_elicitation_requests" legacy ON legacy."id" = receipt."request_id")
+        OR EXISTS (SELECT 1 FROM "mcp_runtime_executions" execution JOIN "precentral_tool_invocations" legacy ON legacy."id" = execution."tool_invocation_id")
+        OR EXISTS (SELECT 1 FROM "elicitation_response_attempts" attempt JOIN "precentral_elicitation_requests" legacy ON legacy."id" = attempt."request_id")
+        OR EXISTS (SELECT 1 FROM "elicitation_result_deliveries" delivery JOIN "precentral_elicitation_requests" legacy ON legacy."id" = delivery."request_id")
+        OR EXISTS (SELECT 1 FROM "elicitation_requests" request_row JOIN "precentral_elicitation_requests" legacy ON legacy."id" = request_row."id")
+        OR EXISTS (SELECT 1 FROM "authorization_grants" grant_row WHERE grant_row."resource_kind" = 'approval-request') THEN
         RAISE EXCEPTION 'pre-central ToolInvocation cleanup left durable runtime residue';
     END IF;
     IF to_regclass('skill_workloads') IS NOT NULL THEN
@@ -393,12 +605,24 @@ ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_payload_check" CHECK (
     jsonb_typeof("payload") = 'object'
     AND (
-        ("kind" IN ('set_byok_key', 'delete_byok_key')
+        ("kind" = 'set_byok_key'
             AND "payload" ?& ARRAY['provider', 'secretRef', 'litellmCredentialName']
             AND "payload" - ARRAY['provider', 'secretRef', 'litellmCredentialName'] = '{}'::jsonb
             AND jsonb_typeof("payload"->'provider') = 'string'
             AND jsonb_typeof("payload"->'secretRef') = 'string'
             AND jsonb_typeof("payload"->'litellmCredentialName') = 'string'
+            AND COALESCE(btrim("payload"->>'provider'), '') <> ''
+            AND COALESCE(btrim("payload"->>'secretRef'), '') <> ''
+            AND COALESCE(btrim("payload"->>'litellmCredentialName'), '') <> '')
+        OR ("kind" = 'delete_byok_key'
+            AND "payload" ?& ARRAY['provider', 'secretRef', 'litellmCredentialName', 'litellmRegistered', 'modelDefinitionIds', 'deployments']
+            AND "payload" - ARRAY['provider', 'secretRef', 'litellmCredentialName', 'litellmRegistered', 'modelDefinitionIds', 'deployments'] = '{}'::jsonb
+            AND jsonb_typeof("payload"->'provider') = 'string'
+            AND jsonb_typeof("payload"->'secretRef') = 'string'
+            AND jsonb_typeof("payload"->'litellmCredentialName') = 'string'
+            AND jsonb_typeof("payload"->'litellmRegistered') = 'boolean'
+            AND jsonb_typeof("payload"->'modelDefinitionIds') = 'array'
+            AND jsonb_typeof("payload"->'deployments') = 'array'
             AND COALESCE(btrim("payload"->>'provider'), '') <> ''
             AND COALESCE(btrim("payload"->>'secretRef'), '') <> ''
             AND COALESCE(btrim("payload"->>'litellmCredentialName'), '') <> '')
@@ -483,6 +707,15 @@ DROP INDEX "third_party_sources_name_key";
 CREATE UNIQUE INDEX "third_party_sources_silo_id_name_key" ON "third_party_sources"("silo_id", "name");
 CREATE INDEX "third_party_sources_silo_id_created_at_idx" ON "third_party_sources"("silo_id", "created_at");
 
+-- Keep revoked grant history outside the active-coordinate fence so the same exact authority can
+-- be admitted again after a reviewed revocation.
+DROP INDEX IF EXISTS "authorization_grant_exact_authority_key";
+CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"(
+    "silo_id", "subject_kind", COALESCE("subject_group_id", ''), COALESCE("subject_principal_id", ''),
+    "boundary_kind", COALESCE("boundary_group_id", ''), COALESCE("boundary_principal_id", ''), "boundary_coverage",
+    "catalog_id", "catalog_revision", "capability_id", "resource_kind", COALESCE("resource_id", ''), "effect", "priority", COALESCE("manager_id", '')
+) WHERE "revoked_at" IS NULL;
+
 INSERT INTO "capability_catalog_revisions" (
     "id", "catalog_id", "revision", "digest", "capabilities", "created_by"
 ) VALUES (
@@ -494,19 +727,39 @@ INSERT INTO "capability_catalog_revisions" (
     'system:central-authorization-migration'
 );
 
+-- Reject any active membership whose issuer-independent subject does not resolve to exactly one
+-- local Principal before membership-derived grants are projected.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT membership."id"
+          FROM "org_memberships" membership
+          LEFT JOIN "principals" principal
+            ON principal."silo_id" = membership."cluster_tenant"
+           AND principal."subject" = membership."subject"
+         WHERE membership."status" = 'active'::"OrgMemberStatus"
+         GROUP BY membership."id"
+        HAVING count(principal."id") <> 1
+    ) THEN
+        RAISE EXCEPTION USING
+            ERRCODE = 'OC717',
+            MESSAGE = 'central authorization migration cannot project an active organization membership to exactly one Principal';
+    END IF;
+END $$;
+
 -- Project current Owner/Admin roles into durable read and administration grants. Read-only
 -- governance views use the Read grant; protected mutations admit the Administer grant.
 INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
     "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "effect", "priority", "require_approval", "created_by"
+    "resource_kind", "resource_id", "effect", "priority", "created_by"
 )
 SELECT
     'central-org-admin-' || action."suffix" || '-' || principal."id", principal."silo_id", 'principal', NULL, principal."id",
-    'personal', NULL, principal."id", 'exact', 'organization-membership-admin-bootstrap',
+    'personal', NULL, principal."id", 'exact', 'organization-membership-admin-bootstrap:' || principal."id",
     'opencrane-product-authorization', 1, 'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    action."capability_id", 'organization', principal."silo_id", 'allow', 0, FALSE,
+    action."capability_id", 'organization', principal."silo_id", 'allow', 0,
     'system:central-authorization-migration'
 FROM "principals" principal
 JOIN "org_memberships" membership
@@ -519,13 +772,72 @@ CROSS JOIN (VALUES
 WHERE membership."status" = 'active'::"OrgMemberStatus"
   AND membership."role" IN ('owner'::"OrgRole", 'admin'::"OrgRole");
 
+-- Give each active Owner and Admin exact Read and Use authority over every retained silo-global
+-- provider connection. The cutover manager is principal-scoped and distinct from runtime creators.
+INSERT INTO "authorization_grants" (
+    "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
+    "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
+    "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
+    "resource_kind", "resource_id", "effect", "priority", "created_by"
+)
+SELECT
+    'central-provider-connection-' || action."suffix" || '-' || md5(credential."id" || ':' || principal."id"),
+    credential."silo_id", 'principal', NULL, principal."id", 'personal', NULL, principal."id", 'exact',
+    'provider-resource-0-10-cutover:' || principal."id", 'opencrane-product-authorization', 1,
+    'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
+    action."capability_id", 'provider-connection', credential."id", 'allow', 0,
+    'system:central-authorization-migration'
+FROM "provider_credentials" credential
+JOIN "org_memberships" membership
+  ON membership."cluster_tenant" = credential."silo_id"
+ AND membership."status" = 'active'::"OrgMemberStatus"
+ AND membership."role" IN ('owner'::"OrgRole", 'admin'::"OrgRole")
+JOIN "principals" principal
+  ON principal."silo_id" = membership."cluster_tenant"
+ AND principal."subject" = membership."subject"
+CROSS JOIN (VALUES
+    ('read', 'provider-connection:read'),
+    ('use', 'provider-connection:use')
+) AS action("suffix", "capability_id")
+WHERE credential."scope" = 'global'
+  AND credential."cluster_tenant" IS NULL;
+
+-- Give the same principals exact Read and Use authority over every retained silo-global model.
+INSERT INTO "authorization_grants" (
+    "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
+    "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
+    "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
+    "resource_kind", "resource_id", "effect", "priority", "created_by"
+)
+SELECT
+    'central-model-definition-' || action."suffix" || '-' || md5(definition."id" || ':' || principal."id"),
+    definition."silo_id", 'principal', NULL, principal."id", 'personal', NULL, principal."id", 'exact',
+    'provider-resource-0-10-cutover:' || principal."id", 'opencrane-product-authorization', 1,
+    'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
+    action."capability_id", 'model-definition', definition."id", 'allow', 0,
+    'system:central-authorization-migration'
+FROM "model_definitions" definition
+JOIN "org_memberships" membership
+  ON membership."cluster_tenant" = definition."silo_id"
+ AND membership."status" = 'active'::"OrgMemberStatus"
+ AND membership."role" IN ('owner'::"OrgRole", 'admin'::"OrgRole")
+JOIN "principals" principal
+  ON principal."silo_id" = membership."cluster_tenant"
+ AND principal."subject" = membership."subject"
+CROSS JOIN (VALUES
+    ('read', 'model-definition:read'),
+    ('use', 'model-definition:use')
+) AS action("suffix", "capability_id")
+WHERE definition."scope" = 'global'
+  AND definition."cluster_tenant" IS NULL;
+
 -- Translate the legacy MCP-use grant into the two reviewed product actions now consumed by MCP.
 INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
     "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
     "resource_kind", "resource_id", "effect", "priority", "valid_from", "expires_at",
-    "revoked_at", "require_approval", "created_by", "created_at"
+    "revoked_at", "created_by", "created_at"
 )
 SELECT
     'central-mcp-' || action."suffix" || '-' || grant_row."id", grant_row."silo_id",
@@ -534,7 +846,7 @@ SELECT
     grant_row."boundary_coverage", grant_row."manager_id", 'opencrane-product-authorization', 1,
     'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821', action."capability_id",
     grant_row."resource_kind", grant_row."resource_id", grant_row."effect", grant_row."priority",
-    grant_row."valid_from", grant_row."expires_at", grant_row."revoked_at", FALSE,
+    grant_row."valid_from", grant_row."expires_at", grant_row."revoked_at",
     grant_row."created_by", grant_row."created_at"
 FROM "authorization_grants" grant_row
 CROSS JOIN (VALUES
@@ -546,32 +858,43 @@ WHERE grant_row."catalog_id" = 'opencrane-core'
   AND grant_row."capability_id" = 'mcp-server:use'
   AND grant_row."resource_kind" = 'mcp-server';
 
+-- Remove the superseded legacy grants and catalogue after their typed replacements are durable.
+DELETE FROM "authorization_grants"
+WHERE "catalog_id" = 'opencrane-core'
+  AND "catalog_revision" = 1
+  AND "capability_id" = 'mcp-server:use'
+  AND "resource_kind" = 'mcp-server';
+
+DELETE FROM "capability_catalog_revisions"
+WHERE "catalog_id" = 'opencrane-core'
+  AND "revision" = 1;
+
 -- Preserve the useful part of former skill ownership: authors can discover their skill and submit
 -- its revisions for review. Ownership remains provenance; these grants become the actual authority.
 INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
     "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "effect", "priority", "require_approval", "created_by"
+    "resource_kind", "resource_id", "effect", "priority", "created_by"
 )
 SELECT
     'central-skill-discover-' || skill."id", skill."silo_id", 'principal', NULL, skill."owner_principal_id",
     'personal', NULL, skill."owner_principal_id", 'exact', 'skill-owner-bootstrap',
     'opencrane-product-authorization', 1, 'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    'skill:discover', 'skill', skill."id", 'allow', 10, FALSE, 'system:central-authorization-migration'
+    'skill:discover', 'skill', skill."id", 'allow', 10, 'system:central-authorization-migration'
 FROM "skills" skill;
 
 INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
     "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "effect", "priority", "require_approval", "created_by"
+    "resource_kind", "resource_id", "effect", "priority", "created_by"
 )
 SELECT
     'central-skill-review-' || revision."id", skill."silo_id", 'principal', NULL, skill."owner_principal_id",
     'personal', NULL, skill."owner_principal_id", 'exact', 'skill-owner-bootstrap',
     'opencrane-product-authorization', 1, 'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    'skill-revision:review', 'skill-revision', revision."id", 'allow', 10, FALSE,
+    'skill-revision:review', 'skill-revision', revision."id", 'allow', 10,
     'system:central-authorization-migration'
 FROM "skill_revisions" revision
 JOIN "skills" skill ON skill."id" = revision."skill_id";
@@ -582,14 +905,14 @@ INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
     "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "effect", "priority", "require_approval", "created_by"
+    "resource_kind", "resource_id", "effect", "priority", "created_by"
 )
 SELECT
     'central-mcp-task-' || action."suffix" || '-' || md5(task."id" || ':' || task."principal_id"),
     task."silo_id", 'principal', NULL, task."principal_id", 'personal', NULL, task."principal_id", 'exact',
     'mcp-task-creator-access', 'opencrane-product-authorization', 1,
     'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    action."capability_id", 'mcp-task', task."id", 'allow', 0, FALSE, task."principal_id"
+    action."capability_id", 'mcp-task', task."id", 'allow', 0, task."principal_id"
 FROM "mcp_tasks" task
 CROSS JOIN (VALUES
     ('read', 'mcp-task:read'),
@@ -624,14 +947,14 @@ INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
     "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "effect", "priority", "require_approval", "created_by"
+    "resource_kind", "resource_id", "effect", "priority", "created_by"
 )
 SELECT
     'central-collection-' || root."suffix" || '-' || principal."id", principal."silo_id",
     'principal', NULL, principal."id", 'personal', NULL, principal."id", 'exact',
-    'organization-membership-product-bootstrap', 'opencrane-product-authorization', 1,
+    'organization-membership-product-bootstrap:' || principal."id", 'opencrane-product-authorization', 1,
     'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    root."capability_id", root."resource_kind", principal."silo_id", 'allow', 0, FALSE, principal."id"
+    root."capability_id", root."resource_kind", principal."silo_id", 'allow', 0, principal."id"
 FROM "principals" principal
 JOIN "org_memberships" membership
   ON membership."cluster_tenant" = principal."silo_id"
@@ -668,14 +991,14 @@ INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
     "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "effect", "priority", "require_approval", "created_by"
+    "resource_kind", "resource_id", "effect", "priority", "created_by"
 )
 SELECT
     'central-persona-' || action."suffix" || '-' || md5(profile."id" || ':' || principal."id"),
     profile."silo_id", 'principal', NULL, principal."id", 'personal', NULL, principal."id", 'exact',
     'persona-creator-access', 'opencrane-product-authorization', 1,
     'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    action."capability_id", 'persona', profile."id", 'allow', 0, FALSE, principal."id"
+    action."capability_id", 'persona', profile."id", 'allow', 0, principal."id"
 FROM "persona_profiles" profile
 JOIN "principals" principal
   ON principal."silo_id" = profile."silo_id"
@@ -695,7 +1018,7 @@ INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
     "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "effect", "priority", "require_approval", "created_by"
+    "resource_kind", "resource_id", "effect", "priority", "created_by"
 )
 SELECT
     'central-conversation-' || action."suffix" || '-' || md5(conversation."id" || ':' || principal."id"),
@@ -703,7 +1026,7 @@ SELECT
     'personal'::"AuthorizationBoundaryKind", NULL, principal."id", 'exact'::"AuthorizationBoundaryCoverage",
     'conversation-participant-access', 'opencrane-product-authorization', 1,
     'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    action."capability_id", 'conversation', conversation."id", 'allow', 0, FALSE, principal."id"
+    action."capability_id", 'conversation', conversation."id", 'allow', 0, principal."id"
 FROM "conversation_participants" participant
 JOIN "conversations" conversation ON conversation."id" = participant."conversation_id"
 JOIN "principals" principal
@@ -724,7 +1047,7 @@ INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
     "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "effect", "priority", "require_approval", "created_by"
+    "resource_kind", "resource_id", "effect", "priority", "created_by"
 )
 SELECT DISTINCT
     'central-channel-target-send-' || md5(route."id" || ':' || principal."id"),
@@ -732,7 +1055,7 @@ SELECT DISTINCT
     'personal'::"AuthorizationBoundaryKind", NULL, principal."id", 'exact'::"AuthorizationBoundaryCoverage",
     'channel-target-participant-access', 'opencrane-product-authorization', 1,
     'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    'channel-target:send', 'channel-target', route."id", 'allow'::"AuthorizationEffect", 0, FALSE, principal."id"
+    'channel-target:send', 'channel-target', route."id", 'allow'::"AuthorizationEffect", 0, principal."id"
 FROM "conversation_participants" participant
 JOIN "conversations" conversation ON conversation."id" = participant."conversation_id"
 JOIN "principals" principal
@@ -806,14 +1129,14 @@ INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
     "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "effect", "priority", "require_approval", "created_by"
+    "resource_kind", "resource_id", "effect", "priority", "created_by"
 )
 SELECT
     'central-artifact-' || action."suffix" || '-' || md5(artifact."id" || ':' || artifact."owner_principal_id"),
     artifact."silo_id", 'principal', NULL, artifact."owner_principal_id", 'personal', NULL,
     artifact."owner_principal_id", 'exact', 'artifact-owner-access', 'opencrane-product-authorization', 1,
     'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    action."capability_id", 'artifact', artifact."id", 'allow', 0, FALSE, artifact."owner_principal_id"
+    action."capability_id", 'artifact', artifact."id", 'allow', 0, artifact."owner_principal_id"
 FROM "artifacts" artifact
 CROSS JOIN (VALUES
     ('discover', 'artifact:discover'),
@@ -828,14 +1151,14 @@ INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
     "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "effect", "priority", "require_approval", "created_by"
+    "resource_kind", "resource_id", "effect", "priority", "created_by"
 )
 SELECT
     'central-share-owner-' || action."suffix" || '-' || md5(share."id"), share."silo_id",
     'principal', NULL, share."owner_principal_id", 'personal', NULL, share."owner_principal_id", 'exact',
     'resource-share-access', 'opencrane-product-authorization', 1,
     'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    action."capability_id", 'resource-share', share."id", 'allow', 0, FALSE, share."owner_principal_id"
+    action."capability_id", 'resource-share', share."id", 'allow', 0, share."owner_principal_id"
 FROM "resource_shares" share
 CROSS JOIN (VALUES ('read', 'resource-share:read'), ('revoke', 'resource-share:revoke')) AS action("suffix", "capability_id");
 
@@ -843,62 +1166,16 @@ INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
     "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "effect", "priority", "require_approval", "created_by"
+    "resource_kind", "resource_id", "effect", "priority", "created_by"
 )
 SELECT
     'central-share-recipient-' || md5(recipient."resource_share_id" || ':' || recipient."principal_id"),
     recipient."silo_id", 'principal', NULL, recipient."principal_id", 'personal', NULL,
     recipient."principal_id", 'exact', 'resource-share-recipient-access:' || recipient."principal_id", 'opencrane-product-authorization', 1,
     'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    'resource-share:read', 'resource-share', recipient."resource_share_id", 'allow', 0, FALSE,
+    'resource-share:read', 'resource-share', recipient."resource_share_id", 'allow', 0,
     recipient."granted_by_principal_id"
 FROM "resource_share_recipients" recipient;
-
--- Abort instead of assigning an existing pending tool approval to an ambiguous local Principal.
--- Terminal and non-tool approvals do not need this deferred-tool projection.
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT approval."id"
-        FROM "approval_requests" approval
-        LEFT JOIN "principals" principal
-          ON principal."silo_id" = approval."silo_id"
-         AND principal."subject" = approval."subject_id"
-        WHERE approval."state" = 'pending'::"ApprovalRequestState"
-          AND approval."tool_invocation_row_id" IS NOT NULL
-        GROUP BY approval."id"
-        HAVING COUNT(principal."id") <> 1
-    ) THEN
-        RAISE EXCEPTION USING
-            ERRCODE = 'OC716',
-            MESSAGE = 'central authorization migration cannot project a pending tool approver to exactly one Principal';
-    END IF;
-END $$;
-
--- Preserve the assigned reviewer's current Read and Decide permissions for pending tool approvals.
--- Decision, expiry, or cancellation soft-revokes these manager-owned rows transactionally.
-INSERT INTO "authorization_grants" (
-    "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
-    "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
-    "manager_id", "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "effect", "priority", "require_approval", "created_by"
-)
-SELECT
-    'central-approval-' || action."suffix" || '-' || md5(approval."id" || ':' || principal."id"),
-    approval."silo_id", 'principal', NULL, principal."id", 'personal', NULL, principal."id", 'exact',
-    'deferred-tool-approval-assignee', 'opencrane-product-authorization', 1,
-    'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    action."capability_id", 'approval-request', approval."id", 'allow', 0, FALSE, principal."id"
-FROM "approval_requests" approval
-JOIN "principals" principal
-  ON principal."silo_id" = approval."silo_id"
- AND principal."subject" = approval."subject_id"
-CROSS JOIN (VALUES
-    ('read', 'approval-request:read'),
-    ('decide', 'approval-request:decide')
-) AS action("suffix", "capability_id")
-WHERE approval."state" = 'pending'::"ApprovalRequestState"
-  AND approval."tool_invocation_row_id" IS NOT NULL;
 
 -- Require complete immutable central decision evidence for every newly admitted external effect.
 -- AgentRun work includes assignment fields; public MCP tasks bind the caller and admitted tool
@@ -993,5 +1270,7 @@ BEGIN
 END;
 $$;
 CREATE TRIGGER "tool_invocations_authorization_evidence" BEFORE INSERT OR UPDATE ON "tool_invocations" FOR EACH ROW EXECUTE FUNCTION "enforce_tool_invocation_authorization_evidence"();
+CREATE TRIGGER "authorization_grants_immutable" BEFORE UPDATE OR DELETE ON "authorization_grants" FOR EACH ROW EXECUTE FUNCTION "enforce_authorization_grant_update"();
+CREATE TRIGGER "capability_catalog_revisions_immutable" BEFORE UPDATE OR DELETE ON "capability_catalog_revisions" FOR EACH ROW EXECUTE FUNCTION "reject_capability_catalog_revision_mutation"();
 
 COMMIT;

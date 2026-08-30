@@ -6,7 +6,7 @@ import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { PersonalAgentSelectedResourceKinds, type AdmitInitialPersonalAgentPublicationCommand, type AdmitPersonalAgentRevisionSelectionCommand, type PersonalAgentCurrentResources, type PersonalAgentProductCaller, type PersonalAgentProductEffects } from "./personal-agent-product-effects.types";
 
-/** Isolates grants derived from the durable personal-agent owner and revision relations. */
+/** Prefixes grants derived from one durable personal-agent owner and its revision relations. */
 const _PERSONAL_AGENT_OWNER_GRANT_MANAGER_ID = "personal-agent-owner-access";
 
 /** Stops a transaction when the central authority refuses a projected personal-agent effect. */
@@ -122,7 +122,8 @@ export class PrismaPersonalAgentProductEffectsAuthority implements PersonalAgent
 				throw new Error(`personal-agent capability is missing for ${resource.kind}:${action}`);
 			return { subject: { kind: AuthorizationSubjectKinds.Principal, principalId: caller.principalId }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: caller.principalId }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource, priority: 0, createdByPrincipalId: caller.principalId };
 		});
-		await this.managedGrants.reconcileManagedResourceGrants({ siloId: caller.siloId, managerId: _PERSONAL_AGENT_OWNER_GRANT_MANAGER_ID, resource, grants, now });
+		const managerId = `${_PERSONAL_AGENT_OWNER_GRANT_MANAGER_ID}:${caller.principalId}`;
+		await this.managedGrants.reconcileManagedResourceGrants({ siloId: caller.siloId, managerId, resource, grants, now });
 	}
 
 	/** Delegates one protected effect to the central authority and rolls back on denial. */

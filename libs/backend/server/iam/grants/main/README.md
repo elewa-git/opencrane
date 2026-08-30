@@ -28,6 +28,8 @@ lifecycle boundary.
 **In this flow:** [authorization](../../authorization/main/README.md) · [groups](../../groups/main/README.md)
 
 Invariant: revocation updates the explicit recipient and its exact linked grant in one transaction.
+The authorization package exposes only a narrow managed-share revocation adapter to this flow; it
+cannot create or enumerate grants.
 The route receives a local Principal resolved from the verified OIDC issuer and
 subject; it never queries Prisma or accepts caller identity from the request body. Revocation soft-
 revokes the grant for audit and recovery while removing the live recipient relation.

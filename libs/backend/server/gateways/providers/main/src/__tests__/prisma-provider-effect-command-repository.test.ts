@@ -84,15 +84,27 @@ function _transaction(rowById: Record<string, unknown>, latest: Record<string, u
 }
 
 /** Builds a current authority with an explicit allow or deny result. */
-function _authorization(allow: boolean): { readonly authority: AuthorizationAuthority; readonly admit: ReturnType<typeof vi.fn> }
+function _authorization(allow: boolean): { readonly authority: AuthorizationAuthority; readonly admit: ReturnType<typeof vi.fn>; readonly replaceManagedGrants: ReturnType<typeof vi.fn>; readonly retireResourceGrants: ReturnType<typeof vi.fn> }
 {
 	const admit = vi.fn(async function _Admit()
 	{
 		return allow
 			? { outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: "sha256:current", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:current-effective" } }
-			: { outcome: AuthorizationDecisionOutcomes.Deny, evidence: null };
+				: { outcome: AuthorizationDecisionOutcomes.Deny, evidence: null };
 	});
-	return { authority: { admitPrincipal: admit } as unknown as AuthorizationAuthority, admit };
+	const replaceManagedGrants = vi.fn(async function _ReplaceManagedGrants()
+	{
+		if (allow)
+			return { outcome: AuthorizationDecisionOutcomes.Allow, changedCount: 3, evidence: {} };
+		return { outcome: AuthorizationDecisionOutcomes.Deny, changedCount: 0, evidence: null };
+	});
+	const retireResourceGrants = vi.fn(async function _RetireResourceGrants()
+	{
+		if (allow)
+			return { outcome: AuthorizationDecisionOutcomes.Allow, changedCount: 4, evidence: {} };
+		return { outcome: AuthorizationDecisionOutcomes.Deny, changedCount: 0, evidence: null };
+	});
+	return { authority: { admitPrincipal: admit, replaceManagedGrants, retireResourceGrants } as unknown as AuthorizationAuthority, admit, replaceManagedGrants, retireResourceGrants };
 }
 
 /** Non-secret Set-BYOK payload shared by monotonic provider-state tests. */
@@ -500,11 +512,66 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		const modelNames = ["openai/gpt-5.5", "openai/gpt-5.4", "openai/gpt-5.4-nano"];
 		const result = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: modelNames.map(function _Projection(publicModelName, index) { return { publicModelName, upstreamModel: publicModelName, litellmModelId: `deployment-${index}` }; }), embedding: { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: [{ publicModelName: "openai/text-embedding-3-large", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-1" }, { publicModelName: "auto-embedding", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-2" }] } } as const;
 
-		const completion = await repository.complete(_record(row, _SET), result, _context(), _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"));
+		const authorization = _authorization(true);
+		const completion = await repository.complete(_record(row, _SET), result, _context("system"), authorization.authority, new Date("2026-08-30T01:00:00.000Z"));
 		expect(completion).toMatchObject({ status: ProviderEffectExecutionStatuses.Succeeded, followUpCommand: { payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { publicModelName: "auto", routingDefaultId: "routing-1", selectedModelDefinitionId: expect.any(String) } } } });
 		expect(models.size).toBe(4);
 		expect(Array.from(models.values()).find(model => model.publicModelName === "openai/gpt-5.5")).toMatchObject({ isDefault: false, providerCredentialId: "credential-1" });
 		expect(routingDefault).toMatchObject({ defaultModel: "openai/gpt-5.5" });
 		expect(child).toMatchObject({ principalId: "principal-1", executorProfile: _PROFILE, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition });
+		const grantedResources = authorization.replaceManagedGrants.mock.calls.map(function _Resource(call) { return call[0].resource; });
+		expect(grantedResources).toEqual([
+			{ kind: ProductAuthorizationResourceKinds.ProviderConnection, id: "byok:acme:openai" },
+			{ kind: ProductAuthorizationResourceKinds.ModelDefinition, id: "model-1" },
+			{ kind: ProductAuthorizationResourceKinds.ModelDefinition, id: "model-2" },
+			{ kind: ProductAuthorizationResourceKinds.ModelDefinition, id: "model-3" },
+			{ kind: ProductAuthorizationResourceKinds.ModelDefinition, id: expect.any(String) },
+		]);
+		expect(authorization.replaceManagedGrants).toHaveBeenCalledWith(expect.objectContaining({ actorKind: "system", actorId: _PROFILE, principalId: "principal-1", managerId: "provider-resource-creator-bootstrap:principal-1" }));
+	});
+
+	it("revokes every exact provider and model grant before deleting their stable resource identities", async function _RetiresProviderGrants()
+	{
+		const payload: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { ..._DELETE.value, modelDefinitionIds: ["model-1", "model-2"] } };
+		const row = _row(payload, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-a", claimExpiresAt: new Date("2026-08-30T02:00:00.000Z") });
+		const models = [
+			{ id: "model-1", publicModelName: "openai/gpt-5.5", upstreamModel: "openai/gpt-5.5", litellmModelId: "deployment-1", apiBase: null, isDefault: false, agentRevisions: [] },
+			{ id: "model-2", publicModelName: "openai/gpt-5.4", upstreamModel: "openai/gpt-5.4", litellmModelId: "deployment-2", apiBase: null, isDefault: false, agentRevisions: [] },
+		];
+		const deleteModels = vi.fn(async function _DeleteModels() { return { count: 2 }; });
+		const deleteCredential = vi.fn(async function _DeleteCredential() { return { count: 1 }; });
+		const transaction = {
+			providerEffectCommand: {
+				findUnique: vi.fn(async function _FindUnique() { return row; }),
+				findFirst: vi.fn(async function _FindFirst() { return row; }),
+				updateMany: vi.fn(async function _Update() { return { count: 1 }; }),
+			},
+			providerCredential: {
+				findFirst: vi.fn(async function _FindCredential() { return { id: "byok:acme:openai", litellmCredentialName: null, updatedAt: new Date("2026-08-30T00:00:00.000Z") }; }),
+				deleteMany: deleteCredential,
+			},
+			modelDefinition: {
+				findMany: vi.fn(async function _FindModels() { return models; }),
+				deleteMany: deleteModels,
+			},
+			modelRoutingDefault: { findFirst: vi.fn(async function _FindDefault() { return null; }) },
+		} as unknown as Prisma.TransactionClient;
+		const authorization = _authorization(true);
+		const repository = new PrismaProviderEffectCommandRepository(transaction);
+
+		const completion = await repository.complete(_record(row, payload), { kind: ProviderEffectCommandKinds.DeleteByokKey, provider: "openai" }, _context("system"), authorization.authority, new Date("2026-08-30T01:00:00.000Z"));
+
+		expect(completion).toEqual({ status: ProviderEffectExecutionStatuses.Succeeded, followUpCommand: null });
+		expect(authorization.retireResourceGrants).toHaveBeenCalledWith(expect.objectContaining({
+			actorKind: "system",
+			actorId: _PROFILE,
+			resources: [
+				{ kind: ProductAuthorizationResourceKinds.ProviderConnection, id: "byok:acme:openai" },
+				{ kind: ProductAuthorizationResourceKinds.ModelDefinition, id: "model-1" },
+				{ kind: ProductAuthorizationResourceKinds.ModelDefinition, id: "model-2" },
+			],
+		}));
+		expect(authorization.retireResourceGrants.mock.invocationCallOrder[0]).toBeLessThan(deleteModels.mock.invocationCallOrder[0]);
+		expect(deleteModels.mock.invocationCallOrder[0]).toBeLessThan(deleteCredential.mock.invocationCallOrder[0]);
 	});
 });
