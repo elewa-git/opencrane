@@ -10,10 +10,9 @@ import { PrismaProviderEffectCommandUnitOfWork } from "./prisma-provider-effect-
 export const _PROVIDER_EFFECT_EXECUTOR_PROFILE = "opencrane-control-plane/provider-effect-v1";
 
 /**
- * Composes the post-commit provider executor used by HTTP routes.
+ * Composes the single post-commit provider executor shared by routes and reconciliation.
  *
- * Called by: `providerByokRouter` and `modelRegistryRouter` when tests or another composition root
- * do not supply an executor.
+ * Called by: the OpenCrane application root before it mounts routes or starts background workers.
  *
  * @param prisma - Product database for command delivery and provider projections.
  * @param coreApi - Kubernetes custody adapter required by BYOK commands, or null for model-only use.
@@ -23,6 +22,6 @@ export const _PROVIDER_EFFECT_EXECUTOR_PROFILE = "opencrane-control-plane/provid
 export function _CreateProviderEffectCommandExecutor(prisma: PrismaClient, coreApi: k8s.CoreV1Api | null = null, operatorNamespace: string | null = null): ProviderEffectCommandExecutor
 {
 	const unitOfWork = new PrismaProviderEffectCommandUnitOfWork(prisma);
-	const handler = new DefaultProviderEffectCommandHandler(prisma, coreApi, operatorNamespace);
+	const handler = new DefaultProviderEffectCommandHandler(coreApi, operatorNamespace);
 	return new DefaultProviderEffectCommandExecutor(unitOfWork, handler, _PROVIDER_EFFECT_EXECUTOR_PROFILE);
 }

@@ -4,6 +4,7 @@ import { ProviderEffectCommandState, type Prisma } from "@prisma/client";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
+import { _BYOK_PROVIDER_CATALOG } from "@opencrane/backend/server/gateways/model-routing";
 
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type AdmitProviderEffectCommand, type ProviderEffectAdmissionResult, type ProviderEffectClaimResult, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectExecutionContext, type ProviderEffectHandlerResult, type ProviderEffectResourceBlocker } from "./provider-effect-command.types";
 import { _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "./provider-effect-command-errors";
@@ -161,15 +162,86 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Claimed, claimFence: command.claimFence, deliveryCount: command.deliveryCount }, data: { state: ProviderEffectCommandState.Succeeded, result: result as unknown as Prisma.InputJsonValue, failureCode: null, claimFence: null, claimExpiresAt: null, completedAt } });
 		if (updated.count !== 1)
 			return ProviderEffectExecutionStatuses.Busy;
-		if (result.kind === ProviderEffectCommandKinds.RegisterModel)
-		{
-			if (command.payload.kind !== ProviderEffectCommandKinds.RegisterModel)
-				throw new Error("model registration result belongs to a different provider command");
-			const model = await this.transaction.modelDefinition.updateMany({ where: { id: command.payload.value.modelDefinitionId, litellmModelId: `pending:${command.id}` }, data: { litellmModelId: result.litellmModelId } });
-			if (model.count !== 1)
-				throw new Error("current model registration command lost its pending projection");
-		}
+		await this._persistProjection(command, result);
 		return ProviderEffectExecutionStatuses.Succeeded;
+	}
+
+	/** Persists the protected product projection after the command fence has been atomically won. */
+	private async _persistProjection(command: ProviderEffectCommandRecord, result: ProviderEffectHandlerResult): Promise<void>
+	{
+		switch (result.kind)
+		{
+			case ProviderEffectCommandKinds.SetByokKey:
+			{
+				if (command.payload.kind !== ProviderEffectCommandKinds.SetByokKey || result.provider !== command.payload.value.provider || result.secretRef !== command.payload.value.secretRef || (result.litellmCredentialName !== null && result.litellmCredentialName !== command.payload.value.litellmCredentialName))
+					throw new Error("provider credential projection does not match its claimed command");
+				const where = { scope: "Global" as const, clusterTenant: null, provider: result.provider };
+				const existing = await this.transaction.providerCredential.findFirst({ where });
+				if (existing === null)
+				{
+					const credential = await this.transaction.providerCredential.create({ data: { ...where, secretRef: result.secretRef, litellmCredentialName: result.litellmCredentialName } });
+					await this._persistProviderModels(result, credential.id);
+				}
+				else
+				{
+					await this.transaction.providerCredential.update({ where: { id: existing.id }, data: { secretRef: result.secretRef, litellmCredentialName: result.litellmCredentialName } });
+					await this._persistProviderModels(result, existing.id);
+				}
+				return;
+			}
+			case ProviderEffectCommandKinds.DeleteByokKey:
+				if (command.payload.kind !== ProviderEffectCommandKinds.DeleteByokKey || result.provider !== command.payload.value.provider)
+					throw new Error("provider credential removal does not match its claimed command");
+				await this.transaction.providerCredential.deleteMany({ where: { scope: "Global", clusterTenant: null, provider: result.provider } });
+				return;
+			case ProviderEffectCommandKinds.RegisterModel:
+			{
+				if (command.payload.kind !== ProviderEffectCommandKinds.RegisterModel)
+					throw new Error("model registration result belongs to a different provider command");
+				const model = await this.transaction.modelDefinition.updateMany({ where: { id: command.payload.value.modelDefinitionId, litellmModelId: `pending:${command.id}` }, data: { litellmModelId: result.litellmModelId } });
+				if (model.count !== 1)
+					throw new Error("current model registration command lost its pending projection");
+			}
+		}
+	}
+
+	/** Validates and saves the provider catalogue, first default, and routing default in this transaction. */
+	private async _persistProviderModels(result: Extract<ProviderEffectHandlerResult, { readonly kind: ProviderEffectCommandKinds.SetByokKey }>, providerCredentialId: string): Promise<void>
+	{
+		const catalog = _BYOK_PROVIDER_CATALOG[result.provider];
+		const cheapest = catalog?.models.find(function _Fast(model) { return model.className === "fast"; }) ?? catalog?.models.at(-1);
+		const expected = [...(catalog?.models.map(function _Model(model) { return { publicModelName: model.slug, upstreamModel: model.slug }; }) ?? [])];
+		if (cheapest !== undefined)
+			expected.push({ publicModelName: "auto", upstreamModel: cheapest.slug });
+		const actual = result.models.map(function _Model(model) { return { publicModelName: model.publicModelName, upstreamModel: model.upstreamModel }; });
+		const expectedDefault = catalog?.models.find(function _Default(model) { return model.className === catalog.defaultClass; })?.slug ?? null;
+		if (JSON.stringify(actual) !== JSON.stringify(expected) || result.defaultPublicModelName !== expectedDefault)
+			throw new Error("provider model projection does not match the fixed provider catalogue");
+		for (const projection of result.models)
+		{
+			const existing = await this.transaction.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, publicModelName: projection.publicModelName } });
+			if (existing === null)
+			{
+				await this.transaction.modelDefinition.create({ data: { scope: "Global", clusterTenant: null, publicModelName: projection.publicModelName, upstreamModel: projection.upstreamModel, litellmModelId: projection.litellmModelId, apiBase: null, isDefault: false, providerCredentialId } });
+				continue;
+			}
+			if (existing.upstreamModel !== projection.upstreamModel || existing.apiBase !== null)
+				throw new Error(`provider model '${projection.publicModelName}' conflicts with its fixed catalogue projection`);
+			await this.transaction.modelDefinition.update({ where: { id: existing.id }, data: { litellmModelId: projection.litellmModelId, providerCredentialId } });
+		}
+		const selectedDefaults = await this.transaction.modelDefinition.findMany({ where: { scope: "Global", clusterTenant: null, isDefault: true }, orderBy: { id: "asc" }, take: 2 });
+		if (selectedDefaults.length > 1)
+			throw new Error("Global model catalogue contains more than one default");
+		let selectedDefault = selectedDefaults[0] ?? null;
+		if (selectedDefault === null && result.defaultPublicModelName !== null)
+		{
+			const candidate = await this.transaction.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, publicModelName: result.defaultPublicModelName } });
+			if (candidate === null)
+				throw new Error("provider default model projection is missing");
+			selectedDefault = await this.transaction.modelDefinition.update({ where: { id: candidate.id }, data: { isDefault: true } });
+		}
+		if (selectedDefault !== null && await this.transaction.modelRoutingDefault.findFirst({ where: { scope: "Global", clusterTenant: null } }) === null)
+			await this.transaction.modelRoutingDefault.create({ data: { scope: "Global", clusterTenant: null, defaultModel: selectedDefault.publicModelName } });
 	}
 
 	/** @inheritdoc */

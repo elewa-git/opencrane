@@ -56,8 +56,11 @@ the admitted upstream model, API base, credential reference, and mode. An absent
   `PrismaDefaultModelDefinitionResolverRepository` — the closed result vocabulary and Postgres
   adapter that turn the configured effective default into one stable, tenant-accessible
   `ModelDefinition` identifier.
-- `_ProvisionByokKey`, `_DeprovisionByokKey`, `_RegisterLiteLlmModel`, `_UpsertLiteLlmCredential`,
-  `_DeleteLiteLlmCredential` — the LiteLLM provisioning helpers reused by the provider gateway.
+- `_ApplyProviderKeySecret`, `_ClearProviderKeySecret`, `_RegisterLiteLlmModel`,
+  `_UpsertLiteLlmCredential`, `_DeleteLiteLlmCredential`, and `_EnsureProviderEmbeddingModels` —
+  external-only custody and LiteLLM adapters used after a durable provider command commits.
+- `_ProvisionByokKey` and `_DeprovisionByokKey` — the separate startup/bootstrap convergence path;
+  provider HTTP routes do not call these database-writing helpers.
   `_RequireLiteLlmModelName` and `_RequireLiteLlmModelDeployment` qualify live startup inventory
   without rewriting immutable model-definition evidence.
 - `_EstimateSavings`, `_ReplayEstimate`, `_DoublyRobustEstimate`, `_OpeEstimateWithCi` — the pure

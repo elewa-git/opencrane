@@ -35,19 +35,19 @@ describe("initial model bootstrap", function _InitialModelBootstrapSuite()
 
 	it("uses the provider custody authority and refuses readiness when LiteLLM rejects the key", async function _RequireLiteLlmRegistration()
 	{
-		_provisionByokKey.mockResolvedValueOnce({ litellmRegistered: true, row: {} as never });
+		_provisionByokKey.mockResolvedValueOnce({ litellmRegistered: true, litellmOutcomeCertain: true, row: {} as never });
 		_requireLiteLlmModelName.mockResolvedValueOnce();
 		await expect(_BootstrapInitialModel(_Dependencies({ provider: "openai", apiKey: "sk-test" }))).resolves.toBeUndefined();
 		expect(_provisionByokKey).toHaveBeenCalledWith(expect.objectContaining({ operatorNamespace: "opencrane-testv2", provider: "openai", apiKey: "sk-test", requireLiveModels: true }));
 		expect(_requireLiteLlmModelName).toHaveBeenCalledWith("auto");
 
-		_provisionByokKey.mockResolvedValueOnce({ litellmRegistered: false, row: {} as never });
+		_provisionByokKey.mockResolvedValueOnce({ litellmRegistered: false, litellmOutcomeCertain: true, row: {} as never });
 		await expect(_BootstrapInitialModel(_Dependencies({ provider: "openai", apiKey: "sk-test" }))).rejects.toThrow(/LiteLLM did not accept/);
 	});
 
 	it("refuses readiness when the accepted provider key has no live auto model", async function _RequireLiveModel()
 	{
-		_provisionByokKey.mockResolvedValueOnce({ litellmRegistered: true, row: {} as never });
+		_provisionByokKey.mockResolvedValueOnce({ litellmRegistered: true, litellmOutcomeCertain: true, row: {} as never });
 		_requireLiteLlmModelName.mockRejectedValueOnce(new Error("LiteLLM has not registered required model 'auto'"));
 		await expect(_BootstrapInitialModel(_Dependencies({ provider: "openai", apiKey: "sk-test" }))).rejects.toThrow(/required model 'auto'/);
 	});

@@ -26,7 +26,7 @@ const _PROVIDER_EFFECT_INTERVAL_MILLISECONDS = 1_000;
  * The returned stop handle is the lifecycle boundary: every loop must be stopped before Prisma is
  * disconnected, and none may keep the Node process alive on its own.
  */
-export async function _StartBackgroundWorkers(prisma: PrismaClient, managedRunAdmission: ManagedRunAdmissionPort, config: OpenCraneProcessConfig, externalActions: ExternalActionWorker, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, providerEffects: ProviderEffectCommandExecutor | null = null): Promise<OpenCraneBackgroundWorkers>
+export async function _StartBackgroundWorkers(prisma: PrismaClient, managedRunAdmission: ManagedRunAdmissionPort, config: OpenCraneProcessConfig, externalActions: ExternalActionWorker, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, providerEffects: ProviderEffectCommandExecutor): Promise<OpenCraneBackgroundWorkers>
 {
 	// 1. Prepare optional schedule admission through the same capacity port used by run-now requests.
 	const scheduleTicker = _CreateScheduleTicker(new PrismaScheduleTickerUnitOfWork(prisma), managedRunAdmission, _log);
@@ -54,10 +54,8 @@ export async function _StartBackgroundWorkers(prisma: PrismaClient, managedRunAd
 	externalActionHandle.unref();
 	const mcpRecoveryHandle = setInterval(function _recoverMcpInvocation() { void mcpRuntime.recoverExpiredInvocation().catch(function _onError(error: unknown) { _log.error({ err: error }, "MCP invocation recovery pass failed"); }); }, _MCP_INVOCATION_RECOVERY_INTERVAL_MILLISECONDS);
 	mcpRecoveryHandle.unref();
-	const providerEffectHandle = providerEffects === null
-		? null
-		: setInterval(function _reconcileProviderEffect() { void providerEffects.reconcileNext().catch(function _onError(error: unknown) { _log.error({ err: error }, "provider effect reconciliation pass failed"); }); }, _PROVIDER_EFFECT_INTERVAL_MILLISECONDS);
-	providerEffectHandle?.unref();
+	const providerEffectHandle = setInterval(function _reconcileProviderEffect() { void providerEffects.reconcileNext().catch(function _onError(error: unknown) { _log.error({ err: error }, "provider effect reconciliation pass failed"); }); }, _PROVIDER_EFFECT_INTERVAL_MILLISECONDS);
+	providerEffectHandle.unref();
 
 	return {
 		async stop(): Promise<void>
@@ -66,8 +64,7 @@ export async function _StartBackgroundWorkers(prisma: PrismaClient, managedRunAd
 				clearInterval(schedulerHandle);
 			clearInterval(externalActionHandle);
 			clearInterval(mcpRecoveryHandle);
-			if (providerEffectHandle !== null)
-				clearInterval(providerEffectHandle);
+			clearInterval(providerEffectHandle);
 			await Promise.all([externalActions.drain(), workflowRuntime.close()]);
 		},
 	};

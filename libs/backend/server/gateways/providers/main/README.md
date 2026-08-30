@@ -31,7 +31,7 @@ the provider-native image tool.
  model-routing resolves which model each request uses
 ```
 
-**In this flow:** [model-routing](../../model-routing/main/README.md) *(owns the provisioning helpers + resolves models)* · LiteLLM *(the proxy the key is registered into)*
+**In this flow:** [model-routing](../../model-routing/main/README.md) *(owns external LiteLLM adapters and resolves models)* · providers *(owns durable command and final product projections)* · LiteLLM *(the proxy the key is registered into)*
 
 Invariant: the raw key is write-only from the API's point of view — reads return presence and
 timestamps (`configured`, `litellmRegistered`, `updatedAt`), never the key. A command stores a
@@ -86,6 +86,12 @@ not become an implicit grant to use every provider or model.
   the routers, mounted at `/api/v1/providers/*` and `/api/v1/models`.
 - `_ProvidersOpenapiPaths` — the OpenAPI (REST API description) path fragments for this surface.
 - `_CreateProviderEffectCommandExecutor` — the shared route and background-reconciler composition.
+
+The application root constructs that executor once and injects the same instance into both routers
+and the background reconciler. Routes cannot construct a local executor or silently omit durable
+reconciliation. The external handler has no Prisma client: it returns a secret-free credential and
+model projection, and `PrismaProviderEffectCommandRepository.complete` persists that projection only
+inside the final current-authority and claim-fence transaction.
 
 ## Boundary
 

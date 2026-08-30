@@ -2110,7 +2110,6 @@
       "apps/opencrane/src/app/user-onboarding-composition.ts",
       "apps/opencrane/src/app/persona-approval-composition.ts",
       "libs/backend/server/gateways/providers/main/src/provider-effect-command-composition.ts",
-      "libs/backend/server/gateways/providers/main/src/provider-effect-command-handler.ts",
       "libs/backend/server/gateways/providers/main/src/provider-effect-command-repository.factory.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 		"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",

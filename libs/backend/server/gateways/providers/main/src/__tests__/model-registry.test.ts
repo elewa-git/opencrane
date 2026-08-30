@@ -2,14 +2,13 @@ import express from "express";
 import type { Express } from "express";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { ModelRoutingScope } from "@opencrane/contracts";
 
 // Side-effect import: loads the express-session SessionData.authUser augmentation.
 import "@opencrane/backend/server/infra/auth";
 import type { AuthUser } from "@opencrane/backend/server/infra/auth";
-import { _RegisterLiteLlmModel } from "@opencrane/backend/server/gateways/model-routing";
 import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, type ProviderEffectCommandExecutor } from "../provider-effect-command.types";
 import type { ProviderGatewayAuthorizationFactory } from "../provider-gateway-authority.types";
 import { modelRegistryRouter } from "../routes/model-registry";
@@ -124,33 +123,17 @@ function _buildApp(prisma: PrismaClient, user: AuthUser | null = _platformOperat
       if (!command)
         throw new Error("test command was not captured");
       const payload = command.payload as { modelDefinitionId: string; publicModelName: string; upstreamModel: string; scope: ModelRoutingScope; clusterTenant: string | null; apiBase: string | null; apiKeyEnvRef: string | null; litellmCredentialName: string | null };
-      const litellmModelId = await _RegisterLiteLlmModel({ ...payload, deploymentId: commandId });
+	  const litellmModelId = `deployment:${commandId}`;
       await prisma.modelDefinition.update({ where: { id: payload.modelDefinitionId }, data: { litellmModelId } });
       return { status: ProviderEffectExecutionStatuses.Succeeded, result: { kind: ProviderEffectCommandKinds.RegisterModel, litellmModelId } };
     },
   } as ProviderEffectCommandExecutor;
-  app.use("/api/v1/models", modelRegistryRouter(prisma, resolveCaller, authorization, executor));
+  app.use("/api/v1/models", modelRegistryRouter(prisma, executor, resolveCaller, authorization));
   return app;
 }
 
 describe("modelRegistryRouter", function _suite()
 {
-  const originalEndpoint = process.env.LITELLM_ENDPOINT;
-  const originalMasterKey = process.env.LITELLM_MASTER_KEY;
-
-  beforeEach(function _resetEnv()
-  {
-    delete process.env.LITELLM_ENDPOINT;
-    delete process.env.LITELLM_MASTER_KEY;
-  });
-
-  afterEach(function _restoreEnv()
-  {
-    if (originalEndpoint !== undefined) { process.env.LITELLM_ENDPOINT = originalEndpoint; } else { delete process.env.LITELLM_ENDPOINT; }
-    if (originalMasterKey !== undefined) { process.env.LITELLM_MASTER_KEY = originalMasterKey; } else { delete process.env.LITELLM_MASTER_KEY; }
-    vi.restoreAllMocks();
-  });
-
 	it("filters exact ModelDefinition reads and admits mutation as organisation policy", async function _CentralAuthority()
 	{
 		const store = new Map<string, Row>([
@@ -188,18 +171,13 @@ describe("modelRegistryRouter", function _suite()
     expect(res.body[0].publicModelName).toBe("openai/gpt-4o");
   });
 
-  it("creates a model with a deterministic placeholder id when LiteLLM is unconfigured", async function _createUnconfigured()
+  it("returns the model only after the injected executor finalizes registration", async function _createFinalized()
   {
-    const fetchSpy = vi.fn();
-    vi.stubGlobal("fetch", fetchSpy);
-
     const res = await request(_buildApp(_mockPrisma(new Map()))).post("/api/v1/models").send({ publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o" });
 
     expect(res.status).toBe(201);
-    expect(res.body.litellmModelId).toBe("placeholder:global-openai-gpt-4o");
+	expect(res.body.litellmModelId).toMatch(/^deployment:/);
     expect(res.body.scope).toBe("global");
-    // No live LiteLLM → no outbound registration call.
-    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("persists only the explicit generated-output capability allowlist", async function _GeneratedOutputCapabilities()
@@ -212,56 +190,6 @@ describe("modelRegistryRouter", function _suite()
     expect(accepted.body.generatedOutputCapabilities).toEqual(["image_png", "code_execution_files"]);
     expect(refused.status).toBe(400);
     expect(refused.body.code).toBe("VALIDATION_ERROR");
-  });
-
-  it("registers with LiteLLM and stores the returned model id when configured", async function _createConfigured()
-  {
-    process.env.LITELLM_ENDPOINT = "http://litellm:4000";
-    process.env.LITELLM_MASTER_KEY = "master-key";
-
-    const fetchSpy = vi.fn()
-      .mockResolvedValueOnce({ ok: true, text: async function _inventory() { return JSON.stringify({ data: [] }); } })
-      .mockResolvedValueOnce({ ok: true, text: async function _created() { return JSON.stringify({ model_id: "deploy-abc123" }); } });
-    vi.stubGlobal("fetch", fetchSpy);
-
-    const res = await request(_buildApp(_mockPrisma(new Map()))).post("/api/v1/models").send({ publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o" });
-
-    expect(res.status).toBe(201);
-    expect(res.body.litellmModelId).toBe("deploy-abc123");
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-    const [url, init] = fetchSpy.mock.calls[1];
-    expect(url).toBe("http://litellm:4000/model/new");
-    const body = JSON.parse((init as { body: string }).body);
-    expect(body.model_name).toBe("openai/gpt-4o");
-    expect(body.litellm_params.model).toBe("openai/gpt-4o");
-    // GLOBAL registration: never set the Enterprise-gated team_id.
-    expect(body.model_info.id).toEqual(expect.any(String));
-  });
-
-  it("falls back to the placeholder id when LiteLLM returns an error (non-fatal)", async function _createLiteLlmError()
-  {
-    process.env.LITELLM_ENDPOINT = "http://litellm:4000";
-    process.env.LITELLM_MASTER_KEY = "master-key";
-
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500, text: async function _text() { return "boom"; } }));
-
-    const res = await request(_buildApp(_mockPrisma(new Map()))).post("/api/v1/models").send({ publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o" });
-
-    expect(res.status).toBe(201);
-    expect(res.body.litellmModelId).toBe("placeholder:global-openai-gpt-4o");
-  });
-
-  it("derives distinct placeholder ids for the same slug at different scopes (uniqueness)", async function _placeholderScopeUniqueness()
-  {
-    const store = new Map<string, Row>();
-    const app = _buildApp(_mockPrisma(store));
-
-    const global = await request(app).post("/api/v1/models").send({ publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o" });
-    const scoped = await request(app).post("/api/v1/models").send({ scope: "clusterTenant", clusterTenant: "acme", publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o" });
-
-    expect(global.body.litellmModelId).toBe("placeholder:global-openai-gpt-4o");
-    expect(scoped.body.litellmModelId).toBe("placeholder:clustertenant-acme-openai-gpt-4o");
-    expect(global.body.litellmModelId).not.toBe(scoped.body.litellmModelId);
   });
 
   it("rejects a model that references a credential owned by another ClusterTenant (400)", async function _credentialScopeMismatch()

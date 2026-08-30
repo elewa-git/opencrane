@@ -257,10 +257,21 @@ export interface ProviderEffectClaimResult
 	readonly command: ProviderEffectCommandRecord | null;
 }
 
+/** One chat-model deployment that finalization must project after external registration succeeds. */
+export interface ProviderEffectModelProjection
+{
+	/** Public model name callers send through the routing gateway. */
+	readonly publicModelName: string;
+	/** Upstream provider model installed behind the public name. */
+	readonly upstreamModel: string;
+	/** LiteLLM deployment identifier returned by registration. */
+	readonly litellmModelId: string;
+}
+
 /** Result returned by a provider effect handler for atomic database finalization. */
 export type ProviderEffectHandlerResult =
-	| { readonly kind: ProviderEffectCommandKinds.SetByokKey; readonly providerCredentialId: string; readonly litellmRegistered: boolean }
-	| { readonly kind: ProviderEffectCommandKinds.DeleteByokKey }
+	| { readonly kind: ProviderEffectCommandKinds.SetByokKey; readonly provider: string; readonly secretRef: string; readonly litellmCredentialName: string | null; readonly models: readonly ProviderEffectModelProjection[]; readonly defaultPublicModelName: string | null }
+	| { readonly kind: ProviderEffectCommandKinds.DeleteByokKey; readonly provider: string }
 	| { readonly kind: ProviderEffectCommandKinds.RegisterModel; readonly litellmModelId: string };
 
 /** Transaction-scoped persistence used to admit and deliver provider commands. */

@@ -38,6 +38,7 @@ describe("OpenCrane background workers", function _BackgroundWorkerSuite()
 			{ drain: externalDrain, runOnce: vi.fn().mockResolvedValue(false) } as unknown as ExternalActionWorker,
 			{ recoverExpiredInvocation } as never,
 			{ close, startWorkers } as IWorkflowWorkerRuntime,
+			{ reconcileNext: vi.fn().mockResolvedValue(false) } as never,
 		);
 
 		expect(startWorkers).toHaveBeenCalledWith({ workerName: "opencrane-control-plane" });

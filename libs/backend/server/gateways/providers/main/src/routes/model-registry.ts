@@ -8,7 +8,7 @@ import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "
 
 import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCaller, ProviderGatewayCallerResolver } from "../provider-gateway-authority.types";
 import { _GrantProviderResourceCreatorUse, _RequireProviderGatewayAdministration, _RequireProviderGatewayCaller, _ResolveProviderGatewayCaller, _SendProviderGatewayAuthorizationError } from "../provider-gateway-authorization";
-import { _CreateProviderEffectCommandExecutor, _PROVIDER_EFFECT_EXECUTOR_PROFILE } from "../provider-effect-command-composition";
+import { _PROVIDER_EFFECT_EXECUTOR_PROFILE } from "../provider-effect-command-composition";
 import { _RequireProviderEffectAdmission, _SendProviderEffectBusy } from "../provider-effect-command-http";
 import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandExecutor, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 import { PrismaProviderGatewayUnitOfWork } from "../prisma-provider-gateway-unit-of-work";
@@ -129,10 +129,10 @@ async function _resolveCredential(prisma: Prisma.TransactionClient, providerCred
 /**
  * CRUD router for {@link ModelDefinition} — the routable models registered in LiteLLM (BYOM).
  *
- * On create the row is written and the model is registered GLOBALLY with LiteLLM via a best-effort
- * `POST /model/new` (guarded by `LITELLM_ENDPOINT` + `LITELLM_MASTER_KEY`). With LiteLLM
- * unconfigured a deterministic placeholder id is stored and the create still succeeds, so the row
- * exists but will not route until it is reconciled. Update does NOT re-register, so changing
+ * On create the pending row and durable registration command commit together. The shared
+ * application-root executor registers the model globally with LiteLLM after commit and replaces
+ * the pending deployment id only in its final authorization transaction. A failed delivery returns
+ * a resumable command id rather than treating a best-effort side effect as success. Update does NOT re-register, so changing
  * `upstreamModel` here leaves the LiteLLM deployment pointing at the old model. Reads filter exact
  * `ModelDefinition` grants; mutations explicitly admit the silo's `Organization/Administer`
  * capability in the transaction that writes the definition.
@@ -147,7 +147,7 @@ async function _resolveCredential(prisma: Prisma.TransactionClient, providerCred
  * @param prisma - Prisma client used for persistence.
  * @returns Configured Express router.
  */
-export function modelRegistryRouter(prisma: PrismaClient, resolveCaller: ProviderGatewayCallerResolver = _ResolveProviderGatewayCaller, createAuthorization?: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>, effectExecutor: ProviderEffectCommandExecutor = _CreateProviderEffectCommandExecutor(prisma)): Router
+export function modelRegistryRouter(prisma: PrismaClient, effectExecutor: ProviderEffectCommandExecutor, resolveCaller: ProviderGatewayCallerResolver = _ResolveProviderGatewayCaller, createAuthorization?: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>): Router
 {
   const router = Router();
 	const models = new PrismaProviderGatewayUnitOfWork(prisma, createAuthorization);

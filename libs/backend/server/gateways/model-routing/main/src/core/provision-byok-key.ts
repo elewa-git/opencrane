@@ -41,11 +41,11 @@ const _AUTO_MODEL_NAME = "auto";
  * The name is fixed per provider, and that is a security constraint rather than a convenience: the
  * server's Role grants it `get`/`update` on exactly these Secret names, so the server can rewrite
  * a key it already has but cannot invent new Secret names or delete existing ones. Deployment
- * pre-creates every Secret in the fixed provider catalogue — see `_clearProviderKeySecret`, which
+ * pre-creates every Secret in the fixed provider catalogue — see `_ClearProviderKeySecret`, which
  * blanks the value instead of deleting the object.
  *
- * Called by: `_ProvisionByokKey`, `_DeprovisionByokKey`, `_applyProviderKeySecret` and
- * `_clearProviderKeySecret` in this file.
+ * Called by: `_ProvisionByokKey`, `_DeprovisionByokKey`, `_ApplyProviderKeySecret` and
+ * `_ClearProviderKeySecret` in this file.
  *
  * @param provider - Provider key, e.g. `openai`.
  * @returns `byok-provider-key-<provider>`.
@@ -113,7 +113,7 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
   const catalog = _BYOK_PROVIDER_CATALOG[provider];
 
   // 1. Persist the raw key to its k8s Secret first — the durable source of truth.
-  await _applyProviderKeySecret(coreApi, operatorNamespace, provider, apiKey);
+  await _ApplyProviderKeySecret(coreApi, operatorNamespace, provider, apiKey);
 
   // 2. Best-effort push to LiteLLM's /credentials dynamic path; Secret-only when unconfigured/down.
   //    custom_llm_provider is the catalog's litellmProvider (glm ⇒ zai), falling back to the key.
@@ -175,7 +175,7 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
  */
 export async function _DeprovisionByokKey(opts: DeprovisionByokKeyOptions): Promise<DeprovisionByokKeyResult>
 {
-  await _clearProviderKeySecret(opts.coreApi, opts.operatorNamespace, opts.provider);
+  await _ClearProviderKeySecret(opts.coreApi, opts.operatorNamespace, opts.provider);
   const credentialOutcome = await _DeleteLiteLlmCredential(_byokCredentialName(opts.provider));
   await opts.prisma.providerCredential.deleteMany({ where: { scope: "Global", clusterTenant: null, provider: opts.provider } });
   return { litellmOutcomeCertain: credentialOutcome !== LiteLlmCredentialMutationOutcomes.Uncertain };
@@ -186,7 +186,7 @@ export async function _DeprovisionByokKey(opts: DeprovisionByokKeyOptions): Prom
  * Reads first to carry `resourceVersion` on replace (PUT requires it); a 404 read falls through to
  * a create. The Secret is the durable source of truth — it survives a LiteLLM DB reset.
  */
-async function _applyProviderKeySecret(coreApi: k8s.CoreV1Api, namespace: string, provider: string, apiKey: string): Promise<void>
+export async function _ApplyProviderKeySecret(coreApi: k8s.CoreV1Api, namespace: string, provider: string, apiKey: string): Promise<void>
 {
   const name = _byokSecretName(provider);
   const body: k8s.V1Secret = {
@@ -221,7 +221,7 @@ async function _applyProviderKeySecret(coreApi: k8s.CoreV1Api, namespace: string
 }
 
 /** Blank a provider Secret's value while keeping the object itself — the server's Role may update these fixed names but not create or delete them, so deleting it would make the provider unrecoverable. */
-async function _clearProviderKeySecret(coreApi: k8s.CoreV1Api, namespace: string, provider: string): Promise<void>
+export async function _ClearProviderKeySecret(coreApi: k8s.CoreV1Api, namespace: string, provider: string): Promise<void>
 {
   try
   {

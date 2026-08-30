@@ -10,7 +10,7 @@ import { _log } from "../log";
 import { _byokCredentialName, _byokSecretName } from "@opencrane/backend/server/gateways/model-routing";
 import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCaller, ProviderGatewayCallerResolver } from "../provider-gateway-authority.types";
 import { _RequireProviderGatewayAdministration, _RequireProviderGatewayCaller, _ResolveProviderGatewayCaller, _SendProviderGatewayAuthorizationError } from "../provider-gateway-authorization";
-import { _CreateProviderEffectCommandExecutor, _PROVIDER_EFFECT_EXECUTOR_PROFILE } from "../provider-effect-command-composition";
+import { _PROVIDER_EFFECT_EXECUTOR_PROFILE } from "../provider-effect-command-composition";
 import { _ProviderKeyMaterialVerifier } from "../provider-effect-command-executor";
 import { _SendProviderEffectBusy } from "../provider-effect-command-http";
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandExecutor, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
@@ -58,9 +58,9 @@ function _toStatus(provider: string, row: PrismaProviderCredential | undefined):
  * Router for BYOK provider keys — set/refresh/remove a RAW upstream provider key for this silo.
  *
  * Unlike {@link providerCredentialsRouter} (reference-only, raw keys rejected), this is the BYOK
- * "dynamic no-restart path". The provisioning work (Secret write + LiteLLM `/credentials` + the
- * Global ProviderCredential row + default-model seed) lives in {@link _ProvisionByokKey} so the
- * boot-time bootstrap can reuse it; this router is the HTTP wrapper (validation + status DTO).
+ * "dynamic no-restart path". The router atomically admits a durable command, then asks the shared
+ * application-root executor to reconcile Secret custody, LiteLLM credentials/models, and the final
+ * credential/catalogue projection. Startup bootstrap remains a separate strict readiness path.
  * Reads return presence + timestamps only — the key is never echoed back.
  *
  * The silo-wide key spends real money and backs every model call. Reads filter stable BYOK
@@ -72,7 +72,7 @@ function _toStatus(provider: string, row: PrismaProviderCredential | undefined):
  * @param operatorNamespace - The operator's own namespace; where the key Secret is written.
  * @returns Configured Express router.
  */
-export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api, operatorNamespace: string, resolveCaller: ProviderGatewayCallerResolver = _ResolveProviderGatewayCaller, createAuthorization?: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>, effectExecutor: ProviderEffectCommandExecutor = _CreateProviderEffectCommandExecutor(prisma, coreApi, operatorNamespace)): Router
+export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api, operatorNamespace: string, effectExecutor: ProviderEffectCommandExecutor, resolveCaller: ProviderGatewayCallerResolver = _ResolveProviderGatewayCaller, createAuthorization?: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>): Router
 {
   const router = Router();
 	const providers = new PrismaProviderGatewayUnitOfWork(prisma, createAuthorization);
@@ -96,7 +96,7 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
 	res.json(_BYOK_PROVIDERS.filter(provider => result.entitledProviders.has(provider)).map(function _status(provider) { return _toStatus(provider, byProvider.get(provider)); }));
   });
 
-  /** Set or refresh a provider's raw key (delegates the provisioning to {@link _ProvisionByokKey}). */
+  /** Set or refresh a provider's raw key through the shared durable executor. */
   router.put("/:provider", async function _setProviderKey(req, res)
   {
 	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
@@ -134,7 +134,6 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
 			}
 		}
 		const delivered = await effectExecutor.execute(commandId, { provider, providerKey: apiKey }, _effectContext(caller, provider));
-		const effectResult = delivered.result;
 		if (delivered.status !== ProviderEffectExecutionStatuses.Succeeded && delivered.status !== ProviderEffectExecutionStatuses.AlreadySucceeded)
 		{
 			res.status(503).json({ error: "Provider key change is admitted but has not completed.", code: "PROVIDER_EFFECT_PENDING", commandId });
@@ -142,8 +141,6 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
 		}
 		const row = await providers.run(async function _ReadResult(transaction)
 		{
-			if (effectResult?.kind === ProviderEffectCommandKinds.SetByokKey)
-				return transaction.providerCredential.findUnique({ where: { id: effectResult.providerCredentialId } });
 			return transaction.providerCredential.findFirst({ where: { scope: "Global", clusterTenant: null, provider } });
 		});
 		if (row === null)
@@ -158,7 +155,7 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
 	}
   });
 
-  /** Remove a provider's key (delegates to {@link _DeprovisionByokKey}). */
+  /** Remove a provider's key through the shared durable executor. */
   router.delete("/:provider", async function _deleteProviderKey(req, res)
   {
 	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);

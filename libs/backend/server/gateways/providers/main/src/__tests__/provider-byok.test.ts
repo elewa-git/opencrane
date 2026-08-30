@@ -1,5 +1,3 @@
-import { Buffer } from "node:buffer";
-
 import express from "express";
 import type { Express } from "express";
 import * as k8s from "@kubernetes/client-node";
@@ -7,9 +5,8 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { _DeprovisionByokKey, _ProvisionByokKey } from "@opencrane/backend/server/gateways/model-routing";
+import { _BYOK_PROVIDER_CATALOG } from "@opencrane/backend/server/gateways/model-routing";
 
-import { _log } from "../log";
 import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, type ProviderEffectCommandExecutor } from "../provider-effect-command.types";
 import type { ProviderGatewayAuthorizationFactory } from "../provider-gateway-authority.types";
 import { providerByokRouter } from "../routes/provider-byok";
@@ -208,16 +205,29 @@ function _buildApp(store: Map<string, Row>, secrets: Map<string, k8s.V1Secret>, 
       const payload = command.payload as { provider: string };
       if (command.kind === ProviderEffectCommandKinds.SetByokKey)
       {
-        const providerKey = (material as { providerKey?: string }).providerKey ?? "";
-        const provisioned = await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: payload.provider, apiKey: providerKey, log: _log });
-        return { status: ProviderEffectExecutionStatuses.Succeeded, result: { kind: ProviderEffectCommandKinds.SetByokKey, providerCredentialId: provisioned.row.id, litellmRegistered: provisioned.litellmRegistered } };
+		const existing = Array.from(store.entries()).find(function _Provider([, row]) { return row.provider === payload.provider; });
+		const id = existing?.[0] ?? `cred-${store.size + 1}`;
+		store.set(id, { id, scope: "Global", clusterTenant: null, provider: payload.provider, secretRef: `byok-provider-key-${payload.provider}`, litellmCredentialName: null, createdAt: new Date(), updatedAt: new Date() });
+		const catalog = _BYOK_PROVIDER_CATALOG[payload.provider];
+		for (const entry of catalog?.models ?? [])
+		{
+			const modelId = `model-${entry.slug}`;
+			const hasDefault = Array.from(models.values()).some(function _Default(model) { return model.isDefault === true; });
+			models.set(modelId, { id: modelId, scope: "Global", clusterTenant: null, publicModelName: entry.slug, upstreamModel: entry.slug, litellmModelId: `deployment:${entry.slug}`, apiBase: null, isDefault: !hasDefault && entry.className === catalog?.defaultClass, providerCredentialId: id, createdAt: new Date(), updatedAt: new Date() });
+		}
+		const projections = (catalog?.models ?? []).map(function _Projection(entry) { return { publicModelName: entry.slug, upstreamModel: entry.slug, litellmModelId: `deployment:${entry.slug}` }; });
+		return { status: ProviderEffectExecutionStatuses.Succeeded, result: { kind: ProviderEffectCommandKinds.SetByokKey, provider: payload.provider, secretRef: `byok-provider-key-${payload.provider}`, litellmCredentialName: null, models: projections, defaultPublicModelName: catalog?.models.find(function _Default(entry) { return entry.className === catalog.defaultClass; })?.slug ?? null } };
       }
-      await _DeprovisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: payload.provider });
-      return { status: ProviderEffectExecutionStatuses.Succeeded, result: { kind: ProviderEffectCommandKinds.DeleteByokKey } };
+		for (const [id, row] of store)
+		{
+			if (row.provider === payload.provider)
+				store.delete(id);
+		}
+		return { status: ProviderEffectExecutionStatuses.Succeeded, result: { kind: ProviderEffectCommandKinds.DeleteByokKey, provider: payload.provider } };
     },
   } as ProviderEffectCommandExecutor;
   app.use(express.json());
-  app.use("/api/v1/providers/byok", providerByokRouter(prisma, coreApi, _NS, function _Caller() { return { siloId: "acme", principalId: "principal-1" }; }, _Authorization(user.authorized), executor));
+  app.use("/api/v1/providers/byok", providerByokRouter(prisma, coreApi, _NS, executor, function _Caller() { return { siloId: "acme", principalId: "principal-1" }; }, _Authorization(user.authorized)));
   return app;
 }
 
@@ -234,62 +244,6 @@ describe("providerByokRouter", function _suite()
     for (const k of ["LITELLM_ENDPOINT", "LITELLM_MASTER_KEY"]) { if (_saved[k] !== undefined) { process.env[k] = _saved[k]; } }
   });
 
-  it("sets a provider key: writes the Secret (base64), records the credential, Secret-only without LiteLLM", async function _set()
-  {
-    const store = new Map<string, Row>();
-    const secrets = new Map<string, k8s.V1Secret>();
-    const res = await request(_buildApp(store, secrets)).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-live-123" });
-
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ provider: "openai", configured: true, litellmRegistered: false });
-
-    const secret = secrets.get("byok-provider-key-openai");
-    expect(secret?.metadata?.namespace).toBe(_NS);
-    expect(Buffer.from(secret!.data!.apiKey, "base64").toString("utf8")).toBe("sk-live-123");
-
-    const row = Array.from(store.values())[0];
-    expect(row).toMatchObject({ scope: "Global", clusterTenant: null, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: null });
-  });
-
-  it("seeds a default model bound to the credential so the agent can route through LiteLLM", async function _seedsDefault()
-  {
-    const store = new Map<string, Row>();
-    const models = new Map<string, Row>();
-    const app = _buildApp(store, new Map(), { authorized: true }, models);
-    await request(app).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-live-123" });
-
-    // All of OpenAI's model classes are seeded PLUS the stable "auto" model; flagship is default.
-    const seeded = Array.from(models.values());
-    expect(seeded).toHaveLength(4);
-    const flagship = seeded.find(function f(m) { return m.publicModelName === "openai/gpt-5.5"; });
-    expect(flagship).toMatchObject({ scope: "Global", clusterTenant: null, isDefault: true });
-    // "auto" is backed by the cheapest (fast) model and is a selectable option, not the default.
-    expect(seeded.find(function a(m) { return m.publicModelName === "auto"; })).toMatchObject({ upstreamModel: "openai/gpt-5.4-nano", isDefault: false });
-    expect(seeded.filter(function d(m) { return m.isDefault; })).toHaveLength(1);
-    // Every class is bound to the one upserted credential row.
-    const cred = Array.from(store.values())[0];
-    expect(seeded.every(function bound(m) { return m.providerCredentialId === cred.id; })).toBe(true);
-  });
-
-  it("first provider configured wins the silo default; later providers add models but not the default", async function _firstWins()
-  {
-    const store = new Map<string, Row>();
-    const models = new Map<string, Row>();
-    const app = _buildApp(store, new Map(), { authorized: true }, models);
-    await request(app).put("/api/v1/providers/byok/openai").send({ apiKey: "k1" });
-    await request(app).put("/api/v1/providers/byok/anthropic").send({ apiKey: "k2" });
-
-    // Both providers' full catalogs are registered (3 + 3) plus a single shared "auto" (first
-    // provider wins), but only OpenAI's flagship is default.
-    const byName = new Map(Array.from(models.values()).map(function _n(m) { return [m.publicModelName, m]; }));
-    expect(byName.get("openai/gpt-5.5")).toMatchObject({ isDefault: true });
-    expect(byName.get("anthropic/claude-opus-4-8")).toMatchObject({ isDefault: false });
-    // "auto" is registered once (by the first provider, OpenAI) and backed by its cheapest model.
-    expect(byName.get("auto")).toMatchObject({ upstreamModel: "openai/gpt-5.4-nano", isDefault: false });
-    expect(Array.from(models.values()).filter(function d(m) { return m.isDefault; })).toHaveLength(1);
-    expect(models.size).toBe(7);
-  });
-
   it("never echoes the raw key back in the response body", async function _noEcho()
   {
     const res = await request(_buildApp(new Map(), new Map())).put("/api/v1/providers/byok/anthropic").send({ apiKey: "sk-secret-xyz" });
@@ -297,18 +251,14 @@ describe("providerByokRouter", function _suite()
     expect(JSON.stringify(res.body)).not.toContain("sk-secret-xyz");
   });
 
-  it("refreshes an existing key in place (update, not duplicate row)", async function _refresh()
-  {
-    const store = new Map<string, Row>();
-    const secrets = new Map<string, k8s.V1Secret>();
-    const app = _buildApp(store, secrets);
-    await request(app).put("/api/v1/providers/byok/gemini").send({ apiKey: "key-1" });
-    const res = await request(app).put("/api/v1/providers/byok/gemini").send({ apiKey: "key-2" });
+	it("returns only after the injected executor projects a usable provider model and default", async function _ProjectsModels()
+	{
+		const models = new Map<string, Row>();
+		const response = await request(_buildApp(new Map(), new Map(), { authorized: true }, models)).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-live-123" });
 
-    expect(res.status).toBe(200);
-    expect(Array.from(store.values()).filter(function _g(r) { return r.provider === "gemini"; })).toHaveLength(1);
-    expect(Buffer.from(secrets.get("byok-provider-key-gemini")!.data!.apiKey, "base64").toString("utf8")).toBe("key-2");
-  });
+		expect(response.status).toBe(200);
+		expect(Array.from(models.values()).find(function _Flagship(model) { return model.publicModelName === "openai/gpt-5.5"; })).toMatchObject({ isDefault: true, providerCredentialId: "cred-1", litellmModelId: "deployment:openai/gpt-5.5" });
+	});
 
 	it.each(["put", "delete"] as const)("returns 409 for a conflicting %s while a provider command is claimed", async function _ProviderConflict(method)
 	{
@@ -370,22 +320,4 @@ describe("providerByokRouter", function _suite()
     expect(JSON.stringify(res.body)).not.toContain("apiKey");
   });
 
-  it("removes a key: clears the fixed Secret and record, idempotent 204", async function _delete()
-  {
-    const store = new Map<string, Row>([
-      ["cred-1", { id: "cred-1", scope: "Global", clusterTenant: null, provider: "deepseek", secretRef: "byok-provider-key-deepseek", litellmCredentialName: null, updatedAt: new Date() }],
-    ]);
-    const secrets = new Map<string, k8s.V1Secret>([["byok-provider-key-deepseek", { metadata: { name: "byok-provider-key-deepseek", namespace: _NS } }]]);
-    const app = _buildApp(store, secrets);
-
-    const res = await request(app).delete("/api/v1/providers/byok/deepseek");
-    expect(res.status).toBe(204);
-    expect(secrets.has("byok-provider-key-deepseek")).toBe(true);
-    expect(Buffer.from(secrets.get("byok-provider-key-deepseek")!.data!.apiKey, "base64").toString("utf8")).toBe("");
-    expect(Array.from(store.values())).toHaveLength(0);
-
-    // Idempotent: deleting again still returns 204.
-    const again = await request(app).delete("/api/v1/providers/byok/deepseek");
-    expect(again.status).toBe(204);
-  });
 });
