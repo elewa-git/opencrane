@@ -13,8 +13,11 @@ if [ "${OPENCRANE_MIGRATION_SOURCE_VERSION:-}" != "0.9.2" ]; then
 	echo "The migration Job only accepts the tagged 0.9.2 database as its starting point." >&2
 	exit 1
 fi
-if [ -z "${DATABASE_URL:-}" ] || [ -z "${OPENCRANE_MIGRATION_SILO_ID:-}" ] || [ -z "${OPENCRANE_MIGRATION_OIDC_ISSUER:-}" ]; then
-	echo "DATABASE_URL, OPENCRANE_MIGRATION_SILO_ID, and OPENCRANE_MIGRATION_OIDC_ISSUER are required." >&2
+if [ -z "${DATABASE_URL:-}" ] || [ -z "${PGHOST:-}" ] || [ -z "${PGPORT:-}" ] \
+	|| [ -z "${PGDATABASE:-}" ] || [ -z "${PGUSER:-}" ] || [ -z "${PGPASSWORD:-}" ] \
+	|| [ -z "${PGSSLMODE:-}" ] \
+	|| [ -z "${OPENCRANE_MIGRATION_SILO_ID:-}" ] || [ -z "${OPENCRANE_MIGRATION_OIDC_ISSUER:-}" ]; then
+	echo "The database URL, libpq connection, migration silo, and OIDC issuer are required." >&2
 	exit 1
 fi
 if [ ! -f "$prerequisite_sql" ]; then
@@ -27,13 +30,16 @@ if [ ! -f "$candidate_repair_sql" ]; then
 fi
 
 candidate_repair_sql_sha256="$(sha256sum "$candidate_repair_sql" | cut -d ' ' -f1)"
-"$psql_cli" --dbname "$DATABASE_URL" --set ON_ERROR_STOP=on \
+# Prisma's URL includes pool settings that psql rejects. Clearing DATABASE_URL makes psql use the
+# Secret-backed PG* variables without placing credentials in process arguments. --no-psqlrc also
+# prevents startup files from changing the migration session.
+DATABASE_URL= "$psql_cli" --no-psqlrc --set ON_ERROR_STOP=on \
 	--set "repair_sql_sha256=$candidate_repair_sql_sha256" \
 	--set "migration_silo_id=$OPENCRANE_MIGRATION_SILO_ID" \
 	--file "$candidate_repair_sql"
 
 prerequisite_sql_sha256="$(sha256sum "$prerequisite_sql" | cut -d ' ' -f1)"
-"$psql_cli" --dbname "$DATABASE_URL" --set ON_ERROR_STOP=on \
+DATABASE_URL= "$psql_cli" --no-psqlrc --set ON_ERROR_STOP=on \
 	--set "source_baseline_sha256=$source_baseline_sha256" \
 	--set "migration_sql_sha256=$prerequisite_sql_sha256" \
 	--set "migration_silo_id=$OPENCRANE_MIGRATION_SILO_ID" \

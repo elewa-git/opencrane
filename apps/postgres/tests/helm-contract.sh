@@ -39,15 +39,27 @@ helm template opencrane-postgres "$CHART" "${BASE_VALUES[@]}" "${MIGRATION_VALUE
 grep -q 'name: opencrane-postgres-database-migration' "$OUTPUT"
 grep -q 'image: "ghcr.io/elewa-git/opencrane-prisma-migrator@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "$OUTPUT"
 grep -q 'name: DATABASE_URL' "$OUTPUT"
-grep -q 'name: "opencrane-postgres-opencrane-app"' "$OUTPUT"
+[[ "$(grep -c 'name: "opencrane-postgres-opencrane-app"' "$OUTPUT")" == "6" ]]
 grep -q 'key: uri' "$OUTPUT"
+grep -q 'name: PGHOST' "$OUTPUT"
+grep -q 'key: host' "$OUTPUT"
+grep -q 'name: PGPORT' "$OUTPUT"
+grep -q 'key: port' "$OUTPUT"
+grep -q 'name: PGDATABASE' "$OUTPUT"
+grep -q 'key: dbname' "$OUTPUT"
+grep -q 'name: PGUSER' "$OUTPUT"
+grep -q 'key: username' "$OUTPUT"
+grep -q 'name: PGPASSWORD' "$OUTPUT"
+grep -q 'key: password' "$OUTPUT"
+grep -q 'name: PGSSLMODE' "$OUTPUT"
+grep -q 'value: disable' "$OUTPUT"
 grep -q 'name: OPENCRANE_MIGRATION_SOURCE_VERSION' "$OUTPUT"
 grep -q 'value: "0.9.2"' "$OUTPUT"
 grep -q 'name: OPENCRANE_MIGRATION_SILO_ID' "$OUTPUT"
 grep -q 'value: "test-silo"' "$OUTPUT"
 grep -q 'name: OPENCRANE_MIGRATION_OIDC_ISSUER' "$OUTPUT"
 grep -q 'value: "https://issuer.example.test"' "$OUTPUT"
-if grep -q 'command:\|migration.sql\|EXPECTED_SQL_SHA256\|PGPASSWORD\|POSTGRES_SUPERUSER_PASSWORD' "$OUTPUT"; then
+if grep -q 'command:\|migration.sql\|EXPECTED_SQL_SHA256\|POSTGRES_SUPERUSER_PASSWORD\|postgres-admin-bootstrap' "$OUTPUT"; then
   echo "postgres chart still renders the retired direct-SQL migration path" >&2
   exit 1
 fi

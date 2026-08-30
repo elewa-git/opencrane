@@ -32,6 +32,11 @@ HTTP server, Kubernetes permissions, or product request handling. The Job receiv
 database URL, admitted source release, exact silo, and OIDC issuer. It applies the reviewed IAM
 prerequisite before recording the Prisma bridge and applying later changes.
 
+The Job projects one application connection Secret in two forms: Prisma receives its complete URL,
+including pool controls, while `psql` receives discrete libpq connection variables. Database
+credentials therefore stay out of process arguments, and each client receives only the settings it
+understands.
+
 ## Public surface
 
 Entrypoint: `run-migrations.sh` accepts only tagged 0.9.2, checks the digest-bound development-candidate
@@ -55,9 +60,10 @@ not import another app at runtime.
 
 ## Runtime & config
 
-The Job supplies `DATABASE_URL`, `OPENCRANE_MIGRATION_SOURCE_VERSION=0.9.2`,
-`OPENCRANE_MIGRATION_SILO_ID`, and `OPENCRANE_MIGRATION_OIDC_ISSUER`. Fresh databases use the
-reviewed target baseline instead and do not run this upgrade image.
+The Job supplies `DATABASE_URL`, the discrete libpq connection variables, and
+`OPENCRANE_MIGRATION_SOURCE_VERSION=0.9.2`, `OPENCRANE_MIGRATION_SILO_ID`, and
+`OPENCRANE_MIGRATION_OIDC_ISSUER`. Fresh databases use the reviewed target baseline instead and do
+not run this upgrade image.
 
 The `0.9.3` candidate was never tagged. The migrator recognizes only the exact reviewed candidate
 ledger, derives its invitation-audit silo from existing product records, applies the missing MCP
