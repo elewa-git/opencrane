@@ -33,7 +33,7 @@ vi.mock("../log", function _Log()
 
 import { DefaultProviderEffectCommandExecutor, _ProviderKeyMaterialVerifier } from "../provider-effect-command-executor";
 import { DefaultProviderEffectCommandHandler } from "../provider-effect-command-handler";
-import { ProviderEffectOutcomeUncertainError, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "../provider-effect-command-errors";
+import { ProviderEffectOutcomeUncertainError, _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "../provider-effect-command-errors";
 import type { Logger } from "@opencrane/backend/observability";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
@@ -48,7 +48,7 @@ const _LOGGER = _TELEMETRY as unknown as Logger;
 /** Build one claimed Set-BYOK command without placing raw material in the record. */
 function _command(): ProviderEffectCommandRecord
 {
-	return { id: "command-1", siloId: "acme", principalId: "principal-1", payload: { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } }, resourceKind: "provider-connection", resourceId: "byok:openai", resourceRevision: "revision-1", desiredGeneration: 1, argumentsDigest: "sha256:arguments", materialVerifier: _ProviderKeyMaterialVerifier("command-1", "openai", "sk-test"), authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _CONTEXT.executorProfile, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey, state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-1", claimExpiresAt: new Date("2099-01-01T00:00:00.000Z"), failureCode: null };
+	return { id: "command-1", siloId: "acme", principalId: "principal-1", payload: { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } }, resourceKind: "provider-connection", resourceId: "byok:openai", resourceRevision: "revision-1", desiredGeneration: 1, argumentsDigest: "sha256:arguments", materialVerifier: _ProviderKeyMaterialVerifier("command-1", "openai", "sk-test"), authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _CONTEXT.executorProfile, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey, state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-1", claimExpiresAt: new Date("2099-01-01T00:00:00.000Z"), failureCode: null, result: null };
 }
 
 /** Build a UnitOfWork that forwards every transaction callback to one fake repository. */
@@ -127,6 +127,26 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		await expect(executor.reconcileNext()).resolves.toBe(true);
 		expect(handler.execute).toHaveBeenCalledOnce();
 		expect(_TELEMETRY.traceNames).toContain("provider.effect.reconcile.discover");
+	});
+
+	it("finalizes recovered evidence without repeating external I/O", async function _FinalizesRecoveredEvidence()
+	{
+		const savedResult = { kind: ProviderEffectCommandKinds.DeleteByokKey, provider: "openai" } as const;
+		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None, deliveryCount: 3, failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, result: savedResult };
+		const repository = {
+			nextRecoverable: vi.fn(async function _Next() { return command; }),
+			claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.Claimed, command }; }),
+			preflight: vi.fn(),
+			complete: vi.fn(async function _Complete(_command, result) { expect(result).toBe(savedResult); return ProviderEffectExecutionStatuses.Succeeded; }),
+		} as unknown as ProviderEffectCommandRepository;
+		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
+
+		await expect(executor.reconcileNext()).resolves.toBe(true);
+
+		expect(repository.preflight).not.toHaveBeenCalled();
+		expect(handler.execute).not.toHaveBeenCalled();
+		expect(repository.complete).toHaveBeenCalledOnce();
 	});
 
 	it("refuses reconciliation when a saved command names a different executor profile", async function _RejectsSavedProfile()

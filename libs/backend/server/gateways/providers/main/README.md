@@ -51,6 +51,7 @@ removal returned by a pending response.
 | `AwaitingMaterial` | matching key resubmitted | `Claimed` |
 | `Claimed` | effect and finalization succeed | `Succeeded` (terminal) |
 | `Claimed` | fixed-name upstream request ends without a response | retains the same claim and resource barrier until the exact command is retried |
+| `Claimed` | external effect succeeds but current authorization or lifecycle blocks finalization | saves secret-free evidence and retains the claim; recovery finalizes that evidence without repeating external I/O |
 | `Claimed` | effect fails before attempt three | `Pending` or `AwaitingMaterial` |
 | `Claimed` | third effect attempt fails | `Failed` (terminal) |
 | `Succeeded` / `Failed` | any delivery request | no external call |

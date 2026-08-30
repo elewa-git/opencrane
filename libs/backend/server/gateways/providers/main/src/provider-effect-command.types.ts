@@ -189,6 +189,8 @@ export interface ProviderEffectCommandRecord extends AdmitProviderEffectCommand
 	readonly claimExpiresAt: Date | null;
 	/** Fixed failure classification retained across exact-command retries, or null. */
 	readonly failureCode: string | null;
+	/** Secret-free external outcome awaiting or recording atomic product projection. */
+	readonly result: ProviderEffectHandlerResult | null;
 }
 
 /**

@@ -65,51 +65,57 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 		}
 		const command = claim.command;
 		const fields = { commandId, siloId: command.siloId, resourceKind: command.resourceKind, resourceId: command.resourceId, executorProfile: command.executorProfile, kind: command.payload.kind, desiredGeneration: command.desiredGeneration, deliveryCount: command.deliveryCount, deliverySource };
-		const preflight = await ___DoWithTrace("provider.effect.preflight", fields, function _Preflight() { return self.unitOfWork.run(function _Verify(repository, authorization) { return repository.preflight(command, context, authorization, new Date()); }); });
-		if (!preflight)
+		let result = command.result;
+		if (result === null)
 		{
-			___MarkActiveSpanFailed();
-			self.log.warn(fields, "provider effect delivery became stale or unauthorized before external I/O");
-			return { status: ProviderEffectExecutionStatuses.Failed, result: null };
-		}
-
-		// 2. Perform the typed external operation after the claim transaction commits.
-		const delivery = await ___DoWithTrace("provider.effect.deliver", fields, async function _Deliver()
-		{
-			try
-			{
-				return { failed: false, result: await self.handler.execute(command, material) } as const;
-			}
-			catch (error)
+			const preflight = await ___DoWithTrace("provider.effect.preflight", fields, function _Preflight() { return self.unitOfWork.run(function _Verify(repository, authorization) { return repository.preflight(command, context, authorization, new Date()); }); });
+			if (!preflight)
 			{
 				___MarkActiveSpanFailed();
-				return { failed: true, error } as const;
+				self.log.warn(fields, "provider effect delivery became stale or unauthorized before external I/O");
+				return { status: ProviderEffectExecutionStatuses.Failed, result: null };
 			}
-		});
-		if (delivery.failed)
-		{
-			___MarkActiveSpanFailed();
-			const uncertain = _IsProviderEffectOutcomeUncertain(delivery.error) || command.failureCode === _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE;
-			const failureCode = uncertain ? _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE : "provider_effect_failed";
-			const status = await ___DoWithTrace("provider.effect.fail", { ...fields, failureCode }, function _Fail()
-			{
-				return self.unitOfWork.run(function _PersistFailure(repository)
-				{
-					return uncertain ? repository.retainClaim(command, failureCode) : repository.fail(command, failureCode);
-				});
-			});
-			const logFields = { err: _redactedError(delivery.error), ...fields, failureCode, status };
-			if (uncertain)
-				self.log.warn(logFields, "provider effect outcome is uncertain; exact command retains the resource barrier");
-			else if (status === ProviderEffectExecutionStatuses.Failed)
-				self.log.error(logFields, "provider effect delivery failed terminally");
-			else
-				self.log.warn(logFields, "provider effect delivery failed and remains recoverable");
-			return { status, result: null };
-		}
-		const result = delivery.result;
 
-		// 3. Save the result only for the fence that performed the effect, so a stale worker cannot overwrite a retry.
+			// 2. Perform the typed external operation only when no durable outcome was already saved.
+			const delivery = await ___DoWithTrace("provider.effect.deliver", fields, async function _Deliver()
+			{
+				try
+				{
+					return { failed: false, result: await self.handler.execute(command, material) } as const;
+				}
+				catch (error)
+				{
+					___MarkActiveSpanFailed();
+					return { failed: true, error } as const;
+				}
+			});
+			if (delivery.failed)
+			{
+				___MarkActiveSpanFailed();
+				const uncertain = _IsProviderEffectOutcomeUncertain(delivery.error) || command.failureCode === _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE;
+				const failureCode = uncertain ? _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE : "provider_effect_failed";
+				const status = await ___DoWithTrace("provider.effect.fail", { ...fields, failureCode }, function _Fail()
+				{
+					return self.unitOfWork.run(function _PersistFailure(repository)
+					{
+						return uncertain ? repository.retainClaim(command, failureCode) : repository.fail(command, failureCode);
+					});
+				});
+				const logFields = { err: _redactedError(delivery.error), ...fields, failureCode, status };
+				if (uncertain)
+					self.log.warn(logFields, "provider effect outcome is uncertain; exact command retains the resource barrier");
+				else if (status === ProviderEffectExecutionStatuses.Failed)
+					self.log.error(logFields, "provider effect delivery failed terminally");
+				else
+					self.log.warn(logFields, "provider effect delivery failed and remains recoverable");
+				return { status, result: null };
+			}
+			result = delivery.result;
+		}
+		else
+			self.log.info(fields, "provider effect delivery is finalizing saved external evidence");
+
+		// 3. Save or recover the result only for the current fence, authority, and resource generation.
 		const completed = await ___DoWithTrace("provider.effect.complete", fields, function _Complete() { return self.unitOfWork.run(function _PersistResult(repository, authorization) { return repository.complete(command, result, context, authorization, new Date()); }); });
 		if (completed === ProviderEffectExecutionStatuses.Succeeded)
 			self.log.info(fields, "provider effect delivery completed");

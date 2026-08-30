@@ -7,7 +7,7 @@ import { ModelRoutingScope } from "@opencrane/contracts";
 import { ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
 
 import { PrismaProviderEffectCommandRepository } from "../prisma-provider-effect-command-repository";
-import { _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "../provider-effect-command-errors";
+import { _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "../provider-effect-command-errors";
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandPayload, type ProviderEffectCommandRecord, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 
 /** Stable executor profile shared by current-authority repository tests. */
@@ -56,7 +56,7 @@ function _row(payload: ProviderEffectCommandPayload, overrides: Record<string, u
 /** Converts a Prisma-shaped row into the claimed record passed between executor transactions. */
 function _record(row: Record<string, unknown>, payload: ProviderEffectCommandPayload): ProviderEffectCommandRecord
 {
-	return { id: row.id as string, siloId: row.siloId as string, principalId: row.principalId as string, payload, resourceKind: row.resourceKind as string, resourceId: row.resourceId as string, resourceRevision: row.resourceRevision as string, desiredGeneration: row.desiredGeneration as number, argumentsDigest: row.argumentsDigest as `sha256:${string}`, materialVerifier: null, authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None, state: row.state as ProviderEffectCommandStates, deliveryCount: row.deliveryCount as number, claimFence: row.claimFence as string | null, claimExpiresAt: row.claimExpiresAt as Date | null, failureCode: row.failureCode as string | null };
+	return { id: row.id as string, siloId: row.siloId as string, principalId: row.principalId as string, payload, resourceKind: row.resourceKind as string, resourceId: row.resourceId as string, resourceRevision: row.resourceRevision as string, desiredGeneration: row.desiredGeneration as number, argumentsDigest: row.argumentsDigest as `sha256:${string}`, materialVerifier: null, authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _PROFILE, materialRequirement: row.materialRequirement as ProviderEffectMaterialRequirements, state: row.state as ProviderEffectCommandStates, deliveryCount: row.deliveryCount as number, claimFence: row.claimFence as string | null, claimExpiresAt: row.claimExpiresAt as Date | null, failureCode: row.failureCode as string | null, result: row.result as ProviderEffectCommandRecord["result"] };
 }
 
 /** Builds a transaction stub that distinguishes latest-generation and active-claim queries. */
@@ -209,6 +209,64 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		expect(database.updateCommands).not.toHaveBeenCalled();
 	});
 
+	it("keeps saved finalization evidence blocking when authority remains revoked", async function _RevokedFinalizationRetry()
+	{
+		const savedResult = { kind: ProviderEffectCommandKinds.DeleteByokKey, provider: "openai" } as const;
+		const row = _row(_DELETE, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 3, claimFence: "fence-old", claimExpiresAt: new Date("2026-08-30T00:30:00.000Z"), failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, result: savedResult });
+		const database = _transaction(row, row);
+		const repository = new PrismaProviderEffectCommandRepository(database.transaction);
+
+		await expect(repository.claim("command-a", null, _context("system"), _authorization(false).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toEqual({ status: ProviderEffectExecutionStatuses.Busy, command: null });
+		expect(database.updateCommands).not.toHaveBeenCalled();
+	});
+
+	it("reclaims saved finalization evidence without material or another delivery attempt", async function _ReclaimsFinalization()
+	{
+		const savedResult = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], defaultPublicModelName: null, embedding: { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: [] } } as const;
+		const row = _row(_SET, { state: ProviderEffectCommandStates.Claimed, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey, materialVerifier: "sha256:material", deliveryCount: 3, claimFence: "fence-old", claimExpiresAt: new Date("2026-08-30T00:30:00.000Z"), failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, result: savedResult });
+		const database = _transaction(row, row);
+		const repository = new PrismaProviderEffectCommandRepository(database.transaction);
+
+		const claimed = await repository.claim("command-a", null, _context("system"), _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"));
+
+		expect(claimed).toMatchObject({ status: ProviderEffectExecutionStatuses.Claimed, command: { deliveryCount: 3, result: savedResult, failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE } });
+		expect(database.updateCommands).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ deliveryCount: 3, failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE }) }));
+	});
+
+	it("discovers expired saved finalization evidence beyond the delivery budget", async function _DiscoversFinalization()
+	{
+		const savedResult = { kind: ProviderEffectCommandKinds.DeleteByokKey, provider: "openai" } as const;
+		const row = _row(_DELETE, { state: ProviderEffectCommandStates.Claimed, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey, deliveryCount: 3, claimFence: "fence-old", claimExpiresAt: new Date("2026-08-30T00:30:00.000Z"), failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, result: savedResult });
+		const findFirst = vi.fn(async function _FindFirst() { return row; });
+		const transaction = { providerEffectCommand: { findFirst } } as unknown as Prisma.TransactionClient;
+		const repository = new PrismaProviderEffectCommandRepository(transaction);
+
+		await expect(repository.nextRecoverable(new Date("2026-08-30T01:00:00.000Z"))).resolves.toMatchObject({ id: "command-a", result: savedResult });
+		expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: expect.arrayContaining([expect.objectContaining({ failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, state: ProviderEffectCommandStates.Claimed })]) } }));
+	});
+
+	it("refuses to replace durable finalization evidence with a different outcome", async function _PreservesFinalizationEvidence()
+	{
+		const savedResult = { kind: ProviderEffectCommandKinds.DeleteByokKey, provider: "openai" } as const;
+		const row = _row(_DELETE, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 2, claimFence: "fence-a", claimExpiresAt: new Date("2026-08-30T02:00:00.000Z"), failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, result: savedResult });
+		const database = _transaction(row, row);
+		const repository = new PrismaProviderEffectCommandRepository(database.transaction);
+
+		await expect(repository.complete(_record(row, _DELETE), { kind: ProviderEffectCommandKinds.DeleteByokKey, provider: "anthropic" }, _context(), _authorization(false).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(ProviderEffectExecutionStatuses.Busy);
+		expect(database.updateCommands).not.toHaveBeenCalled();
+	});
+
+	it("refuses unexpected secret-bearing result fields before persistence", async function _RefusesSecretResultField()
+	{
+		const row = _row(_DELETE, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-a", claimExpiresAt: new Date("2026-08-30T02:00:00.000Z") });
+		const database = _transaction(row, row);
+		const repository = new PrismaProviderEffectCommandRepository(database.transaction);
+		const result = { kind: ProviderEffectCommandKinds.DeleteByokKey, provider: "openai", providerKey: "raw-provider-key" } as never;
+
+		await expect(repository.complete(_record(row, _DELETE), result, _context(), _authorization(false).authority, new Date("2026-08-30T01:00:00.000Z"))).rejects.toThrow();
+		expect(database.updateCommands).not.toHaveBeenCalled();
+	});
+
 	it("terminalizes a saved executor profile that differs from the trusted delivery profile", async function _ExecutorProfileMismatch()
 	{
 		const row = _row(_DELETE, { executorProfile: "untrusted/provider-effect-v1" });
@@ -299,7 +357,7 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		const result = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [{ publicModelName: "openai/gpt-5.5", upstreamModel: "openai/gpt-5.5", litellmModelId: "deployment-1" }], defaultPublicModelName: "openai/gpt-5.5", embedding: { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: [{ publicModelName: "openai/text-embedding-3-large", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-1" }, { publicModelName: "auto-embedding", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-2" }] } } as const;
 
 		await expect(repository.complete(_record(row, _SET), result, _context(), _authorization(false).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(ProviderEffectExecutionStatuses.Busy);
-		expect(transaction.providerEffectCommand.updateMany).not.toHaveBeenCalled();
+		expect(transaction.providerEffectCommand.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ result, failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE }) }));
 		expect(credentialCreate).not.toHaveBeenCalled();
 		expect(modelCreate).not.toHaveBeenCalled();
 		expect(routingCreate).not.toHaveBeenCalled();

@@ -7,8 +7,8 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { _BYOK_PROVIDER_CATALOG, ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
 
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type AdmitProviderEffectCommand, type ProviderEffectAdmissionResult, type ProviderEffectClaimResult, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectExecutionContext, type ProviderEffectHandlerResult, type ProviderEffectResourceBlocker } from "./provider-effect-command.types";
-import { _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "./provider-effect-command-errors";
-import { _ParseProviderEffectCommandPayload, _ValidateProviderEffectCommandResourceBinding } from "./provider-effect-command.validator";
+import { _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "./provider-effect-command-errors";
+import { _ParseProviderEffectCommandPayload, _ParseProviderEffectHandlerResult, _ValidateProviderEffectCommandResourceBinding } from "./provider-effect-command.validator";
 
 /** Maximum number of external deliveries before a command needs a fresh administrator request. */
 const _MAX_DELIVERIES = 3;
@@ -67,11 +67,9 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 	{
 		const row = await this.transaction.providerEffectCommand.findFirst({
 			where: {
-				materialRequirement: ProviderEffectMaterialRequirements.None,
-				deliveryCount: { lt: _MAX_DELIVERIES },
 				OR: [
-					{ state: ProviderEffectCommandState.Pending },
-					{ state: ProviderEffectCommandState.Claimed, claimExpiresAt: { lte: now } },
+					{ failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, state: ProviderEffectCommandState.Claimed, claimExpiresAt: { lte: now } },
+					{ materialRequirement: ProviderEffectMaterialRequirements.None, deliveryCount: { lt: _MAX_DELIVERIES }, OR: [{ state: ProviderEffectCommandState.Pending }, { state: ProviderEffectCommandState.Claimed, claimExpiresAt: { lte: now } }] },
 				],
 			},
 			orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -101,14 +99,15 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 			return { status: ProviderEffectExecutionStatuses.Busy, command: null };
 		if (!await this._isCurrentAndEligible(current) || !await _isAuthorized(current, context, authorization, now))
 		{
-			if (current.failureCode === _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE)
+			if (_isStickyBarrier(current.failureCode))
 				return { status: ProviderEffectExecutionStatuses.Busy, command: null };
 			await this._terminalize(current, "authorization_or_resource_stale", now);
 			return { status: ProviderEffectExecutionStatuses.Failed, command: null };
 		}
 
 		// 2. A raw-key command stays visible but inert until the caller supplies the same command-bound material.
-		if (current.materialRequirement === "EphemeralProviderKey" && (materialVerifier === null || current.materialVerifier !== materialVerifier))
+		const hasSavedResult = current.failureCode === _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE && current.result !== null;
+		if (!hasSavedResult && current.materialRequirement === "EphemeralProviderKey" && (materialVerifier === null || current.materialVerifier !== materialVerifier))
 		{
 			if (current.state !== ProviderEffectCommandState.AwaitingMaterial)
 				await this.transaction.providerEffectCommand.updateMany({ where: { id: current.id, state: current.state, updatedAt: current.updatedAt }, data: { state: ProviderEffectCommandState.AwaitingMaterial, claimFence: null, claimExpiresAt: null } });
@@ -116,7 +115,7 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 		}
 
 		// 3. Replace a pending or expired claim with a new fence so external I/O starts after commit.
-		if (current.deliveryCount >= _MAX_DELIVERIES && current.failureCode !== _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE)
+		if (current.deliveryCount >= _MAX_DELIVERIES && !_isStickyBarrier(current.failureCode))
 		{
 			await this.transaction.providerEffectCommand.updateMany({ where: { id: current.id, state: current.state, updatedAt: current.updatedAt }, data: { state: ProviderEffectCommandState.Failed, failureCode: "delivery_budget_exhausted", claimFence: null, claimExpiresAt: null, completedAt: now } });
 			return { status: ProviderEffectExecutionStatuses.Failed, command: null };
@@ -126,8 +125,9 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 			return { status: ProviderEffectExecutionStatuses.Busy, command: null };
 		const claimFence = randomUUID();
 		const claimExpiresAt = new Date(now.getTime() + _CLAIM_DURATION_MS);
-		const failureCode = current.failureCode === _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE ? current.failureCode : null;
-		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: current.id, state: current.state, deliveryCount: current.deliveryCount, updatedAt: current.updatedAt }, data: { state: ProviderEffectCommandState.Claimed, deliveryCount: { increment: 1 }, claimFence, claimExpiresAt, failureCode } });
+		const failureCode = _isStickyBarrier(current.failureCode) ? current.failureCode : null;
+		const deliveryCount = hasSavedResult ? current.deliveryCount : { increment: 1 } as const;
+		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: current.id, state: current.state, deliveryCount: current.deliveryCount, updatedAt: current.updatedAt }, data: { state: ProviderEffectCommandState.Claimed, deliveryCount, claimFence, claimExpiresAt, failureCode } });
 		if (updated.count !== 1)
 			return { status: ProviderEffectExecutionStatuses.Busy, command: null };
 		const claimed = await this.transaction.providerEffectCommand.findUnique({ where: { id: current.id } });
@@ -144,7 +144,7 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 			return false;
 		if (await this._isCurrentAndEligible(current) && await _isAuthorized(current, context, authorization, now))
 			return true;
-		if (current.failureCode === _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE)
+		if (_isStickyBarrier(current.failureCode))
 			return false;
 		await this._terminalize(current, "authorization_or_resource_stale", now);
 		return false;
@@ -153,17 +153,25 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 	/** @inheritdoc */
 	async complete(command: ProviderEffectCommandRecord, result: ProviderEffectHandlerResult, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, completedAt: Date): Promise<ProviderEffectExecutionStatuses>
 	{
-		if (command.payload.kind !== result.kind)
+		const validatedResult = _ParseProviderEffectHandlerResult(result);
+		if (command.payload.kind !== validatedResult.kind)
 			throw new Error("provider effect result kind does not match its claimed command");
 		const current = await this.transaction.providerEffectCommand.findUnique({ where: { id: command.id } });
 		if (current === null || !_contextMatches(current, context) || current.state !== ProviderEffectCommandState.Claimed || current.claimFence !== command.claimFence || current.deliveryCount !== command.deliveryCount)
 			return ProviderEffectExecutionStatuses.Busy;
-		if (!await this._isCurrentAndEligible(current) || !await _isAuthorized(current, context, authorization, completedAt))
+		if (current.result !== null && !_sameResult(current.result, validatedResult))
 			return ProviderEffectExecutionStatuses.Busy;
-		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Claimed, claimFence: command.claimFence, deliveryCount: command.deliveryCount }, data: { state: ProviderEffectCommandState.Succeeded, result: result as unknown as Prisma.InputJsonValue, failureCode: null, claimFence: null, claimExpiresAt: null, completedAt } });
+		if (!await this._isCurrentAndEligible(current) || !await _isAuthorized(current, context, authorization, completedAt))
+		{
+			const persisted = await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Claimed, claimFence: command.claimFence, deliveryCount: command.deliveryCount }, data: { result: validatedResult as unknown as Prisma.InputJsonValue, failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE } });
+			if (persisted.count !== 1)
+				return ProviderEffectExecutionStatuses.Busy;
+			return ProviderEffectExecutionStatuses.Busy;
+		}
+		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Claimed, claimFence: command.claimFence, deliveryCount: command.deliveryCount }, data: { state: ProviderEffectCommandState.Succeeded, result: validatedResult as unknown as Prisma.InputJsonValue, failureCode: null, claimFence: null, claimExpiresAt: null, completedAt } });
 		if (updated.count !== 1)
 			return ProviderEffectExecutionStatuses.Busy;
-		await this._persistProjection(command, result);
+		await this._persistProjection(command, validatedResult);
 		return ProviderEffectExecutionStatuses.Succeeded;
 	}
 
@@ -361,6 +369,9 @@ function _toRecord(row: Prisma.ProviderEffectCommandGetPayload<Record<string, ne
 	const kind = row.kind as ProviderEffectCommandKinds;
 	const payload = _ParseProviderEffectCommandPayload(kind, row.payload);
 	_ValidateProviderEffectCommandResourceBinding(payload, row.resourceKind, row.resourceId);
+	const result = row.result === null ? null : _ParseProviderEffectHandlerResult(row.result);
+	if (result !== null && result.kind !== payload.kind)
+		throw new Error("provider effect result kind does not match its persisted command");
 	return {
 		id: row.id,
 		siloId: row.siloId,
@@ -381,5 +392,18 @@ function _toRecord(row: Prisma.ProviderEffectCommandGetPayload<Record<string, ne
 		claimFence: row.claimFence,
 		claimExpiresAt: row.claimExpiresAt,
 		failureCode: row.failureCode,
+		result,
 	};
+}
+
+/** Returns whether a failed delivery must retain its exact resource barrier without a normal budget. */
+function _isStickyBarrier(failureCode: string | null): boolean
+{
+	return failureCode === _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE || failureCode === _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE;
+}
+
+/** Compares persisted evidence with a retry result without exposing either value to telemetry. */
+function _sameResult(saved: Prisma.JsonValue, candidate: ProviderEffectHandlerResult): boolean
+{
+	return ___DigestCanonicalJson(saved as JsonValue) === ___DigestCanonicalJson(candidate as unknown as JsonValue);
 }

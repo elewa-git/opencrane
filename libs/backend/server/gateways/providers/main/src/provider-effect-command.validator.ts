@@ -2,8 +2,9 @@ import { z } from "zod";
 
 import { ModelRoutingScope } from "@opencrane/contracts";
 import { ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
 
-import { ProviderEffectCommandKinds, type ProviderEffectCommandPayload } from "./provider-effect-command.types";
+import { ProviderEffectCommandKinds, type ProviderEffectCommandPayload, type ProviderEffectHandlerResult } from "./provider-effect-command.types";
 
 // Database JSON crosses a runtime trust boundary here, so this validator changes with the typed
 // provider-effect payload and refuses fields an executor does not understand.
@@ -13,6 +14,20 @@ const _SET_BYOK_PAYLOAD = z.object({ provider: z.string().min(1), secretRef: z.s
 const _DELETE_BYOK_PAYLOAD = z.object({ provider: z.string().min(1), secretRef: z.string().min(1), litellmCredentialName: z.string().min(1) }).strict();
 /** Validates the non-secret payload for a model-registration command. */
 const _REGISTER_MODEL_PAYLOAD = z.object({ modelDefinitionId: z.string().min(1), publicModelName: z.string().min(1), upstreamModel: z.string().min(1), scope: z.nativeEnum(ModelRoutingScope), clusterTenant: z.string().min(1).nullable(), apiBase: z.string().min(1).nullable(), apiKeyEnvRef: z.string().min(1).nullable(), litellmCredentialName: z.string().min(1).nullable() }).strict();
+/** Validates one secret-free model deployment projection. */
+const _MODEL_PROJECTION = z.object({ publicModelName: z.string().min(1), upstreamModel: z.string().min(1), litellmModelId: z.string().min(1) }).strict();
+/** Validates the closed embedding evidence stored after external provider delivery. */
+const _EMBEDDING_RESULT = z.discriminatedUnion("status", [
+	z.object({ status: z.literal(ProviderEmbeddingReconciliationStatuses.NotApplicable), deployments: z.tuple([]) }).strict(),
+	z.object({ status: z.literal(ProviderEmbeddingReconciliationStatuses.Skipped), deployments: z.tuple([]) }).strict(),
+	z.object({ status: z.literal(ProviderEmbeddingReconciliationStatuses.Confirmed), deployments: z.array(_MODEL_PROJECTION) }).strict(),
+]);
+/** Validates the closed, secret-free result saved after an external effect. */
+const _HANDLER_RESULT = z.discriminatedUnion("kind", [
+	z.object({ kind: z.literal(ProviderEffectCommandKinds.SetByokKey), provider: z.string().min(1), secretRef: z.string().min(1), litellmCredentialName: z.string().min(1).nullable(), models: z.array(_MODEL_PROJECTION), defaultPublicModelName: z.string().min(1).nullable(), embedding: _EMBEDDING_RESULT }).strict(),
+	z.object({ kind: z.literal(ProviderEffectCommandKinds.DeleteByokKey), provider: z.string().min(1) }).strict(),
+	z.object({ kind: z.literal(ProviderEffectCommandKinds.RegisterModel), litellmModelId: z.string().min(1) }).strict(),
+]);
 
 /**
  * Parses saved provider-effect JSON under its persisted command kind.
@@ -35,6 +50,20 @@ export function _ParseProviderEffectCommandPayload(kind: ProviderEffectCommandKi
 		case ProviderEffectCommandKinds.RegisterModel:
 			return { kind, value: _REGISTER_MODEL_PAYLOAD.parse(value) };
 	}
+}
+
+/**
+ * Parses durable external-effect evidence before recovery or projection can consume it.
+ *
+ * Called by: {@link PrismaProviderEffectCommandRepository} for every command row carrying a result.
+ *
+ * @param value - Untrusted JSON result read from PostgreSQL.
+ * @returns A closed, secret-free provider handler result.
+ * @throws A Zod validation error when persisted evidence is malformed.
+ */
+export function _ParseProviderEffectHandlerResult(value: unknown): ProviderEffectHandlerResult
+{
+	return _HANDLER_RESULT.parse(value) as ProviderEffectHandlerResult;
 }
 
 /**
