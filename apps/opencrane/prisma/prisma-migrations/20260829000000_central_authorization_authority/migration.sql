@@ -143,6 +143,7 @@ CREATE TABLE "provider_effect_commands" (
     "delivery_count" INTEGER NOT NULL DEFAULT 0,
     "claim_fence" TEXT,
     "claim_expires_at" TIMESTAMP(3),
+    "follow_up_command_id" TEXT,
     "result" JSONB,
     "failure_code" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -153,9 +154,11 @@ CREATE TABLE "provider_effect_commands" (
 );
 CREATE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__idx" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation" DESC);
 CREATE INDEX "provider_effect_commands_state_claim_expires_at_idx" ON "provider_effect_commands"("state", "claim_expires_at");
+CREATE INDEX "provider_effect_commands_follow_up_command_id_idx" ON "provider_effect_commands"("follow_up_command_id");
 CREATE INDEX "provider_effect_commands_silo_id_created_at_idx" ON "provider_effect_commands"("silo_id", "created_at");
 CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key" ON "provider_effect_commands"("kind", "resource_id", "resource_revision");
 CREATE UNIQUE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__key" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation");
+ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_follow_up_command_id_fkey" FOREIGN KEY ("follow_up_command_id") REFERENCES "provider_effect_commands"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check" CHECK (
     btrim("id") <> ''
     AND btrim("silo_id") <> ''
@@ -186,6 +189,10 @@ ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_
     OR ("state" = 'claimed' AND "completed_at" IS NULL AND "result" IS NOT NULL AND "failure_code" = 'provider_effect_finalization_blocked')
     OR ("state" IN ('pending', 'awaiting_material', 'claimed') AND "completed_at" IS NULL AND "result" IS NULL AND ("failure_code" IS NULL OR (btrim("failure_code") <> '' AND "failure_code" <> 'provider_effect_finalization_blocked')))
 );
+ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_follow_up_check" CHECK (
+    "follow_up_command_id" IS NULL
+    OR ("kind" = 'set_byok_key' AND "state" = 'succeeded' AND "follow_up_command_id" <> "id")
+);
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_payload_check" CHECK (
     jsonb_typeof("payload") = 'object'
     AND (
@@ -199,8 +206,8 @@ ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_
             AND COALESCE(btrim("payload"->>'secretRef'), '') <> ''
             AND COALESCE(btrim("payload"->>'litellmCredentialName'), '') <> '')
         OR ("kind" = 'register_model'
-            AND "payload" ?& ARRAY['modelDefinitionId', 'publicModelName', 'upstreamModel', 'scope', 'clusterTenant', 'apiBase', 'apiKeyEnvRef', 'litellmCredentialName']
-            AND "payload" - ARRAY['modelDefinitionId', 'publicModelName', 'upstreamModel', 'scope', 'clusterTenant', 'apiBase', 'apiKeyEnvRef', 'litellmCredentialName'] = '{}'::jsonb
+            AND "payload" ?& ARRAY['modelDefinitionId', 'publicModelName', 'upstreamModel', 'scope', 'clusterTenant', 'apiBase', 'apiKeyEnvRef', 'litellmCredentialName', 'routingDefaultId', 'selectedModelDefinitionId']
+            AND "payload" - ARRAY['modelDefinitionId', 'publicModelName', 'upstreamModel', 'scope', 'clusterTenant', 'apiBase', 'apiKeyEnvRef', 'litellmCredentialName', 'routingDefaultId', 'selectedModelDefinitionId'] = '{}'::jsonb
             AND jsonb_typeof("payload"->'modelDefinitionId') = 'string'
             AND jsonb_typeof("payload"->'publicModelName') = 'string'
             AND jsonb_typeof("payload"->'upstreamModel') = 'string'
@@ -213,7 +220,16 @@ ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_
                 OR ("payload"->>'scope' = 'clusterTenant' AND jsonb_typeof("payload"->'clusterTenant') = 'string' AND COALESCE(btrim("payload"->>'clusterTenant'), '') <> ''))
             AND (jsonb_typeof("payload"->'apiBase') = 'null' OR (jsonb_typeof("payload"->'apiBase') = 'string' AND COALESCE(btrim("payload"->>'apiBase'), '') <> ''))
             AND (jsonb_typeof("payload"->'apiKeyEnvRef') = 'null' OR (jsonb_typeof("payload"->'apiKeyEnvRef') = 'string' AND COALESCE(btrim("payload"->>'apiKeyEnvRef'), '') <> ''))
-            AND (jsonb_typeof("payload"->'litellmCredentialName') = 'null' OR (jsonb_typeof("payload"->'litellmCredentialName') = 'string' AND COALESCE(btrim("payload"->>'litellmCredentialName'), '') <> '')))
+            AND (jsonb_typeof("payload"->'litellmCredentialName') = 'null' OR (jsonb_typeof("payload"->'litellmCredentialName') = 'string' AND COALESCE(btrim("payload"->>'litellmCredentialName'), '') <> ''))
+            AND (
+                (jsonb_typeof("payload"->'routingDefaultId') = 'null' AND jsonb_typeof("payload"->'selectedModelDefinitionId') = 'null')
+                OR (jsonb_typeof("payload"->'routingDefaultId') = 'string'
+                    AND COALESCE(btrim("payload"->>'routingDefaultId'), '') <> ''
+                    AND jsonb_typeof("payload"->'selectedModelDefinitionId') = 'string'
+                    AND COALESCE(btrim("payload"->>'selectedModelDefinitionId'), '') <> ''
+                    AND "payload"->>'selectedModelDefinitionId' <> "payload"->>'modelDefinitionId'
+                    AND "payload"->>'scope' = 'global'
+                    AND "payload"->>'publicModelName' = 'auto')))
     )
 );
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_resource_binding_check" CHECK (

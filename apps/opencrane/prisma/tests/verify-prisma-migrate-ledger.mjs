@@ -136,6 +136,7 @@ for (const marker of [
 	'"desired_generation" INTEGER NOT NULL',
 	'CREATE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__idx" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation" DESC)',
 	'CREATE INDEX "provider_effect_commands_state_claim_expires_at_idx"',
+	'CREATE INDEX "provider_effect_commands_follow_up_command_id_idx" ON "provider_effect_commands"("follow_up_command_id")',
 	'CREATE INDEX "provider_effect_commands_silo_id_created_at_idx"',
 	'CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key"',
 	'CREATE UNIQUE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__key" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation")',
@@ -143,8 +144,10 @@ for (const marker of [
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_material_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_claim_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_completion_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_follow_up_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_payload_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_resource_binding_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_follow_up_command_id_fkey" FOREIGN KEY ("follow_up_command_id") REFERENCES "provider_effect_commands"("id") ON DELETE RESTRICT ON UPDATE CASCADE',
 ])
 {
 	_Require(authorizationMigration.includes(marker), `the 0.9.2-to-0.10.0 path must install provider effect authority: ${marker}`);
@@ -156,7 +159,14 @@ for (const invariant of [
 	'"material_verifier" IS NOT NULL AND "material_verifier" ~ \'^sha256:[0-9a-f]{64}$\'',
 	'"state" = \'claimed\' AND "claim_fence" IS NOT NULL',
 	'"state" = \'succeeded\' AND "completed_at" IS NOT NULL AND "result" IS NOT NULL',
+	'"follow_up_command_id" IS NULL',
+	'"kind" = \'set_byok_key\' AND "state" = \'succeeded\' AND "follow_up_command_id" <> "id"',
 	'"payload" - ARRAY[\'provider\', \'secretRef\', \'litellmCredentialName\'] = \'{}\'::jsonb',
+	'"payload" - ARRAY[\'modelDefinitionId\', \'publicModelName\', \'upstreamModel\', \'scope\', \'clusterTenant\', \'apiBase\', \'apiKeyEnvRef\', \'litellmCredentialName\', \'routingDefaultId\', \'selectedModelDefinitionId\'] = \'{}\'::jsonb',
+	'jsonb_typeof("payload"->\'routingDefaultId\') = \'null\' AND jsonb_typeof("payload"->\'selectedModelDefinitionId\') = \'null\'',
+	'"payload"->>\'selectedModelDefinitionId\' <> "payload"->>\'modelDefinitionId\'',
+	'"payload"->>\'scope\' = \'global\'',
+	'"payload"->>\'publicModelName\' = \'auto\'',
 	'"resource_kind" = \'model-definition\'',
 	'"payload"->>\'modelDefinitionId\' = "resource_id"',
 	'"resource_kind" = \'provider-connection\'',
@@ -177,6 +187,17 @@ for (const [source, label] of [[authorizationMigration, "upgrade"], [targetBasel
 	_Require(
 		_NormalizedSql(_NamedCheckConstraint(source, "provider_effect_commands_completion_check")) === _NormalizedSql(providerEffectCompletionConstraint),
 		`${label} provider effect completion authority must retain blocked finalization evidence only on an unfinished claimed command`,
+	);
+}
+const providerEffectFollowUpConstraint = `ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_follow_up_check" CHECK (
+    "follow_up_command_id" IS NULL
+    OR ("kind" = 'set_byok_key' AND "state" = 'succeeded' AND "follow_up_command_id" <> "id")
+);`;
+for (const [source, label] of [[authorizationMigration, "upgrade"], [targetBaseline, "fresh baseline"]])
+{
+	_Require(
+		_NormalizedSql(_NamedCheckConstraint(source, "provider_effect_commands_follow_up_check")) === _NormalizedSql(providerEffectFollowUpConstraint),
+		`${label} provider effect follow-up evidence must belong only to a succeeded Set-BYOK parent`,
 	);
 }
 _RequireBeforeIn(authorizationMigration, 'CREATE TYPE "ProviderEffectCommandKind"', 'CREATE TABLE "provider_effect_commands"', "provider effect enums must exist before the upgrade creates its command table");
