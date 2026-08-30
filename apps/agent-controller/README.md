@@ -60,12 +60,10 @@ multiple Pods, and OpenCrane registers the first Pod before bootstrap exchange c
 
 ## Public surface
 
-`Entrypoint:` `src/index.ts` loads telemetry, validates configuration, installs the shared shutdown
-signal, and delegates composition to `src/controller-runtime.ts`. That process starts three narrow
-polling domains together: personal/managed runtime assignment and release, governed skill Job
-assignment and release, and OCI MCP executor assignment, release, and first-Pod registration. The
-MCP domain receives the server-selected imported image digest while deployment configuration fixes
-its companion and Job profile. Telemetry flushes after `SIGTERM`/`SIGINT` drains all three loops.
+`Entrypoint:` `src/index.ts` loads telemetry first, validates configuration, creates the narrow
+OpenCrane and Kubernetes adapters, runs the runtime assignment/release and suspended-skill-assignment
+poll loops, and flushes telemetry
+on `SIGTERM`/`SIGINT`.
 
 ## Boundary
 
