@@ -50,7 +50,7 @@ _legacy_obot_api_path()
   local name="${resource#*/}"
   case "${resource%%/*}" in
     deployment) printf '/apis/apps/v1/namespaces/%s/deployments/%s' "$namespace" "$name" ;;
-    database|database.postgresql.cnpg.io) printf '/apis/postgresql.cnpg.io/v1/namespaces/%s/databases/%s' "$namespace" "$name" ;;
+    database.postgresql.cnpg.io) printf '/apis/postgresql.cnpg.io/v1/namespaces/%s/databases/%s' "$namespace" "$name" ;;
     service) printf '/api/v1/namespaces/%s/services/%s' "$namespace" "$name" ;;
     secret) printf '/api/v1/namespaces/%s/secrets/%s' "$namespace" "$name" ;;
     *) return 1 ;;
@@ -84,9 +84,8 @@ _prove_legacy_obot_database_absent()
   local timeout="$3"
   local counts
   local database_count
-  local role_count
   counts="$(_legacy_obot_postgres_counts "$namespace" "$release" "$timeout")" || return 1
-  read -r database_count role_count <<<"$counts"
+  database_count="${counts%% *}"
   if [[ "$database_count" != "0" ]]; then
     err "The retired Obot logical database is still present in PostgreSQL."
     return 1
@@ -101,7 +100,6 @@ _retire_legacy_obot_database_role()
   local timeout="$3"
   local cluster_resource="cluster.postgresql.cnpg.io/${release}-postgres"
   local counts
-  local database_count
   local role_count
   local cluster_metadata
   local cluster_name
@@ -117,7 +115,7 @@ _retire_legacy_obot_database_role()
   local deadline
 
   counts="$(_legacy_obot_postgres_counts "$namespace" "$release" "$timeout")" || return 1
-  read -r database_count role_count <<<"$counts"
+  role_count="${counts##* }"
   if [[ "$role_count" == "0" ]]; then
     return 0
   fi
@@ -157,7 +155,7 @@ _retire_legacy_obot_database_role()
   deadline=$((SECONDS + timeout))
   while (( SECONDS <= deadline )); do
     counts="$(_legacy_obot_postgres_counts "$namespace" "$release" "$timeout")" || return 1
-    read -r database_count role_count <<<"$counts"
+    role_count="${counts##* }"
     if [[ "$role_count" == "0" ]]; then
       break
     fi

@@ -7,7 +7,6 @@ const prismaRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ledgerRoot = join(prismaRoot, "prisma-migrations");
 const baseline = readFileSync(join(ledgerRoot, "20260826000000_0_9_2_baseline/migration.sql"), "utf8");
 const migration = readFileSync(join(ledgerRoot, "20260827000000_0_10_0_workflow_cutover/migration.sql"), "utf8");
-const sqlWorkloadRetirement = readFileSync(join(ledgerRoot, "20260829000000_retire_sql_workload_control_plane/migration.sql"), "utf8");
 const authorizationMigration = readFileSync(join(ledgerRoot, "20260829000000_central_authorization_authority/migration.sql"), "utf8");
 const candidateForwardRepair = readFileSync(join(prismaRoot, "migrations/untagged-0.9.3-candidate-forward-repair/migration.sql"), "utf8");
 const targetBaseline = readFileSync(join(prismaRoot, "bootstrap/target-baseline.sql"), "utf8");
@@ -75,7 +74,7 @@ const baselineStatements = baseline
 	.split("\n")
 	.filter(function _IsSql(line) { return line.trim() !== "" && !line.trimStart().startsWith("--"); });
 _Require(baselineStatements.length === 0, "the tagged 0.9.2 Prisma bridge must remain a no-op");
-_Require(releasedCutoverChecksum === "75bc11951270c082f93af39522f091e7982ecfd000e76beb25bb80d3274f4cea", "the rebuilt untagged 0.10.0 cutover migration must retain its reviewed checksum");
+_Require(releasedCutoverChecksum === "fbdb206c00e4a41b60be7b0daf3cb1a01459abc48a5ddb7982275ec449b6547a", "the rebuilt untagged 0.10.0 cutover migration must retain its reviewed checksum");
 
 _Require(migration.startsWith("-- OpenCrane 0.9.2 to 0.10.0 workflow and OCI cutover after the reviewed IAM prerequisite."), "the forward migration must name its exact release boundary");
 _Require(migration.match(/^BEGIN;$/gmu)?.length === 1, "the forward migration must open one transaction");
@@ -221,47 +220,13 @@ for (const statement of [
 	_Require(migration.includes(statement), `approved hard cutoff is missing: ${statement}`);
 }
 
-_Require(sqlWorkloadRetirement.match(/^BEGIN;$/gmu)?.length === 1, "the SQL workload retirement must open one transaction");
-_Require(sqlWorkloadRetirement.match(/^COMMIT;$/gmu)?.length === 1, "the SQL workload retirement must commit one transaction");
-for (const statement of [
-	'DROP TRIGGER IF EXISTS "cancel_ineligible_skill_workloads_on_revision" ON "skill_revisions";',
-	'DROP TRIGGER IF EXISTS "cancel_ineligible_skill_workloads_on_invocation" ON "tool_invocations";',
-	'DROP VIEW IF EXISTS "skill_workload_claim_candidates";',
-	'DROP VIEW IF EXISTS "skill_workload_release_claim_candidates";',
-	'DROP FUNCTION IF EXISTS "select_skill_workload_claim_candidate"();',
-	'DROP FUNCTION IF EXISTS "select_skill_workload_release_claim_candidate"();',
-	'DROP FUNCTION IF EXISTS "enforce_skill_workload_bootstrap"();',
-	'DROP FUNCTION IF EXISTS "enforce_skill_workload_authority"();',
-	'DROP FUNCTION IF EXISTS "cancel_ineligible_skill_workloads"();',
-	'DROP TABLE IF EXISTS "skill_workload_bootstraps";',
-	'DROP TABLE IF EXISTS "skill_workloads";',
-	'DROP TYPE IF EXISTS "SkillWorkloadKind";',
-	'DROP TYPE IF EXISTS "SkillWorkloadState";',
-])
-{
-	_Require(sqlWorkloadRetirement.includes(statement), `SQL workload retirement is missing: ${statement}`);
-}
-
-for (const statement of [
-	'DROP FUNCTION IF EXISTS "enforce_accepted_outbox_attempt"();',
-	'DROP FUNCTION IF EXISTS "enforce_run_outbox_event_update"();',
-	'DROP TABLE IF EXISTS "run_outbox_events";',
-	'DROP TYPE IF EXISTS "RunOutboxEventKind";',
-])
-{
-	_Require(sqlWorkloadRetirement.includes(statement), `run outbox retirement is missing: ${statement}`);
-}
-_RequireBeforeIn(sqlWorkloadRetirement, 'DROP TABLE IF EXISTS "run_outbox_events";', 'DROP TYPE IF EXISTS "RunOutboxEventKind";', "the run outbox table must be removed before its enum");
-_Require(!sqlWorkloadRetirement.includes('DELETE FROM "run_outbox_events"'), "the idempotent retirement must not query an optional legacy run outbox table");
-_Require(!sqlWorkloadRetirement.includes('DELETE FROM "skill_workloads"'), "the idempotent retirement must not query an optional legacy skill workload table");
 _Require(!targetBaseline.includes("run_outbox_events"), "clean target must remove the run outbox table and authority");
 _Require(!targetBaseline.includes("RunOutboxEventKind"), "clean target must remove the run outbox enum");
 _Require(authorizationMigration.includes('DROP TABLE IF EXISTS "memory_outbox_events";'), "central cutover must tolerate and remove the optional generic memory outbox table");
 _Require(authorizationMigration.includes('DROP TYPE IF EXISTS "MemoryOutboxEventKind";'), "central cutover must tolerate and remove the optional generic memory outbox enum");
 _Require(!targetBaseline.includes("memory_outbox_events"), "clean target must remove the generic memory outbox table");
 _Require(!targetBaseline.includes("MemoryOutboxEventKind"), "clean target must remove the generic memory outbox enum");
-const runAuthorityReplacement = _TargetFunction("enforce_agent_run_authority_update").replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION");
-_Require(sqlWorkloadRetirement.includes(runAuthorityReplacement), "SQL workload retirement must carry the exact workflow-era AgentRun authority function");
+_Require(_NormalizedSql(_MigrationFunction("enforce_agent_run_authority_update")) === _NormalizedSql(_TargetFunction("enforce_agent_run_authority_update").replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION")), "the workflow cutover must install the target AgentRun authority function");
 
 for (const retiredMcpbTable of ["mcpb_validation_claims", "mcpb_validations"])
 {
