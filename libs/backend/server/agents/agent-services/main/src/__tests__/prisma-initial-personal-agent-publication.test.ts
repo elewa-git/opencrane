@@ -39,6 +39,7 @@ function _ProductEffects()
 function _Transaction()
 {
 	return {
+		modelDefinition: { findUnique: vi.fn().mockResolvedValue({ id: "configured-default" }) },
 		agentService: {
 			create: vi.fn().mockResolvedValue({ id: _COMMAND.onboardingId, workloadProfile: INITIAL_PERSONAL_AGENT_POLICY.workloadProfile }),
 			update: vi.fn().mockResolvedValue({}),
@@ -86,11 +87,23 @@ describe("Prisma initial personal-Agent publication", function _Suite()
 		expect(productEffects.admitInitialPublication.mock.invocationCallOrder[0]).toBeGreaterThan(transaction.agentRevision.create.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER);
 		expect(transaction.agentService.create).toHaveBeenCalledWith({ data: expect.objectContaining({ id: _COMMAND.onboardingId, siloId: _COMMAND.siloId, kind: "Personal", state: "Draft", name: "The Commander", workloadProfile: "personal-default" }) });
 		expect(transaction.agentRevision.create).toHaveBeenCalledWith({
-			data: expect.objectContaining({ revision: 1, promptPolicyVersion: INITIAL_PERSONAL_AGENT_POLICY.promptPolicyVersion, personaRevisionId: _COMMAND.onboardingPersonaRevisionId, budget: { maxTurns: 64, maxTokens: 256_000, maxDurationMs: 3_600_000 }, modelDefinition: { connect: { id: "configured-default" } } }),
+			data: expect.objectContaining({ revision: 1, promptPolicyVersion: INITIAL_PERSONAL_AGENT_POLICY.promptPolicyVersion, personaRevisionId: _COMMAND.onboardingPersonaRevisionId, budget: { maxTurns: 64, maxTokens: 256_000, maxDurationMs: 3_600_000 }, modelDefinition: { connect: { id_siloId: { id: "configured-default", siloId: _COMMAND.siloId } } } }),
 			include: expect.any(Object),
 		});
-		expect(transaction.agentRevision.update).toHaveBeenCalledWith({ where: { id: "revision-a" }, data: { state: "Published", publishedAt: _COMMAND.provisionedAt } });
-		expect(transaction.agentService.update).toHaveBeenCalledWith({ where: { id: _COMMAND.onboardingId }, data: { state: "Active", activeRevisionId: "revision-a", updatedAt: _COMMAND.provisionedAt } });
+		expect(transaction.agentRevision.update).toHaveBeenCalledWith({ where: { id_siloId: { id: "revision-a", siloId: _COMMAND.siloId } }, data: { state: "Published", publishedAt: _COMMAND.provisionedAt } });
+		expect(transaction.agentService.update).toHaveBeenCalledWith({ where: { id_siloId: { id: _COMMAND.onboardingId, siloId: _COMMAND.siloId } }, data: { state: "Active", activeRevisionId: "revision-a", updatedAt: _COMMAND.provisionedAt } });
+	});
+
+	it("fails closed before admission when the resolved default is not in the bootstrap silo", async function _RejectsForeignDefault()
+	{
+		const transaction = _Transaction();
+		transaction.modelDefinition.findUnique.mockResolvedValue(null);
+		const productEffects = _ProductEffects();
+
+		await expect(_Publisher(transaction, _DefaultModelResolver(), productEffects).publish(_COMMAND, _PERSONA, _CALLER)).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Denied, reason: PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable });
+		expect(transaction.modelDefinition.findUnique).toHaveBeenCalledWith({ where: { id_siloId: { id: "configured-default", siloId: _COMMAND.siloId } }, select: { id: true } });
+		expect(productEffects.admitInitialCreation).not.toHaveBeenCalled();
+		expect(transaction.agentService.create).not.toHaveBeenCalled();
 	});
 
 	it("fails closed without writes when model-routing reports no accessible definition", async function _UnavailableDefault()

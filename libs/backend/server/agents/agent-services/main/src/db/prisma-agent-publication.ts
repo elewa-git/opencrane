@@ -50,7 +50,7 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 	/** Loads one immutable revision whose parent service is in the caller's silo. */
 	async getRevision(agentRevisionId: string, siloId: string): Promise<AgentRevision | null>
 	{
-		const row = await this.prisma.agentRevision.findFirst({ where: { id: agentRevisionId, agentService: { is: { siloId } } }, include: { skillAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } });
+		const row = await this.prisma.agentRevision.findFirst({ where: { id: agentRevisionId, siloId, agentService: { is: { siloId } } }, include: { skillAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } });
 		return row === null ? null : _mapRevision(row);
 	}
 
@@ -58,8 +58,8 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 	async publishRevisionAtomically(publication: AtomicAgentRevisionPublication): Promise<AtomicAgentRevisionPublicationResult>
 	{
 		// Read the expected authority state before trying to own its exact coordinates.
-		const serviceRow = await this.prisma.agentService.findUnique({ where: { id: publication.agentServiceId } });
-		const revisionRow = await this.prisma.agentRevision.findUnique({ where: { id: publication.agentRevisionId }, include: { skillAssignments: true, mcpToolAssignments: { include: { toolRevision: { include: { serverRevision: { include: { server: true } } } } } }, boundaryAttachments: true } });
+		const serviceRow = await this.prisma.agentService.findUnique({ where: { id_siloId: { id: publication.agentServiceId, siloId: this.caller.siloId } } });
+		const revisionRow = await this.prisma.agentRevision.findUnique({ where: { id_siloId: { id: publication.agentRevisionId, siloId: this.caller.siloId } }, include: { skillAssignments: true, mcpToolAssignments: { include: { toolRevision: { include: { serverRevision: { include: { server: true } } } } } }, boundaryAttachments: true } });
 		if (serviceRow === null || revisionRow === null || _serviceState(serviceRow.state) !== publication.expectedServiceState || serviceRow.activeRevisionId !== publication.expectedActiveRevisionId || revisionRow.agentServiceId !== publication.agentServiceId || revisionRow.state !== AgentRevisionState.Draft)
 			return { status: "conflict", currentActiveRevisionId: serviceRow?.activeRevisionId ?? null } as const;
 		if (revisionRow.mcpToolAssignments.some(function _UnavailableMcpTool(assignment): boolean
@@ -84,12 +84,12 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 		});
 		if (activated.count !== 1)
 			throw new _PublicationConflict();
-		const published = await this.prisma.agentRevision.updateMany({ where: { id: publication.agentRevisionId, agentServiceId: publication.agentServiceId, state: AgentRevisionState.Draft }, data: { state: AgentRevisionState.Published, publishedAt } });
+		const published = await this.prisma.agentRevision.updateMany({ where: { id: publication.agentRevisionId, siloId: this.caller.siloId, agentServiceId: publication.agentServiceId, state: AgentRevisionState.Draft }, data: { state: AgentRevisionState.Published, publishedAt } });
 		if (published.count !== 1)
 			throw new _PublicationConflict();
 		const [activeRow, publishedRow] = await Promise.all([
-			this.prisma.agentService.findUniqueOrThrow({ where: { id: publication.agentServiceId } }),
-			this.prisma.agentRevision.findUniqueOrThrow({ where: { id: publication.agentRevisionId }, include: { skillAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } }),
+			this.prisma.agentService.findUniqueOrThrow({ where: { id_siloId: { id: publication.agentServiceId, siloId: this.caller.siloId } } }),
+			this.prisma.agentRevision.findUniqueOrThrow({ where: { id_siloId: { id: publication.agentRevisionId, siloId: this.caller.siloId } }, include: { skillAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } }),
 		]);
 
 		return { status: "published", service: _mapService(activeRow), revision: _mapRevision(publishedRow) } as const;
@@ -98,7 +98,7 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 	/** Reads the revision id that won a concurrent publication race. */
 	async getActiveRevisionId(agentServiceId: string): Promise<string | null>
 	{
-		const winner = await this.prisma.agentService.findUnique({ where: { id: agentServiceId }, select: { activeRevisionId: true } });
+		const winner = await this.prisma.agentService.findUnique({ where: { id_siloId: { id: agentServiceId, siloId: this.caller.siloId } }, select: { activeRevisionId: true } });
 		return winner?.activeRevisionId ?? null;
 	}
 }

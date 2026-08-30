@@ -69,7 +69,7 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 
 		// 3. Load the source and prove the old and new personas belong to the same owner profile.
 		const source = await this.transaction.agentRevision.findFirst({
-			where: { id: command.expectedSourceRevisionId, agentServiceId: command.agentServiceId, state: AgentRevisionState.Published },
+			where: { id: command.expectedSourceRevisionId, siloId: command.siloId, agentServiceId: command.agentServiceId, state: AgentRevisionState.Published },
 			include: _AGENT_REVISION_INCLUDE,
 		});
 		if (source === null || source.personaRevisionId === null)
@@ -79,7 +79,7 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 			return _Unavailable(command.expectedSourceRevisionId);
 
 		// 4. Require the source to remain the newest lineage entry before allocating its successor.
-		const latest = await this.transaction.agentRevision.findFirst({ where: { agentServiceId: service.id }, orderBy: { revision: "desc" }, select: { id: true } });
+		const latest = await this.transaction.agentRevision.findFirst({ where: { agentServiceId: service.id, siloId: command.siloId }, orderBy: { revision: "desc" }, select: { id: true } });
 		if (latest?.id !== source.id)
 			return _Stale(command.expectedSourceRevisionId);
 		if (source.personaRevisionId === command.targetPersonaRevisionId)
@@ -121,7 +121,7 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 		await this.productEffects.admitRevisionPublication(productCommand);
 
 		// 8. Publish the revision and repoint the service while the caller owns the transaction.
-		await this.transaction.agentRevision.update({ where: { id: draft.id }, data: { state: AgentRevisionState.Published, publishedAt: command.materializedAt } });
+		await this.transaction.agentRevision.update({ where: { id_siloId: { id: draft.id, siloId: command.siloId } }, data: { state: AgentRevisionState.Published, publishedAt: command.materializedAt } });
 		const activated = await this.transaction.agentService.updateMany({
 			where: { id: service.id, siloId: command.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: source.id },
 			data: { activeRevisionId: draft.id, updatedAt: command.materializedAt },
@@ -160,7 +160,7 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 				kind: AgentServiceKind.Personal,
 				state: AgentServiceState.Active,
 				activeRevisionId: { not: null },
-				activeRevision: { is: { state: AgentRevisionState.Published, personaRevisionId: { in: approvedPersonas.map(function _PersonaId(persona) { return persona.id; }) } } },
+				activeRevision: { is: { siloId: command.siloId, state: AgentRevisionState.Published, personaRevisionId: { in: approvedPersonas.map(function _PersonaId(persona) { return persona.id; }) } } },
 			},
 			select: { id: true, activeRevisionId: true },
 			orderBy: { id: "asc" },

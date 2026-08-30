@@ -132,7 +132,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 
 		// 3. Inspect the deterministic identity independently so an unrelated row can never be adopted.
 		const deterministic = await this.transaction.agentService.findUnique({
-			where: { id: command.onboardingId },
+			where: { id_siloId: { id: command.onboardingId, siloId: command.siloId } },
 			select: { id: true, siloId: true, kind: true, state: true, activeRevisionId: true, workloadProfile: true, activeRevision: { select: { personaRevisionId: true, modelDefinitionId: true } } },
 		});
 		if (deterministic !== null)
@@ -233,7 +233,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 				kind: AgentServiceKind.Personal,
 				state: AgentServiceState.Active,
 				activeRevisionId: { not: null },
-				activeRevision: { is: { state: AgentRevisionState.Published, personaRevisionId: { in: [...persona.approvedRevisionIds] } } },
+				activeRevision: { is: { siloId: command.siloId, state: AgentRevisionState.Published, personaRevisionId: { in: [...persona.approvedRevisionIds] } } },
 			},
 			select: { id: true, activeRevisionId: true, workloadProfile: true, activeRevision: { select: { personaRevisionId: true, modelDefinitionId: true } } },
 			orderBy: { id: "asc" },

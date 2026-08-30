@@ -54,14 +54,14 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 {
 	return {
 		id: command.agentRevisionId,
-		agentService: { connect: { id: command.agentServiceId } },
+		agentService: { connect: { id_siloId: { id: command.agentServiceId, siloId: command.siloId } } },
 		revision: command.revision,
 		parentRevision: command.parentRevisionId === null
 			? undefined
-			: { connect: { id: command.parentRevisionId } },
+			: { connect: { id_siloId: { id: command.parentRevisionId, siloId: command.siloId } } },
 		sourceRevision: command.sourceRevisionId === null
 			? undefined
-			: { connect: { id: command.sourceRevisionId } },
+			: { connect: { id_siloId: { id: command.sourceRevisionId, siloId: command.siloId } } },
 		changeMessage: command.changeMessage,
 		state: AgentRevisionState.Draft,
 		digest: __DigestAgentRevisionContent(
@@ -71,7 +71,7 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 		),
 		promptPolicyVersion: command.content.promptPolicyVersion,
 		personaRevisionId: command.content.personaRevisionId,
-		modelDefinition: { connect: { id: command.content.modelDefinitionId } },
+		modelDefinition: { connect: { id_siloId: { id: command.content.modelDefinitionId, siloId: command.siloId } } },
 		budget: {
 			maxTurns: command.content.budget.maxTurns,
 			maxTokens: command.content.budget.maxTokens,

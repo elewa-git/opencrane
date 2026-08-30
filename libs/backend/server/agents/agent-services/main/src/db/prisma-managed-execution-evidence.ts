@@ -66,6 +66,7 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 		const revision = await prisma.agentRevision.findFirst({
 			where: {
 				id: command.agentRevisionId,
+				siloId: command.siloId,
 				agentServiceId: command.agentServiceId,
 				state: AgentRevisionState.Published,
 				agentService: { is: { id: command.agentServiceId, siloId: command.siloId, kind: AgentServiceKind.Managed, state: AgentServiceState.Active, activeRevisionId: command.agentRevisionId } },

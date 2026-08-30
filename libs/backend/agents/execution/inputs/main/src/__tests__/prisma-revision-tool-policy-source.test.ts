@@ -34,7 +34,7 @@ function _ToolPolicySource(): PrismaRevisionToolPolicySource
 /** Creates a current revision with one MCP tool and one published skill artifact. */
 function _Revision(overrides: Record<string, unknown> = {})
 {
-	return { modelDefinition: { id: "model-definition-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" }, mcpToolAssignments: [_McpToolAssignment()], skillAssignments: [{ skillRevisionId: "skill-revision-1" }], budget: { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000 }, ...overrides };
+	return { modelDefinition: { id: "model-definition-1", siloId: "silo-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" }, mcpToolAssignments: [_McpToolAssignment()], skillAssignments: [{ skillRevisionId: "skill-revision-1" }], budget: { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000 }, ...overrides };
 }
 
 /** Creates one same-silo active skill whose selected revision is published. */
@@ -63,7 +63,7 @@ describe("PrismaRevisionToolPolicySource", function _DescribePrismaRevisionToolP
 
 	it("denies a foreign model and an unpublished skill", async function _DeniesUnavailablePolicy()
 	{
-		await expect(_ToolPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision({ modelDefinition: { id: "model-definition-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-other", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" } }), [_Skill()], [{ id: "artifact-revision-1" }]))).resolves.toEqual({ outcome: "denied", reason: "tool_policy_unavailable" });
+		await expect(_ToolPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision({ modelDefinition: { id: "model-definition-1", siloId: "silo-other", scope: ModelRoutingScope.Global, clusterTenant: null, publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" } }), [_Skill()], [{ id: "artifact-revision-1" }]))).resolves.toEqual({ outcome: "denied", reason: "tool_policy_unavailable" });
 		await expect(_ToolPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision(), [_Skill({ state: SkillRevisionState.Draft })], [{ id: "artifact-revision-1" }]))).resolves.toEqual({ outcome: "denied", reason: "tool_policy_unavailable" });
 	});
 });

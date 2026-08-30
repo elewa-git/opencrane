@@ -124,7 +124,7 @@ async function _resolveModelRoute(transaction: Prisma.TransactionClient, siloId:
 	const maxOutputTokens = typeof route["maxOutputTokens"] === "number" && Number.isSafeInteger(route["maxOutputTokens"]) && route["maxOutputTokens"] > 0 ? route["maxOutputTokens"] : null;
 	if (!siloId.trim() || !modelDefinitionId)
 		throw new Error("snapshot model route requires an exact model definition in a trusted silo");
-	const definition = await transaction.modelDefinition.findFirst({ where: { id: modelDefinitionId, OR: [{ scope: ModelRoutingScope.Global, clusterTenant: null }, { scope: ModelRoutingScope.ClusterTenant, clusterTenant: siloId }] }, select: { publicModelName: true, generatedOutputCapabilities: true } });
+	const definition = await transaction.modelDefinition.findFirst({ where: { id: modelDefinitionId, siloId, OR: [{ scope: ModelRoutingScope.Global, clusterTenant: null }, { scope: ModelRoutingScope.ClusterTenant, clusterTenant: siloId }] }, select: { publicModelName: true, generatedOutputCapabilities: true } });
 	if (definition === null)
 		throw new Error("snapshot model definition is unavailable in the trusted silo");
 	const generatedOutputCapabilities = definition.generatedOutputCapabilities.filter(function _SupportedCapability(capability): capability is GeneratedOutputCapability { return capability === GeneratedOutputCapability.ImagePng || capability === GeneratedOutputCapability.CodeExecutionFiles; });

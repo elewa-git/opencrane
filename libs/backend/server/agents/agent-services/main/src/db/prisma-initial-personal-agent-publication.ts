@@ -55,6 +55,9 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 			return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable);
 		if (model.status === InitialPersonalAgentDefaultModelResolutionStatuses.Ambiguous)
 			return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelAmbiguous);
+		const definition = await this.transaction.modelDefinition.findUnique({ where: { id_siloId: { id: model.modelDefinitionId, siloId: command.siloId } }, select: { id: true } });
+		if (definition === null)
+			return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable);
 
 		// 2. Preallocate the revision and admit creation through the existing silo collection root.
 		const agentRevisionId = randomUUID();
@@ -111,11 +114,11 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 
 		// 5. Publish and activate before the surrounding onboarding transaction commits.
 		await this.transaction.agentRevision.update({
-			where: { id: revision.id },
+			where: { id_siloId: { id: revision.id, siloId: command.siloId } },
 			data: { state: AgentRevisionState.Published, publishedAt: command.provisionedAt },
 		});
 		await this.transaction.agentService.update({
-			where: { id: service.id },
+			where: { id_siloId: { id: service.id, siloId: command.siloId } },
 			data: { state: AgentServiceState.Active, activeRevisionId: revision.id, updatedAt: command.provisionedAt },
 		});
 		return { status: PersonalAgentBootstrapStatuses.Ready, agentServiceId: service.id, agentRevisionId: revision.id, created: true, revised: false };

@@ -40,6 +40,7 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 		const revision = await transaction.prisma.agentRevision.findFirst({
 			where: {
 				id: run.agentRevisionId,
+				siloId: command.siloId,
 				agentServiceId: run.agentServiceId,
 				state: AgentRevisionState.Published,
 				agentService: { is: { id: run.agentServiceId, siloId: command.siloId, state: "Active", activeRevisionId: run.agentRevisionId } },
@@ -105,7 +106,7 @@ export class PrismaRevisionBudgetPolicySource implements BudgetPolicySource
 	{
 		// 1. Re-check that the exact revision is still published. Do not trust the revision id an earlier caller passed.
 		const revision = await transaction.prisma.agentRevision.findFirst({
-			where: { id: run.agentRevisionId, agentServiceId: run.agentServiceId, state: AgentRevisionState.Published, agentService: { is: { siloId: command.siloId, state: "Active", activeRevisionId: run.agentRevisionId } } },
+			where: { id: run.agentRevisionId, siloId: command.siloId, agentServiceId: run.agentServiceId, state: AgentRevisionState.Published, agentService: { is: { siloId: command.siloId, state: "Active", activeRevisionId: run.agentRevisionId } } },
 			select: { budget: true },
 		});
 		if (revision === null) return { outcome: "denied", reason: "budget_unavailable" };
@@ -117,9 +118,9 @@ export class PrismaRevisionBudgetPolicySource implements BudgetPolicySource
 }
 
 /** Returns whether a model definition is global or belongs exactly to the admission silo. */
-function _IsModelAvailable(model: { readonly scope: ModelRoutingScope; readonly clusterTenant: string | null }, siloId: string): boolean
+function _IsModelAvailable(model: { readonly siloId: string; readonly scope: ModelRoutingScope; readonly clusterTenant: string | null }, siloId: string): boolean
 {
-	return model.scope === ModelRoutingScope.Global || (model.scope === ModelRoutingScope.ClusterTenant && model.clusterTenant === siloId);
+	return model.siloId === siloId && ((model.scope === ModelRoutingScope.Global && model.clusterTenant === null) || (model.scope === ModelRoutingScope.ClusterTenant && model.clusterTenant === siloId));
 }
 
 /** Turns the stored JSON budget into the snapshot's budget fields, never filling in a default. */

@@ -14,7 +14,7 @@ describe("PrismaAgentRevisionLifecycleUnitOfWork", function _Suite()
 		{
 			return {
 				id: "revision-1",
-				agentServiceId: input.data.agentService.connect.id,
+				agentServiceId: input.data.agentService.connect.id_siloId.id,
 				revision: 1,
 				parentRevisionId: null,
 				sourceRevisionId: null,
@@ -63,6 +63,8 @@ describe("PrismaAgentRevisionLifecycleUnitOfWork", function _Suite()
 		const expectedPrincipalId = `agent-service:${result.service.id}`;
 		expect(principalCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ id: expectedPrincipalId, siloId: "silo-1", issuer: MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER, subject: result.service.id, provenance: PrincipalProvenance.Internal }) });
 		expect(serviceCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ id: result.service.id, principalId: expectedPrincipalId, kind: AgentServiceKind.Managed, state: AgentServiceState.Draft }) });
+		expect(transaction.modelDefinition.findUnique).toHaveBeenCalledWith({ where: { id_siloId: { id: "model-1", siloId: "silo-1" } }, select: { scope: true, clusterTenant: true } });
+		expect(revisionCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ agentService: { connect: { id_siloId: { id: result.service.id, siloId: "silo-1" } } }, modelDefinition: { connect: { id_siloId: { id: "model-1", siloId: "silo-1" } } } }) }));
 		expect(principalCreate.mock.invocationCallOrder[0]).toBeLessThan(serviceCreate.mock.invocationCallOrder[0]);
 		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
 	});

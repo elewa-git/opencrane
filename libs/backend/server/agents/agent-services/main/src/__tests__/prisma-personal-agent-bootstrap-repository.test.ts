@@ -37,6 +37,7 @@ function _Persona(activeRevisionId = _COMMAND.onboardingPersonaRevisionId)
 function _Transaction()
 {
 	return {
+		modelDefinition: { findUnique: vi.fn().mockResolvedValue({ id: "configured-default" }) },
 		personaRevision: { findUnique: vi.fn().mockResolvedValue(_Persona()), findFirst: vi.fn() },
 		agentService: {
 			findMany: vi.fn().mockResolvedValue([]),

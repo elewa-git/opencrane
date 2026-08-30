@@ -97,15 +97,15 @@ describe("PrismaAgentRevisionPersonaSelectionRepository", function _PersonaSelec
 		expect(fake.agentRevisionCreate).toHaveBeenCalledWith({
 			data: expect.objectContaining({
 				revision: 8,
-				parentRevision: { connect: { id: "agent-revision-1" } },
+				parentRevision: { connect: { id_siloId: { id: "agent-revision-1", siloId: "silo-1" } } },
 				personaRevisionId: "persona-new",
-				modelDefinition: { connect: { id: "model-1" } },
+				modelDefinition: { connect: { id_siloId: { id: "model-1", siloId: "silo-1" } } },
 				budget: { maxTurns: 64, maxTokens: 256_000, maxDurationMs: 3_600_000 },
 				promptPolicyVersion: "prompt-v1",
 			}),
 			include: expect.any(Object),
 		});
-		expect(fake.agentRevisionUpdate).toHaveBeenCalledWith({ where: { id: "agent-revision-2" }, data: { state: "Published", publishedAt: _Command().materializedAt } });
+		expect(fake.agentRevisionUpdate).toHaveBeenCalledWith({ where: { id_siloId: { id: "agent-revision-2", siloId: "silo-1" } }, data: { state: "Published", publishedAt: _Command().materializedAt } });
 		expect(fake.agentServiceUpdateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "service-1", activeRevisionId: "agent-revision-1" }), data: { activeRevisionId: "agent-revision-2", updatedAt: _Command().materializedAt } });
 		expect(productEffects.admitRevisionSelection).toHaveBeenCalledWith(expect.objectContaining({ caller: expect.objectContaining({ principalId: "principal-1" }), source: expect.objectContaining({ agentServiceId: "service-1" }), target: expect.objectContaining({ personaProfileId: "profile-1", modelDefinitionId: "model-1" }) }));
 		expect(productEffects.admitRevisionPublication).toHaveBeenCalledWith(expect.objectContaining({ target: expect.objectContaining({ agentRevisionId: expect.any(String) }) }));

@@ -110,7 +110,7 @@ function _Database(events: string[], options: { readonly failAt?: string; readon
 		modelDefinition: {
 			async findUnique()
 			{
-				return { id: "model-definition-1", scope: "ClusterTenant", clusterTenant: "silo-1", publicModelName: "silo-default", litellmModelId: "litellm-model-1", providerCredential: { id: "provider-connection-1", scope: "ClusterTenant", clusterTenant: "silo-1" } };
+				return { id: "model-definition-1", siloId: "silo-1", scope: "ClusterTenant", clusterTenant: "silo-1", publicModelName: "silo-default", litellmModelId: "litellm-model-1", providerCredential: { id: "provider-connection-1", siloId: "silo-1", scope: "ClusterTenant", clusterTenant: "silo-1" } };
 			},
 		},
 		runModelCredentialMintAuthorization: {

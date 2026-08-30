@@ -145,7 +145,7 @@ export class PrismaWarmRuntimeBindingRepository implements WarmRuntimeBindingPer
 		const route = _SnapshotModelRoute(run.inputSnapshot.modelRoute);
 		if (actor === null || route === null)
 			return null;
-		const model = await this.transaction.modelDefinition.findUnique({ where: { id: route.modelDefinitionId }, select: { id: true, scope: true, clusterTenant: true, publicModelName: true, litellmModelId: true, providerCredential: { select: { id: true, scope: true, clusterTenant: true } } } });
+		const model = await this.transaction.modelDefinition.findUnique({ where: { id_siloId: { id: route.modelDefinitionId, siloId: run.siloId } }, select: { id: true, siloId: true, scope: true, clusterTenant: true, publicModelName: true, litellmModelId: true, providerCredential: { select: { id: true, siloId: true, scope: true, clusterTenant: true } } } });
 		if (model === null || !_ModelIsCurrentForSilo(model, route, run.siloId))
 			return null;
 		const argumentsValue = { runId: run.id, attempt: run.attempt, generation: reservation.generation, keyAlias: __BuildRunAttemptKeyAlias(run.id, run.attempt, run.siloId), modelDefinitionId: model.id, providerConnectionId: model.providerCredential?.id ?? null };
@@ -233,10 +233,10 @@ function _SnapshotModelRoute(value: Prisma.JsonValue): { readonly modelDefinitio
 }
 
 /** Require the persisted definition and provider connection to remain available to this silo. */
-function _ModelIsCurrentForSilo(model: { readonly scope: ModelRoutingScope; readonly clusterTenant: string | null; readonly publicModelName: string; readonly litellmModelId: string; readonly providerCredential: { readonly scope: ModelRoutingScope; readonly clusterTenant: string | null } | null }, route: { readonly alias: string; readonly litellmModelId: string }, siloId: string): boolean
+function _ModelIsCurrentForSilo(model: { readonly siloId: string; readonly scope: ModelRoutingScope; readonly clusterTenant: string | null; readonly publicModelName: string; readonly litellmModelId: string; readonly providerCredential: { readonly siloId: string; readonly scope: ModelRoutingScope; readonly clusterTenant: string | null } | null }, route: { readonly alias: string; readonly litellmModelId: string }, siloId: string): boolean
 {
-	const modelAvailable = model.scope === ModelRoutingScope.Global ? model.clusterTenant === null : model.clusterTenant === siloId;
-	const providerAvailable = model.providerCredential === null || (model.providerCredential.scope === ModelRoutingScope.Global ? model.providerCredential.clusterTenant === null : model.providerCredential.clusterTenant === siloId);
+	const modelAvailable = model.siloId === siloId && (model.scope === ModelRoutingScope.Global ? model.clusterTenant === null : model.clusterTenant === siloId);
+	const providerAvailable = model.providerCredential === null || (model.providerCredential.siloId === siloId && (model.providerCredential.scope === ModelRoutingScope.Global ? model.providerCredential.clusterTenant === null : model.providerCredential.clusterTenant === siloId));
 	return modelAvailable && providerAvailable && model.publicModelName === route.alias && model.litellmModelId === route.litellmModelId;
 }
 

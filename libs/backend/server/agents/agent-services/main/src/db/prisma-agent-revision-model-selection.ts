@@ -58,6 +58,7 @@ export class PrismaAgentRevisionModelSelectionRepository implements AgentRevisio
 		const source = await this.transaction.agentRevision.findFirst({
 			where: {
 				id: command.expectedSourceRevisionId,
+				siloId: command.siloId,
 				agentServiceId: service.id,
 				state: AgentRevisionState.Published,
 			},
@@ -71,7 +72,7 @@ export class PrismaAgentRevisionModelSelectionRepository implements AgentRevisio
 		// 3. Prove the active source is also the latest persisted revision in this service lineage.
 		// A later draft or rejected revision must produce a conflict instead of a duplicate number.
 		const latest = await this.transaction.agentRevision.findFirst({
-			where: { agentServiceId: service.id },
+			where: { agentServiceId: service.id, siloId: command.siloId },
 			orderBy: { revision: "desc" },
 			select: { id: true },
 		});
@@ -143,14 +144,14 @@ export class PrismaAgentRevisionModelSelectionRepository implements AgentRevisio
 		// transaction and uncommitted. If the caller's own check later fails, both writes roll back
 		// together, so the service can never end up active on an unpublished revision.
 		await this.transaction.agentRevision.update({
-			where: { id: draft.id },
+			where: { id_siloId: { id: draft.id, siloId: command.siloId } },
 			data: {
 				state: AgentRevisionState.Published,
 				publishedAt: command.materializedAt,
 			},
 		});
 		await this.transaction.agentService.update({
-			where: { id: service.id },
+			where: { id_siloId: { id: service.id, siloId: command.siloId } },
 			data: {
 				activeRevisionId: draft.id,
 				updatedAt: command.materializedAt,
@@ -164,6 +165,7 @@ export class PrismaAgentRevisionModelSelectionRepository implements AgentRevisio
 	{
 		const models = await this.transaction.modelDefinition.findMany({
 			where: {
+				siloId,
 				publicModelName: modelAlias,
 				OR: [
 					{ scope: ModelRoutingScope.ClusterTenant, clusterTenant: siloId },

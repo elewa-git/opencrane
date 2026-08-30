@@ -105,7 +105,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 	/** Loads one immutable revision whose parent service is in the caller's silo. */
 	async getRevision(agentRevisionId: string, caller: AgentServiceReadCaller): Promise<Awaited<ReturnType<AgentRevisionLifecycleRepository["getRevision"]>>>
 	{
-		const row = await this.prisma.agentRevision.findFirst({ where: { id: agentRevisionId, agentService: { is: { siloId: caller.siloId } } }, include: _AGENT_REVISION_INCLUDE });
+		const row = await this.prisma.agentRevision.findFirst({ where: { id: agentRevisionId, siloId: caller.siloId, agentService: { is: { siloId: caller.siloId } } }, include: _AGENT_REVISION_INCLUDE });
 		return row === null ? null : _mapRevision(row);
 	}
 
@@ -167,7 +167,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 		if (guard.outcome !== _HeadGuardOutcomes.Ready)
 			return guard.result;
 		// Silo scope makes a foreign revision indistinguishable from a missing revision.
-		const source = await this.prisma.agentRevision.findFirst({ where: { id: command.sourceRevisionId, agentService: { is: { siloId: command.siloId } } }, include: _AGENT_REVISION_INCLUDE });
+		const source = await this.prisma.agentRevision.findFirst({ where: { id: command.sourceRevisionId, siloId: command.siloId, agentService: { is: { siloId: command.siloId } } }, include: _AGENT_REVISION_INCLUDE });
 		if (source === null)
 			return { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.RevisionNotFound };
 		if (source.agentServiceId !== command.agentServiceId)
@@ -221,7 +221,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 	async readHistory(agentServiceId: string, caller: AgentServiceReadCaller, runLimit: number): Promise<AgentServiceHistory>
 	{
 		const [revisions, runs] = await Promise.all([
-			this.prisma.agentRevision.findMany({ where: { agentServiceId, agentService: { is: { siloId: caller.siloId } } }, orderBy: { revision: "desc" }, include: _AGENT_REVISION_INCLUDE }),
+			this.prisma.agentRevision.findMany({ where: { agentServiceId, siloId: caller.siloId, agentService: { is: { siloId: caller.siloId } } }, orderBy: { revision: "desc" }, include: _AGENT_REVISION_INCLUDE }),
 			this.prisma.agentRun.findMany({ where: { agentServiceId, siloId: caller.siloId }, orderBy: { acceptedAt: "desc" }, take: Math.max(1, Math.min(runLimit, 200)) }),
 		]);
 		return { revisions: revisions.map(_mapRevision), runs: runs.map(_mapRun) };
@@ -230,8 +230,8 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 	/** Returns whether a model definition is global or belongs to the service's tenant scope. */
 	private async _IsModelDefinitionAvailable(modelDefinitionId: string, siloId: string): Promise<boolean>
 	{
-		const definition = await this.prisma.modelDefinition.findUnique({ where: { id: modelDefinitionId }, select: { scope: true, clusterTenant: true } });
-		return definition?.scope === ModelRoutingScope.Global || (definition?.scope === ModelRoutingScope.ClusterTenant && definition.clusterTenant === siloId);
+		const definition = await this.prisma.modelDefinition.findUnique({ where: { id_siloId: { id: modelDefinitionId, siloId } }, select: { scope: true, clusterTenant: true } });
+		return (definition?.scope === ModelRoutingScope.Global && definition.clusterTenant === null) || (definition?.scope === ModelRoutingScope.ClusterTenant && definition.clusterTenant === siloId);
 	}
 
 	/** Claims the exact service row and validates the expected head revision. */
@@ -242,7 +242,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 			return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceNotFound } };
 		if (_serviceState(service.state) === AgentServiceStates.Retired)
 			return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceRetired } };
-		const head = await this.prisma.agentRevision.findFirst({ where: { agentServiceId }, orderBy: { revision: "desc" }, select: { id: true, revision: true } });
+		const head = await this.prisma.agentRevision.findFirst({ where: { agentServiceId, siloId }, orderBy: { revision: "desc" }, select: { id: true, revision: true } });
 		if (head === null || head.id !== expectedParentRevisionId)
 			return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Conflict, currentHeadRevisionId: head?.id ?? null } };
 		const claimed = await this.prisma.agentService.updateMany({
@@ -256,7 +256,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 			return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceNotFound } };
 		if (_serviceState(winner.state) === AgentServiceStates.Retired)
 			return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Denied, reason: AgentRevisionLifecycleDenials.ServiceRetired } };
-		const winnerHead = await this.prisma.agentRevision.findFirst({ where: { agentServiceId }, orderBy: { revision: "desc" }, select: { id: true } });
+		const winnerHead = await this.prisma.agentRevision.findFirst({ where: { agentServiceId, siloId }, orderBy: { revision: "desc" }, select: { id: true } });
 		return { outcome: _HeadGuardOutcomes.Blocked, result: { outcome: _LifecycleOutcomes.Conflict, currentHeadRevisionId: winnerHead?.id ?? null } };
 	}
 }

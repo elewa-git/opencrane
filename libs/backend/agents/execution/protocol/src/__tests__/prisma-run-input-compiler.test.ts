@@ -58,7 +58,7 @@ describe("__CreatePrismaRunInputCompiler", function _describePrismaRunInputCompi
 		const compiled = await __CreatePrismaRunInputCompiler()(_snapshot({ memoryQueryPolicy: { scope: "none" } }), 1, transaction);
 
 		expect(compiled.model.generatedOutputCapabilities).toEqual(["image_png", "code_execution_files"]);
-		expect(transaction.modelDefinition.findFirst).toHaveBeenCalledWith({ where: { id: "model-definition-1", OR: [{ scope: "Global", clusterTenant: null }, { scope: "ClusterTenant", clusterTenant: "silo-1" }] }, select: { publicModelName: true, generatedOutputCapabilities: true } });
+		expect(transaction.modelDefinition.findFirst).toHaveBeenCalledWith({ where: { id: "model-definition-1", siloId: "silo-1", OR: [{ scope: "Global", clusterTenant: null }, { scope: "ClusterTenant", clusterTenant: "silo-1" }] }, select: { publicModelName: true, generatedOutputCapabilities: true } });
 	});
 
 	it("fails closed instead of resolving a frozen model by its public name", async function _RejectsMissingExactModel()
