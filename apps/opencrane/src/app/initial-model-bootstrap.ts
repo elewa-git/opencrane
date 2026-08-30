@@ -14,13 +14,14 @@ import { _log } from "./log";
  */
 export async function _BootstrapInitialModel(dependencies: InitialModelBootstrapDependencies): Promise<void>
 {
-	const { prisma, coreApi, config, namespace } = dependencies;
+	const { prisma, coreApi, config, namespace, siloId } = dependencies;
 	if (!config)
 	{
 		return;
 	}
 
 	const result = await _ProvisionByokKey({
+		siloId,
 		prisma,
 		coreApi,
 		operatorNamespace: namespace,

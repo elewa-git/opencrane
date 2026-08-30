@@ -130,7 +130,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     const fetchMock = _routedFetch([]);
     vi.stubGlobal("fetch", fetchMock);
 
-    await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "openai", apiKey: "sk-test", log: _log });
+    await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", siloId: "silo-a", provider: "openai", apiKey: "sk-test", log: _log });
 
     const registerCalls = fetchMock.mock.calls.filter(function _isNewModel(c) { return (c[0] as string).includes("/model/new"); });
     const embeddingCall = registerCalls.find(function _isEmbedding(c) { return _bodyOf(c)["model_name"] === "openai/text-embedding-3-large"; });
@@ -169,7 +169,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     const fetchMock = _routedFetch([]);
     vi.stubGlobal("fetch", fetchMock);
 
-    await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "openai", apiKey: "sk-test", log: _log });
+    await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", siloId: "silo-a", provider: "openai", apiKey: "sk-test", log: _log });
 
     const registerCalls = fetchMock.mock.calls.filter(function _isNewModel(c) { return (c[0] as string).includes("/model/new"); });
     const aliasCall = registerCalls.find(function _isAlias(c) { return _bodyOf(c)["model_name"] === _AUTO_EMBEDDING_MODEL_NAME; });
@@ -186,7 +186,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     vi.stubGlobal("fetch", _routedFetch([]));
 
     const prisma = _mockPrisma();
-    await _ProvisionByokKey({ prisma, coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "openai", apiKey: "sk-test", log: _log });
+    await _ProvisionByokKey({ prisma, coreApi: _mockCoreApi(), operatorNamespace: "default", siloId: "silo-a", provider: "openai", apiKey: "sk-test", log: _log });
 
     // The chat-model seeding path (provision-byok-key.test.ts) already asserts the 3 catalog
     // classes + "auto" get ModelDefinition rows; this asserts BOTH embedding deployments (the real
@@ -203,7 +203,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     const fetchMock = _routedFetch([{ model_name: "openai/text-embedding-3-large" }, { model_name: _AUTO_EMBEDDING_MODEL_NAME }]);
     vi.stubGlobal("fetch", fetchMock);
 
-    await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "openai", apiKey: "sk-test", log: _log });
+    await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", siloId: "silo-a", provider: "openai", apiKey: "sk-test", log: _log });
 
     const registerCalls = fetchMock.mock.calls.filter(function _isNewModel(c) { return (c[0] as string).includes("/model/new"); });
     const embeddingNames = registerCalls
@@ -217,7 +217,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     const fetchMock = _routedFetch([{ model_name: "openai/text-embedding-3-large" }]);
     vi.stubGlobal("fetch", fetchMock);
 
-    await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "openai", apiKey: "sk-test", log: _log });
+    await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", siloId: "silo-a", provider: "openai", apiKey: "sk-test", log: _log });
 
     const registerCalls = fetchMock.mock.calls.filter(function _isNewModel(c) { return (c[0] as string).includes("/model/new"); });
     // Real slug already present ⇒ skipped; alias absent ⇒ registered.
@@ -237,7 +237,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     const warn = vi.fn();
     const log = { info: vi.fn(), warn, debug: vi.fn() } as unknown as Logger;
 
-    await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "openai", apiKey: "sk-test", log });
+    await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", siloId: "silo-a", provider: "openai", apiKey: "sk-test", log });
 
 		expect(warn).toHaveBeenCalledWith({ provider: "openai", err: expect.any(Error) }, "byok embedding model registration failed; key is set but no embedding model was registered");
   });
@@ -247,7 +247,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     const fetchMock = _routedFetch([]);
     vi.stubGlobal("fetch", fetchMock);
 
-    await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "anthropic", apiKey: "sk-test", log: _log });
+    await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", siloId: "silo-a", provider: "anthropic", apiKey: "sk-test", log: _log });
 
     const embeddingCreates = fetchMock.mock.calls.filter(function _isEmbeddingCreate(c) { return (c[0] as string).includes("/model/new") && String((c[1] as RequestInit).body).includes("embedding"); });
     expect(embeddingCreates).toHaveLength(0);
@@ -271,7 +271,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
-      _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "openai", apiKey: "sk-test", log: _log }),
+      _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", siloId: "silo-a", provider: "openai", apiKey: "sk-test", log: _log }),
 		).resolves.toBeDefined();
 	});
 

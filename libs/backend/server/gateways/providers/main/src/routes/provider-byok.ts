@@ -13,6 +13,7 @@ import { _RequireProviderGatewayAdministration, _RequireProviderGatewayCaller, _
 import { _PROVIDER_EFFECT_EXECUTOR_PROFILE } from "../provider-effect-command-composition";
 import { _ProviderKeyMaterialVerifier } from "../provider-effect-command-executor";
 import { _SendProviderEffectBusy } from "../provider-effect-command-http";
+import { _GLOBAL_AUTO_MODEL_NAME } from "../prisma-global-model-alias-repository";
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandExecutor, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 import { PrismaProviderGatewayUnitOfWork } from "../prisma-provider-gateway-unit-of-work";
 
@@ -29,6 +30,23 @@ function _ByokProviderConnectionId(provider: string): string
 function _effectContext(caller: ProviderGatewayCaller, provider: string): ProviderEffectExecutionContext
 {
 	return { siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: _ByokProviderConnectionId(provider), executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE };
+}
+
+/** Returns why the current provider credential cannot be removed before a replacement is selected. */
+async function _providerDeletionGovernedReason(transaction: Prisma.TransactionClient, credential: PrismaProviderCredential | null): Promise<string | null>
+{
+	if (credential === null)
+		return null;
+	const selectedModel = await transaction.modelDefinition.findFirst({ where: { siloId: credential.siloId, providerCredentialId: credential.id, OR: [{ agentRevisions: { some: {} } }, { publicModelName: _GLOBAL_AUTO_MODEL_NAME }] } });
+	if (selectedModel !== null)
+		return "The provider still owns a frozen agent model or the current global alias.";
+	const providerModels = await transaction.modelDefinition.findMany({ where: { siloId: credential.siloId, providerCredentialId: credential.id }, select: { publicModelName: true } });
+	if (providerModels.length === 0)
+		return null;
+	const routingDefault = await transaction.modelRoutingDefault.findFirst({ where: { siloId: credential.siloId, scope: "Global", clusterTenant: null, defaultModel: { in: providerModels.map(function _Name(model) { return model.publicModelName; }) } } });
+	if (routingDefault !== null)
+		return "The provider supplies the selected global model; choose a replacement before deleting its key.";
+	return "The provider still owns registered models; retire them through durable model reconciliation before deleting its key.";
 }
 
 /**
@@ -88,7 +106,7 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
 		const resources = _BYOK_PROVIDERS.map(provider => ({ kind: ProductAuthorizationResourceKinds.ProviderConnection, id: _ByokProviderConnectionId(provider) }));
 		const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources, nowEpochMs: Date.now() });
 		const entitledProviders = new Set(entitled.map(resource => resource.id.slice("byok:".length)));
-		const rows = await transaction.providerCredential.findMany({ where: { scope: "Global", clusterTenant: null, provider: { in: [...entitledProviders] } } });
+		const rows = await transaction.providerCredential.findMany({ where: { siloId: caller.siloId, scope: "Global", clusterTenant: null, provider: { in: [...entitledProviders] } } });
 		return { entitledProviders, rows };
 	});
 	const rows = result.rows;
@@ -141,7 +159,7 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
 		}
 		const row = await providers.run(async function _ReadResult(transaction)
 		{
-			return transaction.providerCredential.findFirst({ where: { scope: "Global", clusterTenant: null, provider } });
+			return transaction.providerCredential.findFirst({ where: { siloId: caller.siloId, scope: "Global", clusterTenant: null, provider } });
 		});
 		if (row === null)
 			throw new Error("completed provider key command has no credential row");
@@ -176,11 +194,19 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
 		{
 			const admission = await providers.runDatabaseMutation(async function _Delete(transaction, authorization, effects)
 			{
-				const current = await transaction.providerCredential.findFirst({ where: { scope: "Global", clusterTenant: null, provider } });
+				const current = await transaction.providerCredential.findFirst({ where: { siloId: caller.siloId, scope: "Global", clusterTenant: null, provider } });
+				const governedReason = await _providerDeletionGovernedReason(transaction, current);
+				if (governedReason !== null)
+					return { governedReason } as const;
 				const resourceRevision = `${current?.updatedAt.toISOString() ?? "absent"}:${commandId}`;
 				const admission = await _RequireProviderGatewayAdministration(authorization, caller, { operation: "delete-byok-provider", provider, commandId, resourceRevision });
 				return effects.admit({ id: commandId, siloId: caller.siloId, principalId: caller.principalId, payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider, secretRef: _byokSecretName(provider), litellmCredentialName: _byokCredentialName(provider) } }, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: _ByokProviderConnectionId(provider), resourceRevision, argumentsDigest: admission.argumentsDigest, materialVerifier: null, authorization: admission.evidence, approvalId: null, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None });
 			});
+			if ("governedReason" in admission)
+			{
+				res.status(409).json({ error: admission.governedReason, code: "PROVIDER_CONNECTION_GOVERNED" });
+				return;
+			}
 			if (admission.status === ProviderEffectAdmissionStatuses.Busy)
 			{
 				_SendProviderEffectBusy(res, admission.blocker, "Another provider effect still owns this resource.");

@@ -18,6 +18,7 @@ const _requireLiteLlmModelName = vi.mocked(_RequireLiteLlmModelName);
 function _Dependencies(config: InitialModelBootstrapDependencies["config"]): InitialModelBootstrapDependencies
 {
 	return {
+		siloId: "silo-a",
 		prisma: {} as InitialModelBootstrapDependencies["prisma"],
 		coreApi: {} as InitialModelBootstrapDependencies["coreApi"],
 		config,
@@ -38,7 +39,7 @@ describe("initial model bootstrap", function _InitialModelBootstrapSuite()
 		_provisionByokKey.mockResolvedValueOnce({ litellmRegistered: true, litellmOutcomeCertain: true, row: {} as never });
 		_requireLiteLlmModelName.mockResolvedValueOnce();
 		await expect(_BootstrapInitialModel(_Dependencies({ provider: "openai", apiKey: "sk-test" }))).resolves.toBeUndefined();
-		expect(_provisionByokKey).toHaveBeenCalledWith(expect.objectContaining({ operatorNamespace: "opencrane-testv2", provider: "openai", apiKey: "sk-test", requireLiveModels: true }));
+		expect(_provisionByokKey).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-a", operatorNamespace: "opencrane-testv2", provider: "openai", apiKey: "sk-test", requireLiveModels: true }));
 		expect(_requireLiteLlmModelName).toHaveBeenCalledWith("auto");
 
 		_provisionByokKey.mockResolvedValueOnce({ litellmRegistered: false, litellmOutcomeCertain: true, row: {} as never });

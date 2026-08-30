@@ -6,6 +6,9 @@ import { DefaultProviderEffectCommandExecutor } from "./provider-effect-command-
 import { DefaultProviderEffectCommandHandler } from "./provider-effect-command-handler";
 import type { ProviderEffectCommandExecutor } from "./provider-effect-command.types";
 import { PrismaProviderEffectCommandUnitOfWork } from "./prisma-provider-effect-command-unit-of-work";
+import { PrismaProviderGatewayUnitOfWork } from "./prisma-provider-gateway-unit-of-work";
+import { DefaultGlobalModelRoutingDefaultCommandPort } from "./global-model-routing-default-command";
+import type { GlobalModelRoutingDefaultCommandPort } from "@opencrane/backend/server/gateways/model-routing";
 
 /** Trusted control-plane profile allowed to claim durable provider-effect commands. */
 export const _PROVIDER_EFFECT_EXECUTOR_PROFILE = "opencrane-control-plane/provider-effect-v1";
@@ -26,4 +29,10 @@ export function _CreateProviderEffectCommandExecutor(prisma: PrismaClient, coreA
 	const unitOfWork = new PrismaProviderEffectCommandUnitOfWork(prisma);
 	const handler = new DefaultProviderEffectCommandHandler(coreApi, operatorNamespace, log);
 	return new DefaultProviderEffectCommandExecutor(unitOfWork, handler, _PROVIDER_EFFECT_EXECUTOR_PROFILE, log);
+}
+
+/** Composes Global routing selection with the same provider executor used by BYOK routes. */
+export function _CreateGlobalModelRoutingDefaultCommandPort(prisma: PrismaClient, executor: ProviderEffectCommandExecutor): GlobalModelRoutingDefaultCommandPort
+{
+	return new DefaultGlobalModelRoutingDefaultCommandPort(new PrismaProviderGatewayUnitOfWork(prisma), executor);
 }

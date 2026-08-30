@@ -23,4 +23,5 @@ export * from "./core/resolve-skill-model.types";
 export * from "./core/savings";
 export * from "./core/savings.types";
 export * from "./routes/model-routing-defaults";
+export type * from "./routes/model-routing-authorization.types";
 export * from "./openapi";

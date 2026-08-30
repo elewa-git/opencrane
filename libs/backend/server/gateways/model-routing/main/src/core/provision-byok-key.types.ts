@@ -17,6 +17,8 @@ export type ProviderProvisioningPrisma = PrismaClient | Prisma.TransactionClient
  */
 export interface ProvisionByokKeyOptions
 {
+	/** Deployment-frozen silo that owns every projected provider row. */
+	siloId: string;
   /** Prisma client for credential and model rows. */
   prisma: ProviderProvisioningPrisma;
   /** Kubernetes Core V1 API used to persist the provider key Secret. */
@@ -51,6 +53,8 @@ export interface ProvisionByokKeyOptions
 /** Everything `_DeprovisionByokKey` needs to remove a provider's key. No `log` here, because removal has no best-effort step to warn about — every failure throws. */
 export interface DeprovisionByokKeyOptions
 {
+	/** Deployment-frozen silo that owns the removed provider row. */
+	siloId: string;
   /** Prisma client for the credential row. */
   prisma: ProviderProvisioningPrisma;
   /** Kubernetes Core V1 API used to remove the provider key Secret. */

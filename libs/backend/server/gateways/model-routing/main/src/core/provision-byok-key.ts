@@ -110,7 +110,7 @@ export function _byokCredentialName(provider: string): string
  */
 export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<ProvisionByokKeyResult>
 {
-  const { prisma, coreApi, operatorNamespace, provider, apiKey, log, requireLiveModels = false } = opts;
+	const { prisma, coreApi, operatorNamespace, siloId, provider, apiKey, log, requireLiveModels = false } = opts;
   const catalog = _BYOK_PROVIDER_CATALOG[provider];
 
   // 1. Persist the raw key to its k8s Secret first — the durable source of truth.
@@ -125,13 +125,13 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
   // 3. Record the credential reference (litellmCredentialName set only when LiteLLM accepted it).
   const secretRef = _byokSecretName(provider);
   const litellmCredentialName = litellmRegistered ? credentialName : null;
-  const row = await _upsertCredentialRow(prisma, provider, secretRef, litellmCredentialName);
+	const row = await _upsertCredentialRow(prisma, siloId, provider, secretRef, litellmCredentialName);
 
   // 4. Best-effort: register EVERY model class for the provider, all bound to this one credential,
   //    so LiteLLM can switch across tiers on the single key. Never fail the set if this trips.
   try
   {
-    await _ensureProviderModels(prisma, catalog, row.id, litellmCredentialName, requireLiveModels);
+	await _ensureProviderModels(prisma, siloId, catalog, row.id, litellmCredentialName, requireLiveModels);
   }
   catch (err)
   {
@@ -178,7 +178,7 @@ export async function _DeprovisionByokKey(opts: DeprovisionByokKeyOptions): Prom
 {
   await _ClearProviderKeySecret(opts.coreApi, opts.operatorNamespace, opts.provider);
   const credentialOutcome = await _DeleteLiteLlmCredential(_byokCredentialName(opts.provider));
-  await opts.prisma.providerCredential.deleteMany({ where: { scope: "Global", clusterTenant: null, provider: opts.provider } });
+	await opts.prisma.providerCredential.deleteMany({ where: { siloId: opts.siloId, scope: "Global", clusterTenant: null, provider: opts.provider } });
   return { litellmOutcomeCertain: credentialOutcome !== LiteLlmCredentialMutationOutcomes.Uncertain };
 }
 
@@ -286,9 +286,9 @@ function _k8sStatus(err: unknown): number | undefined
  * carries a null `clusterTenant`. A concurrent create trips P2002 on the second writer; that is
  * caught and converged into an update so two simultaneous sets never 500.
  */
-async function _upsertCredentialRow(prisma: ProviderProvisioningPrisma, provider: string, secretRef: string, litellmCredentialName: string | null): Promise<PrismaProviderCredential>
+async function _upsertCredentialRow(prisma: ProviderProvisioningPrisma, siloId: string, provider: string, secretRef: string, litellmCredentialName: string | null): Promise<PrismaProviderCredential>
 {
-  const where = { scope: "Global" as const, clusterTenant: null, provider };
+	const where = { siloId, scope: "Global" as const, clusterTenant: null, provider };
   const existing = await prisma.providerCredential.findFirst({ where });
   if (existing)
   {
@@ -331,7 +331,7 @@ async function _upsertCredentialRow(prisma: ProviderProvisioningPrisma, provider
  * @throws Whatever `_RegisterLiteLlmModel` throws under `requireLiveModels`; `_ProvisionByokKey`
  *         re-throws it at boot and only logs a warning otherwise.
  */
-async function _ensureProviderModels(prisma: ProviderProvisioningPrisma, catalog: ByokProviderCatalog | undefined, providerCredentialId: string, litellmCredentialName: string | null, requireLiveModels: boolean): Promise<void>
+async function _ensureProviderModels(prisma: ProviderProvisioningPrisma, siloId: string, catalog: ByokProviderCatalog | undefined, providerCredentialId: string, litellmCredentialName: string | null, requireLiveModels: boolean): Promise<void>
 {
   if (!catalog)
   {
@@ -342,7 +342,7 @@ async function _ensureProviderModels(prisma: ProviderProvisioningPrisma, catalog
   let defaultModelId: string | null = null;
   for (const entry of catalog.models)
   {
-    let model = await prisma.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, publicModelName: entry.slug } });
+	let model = await prisma.modelDefinition.findFirst({ where: { siloId, scope: "Global", clusterTenant: null, publicModelName: entry.slug } });
     if (model)
     {
       if (model.providerCredentialId !== providerCredentialId)
@@ -361,7 +361,7 @@ async function _ensureProviderModels(prisma: ProviderProvisioningPrisma, catalog
     else
     {
       const litellmModelId = await _RegisterLiteLlmModel({ publicModelName: entry.slug, upstreamModel: entry.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration: requireLiveModels });
-      model = await prisma.modelDefinition.create({ data: { scope: "Global", clusterTenant: null, publicModelName: entry.slug, litellmModelId, upstreamModel: entry.slug, apiBase: null, isDefault: false, providerCredentialId } });
+	  model = await prisma.modelDefinition.create({ data: { siloId, scope: "Global", clusterTenant: null, publicModelName: entry.slug, litellmModelId, upstreamModel: entry.slug, apiBase: null, isDefault: false, providerCredentialId } });
     }
     if (entry.className === catalog.defaultClass)
     {
@@ -373,14 +373,14 @@ async function _ensureProviderModels(prisma: ProviderProvisioningPrisma, catalog
   // authority that onboarding and later run admission consume.
   if (defaultModelId)
   {
-    const selectedDefaults = await prisma.modelDefinition.findMany({ where: { scope: "Global", clusterTenant: null, isDefault: true }, orderBy: { id: "asc" }, take: 2 });
+	const selectedDefaults = await prisma.modelDefinition.findMany({ where: { siloId, scope: "Global", clusterTenant: null, isDefault: true }, orderBy: { id: "asc" }, take: 2 });
     if (selectedDefaults.length > 1) throw new Error("Global model catalogue contains more than one default");
     let selectedDefault = selectedDefaults[0] ?? null;
     if (!selectedDefault)
     {
       selectedDefault = await _updateModelDefinition(prisma, defaultModelId, { isDefault: true });
     }
-    await _ensureGlobalRoutingDefault(prisma, selectedDefault.publicModelName);
+	await _ensureGlobalRoutingDefault(prisma, siloId, selectedDefault.publicModelName);
   }
 
   // 3. Reconcile the stable auto alias to the cheapest provider class without changing caller input.
@@ -389,11 +389,11 @@ async function _ensureProviderModels(prisma: ProviderProvisioningPrisma, catalog
   {
     return;
   }
-  const existingAuto = await prisma.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, publicModelName: _AUTO_MODEL_NAME } });
+	const existingAuto = await prisma.modelDefinition.findFirst({ where: { siloId, scope: "Global", clusterTenant: null, publicModelName: _AUTO_MODEL_NAME } });
   if (!existingAuto)
   {
     const litellmModelId = await _RegisterLiteLlmModel({ publicModelName: _AUTO_MODEL_NAME, upstreamModel: cheapest.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration: requireLiveModels });
-    await prisma.modelDefinition.create({ data: { scope: "Global", clusterTenant: null, publicModelName: _AUTO_MODEL_NAME, litellmModelId, upstreamModel: cheapest.slug, apiBase: null, isDefault: false, providerCredentialId } });
+	await prisma.modelDefinition.create({ data: { siloId, scope: "Global", clusterTenant: null, publicModelName: _AUTO_MODEL_NAME, litellmModelId, upstreamModel: cheapest.slug, apiBase: null, isDefault: false, providerCredentialId } });
     return;
   }
   if (requireLiveModels)
@@ -432,9 +432,9 @@ async function _qualifyOrReconcileModelDefinition(prisma: ProviderProvisioningPr
  * The partial database index admits one row whose tenant is null. A concurrent provider setup may
  * still win between the read and create, so this helper accepts only a confirmed `P2002` winner.
  */
-async function _ensureGlobalRoutingDefault(prisma: ProviderProvisioningPrisma, publicModelName: string): Promise<void>
+async function _ensureGlobalRoutingDefault(prisma: ProviderProvisioningPrisma, siloId: string, publicModelName: string): Promise<void>
 {
-  const where = { scope: "Global" as const, clusterTenant: null };
+	const where = { siloId, scope: "Global" as const, clusterTenant: null };
   if (await prisma.modelRoutingDefault.findFirst({ where })) return;
   try
   {

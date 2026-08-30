@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import "@opencrane/backend/server/infra/auth";
 import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
 import type { AuthUser } from "@opencrane/backend/server/infra/auth";
-import type { ModelRoutingAuthorizationFactory } from "../routes/model-routing-authorization.types";
+import { ModelRoutingAuthorizationError, type GlobalModelRoutingDefaultCommandPort, type ModelRoutingAuthorizationFactory } from "../routes/model-routing-authorization.types";
 import { modelRoutingDefaultsRouter } from "../routes/model-routing-defaults";
 
 /** In-memory model_routing_defaults store backing the mock Prisma client. */
@@ -33,7 +33,7 @@ function _authUser(overrides: Partial<AuthUser> = {}): AuthUser
 function _mockPrisma(store: Map<string, Row>, tenantClusterTenant: string | null = null): PrismaClient
 {
   let seq = 0;
-  function _key(scope: string, clusterTenant: string | null): string { return `${scope}:${clusterTenant ?? ""}`; }
+  function _key(siloId: string, scope: string, clusterTenant: string | null): string { return `${siloId}:${scope}:${clusterTenant ?? ""}`; }
 	const client = {
     orgMembership: {
       findMany: async function _findMany(args: { where?: { clusterTenant?: string } })
@@ -51,27 +51,27 @@ function _mockPrisma(store: Map<string, Row>, tenantClusterTenant: string | null
         const ct = args?.where?.clusterTenant;
         return ct ? all.filter(function _byCt(r) { return r.clusterTenant === ct; }) : all;
       },
-      findUnique: async function _findUnique(args: { where: { id: string } })
+      findUnique: async function _findUnique(args: { where: { id_siloId: { id: string; siloId: string } } })
       {
-        return Array.from(store.values()).find(function _byId(r) { return r.id === args.where.id; }) ?? null;
+        return Array.from(store.values()).find(function _byId(r) { return r.id === args.where.id_siloId.id && r.siloId === args.where.id_siloId.siloId; }) ?? null;
       },
-      findFirst: async function _findFirst(args: { where: { scope: string; clusterTenant: string | null } })
+      findFirst: async function _findFirst(args: { where: { siloId: string; scope: string; clusterTenant: string | null } })
       {
-        return store.get(_key(args.where.scope, args.where.clusterTenant)) ?? null;
+        return store.get(_key(args.where.siloId, args.where.scope, args.where.clusterTenant)) ?? null;
       },
       create: async function _create(args: { data: Row })
       {
         const now = new Date("2026-06-18T00:00:00.000Z");
         const row: Row = { id: `default-${++seq}`, createdAt: now, updatedAt: now, ...args.data };
-        store.set(_key(String(row.scope), (row.clusterTenant as string | null) ?? null), row);
+        store.set(_key(String(row.siloId), String(row.scope), (row.clusterTenant as string | null) ?? null), row);
         return row;
       },
-      update: async function _update(args: { where: { id: string }; data: Row })
+      update: async function _update(args: { where: { id_siloId: { id: string; siloId: string } }; data: Row })
       {
         const now = new Date("2026-06-18T00:00:00.000Z");
         for (const [k, v] of store)
         {
-          if (v.id === args.where.id)
+		  if (v.id === args.where.id_siloId.id && v.siloId === args.where.id_siloId.siloId)
           {
             const row = { ...v, ...args.data, updatedAt: now };
             store.set(k, row);
@@ -80,11 +80,12 @@ function _mockPrisma(store: Map<string, Row>, tenantClusterTenant: string | null
         }
         return null;
       },
-      delete: async function _delete(args: { where: { id: string } })
+      delete: async function _delete(args: { where: { id_siloId: { id: string; siloId: string } } })
       {
         for (const [k, v] of store)
         {
-          if (v.id === args.where.id) { store.delete(k); }
+		  if (v.id === args.where.id_siloId.id && v.siloId === args.where.id_siloId.siloId)
+			store.delete(k);
         }
         return {};
       },
@@ -107,7 +108,7 @@ function _Authorization(allow: boolean): ModelRoutingAuthorizationFactory<Prisma
 }
 
 /** Build a minimal app mounting the defaults router with a canonical authenticated session. */
-function _buildApp(prisma: PrismaClient, user: AuthUser | null = _authUser({ isPlatformOperator: true })): Express
+function _buildApp(prisma: PrismaClient, user: AuthUser | null = _authUser({ isPlatformOperator: true }), globalCommands?: GlobalModelRoutingDefaultCommandPort): Express
 {
   const app = express();
   app.use(express.json());
@@ -120,7 +121,20 @@ function _buildApp(prisma: PrismaClient, user: AuthUser | null = _authUser({ isP
     });
   }
   const resolveCaller = user === null ? function _NoCaller() { return null; } : function _Caller() { return { siloId: "acme", principalId: "principal-1" }; };
-  app.use("/api/v1/model-routing/defaults", modelRoutingDefaultsRouter(prisma, resolveCaller, _Authorization(user?.isPlatformOperator === true)));
+  const durableGlobal = globalCommands ?? {
+	upsert: async function _Upsert(caller, command)
+	{
+		if (user?.isPlatformOperator !== true)
+			throw new ModelRoutingAuthorizationError();
+		const existing = await prisma.modelRoutingDefault.findFirst({ where: { siloId: caller.siloId, scope: "Global", clusterTenant: null } });
+		const data = { defaultModel: command.defaultModel, autoConfig: command.autoConfig as unknown as Prisma.InputJsonValue };
+		const row = existing === null
+			? await prisma.modelRoutingDefault.create({ data: { siloId: caller.siloId, scope: "Global", clusterTenant: null, ...data } })
+			: await prisma.modelRoutingDefault.update({ where: { id_siloId: { id: existing.id, siloId: caller.siloId } }, data });
+		return { status: "succeeded" as const, value: { id: row.id, scope: "global" as const, clusterTenant: null, defaultModel: row.defaultModel, autoConfig: row.autoConfig as never, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() } };
+	},
+  } satisfies GlobalModelRoutingDefaultCommandPort;
+  app.use("/api/v1/model-routing/defaults", modelRoutingDefaultsRouter(prisma, resolveCaller, _Authorization(user?.isPlatformOperator === true), durableGlobal));
   app.use(_ErrorHandler({ warn: function _warn() {}, error: function _error() {} } as never));
   return app;
 }
@@ -160,35 +174,22 @@ describe("modelRoutingDefaultsRouter", function _suite()
     expect(list.body[0].defaultModel).toBe("b");
   });
 
-  it("stays idempotent when a concurrent create loses the race (P2002 -> update)", async function _upsertRace()
+  it("maps an active durable Global alias command to 409", async function _upsertRace()
   {
-    const raced: Row = { id: "default-raced", scope: "Global", clusterTenant: null, defaultModel: "openai/gpt-4o", autoConfig: null, createdAt: new Date(), updatedAt: new Date() };
-    let firstFind = true;
-    const prisma = {
-      orgMembership: { findMany: async function _fm() { return []; } },
-      modelRoutingDefault: {
-        // First lookup (pre-create) sees nothing; the post-P2002 lookup finds the racer's row.
-        findFirst: async function _ff() { if (firstFind) { firstFind = false; return null; } return raced; },
-        create: async function _create() { throw new Prisma.PrismaClientKnownRequestError("dup", { code: "P2002", clientVersion: "test" }); },
-        update: async function _update(args: { where: { id: string }; data: Row }) { return { ...raced, ...args.data, updatedAt: new Date() }; },
-      },
-    } as unknown as PrismaClient;
-	Object.assign(prisma, { $transaction: async function _Transaction(operation: (transaction: PrismaClient) => Promise<unknown>) { return operation(prisma); } });
+	const commands = { upsert: async function _Busy() { return { status: "busy" as const, commandId: "command-a" }; } };
+	const res = await request(_buildApp(_mockPrisma(new Map()), _authUser({ isPlatformOperator: true }), commands)).put("/api/v1/model-routing/defaults").send({ defaultModel: "anthropic/claude" });
 
-    const res = await request(_buildApp(prisma)).put("/api/v1/model-routing/defaults").send({ defaultModel: "anthropic/claude" });
-
-    expect(res.status).toBe(200);
-    expect(res.body.id).toBe("default-raced");
-    expect(res.body.defaultModel).toBe("anthropic/claude");
+	expect(res.status).toBe(409);
+	expect(res.body).toMatchObject({ code: "PROVIDER_EFFECT_BUSY", commandId: "command-a" });
   });
 
-  it("accepts an auto-config-only default", async function _autoOnly()
+  it("rejects an auto-config-only Global default", async function _autoOnly()
   {
     const app = _buildApp(_mockPrisma(new Map()));
     const res = await request(app).put("/api/v1/model-routing/defaults").send({ autoConfig: _autoConfig() });
 
-    expect(res.status).toBe(200);
-    expect(res.body.autoConfig.objective).toBe("balanced");
+	expect(res.status).toBe(400);
+	expect(res.body.code).toBe("VALIDATION_ERROR");
   });
 
   it("rejects a default that names neither a model nor an auto config (400)", async function _emptyRejected()
@@ -217,7 +218,7 @@ describe("modelRoutingDefaultsRouter", function _suite()
 
 	it("preserves extension fields in a validated auto config", async function _PreserveExtensions()
 	{
-		const response = await request(_buildApp(_mockPrisma(new Map()))).put("/api/v1/model-routing/defaults").send({ autoConfig: { ..._autoConfig(), futureKnob: "kept" } });
+		const response = await request(_buildApp(_mockPrisma(new Map()))).put("/api/v1/model-routing/defaults").send({ defaultModel: "custom/model", autoConfig: { ..._autoConfig(), futureKnob: "kept" } });
 
 		expect(response.status).toBe(200);
 		expect(response.body.autoConfig.futureKnob).toBe("kept");
@@ -264,17 +265,29 @@ describe("modelRoutingDefaultsRouter", function _suite()
     expect(res.body.code).toBe("FORBIDDEN");
   });
 
-  it("deletes an existing default", async function _delete()
+  it("deletes an existing ClusterTenant default", async function _delete()
   {
     const store = new Map<string, Row>();
     const app = _buildApp(_mockPrisma(store));
-    const put = await request(app).put("/api/v1/model-routing/defaults").send({ defaultModel: "x" });
+	const put = await request(app).put("/api/v1/model-routing/defaults").send({ scope: "clusterTenant", clusterTenant: "tenant-a", defaultModel: "x" });
     const res = await request(app).delete(`/api/v1/model-routing/defaults/${put.body.id}`);
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("deleted");
     expect(store.size).toBe(0);
   });
+
+	it("returns 409 instead of deleting the governed Global default", async function _BlocksGlobalDelete()
+	{
+		const store = new Map<string, Row>();
+		const app = _buildApp(_mockPrisma(store));
+		const put = await request(app).put("/api/v1/model-routing/defaults").send({ defaultModel: "x" });
+		const response = await request(app).delete(`/api/v1/model-routing/defaults/${put.body.id}`);
+
+		expect(response.status).toBe(409);
+		expect(response.body.code).toBe("GLOBAL_MODEL_DEFAULT_GOVERNED");
+		expect(store.size).toBe(1);
+	});
 
   it("fails closed when no durable Principal is available", async function _failClosed()
   {

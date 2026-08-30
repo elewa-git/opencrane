@@ -30,11 +30,13 @@ function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map
     !where || ((where.scope === undefined || r.scope === where.scope)
       && (where.clusterTenant === undefined || r.clusterTenant === where.clusterTenant)
       && (where.provider === undefined || r.provider === where.provider));
-  const matchModel = (r: Row, where?: { scope?: string; clusterTenant?: string | null; publicModelName?: string; isDefault?: boolean }): boolean =>
+  const matchModel = (r: Row, where?: { scope?: string; clusterTenant?: string | null; publicModelName?: string; isDefault?: boolean; providerCredentialId?: string; OR?: readonly unknown[] }): boolean =>
     !where || ((where.scope === undefined || r.scope === where.scope)
       && (where.clusterTenant === undefined || r.clusterTenant === where.clusterTenant)
       && (where.publicModelName === undefined || r.publicModelName === where.publicModelName)
-      && (where.isDefault === undefined || r.isDefault === where.isDefault));
+      && (where.isDefault === undefined || r.isDefault === where.isDefault)
+	  && (where.providerCredentialId === undefined || r.providerCredentialId === where.providerCredentialId)
+	  && (where.OR === undefined || r.publicModelName === "auto" || r.hasAgentRevision === true));
 	const client = {
     modelDefinition: {
       findMany: async function _mFindMany(args: { where: Record<string, unknown>; take?: number })
@@ -99,9 +101,13 @@ function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map
       deleteMany: async function _deleteMany(args: { where: { provider: string } })
       {
         let count = 0;
-        for (const [id, r] of store)
-        {
-          if (match(r, args.where)) { store.delete(id); count++; }
+		for (const [id, r] of store)
+		{
+		  if (match(r, args.where))
+		  {
+			store.delete(id);
+			count++;
+		  }
         }
         return { count };
       },
@@ -166,7 +172,8 @@ function _mockCoreApi(secrets: Map<string, k8s.V1Secret>): k8s.CoreV1Api
     readNamespacedSecret: async function _read(args: { name: string })
     {
       const s = secrets.get(args.name);
-      if (!s) { throw _notFound(); }
+		  if (!s)
+			throw _notFound();
       return s;
     },
     createNamespacedSecret: async function _create(args: { body: k8s.V1Secret })
@@ -181,7 +188,8 @@ function _mockCoreApi(secrets: Map<string, k8s.V1Secret>): k8s.CoreV1Api
     },
     deleteNamespacedSecret: async function _delete(args: { name: string })
     {
-      if (!secrets.has(args.name)) { throw _notFound(); }
+		  if (!secrets.has(args.name))
+			throw _notFound();
       secrets.delete(args.name);
       return {};
     },
@@ -212,11 +220,10 @@ function _buildApp(store: Map<string, Row>, secrets: Map<string, k8s.V1Secret>, 
 		for (const entry of catalog?.models ?? [])
 		{
 			const modelId = `model-${entry.slug}`;
-			const hasDefault = Array.from(models.values()).some(function _Default(model) { return model.isDefault === true; });
-			models.set(modelId, { id: modelId, scope: "Global", clusterTenant: null, publicModelName: entry.slug, upstreamModel: entry.slug, litellmModelId: `deployment:${entry.slug}`, apiBase: null, isDefault: !hasDefault && entry.className === catalog?.defaultClass, providerCredentialId: id, createdAt: new Date(), updatedAt: new Date() });
+			models.set(modelId, { id: modelId, scope: "Global", clusterTenant: null, publicModelName: entry.slug, upstreamModel: entry.slug, litellmModelId: `deployment:${entry.slug}`, apiBase: null, isDefault: false, providerCredentialId: id, createdAt: new Date(), updatedAt: new Date() });
 		}
 		const projections = (catalog?.models ?? []).map(function _Projection(entry) { return { publicModelName: entry.slug, upstreamModel: entry.slug, litellmModelId: `deployment:${entry.slug}` }; });
-		return { status: ProviderEffectExecutionStatuses.Succeeded, result: { kind: ProviderEffectCommandKinds.SetByokKey, provider: payload.provider, secretRef: `byok-provider-key-${payload.provider}`, litellmCredentialName: null, models: projections, defaultPublicModelName: catalog?.models.find(function _Default(entry) { return entry.className === catalog.defaultClass; })?.slug ?? null, embedding: { status: catalog?.embeddingModel === undefined ? ProviderEmbeddingReconciliationStatuses.NotApplicable : ProviderEmbeddingReconciliationStatuses.Skipped, deployments: [] } } };
+		return { status: ProviderEffectExecutionStatuses.Succeeded, result: { kind: ProviderEffectCommandKinds.SetByokKey, provider: payload.provider, secretRef: `byok-provider-key-${payload.provider}`, litellmCredentialName: null, models: projections, embedding: { status: catalog?.embeddingModel === undefined ? ProviderEmbeddingReconciliationStatuses.NotApplicable : ProviderEmbeddingReconciliationStatuses.Skipped, deployments: [] } } };
       }
 		for (const [id, row] of store)
 		{
@@ -235,13 +242,21 @@ describe("providerByokRouter", function _suite()
 {
   // LiteLLM is unconfigured in tests, so the /credentials push is a no-op and keys stay Secret-only.
   const _saved: Record<string, string | undefined> = {};
-  beforeAll(function _clearLitellmEnv()
-  {
-    for (const k of ["LITELLM_ENDPOINT", "LITELLM_MASTER_KEY"]) { _saved[k] = process.env[k]; delete process.env[k]; }
-  });
+	beforeAll(function _clearLitellmEnv()
+	{
+		for (const k of ["LITELLM_ENDPOINT", "LITELLM_MASTER_KEY"])
+		{
+			_saved[k] = process.env[k];
+			delete process.env[k];
+		}
+	});
   afterAll(function _restoreLitellmEnv()
   {
-    for (const k of ["LITELLM_ENDPOINT", "LITELLM_MASTER_KEY"]) { if (_saved[k] !== undefined) { process.env[k] = _saved[k]; } }
+		for (const k of ["LITELLM_ENDPOINT", "LITELLM_MASTER_KEY"])
+		{
+			if (_saved[k] !== undefined)
+				process.env[k] = _saved[k];
+		}
   });
 
   it("never echoes the raw key back in the response body", async function _noEcho()
@@ -251,13 +266,26 @@ describe("providerByokRouter", function _suite()
     expect(JSON.stringify(res.body)).not.toContain("sk-secret-xyz");
   });
 
-	it("returns only after the injected executor projects a usable provider model and default", async function _ProjectsModels()
+	it("returns only after the injected executor projects usable provider models", async function _ProjectsModels()
 	{
 		const models = new Map<string, Row>();
 		const response = await request(_buildApp(new Map(), new Map(), { authorized: true }, models)).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-live-123" });
 
 		expect(response.status).toBe(200);
-		expect(Array.from(models.values()).find(function _Flagship(model) { return model.publicModelName === "openai/gpt-5.5"; })).toMatchObject({ isDefault: true, providerCredentialId: "cred-1", litellmModelId: "deployment:openai/gpt-5.5" });
+		expect(Array.from(models.values()).find(function _Flagship(model) { return model.publicModelName === "openai/gpt-5.5"; })).toMatchObject({ isDefault: false, providerCredentialId: "cred-1", litellmModelId: "deployment:openai/gpt-5.5" });
+	});
+
+	it("returns 409 before admitting deletion while any registered model still uses the provider", async function _BlocksProviderWithModels()
+	{
+		const store = new Map<string, Row>([["cred-1", { id: "cred-1", scope: "Global", clusterTenant: null, provider: "openai", updatedAt: new Date() }]]);
+		const models = new Map<string, Row>([["model-1", { id: "model-1", scope: "Global", clusterTenant: null, publicModelName: "openai/gpt-5.5", upstreamModel: "openai/gpt-5.5", providerCredentialId: "cred-1", isDefault: false }]]);
+		const commands = new Map<string, Row>();
+		const response = await request(_buildApp(store, new Map(), { authorized: true }, models, commands)).delete("/api/v1/providers/byok/openai");
+
+		expect(response.status).toBe(409);
+		expect(response.body.code).toBe("PROVIDER_CONNECTION_GOVERNED");
+		expect(commands.size).toBe(0);
+		expect(store.has("cred-1")).toBe(true);
 	});
 
 	it.each(["put", "delete"] as const)("returns 409 for a conflicting %s while a provider command is claimed", async function _ProviderConflict(method)

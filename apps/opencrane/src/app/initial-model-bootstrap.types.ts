@@ -5,6 +5,8 @@ import type { InitialModelBootstrapConfig } from "./config.types";
 /** Dependencies the app composes for initial provider-key registration. */
 export interface InitialModelBootstrapDependencies
 {
+	/** Deployment-frozen silo that owns initial provider projections. */
+	readonly siloId: string;
 	/** The main product database client, passed through the provider-custody authority. */
 	readonly prisma: Parameters<typeof _ProvisionByokKey>[0]["prisma"];
 	/** Release-local Kubernetes Secret custody client passed through the provider authority. */

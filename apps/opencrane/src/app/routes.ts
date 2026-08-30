@@ -8,7 +8,7 @@ import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/auth
 import { groupsRouter } from "@opencrane/backend/server/iam/groups";
 import { _IssueAttemptLiteLlmKey, modelRoutingDefaultsRouter } from "@opencrane/backend/server/gateways/model-routing";
 import { _CreateMcpCallerResolver, mcpOperatorRouter, mcpTaskRouter } from "@opencrane/backend/server/gateways/mcp";
-import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter, type ProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
+import { _CreateGlobalModelRoutingDefaultCommandPort, providerCredentialsRouter, providerByokRouter, modelRegistryRouter, type ProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
 import { PrismaResourceShareUnitOfWork, ResourceShareService, resourceSharesRouter, type ResourceShareCallerResolver } from "@opencrane/backend/server/iam/grants";
 import { PrismaAuthenticatedPrincipalDirectoryUnitOfWork, type AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
@@ -88,7 +88,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(mcpWorkflows.unitOfWork, principalDirectory, mcpWorkflows.eraProbeWorkflow, mcpWorkflows.ociImageValidationWorkflow, mcpWorkflows.ociImageArtifacts) },
 		{ method: "use", path: "/api/v1/mcp", handler: mcpTaskRouter(mcpWorkflows.unitOfWork, mcpRuntime.taskWorkflow, _CreateMcpCallerResolver(principalDirectory)) },
 		{ method: "use", path: "/api/v1/mcp", handler: mcpRuntime.promotion },
-		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma) },
+		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma, undefined, undefined, _CreateGlobalModelRoutingDefaultCommandPort(prisma, providerEffects)) },
 		{ method: "use", path: "/api/v1/providers/credentials", handler: providerCredentialsRouter(prisma) },
 		{ method: "use", path: "/api/v1/providers/byok", handler: providerByokRouter(prisma, coreApi, serverNamespace, providerEffects) },
 		{ method: "use", path: "/api/v1/models", handler: modelRegistryRouter(prisma, providerEffects) },

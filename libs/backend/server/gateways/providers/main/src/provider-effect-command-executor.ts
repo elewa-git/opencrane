@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 
 import { ___DoWithTrace, ___MarkActiveSpanFailed, type Logger } from "@opencrane/backend/observability";
 
-import { _IsProviderEffectOutcomeUncertain, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "./provider-effect-command-errors";
-import { ProviderEffectExecutionStatuses, type ProviderEffectCommandExecutor, type ProviderEffectCommandHandler, type ProviderEffectCommandUnitOfWork, type ProviderEffectEphemeralMaterial, type ProviderEffectExecutionContext, type ProviderEffectExecutionResult } from "./provider-effect-command.types";
+import { _IsProviderEffectFinalizationBlocked, _IsProviderEffectOutcomeUncertain, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "./provider-effect-command-errors";
+import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, type ProviderEffectCommandExecutor, type ProviderEffectCommandHandler, type ProviderEffectCommandRecord, type ProviderEffectCommandUnitOfWork, type ProviderEffectEphemeralMaterial, type ProviderEffectExecutionContext, type ProviderEffectExecutionResult } from "./provider-effect-command.types";
 
 /**
  * Delivers admitted provider commands without holding a database transaction during external I/O.
@@ -56,6 +56,11 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 		// 1. Derive a command-bound verifier in memory, so the database can match a retry without storing or correlating raw keys.
 		const verifier = _materialVerifier(commandId, material);
 		const claim = await ___DoWithTrace("provider.effect.claim", { commandId, deliverySource }, function _Claim() { return self.unitOfWork.run(function _PersistClaim(repository, authorization) { return repository.claim(commandId, verifier, context, authorization, new Date()); }); });
+		if (claim.status === ProviderEffectExecutionStatuses.AlreadySucceeded && claim.command !== null)
+		{
+			const followed = await self._resumeFollowUp(claim.command, context, deliverySource);
+			return followed ?? { status: claim.status, result: null };
+		}
 		if (claim.status !== ProviderEffectExecutionStatuses.Claimed || claim.command === null)
 		{
 			if (claim.status !== ProviderEffectExecutionStatuses.Succeeded && claim.status !== ProviderEffectExecutionStatuses.AlreadySucceeded)
@@ -116,16 +121,57 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 			self.log.info(fields, "provider effect delivery is finalizing saved external evidence");
 
 		// 3. Save or recover the result only for the current fence, authority, and resource generation.
-		const completed = await ___DoWithTrace("provider.effect.complete", fields, function _Complete() { return self.unitOfWork.run(function _PersistResult(repository, authorization) { return repository.complete(command, result, context, authorization, new Date()); }); });
-		if (completed === ProviderEffectExecutionStatuses.Succeeded)
+		let completion;
+		try
+		{
+			completion = await ___DoWithTrace("provider.effect.complete", fields, function _Complete() { return self.unitOfWork.run(function _PersistResult(repository, authorization) { return repository.complete(command, result, context, authorization, new Date()); }); });
+		}
+		catch (error)
+		{
+			if (!_IsProviderEffectFinalizationBlocked(error))
+				throw error;
+			const status = await self.unitOfWork.run(function _Block(repository) { return repository.blockFinalization(command, result); });
+			___MarkActiveSpanFailed();
+			self.log.warn({ ...fields, status }, "provider effect result remains blocked after protected finalization rolled back");
+			return { status, result: null };
+		}
+		if (completion.status === ProviderEffectExecutionStatuses.Succeeded)
 			self.log.info(fields, "provider effect delivery completed");
 		else
 		{
 			___MarkActiveSpanFailed();
-			self.log.warn({ ...fields, status: completed }, "provider effect result was fenced from current state");
+			self.log.warn({ ...fields, status: completion.status }, "provider effect result was fenced from current state");
 		}
-		return completed === ProviderEffectExecutionStatuses.Succeeded ? { status: completed, result } : { status: completed, result: null };
+		if (completion.status !== ProviderEffectExecutionStatuses.Succeeded)
+			return { status: completion.status, result: null };
+		if (completion.followUpCommand !== null)
+		{
+			const followed = await self._executeFollowUp(completion.followUpCommand, context, deliverySource);
+			if (followed.status !== ProviderEffectExecutionStatuses.Succeeded && followed.status !== ProviderEffectExecutionStatuses.AlreadySucceeded)
+				return followed;
+		}
+		return { status: completion.status, result };
 		});
+	}
+
+	/** Loads and delivers the exact child saved by a previously succeeded parent command. */
+	private async _resumeFollowUp(parent: ProviderEffectCommandRecord, context: ProviderEffectExecutionContext, deliverySource: "request" | "reconciler"): Promise<ProviderEffectExecutionResult | null>
+	{
+		if (parent.followUpCommandId === null)
+			return null;
+		const child = await this.unitOfWork.run(function _Find(repository) { return repository.findFollowUp(parent); });
+		if (child === null)
+			throw new Error("provider effect parent references a missing follow-up command");
+		return this._executeFollowUp(child, context, deliverySource);
+	}
+
+	/** Delivers one validated RegisterModel child through its own current-authority claim. */
+	private _executeFollowUp(child: ProviderEffectCommandRecord, context: ProviderEffectExecutionContext, deliverySource: "request" | "reconciler"): Promise<ProviderEffectExecutionResult>
+	{
+		if (child.siloId !== context.siloId || child.principalId !== context.principalId || child.executorProfile !== context.executorProfile || child.payload.kind !== ProviderEffectCommandKinds.RegisterModel || child.resourceId !== child.payload.value.modelDefinitionId)
+			throw new Error("provider effect follow-up command does not match its parent execution context");
+		const childContext: ProviderEffectExecutionContext = { ...context, resourceKind: child.resourceKind, resourceId: child.resourceId };
+		return this._execute(child.id, {}, childContext, deliverySource);
 	}
 
 	/** @inheritdoc */

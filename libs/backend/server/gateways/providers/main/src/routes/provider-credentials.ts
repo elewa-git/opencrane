@@ -115,7 +115,7 @@ export function providerCredentialsRouter(prisma: PrismaClient, resolveCaller: P
     const clusterTenant = typeof req.query.clusterTenant === "string" ? req.query.clusterTenant : undefined;
 	const rows = await providers.run(async function _List(transaction, authorization)
 	{
-		const candidates = await transaction.providerCredential.findMany({ where: clusterTenant ? { clusterTenant } : undefined, orderBy: { createdAt: "asc" } });
+		const candidates = await transaction.providerCredential.findMany({ where: { siloId: caller.siloId, ...(clusterTenant ? { clusterTenant } : {}) }, orderBy: { createdAt: "asc" } });
 		const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: candidates.map(row => ({ kind: ProductAuthorizationResourceKinds.ProviderConnection, id: row.id })), nowEpochMs: Date.now() });
 		const entitledIds = new Set(entitled.map(resource => resource.id));
 		return candidates.filter(row => entitledIds.has(row.id));
@@ -131,7 +131,7 @@ export function providerCredentialsRouter(prisma: PrismaClient, resolveCaller: P
 		return;
 	const row = await providers.run(async function _Get(transaction, authorization)
 	{
-		const candidate = await transaction.providerCredential.findUnique({ where: { id: req.params.id } });
+		const candidate = await transaction.providerCredential.findUnique({ where: { id_siloId: { id: req.params.id, siloId: caller.siloId } } });
 		if (candidate === null)
 			return null;
 		const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: [{ kind: ProductAuthorizationResourceKinds.ProviderConnection, id: candidate.id }], nowEpochMs: Date.now() });
@@ -169,7 +169,7 @@ export function providerCredentialsRouter(prisma: PrismaClient, resolveCaller: P
 		const created = await providers.runDatabaseMutation(async function _Create(transaction, authorization)
 		{
 			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "create-provider-credential", write });
-			const credential = await transaction.providerCredential.create({ data: { scope: _toPrismaScope(scope), clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null, provider: write.provider.trim(), secretRef: write.secretRef.trim(), litellmCredentialName: write.litellmCredentialName?.trim() || null } });
+			const credential = await transaction.providerCredential.create({ data: { siloId: caller.siloId, scope: _toPrismaScope(scope), clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null, provider: write.provider.trim(), secretRef: write.secretRef.trim(), litellmCredentialName: write.litellmCredentialName?.trim() || null } });
 			await _GrantProviderResourceCreatorUse(authorization, caller, { kind: ProductAuthorizationResourceKinds.ProviderConnection, id: credential.id }, new Date());
 			return credential;
 		});
@@ -205,12 +205,12 @@ export function providerCredentialsRouter(prisma: PrismaClient, resolveCaller: P
 	{
 		const updated = await providers.runDatabaseMutation(async function _Update(transaction, authorization)
 		{
-			const existing = await transaction.providerCredential.findUnique({ where: { id: req.params.id } });
+			const existing = await transaction.providerCredential.findUnique({ where: { id_siloId: { id: req.params.id, siloId: caller.siloId } } });
 			if (existing === null)
 				return null;
 			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "update-provider-credential", id: existing.id, write });
 			const data: Prisma.ProviderCredentialUpdateInput = { scope: _toPrismaScope(scope), clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null, provider: write.provider.trim(), secretRef: write.secretRef.trim(), litellmCredentialName: write.litellmCredentialName?.trim() || null };
-			return transaction.providerCredential.update({ where: { id: existing.id }, data });
+			return transaction.providerCredential.update({ where: { id_siloId: { id: existing.id, siloId: caller.siloId } }, data });
 		});
 		if (updated === null)
 		{
@@ -236,11 +236,11 @@ export function providerCredentialsRouter(prisma: PrismaClient, resolveCaller: P
 	{
 		const deleted = await providers.runDatabaseMutation(async function _Delete(transaction, authorization)
 		{
-			const existing = await transaction.providerCredential.findUnique({ where: { id: req.params.id } });
+			const existing = await transaction.providerCredential.findUnique({ where: { id_siloId: { id: req.params.id, siloId: caller.siloId } } });
 			if (existing === null)
 				return false;
 			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "delete-provider-credential", id: existing.id });
-			await transaction.providerCredential.delete({ where: { id: existing.id } });
+			await transaction.providerCredential.delete({ where: { id_siloId: { id: existing.id, siloId: caller.siloId } } });
 			return true;
 		});
 		if (!deleted)

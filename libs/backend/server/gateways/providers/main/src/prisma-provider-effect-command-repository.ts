@@ -1,14 +1,16 @@
 import { randomUUID } from "node:crypto";
 
 import { Prisma, ProviderEffectCommandState } from "@prisma/client";
+import { ModelRoutingScope, type AutoRoutingConfig } from "@opencrane/contracts";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { _BYOK_PROVIDER_CATALOG, ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
 
-import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type AdmitProviderEffectCommand, type ProviderEffectAdmissionResult, type ProviderEffectClaimResult, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectExecutionContext, type ProviderEffectHandlerResult, type ProviderEffectResourceBlocker } from "./provider-effect-command.types";
-import { _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "./provider-effect-command-errors";
+import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type AdmitProviderEffectCommand, type ProviderEffectAdmissionResult, type ProviderEffectClaimResult, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectCompletionResult, type ProviderEffectExecutionContext, type ProviderEffectHandlerResult, type ProviderEffectResourceBlocker } from "./provider-effect-command.types";
+import { ProviderEffectFinalizationBlockedError, _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "./provider-effect-command-errors";
 import { _ParseProviderEffectCommandPayload, _ParseProviderEffectHandlerResult, _ValidateProviderEffectCommandResourceBinding } from "./provider-effect-command.validator";
+import { PrismaGlobalModelAliasRepository } from "./prisma-global-model-alias-repository";
 
 /** Maximum number of external deliveries before a command needs a fresh administrator request. */
 const _MAX_DELIVERIES = 3;
@@ -78,6 +80,63 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 	}
 
 	/** @inheritdoc */
+	async findFollowUp(parent: ProviderEffectCommandRecord): Promise<ProviderEffectCommandRecord | null>
+	{
+		if (parent.payload.kind !== ProviderEffectCommandKinds.SetByokKey || parent.state !== ProviderEffectCommandStates.Succeeded || parent.followUpCommandId === null)
+			return null;
+		const currentParent = await this.transaction.providerEffectCommand.findUnique({ where: { id: parent.id } });
+		if (currentParent === null || currentParent.state !== ProviderEffectCommandState.Succeeded || currentParent.kind !== ProviderEffectCommandKinds.SetByokKey || currentParent.followUpCommandId !== parent.followUpCommandId)
+			return null;
+		const child = await this._findFollowUpCandidate(parent, parent.followUpCommandId, true);
+		if (child === null)
+			throw new Error("provider effect parent references an invalid follow-up command");
+		return child;
+	}
+
+	/** @inheritdoc */
+	async findFollowUpCandidate(parent: Pick<ProviderEffectCommandRecord, "siloId" | "principalId" | "executorProfile">, commandId: string): Promise<ProviderEffectCommandRecord | null>
+	{
+		return this._findFollowUpCandidate(parent, commandId, false);
+	}
+
+	/** Loads one alias child while distinguishing shared blockers from persisted parent corruption. */
+	private async _findFollowUpCandidate(parent: Pick<ProviderEffectCommandRecord, "siloId" | "principalId" | "executorProfile">, commandId: string, strictPrincipal: boolean): Promise<ProviderEffectCommandRecord | null>
+	{
+		const row = await this.transaction.providerEffectCommand.findUnique({ where: { id: commandId } });
+		if (row === null)
+			return null;
+		if (row.principalId !== parent.principalId && !strictPrincipal)
+			return null;
+		if (row.siloId !== parent.siloId || row.principalId !== parent.principalId || row.executorProfile !== parent.executorProfile || row.kind !== ProviderEffectCommandKinds.RegisterModel || row.resourceKind !== ProductAuthorizationResourceKinds.ModelDefinition)
+			throw new Error("provider effect parent references an invalid follow-up command");
+		const child = _toRecord(row);
+		if (child.payload.kind !== ProviderEffectCommandKinds.RegisterModel || child.payload.value.publicModelName !== "auto" || child.payload.value.routingDefaultId === null || child.payload.value.selectedModelDefinitionId === null || child.resourceId !== child.payload.value.modelDefinitionId)
+			throw new Error("provider effect follow-up is not bound to the reserved global alias");
+		return child;
+	}
+
+	/** @inheritdoc */
+	async reconcileGlobalRoutingDefault(owner: Pick<ProviderEffectCommandRecord, "siloId" | "principalId" | "executorProfile">, defaultModel: string, autoConfig: AutoRoutingConfig | null, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, now: Date)
+	{
+		const selected = await this.transaction.modelDefinition.findFirst({ where: { siloId: owner.siloId, scope: "Global", clusterTenant: null, publicModelName: defaultModel } });
+		if (selected === null || selected.publicModelName === "auto" || selected.publicModelName === "auto-embedding" || selected.litellmModelId.startsWith("pending:"))
+			throw new ProviderEffectFinalizationBlockedError();
+		const argumentsDigest = ___DigestCanonicalJson({ operation: "upsert-global-model-routing-default", siloId: owner.siloId, defaultModel, autoConfig } as JsonValue);
+		const admission = await authorization.admitPrincipal({ siloId: owner.siloId, principalId: owner.principalId, actorKind: context.actorKind, actorId: context.actorId, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: owner.siloId }, action: ProductAuthorizationActions.Administer, argumentsDigest, nowEpochMs: now.getTime() });
+		if (admission.outcome !== AuthorizationDecisionOutcomes.Allow || admission.evidence === null)
+			throw new ProviderEffectFinalizationBlockedError();
+		let routing = await this.transaction.modelRoutingDefault.findFirst({ where: { siloId: owner.siloId, scope: "Global", clusterTenant: null } });
+		const autoConfigValue = autoConfig === null ? Prisma.JsonNull : autoConfig as unknown as Prisma.InputJsonValue;
+		if (routing === null)
+			routing = await this.transaction.modelRoutingDefault.create({ data: { siloId: owner.siloId, scope: "Global", clusterTenant: null, defaultModel, autoConfig: autoConfigValue } });
+		else
+			routing = await this.transaction.modelRoutingDefault.update({ where: { id_siloId: { id: routing.id, siloId: owner.siloId } }, data: { defaultModel, autoConfig: autoConfigValue } });
+		const alias = this._globalAlias();
+		const child = await alias.reconcileRoutingDefault(owner, routing.id, context, authorization, now);
+		return { value: { id: routing.id, scope: ModelRoutingScope.Global, clusterTenant: null, defaultModel: routing.defaultModel, autoConfig: routing.autoConfig as AutoRoutingConfig | null, createdAt: routing.createdAt.toISOString(), updatedAt: routing.updatedAt.toISOString() }, child };
+	}
+
+	/** @inheritdoc */
 	async claim(commandId: string, materialVerifier: `sha256:${string}` | null, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, now: Date): Promise<ProviderEffectClaimResult>
 	{
 		// 1. Read the saved state so terminal commands and unexpired claims cannot run again.
@@ -92,7 +151,7 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 		if (!_contextMatches(current, context))
 			return { status: ProviderEffectExecutionStatuses.Failed, command: null };
 		if (current.state === ProviderEffectCommandState.Succeeded)
-			return { status: ProviderEffectExecutionStatuses.AlreadySucceeded, command: null };
+			return { status: ProviderEffectExecutionStatuses.AlreadySucceeded, command: _toRecord(current) };
 		if (current.state === ProviderEffectCommandState.Failed)
 			return { status: ProviderEffectExecutionStatuses.Failed, command: null };
 		if (current.state === ProviderEffectCommandState.Claimed && current.claimExpiresAt !== null && current.claimExpiresAt > now)
@@ -153,28 +212,61 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 	}
 
 	/** @inheritdoc */
-	async complete(command: ProviderEffectCommandRecord, result: ProviderEffectHandlerResult, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, completedAt: Date): Promise<ProviderEffectExecutionStatuses>
+	async complete(command: ProviderEffectCommandRecord, result: ProviderEffectHandlerResult, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, completedAt: Date): Promise<ProviderEffectCompletionResult>
 	{
 		const validatedResult = _ParseProviderEffectHandlerResult(result);
 		if (command.payload.kind !== validatedResult.kind)
 			throw new Error("provider effect result kind does not match its claimed command");
 		const current = await this.transaction.providerEffectCommand.findUnique({ where: { id: command.id } });
 		if (current === null || !_contextMatches(current, context) || current.state !== ProviderEffectCommandState.Claimed || current.claimFence !== command.claimFence || current.deliveryCount !== command.deliveryCount)
-			return ProviderEffectExecutionStatuses.Busy;
+			return { status: ProviderEffectExecutionStatuses.Busy, followUpCommand: null };
 		if (current.result !== null && !_sameResult(current.result, validatedResult))
-			return ProviderEffectExecutionStatuses.Busy;
+			return { status: ProviderEffectExecutionStatuses.Busy, followUpCommand: null };
 		if (!await this._isCurrentAndEligible(current) || !await _isAuthorized(current, context, authorization, completedAt))
 		{
 			const persisted = await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Claimed, claimFence: command.claimFence, deliveryCount: command.deliveryCount }, data: { result: validatedResult as unknown as Prisma.InputJsonValue, failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE } });
 			if (persisted.count !== 1)
-				return ProviderEffectExecutionStatuses.Busy;
-			return ProviderEffectExecutionStatuses.Busy;
+				return { status: ProviderEffectExecutionStatuses.Busy, followUpCommand: null };
+			return { status: ProviderEffectExecutionStatuses.Busy, followUpCommand: null };
 		}
 		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Claimed, claimFence: command.claimFence, deliveryCount: command.deliveryCount }, data: { state: ProviderEffectCommandState.Succeeded, result: validatedResult as unknown as Prisma.InputJsonValue, failureCode: null, claimFence: null, claimExpiresAt: null, completedAt } });
 		if (updated.count !== 1)
-			return ProviderEffectExecutionStatuses.Busy;
+			return { status: ProviderEffectExecutionStatuses.Busy, followUpCommand: null };
 		await this._persistProjection(command, validatedResult);
-		return ProviderEffectExecutionStatuses.Succeeded;
+		let followUpCommand: ProviderEffectCommandRecord | null = null;
+		if (validatedResult.kind === ProviderEffectCommandKinds.SetByokKey)
+		{
+			const alias = this._globalAlias();
+			followUpCommand = await alias.reconcileAfterSet(command, validatedResult, context, authorization, completedAt);
+			if (followUpCommand !== null)
+			{
+				const linked = await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Succeeded, followUpCommandId: null }, data: { followUpCommandId: followUpCommand.id } });
+				if (linked.count !== 1)
+					throw new Error("provider effect parent lost its durable follow-up link");
+			}
+		}
+		return { status: ProviderEffectExecutionStatuses.Succeeded, followUpCommand };
+	}
+
+	/** Opens the transaction-scoped alias planner used by Set and explicit routing writes. */
+	private _globalAlias(): PrismaGlobalModelAliasRepository
+	{
+		return new PrismaGlobalModelAliasRepository(this.transaction, this);
+	}
+
+	/** @inheritdoc */
+	async blockFinalization(command: ProviderEffectCommandRecord, result: ProviderEffectHandlerResult): Promise<ProviderEffectExecutionStatuses>
+	{
+		const validatedResult = _ParseProviderEffectHandlerResult(result);
+		if (validatedResult.kind !== command.payload.kind)
+			throw new Error("blocked provider effect result kind does not match its command");
+		const current = await this.transaction.providerEffectCommand.findUnique({ where: { id: command.id } });
+		if (current === null || current.state !== ProviderEffectCommandState.Claimed || current.claimFence !== command.claimFence || current.deliveryCount !== command.deliveryCount)
+			return ProviderEffectExecutionStatuses.Busy;
+		if (current.result !== null && !_sameResult(current.result, validatedResult))
+			return ProviderEffectExecutionStatuses.Busy;
+		await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Claimed, claimFence: command.claimFence, deliveryCount: command.deliveryCount }, data: { result: validatedResult as unknown as Prisma.InputJsonValue, failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE } });
+		return ProviderEffectExecutionStatuses.Busy;
 	}
 
 	/** Persists the protected product projection after the command fence has been atomically won. */
@@ -186,74 +278,57 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 			{
 				if (command.payload.kind !== ProviderEffectCommandKinds.SetByokKey || result.provider !== command.payload.value.provider || result.secretRef !== command.payload.value.secretRef || (result.litellmCredentialName !== null && result.litellmCredentialName !== command.payload.value.litellmCredentialName))
 					throw new Error("provider credential projection does not match its claimed command");
-				const where = { scope: "Global" as const, clusterTenant: null, provider: result.provider };
+				const where = { siloId: command.siloId, scope: "Global" as const, clusterTenant: null, provider: result.provider };
 				const existing = await this.transaction.providerCredential.findFirst({ where });
 				if (existing === null)
 				{
 					const credential = await this.transaction.providerCredential.create({ data: { ...where, secretRef: result.secretRef, litellmCredentialName: result.litellmCredentialName } });
-					await this._persistProviderModels(result, credential.id);
+					await this._persistProviderModels(command.siloId, result, credential.id);
 				}
 				else
 				{
 					await this.transaction.providerCredential.update({ where: { id: existing.id }, data: { secretRef: result.secretRef, litellmCredentialName: result.litellmCredentialName } });
-					await this._persistProviderModels(result, existing.id);
+					await this._persistProviderModels(command.siloId, result, existing.id);
 				}
 				return;
 			}
 			case ProviderEffectCommandKinds.DeleteByokKey:
 				if (command.payload.kind !== ProviderEffectCommandKinds.DeleteByokKey || result.provider !== command.payload.value.provider)
 					throw new Error("provider credential removal does not match its claimed command");
-				await this.transaction.providerCredential.deleteMany({ where: { scope: "Global", clusterTenant: null, provider: result.provider } });
+				await this.transaction.providerCredential.deleteMany({ where: { siloId: command.siloId, scope: "Global", clusterTenant: null, provider: result.provider } });
 				return;
 			case ProviderEffectCommandKinds.RegisterModel:
 			{
 				if (command.payload.kind !== ProviderEffectCommandKinds.RegisterModel)
 					throw new Error("model registration result belongs to a different provider command");
-				const model = await this.transaction.modelDefinition.updateMany({ where: { id: command.payload.value.modelDefinitionId, litellmModelId: `pending:${command.id}` }, data: { litellmModelId: result.litellmModelId } });
+				const model = await this.transaction.modelDefinition.updateMany({ where: { id: command.payload.value.modelDefinitionId, siloId: command.siloId, litellmModelId: `pending:${command.id}` }, data: { litellmModelId: result.litellmModelId } });
 				if (model.count !== 1)
 					throw new Error("current model registration command lost its pending projection");
 			}
 		}
 	}
 
-	/** Validates and saves the provider catalogue, first default, and routing default in this transaction. */
-	private async _persistProviderModels(result: Extract<ProviderEffectHandlerResult, { readonly kind: ProviderEffectCommandKinds.SetByokKey }>, providerCredentialId: string): Promise<void>
+	/** Validates and saves only the provider-specific catalogue in this transaction. */
+	private async _persistProviderModels(siloId: string, result: Extract<ProviderEffectHandlerResult, { readonly kind: ProviderEffectCommandKinds.SetByokKey }>, providerCredentialId: string): Promise<void>
 	{
 		const catalog = _BYOK_PROVIDER_CATALOG[result.provider];
-		const cheapest = catalog?.models.find(function _Fast(model) { return model.className === "fast"; }) ?? catalog?.models.at(-1);
 		const expected = [...(catalog?.models.map(function _Model(model) { return { publicModelName: model.slug, upstreamModel: model.slug }; }) ?? [])];
-		if (cheapest !== undefined)
-			expected.push({ publicModelName: "auto", upstreamModel: cheapest.slug });
 		const actual = result.models.map(function _Model(model) { return { publicModelName: model.publicModelName, upstreamModel: model.upstreamModel }; });
-		const expectedDefault = catalog?.models.find(function _Default(model) { return model.className === catalog.defaultClass; })?.slug ?? null;
-		if (JSON.stringify(actual) !== JSON.stringify(expected) || result.defaultPublicModelName !== expectedDefault)
+		if (JSON.stringify(actual) !== JSON.stringify(expected))
 			throw new Error("provider model projection does not match the fixed provider catalogue");
 		this._validateEmbeddingProjection(result, catalog?.embeddingModel?.slug ?? null);
 		for (const projection of result.models)
 		{
-			const existing = await this.transaction.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, publicModelName: projection.publicModelName } });
+			const existing = await this.transaction.modelDefinition.findFirst({ where: { siloId, scope: "Global", clusterTenant: null, publicModelName: projection.publicModelName } });
 			if (existing === null)
 			{
-				await this.transaction.modelDefinition.create({ data: { scope: "Global", clusterTenant: null, publicModelName: projection.publicModelName, upstreamModel: projection.upstreamModel, litellmModelId: projection.litellmModelId, apiBase: null, isDefault: false, providerCredentialId } });
+				await this.transaction.modelDefinition.create({ data: { siloId, scope: "Global", clusterTenant: null, publicModelName: projection.publicModelName, upstreamModel: projection.upstreamModel, litellmModelId: projection.litellmModelId, apiBase: null, isDefault: false, providerCredentialId } });
 				continue;
 			}
 			if (existing.upstreamModel !== projection.upstreamModel || existing.apiBase !== null)
 				throw new Error(`provider model '${projection.publicModelName}' conflicts with its fixed catalogue projection`);
-			await this.transaction.modelDefinition.update({ where: { id: existing.id }, data: { litellmModelId: projection.litellmModelId, providerCredentialId } });
+			await this.transaction.modelDefinition.update({ where: { id_siloId: { id: existing.id, siloId } }, data: { litellmModelId: projection.litellmModelId, providerCredentialId } });
 		}
-		const selectedDefaults = await this.transaction.modelDefinition.findMany({ where: { scope: "Global", clusterTenant: null, isDefault: true }, orderBy: { id: "asc" }, take: 2 });
-		if (selectedDefaults.length > 1)
-			throw new Error("Global model catalogue contains more than one default");
-		let selectedDefault = selectedDefaults[0] ?? null;
-		if (selectedDefault === null && result.defaultPublicModelName !== null)
-		{
-			const candidate = await this.transaction.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, publicModelName: result.defaultPublicModelName } });
-			if (candidate === null)
-				throw new Error("provider default model projection is missing");
-			selectedDefault = await this.transaction.modelDefinition.update({ where: { id: candidate.id }, data: { isDefault: true } });
-		}
-		if (selectedDefault !== null && await this.transaction.modelRoutingDefault.findFirst({ where: { scope: "Global", clusterTenant: null } }) === null)
-			await this.transaction.modelRoutingDefault.create({ data: { scope: "Global", clusterTenant: null, defaultModel: selectedDefault.publicModelName } });
 	}
 
 	/** Validates durable embedding evidence against the same fixed provider catalogue. */
@@ -321,13 +396,21 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 		if (current === null || current.id !== command.id || current.desiredGeneration !== command.desiredGeneration)
 			return false;
 		const payload = _ParseProviderEffectCommandPayload(command.kind as ProviderEffectCommandKinds, command.payload);
+		if (payload.kind === ProviderEffectCommandKinds.DeleteByokKey)
+		{
+			const credential = await this.transaction.providerCredential.findFirst({ where: { siloId: command.siloId, scope: "Global", clusterTenant: null, provider: payload.value.provider } });
+			if (credential === null)
+				return true;
+			const dependentModel = await this.transaction.modelDefinition.findFirst({ where: { siloId: command.siloId, providerCredentialId: credential.id } });
+			return dependentModel === null;
+		}
 		if (payload.kind !== ProviderEffectCommandKinds.RegisterModel)
 			return true;
-		const model = await this.transaction.modelDefinition.findUnique({ where: { id: payload.value.modelDefinitionId }, include: { providerCredential: true } });
+		const model = await this.transaction.modelDefinition.findUnique({ where: { id_siloId: { id: payload.value.modelDefinitionId, siloId: command.siloId } }, include: { providerCredential: true } });
 		if (model === null)
 			return false;
 		const expectedScope = payload.value.scope === "clusterTenant" ? "ClusterTenant" : "Global";
-		return model.scope === expectedScope
+		const directModelMatches = model.scope === expectedScope
 			&& model.clusterTenant === payload.value.clusterTenant
 			&& model.publicModelName === payload.value.publicModelName
 			&& model.upstreamModel === payload.value.upstreamModel
@@ -335,6 +418,25 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 			&& model.litellmModelId === `pending:${command.id}`
 			&& (model.providerCredential?.secretRef ?? null) === payload.value.apiKeyEnvRef
 			&& (model.providerCredential?.litellmCredentialName ?? null) === payload.value.litellmCredentialName;
+		if (!directModelMatches)
+			return false;
+		if (payload.value.routingDefaultId === null || payload.value.selectedModelDefinitionId === null)
+			return payload.value.publicModelName !== "auto" && payload.value.publicModelName !== "auto-embedding";
+		if (payload.value.publicModelName !== "auto" || payload.value.scope !== "global" || payload.value.clusterTenant !== null)
+			return false;
+		const routingDefault = await this.transaction.modelRoutingDefault.findUnique({ where: { id_siloId: { id: payload.value.routingDefaultId, siloId: command.siloId } } });
+		const selected = await this.transaction.modelDefinition.findUnique({ where: { id_siloId: { id: payload.value.selectedModelDefinitionId, siloId: command.siloId } }, include: { providerCredential: true } });
+		return routingDefault !== null
+			&& routingDefault.scope === "Global"
+			&& routingDefault.clusterTenant === null
+			&& selected !== null
+			&& !selected.litellmModelId.startsWith("pending:")
+			&& routingDefault.defaultModel === selected.publicModelName
+			&& model.upstreamModel === selected.upstreamModel
+			&& model.apiBase === selected.apiBase
+			&& model.providerCredentialId === selected.providerCredentialId
+			&& payload.value.apiKeyEnvRef === (selected.providerCredential?.secretRef ?? null)
+			&& payload.value.litellmCredentialName === (selected.providerCredential?.litellmCredentialName ?? null);
 	}
 
 	/** Marks a stale Prisma row terminal so it cannot be retried after authority or intent changes. */
@@ -396,6 +498,7 @@ function _toRecord(row: Prisma.ProviderEffectCommandGetPayload<Record<string, ne
 		claimFence: row.claimFence,
 		claimExpiresAt: row.claimExpiresAt,
 		failureCode: row.failureCode,
+		followUpCommandId: row.followUpCommandId,
 		result,
 	};
 }

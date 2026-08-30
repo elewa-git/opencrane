@@ -1085,7 +1085,19 @@
         "adapter": "PrismaProviderEffectCommandRepository",
         "contract": "ProviderEffectCommandRepository",
         "contractImportPath": "./provider-effect-command.types",
-        "constructs": []
+		"constructs": [
+		  {
+			"adapter": "PrismaGlobalModelAliasRepository",
+			"importPath": "./prisma-global-model-alias-repository"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/server/gateways/providers/main/src/prisma-global-model-alias-repository.ts",
+		"adapter": "PrismaGlobalModelAliasRepository",
+		"contract": "ProviderGlobalModelAliasRepository",
+		"contractImportPath": "./provider-effect-command.types",
+		"constructs": []
       }
     ],
     "unitsOfWork": [

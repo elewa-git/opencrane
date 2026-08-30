@@ -1,4 +1,4 @@
-import type { ModelRoutingScope } from "@opencrane/contracts";
+import type { AutoRoutingConfig, ModelRoutingDefault, ModelRoutingScope } from "@opencrane/contracts";
 import type { AuthorizationAuthority, ProductAuthorizationActorKind, ProductAuthorizationAdmissionEvidence } from "@opencrane/backend/server/iam/authorization";
 import type { ProviderEmbeddingReconciliationResult } from "@opencrane/backend/server/gateways/model-routing";
 
@@ -135,6 +135,10 @@ export interface RegisterModelEffectPayload
 	readonly apiKeyEnvRef: string | null;
 	/** Optional LiteLLM credential-store name. */
 	readonly litellmCredentialName: string | null;
+	/** Global routing-default row that selected this alias target, or null for direct registration. */
+	readonly routingDefaultId: string | null;
+	/** Exact model selected behind the global alias, or null for direct registration. */
+	readonly selectedModelDefinitionId: string | null;
 }
 
 /** Closed payload union selected by {@link ProviderEffectCommandKinds}. */
@@ -189,9 +193,14 @@ export interface ProviderEffectCommandRecord extends AdmitProviderEffectCommand
 	readonly claimExpiresAt: Date | null;
 	/** Fixed failure classification retained across exact-command retries, or null. */
 	readonly failureCode: string | null;
+	/** Exact durable child command created by this command's finalization, or null. */
+	readonly followUpCommandId: string | null;
 	/** Secret-free external outcome awaiting or recording atomic product projection. */
 	readonly result: ProviderEffectHandlerResult | null;
 }
+
+/** Stable subject/executor coordinates shared by parent and global-alias child commands. */
+export type ProviderEffectCommandOwner = Pick<ProviderEffectCommandRecord, "siloId" | "principalId" | "executorProfile">;
 
 /**
  * Identifies unfinished provider work that prevents a conflicting resource mutation.
@@ -260,6 +269,15 @@ export interface ProviderEffectClaimResult
 	readonly command: ProviderEffectCommandRecord | null;
 }
 
+/** Atomic finalization outcome and any exact durable child that must run next. */
+export interface ProviderEffectCompletionResult
+{
+	/** Final state won by the current claim fence. */
+	readonly status: ProviderEffectExecutionStatuses;
+	/** RegisterModel child committed with a successful Set-BYOK parent, or null. */
+	readonly followUpCommand: ProviderEffectCommandRecord | null;
+}
+
 /** One chat-model deployment that finalization must project after external registration succeeds. */
 export interface ProviderEffectModelProjection
 {
@@ -273,9 +291,27 @@ export interface ProviderEffectModelProjection
 
 /** Result returned by a provider effect handler for atomic database finalization. */
 export type ProviderEffectHandlerResult =
-	| { readonly kind: ProviderEffectCommandKinds.SetByokKey; readonly provider: string; readonly secretRef: string; readonly litellmCredentialName: string | null; readonly models: readonly ProviderEffectModelProjection[]; readonly defaultPublicModelName: string | null; readonly embedding: ProviderEmbeddingReconciliationResult }
+	| { readonly kind: ProviderEffectCommandKinds.SetByokKey; readonly provider: string; readonly secretRef: string; readonly litellmCredentialName: string | null; readonly models: readonly ProviderEffectModelProjection[]; readonly embedding: ProviderEmbeddingReconciliationResult }
 	| { readonly kind: ProviderEffectCommandKinds.DeleteByokKey; readonly provider: string }
 	| { readonly kind: ProviderEffectCommandKinds.RegisterModel; readonly litellmModelId: string };
+
+/** Transaction-scoped planner for the one global-within-silo chat-model alias. */
+export interface ProviderGlobalModelAliasRepository
+{
+	/** Resolves the silo routing winner and returns the exact durable registration child, if needed. */
+	reconcileAfterSet(parent: ProviderEffectCommandRecord, result: Extract<ProviderEffectHandlerResult, { readonly kind: ProviderEffectCommandKinds.SetByokKey }>, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, now: Date): Promise<ProviderEffectCommandRecord | null>;
+	/** Reconciles one already-selected silo routing default through the same durable child path. */
+	reconcileRoutingDefault(owner: ProviderEffectCommandOwner, routingDefaultId: string, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, now: Date): Promise<ProviderEffectCommandRecord | null>;
+}
+
+/** Atomic global-default projection and the exact external alias command it requires. */
+export interface ProviderGlobalRoutingDefaultResult
+{
+	/** Contract-safe routing row committed with the alias intent. */
+	readonly value: ModelRoutingDefault;
+	/** Exact child to deliver after commit, or null when the alias already converged. */
+	readonly child: ProviderEffectCommandRecord | null;
+}
 
 /** Transaction-scoped persistence used to admit and deliver provider commands. */
 export interface ProviderEffectCommandRepository
@@ -286,12 +322,20 @@ export interface ProviderEffectCommandRepository
 	findResourceBlocker(siloId: string, resourceKind: string, resourceId: string): Promise<ProviderEffectResourceBlocker | null>;
 	/** Selects the oldest database-complete command that a background pass may safely resume. */
 	nextRecoverable(now: Date): Promise<ProviderEffectCommandRecord | null>;
+	/** Loads the validated reserved-auto child linked by one succeeded Set-BYOK parent. */
+	findFollowUp(parent: ProviderEffectCommandRecord): Promise<ProviderEffectCommandRecord | null>;
+	/** Loads one validated reserved-auto blocker that an exact Set-BYOK parent may share. */
+	findFollowUpCandidate(parent: ProviderEffectCommandOwner, commandId: string): Promise<ProviderEffectCommandRecord | null>;
+	/** Selects one silo-global default and admits its alias child in this transaction. */
+	reconcileGlobalRoutingDefault(owner: ProviderEffectCommandOwner, defaultModel: string, autoConfig: AutoRoutingConfig | null, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, now: Date): Promise<ProviderGlobalRoutingDefaultResult>;
 	/** Claims one command after checking delivery state and any in-memory material verifier. */
 	claim(commandId: string, materialVerifier: `sha256:${string}` | null, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, now: Date): Promise<ProviderEffectClaimResult>;
 	/** Rechecks current authority, lifecycle, generation, and claim immediately before external I/O. */
 	preflight(command: ProviderEffectCommandRecord, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, now: Date): Promise<boolean>;
 	/** Commits the effect result only when the caller still owns the saved fence. */
-	complete(command: ProviderEffectCommandRecord, result: ProviderEffectHandlerResult, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, completedAt: Date): Promise<ProviderEffectExecutionStatuses>;
+	complete(command: ProviderEffectCommandRecord, result: ProviderEffectHandlerResult, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, completedAt: Date): Promise<ProviderEffectCompletionResult>;
+	/** Saves an applied secret-free result after protected finalization deliberately rolled back. */
+	blockFinalization(command: ProviderEffectCommandRecord, result: ProviderEffectHandlerResult): Promise<ProviderEffectExecutionStatuses>;
 	/** Releases a failed delivery for retry or marks it terminal when its budget is spent. */
 	fail(command: ProviderEffectCommandRecord, failureCode: string): Promise<ProviderEffectExecutionStatuses>;
 	/** Keeps an uncertain delivery claimed until the exact command positively converges. */

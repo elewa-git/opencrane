@@ -31,6 +31,10 @@ function _platformOperator(): AuthUser
 function _mockPrisma(store: Map<string, Row>): PrismaClient
 {
   let seq = 0;
+	function _id(where: { id?: string; id_siloId?: { id: string; siloId: string } }): string
+	{
+		return where.id_siloId?.id ?? where.id!;
+	}
 	const client = {
     providerCredential: {
       findMany: async function _findMany(args?: { where?: { clusterTenant?: string } })
@@ -39,22 +43,27 @@ function _mockPrisma(store: Map<string, Row>): PrismaClient
         const ct = args?.where?.clusterTenant;
         return ct ? all.filter(function _byCt(r) { return r.clusterTenant === ct; }) : all;
       },
-      findUnique: async function _findUnique(args: { where: { id: string } }) { return store.get(args.where.id) ?? null; },
+		findUnique: async function _findUnique(args: { where: { id?: string; id_siloId?: { id: string; siloId: string } } })
+		{
+			const row = store.get(_id(args.where)) ?? null;
+			return row !== null && (args.where.id_siloId === undefined || (row.siloId ?? "acme") === args.where.id_siloId.siloId) ? row : null;
+		},
       create: async function _create(args: { data: Row })
       {
         const id = `cred-${++seq}`;
         const now = new Date("2026-06-18T00:00:00.000Z");
-        const row = { id, litellmCredentialName: null, clusterTenant: null, createdAt: now, updatedAt: now, ...args.data };
+		const row = { id, siloId: "acme", litellmCredentialName: null, clusterTenant: null, createdAt: now, updatedAt: now, ...args.data };
         store.set(id, row);
         return row;
       },
-      update: async function _update(args: { where: { id: string }; data: Row })
+		update: async function _update(args: { where: { id?: string; id_siloId?: { id: string; siloId: string } }; data: Row })
       {
-        const row = { ...(store.get(args.where.id) as Row), ...args.data, updatedAt: new Date() };
-        store.set(args.where.id, row);
+		const id = _id(args.where);
+		const row = { ...(store.get(id) as Row), ...args.data, updatedAt: new Date() };
+		store.set(id, row);
         return row;
       },
-      delete: async function _delete(args: { where: { id: string } }) { store.delete(args.where.id); return {}; },
+		delete: async function _delete(args: { where: { id?: string; id_siloId?: { id: string; siloId: string } } }) { store.delete(_id(args.where)); return {}; },
     },
   } as unknown as PrismaClient;
 	Object.assign(client, { $transaction: async function _Transaction(operation: (transaction: PrismaClient) => Promise<unknown>) { return operation(client); } });

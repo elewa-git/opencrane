@@ -34,6 +34,10 @@ function _platformOperator(): AuthUser
 function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = new Map(), commands: Map<string, Row> = new Map()): PrismaClient
 {
   let seq = 0;
+	function _id(where: { id?: string; id_siloId?: { id: string; siloId: string } }): string
+	{
+		return where.id_siloId?.id ?? where.id!;
+	}
 	const client = {
     modelDefinition: {
       findMany: async function _findMany(args?: { where?: { clusterTenant?: string } })
@@ -42,26 +46,47 @@ function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = ne
         const ct = args?.where?.clusterTenant;
         return ct ? all.filter(function _byCt(r) { return r.clusterTenant === ct; }) : all;
       },
-      findUnique: async function _findUnique(args: { where: { id: string } }) { return store.get(args.where.id) ?? null; },
+		findUnique: async function _findUnique(args: { where: { id?: string; id_siloId?: { id: string; siloId: string } } })
+		{
+			const row = store.get(_id(args.where)) ?? null;
+			return row !== null && (args.where.id_siloId === undefined || (row.siloId ?? "acme") === args.where.id_siloId.siloId) ? row : null;
+		},
+	  findFirst: async function _findFirst(args: { where: { publicModelName?: string; providerCredentialId?: string; upstreamModel?: string } })
+	  {
+		return Array.from(store.values()).find(function _Matches(row)
+		{
+			return (args.where.publicModelName === undefined || row.publicModelName === args.where.publicModelName)
+				&& (args.where.providerCredentialId === undefined || row.providerCredentialId === args.where.providerCredentialId)
+				&& (args.where.upstreamModel === undefined || row.upstreamModel === args.where.upstreamModel);
+		}) ?? null;
+	  },
       create: async function _create(args: { data: Row })
       {
         const id = `model-${++seq}`;
         const now = new Date("2026-06-18T00:00:00.000Z");
-        const row = { id, apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], clusterTenant: null, createdAt: now, updatedAt: now, ...args.data };
+		const row = { id, siloId: "acme", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], clusterTenant: null, createdAt: now, updatedAt: now, ...args.data };
         store.set(row.id as string, row);
         return row;
       },
-      update: async function _update(args: { where: { id: string }; data: Row })
+		update: async function _update(args: { where: { id?: string; id_siloId?: { id: string; siloId: string } }; data: Row })
       {
-        const row = { ...(store.get(args.where.id) as Row), ...args.data, updatedAt: new Date() };
-        store.set(args.where.id, row);
+		const id = _id(args.where);
+		const row = { ...(store.get(id) as Row), ...args.data, updatedAt: new Date() };
+		store.set(id, row);
         return row;
       },
-      delete: async function _delete(args: { where: { id: string } }) { store.delete(args.where.id); return {}; },
+		delete: async function _delete(args: { where: { id?: string; id_siloId?: { id: string; siloId: string } } }) { store.delete(_id(args.where)); return {}; },
     },
     providerCredential: {
-      findUnique: async function _findCred(args: { where: { id: string } }) { return credentials.get(args.where.id) ?? null; },
+		findUnique: async function _findCred(args: { where: { id?: string; id_siloId?: { id: string; siloId: string } } })
+		{
+			const row = credentials.get(_id(args.where)) ?? null;
+			return row !== null && (args.where.id_siloId === undefined || (row.siloId ?? "acme") === args.where.id_siloId.siloId) ? row : null;
+		},
     },
+	modelRoutingDefault: {
+	  findFirst: async function _findDefault() { return null; },
+	},
     providerEffectCommand: {
       _commands: commands,
 	  findFirst: async function _findCurrentCommand(args: { where: { siloId: string; resourceKind: string; resourceId: string; state?: string | { in: string[] } } })
@@ -137,8 +162,8 @@ describe("modelRegistryRouter", function _suite()
 	it("filters exact ModelDefinition reads and admits mutation as organisation policy", async function _CentralAuthority()
 	{
 		const store = new Map<string, Row>([
-			["model-1", { id: "model-1", scope: "Global", clusterTenant: null, publicModelName: "openai/gpt-4o", litellmModelId: "x", upstreamModel: "openai/gpt-4o", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }],
-			["model-2", { id: "model-2", scope: "Global", clusterTenant: null, publicModelName: "anthropic/claude", litellmModelId: "y", upstreamModel: "anthropic/claude", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }],
+			["model-1", { id: "model-1", siloId: "acme", scope: "Global", clusterTenant: null, publicModelName: "custom/openai", litellmModelId: "x", upstreamModel: "openai/gpt-4o", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }],
+			["model-2", { id: "model-2", siloId: "acme", scope: "Global", clusterTenant: null, publicModelName: "custom/anthropic", litellmModelId: "y", upstreamModel: "anthropic/claude", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }],
 		]);
 		const listPrincipalEntitled = vi.fn(async function _List(command: { resources: readonly { id: string }[] }) { return command.resources.filter(resource => resource.id === "model-2"); });
 		const admitPrincipal = vi.fn(async function _Admit() { return { outcome: "allow", evidence: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } }; });
@@ -147,7 +172,7 @@ describe("modelRegistryRouter", function _suite()
 		const app = _buildApp(_mockPrisma(store), _platformOperator(), factory);
 
 		const list = await request(app).get("/api/v1/models");
-		const created = await request(app).post("/api/v1/models").send({ publicModelName: "gemini/gemini", upstreamModel: "gemini/gemini" });
+		const created = await request(app).post("/api/v1/models").send({ publicModelName: "custom/gemini", upstreamModel: "gemini/gemini" });
 
 		expect(list.body.map((row: { id: string }) => row.id)).toEqual(["model-2"]);
 		expect(listPrincipalEntitled).toHaveBeenCalledWith(expect.objectContaining({ siloId: "acme", principalId: "principal-1", action: "read", resources: [{ kind: "model-definition", id: "model-1" }, { kind: "model-definition", id: "model-2" }] }));
@@ -173,7 +198,7 @@ describe("modelRegistryRouter", function _suite()
 
   it("returns the model only after the injected executor finalizes registration", async function _createFinalized()
   {
-    const res = await request(_buildApp(_mockPrisma(new Map()))).post("/api/v1/models").send({ publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o" });
+	const res = await request(_buildApp(_mockPrisma(new Map()))).post("/api/v1/models").send({ publicModelName: "custom/gpt-4o", upstreamModel: "openai/gpt-4o" });
 
     expect(res.status).toBe(201);
 	expect(res.body.litellmModelId).toMatch(/^deployment:/);
@@ -183,7 +208,7 @@ describe("modelRegistryRouter", function _suite()
   it("persists only the explicit generated-output capability allowlist", async function _GeneratedOutputCapabilities()
   {
     const app = _buildApp(_mockPrisma(new Map()));
-    const accepted = await request(app).post("/api/v1/models").send({ publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o", generatedOutputCapabilities: ["image_png", "code_execution_files"] });
+	const accepted = await request(app).post("/api/v1/models").send({ publicModelName: "custom/gpt-4o", upstreamModel: "openai/gpt-4o", generatedOutputCapabilities: ["image_png", "code_execution_files"] });
     const refused = await request(app).post("/api/v1/models").send({ publicModelName: "openai/gpt-4o-mini", upstreamModel: "openai/gpt-4o-mini", generatedOutputCapabilities: ["code_execution"] });
 
     expect(accepted.status).toBe(201);
@@ -195,11 +220,11 @@ describe("modelRegistryRouter", function _suite()
   it("rejects a model that references a credential owned by another ClusterTenant (400)", async function _credentialScopeMismatch()
   {
     const credentials = new Map<string, Row>([
-      ["cred-b", { id: "cred-b", scope: "ClusterTenant", clusterTenant: "tenant-b", provider: "openai", secretRef: "k" }],
+	  ["cred-b", { id: "cred-b", siloId: "acme", scope: "ClusterTenant", clusterTenant: "tenant-b", provider: "openai", secretRef: "k" }],
     ]);
     const res = await request(_buildApp(_mockPrisma(new Map(), credentials)))
       .post("/api/v1/models")
-      .send({ scope: "clusterTenant", clusterTenant: "tenant-a", publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o", providerCredentialId: "cred-b" });
+	  .send({ scope: "clusterTenant", clusterTenant: "tenant-a", publicModelName: "custom/gpt-4o", upstreamModel: "openai/gpt-4o", providerCredentialId: "cred-b" });
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("CREDENTIAL_SCOPE_MISMATCH");
@@ -208,11 +233,11 @@ describe("modelRegistryRouter", function _suite()
   it("allows a model to bind a Global credential", async function _globalCredentialAllowed()
   {
     const credentials = new Map<string, Row>([
-      ["cred-g", { id: "cred-g", scope: "Global", clusterTenant: null, provider: "openai", secretRef: "openai-key" }],
+	  ["cred-g", { id: "cred-g", siloId: "acme", scope: "Global", clusterTenant: null, provider: "openai", secretRef: "openai-key" }],
     ]);
     const res = await request(_buildApp(_mockPrisma(new Map(), credentials)))
       .post("/api/v1/models")
-      .send({ scope: "clusterTenant", clusterTenant: "tenant-a", publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o", providerCredentialId: "cred-g" });
+	  .send({ scope: "clusterTenant", clusterTenant: "tenant-a", publicModelName: "custom/gpt-4o", upstreamModel: "openai/gpt-4o", providerCredentialId: "cred-g" });
 
     expect(res.status).toBe(201);
     expect(res.body.providerCredentialId).toBe("cred-g");
@@ -308,11 +333,20 @@ describe("modelRegistryRouter", function _suite()
     ]);
     const res = await request(_buildApp(_mockPrisma(store, credentials)))
       .put("/api/v1/models/model-1")
-      .send({ publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o-mini", providerCredentialId: "cred-g", isDefault: true });
+      .send({ publicModelName: "openai/custom-gpt-4o", upstreamModel: "openai/gpt-4o-mini", providerCredentialId: "cred-g", isDefault: false });
 
     expect(res.status).toBe(200);
     expect(res.body.upstreamModel).toBe("openai/gpt-4o-mini");
     expect(res.body.providerCredentialId).toBe("cred-g");
-    expect(res.body.isDefault).toBe(true);
+	expect(res.body.publicModelName).toBe("openai/custom-gpt-4o");
+    expect(res.body.isDefault).toBe(false);
   });
+
+	it.each(["auto", "auto-embedding", "openai/gpt-5.5", "openai/text-embedding-3-large"])("reserves the governed global model name %s", async function _ReservesGovernedNames(publicModelName)
+	{
+		const response = await request(_buildApp(_mockPrisma(new Map()))).post("/api/v1/models").send({ publicModelName, upstreamModel: publicModelName });
+
+		expect(response.status).toBe(400);
+		expect(response.body.code).toBe("MODEL_NAME_RESERVED");
+	});
 });

@@ -1,5 +1,6 @@
 import type { Request } from "express";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import type { AutoRoutingConfig, ModelRoutingDefault } from "@opencrane/contracts";
 
 /** Authenticated local Principal that requests organisation routing policy. */
 export interface ModelRoutingCaller
@@ -21,6 +22,19 @@ export interface ModelRoutingUnitOfWork<Transaction>
 {
 	/** Runs one operation with a transaction-scoped authority over the same client. */
 	run<Result>(operation: (transaction: Transaction, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>;
+}
+
+/** Closed result from the provider-owned durable global-default command path. */
+export type GlobalModelRoutingDefaultCommandResult =
+	| { readonly status: "succeeded"; readonly value: ModelRoutingDefault }
+	| { readonly status: "busy"; readonly commandId: string | null }
+	| { readonly status: "pending"; readonly commandId: string };
+
+/** Narrow port that keeps Global default selection and LiteLLM `auto` reconciliation under one authority. */
+export interface GlobalModelRoutingDefaultCommandPort
+{
+	/** Persists the selection and delivers its exact durable alias command. */
+	upsert(caller: ModelRoutingCaller, command: { readonly defaultModel: string; readonly autoConfig: AutoRoutingConfig | null }): Promise<GlobalModelRoutingDefaultCommandResult>;
 }
 
 /** Signals that central product authority denied a routing-policy operation. */

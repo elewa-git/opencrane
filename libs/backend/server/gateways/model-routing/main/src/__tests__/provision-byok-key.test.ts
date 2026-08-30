@@ -74,7 +74,7 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     const secrets = new Map<string, k8s.V1Secret>();
 
     const prisma = _mockPrisma(creds, models, routingDefaults);
-    const result = await _ProvisionByokKey({ prisma, coreApi: _mockCoreApi(secrets), operatorNamespace: _NS, provider: "openai", apiKey: "sk-test-123", log: _log });
+    const result = await _ProvisionByokKey({ prisma, coreApi: _mockCoreApi(secrets), operatorNamespace: _NS, siloId: "silo-a", provider: "openai", apiKey: "sk-test-123", log: _log });
 
     // LiteLLM unconfigured in the test → Secret-only.
     expect(result.litellmRegistered).toBe(false);
@@ -100,7 +100,7 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
   {
     const routingDefaults = new Map<string, Row>([["routing-global", { id: "routing-global", scope: "Global", clusterTenant: null, defaultModel: "operator/model" }]]);
 
-    await _ProvisionByokKey({ prisma: _mockPrisma(new Map(), new Map(), routingDefaults), coreApi: _mockCoreApi(new Map()), operatorNamespace: _NS, provider: "openai", apiKey: "sk-test-123", log: _log });
+    await _ProvisionByokKey({ prisma: _mockPrisma(new Map(), new Map(), routingDefaults), coreApi: _mockCoreApi(new Map()), operatorNamespace: _NS, siloId: "silo-a", provider: "openai", apiKey: "sk-test-123", log: _log });
 
     expect(Array.from(routingDefaults.values())).toEqual([{ id: "routing-global", scope: "Global", clusterTenant: null, defaultModel: "operator/model" }]);
   });
@@ -122,7 +122,7 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     }));
     try
     {
-      await expect(_ProvisionByokKey({ prisma: _mockPrisma(new Map(), models), coreApi: _mockCoreApi(new Map()), operatorNamespace: _NS, provider: "openai", apiKey: "sk-test-123", log: _log, requireLiveModels: true })).rejects.toThrow(/more than one default/);
+      await expect(_ProvisionByokKey({ prisma: _mockPrisma(new Map(), models), coreApi: _mockCoreApi(new Map()), operatorNamespace: _NS, siloId: "silo-a", provider: "openai", apiKey: "sk-test-123", log: _log, requireLiveModels: true })).rejects.toThrow(/more than one default/);
     }
     finally
     {
@@ -137,13 +137,13 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     const creds = new Map<string, Row>([["cred-1", { id: "cred-1", scope: "Global", clusterTenant: null, provider: "openai" }]]);
     const secrets = new Map<string, k8s.V1Secret>([[_byokSecretName("openai"), { metadata: { name: _byokSecretName("openai"), namespace: _NS } }]]);
 
-    await _DeprovisionByokKey({ prisma: _mockPrisma(creds, new Map()), coreApi: _mockCoreApi(secrets), operatorNamespace: _NS, provider: "openai" });
+    await _DeprovisionByokKey({ prisma: _mockPrisma(creds, new Map()), coreApi: _mockCoreApi(secrets), operatorNamespace: _NS, siloId: "silo-a", provider: "openai" });
 
     expect(secrets.has(_byokSecretName("openai"))).toBe(true);
     expect(Buffer.from(secrets.get(_byokSecretName("openai"))!.data!.apiKey, "base64").toString("utf8")).toBe("");
     expect(creds.size).toBe(0);
 
-    await _ProvisionByokKey({ prisma: _mockPrisma(creds, new Map()), coreApi: _mockCoreApi(secrets), operatorNamespace: _NS, provider: "openai", apiKey: "sk-readded", log: _log });
+    await _ProvisionByokKey({ prisma: _mockPrisma(creds, new Map()), coreApi: _mockCoreApi(secrets), operatorNamespace: _NS, siloId: "silo-a", provider: "openai", apiKey: "sk-readded", log: _log });
     expect(Buffer.from(secrets.get(_byokSecretName("openai"))!.data!.apiKey, "base64").toString("utf8")).toBe("sk-readded");
   });
 
@@ -155,7 +155,7 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     const prisma = _mockPrisma(creds, models);
     const coreApi = _mockCoreApi(secrets);
 
-    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-first", log: _log });
+    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, siloId: "silo-a", provider: "openai", apiKey: "sk-first", log: _log });
     for (const model of models.values())
     {
       model.litellmModelId = `live-${model.publicModelName as string}`;
@@ -179,7 +179,7 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true });
+    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, siloId: "silo-a", provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true });
     expect(Array.from(models.values()).map(function _Id(row) { return row.litellmModelId; })).toEqual(originalIds);
     expect(fetchMock.mock.calls.filter(function _CreatesDeployment(call) { return (call[0] as string).endsWith("/model/new"); })).toHaveLength(0);
     vi.unstubAllGlobals();
@@ -192,7 +192,7 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     const models = new Map<string, Row>();
     const prisma = _mockPrisma(new Map(), models);
     const coreApi = _mockCoreApi(new Map());
-    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-first", log: _log });
+    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, siloId: "silo-a", provider: "openai", apiKey: "sk-first", log: _log });
     process.env.LITELLM_ENDPOINT = "http://litellm:4000";
     process.env.LITELLM_MASTER_KEY = "sk-master";
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async function _fetch(url: string)
@@ -208,7 +208,7 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     }));
     try
     {
-      await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true });
+      await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, siloId: "silo-a", provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true });
       expect(Array.from(models.values()).every(function _IsLive(row) { return (row.litellmModelId as string).startsWith("live-"); })).toBe(true);
     }
     finally
@@ -224,7 +224,7 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     const models = new Map<string, Row>();
     const prisma = _mockPrisma(new Map(), models);
     const coreApi = _mockCoreApi(new Map());
-    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-first", log: _log });
+    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, siloId: "silo-a", provider: "openai", apiKey: "sk-first", log: _log });
     for (const model of models.values()) model.litellmModelId = `live-${model.publicModelName as string}`;
     const originalIds = Array.from(models.values()).map(function _Id(row) { return row.litellmModelId; });
     process.env.LITELLM_ENDPOINT = "http://litellm:4000";
@@ -240,7 +240,7 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     vi.stubGlobal("fetch", fetchMock);
     try
     {
-      await expect(_ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true })).rejects.toThrow(/has not registered required deployment/);
+      await expect(_ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, siloId: "silo-a", provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true })).rejects.toThrow(/has not registered required deployment/);
       expect(fetchMock.mock.calls.filter(function _CreatesDeployment(call) { return (call[0] as string).endsWith("/model/new"); })).toHaveLength(0);
       expect(Array.from(models.values()).map(function _Id(row) { return row.litellmModelId; })).toEqual(originalIds);
     }
@@ -257,7 +257,7 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     const models = new Map<string, Row>();
     const prisma = _mockPrisma(new Map(), models);
     const coreApi = _mockCoreApi(new Map());
-    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-first", log: _log });
+    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, siloId: "silo-a", provider: "openai", apiKey: "sk-first", log: _log });
     for (const model of models.values()) model.providerCredentialId = "cred-old";
     const originalModels = Array.from(models.values()).map(function _Copy(row) { return { ...row }; });
     process.env.LITELLM_ENDPOINT = "http://litellm:4000";
@@ -270,7 +270,7 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     vi.stubGlobal("fetch", fetchMock);
     try
     {
-      await expect(_ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true })).rejects.toThrow(/bound to a different provider credential/);
+      await expect(_ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, siloId: "silo-a", provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true })).rejects.toThrow(/bound to a different provider credential/);
       expect(fetchMock.mock.calls.filter(function _CreatesDeployment(call) { return (call[0] as string).endsWith("/model/new"); })).toHaveLength(0);
       expect(Array.from(models.values())).toEqual(originalModels);
     }

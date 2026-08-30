@@ -66,8 +66,7 @@ export class DefaultProviderEffectCommandHandler implements ProviderEffectComman
 				{
 					const models = await _registerProviderModels(catalog, litellmCredentialName, requireLiveRegistration, this.log);
 					const embedding = await _EnsureProviderEmbeddingModels(catalog, litellmCredentialName, this.log);
-					const defaultPublicModelName = catalog?.models.find(model => model.className === catalog.defaultClass)?.slug ?? null;
-					return { kind: command.payload.kind, provider: value.provider, secretRef: value.secretRef, litellmCredentialName, models, defaultPublicModelName, embedding };
+					return { kind: command.payload.kind, provider: value.provider, secretRef: value.secretRef, litellmCredentialName, models, embedding };
 				}
 				catch
 				{
@@ -113,12 +112,6 @@ async function _registerProviderModels(catalog: ByokProviderCatalog | undefined,
 	{
 		const litellmModelId = await _RegisterLiteLlmModel({ deploymentId: _modelDeploymentId("global-provider-model", entry.slug), publicModelName: entry.slug, upstreamModel: entry.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration }, log);
 		models.push({ publicModelName: entry.slug, upstreamModel: entry.slug, litellmModelId });
-	}
-	const cheapest = catalog.models.find(model => model.className === "fast") ?? catalog.models[catalog.models.length - 1];
-	if (cheapest !== undefined)
-	{
-		const litellmModelId = await _RegisterLiteLlmModel({ deploymentId: _modelDeploymentId("global-provider-model", "auto"), publicModelName: "auto", upstreamModel: cheapest.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration }, log);
-		models.push({ publicModelName: "auto", upstreamModel: cheapest.slug, litellmModelId });
 	}
 	return models;
 }

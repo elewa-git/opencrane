@@ -29,6 +29,22 @@ export class ProviderEffectOutcomeUncertainError extends Error
 	}
 }
 
+/** Signals that post-I/O product planning must retain the exact result for a later finalization. */
+export class ProviderEffectFinalizationBlockedError extends Error
+{
+	constructor()
+	{
+		super("provider effect finalization is blocked");
+		this.name = "ProviderEffectFinalizationBlockedError";
+	}
+}
+
+/** Returns whether finalization deliberately rolled back before protected projections committed. */
+export function _IsProviderEffectFinalizationBlocked(error: unknown): boolean
+{
+	return error instanceof ProviderEffectFinalizationBlockedError;
+}
+
 /**
  * Identifies the fixed domain error without inspecting third-party error text.
  *

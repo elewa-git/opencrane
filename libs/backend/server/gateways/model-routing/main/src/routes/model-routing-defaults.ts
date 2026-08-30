@@ -3,7 +3,7 @@ import { Prisma, type PrismaClient, type ModelRoutingDefault as PrismaModelRouti
 
 import { ___WithValidatedPublicBody } from "@opencrane/backend/server/infra/http";
 import { ___ModelRoutingDefaultWriteSchema, ModelRoutingScope, type AutoRoutingConfig, type ModelRoutingDefault } from "@opencrane/contracts";
-import type { ModelRoutingAuthorizationFactory, ModelRoutingCallerResolver } from "./model-routing-authorization.types";
+import type { GlobalModelRoutingDefaultCommandPort, ModelRoutingAuthorizationFactory, ModelRoutingCallerResolver } from "./model-routing-authorization.types";
 import { _CanAdministerModelRouting, _RequireModelRoutingAdministration, _RequireModelRoutingCaller, _ResolveModelRoutingCaller, _SendModelRoutingAuthorizationError } from "./model-routing-authorization";
 import { PrismaModelRoutingUnitOfWork } from "./prisma-model-routing-unit-of-work";
 
@@ -44,7 +44,7 @@ function _toPrismaScope(scope: ModelRoutingScope): "Global" | "ClusterTenant"
  * @param prisma - Prisma client used for persistence.
  * @returns Configured Express router.
  */
-export function modelRoutingDefaultsRouter(prisma: PrismaClient, resolveCaller: ModelRoutingCallerResolver = _ResolveModelRoutingCaller, createAuthorization?: ModelRoutingAuthorizationFactory<Prisma.TransactionClient>): Router
+export function modelRoutingDefaultsRouter(prisma: PrismaClient, resolveCaller: ModelRoutingCallerResolver = _ResolveModelRoutingCaller, createAuthorization?: ModelRoutingAuthorizationFactory<Prisma.TransactionClient>, globalCommands: GlobalModelRoutingDefaultCommandPort | null = null): Router
 {
   const router = Router();
 	const routing = new PrismaModelRoutingUnitOfWork(prisma, createAuthorization);
@@ -59,7 +59,7 @@ export function modelRoutingDefaultsRouter(prisma: PrismaClient, resolveCaller: 
 	{
 		if (!(await _CanAdministerModelRouting(authorization, caller)))
 			return [];
-		return transaction.modelRoutingDefault.findMany({ where: clusterTenant ? { clusterTenant } : undefined, orderBy: { createdAt: "asc" } });
+		return transaction.modelRoutingDefault.findMany({ where: { siloId: caller.siloId, ...(clusterTenant ? { clusterTenant } : {}) }, orderBy: { createdAt: "asc" } });
 	});
     res.json(rows.map(_toContract));
   });
@@ -74,7 +74,7 @@ export function modelRoutingDefaultsRouter(prisma: PrismaClient, resolveCaller: 
 	{
 		if (!(await _CanAdministerModelRouting(authorization, caller)))
 			return null;
-		return transaction.modelRoutingDefault.findUnique({ where: { id: req.params.id } });
+		return transaction.modelRoutingDefault.findUnique({ where: { id_siloId: { id: req.params.id, siloId: caller.siloId } } });
 	});
     if (!row)
     {
@@ -94,6 +94,42 @@ export function modelRoutingDefaultsRouter(prisma: PrismaClient, resolveCaller: 
     const scope = write.scope ?? ModelRoutingScope.Global;
     const clusterTenant = scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null;
     const defaultModel = typeof write.defaultModel === "string" && write.defaultModel.trim() ? write.defaultModel.trim() : null;
+	if (scope === ModelRoutingScope.Global)
+	{
+		if (defaultModel === null)
+		{
+			res.status(400).json({ error: "A Global routing default must select one model.", code: "VALIDATION_ERROR" });
+			return;
+		}
+		if (globalCommands === null)
+		{
+			res.status(503).json({ error: "Global routing reconciliation is unavailable.", code: "GLOBAL_MODEL_ROUTING_UNAVAILABLE" });
+			return;
+		}
+		let result;
+		try
+		{
+			result = await globalCommands.upsert(caller, { defaultModel, autoConfig: write.autoConfig ?? null });
+		}
+		catch (caught)
+		{
+			if (!_SendModelRoutingAuthorizationError(caught, res))
+				throw caught;
+			return;
+		}
+		if (result.status === "succeeded")
+		{
+			res.json(result.value);
+			return;
+		}
+		if (result.status === "busy")
+		{
+			res.status(409).json({ error: "Global model alias reconciliation is already active.", code: "PROVIDER_EFFECT_BUSY", commandId: result.commandId });
+			return;
+		}
+		res.status(503).json({ error: "Global model alias reconciliation has not completed.", code: "PROVIDER_EFFECT_PENDING", commandId: result.commandId });
+		return;
+	}
 
     // 2. Normalise the optional JSON column: a supplied config is stored verbatim, an explicit
     //    null clears it (Prisma.JsonNull writes a SQL JSON null, not column NULL — matches the
@@ -115,19 +151,19 @@ export function modelRoutingDefaultsRouter(prisma: PrismaClient, resolveCaller: 
 		const row = await routing.run(async function _Upsert(transaction, authorization): Promise<PrismaModelRoutingDefault>
 		{
 			await _RequireModelRoutingAdministration(authorization, caller, { operation: "upsert-model-routing-default", scope, clusterTenant, defaultModel, autoConfig: write.autoConfig ?? null });
-			const existing = await transaction.modelRoutingDefault.findFirst({ where: { scope: prismaScope, clusterTenant } });
+			const existing = await transaction.modelRoutingDefault.findFirst({ where: { siloId: caller.siloId, scope: prismaScope, clusterTenant } });
 			if (existing)
-				return transaction.modelRoutingDefault.update({ where: { id: existing.id }, data });
+				return transaction.modelRoutingDefault.update({ where: { id_siloId: { id: existing.id, siloId: caller.siloId } }, data });
 			try
 			{
-				return await transaction.modelRoutingDefault.create({ data: { scope: prismaScope, clusterTenant, ...data } });
+				return await transaction.modelRoutingDefault.create({ data: { siloId: caller.siloId, scope: prismaScope, clusterTenant, ...data } });
 			}
 			catch (error)
 			{
-				const raced = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" ? await transaction.modelRoutingDefault.findFirst({ where: { scope: prismaScope, clusterTenant } }) : null;
+				const raced = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" ? await transaction.modelRoutingDefault.findFirst({ where: { siloId: caller.siloId, scope: prismaScope, clusterTenant } }) : null;
 				if (raced === null)
 					throw error;
-				return transaction.modelRoutingDefault.update({ where: { id: raced.id }, data });
+				return transaction.modelRoutingDefault.update({ where: { id_siloId: { id: raced.id, siloId: caller.siloId } }, data });
 			}
 		});
 		res.json(_toContract(row));
@@ -149,13 +185,20 @@ export function modelRoutingDefaultsRouter(prisma: PrismaClient, resolveCaller: 
 	{
 		const deleted = await routing.run(async function _Delete(transaction, authorization)
 		{
-			const existing = await transaction.modelRoutingDefault.findUnique({ where: { id: req.params.id } });
+			const existing = await transaction.modelRoutingDefault.findUnique({ where: { id_siloId: { id: req.params.id, siloId: caller.siloId } } });
 			if (existing === null)
 				return false;
 			await _RequireModelRoutingAdministration(authorization, caller, { operation: "delete-model-routing-default", id: existing.id });
-			await transaction.modelRoutingDefault.delete({ where: { id: existing.id } });
+			if (existing.scope === "Global")
+				return "governed" as const;
+			await transaction.modelRoutingDefault.delete({ where: { id_siloId: { id: existing.id, siloId: caller.siloId } } });
 			return true;
 		});
+		if (deleted === "governed")
+		{
+			res.status(409).json({ error: "Global routing defaults must be replaced, not deleted.", code: "GLOBAL_MODEL_DEFAULT_GOVERNED" });
+			return;
+		}
 		if (!deleted)
 		{
 			res.status(404).json({ error: "Model routing default not found", code: "MODEL_ROUTING_DEFAULT_NOT_FOUND" });

@@ -5,6 +5,7 @@ import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/autho
 import { AuthorizationDecisionOutcomes, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ModelRoutingScope } from "@opencrane/contracts";
 import { ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { PrismaProviderEffectCommandRepository } from "../prisma-provider-effect-command-repository";
 import { _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "../provider-effect-command-errors";
@@ -44,6 +45,7 @@ function _row(payload: ProviderEffectCommandPayload, overrides: Record<string, u
 		deliveryCount: 0,
 		claimFence: null,
 		claimExpiresAt: null,
+		followUpCommandId: null,
 		result: null,
 		failureCode: null,
 		createdAt: new Date("2026-08-30T00:00:00.000Z"),
@@ -56,7 +58,7 @@ function _row(payload: ProviderEffectCommandPayload, overrides: Record<string, u
 /** Converts a Prisma-shaped row into the claimed record passed between executor transactions. */
 function _record(row: Record<string, unknown>, payload: ProviderEffectCommandPayload): ProviderEffectCommandRecord
 {
-	return { id: row.id as string, siloId: row.siloId as string, principalId: row.principalId as string, payload, resourceKind: row.resourceKind as string, resourceId: row.resourceId as string, resourceRevision: row.resourceRevision as string, desiredGeneration: row.desiredGeneration as number, argumentsDigest: row.argumentsDigest as `sha256:${string}`, materialVerifier: null, authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _PROFILE, materialRequirement: row.materialRequirement as ProviderEffectMaterialRequirements, state: row.state as ProviderEffectCommandStates, deliveryCount: row.deliveryCount as number, claimFence: row.claimFence as string | null, claimExpiresAt: row.claimExpiresAt as Date | null, failureCode: row.failureCode as string | null, result: row.result as ProviderEffectCommandRecord["result"] };
+	return { id: row.id as string, siloId: row.siloId as string, principalId: row.principalId as string, payload, resourceKind: row.resourceKind as string, resourceId: row.resourceId as string, resourceRevision: row.resourceRevision as string, desiredGeneration: row.desiredGeneration as number, argumentsDigest: row.argumentsDigest as `sha256:${string}`, materialVerifier: null, authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _PROFILE, materialRequirement: row.materialRequirement as ProviderEffectMaterialRequirements, state: row.state as ProviderEffectCommandStates, deliveryCount: row.deliveryCount as number, claimFence: row.claimFence as string | null, claimExpiresAt: row.claimExpiresAt as Date | null, failureCode: row.failureCode as string | null, followUpCommandId: row.followUpCommandId as string | null, result: row.result as ProviderEffectCommandRecord["result"] };
 }
 
 /** Builds a transaction stub that distinguishes latest-generation and active-claim queries. */
@@ -72,7 +74,11 @@ function _transaction(rowById: Record<string, unknown>, latest: Record<string, u
 		},
 		modelDefinition: {
 			findUnique: vi.fn(async function _FindModel() { return model; }),
+			findFirst: vi.fn(async function _FindDependentModel() { return null; }),
 			updateMany: updateModels,
+		},
+		providerCredential: {
+			findFirst: vi.fn(async function _FindCredential() { return null; }),
 		},
 	} as unknown as Prisma.TransactionClient;
 	return { transaction, updateCommands, updateModels };
@@ -95,10 +101,63 @@ const _SET: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.Se
 /** Non-secret Delete-BYOK payload shared by monotonic provider-state tests. */
 const _DELETE: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } };
 /** Model registration payload shared by lifecycle fencing tests. */
-const _REGISTER: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null } };
+const _REGISTER: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null, routingDefaultId: null, selectedModelDefinitionId: null } };
 
 describe("PrismaProviderEffectCommandRepository current authority and generation fencing", function _Suite()
 {
+	it("authorizes the exact global routing write before mutating its projection", async function _AuthorizesGlobalRoutingWrite()
+	{
+		const routing = { id: "routing-1", siloId: "acme", scope: "Global", clusterTenant: null, defaultModel: "openai/gpt", autoConfig: null, createdAt: new Date("2026-08-30T00:00:00.000Z"), updatedAt: new Date("2026-08-30T00:00:00.000Z") };
+		const selected = { id: "model-1", siloId: "acme", scope: "Global", clusterTenant: null, publicModelName: "openai/gpt", upstreamModel: "openai/gpt", litellmModelId: "deployment-1" };
+		const alias = { ...selected, id: "model-auto", publicModelName: "auto" };
+		const update = vi.fn(async function _Update() { return routing; });
+		const admit = vi.fn(async function _Admit() { return { outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } }; });
+		const transaction = {
+			modelDefinition: { findFirst: vi.fn().mockResolvedValueOnce(selected).mockResolvedValueOnce(selected).mockResolvedValueOnce(alias) },
+			modelRoutingDefault: { findFirst: vi.fn(async function _FindRouting() { return routing; }), findUnique: vi.fn(async function _FindRoutingById() { return routing; }), update },
+		} as unknown as Prisma.TransactionClient;
+		const repository = new PrismaProviderEffectCommandRepository(transaction);
+		const autoConfig = { enabled: true, preferredModel: "openai/gpt" } as never;
+
+		await expect(repository.reconcileGlobalRoutingDefault(_record(_row(_SET), _SET), "openai/gpt", autoConfig, _context(), { admitPrincipal: admit } as unknown as AuthorizationAuthority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toMatchObject({ child: null });
+		expect(admit).toHaveBeenCalledWith(expect.objectContaining({
+			siloId: "acme",
+			principalId: "principal-1",
+			resource: { kind: ProductAuthorizationResourceKinds.Organization, id: "acme" },
+			action: "administer",
+			argumentsDigest: ___DigestCanonicalJson({ operation: "upsert-global-model-routing-default", siloId: "acme", defaultModel: "openai/gpt", autoConfig } as JsonValue),
+		}));
+		expect(update).toHaveBeenCalledOnce();
+	});
+
+	it("rolls back a global routing write when current administration is denied", async function _DeniesGlobalRoutingWrite()
+	{
+		const update = vi.fn();
+		const transaction = {
+			modelDefinition: { findFirst: vi.fn(async function _FindSelected() { return { id: "model-1", publicModelName: "openai/gpt", litellmModelId: "deployment-1" }; }) },
+			modelRoutingDefault: { findFirst: vi.fn(), create: vi.fn(), update },
+		} as unknown as Prisma.TransactionClient;
+		const repository = new PrismaProviderEffectCommandRepository(transaction);
+
+		await expect(repository.reconcileGlobalRoutingDefault(_record(_row(_SET), _SET), "openai/gpt", null, _context(), _authorization(false).authority, new Date("2026-08-30T01:00:00.000Z"))).rejects.toThrow("provider effect finalization is blocked");
+		expect(transaction.modelRoutingDefault.findFirst).not.toHaveBeenCalled();
+		expect(update).not.toHaveBeenCalled();
+	});
+
+	it("treats another administrator's matching alias child as busy without accepting its authority", async function _DifferentPrincipalChild()
+	{
+		const childPayload = { kind: ProviderEffectCommandKinds.RegisterModel, value: { ..._REGISTER.value, publicModelName: "auto", routingDefaultId: "routing-1", selectedModelDefinitionId: "model-selected" } } as const;
+		const child = _row(childPayload, { id: "command-auto", principalId: "principal-2", resourceId: "model-1" });
+		const linkedRow = _row(_SET, { state: ProviderEffectCommandStates.Succeeded, followUpCommandId: "command-auto" });
+		const findUnique = vi.fn(async function _FindChild(args: { where: { id: string } }) { return args.where.id === "command-a" ? linkedRow : child; });
+		const transaction = { providerEffectCommand: { findUnique } } as unknown as Prisma.TransactionClient;
+		const repository = new PrismaProviderEffectCommandRepository(transaction);
+
+		await expect(repository.findFollowUpCandidate(_record(_row(_SET), _SET), "command-auto")).resolves.toBeNull();
+		const linkedParent = _record(linkedRow, _SET);
+		await expect(repository.findFollowUp(linkedParent)).rejects.toThrow("invalid follow-up command");
+	});
+
 	it("allocates generation B and supersedes inactive generation A in one admission transaction", async function _AdmitsNewGeneration()
 	{
 		const rowA = _row(_SET);
@@ -134,6 +193,8 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 				create,
 				updateMany: vi.fn(async function _UpdateMany() { return { count: 1 }; }),
 			},
+			providerCredential: { findFirst: vi.fn(async function _FindCredential() { return null; }) },
+			modelDefinition: { findFirst: vi.fn(async function _FindDependentModel() { return null; }) },
 		} as unknown as Prisma.TransactionClient;
 		const repository = new PrismaProviderEffectCommandRepository(transaction);
 		const handler = vi.fn();
@@ -232,7 +293,7 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 
 	it("reclaims saved finalization evidence without material or another delivery attempt", async function _ReclaimsFinalization()
 	{
-		const savedResult = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], defaultPublicModelName: null, embedding: { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: [] } } as const;
+		const savedResult = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], embedding: { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: [] } } as const;
 		const row = _row(_SET, { state: ProviderEffectCommandStates.Claimed, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey, materialVerifier: "sha256:material", deliveryCount: 3, claimFence: "fence-old", claimExpiresAt: new Date("2026-08-30T00:30:00.000Z"), failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, result: savedResult });
 		const database = _transaction(row, row);
 		const repository = new PrismaProviderEffectCommandRepository(database.transaction);
@@ -262,7 +323,7 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		const database = _transaction(row, row);
 		const repository = new PrismaProviderEffectCommandRepository(database.transaction);
 
-		await expect(repository.complete(_record(row, _DELETE), { kind: ProviderEffectCommandKinds.DeleteByokKey, provider: "anthropic" }, _context(), _authorization(false).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(ProviderEffectExecutionStatuses.Busy);
+		await expect(repository.complete(_record(row, _DELETE), { kind: ProviderEffectCommandKinds.DeleteByokKey, provider: "anthropic" }, _context(), _authorization(false).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toEqual({ status: ProviderEffectExecutionStatuses.Busy, followUpCommand: null });
 		expect(database.updateCommands).not.toHaveBeenCalled();
 	});
 
@@ -335,6 +396,19 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		expect(database.updateModels).not.toHaveBeenCalled();
 	});
 
+	it("refuses provider-key deletion when a model begins depending on the credential before delivery", async function _DeleteDependencyRace()
+	{
+		const row = _row(_DELETE, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-a", claimExpiresAt: new Date("2026-08-30T02:00:00.000Z") });
+		const database = _transaction(row, row);
+		const transaction = database.transaction as unknown as { providerCredential: { findFirst: ReturnType<typeof vi.fn> }; modelDefinition: { findFirst: ReturnType<typeof vi.fn> } };
+		transaction.providerCredential.findFirst.mockResolvedValue({ id: "credential-1" });
+		transaction.modelDefinition.findFirst.mockResolvedValue({ id: "model-1" });
+		const repository = new PrismaProviderEffectCommandRepository(database.transaction);
+
+		await expect(repository.preflight(_record(row, _DELETE), _context(), _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(false);
+		expect(database.updateCommands).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ProviderEffectCommandStates.Failed, failureCode: "authorization_or_resource_stale" }) }));
+	});
+
 	it("does not project a completed registration after a newer model generation wins", async function _StaleFinalization()
 	{
 		const rowA = _row(_REGISTER, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-a", claimExpiresAt: new Date("2026-08-30T02:00:00.000Z") });
@@ -343,7 +417,7 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		const repository = new PrismaProviderEffectCommandRepository(database.transaction);
 		const context = { ..._context(), resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: "model-1" };
 
-		await expect(repository.complete(_record(rowA, _REGISTER), { kind: ProviderEffectCommandKinds.RegisterModel, litellmModelId: "deployment-a" }, context, _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(ProviderEffectExecutionStatuses.Busy);
+		await expect(repository.complete(_record(rowA, _REGISTER), { kind: ProviderEffectCommandKinds.RegisterModel, litellmModelId: "deployment-a" }, context, _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toEqual({ status: ProviderEffectExecutionStatuses.Busy, followUpCommand: null });
 		expect(database.updateModels).not.toHaveBeenCalled();
 	});
 
@@ -364,24 +438,37 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 			modelRoutingDefault: { create: routingCreate },
 		} as unknown as Prisma.TransactionClient;
 		const repository = new PrismaProviderEffectCommandRepository(transaction);
-		const result = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [{ publicModelName: "openai/gpt-5.5", upstreamModel: "openai/gpt-5.5", litellmModelId: "deployment-1" }], defaultPublicModelName: "openai/gpt-5.5", embedding: { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: [{ publicModelName: "openai/text-embedding-3-large", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-1" }, { publicModelName: "auto-embedding", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-2" }] } } as const;
+		const result = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [{ publicModelName: "openai/gpt-5.5", upstreamModel: "openai/gpt-5.5", litellmModelId: "deployment-1" }], embedding: { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: [{ publicModelName: "openai/text-embedding-3-large", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-1" }, { publicModelName: "auto-embedding", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-2" }] } } as const;
 
-		await expect(repository.complete(_record(row, _SET), result, _context(), _authorization(false).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(ProviderEffectExecutionStatuses.Busy);
+		await expect(repository.complete(_record(row, _SET), result, _context(), _authorization(false).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toEqual({ status: ProviderEffectExecutionStatuses.Busy, followUpCommand: null });
 		expect(transaction.providerEffectCommand.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ result, failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE }) }));
 		expect(credentialCreate).not.toHaveBeenCalled();
 		expect(modelCreate).not.toHaveBeenCalled();
 		expect(routingCreate).not.toHaveBeenCalled();
 	});
 
-	it("projects the credential, provider catalogue, and first routing default in finalization", async function _FinalizesProviderProjection()
+	it("projects the provider catalogue and admits one durable global alias child", async function _FinalizesProviderProjection()
 	{
 		const row = _row(_SET, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-a", claimExpiresAt: new Date("2026-08-30T02:00:00.000Z") });
 		const models = new Map<string, Record<string, unknown>>();
 		let routingDefault: Record<string, unknown> | null = null;
+		let child: Record<string, unknown> | null = null;
 		const transaction = {
 			providerEffectCommand: {
-				findUnique: vi.fn(async function _FindUnique() { return row; }),
-				findFirst: vi.fn(async function _FindFirst() { return row; }),
+				findUnique: vi.fn(async function _FindUnique(args: { where: { id: string } }) { return args.where.id === row.id ? row : child; }),
+				findFirst: vi.fn(async function _FindFirst(args: { where?: { resourceId?: string; state?: unknown; OR?: unknown } })
+				{
+					if (args.where?.resourceId !== undefined && args.where.resourceId !== row.resourceId)
+						return null;
+					if (args.where?.state !== undefined || args.where?.OR !== undefined)
+						return null;
+					return row;
+				}),
+				create: vi.fn(async function _CreateCommand(args: { data: Record<string, unknown> })
+				{
+					child = _row(_REGISTER, { ...args.data, id: args.data.id, resourceId: args.data.resourceId, resourceRevision: args.data.resourceRevision, desiredGeneration: 1, payload: args.data.payload });
+					return child;
+				}),
 				updateMany: vi.fn(async function _Update() { return { count: 1 }; }),
 			},
 			providerCredential: {
@@ -389,23 +476,33 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 				create: vi.fn(async function _CreateCredential() { return { id: "credential-1" }; }),
 			},
 			modelDefinition: {
-				findFirst: vi.fn(async function _FindModel(args: { where: { publicModelName?: string } }) { return Array.from(models.values()).find(model => model.publicModelName === args.where.publicModelName) ?? null; }),
-				create: vi.fn(async function _CreateModel(args: { data: Record<string, unknown> }) { const model = { id: `model-${models.size + 1}`, ...args.data }; models.set(model.id, model); return model; }),
+				findFirst: vi.fn(async function _FindModel(args: { where: { publicModelName?: string } })
+				{
+					const found = Array.from(models.values()).find(model => model.publicModelName === args.where.publicModelName) ?? null;
+					if (found === null)
+						return null;
+					const providerCredential = found.providerCredentialId === "credential-1" ? { secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } : null;
+					return { ...found, providerCredential };
+				}),
+				create: vi.fn(async function _CreateModel(args: { data: Record<string, unknown> }) { const model = { id: `model-${models.size + 1}`, generatedOutputCapabilities: [], ...args.data }; models.set(model.id, model); return model; }),
 				update: vi.fn(async function _UpdateModel(args: { where: { id: string }; data: Record<string, unknown> }) { const model = { ...models.get(args.where.id), ...args.data }; models.set(args.where.id, model); return model; }),
 				findMany: vi.fn(async function _Defaults() { return Array.from(models.values()).filter(model => model.isDefault === true); }),
 			},
 			modelRoutingDefault: {
 				findFirst: vi.fn(async function _FindRoutingDefault() { return routingDefault; }),
 				create: vi.fn(async function _CreateRoutingDefault(args: { data: Record<string, unknown> }) { routingDefault = { id: "routing-1", ...args.data }; return routingDefault; }),
+				update: vi.fn(async function _UpdateRoutingDefault(args: { data: Record<string, unknown> }) { routingDefault = { ...routingDefault, ...args.data }; return routingDefault; }),
 			},
 		} as unknown as Prisma.TransactionClient;
 		const repository = new PrismaProviderEffectCommandRepository(transaction);
 		const modelNames = ["openai/gpt-5.5", "openai/gpt-5.4", "openai/gpt-5.4-nano"];
-		const result = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [...modelNames.map(function _Projection(publicModelName, index) { return { publicModelName, upstreamModel: publicModelName, litellmModelId: `deployment-${index}` }; }), { publicModelName: "auto", upstreamModel: "openai/gpt-5.4-nano", litellmModelId: "deployment-auto" }], defaultPublicModelName: "openai/gpt-5.5", embedding: { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: [{ publicModelName: "openai/text-embedding-3-large", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-1" }, { publicModelName: "auto-embedding", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-2" }] } } as const;
+		const result = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: modelNames.map(function _Projection(publicModelName, index) { return { publicModelName, upstreamModel: publicModelName, litellmModelId: `deployment-${index}` }; }), embedding: { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: [{ publicModelName: "openai/text-embedding-3-large", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-1" }, { publicModelName: "auto-embedding", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-2" }] } } as const;
 
-		await expect(repository.complete(_record(row, _SET), result, _context(), _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(ProviderEffectExecutionStatuses.Succeeded);
+		const completion = await repository.complete(_record(row, _SET), result, _context(), _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"));
+		expect(completion).toMatchObject({ status: ProviderEffectExecutionStatuses.Succeeded, followUpCommand: { payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { publicModelName: "auto", routingDefaultId: "routing-1", selectedModelDefinitionId: expect.any(String) } } } });
 		expect(models.size).toBe(4);
-		expect(Array.from(models.values()).find(model => model.publicModelName === "openai/gpt-5.5")).toMatchObject({ isDefault: true, providerCredentialId: "credential-1" });
+		expect(Array.from(models.values()).find(model => model.publicModelName === "openai/gpt-5.5")).toMatchObject({ isDefault: false, providerCredentialId: "credential-1" });
 		expect(routingDefault).toMatchObject({ defaultModel: "openai/gpt-5.5" });
+		expect(child).toMatchObject({ principalId: "principal-1", executorProfile: _PROFILE, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition });
 	});
 });

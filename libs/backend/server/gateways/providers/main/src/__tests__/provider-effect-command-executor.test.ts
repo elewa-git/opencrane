@@ -33,7 +33,7 @@ vi.mock("../log", function _Log()
 
 import { DefaultProviderEffectCommandExecutor, _ProviderKeyMaterialVerifier } from "../provider-effect-command-executor";
 import { DefaultProviderEffectCommandHandler } from "../provider-effect-command-handler";
-import { ProviderEffectOutcomeUncertainError, _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "../provider-effect-command-errors";
+import { ProviderEffectFinalizationBlockedError, ProviderEffectOutcomeUncertainError, _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "../provider-effect-command-errors";
 import type { Logger } from "@opencrane/backend/observability";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
@@ -48,7 +48,7 @@ const _LOGGER = _TELEMETRY as unknown as Logger;
 /** Build one claimed Set-BYOK command without placing raw material in the record. */
 function _command(): ProviderEffectCommandRecord
 {
-	return { id: "command-1", siloId: "acme", principalId: "principal-1", payload: { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } }, resourceKind: "provider-connection", resourceId: "byok:openai", resourceRevision: "revision-1", desiredGeneration: 1, argumentsDigest: "sha256:arguments", materialVerifier: _ProviderKeyMaterialVerifier("command-1", "openai", "sk-test"), authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _CONTEXT.executorProfile, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey, state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-1", claimExpiresAt: new Date("2099-01-01T00:00:00.000Z"), failureCode: null, result: null };
+	return { id: "command-1", siloId: "acme", principalId: "principal-1", payload: { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } }, resourceKind: "provider-connection", resourceId: "byok:openai", resourceRevision: "revision-1", desiredGeneration: 1, argumentsDigest: "sha256:arguments", materialVerifier: _ProviderKeyMaterialVerifier("command-1", "openai", "sk-test"), authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _CONTEXT.executorProfile, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey, state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-1", claimExpiresAt: new Date("2099-01-01T00:00:00.000Z"), failureCode: null, followUpCommandId: null, result: null };
 }
 
 /** Build a UnitOfWork that forwards every transaction callback to one fake repository. */
@@ -69,8 +69,8 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 	{
 		const order: string[] = [];
 		const command = _command();
-		const repository = { claim: vi.fn(async function _Claim() { order.push("claim-committed"); return { status: ProviderEffectExecutionStatuses.Claimed, command }; }), preflight: vi.fn(async function _Preflight() { order.push("preflight-committed"); return true; }), complete: vi.fn(async function _Complete() { order.push("result-committed"); return ProviderEffectExecutionStatuses.Succeeded; }) } as unknown as ProviderEffectCommandRepository;
-		const handler = { execute: vi.fn(async function _Execute() { order.push("external-effect"); return { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], defaultPublicModelName: null, embedding: { status: ProviderEmbeddingReconciliationStatuses.NotApplicable, deployments: [] } } as const; }) } as ProviderEffectCommandHandler;
+		const repository = { claim: vi.fn(async function _Claim() { order.push("claim-committed"); return { status: ProviderEffectExecutionStatuses.Claimed, command }; }), preflight: vi.fn(async function _Preflight() { order.push("preflight-committed"); return true; }), complete: vi.fn(async function _Complete() { order.push("result-committed"); return { status: ProviderEffectExecutionStatuses.Succeeded, followUpCommand: null }; }) } as unknown as ProviderEffectCommandRepository;
+		const handler = { execute: vi.fn(async function _Execute() { order.push("external-effect"); return { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], embedding: { status: ProviderEmbeddingReconciliationStatuses.NotApplicable, deployments: [] } } as const; }) } as ProviderEffectCommandHandler;
 		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
 
 		const result = await executor.execute(command.id, { provider: "openai", providerKey: "sk-test" }, _CONTEXT);
@@ -119,7 +119,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 			nextRecoverable: vi.fn(async function _Next() { return command; }),
 			claim: vi.fn(async function _Claim(_id, _verifier, context) { expect(context).toEqual({ ..._CONTEXT, actorKind: "system", actorId: _CONTEXT.executorProfile }); return { status: ProviderEffectExecutionStatuses.Claimed, command }; }),
 			preflight: vi.fn(async function _Preflight() { return true; }),
-			complete: vi.fn(async function _Complete() { return ProviderEffectExecutionStatuses.Succeeded; }),
+			complete: vi.fn(async function _Complete() { return { status: ProviderEffectExecutionStatuses.Succeeded, followUpCommand: null }; }),
 		} as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn(async function _Execute() { return { kind: ProviderEffectCommandKinds.DeleteByokKey, provider: "openai" } as const; }) } as ProviderEffectCommandHandler;
 		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
@@ -137,7 +137,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 			nextRecoverable: vi.fn(async function _Next() { return command; }),
 			claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.Claimed, command }; }),
 			preflight: vi.fn(),
-			complete: vi.fn(async function _Complete(_command, result) { expect(result).toBe(savedResult); return ProviderEffectExecutionStatuses.Succeeded; }),
+			complete: vi.fn(async function _Complete(_command, result) { expect(result).toBe(savedResult); return { status: ProviderEffectExecutionStatuses.Succeeded, followUpCommand: null }; }),
 		} as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
 		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
@@ -147,6 +147,32 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		expect(repository.preflight).not.toHaveBeenCalled();
 		expect(handler.execute).not.toHaveBeenCalled();
 		expect(repository.complete).toHaveBeenCalledOnce();
+	});
+
+	it("saves a rolled-back alias result and finalizes it without repeating provider I/O", async function _RecoversAliasPlanningDenial()
+	{
+		const result = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], embedding: { status: ProviderEmbeddingReconciliationStatuses.NotApplicable, deployments: [] } } as const;
+		const initial = _command();
+		const recovered = { ...initial, deliveryCount: 1, failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, result };
+		const repository = {
+			claim: vi.fn()
+				.mockResolvedValueOnce({ status: ProviderEffectExecutionStatuses.Claimed, command: initial })
+				.mockResolvedValueOnce({ status: ProviderEffectExecutionStatuses.Claimed, command: recovered }),
+			preflight: vi.fn(async function _Preflight() { return true; }),
+			complete: vi.fn()
+				.mockRejectedValueOnce(new ProviderEffectFinalizationBlockedError())
+				.mockResolvedValueOnce({ status: ProviderEffectExecutionStatuses.Succeeded, followUpCommand: null }),
+			blockFinalization: vi.fn(async function _Block() { return ProviderEffectExecutionStatuses.Busy; }),
+		} as unknown as ProviderEffectCommandRepository;
+		const handler = { execute: vi.fn(async function _Execute() { return result; }) } as ProviderEffectCommandHandler;
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
+
+		await expect(executor.execute(initial.id, { provider: "openai", providerKey: "sk-test" }, _CONTEXT)).resolves.toEqual({ status: ProviderEffectExecutionStatuses.Busy, result: null });
+		await expect(executor.execute(initial.id, { provider: "openai", providerKey: "sk-test" }, _CONTEXT)).resolves.toEqual({ status: ProviderEffectExecutionStatuses.Succeeded, result });
+
+		expect(handler.execute).toHaveBeenCalledOnce();
+		expect(repository.blockFinalization).toHaveBeenCalledWith(initial, result);
+		expect(repository.preflight).toHaveBeenCalledOnce();
 	});
 
 	it("refuses reconciliation when a saved command names a different executor profile", async function _RejectsSavedProfile()
@@ -223,10 +249,10 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 
 		const result = await handler.execute(_command(), { provider: "openai", providerKey: "sk-test" });
 
-		expect(result).toMatchObject({ kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: null, defaultPublicModelName: "openai/gpt-5.5" });
+		expect(result).toMatchObject({ kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: null });
 		if (result.kind !== ProviderEffectCommandKinds.SetByokKey)
 			throw new Error("expected provider catalogue projection");
-		expect(result.models.map(function _Name(model) { return model.publicModelName; })).toEqual(["openai/gpt-5.5", "openai/gpt-5.4", "openai/gpt-5.4-nano", "auto"]);
+		expect(result.models.map(function _Name(model) { return model.publicModelName; })).toEqual(["openai/gpt-5.5", "openai/gpt-5.4", "openai/gpt-5.4-nano"]);
 		expect(JSON.stringify(result)).not.toContain("sk-test");
 		expect(replaceNamespacedSecret).toHaveBeenCalledOnce();
 		expect(_TELEMETRY.traceNames).toContain("kubernetes.provider-secret.apply");
@@ -266,7 +292,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 
 		expect(second.models).toEqual(first.models);
 		expect(second.embedding).toEqual(first.embedding);
-		expect(fetchMock.mock.calls.filter(function _ModelCreates(call) { return (call[0] as string).endsWith("/model/new"); })).toHaveLength(6);
+		expect(fetchMock.mock.calls.filter(function _ModelCreates(call) { return (call[0] as string).endsWith("/model/new"); })).toHaveLength(5);
 		expect(JSON.stringify([first, second])).not.toMatch(/sk-first|sk-second/);
 		vi.unstubAllGlobals();
 		vi.unstubAllEnvs();
@@ -296,7 +322,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		vi.stubEnv("LITELLM_MASTER_KEY", "master");
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 })));
 		const handler = new DefaultProviderEffectCommandHandler(null, null, _LOGGER);
-		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: "global", clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null } } as const, resourceKind: "model-definition", resourceId: "model-1", materialRequirement: ProviderEffectMaterialRequirements.None };
+		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: "global", clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null, routingDefaultId: null, selectedModelDefinitionId: null } } as const, resourceKind: "model-definition", resourceId: "model-1", materialRequirement: ProviderEffectMaterialRequirements.None };
 
 		await expect(handler.execute(command, {})).rejects.toBeInstanceOf(ProviderEffectOutcomeUncertainError);
 		vi.unstubAllGlobals();
@@ -322,7 +348,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		});
 		vi.stubGlobal("fetch", fetchMock);
 		const handler = new DefaultProviderEffectCommandHandler(null, null, _LOGGER);
-		const payload = { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: "global", clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null } } as const;
+		const payload = { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: "global", clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null, routingDefaultId: null, selectedModelDefinitionId: null } } as const;
 		const command = { ..._command(), payload, resourceKind: "model-definition", resourceId: "model-1", materialRequirement: ProviderEffectMaterialRequirements.None };
 
 		const first = await handler.execute({ ...command, id: "command-a" }, {});
@@ -363,7 +389,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 			? { kind, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const
 			: kind === ProviderEffectCommandKinds.DeleteByokKey
 				? { kind, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const
-				: { kind, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: "global", clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null } } as const;
+				: { kind, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: "global", clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null, routingDefaultId: null, selectedModelDefinitionId: null } } as const;
 		const register = kind === ProviderEffectCommandKinds.RegisterModel;
 		const context = register ? { ..._CONTEXT, resourceKind: "model-definition", resourceId: "model-1" } : _CONTEXT;
 		const materialVerifier = kind === ProviderEffectCommandKinds.SetByokKey ? _command().materialVerifier : null;
@@ -376,7 +402,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 				.mockResolvedValueOnce({ status: ProviderEffectExecutionStatuses.Claimed, command: retry }),
 			preflight: vi.fn(async function _Preflight() { return true; }),
 			retainClaim: vi.fn(async function _Retain() { barrier = true; return ProviderEffectExecutionStatuses.Retryable; }),
-			complete: vi.fn(async function _Complete() { barrier = false; return ProviderEffectExecutionStatuses.Succeeded; }),
+			complete: vi.fn(async function _Complete() { barrier = false; return { status: ProviderEffectExecutionStatuses.Succeeded, followUpCommand: null }; }),
 			fail: vi.fn(),
 			admit: vi.fn(async function _Admit()
 			{
@@ -387,7 +413,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		} as unknown as ProviderEffectCommandRepository;
 		const uncertainDelivery = new Promise<never>(function _Delayed(_resolve, reject) { releaseUncertain = function _Release() { reject(new ProviderEffectOutcomeUncertainError()); }; });
 		const successfulResult = kind === ProviderEffectCommandKinds.SetByokKey
-			? { kind, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], defaultPublicModelName: null, embedding: { status: ProviderEmbeddingReconciliationStatuses.NotApplicable, deployments: [] } } as const
+			? { kind, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], embedding: { status: ProviderEmbeddingReconciliationStatuses.NotApplicable, deployments: [] } } as const
 			: kind === ProviderEffectCommandKinds.DeleteByokKey ? { kind, provider: "openai" } as const : { kind, litellmModelId: "deployment-1" } as const;
 		const handler = { execute: vi.fn().mockReturnValueOnce(uncertainDelivery).mockResolvedValueOnce(successfulResult) } as ProviderEffectCommandHandler;
 		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);

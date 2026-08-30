@@ -10,7 +10,7 @@ describe("provider effect resource binding", function _Suite()
 {
 	it("accepts only the model definition named by the registration payload", function _ModelBinding()
 	{
-		const payload: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null } };
+		const payload: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null, routingDefaultId: null, selectedModelDefinitionId: null } };
 
 		expect(function _Valid() { _ValidateProviderEffectCommandResourceBinding(payload, ProductAuthorizationResourceKinds.ModelDefinition, "model-1"); }).not.toThrow();
 		expect(function _WrongId() { _ValidateProviderEffectCommandResourceBinding(payload, ProductAuthorizationResourceKinds.ModelDefinition, "model-2"); }).toThrow("not bound");

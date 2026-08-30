@@ -13,7 +13,7 @@ const _SET_BYOK_PAYLOAD = z.object({ provider: z.string().min(1), secretRef: z.s
 /** Validates the non-secret payload for a Delete-BYOK command. */
 const _DELETE_BYOK_PAYLOAD = z.object({ provider: z.string().min(1), secretRef: z.string().min(1), litellmCredentialName: z.string().min(1) }).strict();
 /** Validates the non-secret payload for a model-registration command. */
-const _REGISTER_MODEL_PAYLOAD = z.object({ modelDefinitionId: z.string().min(1), publicModelName: z.string().min(1), upstreamModel: z.string().min(1), scope: z.nativeEnum(ModelRoutingScope), clusterTenant: z.string().min(1).nullable(), apiBase: z.string().min(1).nullable(), apiKeyEnvRef: z.string().min(1).nullable(), litellmCredentialName: z.string().min(1).nullable() }).strict();
+const _REGISTER_MODEL_PAYLOAD = z.object({ modelDefinitionId: z.string().min(1), publicModelName: z.string().min(1), upstreamModel: z.string().min(1), scope: z.nativeEnum(ModelRoutingScope), clusterTenant: z.string().min(1).nullable(), apiBase: z.string().min(1).nullable(), apiKeyEnvRef: z.string().min(1).nullable(), litellmCredentialName: z.string().min(1).nullable(), routingDefaultId: z.string().min(1).nullable(), selectedModelDefinitionId: z.string().min(1).nullable() }).strict().refine(function _CompleteAliasBinding(value) { return (value.routingDefaultId === null) === (value.selectedModelDefinitionId === null); }, { message: "routing default and selected model bindings must be supplied together" });
 /** Validates one secret-free model deployment projection. */
 const _MODEL_PROJECTION = z.object({ publicModelName: z.string().min(1), upstreamModel: z.string().min(1), litellmModelId: z.string().min(1) }).strict();
 /** Validates the closed embedding evidence stored after external provider delivery. */
@@ -24,7 +24,7 @@ const _EMBEDDING_RESULT = z.discriminatedUnion("status", [
 ]);
 /** Validates the closed, secret-free result saved after an external effect. */
 const _HANDLER_RESULT = z.discriminatedUnion("kind", [
-	z.object({ kind: z.literal(ProviderEffectCommandKinds.SetByokKey), provider: z.string().min(1), secretRef: z.string().min(1), litellmCredentialName: z.string().min(1).nullable(), models: z.array(_MODEL_PROJECTION), defaultPublicModelName: z.string().min(1).nullable(), embedding: _EMBEDDING_RESULT }).strict(),
+	z.object({ kind: z.literal(ProviderEffectCommandKinds.SetByokKey), provider: z.string().min(1), secretRef: z.string().min(1), litellmCredentialName: z.string().min(1).nullable(), models: z.array(_MODEL_PROJECTION), embedding: _EMBEDDING_RESULT }).strict(),
 	z.object({ kind: z.literal(ProviderEffectCommandKinds.DeleteByokKey), provider: z.string().min(1) }).strict(),
 	z.object({ kind: z.literal(ProviderEffectCommandKinds.RegisterModel), litellmModelId: z.string().min(1) }).strict(),
 ]);

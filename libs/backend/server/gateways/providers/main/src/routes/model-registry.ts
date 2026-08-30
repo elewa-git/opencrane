@@ -5,6 +5,7 @@ import { GeneratedOutputCapability, ModelRoutingScope, type ModelDefinition, typ
 import type { Prisma, PrismaClient, ModelDefinition as PrismaModelDefinition } from "@prisma/client";
 
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { _BYOK_PROVIDER_CATALOG } from "@opencrane/backend/server/gateways/model-routing";
 
 import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCaller, ProviderGatewayCallerResolver } from "../provider-gateway-authority.types";
 import { _GrantProviderResourceCreatorUse, _RequireProviderGatewayAdministration, _RequireProviderGatewayCaller, _ResolveProviderGatewayCaller, _SendProviderGatewayAuthorizationError } from "../provider-gateway-authorization";
@@ -12,6 +13,7 @@ import { _PROVIDER_EFFECT_EXECUTOR_PROFILE } from "../provider-effect-command-co
 import { _RequireProviderEffectAdmission, _SendProviderEffectBusy } from "../provider-effect-command-http";
 import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandExecutor, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 import { PrismaProviderGatewayUnitOfWork } from "../prisma-provider-gateway-unit-of-work";
+import { _GLOBAL_AUTO_EMBEDDING_MODEL_NAME, _GLOBAL_AUTO_MODEL_NAME } from "../prisma-global-model-alias-repository";
 
 /** Bind model delivery to the current caller, exact definition, and control-plane executor profile. */
 function _effectContext(caller: ProviderGatewayCaller, modelDefinitionId: string): ProviderEffectExecutionContext
@@ -68,13 +70,22 @@ function _validateWrite(body: Record<string, unknown>): { error: string; code: s
   {
     return { error: "publicModelName and upstreamModel are required.", code: "VALIDATION_ERROR" };
   }
+	if (publicModelName === _GLOBAL_AUTO_MODEL_NAME || publicModelName === _GLOBAL_AUTO_EMBEDDING_MODEL_NAME)
+		return { error: "publicModelName is reserved for centrally governed routing.", code: "MODEL_NAME_RESERVED" };
 
   // 2. Scope must be one of the two known values when present.
   const scope = body.scope ?? ModelRoutingScope.Global;
-  if (scope !== ModelRoutingScope.Global && scope !== ModelRoutingScope.ClusterTenant)
+	if (scope !== ModelRoutingScope.Global && scope !== ModelRoutingScope.ClusterTenant)
   {
     return { error: "scope must be 'global' or 'clusterTenant'.", code: "VALIDATION_ERROR" };
   }
+	if (scope === ModelRoutingScope.Global && body.isDefault === true)
+		return { error: "Global defaults must be selected through model routing defaults.", code: "GLOBAL_MODEL_DEFAULT_GOVERNED" };
+	if (scope === ModelRoutingScope.Global && Object.values(_BYOK_PROVIDER_CATALOG).some(function _Reserved(catalog)
+	{
+		return catalog.models.some(function _Model(model) { return model.slug === publicModelName; }) || catalog.embeddingModel?.slug === publicModelName;
+	}))
+		return { error: "publicModelName is reserved for provider catalogue reconciliation.", code: "MODEL_NAME_RESERVED" };
 
   // 3. A ClusterTenant-scoped model must name its owning clusterTenant.
   if (scope === ModelRoutingScope.ClusterTenant && !(typeof body.clusterTenant === "string" && body.clusterTenant.trim()))
@@ -107,13 +118,13 @@ function _validateWrite(body: Record<string, unknown>): { error: string; code: s
  *          `litellmCredentialName` means the key is in LiteLLM's credential store, so registration
  *          binds `litellm_credential_name` instead of the `os.environ` baseline.
  */
-async function _resolveCredential(prisma: Prisma.TransactionClient, providerCredentialId: string | null | undefined, modelClusterTenant: string | null): Promise<{ secretRef: string | null; litellmCredentialName: string | null } | { error: string; code: string }>
+async function _resolveCredential(prisma: Prisma.TransactionClient, siloId: string, providerCredentialId: string | null | undefined, modelClusterTenant: string | null): Promise<{ secretRef: string | null; litellmCredentialName: string | null; provider: string | null } | { error: string; code: string }>
 {
   if (!providerCredentialId)
   {
-    return { secretRef: null, litellmCredentialName: null };
+		return { secretRef: null, litellmCredentialName: null, provider: null };
   }
-  const credential = await prisma.providerCredential.findUnique({ where: { id: providerCredentialId } });
+  const credential = await prisma.providerCredential.findUnique({ where: { id_siloId: { id: providerCredentialId, siloId } } });
   if (!credential)
   {
     return { error: "providerCredentialId does not reference an existing credential.", code: "VALIDATION_ERROR" };
@@ -123,7 +134,25 @@ async function _resolveCredential(prisma: Prisma.TransactionClient, providerCred
   {
     return { error: "providerCredentialId is owned by a different ClusterTenant.", code: "CREDENTIAL_SCOPE_MISMATCH" };
   }
-  return { secretRef: credential.secretRef, litellmCredentialName: credential.litellmCredentialName ?? null };
+  return { secretRef: credential.secretRef, litellmCredentialName: credential.litellmCredentialName ?? null, provider: credential.provider };
+}
+
+/** Returns why public CRUD cannot mutate one centrally governed model, or null for custom BYOM. */
+async function _governedModelReason(transaction: Prisma.TransactionClient, model: PrismaModelDefinition): Promise<string | null>
+{
+	if (model.publicModelName === _GLOBAL_AUTO_MODEL_NAME || model.publicModelName === _GLOBAL_AUTO_EMBEDDING_MODEL_NAME)
+		return "Reserved model aliases are managed by the global routing authority.";
+	const routingDefault = await transaction.modelRoutingDefault.findFirst({ where: { siloId: model.siloId, scope: "Global", clusterTenant: null, defaultModel: model.publicModelName } });
+	if (routingDefault !== null)
+		return "The selected global model must be replaced through model routing defaults first.";
+	if (model.providerCredentialId === null)
+		return null;
+	const credential = await transaction.providerCredential.findUnique({ where: { id_siloId: { id: model.providerCredentialId, siloId: model.siloId } } });
+	const catalog = credential === null ? undefined : _BYOK_PROVIDER_CATALOG[credential.provider];
+	if (catalog?.models.some(function _Owned(entry) { return entry.slug === model.publicModelName && entry.slug === model.upstreamModel; }))
+		return "Provider catalogue models are managed by the provider key authority.";
+	const alias = await transaction.modelDefinition.findFirst({ where: { siloId: model.siloId, scope: "Global", clusterTenant: null, publicModelName: _GLOBAL_AUTO_MODEL_NAME, providerCredentialId: model.providerCredentialId, upstreamModel: model.upstreamModel } });
+	return alias === null ? null : "The current global alias still depends on this model's provider.";
 }
 
 /**
@@ -161,7 +190,7 @@ export function modelRegistryRouter(prisma: PrismaClient, effectExecutor: Provid
     const clusterTenant = typeof req.query.clusterTenant === "string" ? req.query.clusterTenant : undefined;
 	const rows = await models.run(async function _List(transaction, authorization)
 	{
-		const candidates = await transaction.modelDefinition.findMany({ where: clusterTenant ? { clusterTenant } : undefined, orderBy: { createdAt: "asc" } });
+		const candidates = await transaction.modelDefinition.findMany({ where: { siloId: caller.siloId, ...(clusterTenant ? { clusterTenant } : {}) }, orderBy: { createdAt: "asc" } });
 		const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: candidates.map(row => ({ kind: ProductAuthorizationResourceKinds.ModelDefinition, id: row.id })), nowEpochMs: Date.now() });
 		const entitledIds = new Set(entitled.map(resource => resource.id));
 		return candidates.filter(row => entitledIds.has(row.id));
@@ -177,7 +206,7 @@ export function modelRegistryRouter(prisma: PrismaClient, effectExecutor: Provid
 		return;
 	const row = await models.run(async function _Get(transaction, authorization)
 	{
-		const candidate = await transaction.modelDefinition.findUnique({ where: { id: req.params.id } });
+		const candidate = await transaction.modelDefinition.findUnique({ where: { id_siloId: { id: req.params.id, siloId: caller.siloId } } });
 		if (candidate === null)
 			return null;
 		const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: [{ kind: ProductAuthorizationResourceKinds.ModelDefinition, id: candidate.id }], nowEpochMs: Date.now() });
@@ -218,18 +247,29 @@ export function modelRegistryRouter(prisma: PrismaClient, effectExecutor: Provid
 		const admitted = await models.runDatabaseMutation(async function _Create(transaction, authorization, effects)
 		{
 			const clusterTenant = scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null;
-			const credentialResult = await _resolveCredential(transaction, write.providerCredentialId, clusterTenant);
+			const credentialResult = await _resolveCredential(transaction, caller.siloId, write.providerCredentialId, clusterTenant);
 			if ("error" in credentialResult)
 				return credentialResult;
+			if (credentialResult.provider !== null)
+			{
+				const providerBlocker = await effects.findResourceBlocker(caller.siloId, ProductAuthorizationResourceKinds.ProviderConnection, `byok:${credentialResult.provider}`);
+				if (providerBlocker !== null)
+					return { providerEffectBlocker: providerBlocker } as const;
+			}
 			const publicModelName = write.publicModelName.trim();
 			const upstreamModel = write.upstreamModel.trim();
 			const apiBase = write.apiBase?.trim() || null;
 			const admission = await _RequireProviderGatewayAdministration(authorization, caller, { operation: "create-model-definition", commandId, modelDefinitionId, scope, clusterTenant, publicModelName, upstreamModel, apiBase, providerCredentialId: write.providerCredentialId ?? null, generatedOutputCapabilities: write.generatedOutputCapabilities ?? [] });
-			const model = await transaction.modelDefinition.create({ data: { id: modelDefinitionId, scope: _toPrismaScope(scope), clusterTenant, publicModelName, litellmModelId: `pending:${commandId}`, upstreamModel, apiBase, isDefault: write.isDefault ?? false, providerCredentialId: write.providerCredentialId ?? null, generatedOutputCapabilities: write.generatedOutputCapabilities ?? [] } });
+			const model = await transaction.modelDefinition.create({ data: { id: modelDefinitionId, siloId: caller.siloId, scope: _toPrismaScope(scope), clusterTenant, publicModelName, litellmModelId: `pending:${commandId}`, upstreamModel, apiBase, isDefault: write.isDefault ?? false, providerCredentialId: write.providerCredentialId ?? null, generatedOutputCapabilities: write.generatedOutputCapabilities ?? [] } });
 			await _GrantProviderResourceCreatorUse(authorization, caller, { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: model.id }, new Date());
-			const command = _RequireProviderEffectAdmission(await effects.admit({ id: commandId, siloId: caller.siloId, principalId: caller.principalId, payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: model.id, publicModelName, upstreamModel, scope, clusterTenant, apiBase, apiKeyEnvRef: credentialResult.secretRef, litellmCredentialName: credentialResult.litellmCredentialName } }, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: model.id, resourceRevision: commandId, argumentsDigest: admission.argumentsDigest, materialVerifier: null, authorization: admission.evidence, approvalId: null, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None }));
+			const command = _RequireProviderEffectAdmission(await effects.admit({ id: commandId, siloId: caller.siloId, principalId: caller.principalId, payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: model.id, publicModelName, upstreamModel, scope, clusterTenant, apiBase, apiKeyEnvRef: credentialResult.secretRef, litellmCredentialName: credentialResult.litellmCredentialName, routingDefaultId: null, selectedModelDefinitionId: null } }, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: model.id, resourceRevision: commandId, argumentsDigest: admission.argumentsDigest, materialVerifier: null, authorization: admission.evidence, approvalId: null, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None }));
 			return { command, model };
 		});
+		if ("providerEffectBlocker" in admitted && admitted.providerEffectBlocker !== undefined)
+		{
+			_SendProviderEffectBusy(res, admitted.providerEffectBlocker, "The selected provider is changing custody.");
+			return;
+		}
 		if ("error" in admitted)
 		{
 			res.status(400).json(admitted);
@@ -241,7 +281,7 @@ export function modelRegistryRouter(prisma: PrismaClient, effectExecutor: Provid
 			res.status(503).json({ error: "Model registration is admitted but has not completed.", code: "PROVIDER_EFFECT_PENDING", commandId: admitted.command.id, modelDefinitionId: admitted.model.id });
 			return;
 		}
-		const created = await models.run(async function _ReadCreated(transaction) { return transaction.modelDefinition.findUnique({ where: { id: admitted.model.id } }); });
+		const created = await models.run(async function _ReadCreated(transaction) { return transaction.modelDefinition.findUnique({ where: { id_siloId: { id: admitted.model.id, siloId: caller.siloId } } }); });
 		if (created === null)
 			throw new Error("completed model registration command has no model definition");
 		res.status(201).json(_toContract(created));
@@ -267,7 +307,7 @@ export function modelRegistryRouter(prisma: PrismaClient, effectExecutor: Provid
 			res.status(503).json({ error: "Model registration has not completed.", code: "PROVIDER_EFFECT_PENDING", commandId: req.params.commandId, modelDefinitionId: req.params.id });
 			return;
 		}
-		const model = await models.run(async function _ReadResumed(transaction) { return transaction.modelDefinition.findUnique({ where: { id: req.params.id } }); });
+		const model = await models.run(async function _ReadResumed(transaction) { return transaction.modelDefinition.findUnique({ where: { id_siloId: { id: req.params.id, siloId: caller.siloId } } }); });
 		if (model === null || model.litellmModelId.startsWith("pending:"))
 		{
 			res.status(503).json({ error: "Model registration has not completed.", code: "PROVIDER_EFFECT_PENDING", commandId: req.params.commandId, modelDefinitionId: req.params.id });
@@ -308,27 +348,41 @@ export function modelRegistryRouter(prisma: PrismaClient, effectExecutor: Provid
 	{
 		const updated = await models.runDatabaseMutation(async function _Update(transaction, authorization, effects)
 		{
-			const existing = await transaction.modelDefinition.findUnique({ where: { id: req.params.id } });
+			const existing = await transaction.modelDefinition.findUnique({ where: { id_siloId: { id: req.params.id, siloId: caller.siloId } } });
 			if (existing === null)
 				return null;
 			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "update-model-definition", id: existing.id, write });
+			const governedReason = await _governedModelReason(transaction, existing);
+			if (governedReason !== null)
+				return { governedReason } as const;
 			const blocker = await effects.findResourceBlocker(caller.siloId, ProductAuthorizationResourceKinds.ModelDefinition, existing.id);
 			if (blocker !== null)
 				return { providerEffectBlocker: blocker } as const;
-			const credentialResult = await _resolveCredential(transaction, write.providerCredentialId, modelClusterTenant);
+			const credentialResult = await _resolveCredential(transaction, caller.siloId, write.providerCredentialId, modelClusterTenant);
 			if ("error" in credentialResult)
 				return credentialResult;
+			if (credentialResult.provider !== null)
+			{
+				const providerBlocker = await effects.findResourceBlocker(caller.siloId, ProductAuthorizationResourceKinds.ProviderConnection, `byok:${credentialResult.provider}`);
+				if (providerBlocker !== null)
+					return { providerEffectBlocker: providerBlocker } as const;
+			}
 			const data: Prisma.ModelDefinitionUncheckedUpdateInput = { scope: _toPrismaScope(scope), clusterTenant: modelClusterTenant, publicModelName: write.publicModelName.trim(), upstreamModel: write.upstreamModel.trim(), apiBase: write.apiBase?.trim() || null, isDefault: write.isDefault ?? false, providerCredentialId: write.providerCredentialId ?? null, generatedOutputCapabilities: write.generatedOutputCapabilities ?? [] };
-			return transaction.modelDefinition.update({ where: { id: existing.id }, data });
+			return transaction.modelDefinition.update({ where: { id_siloId: { id: existing.id, siloId: caller.siloId } }, data });
 		});
 		if (updated === null)
 		{
 			res.status(404).json({ error: "Model definition not found", code: "MODEL_DEFINITION_NOT_FOUND" });
 			return;
 		}
-		if ("providerEffectBlocker" in updated)
+		if ("providerEffectBlocker" in updated && updated.providerEffectBlocker !== undefined)
 		{
 			_SendProviderEffectBusy(res, updated.providerEffectBlocker, "Model registration is still active.");
+			return;
+		}
+		if ("governedReason" in updated)
+		{
+			res.status(409).json({ error: updated.governedReason, code: "MODEL_DEFINITION_GOVERNED" });
 			return;
 		}
 		if ("error" in updated)
@@ -355,16 +409,24 @@ export function modelRegistryRouter(prisma: PrismaClient, effectExecutor: Provid
 	{
 		const deleted = await models.runDatabaseMutation(async function _Delete(transaction, authorization, effects)
 		{
-			const existing = await transaction.modelDefinition.findUnique({ where: { id: req.params.id } });
+			const existing = await transaction.modelDefinition.findUnique({ where: { id_siloId: { id: req.params.id, siloId: caller.siloId } } });
 			if (existing === null)
-				return { deleted: false, blocker: null } as const;
+				return { deleted: false, blocker: null, governedReason: null } as const;
 			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "delete-model-definition", id: existing.id });
+			const governedReason = await _governedModelReason(transaction, existing);
+			if (governedReason !== null)
+				return { deleted: false, blocker: null, governedReason } as const;
 			const blocker = await effects.findResourceBlocker(caller.siloId, ProductAuthorizationResourceKinds.ModelDefinition, existing.id);
 			if (blocker !== null)
-				return { deleted: false, blocker } as const;
-			await transaction.modelDefinition.delete({ where: { id: existing.id } });
-			return { deleted: true, blocker: null } as const;
+				return { deleted: false, blocker, governedReason: null } as const;
+			await transaction.modelDefinition.delete({ where: { id_siloId: { id: existing.id, siloId: caller.siloId } } });
+			return { deleted: true, blocker: null, governedReason: null } as const;
 		});
+		if (deleted.governedReason !== null)
+		{
+			res.status(409).json({ error: deleted.governedReason, code: "MODEL_DEFINITION_GOVERNED" });
+			return;
+		}
 		if (deleted.blocker !== null)
 		{
 			_SendProviderEffectBusy(res, deleted.blocker, "Model registration is still active.");
