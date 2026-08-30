@@ -13,7 +13,8 @@ export type { RateLimitOptions } from "./rate-limit.types";
  * The default cap is deliberately generous (1000/min/IP): real opencrane-ui traffic stays well
  * under it, so this never shapes normal use — it only sheds a flood. Health probes (`/healthz`,
  * `/readyz`) and the high-frequency trusted internal pod-poll routes (`/api/internal/*`) are
- * exempt so liveness checks and operator loops are never throttled.
+ * exempt by default so liveness checks and operator loops are never throttled. The internal
+ * listener disables that exemption because its workload routes have their own traffic budget.
  *
  * The counters live in this process's memory, so each replica enforces the cap on its own: with N
  * replicas behind the ingress, one client can reach N times the configured limit overall.
@@ -26,6 +27,7 @@ export type { RateLimitOptions } from "./rate-limit.types";
  */
 export function _RateLimit(opts?: RateLimitOptions): RequestHandler
 {
+  const skipInternal = opts?.skipInternal ?? true;
   return rateLimit({
     windowMs: opts?.windowMs ?? 60_000,
     limit: opts?.max ?? 1000,
@@ -40,7 +42,7 @@ export function _RateLimit(opts?: RateLimitOptions): RequestHandler
     {
       return req.path === "/healthz"
         || req.path === "/readyz"
-        || req.path.startsWith("/api/internal");
+        || (skipInternal && req.path.startsWith("/api/internal"));
     },
   });
 }

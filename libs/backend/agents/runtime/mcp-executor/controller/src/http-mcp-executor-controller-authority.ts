@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
-import { RuntimeWorkloadClaimClasses, type RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
+import { RuntimeWorkloadClaimClasses, __IsImmutableRegistryReference, type RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { McpExecutorCleanupCommand, McpExecutorControllerAuthority, McpExecutorControllerClaim, McpExecutorControllerCleanupClaim, McpExecutorControllerFetch, McpExecutorControllerHttpAuthorityOptions, McpExecutorControllerReleaseClaim, McpExecutorControllerTokenReader, McpExecutorPodRegistrationCommand, McpExecutorReleaseCommand } from "./mcp-executor-controller.types";
@@ -15,9 +15,6 @@ function _IsCoordinate(value: unknown): value is string { return typeof value ==
 /** Accepts a UTC instant with millisecond precision. */
 function _IsInstant(value: unknown): value is string { return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) && Number.isFinite(Date.parse(value)); }
 
-/** Accepts an immutable OCI registry reference. */
-function _IsRegistryReference(value: unknown): value is string { return typeof value === "string" && /^[a-z0-9][a-z0-9._:-]*(?:\/[a-z0-9][a-z0-9._/-]*)+@sha256:[a-f0-9]{64}$/.test(value); }
-
 /** Parses an untrusted claim response into the MCP controller contract. */
 function _Claim(value: unknown): McpExecutorControllerClaim
 {
@@ -29,7 +26,7 @@ function _Claim(value: unknown): McpExecutorControllerClaim
 		throw new Error("OpenCrane MCP executor claim was invalid");
 	const candidate = claim as Record<string, unknown>;
 	const keys = ["claimId", "siloId", "workloadClass", "profileName", "idempotencyKey", "claimedAt", "deliveryCount", "expiresAt", "executionReference"];
-	if (Object.keys(candidate).length !== keys.length || !keys.every(function _HasKey(key): boolean { return Object.hasOwn(candidate, key); }) || ![candidate["claimId"], candidate["siloId"], candidate["profileName"], candidate["idempotencyKey"], candidate["executionReference"]].every(_IsCoordinate) || candidate["workloadClass"] !== RuntimeWorkloadClaimClasses.McpExecutor || !_IsInstant(candidate["claimedAt"]) || !_IsInstant(candidate["expiresAt"]) || !Number.isSafeInteger(candidate["deliveryCount"]) || Number(candidate["deliveryCount"]) < 1 || !_IsRegistryReference(record["registryReference"]))
+	if (Object.keys(candidate).length !== keys.length || !keys.every(function _HasKey(key): boolean { return Object.hasOwn(candidate, key); }) || ![candidate["claimId"], candidate["siloId"], candidate["profileName"], candidate["idempotencyKey"], candidate["executionReference"]].every(_IsCoordinate) || candidate["workloadClass"] !== RuntimeWorkloadClaimClasses.McpExecutor || !_IsInstant(candidate["claimedAt"]) || !_IsInstant(candidate["expiresAt"]) || !Number.isSafeInteger(candidate["deliveryCount"]) || Number(candidate["deliveryCount"]) < 1 || !__IsImmutableRegistryReference(record["registryReference"]))
 		throw new Error("OpenCrane MCP executor claim was invalid");
 	return { claim: candidate as unknown as McpExecutorControllerClaim["claim"], registryReference: record["registryReference"] };
 }
