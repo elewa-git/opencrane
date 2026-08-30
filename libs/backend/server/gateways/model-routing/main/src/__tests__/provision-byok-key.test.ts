@@ -172,8 +172,8 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
         { model_name: "openai/gpt-5.4", litellm_params: { model: "openai/gpt-5.4", litellm_credential_name: "byok-openai" }, model_info: { id: "live-openai/gpt-5.4" } },
         { model_name: "openai/gpt-5.4-nano", litellm_params: { model: "openai/gpt-5.4-nano", litellm_credential_name: "byok-openai" }, model_info: { id: "live-openai/gpt-5.4-nano" } },
         { model_name: "auto", litellm_params: { model: "openai/gpt-5.4-nano", litellm_credential_name: "byok-openai" }, model_info: { id: "live-auto" } },
-        { model_name: "openai/text-embedding-3-large", litellm_params: { model: "openai/text-embedding-3-large", litellm_credential_name: "byok-openai" }, model_info: { id: "live-embedding", mode: "embedding" } },
-        { model_name: "auto-embedding", litellm_params: { model: "openai/text-embedding-3-large", litellm_credential_name: "byok-openai" }, model_info: { id: "live-auto-embedding", mode: "embedding" } },
+        { model_name: "openai/text-embedding-3-large", litellm_params: { model: "openai/text-embedding-3-large", litellm_credential_name: "byok-openai" }, model_info: { id: "cfed8894-f48d-56f6-9bb3-32412954af1b", mode: "embedding" } },
+        { model_name: "auto-embedding", litellm_params: { model: "openai/text-embedding-3-large", litellm_credential_name: "byok-openai" }, model_info: { id: "5e3d38ca-63c8-5bf8-b2b7-efa35d76ef1a", mode: "embedding" } },
       ] }), { status: 200 });
       return new Response("not found", { status: 404 });
     });

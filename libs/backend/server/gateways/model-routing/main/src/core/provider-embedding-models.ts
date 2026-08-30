@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { Logger } from "pino";
 
 import { ModelRoutingScope } from "@opencrane/contracts";
@@ -60,6 +62,7 @@ export async function _EnsureProviderEmbeddingModels(catalog: ByokProviderCatalo
 	for (const deployment of deployments)
 	{
 		const litellmModelId = await _RegisterLiteLlmModel({
+			deploymentId: _embeddingDeploymentId(deployment.publicModelName),
 			publicModelName: deployment.publicModelName,
 			upstreamModel: deployment.upstreamModel,
 			scope: ModelRoutingScope.Global,
@@ -74,4 +77,13 @@ export async function _EnsureProviderEmbeddingModels(catalog: ByokProviderCatalo
 		log.info({ publicModelName: deployment.publicModelName, upstreamModel: deployment.upstreamModel }, "embedding model registered with litellm");
 	}
 	return { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: evidence };
+}
+
+/** Builds one resource-stable UUID for a governed Global embedding deployment. */
+function _embeddingDeploymentId(publicModelName: string): string
+{
+	const digest = createHash("sha256").update("global-provider-embedding").update("\0").update(publicModelName).digest("hex").slice(0, 32).split("");
+	digest[12] = "5";
+	digest[16] = ((Number.parseInt(digest[16] ?? "0", 16) & 0x3) | 0x8).toString(16);
+	return `${digest.slice(0, 8).join("")}-${digest.slice(8, 12).join("")}-${digest.slice(12, 16).join("")}-${digest.slice(16, 20).join("")}-${digest.slice(20).join("")}`;
 }

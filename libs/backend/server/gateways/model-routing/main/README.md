@@ -50,6 +50,13 @@ Embedding reconciliation returns a closed `NotApplicable`, `Skipped`, or `Confir
 provider embedding slug and `auto-embedding`; provider command finalization validates and stores that
 secret-free evidence with the governed provider generation.
 
+Credential rotation never deletes before replacing. It atomically PATCHes the fixed LiteLLM
+credential name and uses POST only after PATCH confirms a 404 absence. The deployed DB-backed
+LiteLLM profile reloads patched credentials into memory on its pinned refresh loop. A missing
+response from PATCH or POST remains uncertain, so the durable provider command retains its barrier
+until an exact retry converges. Provider and `auto-embedding` deployments likewise use stable UUIDs
+derived from their governed Global resource, so a late first POST cannot create a second generation.
+
 ## Public surface
 
 - `modelRoutingDefaultsRouter` — the routing-defaults router, mounted at

@@ -19,8 +19,8 @@ const _LITELLM_HTTP_TIMEOUT_MS = 10_000;
  * be reconciled later. A response distinguishes a confirmed rejection from a transport failure
  * whose upstream result is unknown, so callers can retain their resource barrier when necessary.
  *
- * Upsert is implemented as delete-then-create so a refreshed key always replaces the stored value
- * regardless of whether the LiteLLM build exposes a credential update verb.
+ * Existing credentials use LiteLLM's atomic PATCH endpoint. A confirmed 404 is the only condition
+ * that permits POST, so a delayed earlier request can never delete a successfully retried key.
  *
  * @param input - The credential name, provider, and raw key to store in LiteLLM.
  * @returns The confirmed, skipped, rejected, or uncertain fixed-name mutation outcome.
@@ -65,42 +65,62 @@ export async function _DeleteLiteLlmCredential(credentialName: string): Promise<
 }
 
 /**
- * Performs the live delete-then-create against LiteLLM. The delete clears any prior value so a
- * refreshed key replaces it; the create stores the new value. A transport failure yields an
- * uncertain outcome because the request may still complete after this process stops waiting.
+ * Atomically updates an existing credential, or creates it only after PATCH confirms absence.
+ * A transport failure yields an uncertain outcome because the request may still complete after
+ * this process stops waiting.
  *
  * @param endpoint  - LiteLLM base URL.
  * @param masterKey - LiteLLM bearer credential.
  * @param input     - The credential to upsert.
+ * @see https://github.com/BerriAI/litellm/blob/790a5ce0b323c1eefa70c2df25b2780097aa3f80/litellm/proxy/credential_endpoints/endpoints.py
  */
 async function _upsertLive(endpoint: string, masterKey: string, input: LiteLlmCredentialUpsert): Promise<LiteLlmCredentialMutationOutcomes>
 {
   try
   {
-    // 1. Clear any existing value first so a refresh is a true replace (idempotent — 404 is fine).
-    const deleted = await _deleteLive(endpoint, masterKey, input.credentialName);
-    if (deleted === LiteLlmCredentialMutationOutcomes.Uncertain)
-      return deleted;
+    const body = JSON.stringify({
+      credential_name: input.credentialName,
+      credential_info: { custom_llm_provider: input.provider },
+      credential_values: { api_key: input.apiKey },
+    });
+    const headers = {
+      "content-type": "application/json",
+      Authorization: `Bearer ${masterKey}`,
+    };
 
-    // 2. Create the credential carrying the raw key inline. LiteLLM encrypts it at rest with
-    //    LITELLM_SALT_KEY; the key is never echoed back or copied into a runtime configuration.
-    const response = await fetch(`${endpoint}/credentials`, {
+    // 1. PATCH replaces the encrypted value atomically. The pinned LiteLLM build updates the DB
+    //    row in one operation and returns 404 without mutation when the fixed name is absent.
+    const patched = await fetch(`${endpoint}/credentials/${encodeURIComponent(input.credentialName)}`, {
+      method: "PATCH",
+      headers,
+      body,
+      signal: AbortSignal.timeout(_LITELLM_HTTP_TIMEOUT_MS),
+    });
+    if (patched.ok)
+    {
+      _log.info({ credentialName: input.credentialName, provider: input.provider }, "litellm credential updated");
+      return LiteLlmCredentialMutationOutcomes.Applied;
+    }
+    if (patched.status !== 404)
+    {
+      _log.warn({ credentialName: input.credentialName, provider: input.provider, status: patched.status }, "litellm credential update failed; key persisted to Secret only");
+      return LiteLlmCredentialMutationOutcomes.Rejected;
+    }
+
+    // 2. POST only after the target confirms absence. A racing exact-command POST carries the same
+    //    desired key, while a conflicting generation cannot be admitted through the command barrier.
+    const created = await fetch(`${endpoint}/credentials`, {
       method: "POST",
       headers: {
-        "content-type": "application/json",
-        Authorization: `Bearer ${masterKey}`,
+        ...headers,
       },
-      body: JSON.stringify({
-        credential_name: input.credentialName,
-        credential_info: { custom_llm_provider: input.provider },
-        credential_values: { api_key: input.apiKey },
-      }),
+      body,
       signal: AbortSignal.timeout(_LITELLM_HTTP_TIMEOUT_MS),
     });
 
-    if (!response.ok)
+    if (!created.ok)
     {
-      _log.warn({ credentialName: input.credentialName, provider: input.provider, status: response.status }, "litellm credential upsert failed; key persisted to Secret only");
+      _log.warn({ credentialName: input.credentialName, provider: input.provider, status: created.status }, "litellm credential create failed; key persisted to Secret only");
       return LiteLlmCredentialMutationOutcomes.Rejected;
     }
 

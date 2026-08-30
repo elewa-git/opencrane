@@ -63,6 +63,10 @@ function _mockCoreApi(): k8s.CoreV1Api
 /** Route every fetch call by URL/method so `/credentials` and `/model/new` always succeed generically. */
 function _routedFetch(modelInfoData: Array<{ model_name: string }>): ReturnType<typeof vi.fn>
 {
+	const embeddingIds: Record<string, string> = {
+		"openai/text-embedding-3-large": "cfed8894-f48d-56f6-9bb3-32412954af1b",
+		"auto-embedding": "5e3d38ca-63c8-5bf8-b2b7-efa35d76ef1a",
+	};
 	const inventory = modelInfoData.map(function _Inventory(entry)
 	{
 		const embedding = entry.model_name === "openai/text-embedding-3-large" || entry.model_name === _AUTO_EMBEDDING_MODEL_NAME;
@@ -71,7 +75,7 @@ function _routedFetch(modelInfoData: Array<{ model_name: string }>): ReturnType<
 			upstreamModel = "openai/text-embedding-3-large";
 		else if (entry.model_name === "auto")
 			upstreamModel = "openai/gpt-5.4-nano";
-		return { ...entry, litellm_params: { model: upstreamModel, litellm_credential_name: "byok-openai" }, model_info: { id: `existing-${entry.model_name}`, ...(embedding ? { mode: "embedding" } : {}) } };
+		return { ...entry, litellm_params: { model: upstreamModel, litellm_credential_name: "byok-openai" }, model_info: { id: embeddingIds[entry.model_name] ?? `existing-${entry.model_name}`, ...(embedding ? { mode: "embedding" } : {}) } };
 	});
   return vi.fn().mockImplementation(async function _fetch(url: string, init?: RequestInit)
   {
@@ -132,7 +136,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     const embeddingCall = registerCalls.find(function _isEmbedding(c) { return _bodyOf(c)["model_name"] === "openai/text-embedding-3-large"; });
     expect(embeddingCall).toBeDefined();
     const body = _bodyOf(embeddingCall!);
-    expect(body["model_info"]).toEqual({ mode: "embedding" });
+		expect(body["model_info"]).toEqual({ id: "cfed8894-f48d-56f6-9bb3-32412954af1b", mode: "embedding" });
     expect((body["litellm_params"] as Record<string, unknown>)["model"]).toBe("openai/text-embedding-3-large");
   });
 
@@ -171,7 +175,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     const aliasCall = registerCalls.find(function _isAlias(c) { return _bodyOf(c)["model_name"] === _AUTO_EMBEDDING_MODEL_NAME; });
     expect(aliasCall).toBeDefined();
     const body = _bodyOf(aliasCall!);
-    expect(body["model_info"]).toEqual({ mode: "embedding" });
+		expect(body["model_info"]).toEqual({ id: "5e3d38ca-63c8-5bf8-b2b7-efa35d76ef1a", mode: "embedding" });
     // The alias resolves to the provider's REAL embedding upstream (not to itself), so the proxy
     // routes it to OpenAI on the BYOK credential — exactly how the chat `auto` alias works.
     expect((body["litellm_params"] as Record<string, unknown>)["model"]).toBe("openai/text-embedding-3-large");
@@ -278,6 +282,44 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
 
 		await expect(_EnsureProviderEmbeddingModels(_BYOK_PROVIDER_CATALOG["openai"], "byok-openai", _log)).rejects.toThrow(/inventory returned HTTP 503/);
 		expect(fetchMock.mock.calls.filter(function _CreatesDeployment(call) { return (call[0] as string).endsWith("/model/new"); })).toHaveLength(0);
+	});
+
+	it("converges stable embedding ids when the first POST lands after its exact retry", async function _DelayedFirstPost()
+	{
+		const inventory = new Map<string, Record<string, unknown>>();
+		let applyDelayed: (() => void) | null = null;
+		let createCount = 0;
+		const fetchMock = vi.fn(async function _Fetch(url: string, init?: RequestInit): Promise<Response>
+		{
+			if (url.endsWith("/model/info"))
+				return new Response(JSON.stringify({ data: Array.from(inventory.values()) }), { status: 200 });
+			if (url.endsWith("/model/new"))
+			{
+				const body = JSON.parse(init?.body as string) as { model_name: string; litellm_params: Record<string, unknown>; model_info: { id: string; mode: string } };
+				const entry = { model_name: body.model_name, litellm_params: body.litellm_params, model_info: body.model_info };
+				createCount += 1;
+				if (createCount === 1)
+				{
+					applyDelayed = function _ApplyDelayed() { inventory.set(body.model_info.id, entry); };
+					throw new Error("request timed out while upstream continued");
+				}
+				inventory.set(body.model_info.id, entry);
+				return new Response(JSON.stringify({ model_id: body.model_info.id }), { status: 200 });
+			}
+			return new Response("not found", { status: 404 });
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		await expect(_EnsureProviderEmbeddingModels(_BYOK_PROVIDER_CATALOG["openai"], "byok-openai", _log)).rejects.toThrow(/upstream continued/);
+		const retry = await _EnsureProviderEmbeddingModels(_BYOK_PROVIDER_CATALOG["openai"], "byok-openai", _log);
+		applyDelayed!();
+
+		expect(retry).toEqual({ status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: [
+			expect.objectContaining({ publicModelName: "openai/text-embedding-3-large", litellmModelId: "cfed8894-f48d-56f6-9bb3-32412954af1b" }),
+			expect.objectContaining({ publicModelName: "auto-embedding", litellmModelId: "5e3d38ca-63c8-5bf8-b2b7-efa35d76ef1a" }),
+		] });
+		expect(inventory.size).toBe(2);
+		expect(createCount).toBe(3);
 	});
 
 	it("requires a live default model when deployment bootstrap asks for it", async function _requireLiveModel()
