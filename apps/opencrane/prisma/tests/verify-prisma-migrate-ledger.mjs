@@ -133,6 +133,7 @@ for (const marker of [
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_claim_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_completion_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_payload_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_resource_binding_check"',
 ])
 {
 	_Require(authorizationMigration.includes(marker), `the 0.9.2-to-0.10.0 path must install provider effect authority: ${marker}`);
@@ -144,6 +145,10 @@ for (const invariant of [
 	'"state" = \'claimed\' AND "claim_fence" IS NOT NULL',
 	'"state" = \'succeeded\' AND "completed_at" IS NOT NULL AND "result" IS NOT NULL',
 	'"payload" - ARRAY[\'provider\', \'secretRef\', \'litellmCredentialName\'] = \'{}\'::jsonb',
+	'"resource_kind" = \'model-definition\'',
+	'"payload"->>\'modelDefinitionId\' = "resource_id"',
+	'"resource_kind" = \'provider-connection\'',
+	'"resource_id" = \'byok:\' || ("payload"->>\'provider\')',
 ])
 {
 	_Require(authorizationMigration.includes(invariant), `the provider effect upgrade is missing authority invariant: ${invariant}`);

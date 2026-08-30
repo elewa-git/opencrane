@@ -211,6 +211,14 @@ ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_
             AND (jsonb_typeof("payload"->'litellmCredentialName') = 'null' OR (jsonb_typeof("payload"->'litellmCredentialName') = 'string' AND COALESCE(btrim("payload"->>'litellmCredentialName'), '') <> '')))
     )
 );
+ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_resource_binding_check" CHECK (
+    ("kind" = 'register_model'
+        AND "resource_kind" = 'model-definition'
+        AND "payload"->>'modelDefinitionId' = "resource_id")
+    OR ("kind" IN ('set_byok_key', 'delete_byok_key')
+        AND "resource_kind" = 'provider-connection'
+        AND "resource_id" = 'byok:' || ("payload"->>'provider'))
+);
 
 -- Enforce the pre-release hard cutoff for rows whose organization owner cannot be derived.
 -- The app-owned untagged-candidate repair attributes invitation audit rows from exact product
