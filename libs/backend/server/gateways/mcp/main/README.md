@@ -44,14 +44,17 @@ check a newly registered MCP server and a submitted OCI Image Layout ZIP.
        copy config, layers, and manifest to the operator registry
             │
             ▼
-       save registry/repository@sha256:... ──► imported and stored for a later governed runtime claim
+       save registry/repository@sha256:... ──► imported and stored as immutable evidence for a later governed runtime claim
 ```
 
 Layout validation checks the OCI Image Layout structure and every content-addressed descriptor. A
-successful admission also copies the exact image into the operator registry and saves its immutable
-digest-pinned reference. It does not treat a valid layout as evidence that the image is an MCP v2
-server: that evidence must come from the actual `server/discover` exchange after a governed runtime
-starts the imported image.
+successful admission also copies the exact image into the operator registry. Only after every
+configuration and layer blob, then the manifest, has been copied and checked at its SHA-256 digest
+does it save `registry/repository@sha256:...`. That value is immutable evidence of the imported
+image for a later governed runtime claim; saving it grants neither runtime access nor permission to
+run the upload. It does not treat a valid layout as evidence that the image is an MCP v2 server:
+that evidence must come from the actual `server/discover` exchange after a governed runtime starts
+the imported image.
 
 An installed server can then run a tool through a public task. The task keeps its state, input,
 result, and failure in the database, so a server restart does not repeat the tool call.
