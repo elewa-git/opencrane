@@ -59,7 +59,7 @@ model ModelDefinition {
   scope                       ModelRoutingScope @default(Global)
   clusterTenant               String?           @map("cluster_tenant")
   publicModelName             String            @map("public_model_name")
-  litellmModelId              String            @unique @map("litellm_model_id")
+  litellmModelId              String            @map("litellm_model_id")
   upstreamModel               String            @map("upstream_model")
   apiBase                     String?           @map("api_base")
   isDefault                   Boolean           @default(false) @map("is_default")
@@ -72,6 +72,7 @@ model ModelDefinition {
   agentRevisions     AgentRevision[]
 
   @@unique([id, siloId])
+  @@unique([siloId, litellmModelId], map: "model_definitions_silo_id_litellm_model_id_key")
   @@unique([siloId, scope, clusterTenant, publicModelName])
   @@index([siloId, clusterTenant])
   @@map("model_definitions")
@@ -112,7 +113,7 @@ model ProviderEffectCommand {
   followUpCommand ProviderEffectCommand?  @relation("ProviderEffectCommandFollowUp", fields: [followUpCommandId], references: [id], onDelete: Restrict)
   followUpParents ProviderEffectCommand[] @relation("ProviderEffectCommandFollowUp")
 
-  @@unique([kind, resourceId, resourceRevision])
+  @@unique([siloId, kind, resourceId, resourceRevision], map: "provider_effect_commands_silo_kind_resource_revision_key")
   @@unique([siloId, resourceKind, resourceId, desiredGeneration])
   @@index([siloId, resourceKind, resourceId, desiredGeneration(sort: Desc)])
   @@index([state, claimExpiresAt])

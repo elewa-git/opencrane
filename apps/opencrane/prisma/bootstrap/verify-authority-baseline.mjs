@@ -14,10 +14,11 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE UNIQUE INDEX "provider_credentials_global_provider_key" ON "provider_credentials"("silo_id", "provider") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
 	'CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key" ON "model_definitions"("silo_id", "public_model_name") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
 	'CREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions"("silo_id") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL AND "is_default"',
+	'CREATE UNIQUE INDEX "model_definitions_silo_id_litellm_model_id_key" ON "model_definitions"("silo_id", "litellm_model_id")',
 	'CREATE UNIQUE INDEX "model_routing_defaults_global_key" ON "model_routing_defaults"("silo_id") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
 	'ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_id_silo_id_fkey" FOREIGN KEY ("model_definition_id", "silo_id") REFERENCES "model_definitions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE',
 	'ALTER TABLE "model_definitions" ADD CONSTRAINT "model_definitions_provider_credential_id_silo_id_fkey" FOREIGN KEY ("provider_credential_id", "silo_id") REFERENCES "provider_credentials"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE',
-	'CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key"',
+	'CREATE UNIQUE INDEX "provider_effect_commands_silo_kind_resource_revision_key" ON "provider_effect_commands"("silo_id", "kind", "resource_id", "resource_revision")',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_material_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_claim_check"',
@@ -131,6 +132,8 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'"provenance" = \'agent_output\' AND "created_by_user_id" IS NULL AND "message_id" IS NULL',
 ];
 const _FORBIDDEN_AUTHORITY_MARKERS = [
+	'CREATE UNIQUE INDEX "model_definitions_litellm_model_id_key" ON "model_definitions"("litellm_model_id")',
+	'CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key" ON "provider_effect_commands"("kind", "resource_id", "resource_revision")',
 	'NEW."scope_kind" IS DISTINCT FROM OLD."scope_kind"',
 	'CREATE UNIQUE INDEX "memory_datasets_exact_scope_key"',
 	'btrim("organization_id") <> \'\' AND\n        (("scope_kind" = \'organization\'',

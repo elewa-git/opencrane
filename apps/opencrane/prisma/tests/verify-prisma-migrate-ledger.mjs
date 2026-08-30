@@ -130,6 +130,7 @@ for (const globalModelIndex of [
 	'CREATE UNIQUE INDEX "provider_credentials_global_provider_key" ON "provider_credentials"("silo_id", "provider") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
 	'CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key" ON "model_definitions"("silo_id", "public_model_name") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
 	'CREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions"("silo_id") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL AND "is_default"',
+	'CREATE UNIQUE INDEX "model_definitions_silo_id_litellm_model_id_key" ON "model_definitions"("silo_id", "litellm_model_id")',
 	'CREATE UNIQUE INDEX "model_routing_defaults_global_key" ON "model_routing_defaults"("silo_id") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
 ])
 {
@@ -141,6 +142,10 @@ _Require(authorizationMigration.includes("cannot install global model default au
 _RequireBeforeIn(authorizationMigration, "cannot install global model alias authority: duplicate public model names exist", 'CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key"', "the upgrade must check global alias duplicates before creating its index");
 _RequireBeforeIn(authorizationMigration, "cannot install global model default authority: multiple global defaults exist", 'CREATE UNIQUE INDEX "model_definitions_global_default_key"', "the upgrade must check global defaults before creating its index");
 _Require(authorizationMigration.includes("expected one admitted silo"), "the upgrade must fail closed when unreferenced provider rows cannot be mapped to one admitted silo");
+_RequireBeforeIn(authorizationMigration, 'DROP INDEX "model_definitions_litellm_model_id_key"', 'CREATE UNIQUE INDEX "model_definitions_silo_id_litellm_model_id_key"', "the upgrade must replace the installation-wide LiteLLM deployment fence with the silo-local fence");
+_Require(!targetBaseline.includes('CREATE UNIQUE INDEX "model_definitions_litellm_model_id_key" ON "model_definitions"("litellm_model_id")'), "fresh databases must not retain an installation-wide LiteLLM deployment fence");
+_Require(!authorizationMigration.includes('CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key"'), "the upgrade must not create an installation-wide provider command identity fence");
+_Require(!targetBaseline.includes('CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key"'), "fresh databases must not create an installation-wide provider command identity fence");
 for (const siloFence of [
 	'ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_agent_service_id_silo_id_fkey"',
 	'ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_id_silo_id_fkey"',
@@ -164,7 +169,7 @@ for (const marker of [
 	'CREATE INDEX "provider_effect_commands_state_claim_expires_at_idx"',
 	'CREATE INDEX "provider_effect_commands_follow_up_command_id_idx" ON "provider_effect_commands"("follow_up_command_id")',
 	'CREATE INDEX "provider_effect_commands_silo_id_created_at_idx"',
-	'CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key"',
+	'CREATE UNIQUE INDEX "provider_effect_commands_silo_kind_resource_revision_key" ON "provider_effect_commands"("silo_id", "kind", "resource_id", "resource_revision")',
 	'CREATE UNIQUE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__key" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation")',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_material_check"',

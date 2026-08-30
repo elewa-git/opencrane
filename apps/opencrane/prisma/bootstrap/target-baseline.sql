@@ -3010,13 +3010,13 @@ CREATE UNIQUE INDEX "provider_credentials_id_silo_id_key" ON "provider_credentia
 CREATE UNIQUE INDEX "provider_credentials_silo_id_scope_cluster_tenant_provider_key" ON "provider_credentials"("silo_id", "scope", "cluster_tenant", "provider");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "model_definitions_litellm_model_id_key" ON "model_definitions"("litellm_model_id");
-
--- CreateIndex
 CREATE INDEX "model_definitions_silo_id_cluster_tenant_idx" ON "model_definitions"("silo_id", "cluster_tenant");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "model_definitions_id_silo_id_key" ON "model_definitions"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "model_definitions_silo_id_litellm_model_id_key" ON "model_definitions"("silo_id", "litellm_model_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "model_definitions_silo_id_scope_cluster_tenant_public_model_key" ON "model_definitions"("silo_id", "scope", "cluster_tenant", "public_model_name");
@@ -3042,7 +3042,7 @@ CREATE INDEX "provider_effect_commands_follow_up_command_id_idx" ON "provider_ef
 CREATE INDEX "provider_effect_commands_silo_id_created_at_idx" ON "provider_effect_commands"("silo_id", "created_at");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key" ON "provider_effect_commands"("kind", "resource_id", "resource_revision");
+CREATE UNIQUE INDEX "provider_effect_commands_silo_kind_resource_revision_key" ON "provider_effect_commands"("silo_id", "kind", "resource_id", "resource_revision");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__key" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation");

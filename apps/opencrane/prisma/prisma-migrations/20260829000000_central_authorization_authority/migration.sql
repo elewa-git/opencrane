@@ -196,6 +196,7 @@ DROP INDEX IF EXISTS "model_routing_defaults_global_key";
 DROP INDEX "provider_credentials_cluster_tenant_idx";
 DROP INDEX "provider_credentials_scope_cluster_tenant_provider_key";
 DROP INDEX "model_definitions_cluster_tenant_idx";
+DROP INDEX "model_definitions_litellm_model_id_key";
 DROP INDEX "model_definitions_scope_cluster_tenant_public_model_name_key";
 
 CREATE UNIQUE INDEX "agent_revisions_id_silo_id_key" ON "agent_revisions"("id", "silo_id");
@@ -205,6 +206,7 @@ CREATE INDEX "provider_credentials_silo_id_cluster_tenant_idx" ON "provider_cred
 CREATE UNIQUE INDEX "provider_credentials_silo_id_scope_cluster_tenant_provider_key" ON "provider_credentials"("silo_id", "scope", "cluster_tenant", "provider");
 CREATE UNIQUE INDEX "model_definitions_id_silo_id_key" ON "model_definitions"("id", "silo_id");
 CREATE INDEX "model_definitions_silo_id_cluster_tenant_idx" ON "model_definitions"("silo_id", "cluster_tenant");
+CREATE UNIQUE INDEX "model_definitions_silo_id_litellm_model_id_key" ON "model_definitions"("silo_id", "litellm_model_id");
 CREATE UNIQUE INDEX "model_definitions_silo_id_scope_cluster_tenant_public_model_key" ON "model_definitions"("silo_id", "scope", "cluster_tenant", "public_model_name");
 CREATE UNIQUE INDEX "model_routing_defaults_id_silo_id_key" ON "model_routing_defaults"("id", "silo_id");
 CREATE UNIQUE INDEX "model_routing_defaults_silo_id_scope_cluster_tenant_key" ON "model_routing_defaults"("silo_id", "scope", "cluster_tenant");
@@ -324,7 +326,7 @@ CREATE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__idx" O
 CREATE INDEX "provider_effect_commands_state_claim_expires_at_idx" ON "provider_effect_commands"("state", "claim_expires_at");
 CREATE INDEX "provider_effect_commands_follow_up_command_id_idx" ON "provider_effect_commands"("follow_up_command_id");
 CREATE INDEX "provider_effect_commands_silo_id_created_at_idx" ON "provider_effect_commands"("silo_id", "created_at");
-CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key" ON "provider_effect_commands"("kind", "resource_id", "resource_revision");
+CREATE UNIQUE INDEX "provider_effect_commands_silo_kind_resource_revision_key" ON "provider_effect_commands"("silo_id", "kind", "resource_id", "resource_revision");
 CREATE UNIQUE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__key" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation");
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_follow_up_command_id_fkey" FOREIGN KEY ("follow_up_command_id") REFERENCES "provider_effect_commands"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check" CHECK (
