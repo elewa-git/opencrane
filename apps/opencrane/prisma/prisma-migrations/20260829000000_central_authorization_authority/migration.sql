@@ -129,6 +129,7 @@ CREATE TABLE "provider_effect_commands" (
     "resource_kind" TEXT NOT NULL,
     "resource_id" TEXT NOT NULL,
     "resource_revision" TEXT NOT NULL,
+    "desired_generation" INTEGER NOT NULL,
     "arguments_digest" TEXT NOT NULL,
     "material_verifier" TEXT,
     "authorization_decision_digest" TEXT NOT NULL,
@@ -150,9 +151,11 @@ CREATE TABLE "provider_effect_commands" (
 
     CONSTRAINT "provider_effect_commands_pkey" PRIMARY KEY ("id")
 );
+CREATE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__idx" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation" DESC);
 CREATE INDEX "provider_effect_commands_state_claim_expires_at_idx" ON "provider_effect_commands"("state", "claim_expires_at");
 CREATE INDEX "provider_effect_commands_silo_id_created_at_idx" ON "provider_effect_commands"("silo_id", "created_at");
 CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key" ON "provider_effect_commands"("kind", "resource_id", "resource_revision");
+CREATE UNIQUE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__key" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation");
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check" CHECK (
     btrim("id") <> ''
     AND btrim("silo_id") <> ''
@@ -160,6 +163,7 @@ ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_
     AND btrim("resource_kind") <> ''
     AND btrim("resource_id") <> ''
     AND btrim("resource_revision") <> ''
+    AND "desired_generation" > 0
     AND "arguments_digest" ~ '^sha256:[0-9a-f]{64}$'
     AND "authorization_decision_digest" ~ '^sha256:[0-9a-f]{64}$'
     AND "authorization_policy_revision_hash" ~ '^sha256:[0-9a-f]{64}$'

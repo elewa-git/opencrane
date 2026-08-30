@@ -7,6 +7,9 @@ const _MINIMUM_CONSTRAINTS = 235;
 const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE FUNCTION "enforce_authorization_grant_update"()',
 	'CREATE TABLE "provider_effect_commands"',
+	'"desired_generation" INTEGER NOT NULL',
+	'CREATE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__idx" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation" DESC)',
+	'CREATE UNIQUE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__key" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation")',
 	'CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_material_check"',
@@ -15,6 +18,7 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_payload_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_resource_binding_check"',
 	'"material_verifier" IS NOT NULL AND "material_verifier" ~ \'^sha256:[0-9a-f]{64}$\'',
+	'"desired_generation" > 0',
 	'"payload" - ARRAY[\'provider\', \'secretRef\', \'litellmCredentialName\'] = \'{}\'::jsonb',
 	'"resource_kind" = \'model-definition\'\n        AND "payload"->>\'modelDefinitionId\' = "resource_id"',
 	'"resource_kind" = \'provider-connection\'\n        AND "resource_id" = \'byok:\' || ("payload"->>\'provider\')',

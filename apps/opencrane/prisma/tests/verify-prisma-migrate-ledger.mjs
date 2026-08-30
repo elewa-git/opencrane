@@ -125,9 +125,12 @@ for (const marker of [
 	'CREATE TYPE "ProviderEffectCommandState" AS ENUM (\'pending\', \'awaiting_material\', \'claimed\', \'succeeded\', \'failed\')',
 	'CREATE TYPE "ProviderEffectMaterialRequirement" AS ENUM (\'none\', \'ephemeral_provider_key\')',
 	'CREATE TABLE "provider_effect_commands"',
+	'"desired_generation" INTEGER NOT NULL',
+	'CREATE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__idx" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation" DESC)',
 	'CREATE INDEX "provider_effect_commands_state_claim_expires_at_idx"',
 	'CREATE INDEX "provider_effect_commands_silo_id_created_at_idx"',
 	'CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key"',
+	'CREATE UNIQUE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__key" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation")',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_material_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_claim_check"',
@@ -141,6 +144,7 @@ for (const marker of [
 }
 for (const invariant of [
 	'"arguments_digest" ~ \'^sha256:[0-9a-f]{64}$\'',
+	'"desired_generation" > 0',
 	'"material_verifier" IS NOT NULL AND "material_verifier" ~ \'^sha256:[0-9a-f]{64}$\'',
 	'"state" = \'claimed\' AND "claim_fence" IS NOT NULL',
 	'"state" = \'succeeded\' AND "completed_at" IS NOT NULL AND "result" IS NOT NULL',
