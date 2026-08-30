@@ -16,6 +16,15 @@ interface ResolvedAuthorizationContext
 	readonly boundaryContext: AuthorizationBoundaryContext;
 }
 
+/** One allowed Principal decision kept in memory until its complete batch is proven. */
+interface AllowedPrincipalAdmission
+{
+	/** Boundary-specific command whose evidence will be recorded. */
+	readonly command: AdmitProductAuthorizationCommand;
+	/** Allowed catalogue decision produced for that boundary. */
+	readonly decision: ProductAuthorizationResult;
+}
+
 /** Evaluates every product action through one current grant and membership context. */
 export class __AuthorizationAuthority implements AuthorizationAuthority
 {
@@ -77,61 +86,45 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 		{
 			return { ...decision, evidence: null };
 		}
-		if (decision.rule === null || decision.rule.evidence === ProductAuthorizationEvidenceKinds.Read)
-		{
-			throw new Error("authorization admission requires a mutation or effect catalogue rule");
-		}
-		if (this.recorder === null)
-		{
-			throw new Error("authorization admission requires a transaction-bound decision recorder");
-		}
-
-		const effectiveAuthorizationDigest = ___DigestCanonicalJson({ grantIds: [...decision.grantIds].sort() } as JsonValue);
-		const policyRevisionHash = __ProductAuthorizationCapability(command.resource.kind, command.action)?.catalog.digest;
-		if (policyRevisionHash === undefined)
-		{
-			throw new Error("authorization admission lost its catalogue capability");
-		}
-		const decisionDigest = ___DigestCanonicalJson({
-			siloId: command.siloId,
-			principalId: command.principalId,
-			actorKind: command.actorKind,
-			actorId: command.actorId,
-			boundary: command.boundary,
-			requiredBoundaryCoverage: command.requiredBoundaryCoverage ?? null,
-			resource: command.resource,
-			action: command.action,
-			argumentsDigest: command.argumentsDigest,
-			policyRevisionHash,
-			effectiveAuthorizationDigest,
-			grantIds: [...decision.grantIds].sort(),
-			outcome: decision.outcome,
-			reason: decision.reason,
-			nowEpochMs: command.nowEpochMs,
-		} as unknown as JsonValue);
-		const result = { ...decision, evidence: { decisionDigest, policyRevisionHash, effectiveAuthorizationDigest } };
-		await this.recorder.record(command, result);
+		const result = this._BuildAdmission(command, decision);
+		await this._RecordAdmission(command, result);
 		return result;
 	}
 
 	/** @inheritdoc */
 	async admitPrincipal(command: AdmitPrincipalProductAuthorizationCommand): Promise<AdmitProductAuthorizationResult>
 	{
-		const subjects = await this.repository.resolvePrincipalSubjects(command.siloId, command.principalId);
-		const boundaries = [
-			{ kind: AuthorizationBoundaryKinds.Personal, principalId: command.principalId } as const,
-			...subjects.flatMap(subject => subject.kind === AuthorizationSubjectKinds.Group ? [{ kind: AuthorizationBoundaryKinds.Group, groupId: subject.groupId } as const] : []),
-		];
-		for (const boundary of boundaries)
+		const allowed = await this._DecidePrincipal(command);
+		if (allowed !== null)
 		{
-			const result = await this.admit({ ...command, boundary });
-			if (result.outcome === AuthorizationDecisionOutcomes.Allow)
-			{
-				return result;
-			}
+			const result = this._BuildAdmission(allowed.command, allowed.decision);
+			await this._RecordAdmission(allowed.command, result);
+			return result;
 		}
 		const rule = __ProductAuthorizationRule(command.resource.kind, command.action);
 		return { outcome: AuthorizationDecisionOutcomes.Deny, reason: "no_matching_grant", grantIds: [], rule, evidence: null };
+	}
+
+	/** @inheritdoc */
+	async admitPrincipalBatch(commands: readonly AdmitPrincipalProductAuthorizationCommand[]): Promise<readonly AdmitProductAuthorizationResult[]>
+	{
+		// 1. Decide the complete set before writing, so a denied coordinate cannot leave partial evidence.
+		const allowed: AllowedPrincipalAdmission[] = [];
+		for (const command of commands)
+		{
+			const decision = await this._DecidePrincipal(command);
+			if (decision === null)
+				return [];
+			allowed.push(decision);
+		}
+
+		// 2. Build every receipt before recording any of them, so invalid evidence classes fail atomically.
+		const results = allowed.map(item => this._BuildAdmission(item.command, item.decision));
+
+		// 3. Record the complete allowed set through the transaction-owned writer.
+		for (const [index, item] of allowed.entries())
+			await this._RecordAdmission(item.command, results[index]);
+		return results;
 	}
 
 	/** @inheritdoc */
@@ -142,6 +135,7 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 		{
 			return [];
 		}
+		this._RequireReadRules(command.action, command.resources);
 
 		// 2. Load shared context once so catalogue size cannot multiply database authorization reads.
 		const context = await this._ResolveContext(command.siloId, command.principalId, command.boundary);
@@ -162,6 +156,7 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 		{
 			return [];
 		}
+		this._RequireReadRules(command.action, command.resources);
 
 		// 2. Resolve the Principal and direct Groups from product authority, never request claims.
 		const subjects = await this.repository.resolvePrincipalSubjects(command.siloId, command.principalId);
@@ -200,8 +195,9 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 		{
 			throw new Error("managed grant reads require a transaction-bound repository");
 		}
-		const entitled = await this.listPrincipalEntitled({ siloId: command.siloId, principalId: command.principalId, action: ProductAuthorizationActions.Administer, resources: [{ kind: ProductAuthorizationResourceKinds.Organization, id: command.siloId }], nowEpochMs: command.nowEpochMs });
-		if (entitled.length !== 1)
+		const argumentsDigest = ___DigestCanonicalJson({ managerId: command.managerId, resource: command.resource } as unknown as JsonValue);
+		const admission = await this.admitPrincipal({ siloId: command.siloId, principalId: command.principalId, actorKind: "user", actorId: command.principalId, action: ProductAuthorizationActions.Administer, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: command.siloId }, argumentsDigest, nowEpochMs: command.nowEpochMs });
+		if (admission.outcome !== AuthorizationDecisionOutcomes.Allow)
 		{
 			return [];
 		}
@@ -247,5 +243,57 @@ export class __AuthorizationAuthority implements AuthorizationAuthority
 		]);
 		const grants = await this.repository.listSubjectGrants(siloId, subjects);
 		return { subjects, grants, boundaryContext };
+	}
+
+	/** Finds the first stored Principal boundary that allows one admission command. */
+	private async _DecidePrincipal(command: AdmitPrincipalProductAuthorizationCommand): Promise<AllowedPrincipalAdmission | null>
+	{
+		const subjects = await this.repository.resolvePrincipalSubjects(command.siloId, command.principalId);
+		const boundaries = [
+			{ kind: AuthorizationBoundaryKinds.Personal, principalId: command.principalId } as const,
+			...subjects.flatMap(subject => subject.kind === AuthorizationSubjectKinds.Group ? [{ kind: AuthorizationBoundaryKinds.Group, groupId: subject.groupId } as const] : []),
+		];
+		for (const boundary of boundaries)
+		{
+			const boundedCommand = { ...command, boundary };
+			const decision = await this.decide(boundedCommand);
+			if (decision.outcome === AuthorizationDecisionOutcomes.Allow)
+				return { command: boundedCommand, decision };
+		}
+		return null;
+	}
+
+	/** Builds authority-derived evidence without writing it, which lets batch admission fail as a set. */
+	private _BuildAdmission(command: AdmitProductAuthorizationCommand, decision: ProductAuthorizationResult): AdmitProductAuthorizationResult
+	{
+		if (decision.outcome !== AuthorizationDecisionOutcomes.Allow || decision.rule === null || decision.rule.evidence === ProductAuthorizationEvidenceKinds.Read)
+			throw new Error("authorization admission requires an allowed mutation or effect catalogue rule");
+		if (this.recorder === null)
+			throw new Error("authorization admission requires a transaction-bound decision recorder");
+		const effectiveAuthorizationDigest = ___DigestCanonicalJson({ grantIds: [...decision.grantIds].sort() } as JsonValue);
+		const policyRevisionHash = __ProductAuthorizationCapability(command.resource.kind, command.action)?.catalog.digest;
+		if (policyRevisionHash === undefined)
+			throw new Error("authorization admission lost its catalogue capability");
+		const decisionDigest = ___DigestCanonicalJson({ siloId: command.siloId, principalId: command.principalId, actorKind: command.actorKind, actorId: command.actorId, boundary: command.boundary, requiredBoundaryCoverage: command.requiredBoundaryCoverage ?? null, resource: command.resource, action: command.action, argumentsDigest: command.argumentsDigest, policyRevisionHash, effectiveAuthorizationDigest, grantIds: [...decision.grantIds].sort(), outcome: decision.outcome, reason: decision.reason, nowEpochMs: command.nowEpochMs } as unknown as JsonValue);
+		return { ...decision, evidence: { decisionDigest, policyRevisionHash, effectiveAuthorizationDigest } };
+	}
+
+	/** Writes one prebuilt allowed result through the transaction-bound recorder. */
+	private async _RecordAdmission(command: AdmitProductAuthorizationCommand, result: AdmitProductAuthorizationResult): Promise<void>
+	{
+		if (this.recorder === null)
+			throw new Error("authorization admission requires a transaction-bound decision recorder");
+		await this.recorder.record(command, result);
+	}
+
+	/** Rejects batch filtering for actions whose catalogue rule requires durable evidence. */
+	private _RequireReadRules(action: ProductAuthorizationActions, resources: readonly ProductAuthorizationResourceLocator[]): void
+	{
+		for (const resource of resources)
+		{
+			const rule = __ProductAuthorizationRule(resource.kind, action);
+			if (rule === null || rule.evidence !== ProductAuthorizationEvidenceKinds.Read)
+				throw new Error(`authorization catalogue filtering requires a Read-class rule: ${resource.kind}:${action}`);
+		}
 	}
 }

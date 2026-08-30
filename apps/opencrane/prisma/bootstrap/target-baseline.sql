@@ -6837,8 +6837,33 @@ BEGIN
         OR NEW."authorization_evidence_digest" IS NOT NULL;
 
     IF NEW."run_id" IS NULL THEN
-        IF has_evidence THEN
-            RAISE EXCEPTION 'task-owned ToolInvocation cannot carry AgentRun authorization evidence';
+        IF TG_OP = 'INSERT' OR has_evidence THEN
+            IF NEW."authorization_principal_id" IS NULL
+                OR btrim(NEW."authorization_principal_id") = ''
+                OR NEW."authorization_actor_kind" IS DISTINCT FROM 'user'::"ToolInvocationAuthorizationActorKind"
+                OR NEW."authorization_coordinates" IS NULL
+                OR jsonb_typeof(NEW."authorization_coordinates") <> 'array'
+                OR jsonb_array_length(NEW."authorization_coordinates") = 0
+                OR NEW."authorization_decision_digests" IS NULL
+                OR cardinality(NEW."authorization_decision_digests") = 0
+                OR NEW."authorization_membership_revision" IS NOT NULL
+                OR NEW."authorization_assignment_digest" IS NOT NULL
+                OR NEW."authorization_evidence_digest" IS NULL
+                OR NEW."authorization_evidence_digest" !~ '^sha256:[0-9a-f]{64}$'
+                OR EXISTS (
+                    SELECT 1 FROM unnest(NEW."authorization_decision_digests") AS digest
+                    WHERE digest !~ '^sha256:[0-9a-f]{64}$'
+                )
+                OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements(NEW."authorization_coordinates") AS coordinate
+                    WHERE jsonb_typeof(coordinate) <> 'object'
+                       OR jsonb_typeof(coordinate->'resource') <> 'object'
+                       OR COALESCE(btrim(coordinate->'resource'->>'kind'), '') = ''
+                       OR COALESCE(btrim(coordinate->'resource'->>'id'), '') = ''
+                       OR COALESCE(btrim(coordinate->>'action'), '') = ''
+                ) THEN
+                RAISE EXCEPTION 'task-owned ToolInvocation requires complete central authorization evidence without AgentRun fields';
+            END IF;
         END IF;
         RETURN NEW;
     END IF;
@@ -6850,6 +6875,7 @@ BEGIN
             OR NEW."authorization_coordinates" IS NULL
             OR jsonb_typeof(NEW."authorization_coordinates") <> 'array'
             OR jsonb_array_length(NEW."authorization_coordinates") = 0
+            OR NEW."authorization_decision_digests" IS NULL
             OR cardinality(NEW."authorization_decision_digests") = 0
             OR NEW."authorization_membership_revision" IS NULL
             OR NEW."authorization_membership_revision" < 1
@@ -6865,9 +6891,9 @@ BEGIN
                 SELECT 1 FROM jsonb_array_elements(NEW."authorization_coordinates") AS coordinate
                 WHERE jsonb_typeof(coordinate) <> 'object'
                    OR jsonb_typeof(coordinate->'resource') <> 'object'
-                   OR btrim(coordinate->'resource'->>'kind') = ''
-                   OR btrim(coordinate->'resource'->>'id') = ''
-                   OR btrim(coordinate->>'action') = ''
+                   OR COALESCE(btrim(coordinate->'resource'->>'kind'), '') = ''
+                   OR COALESCE(btrim(coordinate->'resource'->>'id'), '') = ''
+                   OR COALESCE(btrim(coordinate->>'action'), '') = ''
             ) THEN
             RAISE EXCEPTION 'run-owned ToolInvocation requires complete central authorization evidence';
         END IF;

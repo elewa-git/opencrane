@@ -247,11 +247,11 @@ export class PrismaOrganizationMemberRepository implements OrganizationMemberTra
 		return _member(membership, command.caller);
 	}
 
-	/** Requires a current central-authority decision for one read-only organization-member operation. */
+	/** Requires the administrator-owned Organization/Read grant for one member view. */
 	private async _requireAdministrationDecision(caller: OrganizationMembershipCaller): Promise<void>
 	{
 		const resources = [{ kind: ProductAuthorizationResourceKinds.Organization, id: caller.siloId }] as const;
-		const allowed = await this.authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Administer, resources, nowEpochMs: Date.now() });
+		const allowed = await this.authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources, nowEpochMs: Date.now() });
 		if (allowed.length !== 1)
 			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "organization membership operation is not authorized");
 	}

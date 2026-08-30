@@ -15,13 +15,13 @@ export class McpOperatorAuthorizationError extends Error
 	}
 }
 
-/** Requires the current Organization/Administer grant for one read-only governance view. */
+/** Requires the administrator-owned Organization/Read grant for one governance view. */
 export async function __RequireMcpOrganizationAdministrationRead(authorization: AuthorizationAuthority, caller: McpOperatorCaller): Promise<void>
 {
 	const entitled = await authorization.listPrincipalEntitled({
 		siloId: caller.siloId,
 		principalId: caller.principalId,
-		action: ProductAuthorizationActions.Administer,
+		action: ProductAuthorizationActions.Read,
 		resources: [{ kind: ProductAuthorizationResourceKinds.Organization, id: caller.siloId }],
 		nowEpochMs: Date.now(),
 	});

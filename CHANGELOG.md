@@ -39,6 +39,12 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   boundaries.** Grants distinguish exact from descendant coverage without inheriting group
   membership through the hierarchy, managed editors revoke only grants they own, and resource
   shares create auditable exact-recipient grants without becoming a parallel authorization model.
+- **People, personal assistants, and managed agents now use one product authorization authority.**
+  Reads filter the catalogue against current grants, protected mutations commit their decision
+  evidence in the same database transaction, and external effects first create a one-use
+  `ToolInvocation` bound to the principal, run, resource revision, arguments, approval, and workload
+  assignment. Revocation and cancellation therefore close future effects without letting a runtime
+  reinterpret grants.
 - **Platform developers can now add durable, transactionally admitted work without coupling product
   logic to a scheduler engine.** The engine-neutral workflow contract and scheduling kit preserve
   idempotency, cancellation, and respawn evidence, while the Absurd adapter admits a task and its
@@ -191,12 +197,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Changed
 
-- **Operators upgrading tagged 0.9.2 to 0.10.0 now cut over to the same IAM model used by fresh
-  installations.** Its 0.9.0 database schema passes through a digest-bound prerequisite that
-  deterministically projects principals, groups,
-  memberships, grants, and resource boundaries, then removes the superseded agent-scope and MCP
-  access-policy authorities; ambiguous or populated unsupported legacy state stops before mutation,
-  and recovery remains backup/restore only.
+- **Operators upgrading tagged 0.9.2 to 0.10.0 now receive the same clean authorization and workflow
+  model as a fresh installation.** The migration projects current principals, groups, memberships,
+  grants, and resource boundaries, then removes pre-central runtime history and the superseded
+  authorization, workload, outbox, and memory tables. Development databases that ran the untagged
+  0.9.3 candidate can use the checksum-bound forward repair or be reset; 0.9.3 is never presented as
+  a supported release boundary. This destructive pre-1.0 cutover avoids carrying compatibility
+  state into the 0.10 architecture.
 
 - **Maintainers now carry durable compatibility and transition evidence with every release-affecting
   change.** Each directly changed or dependency-adapted Nx application records the immutable root
@@ -286,6 +293,12 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   instead of silently defaulting to `personal`.
 
 ### Security
+
+- **Product access can no longer be granted by a session role flag, ownership shortcut, or a
+  domain-specific policy engine.** Routes and agent effects use `AuthorizationAuthority` for the
+  typed resource and action; the callerless DPoP capability executor and separate action receipts
+  are gone. `isPlatformOperator` survives only as a fleet identity-plane claim and cannot authorize
+  a product action.
 
 - **Tenant pods can no longer self-install or self-update their agent runtime.** Runtime code is
   owned by the signed image lifecycle, closing the path where a restart or mutable state volume

@@ -79,7 +79,7 @@ export interface RunAdmissionTransaction
 	/** Prisma transaction through which all admission reads and durable writes must occur. */
 	readonly prisma: Prisma.TransactionClient;
 	/** Central product authority bound to this exact admission transaction. */
-	readonly authorization?: Pick<AuthorizationAuthority, "admit" | "admitPrincipal" | "listPrincipalEntitled">;
+	readonly authorization?: Pick<AuthorizationAuthority, "admit" | "admitPrincipal" | "admitPrincipalBatch" | "listPrincipalEntitled">;
 	/** Canonical server-owned admission time used by every fenced authority read and immutable snapshot. */
 	readonly admittedAt: string;
 	/** Epoch-millisecond form of the same canonical server-owned admission time. */

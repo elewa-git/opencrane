@@ -40,8 +40,13 @@ function _Candidate(toolRevisionId: string): RuntimeExternalActionCandidate
 function _Authority(entitled: readonly ProductAuthorizationResourceLocator[] = [])
 {
 	return {
-		admitPrincipal: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: `sha256:${"b".repeat(64)}` } }),
-		listPrincipalEntitled: vi.fn().mockResolvedValue(entitled),
+		admitPrincipalBatch: vi.fn().mockImplementation(async function _Admit(commands: readonly { readonly resource: ProductAuthorizationResourceLocator }[])
+		{
+			const entitledCoordinates = new Set(entitled.map(resource => `${resource.kind}:${resource.id}`));
+			if (!commands.every(command => entitledCoordinates.has(`${command.resource.kind}:${command.resource.id}`)))
+				return [];
+			return commands.map(function _Admission() { return { outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: `sha256:${"b".repeat(64)}` } }; });
+		}),
 	};
 }
 
@@ -74,7 +79,7 @@ describe("RuntimeExternalActionAuthorizationService", function _DescribeRuntimeA
 		const candidate = _Candidate("mcp-tool-1");
 
 		await expect(adapter.admitInTransaction({} as never, _Context(), candidate, new Date("2026-08-29T00:01:00.000Z"))).resolves.toEqual(expect.objectContaining({ principalId: "principal-1", agentRevisionId: "revision-1", runId: "run-1", attempt: 1, argumentsDigest: candidate.argumentsDigest, assignmentDigest: `sha256:${"a".repeat(64)}` }));
-		expect(authority.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ principalId: "principal-1", actorKind: "user", membershipRevision: 7, resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "mcp-tool-1" }, action: ProductAuthorizationActions.Invoke, argumentsDigest: candidate.argumentsDigest }));
+		expect(authority.admitPrincipalBatch).toHaveBeenCalledWith([expect.objectContaining({ principalId: "principal-1", actorKind: "user", membershipRevision: 7, resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "mcp-tool-1" }, action: ProductAuthorizationActions.Invoke, argumentsDigest: candidate.argumentsDigest })]);
 	});
 
 	it("refuses an MCP action whose current publication lifecycle is unavailable", async function _RefusesUnpublishedMcp()
@@ -83,7 +88,7 @@ describe("RuntimeExternalActionAuthorizationService", function _DescribeRuntimeA
 		const adapter = _Service(_Eligibility({ mcp: { isEligible: vi.fn().mockResolvedValue(false) } }), authority);
 
 		await expect(adapter.admitInTransaction({} as never, _Context(), _Candidate("mcp-tool-1"), new Date())).resolves.toBeNull();
-		expect(authority.admitPrincipal).not.toHaveBeenCalled();
+		expect(authority.admitPrincipalBatch).not.toHaveBeenCalled();
 	});
 
 	it("requires Dataset Use and MemoryScope Use before personal recall", async function _AdmitsMemory()
@@ -93,10 +98,10 @@ describe("RuntimeExternalActionAuthorizationService", function _DescribeRuntimeA
 		const adapter = _Service(_Eligibility(), authority);
 
 		await expect(adapter.admitInTransaction({} as never, _Context(), _Candidate(PERSONAL_MEMORY_RECALL_TOOL_REVISION), new Date("2026-08-29T00:01:00.000Z"))).resolves.toEqual(expect.objectContaining({ coordinates: resources.map(resource => ({ resource, action: ProductAuthorizationActions.Use })) }));
-		expect(authority.listPrincipalEntitled).toHaveBeenCalledWith(expect.objectContaining({ action: ProductAuthorizationActions.Use, resources }));
-		expect(authority.admitPrincipal).toHaveBeenCalledTimes(2);
-		expect(authority.admitPrincipal).toHaveBeenNthCalledWith(1, expect.objectContaining({ resource: resources[0], action: ProductAuthorizationActions.Use }));
-		expect(authority.admitPrincipal).toHaveBeenNthCalledWith(2, expect.objectContaining({ resource: resources[1], action: ProductAuthorizationActions.Use }));
+		expect(authority.admitPrincipalBatch).toHaveBeenCalledWith([
+			expect.objectContaining({ resource: resources[0], action: ProductAuthorizationActions.Use }),
+			expect.objectContaining({ resource: resources[1], action: ProductAuthorizationActions.Use }),
+		]);
 	});
 
 	it("authorizes the exact Persona profile behind a built-in upgrade proposal", async function _AdmitsUpgrade()
@@ -106,7 +111,7 @@ describe("RuntimeExternalActionAuthorizationService", function _DescribeRuntimeA
 		const adapter = _Service(_Eligibility(), authority);
 
 		await expect(adapter.admitInTransaction({} as never, _Context(), _Candidate(UPGRADE_SESSION_TOOL_REVISION), new Date("2026-08-29T00:01:00.000Z"))).resolves.toEqual(expect.objectContaining({ coordinates: [{ resource, action: ProductAuthorizationActions.Use }] }));
-		expect(authority.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ resource: { kind: ProductAuthorizationResourceKinds.Persona, id: "persona-profile-1" }, action: ProductAuthorizationActions.Use }));
+		expect(authority.admitPrincipalBatch).toHaveBeenCalledWith([expect.objectContaining({ resource: { kind: ProductAuthorizationResourceKinds.Persona, id: "persona-profile-1" }, action: ProductAuthorizationActions.Use })]);
 	});
 
 	it.each([
@@ -118,7 +123,7 @@ describe("RuntimeExternalActionAuthorizationService", function _DescribeRuntimeA
 		const authority = _Authority([resource]);
 		const adapter = _Service(_Eligibility(override), authority);
 		await expect(adapter.admitInTransaction({} as never, _Context(), _Candidate("mcp-tool-1"), new Date("2026-08-29T00:01:00.000Z"))).resolves.toBeNull();
-		expect(authority.admitPrincipal).not.toHaveBeenCalled();
+		expect(authority.admitPrincipalBatch).not.toHaveBeenCalled();
 	});
 
 	it("refuses an effect after its central grant is revoked", async function _RefusesRevokedGrant()
@@ -126,6 +131,6 @@ describe("RuntimeExternalActionAuthorizationService", function _DescribeRuntimeA
 		const authority = _Authority([]);
 		const adapter = _Service(_Eligibility(), authority);
 		await expect(adapter.admitInTransaction({} as never, _Context(), _Candidate("mcp-tool-1"), new Date("2026-08-29T00:01:00.000Z"))).resolves.toBeNull();
-		expect(authority.admitPrincipal).not.toHaveBeenCalled();
+		expect(authority.admitPrincipalBatch).toHaveBeenCalledTimes(1);
 	});
 });

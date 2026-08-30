@@ -6,8 +6,8 @@ import type { Logger } from "pino";
 
 import { ___LoadOidcAuthConfig } from "./oidc-config";
 import type { OidcAuthConfig } from "./oidc-config.types";
-import { _ResolveOrgMembershipFacts } from "./org-membership";
-import type { OrgMembershipRepository } from "./org-membership.types";
+import { _ResolveOwnedOrgSummaries } from "./org-membership";
+import type { OwnedOrgSummaryRepository } from "./org-membership.types";
 import type { AuthStatus, LoginClient } from "./oidc-service.types";
 import { ___BuildOidcAuthUser, ___ResolveOidcClaims } from "./oidc-claims";
 import { ___BuildOidcEndSessionUrl } from "./oidc-logout";
@@ -75,13 +75,13 @@ export abstract class OidcAuthServiceBase
   private clientDiscovered = new Map<string, Promise<client.Configuration>>();
 
   /** Repository for resolving the caller's membership-derived org-admin facts. */
-  protected membershipRepository: OrgMembershipRepository;
+  protected membershipRepository: OwnedOrgSummaryRepository;
 
   /**
    * @param log              - Parent logger; a child scoped to `oidc-auth` is derived.
-   * @param membershipRepository - Repository providing membership facts.
+   * @param membershipRepository - Repository providing organisation labels for session presentation.
    */
-  constructor(log: Logger, membershipRepository: OrgMembershipRepository)
+  constructor(log: Logger, membershipRepository: OwnedOrgSummaryRepository)
   {
     this.log = log.child({ component: "oidc-auth" });
     this.membershipRepository = membershipRepository;
@@ -162,7 +162,7 @@ export abstract class OidcAuthServiceBase
       }
 
       const [membership, extra] = await Promise.all([
-        _ResolveOrgMembershipFacts(this.membershipRepository, authUser.sub),
+        _ResolveOwnedOrgSummaries(this.membershipRepository, authUser.sub),
         this.enrichStatusUser(req, authUser),
       ]);
 

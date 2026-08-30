@@ -452,9 +452,9 @@
         ]
       },
       {
-        "path": "libs/backend/server/infra/auth/src/prisma-org-membership-repository.ts",
-        "adapter": "PrismaOrgMembershipRepository",
-        "contract": "OrgMembershipRepository",
+        "path": "libs/backend/server/infra/auth/src/prisma-owned-org-summary-repository.ts",
+        "adapter": "PrismaOwnedOrgSummaryRepository",
+        "contract": "OwnedOrgSummaryRepository",
         "contractImportPath": "./org-membership.types",
         "constructs": []
       },

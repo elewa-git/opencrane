@@ -5,7 +5,7 @@ import type { JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "./canonical-json-digest";
 import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents } from "./tool-invocation-lifecycle.types";
 import { _ToolInvocationAuthorizationEvidenceIsValid, _ToolInvocationClaimKindFromPersistence, _ToolInvocationCompletionEvent, _ToolInvocationIsMcpTaskOwned, _ToolInvocationPlan, _ToolInvocationPreparationPolicyIsFixed, _ToolInvocationRecoveryKeyIsValid, _ToolInvocationRecoveryModeFromPersistence, _ToolInvocationSafeFailureCode, _ToolInvocationStateFromPersistence } from "./tool-invocation-persistence-policy";
-import { ToolInvocationAdmissionOutcomes, ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolResultDeliveryOutcomes, type ToolInvocationAdmissionResult, type ToolInvocationAuthorizationCoordinate, type ToolInvocationAuthorizationEvidence, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationTransactionRepository, type ToolInvocationTransitionResult, type ToolResultDeliveryPayload } from "./tool-invocation.types";
+import { ToolInvocationAdmissionOutcomes, ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolResultDeliveryOutcomes, type McpTaskToolInvocationAuthorizationEvidence, type ToolInvocationAdmissionResult, type ToolInvocationAuthorizationCoordinate, type ToolInvocationAuthorizationEvidence, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationTransactionRepository, type ToolInvocationTransitionResult, type ToolResultDeliveryPayload } from "./tool-invocation.types";
 
 /** Maps package recovery modes onto Prisma's generated enum. */
 const _RECOVERY_TO_PRISMA: Readonly<Record<ExternalActionRecoveryModes, ExternalActionRecoveryMode>> = {
@@ -30,7 +30,7 @@ const _AUTHORIZATION_ACTOR_TO_PRISMA = {
 type ToolInvocationRow = Prisma.ToolInvocationGetPayload<Record<string, never>>;
 
 /** Maps the all-or-none runtime authorization columns into the package contract. */
-function _authorizationEvidence(row: ToolInvocationRow): ToolInvocationAuthorizationEvidence | null
+function _authorizationEvidence(row: ToolInvocationRow): ToolInvocationAuthorizationEvidence | McpTaskToolInvocationAuthorizationEvidence | null
 {
 	const decisionDigests = row.authorizationDecisionDigests ?? [];
 	const hasEvidence = !_isMissing(row.authorizationPrincipalId)
@@ -42,7 +42,21 @@ function _authorizationEvidence(row: ToolInvocationRow): ToolInvocationAuthoriza
 		|| !_isMissing(row.authorizationEvidenceDigest);
 	if (!hasEvidence)
 		return null;
-	if (_isMissing(row.authorizationPrincipalId) || _isMissing(row.authorizationActorKind) || _isMissing(row.authorizationCoordinates) || decisionDigests.length === 0 || _isMissing(row.authorizationMembershipRevision) || _isMissing(row.authorizationAssignmentDigest) || _isMissing(row.authorizationEvidenceDigest))
+	if (_isMissing(row.authorizationPrincipalId) || _isMissing(row.authorizationActorKind) || _isMissing(row.authorizationCoordinates) || decisionDigests.length === 0 || _isMissing(row.authorizationEvidenceDigest))
+		throw new Error(`ToolInvocation ${row.id} has incomplete authorization evidence`);
+	if (row.runId === null)
+	{
+		if (row.authorizationActorKind !== ToolInvocationAuthorizationActorKind.User || !_isMissing(row.authorizationMembershipRevision) || !_isMissing(row.authorizationAssignmentDigest))
+			throw new Error(`ToolInvocation ${row.id} has invalid task authorization evidence`);
+		return {
+			principalId: row.authorizationPrincipalId,
+			actorKind: "user",
+			coordinates: row.authorizationCoordinates as unknown as readonly ToolInvocationAuthorizationCoordinate[],
+			decisionDigests: decisionDigests as `sha256:${string}`[],
+			evidenceDigest: row.authorizationEvidenceDigest as `sha256:${string}`,
+		};
+	}
+	if (_isMissing(row.authorizationMembershipRevision) || _isMissing(row.authorizationAssignmentDigest))
 		throw new Error(`ToolInvocation ${row.id} has incomplete authorization evidence`);
 	return {
 		principalId: row.authorizationPrincipalId,

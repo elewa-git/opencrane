@@ -18,9 +18,9 @@ const _MIGRATION_STATES = new Set(["authority-adopted", "identity-boundary-survi
 const _RECEIPT_CLASSES = new Set(["decision", "effect", "read", "workload-assignment-proof"]);
 /** Target ports accepted by this migration inventory. */
 const _TARGET_AUTHORITIES = new Set([
-	"AuthorizationAuthority.admitDecision",
-	"AuthorizationAuthority.admitEffect",
+	"AuthorizationAuthority.admit",
 	"AuthorizationAuthority.admitPrincipal",
+	"AuthorizationAuthority.admitPrincipalBatch",
 	"AuthorizationAuthority.decide",
 	"AuthorizationAuthority.listEntitled",
 	"AuthorizationAuthority.listManagedGrants",
@@ -35,6 +35,10 @@ const _REMOVAL_WAVES = new Set(["agent-authority", "data-and-actions", "governed
 const _CATALOGUE_RESOURCES = new Set(["agent-revision", "agent-run", "agent-service", "approval-request", "artifact", "artifact-collection", "artifact-revision", "audit-log", "authorization-grant", "budget", "channel-target", "conversation", "conversation-collection", "dataset", "group", "mcp-server", "mcp-server-revision", "mcp-task", "mcp-tool-revision", "memory-scope", "model-definition", "organization", "organization-membership", "persona", "persona-collection", "provider-connection", "resource-share", "schedule", "skill", "skill-revision", "third-party-source", "token-usage", "tool-invocation"]);
 /** Actions already declared by ProductAuthorizationActions. */
 const _CATALOGUE_ACTIONS = new Set(["administer", "assign", "cancel", "create", "decide", "delegate", "delete", "discover", "edit", "forget", "install", "invoke", "manage", "publish", "read", "retire", "retry", "review", "revoke", "schedule", "send", "share", "use"]);
+/** Catalogue source whose reviewed rule classes constrain each inventory entry. */
+const _CATALOGUE_SOURCE_PATH = "libs/models/authorization/main/src/product-authorization.ts";
+/** Enum source that maps TypeScript member names to persisted catalogue strings. */
+const _CATALOGUE_TYPES_PATH = "libs/models/authorization/main/src/product-authorization.types.ts";
 
 /**
  * Fixed forbidden syntax owned by this checker.
@@ -134,6 +138,80 @@ function _IsObject(value)
 	return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+/** Parse one string-valued enum without executing TypeScript during the repository check. */
+function _EnumValues(source, name)
+{
+	const start = source.indexOf(`export enum ${name}`);
+	if (start < 0) return new Map();
+	const end = source.indexOf("\n}", start);
+	if (end < 0) return new Map();
+	const values = new Map();
+	for (const match of source.slice(start, end).matchAll(/^\s*([A-Za-z][A-Za-z0-9]*)\s*=\s*"([a-z0-9-]+)"/gmu))
+		values.set(match[1], match[2]);
+	return values;
+}
+
+/** Parse action members from one `_Rules` call body. */
+function _RuleActions(source, actionValues)
+{
+	return [...source.matchAll(/ProductAuthorizationActions\.([A-Za-z][A-Za-z0-9]*)/gu)].flatMap(function _Action(match)
+	{
+		const action = actionValues.get(match[1]);
+		return action === undefined ? [] : [action];
+	});
+}
+
+/** Load the exact evidence class declared by the product catalogue for each coordinate. */
+function _CatalogueEvidence(root)
+{
+	const cataloguePath = join(root, _CATALOGUE_SOURCE_PATH);
+	const typesPath = join(root, _CATALOGUE_TYPES_PATH);
+	if (!existsSync(cataloguePath) || !existsSync(typesPath)) return new Map();
+	const source = readFileSync(cataloguePath, "utf8");
+	const typeSource = readFileSync(typesPath, "utf8");
+	const resourceValues = _EnumValues(typeSource, "ProductAuthorizationResourceKinds");
+	const actionValues = _EnumValues(typeSource, "ProductAuthorizationActions");
+	const evidence = new Map();
+	function _Add(resourceMember, actionSource, evidenceMember)
+	{
+		const resource = resourceValues.get(resourceMember);
+		if (resource === undefined) return;
+		for (const action of _RuleActions(actionSource, actionValues))
+			evidence.set(`${resource}:${action}`, evidenceMember.toLowerCase());
+	}
+	for (const match of source.matchAll(/_Rules\(ProductAuthorizationResourceKinds\.([A-Za-z][A-Za-z0-9]*),\s*\[([^\]]*)\],\s*ProductAuthorizationEvidenceKinds\.([A-Za-z][A-Za-z0-9]*)\)/gu))
+		_Add(match[1], match[2], match[3]);
+	for (const helperName of ["_PackageRules", "_RevisionRules", "_ContentRules"])
+	{
+		const helperStart = source.indexOf(`function ${helperName}(`);
+		const helperEnd = helperStart < 0 ? -1 : source.indexOf("\n}", helperStart);
+		if (helperStart < 0 || helperEnd < 0) continue;
+		const helperSource = source.slice(helperStart, helperEnd);
+		const helperRules = [...helperSource.matchAll(/_Rules\(resourceKind,\s*\[([^\]]*)\],\s*ProductAuthorizationEvidenceKinds\.([A-Za-z][A-Za-z0-9]*)\)/gu)];
+		const invocation = new RegExp(`${helperName}\\(ProductAuthorizationResourceKinds\\.([A-Za-z][A-Za-z0-9]*)\\)`, "gu");
+		for (const match of source.matchAll(invocation))
+			for (const rule of helperRules)
+				_Add(match[1], rule[1], rule[2]);
+	}
+	return evidence;
+}
+
+/** Return whether a target port can satisfy the catalogue's evidence requirement. */
+function _TargetMatchesReceipt(targetAuthority, receiptClass)
+{
+	if (!targetAuthority.startsWith("AuthorizationAuthority.")) return true;
+	const method = targetAuthority.slice("AuthorizationAuthority.".length);
+	if (receiptClass === "read") return ["decide", "listEntitled", "listManagedGrants", "listPrincipalEntitled"].includes(method);
+	return ["admit", "admitPrincipal", "admitPrincipalBatch", "replaceManagedGrants"].includes(method);
+}
+
+/** Read an exact authority method from an anchor that directly names one. */
+function _AnchoredAuthorityMethod(anchor)
+{
+	const match = anchor.match(/\.(admitPrincipalBatch|admitPrincipal|admit|decide|listManagedGrants|listPrincipalEntitled|listEntitled|replaceManagedGrants)\s*\(/u);
+	return match?.[1] ?? null;
+}
+
 /** Validate the exact shape of one current source locator. */
 function _ValidateCurrentPath(currentPath, context, errors)
 {
@@ -157,6 +235,8 @@ export function _ValidateAuthorizationEnforcementInventory(inventory, root)
 	if (!_IsObject(inventory) || inventory.version !== 1 || typeof inventory.policy !== "string" || inventory.policy.trim().length < 40 || !Array.isArray(inventory.entries) || !Array.isArray(inventory.catalogueGaps))
 		return ["inventory: malformed top-level schema"];
 
+	const catalogueEvidence = _CatalogueEvidence(root);
+	if (catalogueEvidence.size === 0) errors.push("inventory: product authorization catalogue could not be read");
 	const gaps = new Set();
 	for (const [index, gap] of inventory.catalogueGaps.entries())
 	{
@@ -201,6 +281,16 @@ export function _ValidateAuthorizationEnforcementInventory(inventory, root)
 		if (typeof entry.action === "string" && !_CATALOGUE_ACTIONS.has(entry.action) && !gaps.has(`action:${entry.action}`)) errors.push(`${context}: action '${entry.action}' is missing from the catalogue without a declared gap`);
 		if (!_TARGET_AUTHORITIES.has(entry.targetAuthority)) errors.push(`${context}: unsupported targetAuthority '${entry.targetAuthority}'`);
 		if (!_RECEIPT_CLASSES.has(entry.receiptClass)) errors.push(`${context}: unsupported receiptClass '${entry.receiptClass}'`);
+		if (typeof entry.resource === "string" && typeof entry.action === "string" && entry.migrationState === "authority-adopted")
+		{
+			const expectedReceipt = catalogueEvidence.get(`${entry.resource}:${entry.action}`);
+			if (expectedReceipt === undefined) errors.push(`${context}: ${entry.resource}:${entry.action} has no product catalogue rule`);
+			else if (entry.receiptClass !== expectedReceipt) errors.push(`${context}: receiptClass '${entry.receiptClass}' disagrees with catalogue '${expectedReceipt}'`);
+			if (!_TargetMatchesReceipt(entry.targetAuthority, entry.receiptClass)) errors.push(`${context}: targetAuthority '${entry.targetAuthority}' cannot produce '${entry.receiptClass}' evidence`);
+			const anchoredMethod = _AnchoredAuthorityMethod(entry.currentPath?.anchor ?? "");
+			const targetMethod = entry.targetAuthority.startsWith("AuthorizationAuthority.") ? entry.targetAuthority.slice("AuthorizationAuthority.".length) : null;
+			if (anchoredMethod !== null && targetMethod !== anchoredMethod) errors.push(`${context}: targetAuthority method '${targetMethod}' disagrees with anchored call '${anchoredMethod}'`);
+		}
 		if (!_MIGRATION_STATES.has(entry.migrationState)) errors.push(`${context}: unsupported migrationState '${entry.migrationState}'`);
 		if (typeof entry.lifecycleOwner !== "string" || !/^(?:apps|libs)\/[A-Za-z0-9_./-]+$/u.test(entry.lifecycleOwner) || !existsSync(join(root, entry.lifecycleOwner))) errors.push(`${context}: lifecycleOwner must be a live repository path`);
 		_ValidateCurrentPath(entry.currentPath, context, errors);

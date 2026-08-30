@@ -31,6 +31,7 @@ function _Authorization(): AuthorizationAuthority
 		decide: vi.fn().mockResolvedValue(decision),
 		admit: vi.fn().mockResolvedValue(decision),
 		admitPrincipal: vi.fn().mockResolvedValue(decision),
+		admitPrincipalBatch: vi.fn(async function _AdmitBatch(commands) { return commands.map(function _Decision() { return decision; }); }),
 		listEntitled: vi.fn(async command => command.resources),
 		listPrincipalEntitled: vi.fn(async command => command.resources),
 		listManagedGrants: vi.fn().mockResolvedValue([]),
@@ -72,7 +73,7 @@ describe("PrismaOrganizationMemberRepository concurrency", function _Suite()
 
 		await _UnitOfWork(prisma, authorization).directory(_CALLER);
 
-		expect(authorization.listPrincipalEntitled).toHaveBeenCalledWith(expect.objectContaining({ siloId: "acme", principalId: "principal-admin-1", action: "administer", resources: [{ kind: "organization", id: "acme" }] }));
+		expect(authorization.listPrincipalEntitled).toHaveBeenCalledWith(expect.objectContaining({ siloId: "acme", principalId: "principal-admin-1", action: "read", resources: [{ kind: "organization", id: "acme" }] }));
 		expect(transaction.orgMembership.findFirst).not.toHaveBeenCalled();
 	});
 

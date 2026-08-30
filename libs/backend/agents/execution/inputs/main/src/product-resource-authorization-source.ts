@@ -1,5 +1,6 @@
 import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { ApprovedPersonaInput, IdentityEnvelopeInput, MemoryScopeInput, ProductResourceAuthorizationSource, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput } from "./session-assembly.types";
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
@@ -14,8 +15,10 @@ export class TransactionBoundProductResourceAuthorizationSource implements Produ
 			return { outcome: "denied", reason: "product_authorization_unavailable" };
 		const principalId = identity.kind === RunInputSnapshotIdentityKinds.User ? identity.principalId : identity.executionSubjectId;
 		const resources = _Resources(persona, memory, tools);
-		const entitled = await transaction.authorization.listPrincipalEntitled({ siloId: command.siloId, principalId, action: ProductAuthorizationActions.Use, resources, nowEpochMs: transaction.admittedAtEpochMs });
-		return _ContainsEveryResource(entitled, resources) ? { outcome: "loaded", value: null } : { outcome: "denied", reason: "product_authorization_unavailable" };
+		const actorKind = identity.kind === RunInputSnapshotIdentityKinds.User ? "user" : "agent-service";
+		const argumentsDigest = ___DigestCanonicalJson({ runId: command.runId, agentServiceId: command.agentServiceId, conversationId: command.conversationId } as JsonValue);
+		const admissions = await transaction.authorization.admitPrincipalBatch(resources.map(resource => ({ siloId: command.siloId, principalId, actorKind, actorId: principalId, action: ProductAuthorizationActions.Use, resource, argumentsDigest, membershipRevision: identity.fleetMembershipRevision, nowEpochMs: transaction.admittedAtEpochMs })));
+		return admissions.length === resources.length ? { outcome: "loaded", value: null } : { outcome: "denied", reason: "product_authorization_unavailable" };
 	}
 }
 
@@ -37,11 +40,4 @@ function _Resources(persona: ApprovedPersonaInput, memory: MemoryScopeInput, too
 	}
 	const unique = new Map(resources.map(resource => [`${resource.kind}:${resource.id}`, resource]));
 	return [...unique.values()];
-}
-
-/** Compares typed coordinates without depending on authority return order. */
-function _ContainsEveryResource(actual: readonly ProductAuthorizationResourceLocator[], expected: readonly ProductAuthorizationResourceLocator[]): boolean
-{
-	const coordinates = new Set(actual.map(resource => `${resource.kind}:${resource.id}`));
-	return expected.every(resource => coordinates.has(`${resource.kind}:${resource.id}`));
 }

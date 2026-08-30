@@ -1,8 +1,6 @@
 -- Remove SQL workload state that Absurd workflows replaced.
 BEGIN;
 
-DROP TRIGGER IF EXISTS "skill_workloads_authority" ON "skill_workloads";
-DROP TRIGGER IF EXISTS "skill_workload_bootstraps_authority" ON "skill_workload_bootstraps";
 DROP TRIGGER IF EXISTS "cancel_ineligible_skill_workloads_on_revision" ON "skill_revisions";
 DROP TRIGGER IF EXISTS "cancel_ineligible_skill_workloads_on_invocation" ON "tool_invocations";
 DROP VIEW IF EXISTS "skill_workload_claim_candidates";
@@ -12,20 +10,15 @@ DROP FUNCTION IF EXISTS "select_skill_workload_release_claim_candidate"();
 DROP FUNCTION IF EXISTS "enforce_skill_workload_bootstrap"();
 DROP FUNCTION IF EXISTS "enforce_skill_workload_authority"();
 DROP FUNCTION IF EXISTS "cancel_ineligible_skill_workloads"();
-DELETE FROM "skill_workload_bootstraps";
-DELETE FROM "skill_workloads";
-DROP TABLE "skill_workload_bootstraps";
-DROP TABLE "skill_workloads";
-DROP TYPE "SkillWorkloadKind";
-DROP TYPE "SkillWorkloadState";
+DROP TABLE IF EXISTS "skill_workload_bootstraps";
+DROP TABLE IF EXISTS "skill_workloads";
+DROP TYPE IF EXISTS "SkillWorkloadKind";
+DROP TYPE IF EXISTS "SkillWorkloadState";
 
-DROP TRIGGER IF EXISTS "run_outbox_events_accepted_attempt" ON "run_outbox_events";
-DROP TRIGGER IF EXISTS "run_outbox_events_monotonic" ON "run_outbox_events";
 DROP FUNCTION IF EXISTS "enforce_accepted_outbox_attempt"();
 DROP FUNCTION IF EXISTS "enforce_run_outbox_event_update"();
-DELETE FROM "run_outbox_events";
-DROP TABLE "run_outbox_events";
-DROP TYPE "RunOutboxEventKind";
+DROP TABLE IF EXISTS "run_outbox_events";
+DROP TYPE IF EXISTS "RunOutboxEventKind";
 
 CREATE OR REPLACE FUNCTION "enforce_agent_run_authority_update"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

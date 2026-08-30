@@ -46,3 +46,28 @@ export interface ToolInvocationAuthorizationEvidence
 	/** Digest binding this evidence to the outer run, attempt, revision, and argument fields. */
 	readonly evidenceDigest: `sha256:${string}`;
 }
+
+/**
+ * Carries the central decision that admitted a caller-owned MCP task effect.
+ *
+ * A public task has no AgentRun, membership-revision fence, or workload assignment. Its evidence
+ * instead binds the caller Principal and admitted tool coordinate to the task-owned invocation.
+ * The MCP task repository writes this shape from the result returned by `admitPrincipal`; the
+ * ToolInvocation mapper rejects partial task evidence before an executor may use the row.
+ * Called by: libs/backend/server/gateways/mcp/main/src/mcp-tasks/prisma-mcp-task-repository.ts and
+ * ./prisma-tool-invocation-repository.ts.
+ * @see ToolInvocationAuthorizationEvidence for the AgentRun-owned evidence shape.
+ */
+export interface McpTaskToolInvocationAuthorizationEvidence
+{
+	/** Local Principal whose current grants admitted the task effect. */
+	readonly principalId: string;
+	/** Public tasks currently execute only for their authenticated human caller. */
+	readonly actorKind: "user";
+	/** Tool revision and Invoke action admitted for this task. */
+	readonly coordinates: readonly ToolInvocationAuthorizationCoordinate[];
+	/** Decision digest returned by the central authority for each stored coordinate. */
+	readonly decisionDigests: readonly `sha256:${string}`[];
+	/** Digest binding the central decision to the silo, task, tool revision, and arguments. */
+	readonly evidenceDigest: `sha256:${string}`;
+}

@@ -9,9 +9,14 @@ DROP FUNCTION "enforce_action_execution_receipt_lifecycle"();
 DROP TYPE "ActionExecutionState";
 DROP TYPE "ActionReplayMode";
 
--- Bind every newly admitted AgentRun ToolInvocation to the central decisions and exact assignment
--- that authorized it. Existing historical rows remain readable; the insert trigger below requires
--- the complete evidence set for all new run-owned work.
+-- Delete the callerless generic memory delivery queue. Personal memory retains the durable
+-- dataset and fact catalogue; gateway delivery follows the admitted personal-memory path.
+DROP TABLE IF EXISTS "memory_outbox_events";
+DROP TYPE IF EXISTS "MemoryOutboxEventKind";
+
+-- Bind every newly admitted ToolInvocation to the central decisions that authorized it. The
+-- pre-1.0 cutover deletes every row written before this evidence contract existed; no candidate
+-- runtime history crosses the 0.9.2 to 0.10.0 release boundary.
 CREATE TYPE "ToolInvocationAuthorizationActorKind" AS ENUM ('user', 'agent-service');
 ALTER TABLE "tool_invocations" ADD COLUMN "authorization_principal_id" TEXT;
 ALTER TABLE "tool_invocations" ADD COLUMN "authorization_actor_kind" "ToolInvocationAuthorizationActorKind";
@@ -20,6 +25,73 @@ ALTER TABLE "tool_invocations" ADD COLUMN "authorization_decision_digests" TEXT[
 ALTER TABLE "tool_invocations" ADD COLUMN "authorization_membership_revision" INTEGER;
 ALTER TABLE "tool_invocations" ADD COLUMN "authorization_assignment_digest" TEXT;
 ALTER TABLE "tool_invocations" ADD COLUMN "authorization_evidence_digest" TEXT;
+
+-- Delete every pre-0.10 ToolInvocation and its invocation-owned dependants. Tagged 0.9.2 did not
+-- admit central evidence, while rows from an untagged 0.10 candidate are expressly unsupported.
+CREATE TEMP TABLE "precentral_tool_invocations" (
+    "id" TEXT PRIMARY KEY
+) ON COMMIT DROP;
+INSERT INTO "precentral_tool_invocations" ("id")
+SELECT "id"
+  FROM "tool_invocations";
+
+DROP TRIGGER IF EXISTS "personal_memory_permission_receipts_authority" ON "personal_memory_permission_receipts";
+DROP TRIGGER IF EXISTS "approval_requests_immutable" ON "approval_requests";
+DROP TRIGGER IF EXISTS "mcp_runtime_executions_authority" ON "mcp_runtime_executions";
+DROP TRIGGER IF EXISTS "tool_invocations_lifecycle_guard" ON "tool_invocations";
+
+DO $$
+BEGIN
+    IF to_regclass('skill_workloads') IS NOT NULL THEN
+        IF to_regclass('skill_workload_bootstraps') IS NOT NULL THEN
+            EXECUTE 'DROP TRIGGER IF EXISTS "skill_workload_bootstraps_authority" ON "skill_workload_bootstraps"';
+            EXECUTE 'DELETE FROM "skill_workload_bootstraps" bootstrap
+                      USING "skill_workloads" workload, "precentral_tool_invocations" invocation
+                      WHERE bootstrap."skill_workload_id" = workload."id"
+                        AND workload."tool_invocation_id" = invocation."id"';
+        END IF;
+        EXECUTE 'DROP TRIGGER IF EXISTS "skill_workloads_authority" ON "skill_workloads"';
+        EXECUTE 'DELETE FROM "skill_workloads" workload
+                  USING "precentral_tool_invocations" invocation
+                  WHERE workload."tool_invocation_id" = invocation."id"';
+    END IF;
+END $$;
+DELETE FROM "personal_memory_permission_receipts"
+ WHERE "tool_invocation_id" IN (SELECT "id" FROM "precentral_tool_invocations");
+DELETE FROM "approval_requests"
+ WHERE "tool_invocation_row_id" IN (SELECT "id" FROM "precentral_tool_invocations");
+DELETE FROM "tool_result_deliveries"
+ WHERE "tool_invocation_id" IN (SELECT "id" FROM "precentral_tool_invocations");
+DELETE FROM "mcp_runtime_executions"
+ WHERE "tool_invocation_id" IN (SELECT "id" FROM "precentral_tool_invocations");
+DELETE FROM "tool_invocations"
+ WHERE "id" IN (SELECT "id" FROM "precentral_tool_invocations");
+
+CREATE TRIGGER "tool_invocations_lifecycle_guard" BEFORE INSERT OR UPDATE OR DELETE ON "tool_invocations" FOR EACH ROW EXECUTE FUNCTION "enforce_tool_invocation_lifecycle"();
+CREATE TRIGGER "mcp_runtime_executions_authority" BEFORE INSERT OR UPDATE OR DELETE ON "mcp_runtime_executions" FOR EACH ROW EXECUTE FUNCTION "enforce_mcp_runtime_execution_authority"();
+CREATE TRIGGER "approval_requests_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "approval_requests" FOR EACH ROW EXECUTE FUNCTION "enforce_approval_request_update"();
+CREATE TRIGGER "personal_memory_permission_receipts_authority" BEFORE INSERT OR UPDATE OR DELETE ON "personal_memory_permission_receipts" FOR EACH ROW EXECUTE FUNCTION "enforce_personal_memory_permission_authority"();
+DO $$
+DECLARE
+    has_residue BOOLEAN;
+BEGIN
+    IF EXISTS (SELECT 1 FROM "tool_invocations" invocation JOIN "precentral_tool_invocations" legacy ON legacy."id" = invocation."id")
+        OR EXISTS (SELECT 1 FROM "approval_requests" approval JOIN "precentral_tool_invocations" legacy ON legacy."id" = approval."tool_invocation_row_id")
+        OR EXISTS (SELECT 1 FROM "tool_result_deliveries" delivery JOIN "precentral_tool_invocations" legacy ON legacy."id" = delivery."tool_invocation_id")
+        OR EXISTS (SELECT 1 FROM "personal_memory_permission_receipts" receipt JOIN "precentral_tool_invocations" legacy ON legacy."id" = receipt."tool_invocation_id")
+        OR EXISTS (SELECT 1 FROM "mcp_runtime_executions" execution JOIN "precentral_tool_invocations" legacy ON legacy."id" = execution."tool_invocation_id") THEN
+        RAISE EXCEPTION 'pre-central ToolInvocation cleanup left durable runtime residue';
+    END IF;
+    IF to_regclass('skill_workloads') IS NOT NULL THEN
+        EXECUTE 'SELECT EXISTS (
+                    SELECT 1 FROM "skill_workloads" workload
+                    JOIN "precentral_tool_invocations" legacy ON legacy."id" = workload."tool_invocation_id"
+                 )' INTO has_residue;
+        IF has_residue THEN
+            RAISE EXCEPTION 'pre-central ToolInvocation cleanup left durable SQL workload residue';
+        END IF;
+    END IF;
+END $$;
 
 -- Persist one-use authorization for the model-key mint effect after the central authority has
 -- admitted the exact run attempt, model definition, provider connection, and authorization digest.
@@ -100,8 +172,8 @@ INSERT INTO "capability_catalog_revisions" (
     'system:central-authorization-migration'
 );
 
--- Project current Owner/Admin roles into one durable root grant. Runtime authorization reads only
--- this grant; membership roles are input to this one-time projection, never a second evaluator.
+-- Project current Owner/Admin roles into durable read and administration grants. Read-only
+-- governance views use the Read grant; protected mutations admit the Administer grant.
 INSERT INTO "authorization_grants" (
     "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
     "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
@@ -109,15 +181,19 @@ INSERT INTO "authorization_grants" (
     "resource_kind", "resource_id", "effect", "priority", "require_approval", "created_by"
 )
 SELECT
-    'central-org-admin-' || principal."id", principal."silo_id", 'principal', NULL, principal."id",
+    'central-org-admin-' || action."suffix" || '-' || principal."id", principal."silo_id", 'principal', NULL, principal."id",
     'personal', NULL, principal."id", 'exact', 'organization-membership-admin-bootstrap',
     'opencrane-product-authorization', 1, 'sha256:92d109c411001265ae8dd6a4a89e6518cd28d60ab623c62c0dd4db0868ee2821',
-    'organization:administer', 'organization', principal."silo_id", 'allow', 0, FALSE,
+    action."capability_id", 'organization', principal."silo_id", 'allow', 0, FALSE,
     'system:central-authorization-migration'
 FROM "principals" principal
 JOIN "org_memberships" membership
   ON membership."cluster_tenant" = principal."silo_id"
  AND membership."subject" = principal."subject"
+CROSS JOIN (VALUES
+    ('read', 'organization:read'),
+    ('administer', 'organization:administer')
+) AS action("suffix", "capability_id")
 WHERE membership."status" = 'active'::"OrgMemberStatus"
   AND membership."role" IN ('owner'::"OrgRole", 'admin'::"OrgRole");
 
@@ -502,8 +578,9 @@ CROSS JOIN (VALUES
 WHERE approval."state" = 'pending'::"ApprovalRequestState"
   AND approval."tool_invocation_row_id" IS NOT NULL;
 
--- Require complete immutable central decision evidence for every newly admitted run-owned effect.
--- Historical 0.9.2 rows remain readable and may complete their saved lifecycle without invented evidence.
+-- Require complete immutable central decision evidence for every newly admitted external effect.
+-- AgentRun work includes assignment fields; public MCP tasks bind the caller and admitted tool
+-- decision without inventing run membership or workload-assignment evidence.
 CREATE FUNCTION "enforce_tool_invocation_authorization_evidence"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     has_evidence BOOLEAN;
@@ -529,8 +606,33 @@ BEGIN
         OR NEW."authorization_evidence_digest" IS NOT NULL;
 
     IF NEW."run_id" IS NULL THEN
-        IF has_evidence THEN
-            RAISE EXCEPTION 'task-owned ToolInvocation cannot carry AgentRun authorization evidence';
+        IF TG_OP = 'INSERT' OR has_evidence THEN
+            IF NEW."authorization_principal_id" IS NULL
+                OR btrim(NEW."authorization_principal_id") = ''
+                OR NEW."authorization_actor_kind" IS DISTINCT FROM 'user'::"ToolInvocationAuthorizationActorKind"
+                OR NEW."authorization_coordinates" IS NULL
+                OR jsonb_typeof(NEW."authorization_coordinates") <> 'array'
+                OR jsonb_array_length(NEW."authorization_coordinates") = 0
+                OR NEW."authorization_decision_digests" IS NULL
+                OR cardinality(NEW."authorization_decision_digests") = 0
+                OR NEW."authorization_membership_revision" IS NOT NULL
+                OR NEW."authorization_assignment_digest" IS NOT NULL
+                OR NEW."authorization_evidence_digest" IS NULL
+                OR NEW."authorization_evidence_digest" !~ '^sha256:[0-9a-f]{64}$'
+                OR EXISTS (
+                    SELECT 1 FROM unnest(NEW."authorization_decision_digests") AS digest
+                    WHERE digest !~ '^sha256:[0-9a-f]{64}$'
+                )
+                OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements(NEW."authorization_coordinates") AS coordinate
+                    WHERE jsonb_typeof(coordinate) <> 'object'
+                       OR jsonb_typeof(coordinate->'resource') <> 'object'
+                       OR COALESCE(btrim(coordinate->'resource'->>'kind'), '') = ''
+                       OR COALESCE(btrim(coordinate->'resource'->>'id'), '') = ''
+                       OR COALESCE(btrim(coordinate->>'action'), '') = ''
+                ) THEN
+                RAISE EXCEPTION 'task-owned ToolInvocation requires complete central authorization evidence without AgentRun fields';
+            END IF;
         END IF;
         RETURN NEW;
     END IF;
@@ -542,6 +644,7 @@ BEGIN
             OR NEW."authorization_coordinates" IS NULL
             OR jsonb_typeof(NEW."authorization_coordinates") <> 'array'
             OR jsonb_array_length(NEW."authorization_coordinates") = 0
+            OR NEW."authorization_decision_digests" IS NULL
             OR cardinality(NEW."authorization_decision_digests") = 0
             OR NEW."authorization_membership_revision" IS NULL
             OR NEW."authorization_membership_revision" < 1
@@ -557,9 +660,9 @@ BEGIN
                 SELECT 1 FROM jsonb_array_elements(NEW."authorization_coordinates") AS coordinate
                 WHERE jsonb_typeof(coordinate) <> 'object'
                    OR jsonb_typeof(coordinate->'resource') <> 'object'
-                   OR btrim(coordinate->'resource'->>'kind') = ''
-                   OR btrim(coordinate->'resource'->>'id') = ''
-                   OR btrim(coordinate->>'action') = ''
+                   OR COALESCE(btrim(coordinate->'resource'->>'kind'), '') = ''
+                   OR COALESCE(btrim(coordinate->'resource'->>'id'), '') = ''
+                   OR COALESCE(btrim(coordinate->>'action'), '') = ''
             ) THEN
             RAISE EXCEPTION 'run-owned ToolInvocation requires complete central authorization evidence';
         END IF;

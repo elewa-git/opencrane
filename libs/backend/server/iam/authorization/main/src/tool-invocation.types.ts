@@ -1,9 +1,9 @@
 import type { JsonValue } from "@opencrane/util";
 
 import { TOOL_INVOCATION_PREPARATION_POLICY, type ExternalActionClaimKinds, type ExternalActionRecoveryModes, type ToolInvocationStates } from "./tool-invocation-lifecycle.types";
-import type { ToolInvocationAuthorizationEvidence } from "./tool-invocation-authorization-evidence.types";
+import type { McpTaskToolInvocationAuthorizationEvidence, ToolInvocationAuthorizationEvidence } from "./tool-invocation-authorization-evidence.types";
 
-export type { ToolInvocationAuthorizationCoordinate, ToolInvocationAuthorizationEvidence } from "./tool-invocation-authorization-evidence.types";
+export type { McpTaskToolInvocationAuthorizationEvidence, ToolInvocationAuthorizationCoordinate, ToolInvocationAuthorizationEvidence } from "./tool-invocation-authorization-evidence.types";
 export { ToolInvocationRunRecoveryEnterResults } from "./tool-invocation-recovery.types";
 export type { ToolInvocationRecoveryEvent, ToolInvocationRecoveryEventSink, ToolInvocationRunRecoveryAuthority, ToolInvocationRunRecoveryCommand, ToolInvocationRunRecoveryEnterResult } from "./tool-invocation-recovery.types";
 
@@ -77,8 +77,8 @@ export interface ToolInvocationRecord
 	readonly agentRevisionId: string | null;
 	/** Trusted execution subject on whose behalf the action runs. */
 	readonly subjectId: string;
-	/** Central runtime-effect evidence, or null for a caller-owned MCP task with no AgentRun. */
-	readonly authorizationEvidence: ToolInvocationAuthorizationEvidence | null;
+	/** Central effect evidence shaped for either the owning AgentRun or caller-owned MCP task. */
+	readonly authorizationEvidence: ToolInvocationAuthorizationEvidence | McpTaskToolInvocationAuthorizationEvidence | null;
 	/** Run owning the invocation. */
 	readonly runId: string | null;
 	/** Attempt owning the invocation. */

@@ -87,6 +87,13 @@ CloudNativePG reconcile `pg_cron`, then observe a second `Database` generation t
 existing `cron` schema to the application owner. The migration Job must never receive the
 CloudNativePG superuser credential.
 
+OpenCrane is not yet a production-compatible 1.0 database contract. The 0.10.0 cutover therefore
+deletes pre-central runtime history and drops every superseded authorization, outbox, workload, and
+memory table instead of carrying compatibility state into the target architecture. Development and
+test databases must accept that destructive cutover or be reset. Starting with 1.0.0, a released
+database is durable product data: migrations must preserve it by default, and any destructive data
+operation requires a separately reviewed operator action with explicit scope and recovery evidence.
+
 ## Required gate
 
 Before review run:

@@ -192,7 +192,7 @@ describe("mcp-operator router", function _suite()
 
       expect(res.status).not.toBe(403);
       expect(spies["mcpServer.findMany"]).toHaveBeenCalled();
-	  expect(_authorizationAuthority.listPrincipalEntitled).toHaveBeenCalledWith(expect.objectContaining({ action: ProductAuthorizationActions.Administer, resources: [{ kind: ProductAuthorizationResourceKinds.Organization, id: "silo-1" }] }));
+	  expect(_authorizationAuthority.listPrincipalEntitled).toHaveBeenCalledWith(expect.objectContaining({ action: ProductAuthorizationActions.Read, resources: [{ kind: ProductAuthorizationResourceKinds.Organization, id: "silo-1" }] }));
     });
 
 	it("shows an administrator a Ready tool without presenting a disabled server as assignable", async function _ShowsBlockedTool()

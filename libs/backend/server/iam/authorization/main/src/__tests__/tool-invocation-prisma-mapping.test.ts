@@ -44,6 +44,39 @@ describe("ToolInvocation Prisma mapping", function _suite()
 		} }));
 	});
 
+	it("returns task authorization evidence without inventing AgentRun fields", async function _mapsTaskEvidence()
+	{
+		const row = _row({
+			runId: null,
+			attempt: null,
+			mcpTaskId: "mcp-task-1",
+			agentServiceId: null,
+			agentRevisionId: null,
+			authorizationMembershipRevision: null,
+			authorizationAssignmentDigest: null,
+		});
+		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValue(row) } } as unknown as Prisma.TransactionClient;
+		const repository = new PrismaToolInvocationRepository(transaction);
+		const record = await repository.findById("invocation-1");
+
+		expect(record).toEqual(expect.objectContaining({ authorizationEvidence: {
+			principalId: "principal-1",
+			actorKind: "user",
+			coordinates: [{ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "tool-revision-1" }, action: ProductAuthorizationActions.Invoke }],
+			decisionDigests: [`sha256:${"b".repeat(64)}`],
+			evidenceDigest: `sha256:${"c".repeat(64)}`,
+		} }));
+	});
+
+	it("rejects task evidence that invents an AgentRun assignment", async function _rejectsTaskAssignmentEvidence()
+	{
+		const row = _row({ runId: null, attempt: null, mcpTaskId: "mcp-task-1", agentServiceId: null, agentRevisionId: null, authorizationMembershipRevision: null });
+		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValue(row) } } as unknown as Prisma.TransactionClient;
+		const repository = new PrismaToolInvocationRepository(transaction);
+
+		await expect(repository.findById("invocation-1")).rejects.toThrow("ToolInvocation invocation-1 has invalid task authorization evidence");
+	});
+
 	it("rejects a row whose central authorization evidence is only partly stored", async function _rejectsPartialEvidence()
 	{
 		const row = _row({ authorizationPrincipalId: null });

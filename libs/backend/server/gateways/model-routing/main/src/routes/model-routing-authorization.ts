@@ -24,10 +24,10 @@ export function _RequireModelRoutingCaller(request: Request, response: Response,
 	return null;
 }
 
-/** Check exact organisation-policy administration without recording read evidence. */
+/** Check the administrator-owned organisation Read grant without recording evidence. */
 export async function _CanAdministerModelRouting(authorization: AuthorizationAuthority, caller: ModelRoutingCaller): Promise<boolean>
 {
-	const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Administer, resources: [{ kind: ProductAuthorizationResourceKinds.Organization, id: caller.siloId }], nowEpochMs: Date.now() });
+	const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: [{ kind: ProductAuthorizationResourceKinds.Organization, id: caller.siloId }], nowEpochMs: Date.now() });
 	return entitled.length === 1;
 }
 

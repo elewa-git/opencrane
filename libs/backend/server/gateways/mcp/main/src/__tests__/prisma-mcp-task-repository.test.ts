@@ -2,6 +2,7 @@ import { McpApprovalStatus, McpExecutorCommandState, McpExecutorWorkloadState, M
 import { describe, expect, it, vi } from "vitest";
 
 import type { ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
+import { ___DigestCanonicalJson } from "@opencrane/util";
 import { MCP_ERA_PROTOCOL_VERSION } from "../era-probe/mcp-era-probe.types";
 import type { McpTaskSubmissionRecord } from "../mcp-tasks/mcp-task-repository.types";
 import { McpTaskStates } from "../mcp-tasks/mcp-task.types";
@@ -131,6 +132,9 @@ describe("Prisma MCP task admission", function _McpTaskAdmissionSuite()
 		const authorization = _Authorization();
 		const repository = new PrismaMcpTaskRepository(transaction, authorization as never);
 		const submission = _Submission();
+		const authorizationCoordinates = [{ resource: { kind: "mcp-tool-revision", id: submission.toolRevisionId }, action: "invoke" }];
+		const authorizationDecisionDigests = [`sha256:${"a".repeat(64)}`];
+		const authorizationEvidenceDigest = ___DigestCanonicalJson({ siloId: submission.siloId, principalId: submission.principalId, actorKind: "user", coordinates: authorizationCoordinates, decisionDigests: authorizationDecisionDigests, mcpTaskId: "mcp-task-1", toolRevisionId: submission.toolRevisionId, argumentsDigest: ___DigestCanonicalJson(submission.arguments) });
 
 		await expect(repository.admitAuthorizedToolInvocation(submission.siloId, "mcp-task-1", submission.callDigest)).resolves.toMatchObject({ state: McpTaskStates.Queued, toolInvocationRowId: "invocation-1" });
 		await expect(repository.admitAuthorizedToolInvocation(submission.siloId, "mcp-task-1", submission.callDigest)).resolves.toMatchObject({ state: McpTaskStates.Queued, toolInvocationRowId: "invocation-1" });
@@ -138,8 +142,35 @@ describe("Prisma MCP task admission", function _McpTaskAdmissionSuite()
 		expect(createInvocation).toHaveBeenCalledOnce();
 		expect(authorization.admitPrincipal).toHaveBeenCalledOnce();
 		expect(authorization.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ siloId: submission.siloId, principalId: submission.principalId, resource: { kind: "mcp-tool-revision", id: submission.toolRevisionId }, action: "invoke" }));
-		expect(createInvocation).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ mcpTaskId: "mcp-task-1", toolRevisionId: submission.toolRevisionId, state: ToolInvocationState.Ready, approvalRequired: false }) }));
+		expect(createInvocation).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+			mcpTaskId: "mcp-task-1",
+			toolRevisionId: submission.toolRevisionId,
+			state: ToolInvocationState.Ready,
+			approvalRequired: false,
+			authorizationPrincipalId: submission.principalId,
+			authorizationActorKind: "User",
+			authorizationCoordinates,
+			authorizationDecisionDigests,
+			authorizationEvidenceDigest,
+		}) }));
+		const invocationData = createInvocation.mock.calls[0]![0].data;
+		expect(invocationData).not.toHaveProperty("authorizationMembershipRevision");
+		expect(invocationData).not.toHaveProperty("authorizationAssignmentDigest");
 		expect(updateTask).toHaveBeenCalledOnce();
+	});
+
+	it("fails closed when an allowed task invocation decision omits central evidence", async function _RejectsMissingAdmissionEvidence()
+	{
+		const createInvocation = vi.fn();
+		const transaction = { mcpTask: { findFirst: vi.fn().mockResolvedValue(_Task()) }, toolInvocation: { create: createInvocation } } as unknown as Prisma.TransactionClient;
+		const authorization = _Authorization();
+		authorization.admitPrincipal.mockResolvedValueOnce({ outcome: "allow", reason: "winning_allow", grantIds: ["grant-1"], evidence: null });
+		const repository = new PrismaMcpTaskRepository(transaction, authorization as never);
+		const submission = _Submission();
+
+		await expect(repository.admitAuthorizedToolInvocation(submission.siloId, "mcp-task-1", submission.callDigest)).rejects.toThrow("allowed MCP tool invocation admission omitted central evidence");
+
+		expect(createInvocation).not.toHaveBeenCalled();
 	});
 
 	it("fails the task before ToolInvocation creation when exact tool invocation is revoked", async function _RejectsRevokedTool()

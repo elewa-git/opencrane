@@ -74,7 +74,7 @@ export class PrismaAuthenticatedPrincipalCapabilityUnitOfWork implements Authent
 				// 3. Project the current central decision as a UI hint; product routes still re-admit writes.
 				const authorization = createAuthorization === undefined ? new PrismaAuthorizationAuthority(transaction) : createAuthorization(transaction);
 				const resources = [{ kind: ProductAuthorizationResourceKinds.Organization, id: siloId }] as const;
-				const allowed = await authorization.listPrincipalEntitled({ siloId, principalId: principal.principalId, action: ProductAuthorizationActions.Administer, resources, nowEpochMs: now.getTime() });
+				const allowed = await authorization.listPrincipalEntitled({ siloId, principalId: principal.principalId, action: ProductAuthorizationActions.Read, resources, nowEpochMs: now.getTime() });
 				return allowed.length === 1;
 			});
 		}

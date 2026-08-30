@@ -91,8 +91,10 @@ one manager and resource so it cannot revoke another manager's evidence.
 retry only within their declared budgets; an ambiguous provider result follows the adapter's frozen
 idempotency or reconciliation mode and never becomes an unrecorded automatic retry.
 Every run-owned invocation stores the complete structured admission evidence alongside the existing
-`approvalRequired` and approval relation. Database constraints reject partial evidence, task-owned
-evidence, and changes to evidence after insertion.
+`approvalRequired` and approval relation. A caller-owned MCP task stores the Principal, actor class,
+tool/action coordinate, decision digest, and a digest that binds that evidence to the task, tool
+revision, and arguments; it does not invent AgentRun membership or workload-assignment fields.
+Database constraints reject either owner's partial evidence and changes to evidence after insertion.
 
 ## See also
 

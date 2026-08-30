@@ -46,14 +46,16 @@ function _ExistingOrganizationAdminGrant()
 
 describe("PrismaOrganizationAdminGrantBootstrapRepository", function _Suite()
 {
-	it.each([OrgRole.Owner, OrgRole.Admin])("creates one managed organisation grant for an active %s", async function _Creates(role)
+	it.each([OrgRole.Owner, OrgRole.Admin])("creates managed read and administration grants for an active %s", async function _Creates(role)
 	{
 		const store = _Transaction({ role, status: OrgMemberStatus.Active });
 		const repository = new PrismaOrganizationAdminGrantBootstrapRepository(store.transaction);
 
-		await expect(repository.reconcileOrganizationAdminGrant({ siloId: "silo-a", subject: "subject-1", principalId: "principal-1", now: new Date("2026-08-29T00:00:00.000Z") })).resolves.toBe(1);
+		await expect(repository.reconcileOrganizationAdminGrant({ siloId: "silo-a", subject: "subject-1", principalId: "principal-1", now: new Date("2026-08-29T00:00:00.000Z") })).resolves.toBe(2);
 		expect(store.grantFindMany).toHaveBeenCalledWith({ where: { siloId: "silo-a", managerId: "organization-membership-admin-bootstrap", resourceKind: "organization", resourceId: "silo-a", effect: "Allow", revokedAt: null }, select: expect.any(Object) });
-		expect(store.grantCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ managerId: "organization-membership-admin-bootstrap", subjectPrincipalId: "principal-1", boundaryPrincipalId: "principal-1", catalogId: PRODUCT_AUTHORIZATION_CATALOG_ID, catalogRevision: PRODUCT_AUTHORIZATION_CATALOG_REVISION, catalogDigest: PRODUCT_AUTHORIZATION_CATALOG_DIGEST, capabilityId: "organization:administer", resourceKind: "organization", resourceId: "silo-a" }) });
+		expect(store.grantCreate).toHaveBeenCalledTimes(2);
+		expect(store.grantCreate.mock.calls.map(call => call[0].data.capabilityId)).toEqual(["organization:read", "organization:administer"]);
+		expect(store.grantCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ managerId: "organization-membership-admin-bootstrap", subjectPrincipalId: "principal-1", boundaryPrincipalId: "principal-1", catalogId: PRODUCT_AUTHORIZATION_CATALOG_ID, catalogRevision: PRODUCT_AUTHORIZATION_CATALOG_REVISION, catalogDigest: PRODUCT_AUTHORIZATION_CATALOG_DIGEST, resourceKind: "organization", resourceId: "silo-a" }) });
 	});
 
 	it.each([

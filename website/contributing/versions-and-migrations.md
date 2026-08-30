@@ -70,6 +70,14 @@ OpenCrane owner. The migration container receives only the application credentia
 - Development databases that ran the untagged 0.9.3 candidate need a reset or reviewed forward
   repair; the release tooling never treats that candidate as published history.
 
+::: warning
+OpenCrane has not reached its production-compatible 1.0 database contract. The 0.10.0 migration is
+a clean cutover: it deletes pre-central runtime history and drops superseded authorization, outbox,
+workload, and memory tables. Development and test databases must accept that destructive change or
+be reset. From 1.0.0 onward, released database content is preserved by default; destructive data
+operations require a separately reviewed operator action with explicit scope and recovery evidence.
+:::
+
 ## CI enforces the whole scheme
 
 ::: tip

@@ -1,7 +1,7 @@
 import { AgentRunState as PrismaAgentRunState, Prisma, RuntimeCommandKind, RuntimeSteeringRequestState, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 
 import type { RuntimeCommandStreamAuthority } from "@opencrane/backend/server/infra/agent-runtime-stream";
-import { AGENT_RUNTIME_COMMAND_MAX_BYTES, AGENT_RUNTIME_CONTINUATION_MAX_BYTES, RuntimeCandidateKinds, type RuntimeCandidate, type RuntimeCommandEnvelope, type RuntimeContinuationSaveRequest, type RuntimeStreamOpen } from "@opencrane/contracts";
+import { AGENT_RUNTIME_COMMAND_MAX_BYTES, AGENT_RUNTIME_CONTINUATION_MAX_BYTES, RuntimeCandidateKinds, RuntimeCommandKinds, type RuntimeCandidate, type RuntimeCommandEnvelope, type RuntimeContinuationSaveRequest, type RuntimeStreamOpen } from "@opencrane/contracts";
 import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
 import { TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationAdmissionOutcomes, ToolInvocationRunRecoveryEnterResults, __AdmitPreparingToolInvocationInTransaction, __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import { RunEventTypes } from "@opencrane/models/agents";
@@ -373,7 +373,7 @@ async function _MarkDispatchRecoveryRequired(transaction: Prisma.TransactionClie
 /** Reserve enough of the 64KiB command frame for the largest admitted continuation. */
 function _LeavesContinuationHeadroom(command: RuntimeCommandEnvelope): boolean
 {
-	if (command.kind !== "resume_attempt")
+	if (command.kind !== RuntimeCommandKinds.ResumeAttempt)
 		return true;
 	const continuationPropertyBytes = Buffer.byteLength(',"continuation":', "utf8");
 	const sseDataLineBytes = Buffer.byteLength("data: \n", "utf8");
@@ -415,14 +415,17 @@ async function _admitCandidate(transaction: Prisma.TransactionClient, repository
 			{
 				const now = new Date(clock.nowEpochMs());
 				const preparation = await _PrepareToolInvocation(transaction, context, stream.runtimeInstanceId, candidate, compileRunInput);
-				if (preparation === null) return { accepted: false, reason: "external_action_invalid" };
+				if (preparation === null)
+					return { accepted: false, reason: "external_action_invalid" };
 				const authorizationEvidence = await externalActionAuthorization.admitInTransaction(transaction, context, candidate, now);
 				if (authorizationEvidence === null)
 					return { accepted: false, reason: "external_action_not_authorized" };
 				const intent = _BindToolInvocationAuthorization(preparation, context, authorizationEvidence);
-				if (intent === null) throw new RuntimeCandidateSideEffectDeniedError("external_action_invalid");
+				if (intent === null)
+					throw new RuntimeCandidateSideEffectDeniedError("external_action_invalid");
 				const durable = await __AdmitPreparingToolInvocationInTransaction(transaction, intent, now, TOOL_INVOCATION_PREPARATION_POLICY);
-				if (durable.outcome === ToolInvocationAdmissionOutcomes.Conflict) throw new RuntimeCandidateSideEffectDeniedError("external_action_conflict");
+				if (durable.outcome === ToolInvocationAdmissionOutcomes.Conflict)
+					throw new RuntimeCandidateSideEffectDeniedError("external_action_conflict");
 			}
 			if (candidate.kind === RuntimeCandidateKinds.Elicitation)
 			{
@@ -430,7 +433,8 @@ async function _admitCandidate(transaction: Prisma.TransactionClient, repository
 			}
 			// 2c. Apply transaction-local canonical event effects before accepting the id.
 			const sideEffectDenial = await _ApplyRuntimeCandidateSideEffects(transaction, candidate, context.runId, context.attempt, sourceCommand.kind === RuntimeCommandKind.StartAttempt, eventReporter);
-			if (sideEffectDenial !== null) throw new RuntimeCandidateSideEffectDeniedError(sideEffectDenial);
+			if (sideEffectDenial !== null)
+				throw new RuntimeCandidateSideEffectDeniedError(sideEffectDenial);
 			// 3. Append the accepted candidate id monotonically under the exact stream sequence fence.
 			const appended = await repository.appendCandidate(context.runId, context.attempt, stream.nextCommandSequence, candidate.candidateId);
 			if (appended.count !== 1) throw new Error("runtime dispatch lost its candidate acceptance fence");

@@ -68,7 +68,7 @@ describe("PrismaAuthenticatedPrincipalAdmissionUnitOfWork", function _Suite()
 
 		await expect(capability.canAdministerOrganization({ siloId: "silo-a", issuer: "https://issuer.example", subject: "subject-1" })).resolves.toBe(true);
 		expect(createAuthorization).toHaveBeenCalledTimes(1);
-		expect(listPrincipalEntitled).toHaveBeenCalledWith({ siloId: "silo-a", principalId: "principal-1", action: "administer", resources: [{ kind: "organization", id: "silo-a" }], nowEpochMs: expect.any(Number) });
+		expect(listPrincipalEntitled).toHaveBeenCalledWith({ siloId: "silo-a", principalId: "principal-1", action: "read", resources: [{ kind: "organization", id: "silo-a" }], nowEpochMs: expect.any(Number) });
 	});
 
 	it("fails the capability projection closed when the central authority finds no grant", async function _DeniesOrganizationAdministration()

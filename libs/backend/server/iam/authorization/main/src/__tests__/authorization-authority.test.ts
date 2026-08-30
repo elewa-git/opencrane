@@ -115,6 +115,32 @@ describe("central authorization authority", function _Suite()
 		expect(repository.resolveBoundaryContext).toHaveBeenCalledTimes(2);
 	});
 
+	it("rejects catalogue filtering for a rule that requires durable evidence", async function _RejectsNonReadBatch()
+	{
+		const repository = _Repository();
+		const authority = new __AuthorizationAuthority(repository);
+		await expect(authority.listPrincipalEntitled({ siloId: "silo-1", principalId: "principal-1", action: ProductAuthorizationActions.Publish, resources: [{ kind: ProductAuthorizationResourceKinds.Skill, id: "skill-allowed" }], nowEpochMs: 1 })).rejects.toThrow("requires a Read-class rule");
+		expect(repository.resolvePrincipalSubjects).not.toHaveBeenCalled();
+	});
+
+	it("records no batch evidence when one effect coordinate is denied", async function _RejectsPartialBatch()
+	{
+		const repository = _Repository();
+		const capability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.SkillRevision, ProductAuthorizationActions.Use);
+		if (capability === null)
+			throw new Error("skill revision use capability is missing");
+		vi.mocked(repository.listSubjectGrants).mockResolvedValue([{ grantId: "grant-use", siloId: "silo-1", subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "principal-1" }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: "principal-1" }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource: { kind: ProductAuthorizationResourceKinds.SkillRevision, id: "revision-allowed" }, effect: AuthorizationGrantEffects.Allow, priority: 10, validFromEpochMs: 0, expiresAtEpochMs: null, revokedAtEpochMs: null }]);
+		const recorder: ProductAuthorizationDecisionRecorder = { record: vi.fn().mockResolvedValue(undefined) };
+		const authority = new __AuthorizationAuthority(repository, recorder);
+		const shared = { siloId: "silo-1", principalId: "principal-1", actorKind: "user" as const, actorId: "principal-1", action: ProductAuthorizationActions.Use, argumentsDigest: `sha256:${"a".repeat(64)}` as const, nowEpochMs: 1 };
+		const results = await authority.admitPrincipalBatch([
+			{ ...shared, resource: { kind: ProductAuthorizationResourceKinds.SkillRevision, id: "revision-allowed" } },
+			{ ...shared, resource: { kind: ProductAuthorizationResourceKinds.SkillRevision, id: "revision-denied" } },
+		]);
+		expect(results).toEqual([]);
+		expect(recorder.record).not.toHaveBeenCalled();
+	});
+
 	it("replaces product-managed grants only after durable root administration admission", async function _ReplaceManagedGrants()
 	{
 		const repository = _Repository();

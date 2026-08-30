@@ -23,7 +23,7 @@ function _MayAdministerOrganization(membership: { readonly role: OrgRole; readon
  *
  * The adapter converts an active Owner or Admin role into one ordinary managed grant. A missing,
  * suspended, or Member membership produces an empty desired set, which revokes this manager's prior
- * grant without touching grants written by another authority.
+ * read and administration grants without touching grants written by another authority.
  *
  * Called by: `PrismaAuthenticatedPrincipalAdmissionUnitOfWork` during authenticated request admission.
  * @implements OrganizationAdminGrantBootstrapRepository
@@ -56,13 +56,17 @@ export class PrismaOrganizationAdminGrantBootstrapRepository implements Organiza
 
 		// 3. Reconcile this bootstrap manager's desired grant through the shared grant writer.
 		const resource = { kind: ProductAuthorizationResourceKinds.Organization, id: command.siloId } as const;
-		const capability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.Organization, ProductAuthorizationActions.Administer);
-		if (capability === null)
+		const capabilities = [ProductAuthorizationActions.Read, ProductAuthorizationActions.Administer].map(function _Capability(action)
 		{
-			throw new Error("organization administration capability is missing from the product catalogue");
-		}
+			const capability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.Organization, action);
+			if (capability === null)
+			{
+				throw new Error(`organization ${action} capability is missing from the product catalogue`);
+			}
+			return capability;
+		});
 		const grants = _MayAdministerOrganization(membership)
-			? [{ subject: { kind: AuthorizationSubjectKinds.Principal, principalId: command.principalId }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: command.principalId }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource, priority: 0, createdByPrincipalId: command.principalId }] as const
+			? capabilities.map(function _Grant(capability) { return { subject: { kind: AuthorizationSubjectKinds.Principal, principalId: command.principalId }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: command.principalId }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource, priority: 0, createdByPrincipalId: command.principalId } as const; })
 			: [];
 		const repository = new PrismaManagedAuthorizationGrantRepository(this.transaction);
 		return repository.reconcileManagedResourceGrants({ siloId: command.siloId, managerId: _ORGANIZATION_ADMIN_GRANT_MANAGER_ID, resource, grants, now: command.now });

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import Ajv from "ajv";
-import { ExternalActionRecoveryMode, McpApprovalStatus, McpExecutorCommandState, McpExecutorWorkloadState, McpServerRevisionState, McpServerStatus, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
+import { ExternalActionRecoveryMode, McpApprovalStatus, McpExecutorCommandState, McpExecutorWorkloadState, McpServerRevisionState, McpServerStatus, McpTaskState, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
 
 import { PrismaManagedAuthorizationGrantRepository, type AuthorizationAuthority, type ManagedAuthorizationGrantRepository, type ManagedAuthorizationGrantSpec } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
@@ -317,12 +317,31 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 			const failed = await this._transaction.mcpTask.update({ where: { id: task.id }, data: { state: McpTaskState.Failed, failureCode: "mcp_tool_not_authorized", completedAt: now }, select: _TASK_SELECT });
 			return _Record(failed);
 		}
+		if (invocationAdmission.evidence === null)
+			throw new Error("allowed MCP tool invocation admission omitted central evidence");
+		const authorizationCoordinates = [{ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: task.toolRevisionId }, action: ProductAuthorizationActions.Invoke }] as const;
+		const authorizationDecisionDigests = [invocationAdmission.evidence.decisionDigest];
+		const authorizationEvidenceDigest = ___DigestCanonicalJson({
+			siloId: task.siloId,
+			principalId: task.principalId,
+			actorKind: "user",
+			coordinates: authorizationCoordinates,
+			decisionDigests: authorizationDecisionDigests,
+			mcpTaskId: task.id,
+			toolRevisionId: task.toolRevisionId,
+			argumentsDigest,
+		} as unknown as JsonValue);
 		const requestIdentity = { runtimeInstanceId: `mcp-task:${task.id}`, commandId: task.id, candidateId: task.id };
 		const invocation = await this._transaction.toolInvocation.create({
 			data: {
 				siloId: task.siloId,
 				mcpTaskId: task.id,
 				subjectId: task.principalId,
+				authorizationPrincipalId: task.principalId,
+				authorizationActorKind: ToolInvocationAuthorizationActorKind.User,
+				authorizationCoordinates: authorizationCoordinates as unknown as Prisma.InputJsonValue,
+				authorizationDecisionDigests,
+				authorizationEvidenceDigest,
 				runtimeInstanceId: requestIdentity.runtimeInstanceId,
 				commandId: requestIdentity.commandId,
 				candidateId: requestIdentity.candidateId,

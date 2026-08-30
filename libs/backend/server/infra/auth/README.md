@@ -48,8 +48,8 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
   Subclasses may declare a post-login admission failure fatal when silently continuing would present
   a signed-in user with false onboarding state. Fatal failures destroy the freshly regenerated
   session before returning the callback error; optional projection work remains best-effort.
-- Session helpers + `AuthUser`; `_ResolveIdentityClaims`; `_ResolveOrgMembershipFacts`,
-  `OrgMembershipFacts`, `OrgMembershipRepository`, and `PrismaOrgMembershipRepository`.
+- Session helpers + `AuthUser`; `_ResolveIdentityClaims`; `_ResolveOwnedOrgSummaries`,
+  `OwnedOrgSummaryFacts`, `OwnedOrgSummaryRepository`, and `PrismaOwnedOrgSummaryRepository`.
 - `_ResolveRequestPrincipal`, `RequestPrincipal` — expose the admitted local Principal and
   independently rechecked host silo without importing any backend-domain caller type.
 - `_CreateMountedPublicKeySource`, `MountedPublicKeySource` — fail-closed access to an absolute
@@ -77,10 +77,11 @@ Tagged `scope:auth` (`layer:infra`): it may depend only on `scope:auth`, `scope:
 
 ## Data & persistence
 
-`PrismaOrgMembershipRepository` reads only owner/admin rows from the app-owned `OrgMembership`
-model. This package owns neither that model nor its schema or migrations; clean-database setup stays
-with the target baseline under `apps/opencrane/prisma`. Repository failures propagate so callers do
-not confuse an unavailable authority source with a successful empty membership result.
+`PrismaOwnedOrgSummaryRepository` reads the verified subject's `OrgMembership` rows and projects
+owner and administrator labels for `/auth/me`; that summary never authorizes a route. This package
+owns neither the model nor its schema or migrations; clean-database setup stays with the target
+baseline under `apps/opencrane/prisma`. Repository failures propagate so callers do not confuse an
+unavailable summary source with a successful empty result.
 
 ## See also
 

@@ -121,6 +121,8 @@ export interface AuthorizationAuthority
 	admit(command: AdmitProductAuthorizationCommand): Promise<AdmitProductAuthorizationResult>;
 	/** Decides and records across the actor's stored personal and Group boundaries. */
 	admitPrincipal(command: AdmitPrincipalProductAuthorizationCommand): Promise<AdmitProductAuthorizationResult>;
+	/** Records a complete Principal action set only when every command is allowed. */
+	admitPrincipalBatch(commands: readonly AdmitPrincipalProductAuthorizationCommand[]): Promise<readonly AdmitProductAuthorizationResult[]>;
 	/** Filters a lifecycle-eligible catalogue without one database read per candidate. */
 	listEntitled(command: ListEntitledProductResourcesCommand): Promise<readonly ProductAuthorizationResourceLocator[]>;
 	/** Filters candidates across the Principal's stored personal and Group boundaries. */

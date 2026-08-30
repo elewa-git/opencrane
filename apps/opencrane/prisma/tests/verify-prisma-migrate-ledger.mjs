@@ -75,12 +75,19 @@ const baselineStatements = baseline
 	.split("\n")
 	.filter(function _IsSql(line) { return line.trim() !== "" && !line.trimStart().startsWith("--"); });
 _Require(baselineStatements.length === 0, "the tagged 0.9.2 Prisma bridge must remain a no-op");
-_Require(releasedCutoverChecksum === "c1d171fc5b6cc1b5f7c8549e5a1726966aa25d60c18fd2a5555182e3fac60e4c", "the rebuilt untagged 0.10.0 cutover migration must retain its reviewed checksum");
+_Require(releasedCutoverChecksum === "75bc11951270c082f93af39522f091e7982ecfd000e76beb25bb80d3274f4cea", "the rebuilt untagged 0.10.0 cutover migration must retain its reviewed checksum");
 
 _Require(migration.startsWith("-- OpenCrane 0.9.2 to 0.10.0 workflow and OCI cutover after the reviewed IAM prerequisite."), "the forward migration must name its exact release boundary");
 _Require(migration.match(/^BEGIN;$/gmu)?.length === 1, "the forward migration must open one transaction");
 _Require(migration.match(/^COMMIT;$/gmu)?.length === 1, "the forward migration must commit one transaction");
 _Require(migration.trimEnd().endsWith("COMMIT;"), "the forward migration must finish with its transaction commit");
+for (const retiredRuntimeTable of ["skill_workload_bootstraps", "skill_workloads", "run_outbox_events"])
+{
+	_Require(migration.includes(`DROP TABLE IF EXISTS "${retiredRuntimeTable}"`), `the rebuilt cutover must delete ${retiredRuntimeTable}`);
+	_Require(!migration.includes(`CREATE TABLE "${retiredRuntimeTable}"`), `the rebuilt cutover must not recreate ${retiredRuntimeTable}`);
+}
+_Require(!migration.includes('CREATE FUNCTION "select_skill_workload_claim_candidate"'), "the rebuilt cutover must not reinstall the retired SQL workload selector");
+_Require(!migration.includes('CREATE TRIGGER "run_outbox_events_monotonic"'), "the rebuilt cutover must not reinstall the retired run-outbox authority");
 
 _Require(authorizationMigration.match(/^BEGIN;$/gmu)?.length === 1, "the central authorization migration must open one transaction");
 _Require(authorizationMigration.match(/^COMMIT;$/gmu)?.length === 1, "the central authorization migration must commit one transaction");
@@ -90,6 +97,27 @@ _Require(authorizationMigration.includes('DROP FUNCTION "enforce_action_executio
 _Require(authorizationMigration.includes('DROP TYPE "ActionExecutionState";'), "the central authorization migration must remove the replaced receipt state type");
 _Require(authorizationMigration.includes('DROP TYPE "ActionReplayMode";'), "the central authorization migration must remove the replaced replay type");
 _Require(!targetBaseline.includes('CREATE TABLE "action_execution_receipts"'), "fresh databases must not install the replaced proof-bound receipt table");
+_Require(authorizationMigration.includes('CREATE TEMP TABLE "precentral_tool_invocations"'), "the central authorization migration must identify every pre-central ToolInvocation");
+_Require(authorizationMigration.includes('SELECT "id"\n  FROM "tool_invocations";'), "the hard cutoff must include terminal and task-owned pre-central ToolInvocation rows");
+_Require(!authorizationMigration.includes('"state" NOT IN'), "the pre-1.0 cutoff must not retain terminal ToolInvocation compatibility");
+_Require(authorizationMigration.includes("to_regclass('skill_workloads') IS NOT NULL"), "the ToolInvocation cutoff must tolerate a repaired candidate that already lacks legacy SQL workloads");
+_Require(authorizationMigration.includes("to_regclass('skill_workload_bootstraps') IS NOT NULL"), "the ToolInvocation cutoff must tolerate a repaired candidate that already lacks legacy SQL workload bootstraps");
+for (const dependentDelete of [
+	'DELETE FROM "skill_workload_bootstraps"',
+	'DELETE FROM "skill_workloads"',
+	'DELETE FROM "personal_memory_permission_receipts"',
+	'DELETE FROM "approval_requests"',
+	'DELETE FROM "tool_result_deliveries"',
+	'DELETE FROM "mcp_runtime_executions"',
+	'DELETE FROM "tool_invocations"',
+])
+{
+	_Require(authorizationMigration.includes(dependentDelete), `pre-central ToolInvocation cleanup is missing dependency step ${dependentDelete}`);
+}
+_RequireBeforeIn(authorizationMigration, 'DROP TRIGGER IF EXISTS "tool_invocations_lifecycle_guard"', 'DELETE FROM "tool_invocations"', "the migration must open the deletion guard before removing unfinished invocations");
+_RequireBeforeIn(authorizationMigration, 'DELETE FROM "tool_invocations"', 'CREATE TRIGGER "tool_invocations_lifecycle_guard"', "the migration must restore ToolInvocation deletion authority after its approved cutoff");
+_RequireBeforeIn(authorizationMigration, 'DELETE FROM "tool_invocations"', 'CREATE FUNCTION "enforce_tool_invocation_authorization_evidence"', "pre-central invocations must be removed before central evidence becomes mandatory");
+_Require(authorizationMigration.includes("pre-central ToolInvocation cleanup left durable runtime residue"), "the migration must fail if a pre-central invocation or dependent runtime row survives cleanup");
 _Require(authorizationMigration.includes('CREATE TABLE "run_model_credential_mint_authorizations"'), "the central authorization migration must install the one-use model-key effect admission");
 _Require(targetBaseline.includes('CREATE TABLE "run_model_credential_mint_authorizations"'), "fresh databases must install the one-use model-key effect admission");
 for (const legacyTable of ["token_usage_snapshots", "global_budget_settings", "account_budget_settings", "third_party_sources"])
@@ -129,7 +157,8 @@ for (const siloKey of [
 	_Require(targetBaseline.replace(/\s+/gu, "").includes(compactKey) && authorizationMigration.replace(/\s+/gu, "").includes(compactKey), `fresh and upgraded databases must share silo key ${siloKey}`);
 }
 _Require(authorizationMigration.includes("'organization-membership-admin-bootstrap'"), "the upgrade projection must use the live organization-admin grant manager");
-_Require(authorizationMigration.includes("'organization:administer', 'organization', principal.\"silo_id\", 'allow', 0"), "the upgrade projection must match the live organization-admin grant priority");
+_Require(authorizationMigration.includes("('read', 'organization:read')") && authorizationMigration.includes("('administer', 'organization:administer')"), "the upgrade projection must install both read and administration grants for current organization administrators");
+_Require(authorizationMigration.includes("action.\"capability_id\", 'organization', principal.\"silo_id\", 'allow', 0"), "the upgrade projection must match the live organization-admin grant priority");
 _Require(authorizationMigration.includes("('persona', 'persona-collection:create', 'persona-collection')"), "active members must receive the Persona creation root during upgrade");
 _Require(authorizationMigration.includes("ERRCODE = 'OC715'"), "the Persona owner projection must fail closed on ambiguous Principal identity");
 _Require(authorizationMigration.includes("'persona-creator-access'"), "existing Persona owners must receive the live creator-managed grants");
@@ -142,10 +171,8 @@ const authorizationDigest = `sha256:${createHash("sha256").update(_CanonicalJson
 _Require(authorizationDigest === targetAuthorizationCatalogue.digest, "product-authorization catalogue digest must bind its canonical payload");
 _Require(!migration.includes("pg_advisory"), "the 0.10.0 migration must not restore retired migration preflights");
 _Require(!migration.includes("LOCK TABLE"), "the 0.10.0 migration must not restore write fencing");
-_RequireBefore('DROP TRIGGER IF EXISTS "run_outbox_events_monotonic"', 'DELETE FROM "run_outbox_events"', "the approved hard cutoff must disable the retired outbox deletion guard first");
-
 for (const statement of [
-	'DELETE FROM "run_outbox_events" WHERE "kind"::text IN (\'run.attempt_requested\', \'run.workload_release_requested\');',
+	'DROP TABLE IF EXISTS "run_outbox_events";',
 	'DELETE FROM "agent_revision_integration_assignments";',
 	'DELETE FROM "integration_custody_references";',
 	'DELETE FROM "integrations";',
@@ -157,8 +184,6 @@ for (const statement of [
 _Require(sqlWorkloadRetirement.match(/^BEGIN;$/gmu)?.length === 1, "the SQL workload retirement must open one transaction");
 _Require(sqlWorkloadRetirement.match(/^COMMIT;$/gmu)?.length === 1, "the SQL workload retirement must commit one transaction");
 for (const statement of [
-	'DROP TRIGGER IF EXISTS "skill_workloads_authority" ON "skill_workloads";',
-	'DROP TRIGGER IF EXISTS "skill_workload_bootstraps_authority" ON "skill_workload_bootstraps";',
 	'DROP TRIGGER IF EXISTS "cancel_ineligible_skill_workloads_on_revision" ON "skill_revisions";',
 	'DROP TRIGGER IF EXISTS "cancel_ineligible_skill_workloads_on_invocation" ON "tool_invocations";',
 	'DROP VIEW IF EXISTS "skill_workload_claim_candidates";',
@@ -168,34 +193,33 @@ for (const statement of [
 	'DROP FUNCTION IF EXISTS "enforce_skill_workload_bootstrap"();',
 	'DROP FUNCTION IF EXISTS "enforce_skill_workload_authority"();',
 	'DROP FUNCTION IF EXISTS "cancel_ineligible_skill_workloads"();',
-	'DELETE FROM "skill_workload_bootstraps";',
-	'DELETE FROM "skill_workloads";',
-	'DROP TABLE "skill_workload_bootstraps";',
-	'DROP TABLE "skill_workloads";',
-	'DROP TYPE "SkillWorkloadKind";',
-	'DROP TYPE "SkillWorkloadState";',
+	'DROP TABLE IF EXISTS "skill_workload_bootstraps";',
+	'DROP TABLE IF EXISTS "skill_workloads";',
+	'DROP TYPE IF EXISTS "SkillWorkloadKind";',
+	'DROP TYPE IF EXISTS "SkillWorkloadState";',
 ])
 {
 	_Require(sqlWorkloadRetirement.includes(statement), `SQL workload retirement is missing: ${statement}`);
 }
 
 for (const statement of [
-	'DROP TRIGGER IF EXISTS "run_outbox_events_accepted_attempt" ON "run_outbox_events";',
-	'DROP TRIGGER IF EXISTS "run_outbox_events_monotonic" ON "run_outbox_events";',
 	'DROP FUNCTION IF EXISTS "enforce_accepted_outbox_attempt"();',
 	'DROP FUNCTION IF EXISTS "enforce_run_outbox_event_update"();',
-	'DELETE FROM "run_outbox_events";',
-	'DROP TABLE "run_outbox_events";',
-	'DROP TYPE "RunOutboxEventKind";',
+	'DROP TABLE IF EXISTS "run_outbox_events";',
+	'DROP TYPE IF EXISTS "RunOutboxEventKind";',
 ])
 {
 	_Require(sqlWorkloadRetirement.includes(statement), `run outbox retirement is missing: ${statement}`);
 }
-_RequireBeforeIn(sqlWorkloadRetirement, 'DROP TRIGGER IF EXISTS "run_outbox_events_monotonic"', 'DELETE FROM "run_outbox_events";', "the deletion guard must be removed before run outbox rows are deleted");
-_RequireBeforeIn(sqlWorkloadRetirement, 'DELETE FROM "run_outbox_events";', 'DROP TABLE "run_outbox_events";', "run outbox rows must be deleted before their table is removed");
-_RequireBeforeIn(sqlWorkloadRetirement, 'DROP TABLE "run_outbox_events";', 'DROP TYPE "RunOutboxEventKind";', "the run outbox table must be removed before its enum");
+_RequireBeforeIn(sqlWorkloadRetirement, 'DROP TABLE IF EXISTS "run_outbox_events";', 'DROP TYPE IF EXISTS "RunOutboxEventKind";', "the run outbox table must be removed before its enum");
+_Require(!sqlWorkloadRetirement.includes('DELETE FROM "run_outbox_events"'), "the idempotent retirement must not query an optional legacy run outbox table");
+_Require(!sqlWorkloadRetirement.includes('DELETE FROM "skill_workloads"'), "the idempotent retirement must not query an optional legacy skill workload table");
 _Require(!targetBaseline.includes("run_outbox_events"), "clean target must remove the run outbox table and authority");
 _Require(!targetBaseline.includes("RunOutboxEventKind"), "clean target must remove the run outbox enum");
+_Require(authorizationMigration.includes('DROP TABLE IF EXISTS "memory_outbox_events";'), "central cutover must tolerate and remove the optional generic memory outbox table");
+_Require(authorizationMigration.includes('DROP TYPE IF EXISTS "MemoryOutboxEventKind";'), "central cutover must tolerate and remove the optional generic memory outbox enum");
+_Require(!targetBaseline.includes("memory_outbox_events"), "clean target must remove the generic memory outbox table");
+_Require(!targetBaseline.includes("MemoryOutboxEventKind"), "clean target must remove the generic memory outbox enum");
 const runAuthorityReplacement = _TargetFunction("enforce_agent_run_authority_update").replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION");
 _Require(sqlWorkloadRetirement.includes(runAuthorityReplacement), "SQL workload retirement must carry the exact workflow-era AgentRun authority function");
 
@@ -231,7 +255,8 @@ _RequireBefore('UPDATE "mcp_servers"\n   SET "era_probe_failure_code"', 'ADD CON
 
 _Require(!targetBaseline.includes('SkillWorkload'), "clean target must remove the retired skill workload types");
 _Require(!targetBaseline.includes('skill_workload'), "clean target must remove the retired skill workload tables and authority");
-_RequireBefore('DELETE FROM "run_outbox_events"', 'CREATE TYPE "RunOutboxEventKind_new"', "retired run events must be deleted before narrowing their enum");
+_Require(migration.includes('DROP TABLE IF EXISTS "run_outbox_events";'), "the rebuilt cutover must delete the retired run outbox table");
+_Require(!migration.includes('CREATE TYPE "RunOutboxEventKind_new"'), "the rebuilt cutover must not recreate a run-outbox enum");
 _RequireBefore('DELETE FROM "integrations";', 'DROP TABLE "integrations";', "retired integration data must be deleted before its table is removed");
 _RequireBefore('SET "state" = \'cancelled\'', 'SET "state" = \'terminal_failed\'', "active artifact output leases must be cancelled before old jobs become terminal");
 _RequireBefore('SET "state" = \'terminal_failed\'', 'RENAME COLUMN "attempt" TO "delivery_count"', "pre-workflow artifact jobs must stop before the new delivery lifecycle is installed");
@@ -316,16 +341,14 @@ for (const name of [
 	_Require(migration.includes(_TargetFunction(name)), `forward migration must install exact target function ${name}`);
 }
 
-const reviewedWorkloadFunctionDigests = new Map([
-	["select_skill_workload_claim_candidate", "615c4ac4e29ef01706146071f9c6a2fca19f0cc5fb93412882b25f03b229123c"],
-	["enforce_skill_workload_bootstrap", "c8c6c1a327b27ed4959bbf354d9776c3977ba94bb3deb3d234d4d280588e2803"],
-	["enforce_skill_workload_authority", "34164554914543dde48e2a744489c9ece5724a00437a84df085f9b417c917e69"],
-	["cancel_ineligible_skill_workloads", "174601302d16d48721bdbf11dca6452e9a33d0b407ecbd4be70dd831339f6146"],
-]);
-for (const [name, reviewedDigest] of reviewedWorkloadFunctionDigests)
+for (const retiredFunction of [
+	"select_skill_workload_claim_candidate",
+	"enforce_skill_workload_bootstrap",
+	"enforce_skill_workload_authority",
+	"cancel_ineligible_skill_workloads",
+])
 {
-	const actualDigest = createHash("sha256").update(_NormalizedSql(_MigrationFunction(name))).digest("hex");
-	_Require(actualDigest === reviewedDigest, `rebuilt cutover must retain the exact reviewed workload function ${name}`);
+	_Require(!migration.includes(`CREATE FUNCTION "${retiredFunction}"`) && !migration.includes(`CREATE OR REPLACE FUNCTION "${retiredFunction}"`), `rebuilt cutover must not reinstall retired function ${retiredFunction}`);
 }
 
 console.log("0.9.2-to-0.10.0 Prisma migration contract: PASS");

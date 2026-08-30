@@ -9,9 +9,7 @@ import type { JsonValue } from "@opencrane/util";
 import { _CompileRunInputForContext } from "./compiled-run-input-context";
 import type { RunInputCompiler, RuntimeDispatchContext } from "./prisma-runtime-dispatch-authority.types";
 import type { RuntimeExternalActionAuthorizationEvidence } from "./runtime-external-action-authorization.types";
-
-/** Provider-free invocation facts validated before central authority records an allow decision. */
-export type RuntimeToolInvocationPreparation = Omit<ToolInvocationIntent, "authorizationEvidence">;
+import type { RuntimeToolInvocationPreparation } from "./runtime-candidate-preparation.types";
 
 /** Bind one generic runtime proposal to transaction-consistent run, conversation, participant, and server time. */
 export async function _OpenRuntimeElicitation(context: RuntimeDispatchContext, candidate: RuntimeElicitationCandidate, elicitationUnitOfWork: RuntimeElicitationUnitOfWork, now: Date): Promise<boolean>

@@ -126,6 +126,12 @@ before disconnecting Prisma.
   the exact server-owned continuation for one fenced run attempt.
 - `RuntimeContinuationAuthority` — keeps command dispatch and warm replacement dependent on that
   durable continuation behavior without exposing its Prisma or encryption implementation.
+- `RuntimeExternalActionAuthorizationService` — binds the central authority and domain lifecycle
+  checks to the exact runtime dispatch transaction, returning the evidence stored beside the
+  admitted ToolInvocation.
+- `RuntimeExternalActionEligibilityFactory` and `RuntimeExternalActionEligibilityPorts` — let app
+  composition bind AgentService, membership, MCP, personal-memory, and persona eligibility readers
+  to that same transaction without creating another product policy engine.
 - `__CreateProductionExternalActionWorker` — constructs the bounded process worker that prepares,
   claims, executes, reconciles, and recovers durable ToolInvocations.
 - `__CreateProductionExternalActionApprovalOpener` — binds an approval-required invocation to its

@@ -55,21 +55,13 @@ class RuntimeExternalActionAuthorizationCoordinator implements RuntimeExternalAc
 		if (coordinates === null || coordinates.length === 0)
 			return null;
 
-		// 4. Preflight the whole resource set so a multi-resource effect cannot leave partial receipts.
-		if (!await _ContainsEveryEntitledResource(this.authority, context, actor, coordinates, now))
+		// 4. Admit the whole resource set as one evidence batch, so denial cannot leave partial receipts.
+		const admissions = await this.authority.admitPrincipalBatch(coordinates.map(coordinate => ({ siloId: context.siloId, principalId: actor.principalId, actorKind: actor.actorKind, actorId: actor.actorId, resource: coordinate.resource, action: coordinate.action, argumentsDigest, membershipRevision: actor.membershipRevision, nowEpochMs: now.getTime() })));
+		if (admissions.length !== coordinates.length || admissions.some(admission => admission.outcome !== AuthorizationDecisionOutcomes.Allow || admission.evidence === null))
 			return null;
+		const decisionDigests = admissions.map(admission => admission.evidence?.decisionDigest).filter((digest): digest is `sha256:${string}` => digest !== undefined);
 
-		// 5. Record every central decision before building the evidence saved with the ToolInvocation.
-		const decisionDigests: `sha256:${string}`[] = [];
-		for (const coordinate of coordinates)
-		{
-			const admission = await this.authority.admitPrincipal({ siloId: context.siloId, principalId: actor.principalId, actorKind: actor.actorKind, actorId: actor.actorId, resource: coordinate.resource, action: coordinate.action, argumentsDigest, membershipRevision: actor.membershipRevision, nowEpochMs: now.getTime() });
-			if (admission.outcome !== AuthorizationDecisionOutcomes.Allow || admission.evidence === null)
-				return null;
-			decisionDigests.push(admission.evidence.decisionDigest);
-		}
-
-		// 6. Bind lifecycle, authority, assignment, and arguments into one stored evidence digest.
+		// 5. Bind lifecycle, authority, assignment, and arguments into one stored evidence digest.
 		const evidenceWithoutDigest = {
 			principalId: actor.principalId,
 			actorKind: actor.actorKind,
@@ -173,20 +165,6 @@ function _RuntimeActor(context: RuntimeDispatchContext): RuntimeProductActor | n
 	return { principalId: identity.executionSubjectId, actorKind: "agent-service", actorId: identity.executionSubjectId, membershipRevision: identity.fleetMembershipRevision };
 }
 
-/** Preflights every resource with the current principal and action. */
-async function _ContainsEveryEntitledResource(authority: AuthorizationAuthority, context: RuntimeDispatchContext, actor: RuntimeProductActor, coordinates: readonly RuntimeExternalActionAuthorizationCoordinate[], now: Date): Promise<boolean>
-{
-	const actions = [...new Set(coordinates.map(coordinate => coordinate.action))];
-	for (const action of actions)
-	{
-		const expected = coordinates.filter(coordinate => coordinate.action === action).map(coordinate => coordinate.resource);
-		const actual = await authority.listPrincipalEntitled({ siloId: context.siloId, principalId: actor.principalId, action, resources: expected, nowEpochMs: now.getTime() });
-		if (!_ContainsEveryResource(actual, expected))
-			return false;
-	}
-	return true;
-}
-
 /** Orders resource coordinates before they become durable evidence. */
 function _CanonicalCoordinates(coordinates: readonly RuntimeExternalActionAuthorizationCoordinate[]): readonly RuntimeExternalActionAuthorizationCoordinate[]
 {
@@ -203,11 +181,4 @@ function _PersonalMemoryDatasetId(value: unknown): string | null
 		return null;
 	const policy = value as Readonly<Record<string, unknown>>;
 	return policy["scope"] === "personal" && typeof policy["datasetId"] === "string" && policy["datasetId"].trim() ? policy["datasetId"] : null;
-}
-
-/** Compares typed resource coordinates without depending on returned array order. */
-function _ContainsEveryResource(actual: readonly ProductAuthorizationResourceLocator[], expected: readonly ProductAuthorizationResourceLocator[]): boolean
-{
-	const coordinates = new Set(actual.map(resource => `${resource.kind}:${resource.id}`));
-	return expected.every(resource => coordinates.has(`${resource.kind}:${resource.id}`));
 }

@@ -165,8 +165,11 @@ This package owns the public behavior around `McpServer`, `McpServerInstall`, `M
 evidence remain owned by the authorization package. `PrismaMcpOperatorUnitOfWork` binds the MCP
 repositories and `AuthorizationAuthority` to the same public database transaction. Tool execution
 rechecks `McpToolRevision/Invoke` before that transaction creates its durable `ToolInvocation`. The
-separate `McpTask` authorization coordinate exists earlier because a task waiting for required input
-does not yet have the complete arguments needed to create that invocation.
+invocation stores the exact allow decision's Principal, actor, tool/action coordinate, decision
+digest, and silo-and-task-bound evidence digest. It leaves AgentRun membership and workload-assignment fields
+empty because a caller-owned task has neither. The separate `McpTask` authorization coordinate
+exists earlier because a task waiting for required input does not yet have the complete arguments
+needed to create that invocation.
 `PrismaRuntimeMcpEffectEligibilityAuthority` owns the current MCP half of that check: it revalidates
 the exact AgentRevision assignment, ready server revision, and active published server without
 exposing MCP lifecycle tables to execution protocol code.
