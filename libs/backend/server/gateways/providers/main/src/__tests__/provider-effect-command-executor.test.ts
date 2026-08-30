@@ -40,7 +40,7 @@ import { ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/serv
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandHandler, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectCommandUnitOfWork, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 
 /** Trusted route coordinates shared by executor tests. */
-const _CONTEXT: ProviderEffectExecutionContext = { siloId: "acme", principalId: "principal-1", actorKind: "user", actorId: "principal-1", resourceKind: "provider-connection", resourceId: "byok:openai", executorProfile: "opencrane-control-plane/provider-effect-v1" };
+const _CONTEXT: ProviderEffectExecutionContext = { siloId: "acme", principalId: "principal-1", actorKind: "user", actorId: "principal-1", resourceKind: "provider-connection", resourceId: "byok:acme:openai", executorProfile: "opencrane-control-plane/provider-effect-v1" };
 
 /** Process logger used by the executor and handler under test. */
 const _LOGGER = _TELEMETRY as unknown as Logger;
@@ -48,7 +48,7 @@ const _LOGGER = _TELEMETRY as unknown as Logger;
 /** Build one claimed Set-BYOK command without placing raw material in the record. */
 function _command(): ProviderEffectCommandRecord
 {
-	return { id: "command-1", siloId: "acme", principalId: "principal-1", payload: { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } }, resourceKind: "provider-connection", resourceId: "byok:openai", resourceRevision: "revision-1", desiredGeneration: 1, argumentsDigest: "sha256:arguments", materialVerifier: _ProviderKeyMaterialVerifier("command-1", "openai", "sk-test"), authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _CONTEXT.executorProfile, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey, state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-1", claimExpiresAt: new Date("2099-01-01T00:00:00.000Z"), failureCode: null, followUpCommandId: null, result: null };
+	return { id: "command-1", siloId: "acme", principalId: "principal-1", payload: { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } }, resourceKind: "provider-connection", resourceId: "byok:acme:openai", resourceRevision: "revision-1", desiredGeneration: 1, argumentsDigest: "sha256:arguments", materialVerifier: _ProviderKeyMaterialVerifier("command-1", "openai", "sk-test"), authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, executorProfile: _CONTEXT.executorProfile, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey, state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-1", claimExpiresAt: new Date("2099-01-01T00:00:00.000Z"), failureCode: null, followUpCommandId: null, result: null };
 }
 
 /** Build a UnitOfWork that forwards every transaction callback to one fake repository. */

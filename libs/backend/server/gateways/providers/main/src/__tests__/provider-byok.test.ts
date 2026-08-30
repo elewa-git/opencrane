@@ -83,7 +83,7 @@ function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map
       {
         return Array.from(store.values()).find(function _m(r) { return match(r, args.where); }) ?? null;
       },
-      findUnique: async function _findUnique(args: { where: { id: string } }) { return store.get(args.where.id) ?? null; },
+		findUnique: async function _findUnique(args: { where: { id?: string; id_siloId?: { id: string } } }) { return store.get(args.where.id_siloId?.id ?? args.where.id!) ?? null; },
       create: async function _create(args: { data: Row })
       {
         const id = `cred-${++seq}`;
@@ -155,6 +155,12 @@ function _Authorization(allow: boolean): ProviderGatewayAuthorizationFactory<Pri
 				return { outcome: "allow", evidence: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } };
 			},
 			listPrincipalEntitled: async function _List(command: { resources: readonly unknown[] }) { return allow ? command.resources : []; },
+			replaceManagedGrants: async function _Replace()
+			{
+				if (allow)
+					return { outcome: "allow", changedCount: 1, evidence: {} };
+				return { outcome: "deny", changedCount: 0, evidence: null };
+			},
 		};
 	}) as unknown as ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>;
 }
@@ -214,7 +220,7 @@ function _buildApp(store: Map<string, Row>, secrets: Map<string, k8s.V1Secret>, 
       if (command.kind === ProviderEffectCommandKinds.SetByokKey)
       {
 		const existing = Array.from(store.entries()).find(function _Provider([, row]) { return row.provider === payload.provider; });
-		const id = existing?.[0] ?? `cred-${store.size + 1}`;
+		const id = existing?.[0] ?? `byok:acme:${payload.provider}`;
 		store.set(id, { id, scope: "Global", clusterTenant: null, provider: payload.provider, secretRef: `byok-provider-key-${payload.provider}`, litellmCredentialName: null, createdAt: new Date(), updatedAt: new Date() });
 		const catalog = _BYOK_PROVIDER_CATALOG[payload.provider];
 		for (const entry of catalog?.models ?? [])
@@ -266,13 +272,13 @@ describe("providerByokRouter", function _suite()
     expect(JSON.stringify(res.body)).not.toContain("sk-secret-xyz");
   });
 
-	it("returns only after the injected executor projects usable provider models", async function _ProjectsModels()
+  it("returns only after the injected executor projects usable provider models", async function _ProjectsModels()
 	{
 		const models = new Map<string, Row>();
 		const response = await request(_buildApp(new Map(), new Map(), { authorized: true }, models)).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-live-123" });
 
 		expect(response.status).toBe(200);
-		expect(Array.from(models.values()).find(function _Flagship(model) { return model.publicModelName === "openai/gpt-5.5"; })).toMatchObject({ isDefault: false, providerCredentialId: "cred-1", litellmModelId: "deployment:openai/gpt-5.5" });
+		expect(Array.from(models.values()).find(function _Flagship(model) { return model.publicModelName === "openai/gpt-5.5"; })).toMatchObject({ isDefault: false, providerCredentialId: "byok:acme:openai", litellmModelId: "deployment:openai/gpt-5.5" });
 	});
 
 	it("returns 409 before admitting deletion while any registered model still uses the provider", async function _BlocksProviderWithModels()
@@ -290,7 +296,7 @@ describe("providerByokRouter", function _suite()
 
 	it.each(["put", "delete"] as const)("returns 409 for a conflicting %s while a provider command is claimed", async function _ProviderConflict(method)
 	{
-		const commands = new Map<string, Row>([["command-a", { id: "command-a", siloId: "acme", resourceKind: "provider-connection", resourceId: "byok:openai", desiredGeneration: 1, state: "Claimed", claimExpiresAt: new Date("2026-06-30T12:00:00.000Z") }]]);
+		const commands = new Map<string, Row>([["command-a", { id: "command-a", siloId: "acme", resourceKind: "provider-connection", resourceId: "byok:acme:openai", desiredGeneration: 1, state: "Claimed", claimExpiresAt: new Date("2026-06-30T12:00:00.000Z") }]]);
 		const secrets = new Map<string, k8s.V1Secret>();
 		const app = _buildApp(new Map(), secrets, { authorized: true }, new Map(), commands);
 		const response = method === "put"
@@ -315,6 +321,19 @@ describe("providerByokRouter", function _suite()
     expect(secrets.size).toBe(0);
     expect(store.size).toBe(0);
   });
+
+	it("refuses terminal command status after the provider read grant is revoked", async function _RevokedTerminalRead()
+	{
+		const commandId = "command-succeeded";
+		const store = new Map<string, Row>([["byok:acme:openai", { id: "byok:acme:openai", siloId: "acme", scope: "Global", clusterTenant: null, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", createdAt: new Date(), updatedAt: new Date() }]]);
+		const commands = new Map<string, Row>([[commandId, { id: commandId, siloId: "acme", kind: ProviderEffectCommandKinds.SetByokKey, payload: { provider: "openai" }, resourceKind: "provider-connection", resourceId: "byok:acme:openai", desiredGeneration: 1, state: "Succeeded" }]]);
+		const app = _buildApp(store, new Map(), { authorized: false }, new Map(), commands);
+
+		const response = await request(app).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-retry", commandId });
+
+		expect(response.status).toBe(403);
+		expect(response.body.code).toBe("FORBIDDEN");
+	});
 
   it("rejects an unsupported provider with 400", async function _badProvider()
   {

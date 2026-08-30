@@ -4,6 +4,7 @@ import { _BYOK_PROVIDER_CATALOG, ProviderEmbeddingReconciliationStatuses } from 
 
 import { ProviderEffectCommandKinds, type ProviderEffectCommandRecord, type ProviderEffectHandlerResult } from "./provider-effect-command.types";
 import type { ProviderEffectProjectionRepository } from "./provider-effect-projection.types";
+import { _ByokProviderConnectionId } from "./provider-resource-identity";
 
 /** Owns product eligibility and projection inside a provider-command transaction. */
 export class PrismaProviderEffectProjectionRepository implements ProviderEffectProjectionRepository
@@ -75,9 +76,12 @@ export class PrismaProviderEffectProjectionRepository implements ProviderEffectP
 					throw new Error("provider credential projection does not match its claimed command");
 				const where = { siloId: command.siloId, scope: "Global" as const, clusterTenant: null, provider: result.provider };
 				const existing = await this.transaction.providerCredential.findFirst({ where });
+				const providerConnectionId = _ByokProviderConnectionId(command.siloId, result.provider);
+				if (command.resourceId !== providerConnectionId || (existing !== null && existing.id !== providerConnectionId))
+					throw new Error("provider credential projection has a different governed identity");
 				if (existing === null)
 				{
-					const credential = await this.transaction.providerCredential.create({ data: { ...where, secretRef: result.secretRef, litellmCredentialName: result.litellmCredentialName } });
+					const credential = await this.transaction.providerCredential.create({ data: { id: providerConnectionId, ...where, secretRef: result.secretRef, litellmCredentialName: result.litellmCredentialName } });
 					await this._persistProviderModels(command.siloId, result, credential.id);
 				}
 				else

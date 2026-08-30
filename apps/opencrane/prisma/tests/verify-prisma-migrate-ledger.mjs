@@ -201,7 +201,7 @@ for (const invariant of [
 	'"resource_kind" = \'model-definition\'',
 	'"payload"->>\'modelDefinitionId\' = "resource_id"',
 	'"resource_kind" = \'provider-connection\'',
-	'"resource_id" = \'byok:\' || ("payload"->>\'provider\')',
+	'"resource_id" = \'byok:\' || "silo_id" || \':\' || ("payload"->>\'provider\')',
 ])
 {
 	_Require(authorizationMigration.includes(invariant), `the provider effect upgrade is missing authority invariant: ${invariant}`);

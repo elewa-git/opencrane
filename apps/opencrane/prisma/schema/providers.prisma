@@ -95,7 +95,6 @@ model ProviderEffectCommand {
   authorizationDecisionDigest     String                            @map("authorization_decision_digest")
   authorizationPolicyRevisionHash String                            @map("authorization_policy_revision_hash")
   effectiveAuthorizationDigest    String                            @map("effective_authorization_digest")
-  approvalId                      String?                           @map("approval_id")
   executorProfile                 String                            @map("executor_profile")
   materialRequirement             ProviderEffectMaterialRequirement @default(None) @map("material_requirement")
   payload                         Json

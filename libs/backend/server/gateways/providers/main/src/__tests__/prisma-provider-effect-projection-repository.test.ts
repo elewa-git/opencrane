@@ -9,7 +9,7 @@ import { ProviderEffectCommandKinds, type ProviderEffectCommandRecord, type Prov
 /** Builds the exact non-secret Set-BYOK command needed by projection tests. */
 function _command(): ProviderEffectCommandRecord
 {
-	return { id: "command-a", siloId: "silo-a", principalId: "principal-a", payload: { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } } as ProviderEffectCommandRecord;
+	return { id: "command-a", siloId: "silo-a", principalId: "principal-a", resourceId: "byok:silo-a:openai", payload: { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } } as ProviderEffectCommandRecord;
 }
 
 /** Builds confirmed chat and embedding evidence returned by external reconciliation. */
@@ -43,7 +43,7 @@ describe("PrismaProviderEffectProjectionRepository", function _Suite()
 		const modelCreate = vi.fn(async function _CreateModel() { return {}; });
 		const transaction = {
 			providerCredential: {
-				findFirst: vi.fn(async function _FindCredential() { return { id: "credential-a" }; }),
+				findFirst: vi.fn(async function _FindCredential() { return { id: "byok:silo-a:openai" }; }),
 				update: credentialUpdate,
 			},
 			modelDefinition: {
@@ -54,7 +54,7 @@ describe("PrismaProviderEffectProjectionRepository", function _Suite()
 
 		await new PrismaProviderEffectProjectionRepository(transaction).persist(_command(), _result());
 
-		expect(credentialUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id_siloId: { id: "credential-a", siloId: "silo-a" } } }));
+		expect(credentialUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id_siloId: { id: "byok:silo-a:openai", siloId: "silo-a" } } }));
 		expect(modelCreate).toHaveBeenCalledTimes(3);
 		expect(modelCreate).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ publicModelName: "auto-embedding" }) }));
 		expect(modelCreate).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ publicModelName: "openai/text-embedding-3-large" }) }));
@@ -64,7 +64,7 @@ describe("PrismaProviderEffectProjectionRepository", function _Suite()
 	{
 		const modelCreate = vi.fn();
 		const transaction = {
-			providerCredential: { findFirst: vi.fn(async function _FindCredential() { return { id: "credential-a" }; }), update: vi.fn() },
+			providerCredential: { findFirst: vi.fn(async function _FindCredential() { return { id: "byok:silo-a:openai" }; }), update: vi.fn() },
 			modelDefinition: { findFirst: vi.fn(), create: modelCreate },
 		} as unknown as Prisma.TransactionClient;
 		const result = { ..._result(), embedding: { ..._result().embedding, deployments: [] } } as never;

@@ -6,6 +6,7 @@ import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "
 
 import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCallerResolver } from "../provider-gateway-authority.types";
 import { _GrantProviderResourceCreatorUse, _RequireProviderGatewayAdministration, _RequireProviderGatewayCaller, _ResolveProviderGatewayCaller, _SendProviderGatewayAuthorizationError } from "../provider-gateway-authorization";
+import { _ByokProviderConnectionId } from "../provider-resource-identity";
 import { PrismaProviderGatewayUnitOfWork } from "../prisma-provider-gateway-unit-of-work";
 
 /** Raw-key field names that must never be accepted or stored (keys live in k8s Secrets). */
@@ -169,7 +170,9 @@ export function providerCredentialsRouter(prisma: PrismaClient, resolveCaller: P
 		const created = await providers.runDatabaseMutation(async function _Create(transaction, authorization)
 		{
 			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "create-provider-credential", write });
-			const credential = await transaction.providerCredential.create({ data: { siloId: caller.siloId, scope: _toPrismaScope(scope), clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null, provider: write.provider.trim(), secretRef: write.secretRef.trim(), litellmCredentialName: write.litellmCredentialName?.trim() || null } });
+			const provider = write.provider.trim();
+			const id = scope === ModelRoutingScope.Global ? _ByokProviderConnectionId(caller.siloId, provider) : undefined;
+			const credential = await transaction.providerCredential.create({ data: { id, siloId: caller.siloId, scope: _toPrismaScope(scope), clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null, provider, secretRef: write.secretRef.trim(), litellmCredentialName: write.litellmCredentialName?.trim() || null } });
 			await _GrantProviderResourceCreatorUse(authorization, caller, { kind: ProductAuthorizationResourceKinds.ProviderConnection, id: credential.id }, new Date());
 			return credential;
 		});

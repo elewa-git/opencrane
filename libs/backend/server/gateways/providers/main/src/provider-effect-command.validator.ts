@@ -5,6 +5,7 @@ import { ProductAuthorizationResourceKinds } from "@opencrane/models/authorizati
 import { ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
 
 import { ProviderEffectCommandKinds, type ProviderEffectCommandPayload, type ProviderEffectHandlerResult } from "./provider-effect-command.types";
+import { _ByokProviderConnectionId } from "./provider-resource-identity";
 
 // Database JSON crosses a runtime trust boundary here, so this validator changes with the typed
 // provider-effect payload and refuses fields an executor does not understand.
@@ -72,11 +73,12 @@ export function _ParseProviderEffectHandlerResult(value: unknown): ProviderEffec
  * Called by: {@link PrismaProviderEffectCommandRepository} during admission and database reads.
  *
  * @param payload - Parsed closed provider-effect payload.
+ * @param siloId - Silo that owns the command and its provider resource identity.
  * @param resourceKind - Central authorization resource kind bound to the command.
  * @param resourceId - Central authorization resource id bound to the command.
  * @throws When payload and authorization coordinates do not identify the same resource.
  */
-export function _ValidateProviderEffectCommandResourceBinding(payload: ProviderEffectCommandPayload, resourceKind: string, resourceId: string): void
+export function _ValidateProviderEffectCommandResourceBinding(payload: ProviderEffectCommandPayload, siloId: string, resourceKind: string, resourceId: string): void
 {
 	if (payload.kind === ProviderEffectCommandKinds.RegisterModel)
 	{
@@ -84,6 +86,6 @@ export function _ValidateProviderEffectCommandResourceBinding(payload: ProviderE
 			throw new Error("model registration command is not bound to its model-definition resource");
 		return;
 	}
-	if (resourceKind !== ProductAuthorizationResourceKinds.ProviderConnection || resourceId !== `byok:${payload.value.provider}`)
+	if (resourceKind !== ProductAuthorizationResourceKinds.ProviderConnection || resourceId !== _ByokProviderConnectionId(siloId, payload.value.provider))
 		throw new Error("BYOK command is not bound to its provider-connection resource");
 }

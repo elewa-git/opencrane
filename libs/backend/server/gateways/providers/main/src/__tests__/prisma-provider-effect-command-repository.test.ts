@@ -17,7 +17,7 @@ const _PROFILE = "opencrane-control-plane/provider-effect-v1";
 /** Builds one current request or system delivery context. */
 function _context(actorKind: "user" | "system" = "user"): ProviderEffectExecutionContext
 {
-	return { siloId: "acme", principalId: "principal-1", actorKind, actorId: actorKind === "user" ? "principal-1" : _PROFILE, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: "byok:openai", executorProfile: _PROFILE };
+	return { siloId: "acme", principalId: "principal-1", actorKind, actorId: actorKind === "user" ? "principal-1" : _PROFILE, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: "byok:acme:openai", executorProfile: _PROFILE };
 }
 
 /** Builds one Prisma-shaped provider command row for repository tests. */
@@ -29,7 +29,7 @@ function _row(payload: ProviderEffectCommandPayload, overrides: Record<string, u
 		principalId: "principal-1",
 		kind: payload.kind,
 		resourceKind: payload.kind === ProviderEffectCommandKinds.RegisterModel ? ProductAuthorizationResourceKinds.ModelDefinition : ProductAuthorizationResourceKinds.ProviderConnection,
-		resourceId: payload.kind === ProviderEffectCommandKinds.RegisterModel ? payload.value.modelDefinitionId : `byok:${payload.value.provider}`,
+		resourceId: payload.kind === ProviderEffectCommandKinds.RegisterModel ? payload.value.modelDefinitionId : `byok:acme:${payload.value.provider}`,
 		resourceRevision: "revision-a",
 		desiredGeneration: 1,
 		argumentsDigest: "sha256:arguments",
@@ -37,7 +37,6 @@ function _row(payload: ProviderEffectCommandPayload, overrides: Record<string, u
 		authorizationDecisionDigest: "sha256:decision",
 		authorizationPolicyRevisionHash: "sha256:policy",
 		effectiveAuthorizationDigest: "sha256:effective",
-		approvalId: null,
 		executorProfile: _PROFILE,
 		materialRequirement: ProviderEffectMaterialRequirements.None,
 		payload: payload.value,
@@ -58,7 +57,7 @@ function _row(payload: ProviderEffectCommandPayload, overrides: Record<string, u
 /** Converts a Prisma-shaped row into the claimed record passed between executor transactions. */
 function _record(row: Record<string, unknown>, payload: ProviderEffectCommandPayload): ProviderEffectCommandRecord
 {
-	return { id: row.id as string, siloId: row.siloId as string, principalId: row.principalId as string, payload, resourceKind: row.resourceKind as string, resourceId: row.resourceId as string, resourceRevision: row.resourceRevision as string, desiredGeneration: row.desiredGeneration as number, argumentsDigest: row.argumentsDigest as `sha256:${string}`, materialVerifier: null, authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _PROFILE, materialRequirement: row.materialRequirement as ProviderEffectMaterialRequirements, state: row.state as ProviderEffectCommandStates, deliveryCount: row.deliveryCount as number, claimFence: row.claimFence as string | null, claimExpiresAt: row.claimExpiresAt as Date | null, failureCode: row.failureCode as string | null, followUpCommandId: row.followUpCommandId as string | null, result: row.result as ProviderEffectCommandRecord["result"] };
+	return { id: row.id as string, siloId: row.siloId as string, principalId: row.principalId as string, payload, resourceKind: row.resourceKind as string, resourceId: row.resourceId as string, resourceRevision: row.resourceRevision as string, desiredGeneration: row.desiredGeneration as number, argumentsDigest: row.argumentsDigest as `sha256:${string}`, materialVerifier: null, authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, executorProfile: _PROFILE, materialRequirement: row.materialRequirement as ProviderEffectMaterialRequirements, state: row.state as ProviderEffectCommandStates, deliveryCount: row.deliveryCount as number, claimFence: row.claimFence as string | null, claimExpiresAt: row.claimExpiresAt as Date | null, failureCode: row.failureCode as string | null, followUpCommandId: row.followUpCommandId as string | null, result: row.result as ProviderEffectCommandRecord["result"] };
 }
 
 /** Builds a transaction stub that distinguishes latest-generation and active-claim queries. */
@@ -172,7 +171,7 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		} as unknown as Prisma.TransactionClient;
 		const repository = new PrismaProviderEffectCommandRepository(transaction);
 
-		const result = await repository.admit({ id: "command-b", siloId: "acme", principalId: "principal-1", payload: _DELETE, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: "byok:openai", resourceRevision: "revision-b", argumentsDigest: "sha256:arguments-b", materialVerifier: null, authorization: { decisionDigest: "sha256:decision-b", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective-b" }, approvalId: null, executorProfile: _PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None });
+		const result = await repository.admit({ id: "command-b", siloId: "acme", principalId: "principal-1", payload: _DELETE, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: "byok:acme:openai", resourceRevision: "revision-b", argumentsDigest: "sha256:arguments-b", materialVerifier: null, authorization: { decisionDigest: "sha256:decision-b", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective-b" }, executorProfile: _PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None });
 
 		expect(result.status).toBe(ProviderEffectAdmissionStatuses.Admitted);
 		if (result.status !== ProviderEffectAdmissionStatuses.Admitted)
@@ -203,7 +202,7 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		const requiresMaterial = payload.kind === ProviderEffectCommandKinds.SetByokKey;
 		const materialVerifier = requiresMaterial ? "sha256:material-b" as const : null;
 		const materialRequirement = requiresMaterial ? ProviderEffectMaterialRequirements.EphemeralProviderKey : ProviderEffectMaterialRequirements.None;
-		const result = await repository.admit({ id: "command-b", siloId: "acme", principalId: "principal-1", payload, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: "byok:openai", resourceRevision: "revision-b", argumentsDigest: "sha256:arguments-b", materialVerifier, authorization: { decisionDigest: "sha256:decision-b", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective-b" }, approvalId: null, executorProfile: _PROFILE, materialRequirement });
+		const result = await repository.admit({ id: "command-b", siloId: "acme", principalId: "principal-1", payload, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: "byok:acme:openai", resourceRevision: "revision-b", argumentsDigest: "sha256:arguments-b", materialVerifier, authorization: { decisionDigest: "sha256:decision-b", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective-b" }, executorProfile: _PROFILE, materialRequirement });
 		handler();
 
 		expect(result).toEqual({ status: ProviderEffectAdmissionStatuses.Busy, command: null, blocker: { commandId: "command-a", state: ProviderEffectCommandStates.Claimed } });
@@ -223,7 +222,7 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		} as unknown as Prisma.TransactionClient;
 		const admissionRepository = new PrismaProviderEffectCommandRepository(admissionTransaction);
 
-		const admission = await admissionRepository.admit({ id: "command-b", siloId: "acme", principalId: "principal-1", payload: _DELETE, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: "byok:openai", resourceRevision: "revision-b", argumentsDigest: "sha256:arguments-b", materialVerifier: null, authorization: { decisionDigest: "sha256:decision-b", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective-b" }, approvalId: null, executorProfile: _PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None });
+		const admission = await admissionRepository.admit({ id: "command-b", siloId: "acme", principalId: "principal-1", payload: _DELETE, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: "byok:acme:openai", resourceRevision: "revision-b", argumentsDigest: "sha256:arguments-b", materialVerifier: null, authorization: { decisionDigest: "sha256:decision-b", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective-b" }, executorProfile: _PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None });
 		expect(admission.status).toBe(ProviderEffectAdmissionStatuses.Busy);
 		expect(create).not.toHaveBeenCalled();
 

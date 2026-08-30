@@ -6,12 +6,13 @@ import { GeneratedOutputCapability, ModelRoutingScope, type ModelDefinition } fr
 import { ___RunSerializableAuthorizationTransaction, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
-import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCaller } from "./provider-gateway-authority.types";
+import { ProviderGatewayAuthorizationError, type ProviderGatewayAuthorizationFactory, type ProviderGatewayCaller } from "./provider-gateway-authority.types";
 import { _GrantProviderResourceCreatorUse, _RequireProviderGatewayAdministration } from "./provider-gateway-authorization";
 import { _PROVIDER_EFFECT_EXECUTOR_PROFILE } from "./provider-effect-command-composition";
 import { _RequireProviderEffectAdmission } from "./provider-effect-command-http";
 import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandExecutor, type ProviderEffectCommandRepository, type ProviderEffectExecutionContext, type ProviderEffectResourceBlocker } from "./provider-effect-command.types";
 import { _CreateProviderEffectCommandRepository } from "./provider-effect-command-repository.factory";
+import { _ByokProviderConnectionId } from "./provider-resource-identity";
 import type { ModelDefinitionCreationResult, ModelDefinitionRegistrationResult, ModelDefinitionService, ModelDefinitionValidationFailure, ValidatedModelDefinitionWrite } from "./model-definition-service.types";
 import { _ValidateModelDefinitionWrite } from "./model-definition-write.validator";
 import type { ModelDefinitionRecord, ModelDefinitionRepository } from "./model-definition-repository.types";
@@ -84,7 +85,7 @@ export class PrismaModelDefinitionUnitOfWork implements ModelDefinitionService
 		const delivered = await this.effectExecutor.execute(admitted.commandId, undefined, _EffectContext(caller, admitted.modelDefinitionId));
 		if (delivered.status !== ProviderEffectExecutionStatuses.Succeeded)
 			return { status: "pending", commandId: admitted.commandId, modelDefinitionId: admitted.modelDefinitionId };
-		const created = await this._ReadPersisted(caller.siloId, admitted.modelDefinitionId);
+		const created = await this._ReadPersisted(caller, admitted.modelDefinitionId);
 		if (created === null)
 			throw new Error("completed model registration command has no model definition");
 		return { status: "created", model: created };
@@ -96,7 +97,7 @@ export class PrismaModelDefinitionUnitOfWork implements ModelDefinitionService
 		const delivered = await this.effectExecutor.execute(commandId, undefined, _EffectContext(caller, modelDefinitionId));
 		if (delivered.status !== ProviderEffectExecutionStatuses.Succeeded && delivered.status !== ProviderEffectExecutionStatuses.AlreadySucceeded)
 			return { status: "pending", commandId, modelDefinitionId };
-		const model = await this._ReadPersisted(caller.siloId, modelDefinitionId);
+		const model = await this._ReadPersisted(caller, modelDefinitionId);
 		return model === null || model.litellmModelId.startsWith("pending:") ? { status: "pending", commandId, modelDefinitionId } : { status: "completed", model };
 	}
 
@@ -110,24 +111,30 @@ export class PrismaModelDefinitionUnitOfWork implements ModelDefinitionService
 				return credential;
 			if (credential.provider !== null)
 			{
-				const providerEffectBlocker = await effects.findResourceBlocker(caller.siloId, ProductAuthorizationResourceKinds.ProviderConnection, `byok:${credential.provider}`);
+				const providerEffectBlocker = await effects.findResourceBlocker(caller.siloId, ProductAuthorizationResourceKinds.ProviderConnection, _ByokProviderConnectionId(caller.siloId, credential.provider));
 				if (providerEffectBlocker !== null)
 					return { providerEffectBlocker };
 			}
 			const admission = await _RequireProviderGatewayAdministration(authorization, caller, { operation: "create-model-definition", commandId, modelDefinitionId, ...write });
 			const model = await repository.create({ id: modelDefinitionId, siloId: caller.siloId, scope: _ToPrismaScope(write.scope), clusterTenant: write.clusterTenant, publicModelName: write.publicModelName, litellmModelId: `pending:${commandId}`, upstreamModel: write.upstreamModel, apiBase: write.apiBase, providerCredentialId: write.providerCredentialId, generatedOutputCapabilities: write.generatedOutputCapabilities });
 			await _GrantProviderResourceCreatorUse(authorization, caller, { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: model.id }, new Date());
-			const command = _RequireProviderEffectAdmission(await effects.admit({ id: commandId, siloId: caller.siloId, principalId: caller.principalId, payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: model.id, publicModelName: write.publicModelName, upstreamModel: write.upstreamModel, scope: write.scope, clusterTenant: write.clusterTenant, apiBase: write.apiBase, apiKeyEnvRef: credential.secretRef, litellmCredentialName: credential.litellmCredentialName, routingDefaultId: null, selectedModelDefinitionId: null } }, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: model.id, resourceRevision: commandId, argumentsDigest: admission.argumentsDigest, materialVerifier: null, authorization: admission.evidence, approvalId: null, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None }));
+			const command = _RequireProviderEffectAdmission(await effects.admit({ id: commandId, siloId: caller.siloId, principalId: caller.principalId, payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: model.id, publicModelName: write.publicModelName, upstreamModel: write.upstreamModel, scope: write.scope, clusterTenant: write.clusterTenant, apiBase: write.apiBase, apiKeyEnvRef: credential.secretRef, litellmCredentialName: credential.litellmCredentialName, routingDefaultId: null, selectedModelDefinitionId: null } }, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: model.id, resourceRevision: commandId, argumentsDigest: admission.argumentsDigest, materialVerifier: null, authorization: admission.evidence, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None }));
 			return { commandId: command.id, modelDefinitionId: model.id };
 		});
 	}
 
 	/** Read one final model projection without granting broader catalogue visibility. */
-	private _ReadPersisted(siloId: string, modelDefinitionId: string): Promise<ModelDefinition | null>
+	private _ReadPersisted(caller: ProviderGatewayCaller, modelDefinitionId: string): Promise<ModelDefinition | null>
 	{
-		return this._Run(async function _Read(_transaction, _authorization, _effects, repository)
+		return this._Run(async function _Read(_transaction, authorization, _effects, repository)
 		{
-			const row = await repository.find(siloId, modelDefinitionId);
+			const row = await repository.find(caller.siloId, modelDefinitionId);
+			if (row === null)
+				return null;
+			const resource = { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: row.id } as const;
+			const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: [resource], nowEpochMs: Date.now() });
+			if (entitled.length !== 1)
+				throw new ProviderGatewayAuthorizationError();
 			return row === null ? null : _ToContract(row);
 		});
 	}

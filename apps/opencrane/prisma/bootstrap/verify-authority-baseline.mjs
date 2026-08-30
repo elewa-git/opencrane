@@ -39,7 +39,7 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'"payload"->>\'scope\' = \'global\'',
 	'"payload"->>\'publicModelName\' = \'auto\'',
 	'"resource_kind" = \'model-definition\'\n        AND "payload"->>\'modelDefinitionId\' = "resource_id"',
-	'"resource_kind" = \'provider-connection\'\n        AND "resource_id" = \'byok:\' || ("payload"->>\'provider\')',
+	'"resource_kind" = \'provider-connection\'\n        AND "resource_id" = \'byok:\' || "silo_id" || \':\' || ("payload"->>\'provider\')',
 	'NEW."subject_kind" IS DISTINCT FROM OLD."subject_kind"',
 	'NEW."boundary_coverage" IS DISTINCT FROM OLD."boundary_coverage"',
 	'NEW."manager_id" IS DISTINCT FROM OLD."manager_id"',

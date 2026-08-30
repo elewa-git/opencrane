@@ -170,8 +170,6 @@ export interface AdmitProviderEffectCommand
 	readonly materialVerifier: `sha256:${string}` | null;
 	/** Central decision evidence written by the same transaction. */
 	readonly authorization: ProductAuthorizationAdmissionEvidence;
-	/** Approval row that narrowed this effect, or null when organisation administration needs none. */
-	readonly approvalId: string | null;
 	/** Fixed control-plane profile allowed to execute this command. */
 	readonly executorProfile: string;
 	/** Whether the executor can retry from stored data alone. */

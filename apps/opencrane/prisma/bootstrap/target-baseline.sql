@@ -1699,7 +1699,6 @@ CREATE TABLE "provider_effect_commands" (
     "authorization_decision_digest" TEXT NOT NULL,
     "authorization_policy_revision_hash" TEXT NOT NULL,
     "effective_authorization_digest" TEXT NOT NULL,
-    "approval_id" TEXT,
     "executor_profile" TEXT NOT NULL,
     "material_requirement" "ProviderEffectMaterialRequirement" NOT NULL DEFAULT 'none',
     "payload" JSONB NOT NULL,
@@ -4004,16 +4003,15 @@ ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_
     AND "authorization_decision_digest" ~ '^sha256:[0-9a-f]{64}$'
     AND "authorization_policy_revision_hash" ~ '^sha256:[0-9a-f]{64}$'
     AND "effective_authorization_digest" ~ '^sha256:[0-9a-f]{64}$'
-    AND ("approval_id" IS NULL OR btrim("approval_id") <> '')
     AND btrim("executor_profile") <> ''
-    AND "delivery_count" BETWEEN 0 AND 3
+    AND "delivery_count" >= 0
 );
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_material_check" CHECK (
     ("kind" = 'set_byok_key' AND "material_requirement" = 'ephemeral_provider_key' AND "material_verifier" IS NOT NULL AND "material_verifier" ~ '^sha256:[0-9a-f]{64}$')
     OR ("kind" IN ('delete_byok_key', 'register_model') AND "material_requirement" = 'none' AND "material_verifier" IS NULL)
 );
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_claim_check" CHECK (
-    ("state" = 'claimed' AND "claim_fence" IS NOT NULL AND btrim("claim_fence") <> '' AND "claim_expires_at" IS NOT NULL AND "delivery_count" BETWEEN 1 AND 3)
+    ("state" = 'claimed' AND "claim_fence" IS NOT NULL AND btrim("claim_fence") <> '' AND "claim_expires_at" IS NOT NULL AND "delivery_count" >= 1)
     OR ("state" <> 'claimed' AND "claim_fence" IS NULL AND "claim_expires_at" IS NULL)
 );
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_completion_check" CHECK (
@@ -4071,7 +4069,7 @@ ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_
         AND "payload"->>'modelDefinitionId' = "resource_id")
     OR ("kind" IN ('set_byok_key', 'delete_byok_key')
         AND "resource_kind" = 'provider-connection'
-        AND "resource_id" = 'byok:' || ("payload"->>'provider'))
+        AND "resource_id" = 'byok:' || "silo_id" || ':' || ("payload"->>'provider'))
 );
 -- Install the database clock and locked selectors consumed through Prisma views by the MCP controller.
 CREATE VIEW "mcp_runtime_clock" AS

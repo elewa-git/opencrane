@@ -12,17 +12,18 @@ describe("provider effect resource binding", function _Suite()
 	{
 		const payload: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null, routingDefaultId: null, selectedModelDefinitionId: null } };
 
-		expect(function _Valid() { _ValidateProviderEffectCommandResourceBinding(payload, ProductAuthorizationResourceKinds.ModelDefinition, "model-1"); }).not.toThrow();
-		expect(function _WrongId() { _ValidateProviderEffectCommandResourceBinding(payload, ProductAuthorizationResourceKinds.ModelDefinition, "model-2"); }).toThrow("not bound");
-		expect(function _WrongKind() { _ValidateProviderEffectCommandResourceBinding(payload, ProductAuthorizationResourceKinds.ProviderConnection, "model-1"); }).toThrow("not bound");
+		expect(function _Valid() { _ValidateProviderEffectCommandResourceBinding(payload, "silo-1", ProductAuthorizationResourceKinds.ModelDefinition, "model-1"); }).not.toThrow();
+		expect(function _WrongId() { _ValidateProviderEffectCommandResourceBinding(payload, "silo-1", ProductAuthorizationResourceKinds.ModelDefinition, "model-2"); }).toThrow("not bound");
+		expect(function _WrongKind() { _ValidateProviderEffectCommandResourceBinding(payload, "silo-1", ProductAuthorizationResourceKinds.ProviderConnection, "model-1"); }).toThrow("not bound");
 	});
 
 	it("accepts only the synthetic provider connection derived from the BYOK provider", function _ProviderBinding()
 	{
 		const payload: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } };
 
-		expect(function _Valid() { _ValidateProviderEffectCommandResourceBinding(payload, ProductAuthorizationResourceKinds.ProviderConnection, "byok:openai"); }).not.toThrow();
-		expect(function _WrongProvider() { _ValidateProviderEffectCommandResourceBinding(payload, ProductAuthorizationResourceKinds.ProviderConnection, "byok:anthropic"); }).toThrow("not bound");
-		expect(function _WrongKind() { _ValidateProviderEffectCommandResourceBinding(payload, ProductAuthorizationResourceKinds.ModelDefinition, "byok:openai"); }).toThrow("not bound");
+		expect(function _Valid() { _ValidateProviderEffectCommandResourceBinding(payload, "silo-1", ProductAuthorizationResourceKinds.ProviderConnection, "byok:silo-1:openai"); }).not.toThrow();
+		expect(function _WrongProvider() { _ValidateProviderEffectCommandResourceBinding(payload, "silo-1", ProductAuthorizationResourceKinds.ProviderConnection, "byok:silo-1:anthropic"); }).toThrow("not bound");
+		expect(function _WrongSilo() { _ValidateProviderEffectCommandResourceBinding(payload, "silo-2", ProductAuthorizationResourceKinds.ProviderConnection, "byok:silo-1:openai"); }).toThrow("not bound");
+		expect(function _WrongKind() { _ValidateProviderEffectCommandResourceBinding(payload, "silo-1", ProductAuthorizationResourceKinds.ModelDefinition, "byok:silo-1:openai"); }).toThrow("not bound");
 	});
 });

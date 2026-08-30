@@ -191,6 +191,35 @@ ALTER TABLE "agent_revisions" DROP CONSTRAINT "agent_revisions_parent_revision_i
 ALTER TABLE "agent_revisions" DROP CONSTRAINT "agent_revisions_source_revision_id_fkey";
 ALTER TABLE "model_definitions" DROP CONSTRAINT "model_definitions_provider_credential_id_fkey";
 
+-- Give each silo-global provider one identity shared by credential rows, product grants, runtime
+-- mint authority, and durable provider commands. The silo remains in the id because credential ids
+-- are globally unique even though provider names repeat across silos.
+CREATE TEMP TABLE "global_provider_connection_identity" AS
+SELECT "id" AS "old_id", 'byok:' || "silo_id" || ':' || "provider" AS "new_id"
+  FROM "provider_credentials"
+ WHERE "scope" = 'global' AND "cluster_tenant" IS NULL;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+          FROM "global_provider_connection_identity" identity
+          JOIN "provider_credentials" credential ON credential."id" = identity."new_id"
+         WHERE credential."id" <> identity."old_id"
+    ) THEN
+        RAISE EXCEPTION 'cannot install provider connection identity: a canonical id is already owned by another credential';
+    END IF;
+END $$;
+
+UPDATE "model_definitions" definition
+   SET "provider_credential_id" = identity."new_id"
+  FROM "global_provider_connection_identity" identity
+ WHERE definition."provider_credential_id" = identity."old_id";
+UPDATE "provider_credentials" credential
+   SET "id" = identity."new_id"
+  FROM "global_provider_connection_identity" identity
+ WHERE credential."id" = identity."old_id";
+
 DROP INDEX "model_routing_defaults_scope_cluster_tenant_key";
 DROP INDEX IF EXISTS "model_routing_defaults_global_key";
 DROP INDEX "provider_credentials_cluster_tenant_idx";
@@ -305,7 +334,6 @@ CREATE TABLE "provider_effect_commands" (
     "authorization_decision_digest" TEXT NOT NULL,
     "authorization_policy_revision_hash" TEXT NOT NULL,
     "effective_authorization_digest" TEXT NOT NULL,
-    "approval_id" TEXT,
     "executor_profile" TEXT NOT NULL,
     "material_requirement" "ProviderEffectMaterialRequirement" NOT NULL DEFAULT 'none',
     "payload" JSONB NOT NULL,
@@ -341,16 +369,15 @@ ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_
     AND "authorization_decision_digest" ~ '^sha256:[0-9a-f]{64}$'
     AND "authorization_policy_revision_hash" ~ '^sha256:[0-9a-f]{64}$'
     AND "effective_authorization_digest" ~ '^sha256:[0-9a-f]{64}$'
-    AND ("approval_id" IS NULL OR btrim("approval_id") <> '')
     AND btrim("executor_profile") <> ''
-    AND "delivery_count" BETWEEN 0 AND 3
+    AND "delivery_count" >= 0
 );
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_material_check" CHECK (
     ("kind" = 'set_byok_key' AND "material_requirement" = 'ephemeral_provider_key' AND "material_verifier" IS NOT NULL AND "material_verifier" ~ '^sha256:[0-9a-f]{64}$')
     OR ("kind" IN ('delete_byok_key', 'register_model') AND "material_requirement" = 'none' AND "material_verifier" IS NULL)
 );
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_claim_check" CHECK (
-    ("state" = 'claimed' AND "claim_fence" IS NOT NULL AND btrim("claim_fence") <> '' AND "claim_expires_at" IS NOT NULL AND "delivery_count" BETWEEN 1 AND 3)
+    ("state" = 'claimed' AND "claim_fence" IS NOT NULL AND btrim("claim_fence") <> '' AND "claim_expires_at" IS NOT NULL AND "delivery_count" >= 1)
     OR ("state" <> 'claimed' AND "claim_fence" IS NULL AND "claim_expires_at" IS NULL)
 );
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_completion_check" CHECK (
@@ -408,7 +435,7 @@ ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_
         AND "payload"->>'modelDefinitionId' = "resource_id")
     OR ("kind" IN ('set_byok_key', 'delete_byok_key')
         AND "resource_kind" = 'provider-connection'
-        AND "resource_id" = 'byok:' || ("payload"->>'provider'))
+        AND "resource_id" = 'byok:' || "silo_id" || ':' || ("payload"->>'provider'))
 );
 
 -- Enforce the pre-release hard cutoff for rows whose organization owner cannot be derived.

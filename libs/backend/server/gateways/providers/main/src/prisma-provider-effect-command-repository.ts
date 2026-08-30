@@ -56,14 +56,14 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 	/** @inheritdoc */
 	async admit(command: AdmitProviderEffectCommand): Promise<ProviderEffectAdmissionResult>
 	{
-		_ValidateProviderEffectCommandResourceBinding(command.payload, command.resourceKind, command.resourceId);
+		_ValidateProviderEffectCommandResourceBinding(command.payload, command.siloId, command.resourceKind, command.resourceId);
 		const claimed = await this.transaction.providerEffectCommand.findFirst({ where: { siloId: command.siloId, resourceKind: command.resourceKind, resourceId: command.resourceId, OR: [{ state: ProviderEffectCommandState.Claimed }, { state: { in: [ProviderEffectCommandState.Pending, ProviderEffectCommandState.AwaitingMaterial] }, failureCode: _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE }] }, orderBy: { desiredGeneration: "desc" } });
 		if (claimed !== null)
 			return { status: ProviderEffectAdmissionStatuses.Busy, command: null, blocker: { commandId: claimed.id, state: claimed.state as ProviderEffectCommandStates } };
 		const previous = await this.transaction.providerEffectCommand.findFirst({ where: { siloId: command.siloId, resourceKind: command.resourceKind, resourceId: command.resourceId }, orderBy: { desiredGeneration: "desc" } });
 		const desiredGeneration = (previous?.desiredGeneration ?? 0) + 1;
 		const now = new Date();
-		const row = await this.transaction.providerEffectCommand.create({ data: { id: command.id, siloId: command.siloId, principalId: command.principalId, kind: command.payload.kind, resourceKind: command.resourceKind, resourceId: command.resourceId, resourceRevision: command.resourceRevision, desiredGeneration, argumentsDigest: command.argumentsDigest, materialVerifier: command.materialVerifier, authorizationDecisionDigest: command.authorization.decisionDigest, authorizationPolicyRevisionHash: command.authorization.policyRevisionHash, effectiveAuthorizationDigest: command.authorization.effectiveAuthorizationDigest, approvalId: command.approvalId, executorProfile: command.executorProfile, materialRequirement: command.materialRequirement, payload: command.payload.value as unknown as Prisma.InputJsonValue } });
+		const row = await this.transaction.providerEffectCommand.create({ data: { id: command.id, siloId: command.siloId, principalId: command.principalId, kind: command.payload.kind, resourceKind: command.resourceKind, resourceId: command.resourceId, resourceRevision: command.resourceRevision, desiredGeneration, argumentsDigest: command.argumentsDigest, materialVerifier: command.materialVerifier, authorizationDecisionDigest: command.authorization.decisionDigest, authorizationPolicyRevisionHash: command.authorization.policyRevisionHash, effectiveAuthorizationDigest: command.authorization.effectiveAuthorizationDigest, executorProfile: command.executorProfile, materialRequirement: command.materialRequirement, payload: command.payload.value as unknown as Prisma.InputJsonValue } });
 		await this.transaction.providerEffectCommand.updateMany({ where: { siloId: command.siloId, resourceKind: command.resourceKind, resourceId: command.resourceId, desiredGeneration: { lt: desiredGeneration }, OR: [{ state: ProviderEffectCommandState.Pending }, { state: ProviderEffectCommandState.AwaitingMaterial }, { state: ProviderEffectCommandState.Claimed, claimExpiresAt: { lte: now } }] }, data: { state: ProviderEffectCommandState.Failed, failureCode: "superseded", claimFence: null, claimExpiresAt: null, completedAt: now } });
 		return { status: ProviderEffectAdmissionStatuses.Admitted, command: _toRecord(row), blocker: null };
 	}
@@ -346,7 +346,7 @@ function _toRecord(row: Prisma.ProviderEffectCommandGetPayload<Record<string, ne
 {
 	const kind = row.kind as ProviderEffectCommandKinds;
 	const payload = _ParseProviderEffectCommandPayload(kind, row.payload);
-	_ValidateProviderEffectCommandResourceBinding(payload, row.resourceKind, row.resourceId);
+	_ValidateProviderEffectCommandResourceBinding(payload, row.siloId, row.resourceKind, row.resourceId);
 	const result = row.result === null ? null : _ParseProviderEffectHandlerResult(row.result);
 	if (row.failureCode === _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE && result === null)
 		throw new Error("blocked provider effect finalization lacks durable evidence");
@@ -364,7 +364,6 @@ function _toRecord(row: Prisma.ProviderEffectCommandGetPayload<Record<string, ne
 		argumentsDigest: row.argumentsDigest as `sha256:${string}`,
 		materialVerifier: row.materialVerifier as `sha256:${string}` | null,
 		authorization: { decisionDigest: row.authorizationDecisionDigest as `sha256:${string}`, policyRevisionHash: row.authorizationPolicyRevisionHash as `sha256:${string}`, effectiveAuthorizationDigest: row.effectiveAuthorizationDigest as `sha256:${string}` },
-		approvalId: row.approvalId,
 		executorProfile: row.executorProfile,
 		materialRequirement: row.materialRequirement as ProviderEffectMaterialRequirements,
 		state: row.state as ProviderEffectCommandStates,

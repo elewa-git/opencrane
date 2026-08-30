@@ -165,7 +165,7 @@ describe("modelRegistryRouter", function _suite()
 			["model-1", { id: "model-1", siloId: "acme", scope: "Global", clusterTenant: null, publicModelName: "custom/openai", litellmModelId: "x", upstreamModel: "openai/gpt-4o", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }],
 			["model-2", { id: "model-2", siloId: "acme", scope: "Global", clusterTenant: null, publicModelName: "custom/anthropic", litellmModelId: "y", upstreamModel: "anthropic/claude", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }],
 		]);
-		const listPrincipalEntitled = vi.fn(async function _List(command: { resources: readonly { id: string }[] }) { return command.resources.filter(resource => resource.id === "model-2"); });
+			const listPrincipalEntitled = vi.fn(async function _List(command: { resources: readonly { id: string }[] }) { return command.resources.filter(resource => resource.id !== "model-1"); });
 		const admitPrincipal = vi.fn(async function _Admit() { return { outcome: "allow", evidence: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } }; });
 		const replaceManagedGrants = vi.fn(async function _Replace() { return { outcome: "allow" }; });
 		const factory = (function _CreateAuthorization() { return { listPrincipalEntitled, admitPrincipal, replaceManagedGrants }; }) as unknown as ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>;
@@ -204,6 +204,22 @@ describe("modelRegistryRouter", function _suite()
 	expect(res.body.litellmModelId).toMatch(/^deployment:/);
     expect(res.body.scope).toBe("global");
   });
+
+	it("refuses a terminal registration replay after the model read grant is revoked", async function _RevokedTerminalRead()
+	{
+		const store = new Map<string, Row>([["model-1", { id: "model-1", siloId: "acme", scope: "Global", clusterTenant: null, publicModelName: "custom/gpt-4o", litellmModelId: "deployment:model-1", upstreamModel: "openai/gpt-4o", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }]]);
+		const authorization = (function _CreateAuthorization()
+		{
+			return { listPrincipalEntitled: async function _DenyRead() { return []; } };
+		}) as unknown as ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>;
+		const executor = { reconcileNext: async function _ReconcileNext() { return false; }, execute: async function _AlreadySucceeded() { return { status: ProviderEffectExecutionStatuses.AlreadySucceeded, result: null }; } } as ProviderEffectCommandExecutor;
+		const app = _buildApp(_mockPrisma(store), _platformOperator(), authorization, executor);
+
+		const response = await request(app).post("/api/v1/models/model-1/registration-commands/command-1");
+
+		expect(response.status).toBe(403);
+		expect(response.body.code).toBe("FORBIDDEN");
+	});
 
   it("persists only the explicit generated-output capability allowlist", async function _GeneratedOutputCapabilities()
   {
