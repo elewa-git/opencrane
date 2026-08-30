@@ -1064,6 +1064,7 @@ if [[ "$RELEASE_VERSION" == "0.10.0" && "$FROM_RELEASE_VERSION" == "0.9.2" && "$
     "${FINAL_RUNTIME_REPOSITORY}@${AGENT_RUNTIME_IMAGE_DIGEST}" \
     "$FINAL_SCANNER_NAMESPACE" "$FINAL_PERSONAL_RUNTIME_NAMESPACE" "$FINAL_MANAGED_RUNTIME_NAMESPACE" || exit $?
   retire_legacy_obot_mcp_server_resources "$NAMESPACE" "$TIMEOUT" || exit $?
+  retire_legacy_obot_database_custody "$NAMESPACE" "$RELEASE" "$TIMEOUT" || exit $?
 fi
 _post_deploy_verify || exit $?
 
