@@ -1,7 +1,7 @@
 import type { JsonValue } from "@opencrane/util";
 
 import { McpExecutorProtocolError, type McpExecutorDiscoveredTool, type McpExecutorToolCallResult } from "./mcp-executor-protocol.types";
-import { _IsMcpExecutorToolInputSchema, _McpExecutorContentBlocks } from "./mcp-executor-protocol.validator";
+import { _McpExecutorContentBlocks, _ParseMcpExecutorDiscoveredTools as _ParseDiscoveredTools } from "./mcp-executor-protocol.validator";
 
 /**
  * Selects the Model Context Protocol revision admitted by the OCI MCP executor.
@@ -74,24 +74,31 @@ export function __ParseMcpExecutorToolsListResponse(payload: unknown): readonly 
 	return __ParseMcpExecutorDiscoveredTools(tools);
 }
 
-/** Validate the durable companion form of one discovered MCP tool list. */
+/**
+ * Validates discovered MCP tools before the companion accepts the server's complete tool list.
+ *
+ * The schema rejects malformed records and this function rejects duplicate names across the list.
+ * Callers receive all checked definitions or a protocol error; no partial list is returned.
+ *
+ * Called by: {@link __ParseMcpExecutorToolsListResponse} and mcp-companion-wire.ts.
+ * @param tools - Untrusted `tools` field from an MCP `tools/list` result.
+ * @returns At most 256 unique tool definitions with object-shaped input schemas.
+ * @throws McpExecutorProtocolError When a definition is malformed or a name is duplicated.
+ * @see https://modelcontextprotocol.io/specification/2026-07-28
+ */
 export function __ParseMcpExecutorDiscoveredTools(tools: unknown): readonly McpExecutorDiscoveredTool[]
 {
-	if (!Array.isArray(tools) || tools.length > 256)
+	const discoveredTools = _ParseDiscoveredTools(tools);
+	if (discoveredTools === null)
 		throw new McpExecutorProtocolError("MCP tool list was invalid");
 	const names = new Set<string>();
-	return tools.map(function _Tool(value): McpExecutorDiscoveredTool
+	for (const tool of discoveredTools)
 	{
-		if (typeof value !== "object" || value === null || Array.isArray(value))
+		if (names.has(tool.name))
 			throw new McpExecutorProtocolError("MCP tool definition was invalid");
-		const tool = value as Record<string, unknown>;
-		const name = tool["name"];
-		const description = tool["description"];
-		if (!_AllowedKeys(tool, ["name", "description", "inputSchema"]) || !Object.hasOwn(tool, "name") || !Object.hasOwn(tool, "inputSchema") || typeof name !== "string" || name.length === 0 || name.length > 128 || names.has(name) || (description !== undefined && description !== null && (typeof description !== "string" || description.length > 4_096)) || !_IsMcpExecutorToolInputSchema(tool["inputSchema"]))
-			throw new McpExecutorProtocolError("MCP tool definition was invalid");
-		names.add(name);
-		return { name, description: typeof description === "string" ? description : null, inputSchema: tool["inputSchema"] };
-	});
+		names.add(tool.name);
+	}
+	return discoveredTools;
 }
 
 /**
@@ -141,10 +148,4 @@ function _ExactKeys(value: Record<string, unknown>, keys: readonly string[]): bo
 	const actual = Object.keys(value).sort();
 	const expected = [...keys].sort();
 	return actual.length === expected.length && actual.every(function _Matches(key, index) { return key === expected[index]; });
-}
-
-/** Refuse unknown fields while allowing documented optional fields to be absent. */
-function _AllowedKeys(value: Record<string, unknown>, keys: readonly string[]): boolean
-{
-	return Object.keys(value).every(function _Allowed(key) { return keys.includes(key); });
 }
