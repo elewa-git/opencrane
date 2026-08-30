@@ -49,6 +49,16 @@ function _MigrationFunction(name)
 	return migration.slice(start, end);
 }
 
+function _AuthorizationMigrationFunction(name)
+{
+	const marker = `FUNCTION "${name}"`;
+	const markerIndex = authorizationMigration.indexOf(marker);
+	const start = authorizationMigration.lastIndexOf("CREATE", markerIndex);
+	const end = authorizationMigration.indexOf("$$;", markerIndex) + 3;
+	_Require(markerIndex >= 0 && start >= 0 && end > 2, `central authorization function ${name} must exist`);
+	return authorizationMigration.slice(start, end);
+}
+
 function _NormalizedSql(value)
 {
 	return value.replace(/\s+/gu, " ").trim();
@@ -100,6 +110,58 @@ _Require(!migration.includes('CREATE TRIGGER "run_outbox_events_monotonic"'), "t
 _Require(authorizationMigration.match(/^BEGIN;$/gmu)?.length === 1, "the central authorization migration must open one transaction");
 _Require(authorizationMigration.match(/^COMMIT;$/gmu)?.length === 1, "the central authorization migration must commit one transaction");
 _Require(authorizationMigration.trimEnd().endsWith("COMMIT;"), "the central authorization migration must finish with its transaction commit");
+const workloadBootstrapAudienceConstraint = 'ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_audience_check" CHECK ("audience" IN (\'opencrane-agent-runtime\', \'opencrane-managed-agent-runtime\'));';
+_Require(targetBaseline.includes(workloadBootstrapAudienceConstraint), "fresh databases must admit both governed workload bootstrap audiences");
+_Require(authorizationMigration.includes('ALTER TABLE "workload_bootstraps" DROP CONSTRAINT "workload_bootstraps_audience_check";'), "the upgrade must replace the narrower workload bootstrap audience authority");
+_Require(authorizationMigration.includes(workloadBootstrapAudienceConstraint), "the upgrade must admit both governed workload bootstrap audiences");
+_Require(
+	_NormalizedSql(_AuthorizationMigrationFunction("enforce_conversation_participant_coordinates").replace("CREATE OR REPLACE FUNCTION", "CREATE FUNCTION")) === _NormalizedSql(_TargetFunction("enforce_conversation_participant_coordinates")),
+	"fresh and upgraded databases must allocate the same ConversationParticipant access-end authority",
+);
+_Require(
+	_NormalizedSql(_AuthorizationMigrationFunction("enforce_workload_bootstrap_consumption").replace("CREATE OR REPLACE FUNCTION", "CREATE FUNCTION")) === _NormalizedSql(_TargetFunction("enforce_workload_bootstrap_consumption")),
+	"fresh and upgraded databases must install the same irreversible WorkloadBootstrap revocation authority",
+);
+for (const bootstrapRevocationInvariant of ["WorkloadBootstrap revocation is irreversible", "WorkloadBootstrap is already revoked", "a revoked WorkloadBootstrap cannot be consumed"])
+{
+	_Require(targetBaseline.includes(bootstrapRevocationInvariant), `WorkloadBootstrap authority must retain invariant: ${bootstrapRevocationInvariant}`);
+}
+for (const name of [
+	"enforce_conversation_run_event_append",
+	"enforce_conversation_timeline_entry",
+	"enforce_child_run_completion_delivery",
+	"enforce_child_run_completion_delivery_event",
+	"enforce_terminal_agent_run_event",
+])
+{
+	_Require(
+		_NormalizedSql(_AuthorizationMigrationFunction(name).replace("CREATE OR REPLACE FUNCTION", "CREATE FUNCTION")) === _NormalizedSql(_TargetFunction(name)),
+		`fresh and upgraded databases must install the exact attempt-bound function ${name}`,
+	);
+}
+for (const guard of [
+	"OC_RUN_EVENT_ATTEMPT_BACKFILL_RESET_REQUIRED",
+	"OC_CHILD_DELIVERY_ATTEMPT_BACKFILL_RESET_REQUIRED",
+	"OC_CHILD_DELIVERY_TIMELINE_RESET_REQUIRED",
+	"OC_ASSET_RUN_EVENT_ATTEMPT_RESET_REQUIRED",
+])
+{
+	_Require(authorizationMigration.includes(guard), `the attempt-bound upgrade must fail closed with ${guard}`);
+}
+_Require(authorizationMigration.includes('ALTER TABLE "conversation_run_events" ADD COLUMN "attempt" INTEGER;'), "the upgrade must add the RunEvent attempt coordinate before making it required");
+_RequireBeforeIn(authorizationMigration, 'DROP TRIGGER "conversation_run_events_append_only" ON "conversation_run_events";', 'UPDATE "conversation_run_events" SET "attempt" = 1;', "the upgrade must suspend the append-only event guard only while backfilling immutable history");
+_RequireBeforeIn(authorizationMigration, 'UPDATE "conversation_run_events" SET "attempt" = 1;', 'ALTER TABLE "conversation_run_events" ALTER COLUMN "attempt" SET NOT NULL;', "the upgrade must deterministically backfill RunEvent attempts before requiring them");
+_RequireBeforeIn(authorizationMigration, 'UPDATE "conversation_run_events" SET "attempt" = 1;', 'CREATE TRIGGER "conversation_run_events_append_only" BEFORE UPDATE OR DELETE ON "conversation_run_events"', "the upgrade must restore append-only RunEvent authority after backfill");
+_RequireBeforeIn(authorizationMigration, 'DROP TRIGGER "child_run_completion_deliveries_authority" ON "child_run_completion_deliveries";', 'UPDATE "child_run_completion_deliveries" delivery', "the upgrade must suspend child-delivery immutability only while deriving historical coordinates");
+_RequireBeforeIn(authorizationMigration, 'UPDATE "child_run_completion_deliveries" delivery', 'CREATE TRIGGER "child_run_completion_deliveries_authority" BEFORE INSERT OR UPDATE OR DELETE ON "child_run_completion_deliveries"', "the upgrade must restore child-delivery authority after backfill");
+_Require(authorizationMigration.includes('ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_pkey" PRIMARY KEY ("child_run_id", "child_attempt", "parent_attempt");'), "the upgrade must install the approved child-delivery attempt identity");
+_Require(authorizationMigration.includes('CREATE UNIQUE INDEX "child_run_completion_deliveries_one_delivery_per_attempt" ON "child_run_completion_deliveries"("child_run_id", "child_attempt") WHERE "outcome" = \'delivered\';'), "the upgrade must permit at most one delivered result per child attempt");
+_Require(authorizationMigration.includes('ALTER TABLE "conversation_timeline_entries" DROP COLUMN "parent_delivery_child_run_id";'), "the upgrade must delete the callerless child parent-delivery timeline relation");
+_Require(!targetBaseline.includes('"parent_delivery_child_run_id"'), "fresh databases must not retain the callerless child parent-delivery timeline relation");
+_Require(targetBaseline.includes('CREATE UNIQUE INDEX "conversation_run_events_conversation_id_run_id_attempt_sequ_key" ON "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence");'), "fresh databases must expose the exact four-coordinate RunEvent identity");
+_Require(targetBaseline.includes('CREATE UNIQUE INDEX "child_run_completion_deliveries_one_delivery_per_attempt"'), "fresh databases must permit only one delivered result per child attempt");
+_Require(targetBaseline.includes('CREATE INDEX "conversation_run_events_run_id_attempt_message_id_idx"'), "fresh databases must index messages inside their exact run attempt");
+_Require(!targetBaseline.includes('CREATE INDEX "conversation_run_events_run_id_message_id_idx"'), "fresh databases must remove the attemptless RunEvent message index");
 _Require(authorizationMigration.includes('DROP TABLE "action_execution_receipts";'), "the central authorization migration must remove the replaced proof-bound receipt table");
 _Require(authorizationMigration.includes('DROP FUNCTION "enforce_action_execution_receipt_lifecycle"();'), "the central authorization migration must remove the replaced receipt trigger function");
 _Require(authorizationMigration.includes('DROP TYPE "ActionExecutionState";'), "the central authorization migration must remove the replaced receipt state type");
@@ -149,7 +211,11 @@ _Require(!targetBaseline.includes("'capability-catalog-opencrane-core-v1'"), "fr
 _Require(!targetBaseline.includes("'opencrane-core'"), "fresh databases must not retain the retired legacy MCP catalogue identifier");
 _Require(authorizationMigration.includes('CREATE TEMP TABLE "precentral_tool_invocations"'), "the central authorization migration must identify every pre-central ToolInvocation");
 _Require(authorizationMigration.includes('SELECT "id"\n  FROM "tool_invocations";'), "the hard cutoff must include terminal and task-owned pre-central ToolInvocation rows");
-_Require(!authorizationMigration.includes('"state" NOT IN'), "the pre-1.0 cutoff must not retain terminal ToolInvocation compatibility");
+const precentralToolCapture = authorizationMigration.slice(
+	authorizationMigration.indexOf('CREATE TEMP TABLE "precentral_tool_invocations"'),
+	authorizationMigration.indexOf('CREATE TEMP TABLE "precentral_approval_requests"'),
+);
+_Require(!precentralToolCapture.includes('"state" NOT IN'), "the pre-1.0 cutoff must not retain terminal ToolInvocation compatibility");
 _Require(authorizationMigration.includes("to_regclass('skill_workloads') IS NOT NULL"), "the ToolInvocation cutoff must tolerate a repaired candidate that already lacks legacy SQL workloads");
 _Require(authorizationMigration.includes("to_regclass('skill_workload_bootstraps') IS NOT NULL"), "the ToolInvocation cutoff must tolerate a repaired candidate that already lacks legacy SQL workload bootstraps");
 for (const dependentDelete of [
@@ -465,7 +531,7 @@ for (const table of ["conversation_assets", "conversation_asset_output_tickets"]
 	const foreignKeys = targetBaseline.split("\n").filter(function _IsRunEventKey(line)
 	{
 		return line.startsWith(`ALTER TABLE "${table}" ADD CONSTRAINT `)
-			&& line.includes('FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"');
+			&& line.includes('FOREIGN KEY ("conversation_id", "run_id", "run_attempt", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence")');
 	});
 	_Require(foreignKeys.length === 1, `${table} must own exactly one run-event foreign key`);
 }

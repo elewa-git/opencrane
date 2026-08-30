@@ -129,7 +129,7 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 	/** Requires the canonical assistant message-start coordinate owned by this run. */
 	private async _messageStarted(conversationId: string, command: ReserveConversationAssetOutput): Promise<{ readonly sequence: number } | null>
 	{
-		const event = await this.transaction.conversationRunEvent.findFirst({ where: { conversationId, runId: command.runId, type: _MESSAGE_STARTED_EVENT_TYPE, messageId: command.messageId }, select: { sequence: true, payload: true } });
+		const event = await this.transaction.conversationRunEvent.findFirst({ where: { conversationId, runId: command.runId, attempt: command.runAttempt, type: _MESSAGE_STARTED_EVENT_TYPE, messageId: command.messageId }, select: { sequence: true, payload: true } });
 		return event !== null && _MessagePayloadMatches(event.payload, command.messageId) ? { sequence: event.sequence } : null;
 	}
 

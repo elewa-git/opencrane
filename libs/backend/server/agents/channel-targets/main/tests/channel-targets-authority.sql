@@ -1,7 +1,7 @@
 BEGIN;
 
-INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
-VALUES ('channel-model', 'global', 'channel-model', 'litellm-channel-model', 'channel-model', clock_timestamp());
+INSERT INTO "model_definitions" ("id", "silo_id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
+VALUES ('channel-model', 'silo-channel', 'global', 'channel-model', 'litellm-channel-model', 'channel-model', clock_timestamp());
 
 CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
 DECLARE actual_message TEXT;
@@ -17,15 +17,15 @@ END;
 $$;
 
 INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at") VALUES
-    ('channel-user-principal', 'silo-channel', 'https://issuer.test', 'user-1', 'oidc', clock_timestamp()),
+    ('channel-user-principal', 'silo-channel', 'https://issuer.test', 'user-1', 'external', clock_timestamp()),
     ('channel-service-principal', 'silo-channel', 'urn:opencrane:agent-service', 'channel-service', 'internal', clock_timestamp()),
     ('channel-service-2-principal', 'silo-channel', 'urn:opencrane:agent-service', 'channel-service-2', 'internal', clock_timestamp());
 INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
 VALUES ('channel-service', 'silo-channel', 'managed', 'Channel agent', 'managed-agent', 'channel-service-principal', clock_timestamp());
 INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
 VALUES ('channel-service-2', 'silo-channel', 'managed', 'Second channel agent', 'managed-agent', 'channel-service-2-principal', clock_timestamp());
-INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at")
-VALUES ('channel-revision', 'channel-service', 1, 'published', 'sha256:' || repeat('a', 64), 'prompt-v1', 'channel-model', '{}', 'user-1', clock_timestamp());
+INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at")
+VALUES ('channel-revision', 'silo-channel', 'channel-service', 1, 'published', 'sha256:' || repeat('a', 64), 'prompt-v1', 'channel-model', '{}', 'user-1', clock_timestamp());
 UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'channel-revision' WHERE "id" = 'channel-service';
 INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at") VALUES ('channel-conversation', 'silo-channel', 'channel-service', 'agent_session', clock_timestamp());
 INSERT INTO "conversation_participants" ("conversation_id", "user_id", "visible_from_position", "read_through_position")

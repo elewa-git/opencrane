@@ -48,7 +48,10 @@ does not grant permission to use a run.
   exact `ModelDefinition/Use` grant and, when present, its exact `ProviderConnection/Use` grant.
 - The database saves one `RunModelCredentialMintAuthorization` before commit. A second serializable
   transaction spends that row once before LiteLLM is called, so a replay cannot mint another key.
-- Runtime events are accepted only for the current run, attempt, Pod, and command.
+- Runtime events are accepted only for the current run, attempt, Pod, and command. Their sequence is
+  global to the durable run, while terminality is scoped to the attempt that emitted the event.
+- A terminal child result is delivered once per child attempt. A suppression belongs to the current
+  parent attempt, so retrying the parent can reconsider a result that its earlier stream could not accept.
 - Cancellation changes the database state first. The saved workflow then removes the exact used Pod
   and completes any provider output handoff.
 - Cancellation becomes final only after that workflow cleanup has finished. Pending approvals and
@@ -97,8 +100,8 @@ shared backend libraries. It never imports an application or Kubernetes client.
 
 The main records are `AgentRun`, `RunInputSnapshot`, `AgentRunWorkflowTask`,
 `WarmRuntimeReservation`, `WorkloadAssignment`, `WorkloadBootstrap`, `RunProofKey`,
-`RunModelCredentialMintAuthorization`, and ordered run events. Admission saves the run, fixed input,
-and workflow task together. Each
+`RunModelCredentialMintAuthorization`, `ChildRunCompletionDelivery`, and ordered run events. Admission
+saves the run, fixed input, and workflow task together. Each
 `WarmRuntimeReservation`, `WorkloadBootstrap`, and `RunProofKey` belongs to one binding generation.
 Warm-runtime changes are saved before the next Kubernetes step begins.
 

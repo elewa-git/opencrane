@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { ChildRunCompletionDeliveryOutcome, Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
@@ -27,7 +27,10 @@ function _serviceRow()
 /** Creates the current participant and membership delegates for a retry transaction. */
 function _authority()
 {
-	return { conversationParticipant: { findFirst: vi.fn().mockResolvedValue({ conversationId: "conversation-1" }) } };
+	return {
+		conversationParticipant: { findFirst: vi.fn().mockResolvedValue({ conversationId: "conversation-1" }) },
+		childRunCompletionDelivery: { findMany: vi.fn().mockResolvedValue([]), findUnique: vi.fn(), create: vi.fn() },
+	};
 }
 
 /** Allows the current exact AgentRun retry grant in lifecycle-focused tests. */
@@ -71,6 +74,31 @@ describe("Prisma AgentRun authority adapter", function _suite()
 		expect(result.status).toBe("started");
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", state: { in: ["Failed", "Cancelled"] } }) }));
 		expect(transaction.agentRunWorkflowTask.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { runId_attempt: { runId: "run-1", attempt: 2 } } }));
+	});
+
+	it("redelivers a terminal child that the previous parent attempt had to suppress", async function _RedeliversSuppressedChild()
+	{
+		const run = _runRow();
+		const updated = { ...run, attempt: 2, state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null };
+		const child = { ...run, id: "child-1", conversationId: null, parentRunId: "run-1", rootRunId: "run-1", attempt: 1, state: "Completed", terminalReason: "Success", finishedAt: new Date("2026-07-18T00:30:00.000Z") };
+		const authority = _authority();
+		authority.childRunCompletionDelivery.findMany.mockResolvedValue([{ childRunId: "child-1" }]);
+		authority.childRunCompletionDelivery.findUnique
+			.mockResolvedValueOnce({ parentRunId: "run-1", outcome: ChildRunCompletionDeliveryOutcome.ParentStreamTerminal, parentEventSequence: null })
+			.mockResolvedValueOnce(null);
+		const transaction = {
+			..._taskStore(),
+			...authority,
+			agentService: { findUnique: vi.fn().mockResolvedValue(_serviceRow()) },
+			agentRun: { findUnique: vi.fn().mockResolvedValueOnce(run).mockResolvedValueOnce(updated).mockResolvedValueOnce(child).mockResolvedValueOnce(updated).mockResolvedValue(updated), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			childRunReservation: { findUnique: vi.fn().mockResolvedValue({ childRunId: "child-1", parentRunId: "run-1", rootRunId: "run-1" }) },
+			conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 4 } }), findMany: vi.fn().mockResolvedValue([]), create: vi.fn() },
+		};
+
+		await expect(new PrismaAgentRunAuthorityRepository(transaction as never, _workflow(), _authorization()).startNextAttemptAtomically(_command())).resolves.toMatchObject({ status: "started", run: { attempt: 2 } });
+		expect(transaction.childRunCompletionDelivery.findMany).toHaveBeenCalledWith({ where: { parentRunId: "run-1", parentAttempt: { lte: 1 }, outcome: ChildRunCompletionDeliveryOutcome.ParentStreamTerminal }, select: { childRunId: true } });
+		expect(transaction.childRunCompletionDelivery.create).toHaveBeenCalledWith({ data: expect.objectContaining({ childRunId: "child-1", childAttempt: 1, parentAttempt: 2, outcome: ChildRunCompletionDeliveryOutcome.Delivered }) });
+		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", attempt: 2, type: "child.run.completed", payload: expect.objectContaining({ childRunId: "child-1", childAttempt: 1 }) }) });
 	});
 
 	it("denies a retry before mutation when current participant authority is absent", async function _Unauthorized()

@@ -832,6 +832,7 @@ CREATE TABLE "conversation_messages" (
 CREATE TABLE "conversation_run_events" (
     "conversation_id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
     "sequence" INTEGER NOT NULL,
     "type" TEXT NOT NULL,
     "message_id" TEXT,
@@ -852,7 +853,6 @@ CREATE TABLE "conversation_timeline_entries" (
     "membership_event_id" TEXT,
     "participant_user_id" TEXT,
     "system_event_id" TEXT,
-    "parent_delivery_child_run_id" TEXT,
     "parent_delivery_agent_thread_id" TEXT,
     "payload" JSONB,
     "occurred_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1820,12 +1820,14 @@ CREATE TABLE "agent_run_workflow_tasks" (
 -- CreateTable
 CREATE TABLE "child_run_completion_deliveries" (
     "child_run_id" TEXT NOT NULL,
+    "child_attempt" INTEGER NOT NULL,
     "parent_run_id" TEXT NOT NULL,
+    "parent_attempt" INTEGER NOT NULL,
     "parent_event_sequence" INTEGER,
     "outcome" "ChildRunCompletionDeliveryOutcome" NOT NULL,
     "delivered_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "child_run_completion_deliveries_pkey" PRIMARY KEY ("child_run_id")
+    CONSTRAINT "child_run_completion_deliveries_pkey" PRIMARY KEY ("child_run_id","child_attempt","parent_attempt")
 );
 
 -- CreateTable
@@ -2593,15 +2595,18 @@ CREATE UNIQUE INDEX "conversation_messages_conversation_id_id_key" ON "conversat
 CREATE UNIQUE INDEX "conversation_messages_conversation_id_idempotency_key_key" ON "conversation_messages"("conversation_id", "idempotency_key");
 
 -- CreateIndex
-CREATE INDEX "conversation_run_events_run_id_message_id_idx" ON "conversation_run_events"("run_id", "message_id");
+CREATE INDEX "conversation_run_events_run_id_attempt_message_id_idx" ON "conversation_run_events"("run_id", "attempt", "message_id");
 
-CREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "message_id") WHERE "type" = 'message.started';
+CREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "attempt", "message_id") WHERE "type" = 'message.started';
 
 -- CreateIndex
 CREATE INDEX "conversation_run_events_run_id_occurred_at_idx" ON "conversation_run_events"("run_id", "occurred_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "conversation_run_events_conversation_id_run_id_sequence_key" ON "conversation_run_events"("conversation_id", "run_id", "sequence");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_run_events_conversation_id_run_id_attempt_sequ_key" ON "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence");
 
 -- CreateIndex
 CREATE INDEX "conversation_timeline_entries_conversation_id_occurred_at_idx" ON "conversation_timeline_entries"("conversation_id", "occurred_at");
@@ -2617,9 +2622,6 @@ CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_membership_ev
 
 -- CreateIndex
 CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_system_event__key" ON "conversation_timeline_entries"("conversation_id", "system_event_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_timeline_entries_parent_delivery_child_run_id_key" ON "conversation_timeline_entries"("parent_delivery_child_run_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "conversation_timeline_entries_parent_delivery_agent_thread__key" ON "conversation_timeline_entries"("parent_delivery_agent_thread_id");
@@ -3101,7 +3103,7 @@ CREATE UNIQUE INDEX "agent_run_workflow_tasks_task_id_key" ON "agent_run_workflo
 CREATE UNIQUE INDEX "agent_run_workflow_tasks_silo_id_task_key_key" ON "agent_run_workflow_tasks"("silo_id", "task_key");
 
 -- CreateIndex
-CREATE INDEX "child_run_completion_deliveries_parent_run_id_idx" ON "child_run_completion_deliveries"("parent_run_id");
+CREATE INDEX "child_run_completion_deliveries_parent_run_id_parent_attemp_idx" ON "child_run_completion_deliveries"("parent_run_id", "parent_attempt");
 
 -- CreateIndex
 CREATE INDEX "child_run_reservations_parent_run_id_idx" ON "child_run_reservations"("parent_run_id");
@@ -3458,7 +3460,7 @@ ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversati
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_run_event_seque_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_run_attempt_run_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_attempt", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_id_silo_id_fkey" FOREIGN KEY ("artifact_id", "silo_id") REFERENCES "artifacts"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3482,7 +3484,7 @@ ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_ass
 ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_run_id_run_attempt_fkey" FOREIGN KEY ("run_id", "run_attempt") REFERENCES "workload_assignments"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_r_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_r_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_attempt", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_id_context_revision_id_fkey" FOREIGN KEY ("id", "context_revision_id") REFERENCES "conversation_context_revisions"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3510,9 +3512,6 @@ ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timelin
 
 -- AddForeignKey
 ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_participant__fkey" FOREIGN KEY ("conversation_id", "participant_user_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_parent_delivery_child_run_id_fkey" FOREIGN KEY ("parent_delivery_child_run_id") REFERENCES "child_run_completion_deliveries"("child_run_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_parent_delivery_agent_thread_fkey" FOREIGN KEY ("parent_delivery_agent_thread_id") REFERENCES "agent_thread_parent_deliveries"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -4743,8 +4742,9 @@ DECLARE
     transition_time TIMESTAMP(3) := clock_timestamp();
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        IF NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL OR NEW."receipt_id" IS NOT NULL THEN
-            RAISE EXCEPTION 'a new WorkloadBootstrap must begin unconsumed';
+        IF NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL
+            OR NEW."receipt_id" IS NOT NULL OR NEW."revoked_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'a new WorkloadBootstrap must begin unconsumed and unrevoked';
         END IF;
         SELECT "state" INTO run_state
         FROM "agent_runs"
@@ -4772,6 +4772,7 @@ BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'WorkloadBootstrap rows cannot be deleted'; END IF;
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
         OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
+        OR NEW."generation" IS DISTINCT FROM OLD."generation"
         OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
         OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
         OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
@@ -4783,6 +4784,29 @@ BEGIN
         OR NEW."claim_digest" IS DISTINCT FROM OLD."claim_digest"
         OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
         RAISE EXCEPTION 'WorkloadBootstrap identity is immutable';
+    END IF;
+    IF OLD."revoked_at" IS NOT NULL THEN
+        IF NEW."consumed_at" IS DISTINCT FROM OLD."consumed_at"
+            OR NEW."consumed_by_pod_uid" IS DISTINCT FROM OLD."consumed_by_pod_uid"
+            OR NEW."receipt_id" IS DISTINCT FROM OLD."receipt_id" THEN
+            RAISE EXCEPTION 'a revoked WorkloadBootstrap cannot be consumed';
+        END IF;
+        IF NEW."revoked_at" IS DISTINCT FROM OLD."revoked_at" THEN
+            RAISE EXCEPTION 'WorkloadBootstrap revocation is irreversible';
+        END IF;
+        RAISE EXCEPTION 'WorkloadBootstrap is already revoked';
+    END IF;
+    IF NEW."revoked_at" IS NOT NULL THEN
+        IF NEW."consumed_at" IS DISTINCT FROM OLD."consumed_at"
+            OR NEW."consumed_by_pod_uid" IS DISTINCT FROM OLD."consumed_by_pod_uid"
+            OR NEW."receipt_id" IS DISTINCT FROM OLD."receipt_id" THEN
+            RAISE EXCEPTION 'a revoked WorkloadBootstrap cannot be consumed';
+        END IF;
+        IF NEW."revoked_at" < OLD."created_at" OR NEW."revoked_at" > transition_time
+            OR (OLD."consumed_at" IS NOT NULL AND NEW."revoked_at" < OLD."consumed_at") THEN
+            RAISE EXCEPTION 'WorkloadBootstrap revocation time must be current';
+        END IF;
+        RETURN NEW;
     END IF;
     IF OLD."consumed_at" IS NOT NULL OR NEW."consumed_at" IS NULL
         OR NEW."consumed_by_pod_uid" IS NULL OR NEW."receipt_id" IS NULL THEN
@@ -5215,10 +5239,6 @@ BEGIN
         OR NEW."read_through_position" > last_position THEN
         RAISE EXCEPTION 'ConversationParticipant read position is outside its visible timeline';
     END IF;
-    IF NEW."access_ended_position" IS NOT NULL
-        AND NEW."read_through_position" >= NEW."access_ended_position" THEN
-        RAISE EXCEPTION 'ConversationParticipant cannot read at or beyond its access end';
-    END IF;
     IF OLD."access_ended_position" IS NOT NULL
         AND NEW."access_ended_position" IS DISTINCT FROM OLD."access_ended_position" THEN
         RAISE EXCEPTION 'ConversationParticipant access end is immutable';
@@ -5233,6 +5253,10 @@ BEGIN
             NEW."conversation_id", 'membership', 'access-ended:' || NEW."user_id", NEW."user_id",
             jsonb_build_object('action', 'access_ended', 'userId', NEW."user_id")
         ) RETURNING "position" INTO NEW."access_ended_position";
+    END IF;
+    IF NEW."access_ended_position" IS NOT NULL
+        AND NEW."read_through_position" >= NEW."access_ended_position" THEN
+        RAISE EXCEPTION 'ConversationParticipant cannot read at or beyond its access end';
     END IF;
     RETURN NEW;
 END;
@@ -5462,21 +5486,27 @@ CREATE FUNCTION "enforce_conversation_run_event_append"() RETURNS trigger LANGUA
 DECLARE
     previous_sequence INTEGER;
     terminal_exists BOOLEAN;
+    current_attempt INTEGER;
     run_state "AgentRunState";
     run_conversation_id TEXT;
 BEGIN
     PERFORM pg_advisory_xact_lock(hashtextextended(NEW."run_id", 0));
-    SELECT "state", "conversation_id" INTO run_state, run_conversation_id FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+    SELECT "attempt", "state", "conversation_id" INTO current_attempt, run_state, run_conversation_id
+    FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
     IF run_state IS NULL THEN RAISE EXCEPTION 'RunEvent run does not exist'; END IF;
     IF run_conversation_id IS NULL THEN RAISE EXCEPTION 'RunEvent requires a conversation-bound AgentRun'; END IF;
     IF NEW."conversation_id" IS DISTINCT FROM run_conversation_id THEN
         RAISE EXCEPTION 'RunEvent must bind the exact AgentRun Conversation';
     END IF;
-    SELECT COALESCE(MAX("sequence"), 0), COALESCE(bool_or("type" IN ('run.completed', 'run.failed', 'run.cancelled')), false)
+    IF NEW."attempt" IS DISTINCT FROM current_attempt THEN
+        RAISE EXCEPTION 'RunEvent must bind the current AgentRun attempt';
+    END IF;
+    SELECT COALESCE(MAX("sequence"), 0),
+           COALESCE(bool_or("type" IN ('run.completed', 'run.failed', 'run.cancelled')) FILTER (WHERE "attempt" = NEW."attempt"), false)
       INTO previous_sequence, terminal_exists
       FROM "conversation_run_events" WHERE "run_id" = NEW."run_id";
     IF terminal_exists THEN
-        RAISE EXCEPTION 'RunEvent stream is terminal';
+        RAISE EXCEPTION 'RunEvent attempt stream is terminal';
     END IF;
     IF NEW."sequence" <> previous_sequence + 1 THEN
         RAISE EXCEPTION 'RunEvent sequence must be contiguous';
@@ -5495,9 +5525,12 @@ BEGIN
         FROM "child_run_completion_deliveries" delivery
         JOIN "agent_runs" child ON child."id" = delivery."child_run_id"
         WHERE delivery."child_run_id" = NEW."payload"->>'childRunId'
+          AND delivery."child_attempt"::TEXT = NEW."payload"->>'childAttempt'
           AND delivery."parent_run_id" = NEW."run_id"
+          AND delivery."parent_attempt" = NEW."attempt"
           AND delivery."parent_event_sequence" = NEW."sequence"
           AND delivery."outcome" = 'delivered'
+          AND child."attempt" = delivery."child_attempt"
           AND ((NEW."type" = 'child.run.completed' AND child."state" = 'completed') OR (NEW."type" = 'child.run.failed' AND child."state" = 'failed') OR (NEW."type" = 'child.run.cancelled' AND child."state" = 'cancelled'))
     ) THEN
         RAISE EXCEPTION 'child RunEvent requires child completion delivery authority';
@@ -5528,24 +5561,21 @@ BEGIN
     IF NEW."kind" = 'message' THEN
         IF NEW."message_id" IS NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
             OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
-            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_child_run_id" IS NOT NULL
-            OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
+            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
             OR NEW."payload" IS NOT NULL THEN
             RAISE EXCEPTION 'message timeline entry requires only exact Message provenance';
         END IF;
     ELSIF NEW."kind" = 'run_event' THEN
         IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NULL OR NEW."run_event_sequence" IS NULL
             OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
-            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_child_run_id" IS NOT NULL
-            OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
+            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
             OR NEW."payload" IS NOT NULL THEN
             RAISE EXCEPTION 'run-event timeline entry requires only exact RunEvent provenance';
         END IF;
     ELSIF NEW."kind" = 'membership' THEN
         IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
             OR NEW."membership_event_id" IS NULL OR NEW."participant_user_id" IS NULL
-            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_child_run_id" IS NOT NULL
-            OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
+            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
             OR jsonb_typeof(NEW."payload") IS DISTINCT FROM 'object' THEN
             RAISE EXCEPTION 'membership timeline entry requires only exact participant event provenance';
         END IF;
@@ -5556,31 +5586,18 @@ BEGIN
     ELSIF NEW."kind" = 'system' THEN
         IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
             OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
-            OR NEW."system_event_id" IS NULL OR NEW."parent_delivery_child_run_id" IS NOT NULL
-            OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
+            OR NEW."system_event_id" IS NULL OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
             OR jsonb_typeof(NEW."payload") IS DISTINCT FROM 'object' THEN
             RAISE EXCEPTION 'system timeline entry requires only exact system event provenance';
         END IF;
     ELSIF NEW."kind" = 'parent_delivery' THEN
         IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
             OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
-            OR NEW."system_event_id" IS NOT NULL
-            OR (NEW."parent_delivery_child_run_id" IS NULL AND NEW."parent_delivery_agent_thread_id" IS NULL)
-            OR (NEW."parent_delivery_child_run_id" IS NOT NULL AND NEW."parent_delivery_agent_thread_id" IS NOT NULL)
+            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_agent_thread_id" IS NULL
             OR NEW."payload" IS NOT NULL THEN
             RAISE EXCEPTION 'parent-delivery timeline entry requires only exact delivery provenance';
         END IF;
-        IF NEW."parent_delivery_child_run_id" IS NOT NULL AND NOT EXISTS (
-            SELECT 1
-            FROM "child_run_completion_deliveries" delivery
-            JOIN "agent_runs" parent_run ON parent_run."id" = delivery."parent_run_id"
-            WHERE delivery."child_run_id" = NEW."parent_delivery_child_run_id"
-              AND delivery."outcome" = 'delivered'
-              AND parent_run."conversation_id" = NEW."conversation_id"
-        ) THEN
-            RAISE EXCEPTION 'parent-delivery timeline entry requires exact immediate-parent delivery authority';
-        END IF;
-        IF NEW."parent_delivery_agent_thread_id" IS NOT NULL AND NOT EXISTS (
+        IF NOT EXISTS (
             SELECT 1
             FROM "agent_thread_parent_deliveries" delivery
             WHERE delivery."id" = NEW."parent_delivery_agent_thread_id"
@@ -5637,30 +5654,41 @@ END;
 $$;
 CREATE FUNCTION "enforce_child_run_completion_delivery"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
+    child_attempt INTEGER;
     child_parent_run_id TEXT;
     child_root_run_id TEXT;
     child_silo_id TEXT;
     child_state "AgentRunState";
     reservation_parent_run_id TEXT;
     reservation_root_run_id TEXT;
+    parent_attempt INTEGER;
     parent_silo_id TEXT;
     parent_root_run_id TEXT;
     parent_conversation_id TEXT;
-    expected_event_type TEXT;
 BEGIN
     IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'child completion deliveries are append-only'; END IF;
-    SELECT "parent_run_id", "root_run_id", "silo_id", "state" INTO child_parent_run_id, child_root_run_id, child_silo_id, child_state FROM "agent_runs" WHERE "id" = NEW."child_run_id" FOR UPDATE;
+    SELECT "attempt", "parent_run_id", "root_run_id", "silo_id", "state"
+    INTO child_attempt, child_parent_run_id, child_root_run_id, child_silo_id, child_state
+    FROM "agent_runs" WHERE "id" = NEW."child_run_id" FOR UPDATE;
     IF child_parent_run_id IS NULL OR child_state NOT IN ('completed', 'failed', 'cancelled') THEN RAISE EXCEPTION 'child completion delivery requires terminal child authority'; END IF;
     SELECT "parent_run_id", "root_run_id" INTO reservation_parent_run_id, reservation_root_run_id FROM "child_run_reservations" WHERE "child_run_id" = NEW."child_run_id" FOR UPDATE;
-    SELECT "silo_id", "root_run_id", "conversation_id" INTO parent_silo_id, parent_root_run_id, parent_conversation_id FROM "agent_runs" WHERE "id" = NEW."parent_run_id" FOR UPDATE;
+    SELECT "attempt", "silo_id", "root_run_id", "conversation_id"
+    INTO parent_attempt, parent_silo_id, parent_root_run_id, parent_conversation_id
+    FROM "agent_runs" WHERE "id" = NEW."parent_run_id" FOR UPDATE;
+    IF NEW."child_attempt" IS DISTINCT FROM child_attempt OR NEW."parent_attempt" IS DISTINCT FROM parent_attempt THEN
+        RAISE EXCEPTION 'child completion delivery must bind the current child and parent attempts';
+    END IF;
     IF reservation_parent_run_id IS NULL OR parent_silo_id IS NULL OR NEW."parent_run_id" <> child_parent_run_id OR reservation_parent_run_id <> child_parent_run_id OR reservation_root_run_id <> child_root_run_id OR parent_silo_id <> child_silo_id OR parent_root_run_id <> child_root_run_id THEN RAISE EXCEPTION 'child completion delivery lineage mismatch'; END IF;
     IF NEW."outcome" = 'delivered' THEN
-        expected_event_type := CASE child_state WHEN 'completed' THEN 'child.run.completed' WHEN 'failed' THEN 'child.run.failed' ELSE 'child.run.cancelled' END;
         IF parent_conversation_id IS NULL OR NEW."parent_event_sequence" IS NULL THEN RAISE EXCEPTION 'delivered child completion requires a parent conversation stream and event sequence'; END IF;
     ELSIF NEW."outcome" = 'no_parent_stream' THEN
         IF parent_conversation_id IS NOT NULL OR NEW."parent_event_sequence" IS NOT NULL THEN RAISE EXCEPTION 'no_parent_stream outcome requires no parent conversation stream'; END IF;
     ELSE
-        IF NEW."parent_event_sequence" IS NOT NULL OR NOT EXISTS (SELECT 1 FROM "conversation_run_events" WHERE "run_id" = NEW."parent_run_id" AND "type" IN ('run.completed', 'run.failed', 'run.cancelled')) THEN RAISE EXCEPTION 'parent_stream_terminal outcome requires terminal parent stream'; END IF;
+        IF NEW."parent_event_sequence" IS NOT NULL OR NOT EXISTS (
+            SELECT 1 FROM "conversation_run_events"
+            WHERE "run_id" = NEW."parent_run_id" AND "attempt" = NEW."parent_attempt"
+              AND "type" IN ('run.completed', 'run.failed', 'run.cancelled')
+        ) THEN RAISE EXCEPTION 'parent_stream_terminal outcome requires terminal parent attempt stream'; END IF;
     END IF;
     RETURN NEW;
 END;
@@ -5671,9 +5699,15 @@ DECLARE
     expected_event_type TEXT;
 BEGIN
     IF NEW."outcome" <> 'delivered' THEN RETURN NULL; END IF;
-    SELECT "state" INTO child_state FROM "agent_runs" WHERE "id" = NEW."child_run_id";
+    SELECT "state" INTO child_state FROM "agent_runs" WHERE "id" = NEW."child_run_id" AND "attempt" = NEW."child_attempt";
     expected_event_type := CASE child_state WHEN 'completed' THEN 'child.run.completed' WHEN 'failed' THEN 'child.run.failed' ELSE 'child.run.cancelled' END;
-    IF NOT EXISTS (SELECT 1 FROM "conversation_run_events" WHERE "run_id" = NEW."parent_run_id" AND "sequence" = NEW."parent_event_sequence" AND "type" = expected_event_type AND "payload"->>'childRunId' = NEW."child_run_id") THEN RAISE EXCEPTION 'delivered child completion requires exact parent event'; END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM "conversation_run_events"
+        WHERE "run_id" = NEW."parent_run_id" AND "attempt" = NEW."parent_attempt"
+          AND "sequence" = NEW."parent_event_sequence" AND "type" = expected_event_type
+          AND "payload"->>'childRunId' = NEW."child_run_id"
+          AND "payload"->>'childAttempt' = NEW."child_attempt"::TEXT
+    ) THEN RAISE EXCEPTION 'delivered child completion requires exact parent attempt event'; END IF;
     RETURN NULL;
 END;
 $$;
@@ -5701,7 +5735,7 @@ DECLARE
 BEGIN
     IF NEW."conversation_id" IS NULL OR NEW."state" NOT IN ('completed', 'failed', 'cancelled') THEN RETURN NULL; END IF;
     expected_type := CASE NEW."state" WHEN 'completed' THEN 'run.completed' WHEN 'failed' THEN 'run.failed' ELSE 'run.cancelled' END;
-    IF NOT EXISTS (SELECT 1 FROM "conversation_run_events" WHERE "run_id" = NEW."id" AND "type" = expected_type) THEN
+    IF NOT EXISTS (SELECT 1 FROM "conversation_run_events" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "type" = expected_type) THEN
         RAISE EXCEPTION 'terminal conversation AgentRun requires its matching terminal RunEvent';
     END IF;
     RETURN NULL;
@@ -7287,7 +7321,7 @@ ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_state_ch
     );
 ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_expiry_check" CHECK ("expires_at" > "created_at");
 ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_claim_digest_check" CHECK ("claim_digest" ~ '^sha256:[0-9a-f]{64}$');
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_audience_check" CHECK ("audience" = 'opencrane-agent-runtime');
+ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_audience_check" CHECK ("audience" IN ('opencrane-agent-runtime', 'opencrane-managed-agent-runtime'));
 ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_consumption_check" CHECK (
         ("consumed_at" IS NULL AND "consumed_by_pod_uid" IS NULL AND "receipt_id" IS NULL) OR
         ("consumed_at" IS NOT NULL AND "consumed_by_pod_uid" IS NOT NULL AND btrim("consumed_by_pod_uid") <> '' AND "receipt_id" IS NOT NULL AND btrim("receipt_id") <> '')
@@ -7439,7 +7473,7 @@ CREATE UNIQUE INDEX "conversation_messages_one_user_input_per_run"
 CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"
     ON "agent_runs"("conversation_id")
     WHERE "conversation_id" IS NOT NULL AND "state" NOT IN ('completed', 'failed', 'cancelled');
-ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_sequence_check" CHECK ("sequence" > 0);
+ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_attempt_sequence_check" CHECK ("attempt" > 0 AND "sequence" > 0);
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_type_check" CHECK ("type" IN (
         'run.accepted', 'run.started', 'message.started', 'message.delta', 'message.completed',
         'tool.requested', 'elicitation.requested', 'tool.started', 'tool.progress', 'tool.completed', 'tool.failed',
@@ -7456,24 +7490,24 @@ ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_me
 ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_reference_shape_check" CHECK (
         ("kind" = 'message' AND "message_id" IS NOT NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
             AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
-            AND "parent_delivery_child_run_id" IS NULL AND "parent_delivery_agent_thread_id" IS NULL AND "payload" IS NULL) OR
+            AND "parent_delivery_agent_thread_id" IS NULL AND "payload" IS NULL) OR
         ("kind" = 'run_event' AND "message_id" IS NULL AND "run_id" IS NOT NULL AND "run_event_sequence" IS NOT NULL
             AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
-            AND "parent_delivery_child_run_id" IS NULL AND "parent_delivery_agent_thread_id" IS NULL AND "payload" IS NULL) OR
+            AND "parent_delivery_agent_thread_id" IS NULL AND "payload" IS NULL) OR
         ("kind" = 'membership' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
             AND "membership_event_id" IS NOT NULL AND btrim("membership_event_id") <> '' AND "participant_user_id" IS NOT NULL
-            AND btrim("participant_user_id") <> '' AND "system_event_id" IS NULL AND "parent_delivery_child_run_id" IS NULL
-            AND "parent_delivery_agent_thread_id" IS NULL AND jsonb_typeof("payload") = 'object') OR
+            AND btrim("participant_user_id") <> '' AND "system_event_id" IS NULL AND "parent_delivery_agent_thread_id" IS NULL
+            AND jsonb_typeof("payload") = 'object') OR
         ("kind" = 'system' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
             AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NOT NULL
-            AND btrim("system_event_id") <> '' AND "parent_delivery_child_run_id" IS NULL
-            AND "parent_delivery_agent_thread_id" IS NULL AND jsonb_typeof("payload") = 'object') OR
+            AND btrim("system_event_id") <> '' AND "parent_delivery_agent_thread_id" IS NULL AND jsonb_typeof("payload") = 'object') OR
         ("kind" = 'parent_delivery' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
             AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
-            AND (("parent_delivery_child_run_id" IS NOT NULL AND btrim("parent_delivery_child_run_id") <> '' AND "parent_delivery_agent_thread_id" IS NULL)
-              OR ("parent_delivery_child_run_id" IS NULL AND "parent_delivery_agent_thread_id" IS NOT NULL AND btrim("parent_delivery_agent_thread_id") <> ''))
-            AND "payload" IS NULL)
+            AND "parent_delivery_agent_thread_id" IS NOT NULL AND btrim("parent_delivery_agent_thread_id") <> '' AND "payload" IS NULL)
     );
+ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_attempt_check" CHECK ("child_attempt" > 0 AND "parent_attempt" > 0);
+CREATE UNIQUE INDEX "child_run_completion_deliveries_one_delivery_per_attempt"
+    ON "child_run_completion_deliveries"("child_run_id", "child_attempt") WHERE "outcome" = 'delivered';
 ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_revision_check" CHECK ("revision" > 0);
 ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_digest_check" CHECK ("digest" ~ '^sha256:[0-9a-f]{64}$');
 ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_summary_check" CHECK (jsonb_typeof("summary") = 'object');

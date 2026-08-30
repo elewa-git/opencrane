@@ -89,7 +89,7 @@ model AgentRun {
   steeringRequests                  RuntimeSteeringRequest[]
   spawnedChildReservations          ChildRunReservation[]                 @relation("ChildRunReservationParent")
   childReservation                  ChildRunReservation?                  @relation("ChildRunReservationChild")
-  childCompletionDelivery           ChildRunCompletionDelivery?           @relation("ChildRunCompletionDeliveryChild")
+  childCompletionDeliveries         ChildRunCompletionDelivery[]          @relation("ChildRunCompletionDeliveryChild")
   receivedChildCompletions          ChildRunCompletionDelivery[]          @relation("ChildRunCompletionDeliveryParent")
   agentThreadOrigin                 ConversationAgentThread?
   agentThreadDeliveries             AgentThreadParentDelivery[]
@@ -177,16 +177,18 @@ model AgentRunWorkflowTask {
 
 /// Append-only proof that a terminal child was delivered to its direct parent's stream or deliberately suppressed.
 model ChildRunCompletionDelivery {
-  childRunId          String                            @id @map("child_run_id")
+  childRunId          String                            @map("child_run_id")
+  childAttempt        Int                               @map("child_attempt")
   parentRunId         String                            @map("parent_run_id")
+  parentAttempt       Int                               @map("parent_attempt")
   parentEventSequence Int?                              @map("parent_event_sequence")
   outcome             ChildRunCompletionDeliveryOutcome
   deliveredAt         DateTime                          @default(now()) @map("delivered_at")
   childRun            AgentRun                          @relation("ChildRunCompletionDeliveryChild", fields: [childRunId], references: [id], onDelete: Restrict)
   parentRun           AgentRun                          @relation("ChildRunCompletionDeliveryParent", fields: [parentRunId], references: [id], onDelete: Restrict)
-  timelineEntry       ConversationTimelineEntry?
 
-  @@index([parentRunId])
+  @@id([childRunId, childAttempt, parentAttempt])
+  @@index([parentRunId, parentAttempt])
   @@map("child_run_completion_deliveries")
 }
 

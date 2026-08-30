@@ -27,6 +27,15 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   while every other product route remains unavailable until that exact subject has an active
   membership in the host-selected silo.
 
+- **Ending conversation access now reaches the durable authorization revocation path.** The database
+  allocates the participant's access-end timeline position before validating its read cursor, so the
+  same transaction can revoke the exact ChannelTarget grants on fresh installs and 0.9.2 upgrades.
+
+- **Retried agent runs now preserve attempt-exact conversation and child-delivery history.** A failed
+  attempt no longer makes the stable run stream permanently terminal: later attempts continue the
+  global event sequence while message starts, generated outputs, and child completion delivery stay
+  bound to the attempt that produced them, with at most one delivered result per child attempt.
+
 ### Added
 
 - **Org admins can now model departments, teams, and projects as one hierarchy of groups.** Groups

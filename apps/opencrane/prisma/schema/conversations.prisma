@@ -123,6 +123,7 @@ model ConversationMessage {
 model ConversationRunEvent {
   conversationId     String                          @map("conversation_id")
   runId              String                          @map("run_id")
+  attempt            Int
   sequence           Int
   type               String
   messageId          String?                         @map("message_id")
@@ -135,7 +136,8 @@ model ConversationRunEvent {
 
   @@id([runId, sequence])
   @@unique([conversationId, runId, sequence])
-  @@index([runId, messageId])
+  @@unique([conversationId, runId, attempt, sequence])
+  @@index([runId, attempt, messageId])
   @@index([runId, occurredAt])
   @@map("conversation_run_events")
 }
@@ -150,7 +152,6 @@ model ConversationTimelineEntry {
   membershipEventId           String?                       @map("membership_event_id")
   participantUserId           String?                       @map("participant_user_id")
   systemEventId               String?                       @map("system_event_id")
-  parentDeliveryChildRunId    String?                       @map("parent_delivery_child_run_id")
   parentDeliveryAgentThreadId String?                       @map("parent_delivery_agent_thread_id")
   payload                     Json?
   occurredAt                  DateTime                      @default(now()) @map("occurred_at")
@@ -158,7 +159,6 @@ model ConversationTimelineEntry {
   message                     ConversationMessage?          @relation(fields: [conversationId, messageId], references: [conversationId, id], onDelete: Restrict)
   runEvent                    ConversationRunEvent?         @relation(fields: [conversationId, runId, runEventSequence], references: [conversationId, runId, sequence], onDelete: Restrict)
   participant                 ConversationParticipant?      @relation(fields: [conversationId, participantUserId], references: [conversationId, userId], onDelete: Restrict)
-  parentDelivery              ChildRunCompletionDelivery?   @relation(fields: [parentDeliveryChildRunId], references: [childRunId], onDelete: Restrict)
   agentThreadDelivery         AgentThreadParentDelivery?    @relation(fields: [parentDeliveryAgentThreadId], references: [id], onDelete: Restrict)
 
   @@id([conversationId, position])
@@ -166,7 +166,6 @@ model ConversationTimelineEntry {
   @@unique([conversationId, runId, runEventSequence])
   @@unique([conversationId, membershipEventId])
   @@unique([conversationId, systemEventId])
-  @@unique([parentDeliveryChildRunId])
   @@unique([parentDeliveryAgentThreadId])
   @@index([conversationId, occurredAt])
   @@map("conversation_timeline_entries")

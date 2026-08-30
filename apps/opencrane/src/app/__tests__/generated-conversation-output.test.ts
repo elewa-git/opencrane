@@ -66,7 +66,7 @@ function _Database()
 		auditDecision: { create: vi.fn().mockResolvedValue({}) },
 		auditEntry: { create: vi.fn().mockResolvedValue({}) },
 		workloadAssignment: { findFirst: vi.fn().mockResolvedValue(assignment) },
-		conversationRunEvent: { findFirst: vi.fn().mockResolvedValue({ sequence: 7, payload: { messageId: "assistant:command-1", role: "assistant" } }) },
+		conversationRunEvent: { findFirst: vi.fn().mockResolvedValue({ attempt: 2, sequence: 7, payload: { messageId: "assistant:command-1", role: "assistant" } }) },
 		conversationAssetOutputTicket: {
 			findUnique: vi.fn().mockImplementation(async function _FindTicket(args: { readonly where: Record<string, unknown> }) { return Object.hasOwn(args.where, "id") ? _TicketWithAsset() : null; }),
 			create: vi.fn().mockImplementation(async function _CreateTicket(args: { readonly data: Record<string, unknown> }) { ticket = { ...args.data, finalizedAt: null }; journey.push("reserve"); return ticket; }),

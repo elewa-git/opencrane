@@ -28,6 +28,7 @@ const groupHierarchySql = readFileSync(join(groupHierarchyTransitionRoot, "migra
 const groupHierarchyManifest = JSON.parse(readFileSync(join(groupHierarchyTransitionRoot, "manifest.json"), "utf8"));
 const groupHierarchySqlDigest = createHash("sha256").update(groupHierarchySql).digest("hex");
 const candidateForwardRepairSql = readFileSync(join(migrationRoot, "untagged-0.9.3-candidate-forward-repair/migration.sql"), "utf8");
+const centralAuthorizationSql = readFileSync(join(migrationRoot, "../prisma-migrations/20260829000000_central_authorization_authority/migration.sql"), "utf8");
 
 function requireContract(condition, message)
 {
@@ -186,7 +187,6 @@ requireContract(sql.trimEnd().endsWith("\\endif"), "migration retry branch must 
 const authorityFunctions = [
 	"enforce_channel_runtime_route_evidence",
 	"enforce_conversation_lifecycle",
-	"enforce_conversation_timeline_entry",
 	"enforce_persona_question_set_lifecycle",
 	"enforce_persona_question_mutation",
 	"enforce_persona_interview_lifecycle",
@@ -209,6 +209,23 @@ for (const name of authorityFunctions)
 	const targetFunction = targetBaseline.slice(baselineStart, baselineEnd);
 	const migratedFunction = targetFunction.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION");
 	requireContract(sql.includes(migratedFunction), `migration must carry exact target function ${name}`);
+}
+
+const centralAuthorizationFunctions = [
+	"enforce_conversation_run_event_append",
+	"enforce_conversation_timeline_entry",
+	"enforce_child_run_completion_delivery",
+	"enforce_child_run_completion_delivery_event",
+	"enforce_terminal_agent_run_event",
+];
+for (const name of centralAuthorizationFunctions)
+{
+	const baselineStart = targetBaseline.indexOf(`CREATE FUNCTION "${name}"`);
+	const baselineEnd = targetBaseline.indexOf("$$;", baselineStart) + 3;
+	requireContract(baselineStart >= 0 && baselineEnd > 2, `target function ${name} must exist`);
+	const targetFunction = targetBaseline.slice(baselineStart, baselineEnd);
+	const migratedFunction = targetFunction.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION");
+	requireContract(centralAuthorizationSql.includes(migratedFunction), `central authorization migration must carry exact target function ${name}`);
 }
 
 const seedStart = targetBaseline.indexOf('INSERT INTO "persona_question_sets"');

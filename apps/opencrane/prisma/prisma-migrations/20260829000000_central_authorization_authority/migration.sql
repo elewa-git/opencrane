@@ -1,6 +1,11 @@
 -- Install the immutable central product-authorization catalogue used by transaction-bound grants.
 BEGIN;
 
+-- Admit the same managed runtime audience already accepted by WorkloadAssignment. The bootstrap
+-- remains bound to the exact assignment identity, namespace, service account, and workload UID.
+ALTER TABLE "workload_bootstraps" DROP CONSTRAINT "workload_bootstraps_audience_check";
+ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_audience_check" CHECK ("audience" IN ('opencrane-agent-runtime', 'opencrane-managed-agent-runtime'));
+
 -- Remove the callerless proof-bound receipt model replaced by transaction-bound product admission
 -- and the durable ToolInvocation lifecycle. RunProofKey and WorkloadAssignment remain because they
 -- still prove the identity assigned to live workloads.
@@ -1177,6 +1182,178 @@ SELECT
     recipient."granted_by_principal_id"
 FROM "resource_share_recipients" recipient;
 
+-- Allocate the participant access-end timeline position before validating its read cursor. Runtime
+-- callers submit zero as a database-allocation sentinel, so comparing the cursor to that sentinel
+-- would reject every legitimate access-end transition before the database could replace it.
+CREATE OR REPLACE FUNCTION "enforce_conversation_participant_coordinates"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    conversation_lifecycle "ConversationLifecycle";
+    next_position BIGINT;
+    last_position BIGINT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'ConversationParticipant rows cannot be deleted';
+    END IF;
+    SELECT "lifecycle", COALESCE((
+        SELECT max(entry."position") + 1
+        FROM "conversation_timeline_entries" entry
+        WHERE entry."conversation_id" = conversation."id"
+    ), 1)
+    INTO conversation_lifecycle, next_position
+    FROM "conversations" conversation
+    WHERE conversation."id" = NEW."conversation_id"
+    FOR UPDATE;
+    IF conversation_lifecycle IS NULL THEN
+        RAISE EXCEPTION 'ConversationParticipant requires its exact Conversation';
+    END IF;
+    last_position := next_position - 1;
+    IF TG_OP = 'INSERT' THEN
+        IF conversation_lifecycle <> 'open' THEN
+            RAISE EXCEPTION 'participants cannot join a closed Conversation';
+        END IF;
+        NEW."visible_from_position" := next_position;
+        NEW."read_through_position" := last_position;
+        IF NEW."access_ended_position" IS NOT NULL OR NEW."archived_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'new ConversationParticipant must begin with current, unarchived access';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id"
+        OR NEW."user_id" IS DISTINCT FROM OLD."user_id"
+        OR NEW."visible_from_position" IS DISTINCT FROM OLD."visible_from_position"
+        OR NEW."joined_at" IS DISTINCT FROM OLD."joined_at" THEN
+        RAISE EXCEPTION 'ConversationParticipant join authority is immutable';
+    END IF;
+    IF NEW."read_through_position" < NEW."visible_from_position" - 1
+        OR NEW."read_through_position" > last_position THEN
+        RAISE EXCEPTION 'ConversationParticipant read position is outside its visible timeline';
+    END IF;
+    IF OLD."access_ended_position" IS NOT NULL
+        AND NEW."access_ended_position" IS DISTINCT FROM OLD."access_ended_position" THEN
+        RAISE EXCEPTION 'ConversationParticipant access end is immutable';
+    END IF;
+    IF OLD."access_ended_position" IS NULL AND NEW."access_ended_position" IS NOT NULL THEN
+        IF NEW."access_ended_position" <> 0 THEN
+            RAISE EXCEPTION 'ConversationParticipant access end position is database allocated';
+        END IF;
+        INSERT INTO "conversation_timeline_entries" (
+            "conversation_id", "kind", "membership_event_id", "participant_user_id", "payload"
+        ) VALUES (
+            NEW."conversation_id", 'membership', 'access-ended:' || NEW."user_id", NEW."user_id",
+            jsonb_build_object('action', 'access_ended', 'userId', NEW."user_id")
+        ) RETURNING "position" INTO NEW."access_ended_position";
+    END IF;
+    IF NEW."access_ended_position" IS NOT NULL
+        AND NEW."read_through_position" >= NEW."access_ended_position" THEN
+        RAISE EXCEPTION 'ConversationParticipant cannot read at or beyond its access end';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+-- Allow cancellation to revoke either an unconsumed or consumed bootstrap without changing the
+-- immutable identity or exactly-once consumption evidence.
+CREATE OR REPLACE FUNCTION "enforce_workload_bootstrap_consumption"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    assignment_pod_uid TEXT;
+    assignment_state "WorkloadAssignmentState";
+    run_state "AgentRunState";
+    transition_time TIMESTAMP(3) := clock_timestamp();
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL
+            OR NEW."receipt_id" IS NOT NULL OR NEW."revoked_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'a new WorkloadBootstrap must begin unconsumed and unrevoked';
+        END IF;
+        SELECT "state" INTO run_state
+        FROM "agent_runs"
+        WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
+        FOR UPDATE;
+        IF run_state IS DISTINCT FROM 'assigned'::"AgentRunState" THEN
+            RAISE EXCEPTION 'a new WorkloadBootstrap requires the current Assigned attempt';
+        END IF;
+        SELECT "state" INTO assignment_state
+        FROM "workload_assignments"
+        WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
+          AND "agent_service_id" = NEW."agent_service_id"
+          AND "agent_revision_id" = NEW."agent_revision_id"
+          AND "silo_id" = NEW."silo_id" AND "subject_id" = NEW."subject_id"
+          AND "audience" = NEW."audience"
+          AND "service_account_name" = NEW."service_account_name"
+          AND "namespace" = NEW."namespace" AND "workload_kind" = NEW."workload_kind"
+          AND "workload_uid" = NEW."workload_uid"
+        FOR UPDATE;
+        IF assignment_state IS DISTINCT FROM 'pending_pod'::"WorkloadAssignmentState" THEN
+            RAISE EXCEPTION 'a new WorkloadBootstrap requires its PendingPod assignment';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'WorkloadBootstrap rows cannot be deleted'; END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
+        OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
+        OR NEW."generation" IS DISTINCT FROM OLD."generation"
+        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
+        OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
+        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
+        OR NEW."audience" IS DISTINCT FROM OLD."audience"
+        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name"
+        OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
+        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind"
+        OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
+        OR NEW."claim_digest" IS DISTINCT FROM OLD."claim_digest"
+        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'WorkloadBootstrap identity is immutable';
+    END IF;
+    IF OLD."revoked_at" IS NOT NULL THEN
+        IF NEW."consumed_at" IS DISTINCT FROM OLD."consumed_at"
+            OR NEW."consumed_by_pod_uid" IS DISTINCT FROM OLD."consumed_by_pod_uid"
+            OR NEW."receipt_id" IS DISTINCT FROM OLD."receipt_id" THEN
+            RAISE EXCEPTION 'a revoked WorkloadBootstrap cannot be consumed';
+        END IF;
+        IF NEW."revoked_at" IS DISTINCT FROM OLD."revoked_at" THEN
+            RAISE EXCEPTION 'WorkloadBootstrap revocation is irreversible';
+        END IF;
+        RAISE EXCEPTION 'WorkloadBootstrap is already revoked';
+    END IF;
+    IF NEW."revoked_at" IS NOT NULL THEN
+        IF NEW."consumed_at" IS DISTINCT FROM OLD."consumed_at"
+            OR NEW."consumed_by_pod_uid" IS DISTINCT FROM OLD."consumed_by_pod_uid"
+            OR NEW."receipt_id" IS DISTINCT FROM OLD."receipt_id" THEN
+            RAISE EXCEPTION 'a revoked WorkloadBootstrap cannot be consumed';
+        END IF;
+        IF NEW."revoked_at" < OLD."created_at" OR NEW."revoked_at" > transition_time
+            OR (OLD."consumed_at" IS NOT NULL AND NEW."revoked_at" < OLD."consumed_at") THEN
+            RAISE EXCEPTION 'WorkloadBootstrap revocation time must be current';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF OLD."consumed_at" IS NOT NULL OR NEW."consumed_at" IS NULL
+        OR NEW."consumed_by_pod_uid" IS NULL OR NEW."receipt_id" IS NULL THEN
+        RAISE EXCEPTION 'WorkloadBootstrap may be consumed exactly once';
+    END IF;
+    IF NEW."consumed_at" < OLD."created_at" OR NEW."consumed_at" > transition_time
+        OR NEW."consumed_at" >= OLD."expires_at" OR transition_time >= OLD."expires_at" THEN
+        RAISE EXCEPTION 'WorkloadBootstrap must be consumed at a current time before expiry';
+    END IF;
+    SELECT "state" INTO run_state
+    FROM "agent_runs"
+    WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
+    FOR UPDATE;
+    IF run_state IS DISTINCT FROM 'assigned'::"AgentRunState" THEN
+        RAISE EXCEPTION 'WorkloadBootstrap consumption requires the current Assigned attempt';
+    END IF;
+    SELECT "state", "pod_uid" INTO assignment_state, assignment_pod_uid
+    FROM "workload_assignments"
+    WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
+    FOR UPDATE;
+    IF assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
+        OR assignment_pod_uid IS DISTINCT FROM NEW."consumed_by_pod_uid" THEN
+        RAISE EXCEPTION 'bootstrap consumer Pod is not the registered assignment Pod';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
 -- Require complete immutable central decision evidence for every newly admitted external effect.
 -- AgentRun work includes assignment fields; public MCP tasks bind the caller and admitted tool
 -- decision without inventing run membership or workload-assignment evidence.
@@ -1269,6 +1446,365 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+
+-- Bind durable run events and child deliveries to the attempt that produced them. This pre-1.0 upgrade
+-- backfills attempt 1 only when the existing rows prove that coordinate; retry history and rows from
+-- the removed child-delivery timeline relation require a database reset.
+DO $attempt_backfill_guard$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM "conversation_run_events" event
+        JOIN "agent_runs" run ON run."id" = event."run_id"
+        WHERE run."attempt" > 1
+    ) THEN
+        RAISE EXCEPTION 'OC_RUN_EVENT_ATTEMPT_BACKFILL_RESET_REQUIRED: attemptless RunEvent history belongs to a retried AgentRun';
+    END IF;
+    IF EXISTS (
+        SELECT 1
+        FROM "conversation_timeline_entries"
+        WHERE "parent_delivery_child_run_id" IS NOT NULL
+    ) THEN
+        RAISE EXCEPTION 'OC_CHILD_DELIVERY_TIMELINE_RESET_REQUIRED: callerless child parent-delivery timeline history cannot be migrated';
+    END IF;
+    IF EXISTS (
+        SELECT 1
+        FROM "child_run_completion_deliveries" delivery
+        WHERE delivery."outcome" = 'delivered'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM "conversation_run_events" event
+              WHERE event."run_id" = delivery."parent_run_id"
+                AND event."sequence" = delivery."parent_event_sequence"
+                AND event."type" IN ('child.run.completed', 'child.run.failed', 'child.run.cancelled')
+                AND event."payload"->>'childRunId' = delivery."child_run_id"
+                AND CASE
+                    WHEN event."payload"->>'childAttempt' ~ '^[1-9][0-9]{0,9}$'
+                    THEN (event."payload"->>'childAttempt')::NUMERIC <= 2147483647
+                    ELSE FALSE
+                END
+          )
+    ) THEN
+        RAISE EXCEPTION 'OC_CHILD_DELIVERY_ATTEMPT_BACKFILL_RESET_REQUIRED: delivered child history lacks exact attempt evidence';
+    END IF;
+    IF EXISTS (
+        SELECT 1
+        FROM "child_run_completion_deliveries" delivery
+        JOIN "agent_runs" child ON child."id" = delivery."child_run_id"
+        JOIN "agent_runs" parent ON parent."id" = delivery."parent_run_id"
+        WHERE delivery."outcome" <> 'delivered'
+          AND (child."attempt" <> 1 OR parent."attempt" <> 1)
+    ) THEN
+        RAISE EXCEPTION 'OC_CHILD_DELIVERY_ATTEMPT_BACKFILL_RESET_REQUIRED: suppressed child history belongs to a retried AgentRun';
+    END IF;
+END;
+$attempt_backfill_guard$;
+
+ALTER TABLE "conversation_timeline_entries" DROP CONSTRAINT IF EXISTS "conversation_timeline_entries_parent_delivery_child_run_id_fkey";
+DROP INDEX IF EXISTS "conversation_timeline_entries_parent_delivery_child_run_id_key";
+ALTER TABLE "conversation_timeline_entries" DROP CONSTRAINT "conversation_timeline_entries_reference_shape_check";
+ALTER TABLE "conversation_timeline_entries" DROP COLUMN "parent_delivery_child_run_id";
+
+DROP TRIGGER "conversation_run_events_append_only" ON "conversation_run_events";
+ALTER TABLE "conversation_run_events" ADD COLUMN "attempt" INTEGER;
+UPDATE "conversation_run_events" SET "attempt" = 1;
+ALTER TABLE "conversation_run_events" ALTER COLUMN "attempt" SET NOT NULL;
+ALTER TABLE "conversation_run_events" DROP CONSTRAINT "conversation_run_events_sequence_check";
+ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_attempt_sequence_check" CHECK ("attempt" > 0 AND "sequence" > 0);
+DROP INDEX "conversation_run_events_run_id_message_id_idx";
+DROP INDEX "conversation_run_events_one_message_start";
+CREATE INDEX "conversation_run_events_run_id_attempt_message_id_idx" ON "conversation_run_events"("run_id", "attempt", "message_id");
+CREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "attempt", "message_id") WHERE "type" = 'message.started';
+CREATE UNIQUE INDEX "conversation_run_events_conversation_id_run_id_attempt_sequ_key" ON "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence");
+
+DO $asset_attempt_guard$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM "conversation_assets" asset
+        JOIN "conversation_run_events" event
+          ON event."conversation_id" = asset."conversation_id"
+         AND event."run_id" = asset."run_id"
+         AND event."sequence" = asset."run_event_sequence"
+        WHERE asset."run_event_sequence" IS NOT NULL
+          AND asset."run_attempt" IS DISTINCT FROM event."attempt"
+    ) OR EXISTS (
+        SELECT 1
+        FROM "conversation_asset_output_tickets" ticket
+        JOIN "conversation_run_events" event
+          ON event."conversation_id" = ticket."conversation_id"
+         AND event."run_id" = ticket."run_id"
+         AND event."sequence" = ticket."run_event_sequence"
+        WHERE ticket."run_attempt" IS DISTINCT FROM event."attempt"
+    ) THEN
+        RAISE EXCEPTION 'OC_ASSET_RUN_EVENT_ATTEMPT_RESET_REQUIRED: asset evidence disagrees with its exact RunEvent attempt';
+    END IF;
+END;
+$asset_attempt_guard$;
+
+ALTER TABLE "conversation_assets" DROP CONSTRAINT IF EXISTS "conversation_assets_conversation_id_run_id_run_event_sequence_fkey";
+ALTER TABLE "conversation_assets" DROP CONSTRAINT IF EXISTS "conversation_assets_conversation_id_run_id_run_event_seque_fkey";
+ALTER TABLE "conversation_asset_output_tickets" DROP CONSTRAINT IF EXISTS "conversation_asset_output_tickets_conversation_id_run_id_run_event_sequence_fkey";
+ALTER TABLE "conversation_asset_output_tickets" DROP CONSTRAINT IF EXISTS "conversation_asset_output_tickets_conversation_id_run_id_r_fkey";
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_run_attempt_run_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_attempt", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_r_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_attempt", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+DROP TRIGGER "child_run_completion_deliveries_authority" ON "child_run_completion_deliveries";
+ALTER TABLE "child_run_completion_deliveries" ADD COLUMN "child_attempt" INTEGER;
+ALTER TABLE "child_run_completion_deliveries" ADD COLUMN "parent_attempt" INTEGER;
+UPDATE "child_run_completion_deliveries" delivery
+SET "child_attempt" = (event."payload"->>'childAttempt')::INTEGER,
+    "parent_attempt" = event."attempt"
+FROM "conversation_run_events" event
+WHERE delivery."outcome" = 'delivered'
+  AND event."run_id" = delivery."parent_run_id"
+  AND event."sequence" = delivery."parent_event_sequence"
+  AND event."type" IN ('child.run.completed', 'child.run.failed', 'child.run.cancelled')
+  AND event."payload"->>'childRunId' = delivery."child_run_id";
+UPDATE "child_run_completion_deliveries"
+SET "child_attempt" = 1, "parent_attempt" = 1
+WHERE "outcome" <> 'delivered';
+ALTER TABLE "child_run_completion_deliveries" ALTER COLUMN "child_attempt" SET NOT NULL;
+ALTER TABLE "child_run_completion_deliveries" ALTER COLUMN "parent_attempt" SET NOT NULL;
+ALTER TABLE "child_run_completion_deliveries" DROP CONSTRAINT "child_run_completion_deliveries_pkey";
+ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_pkey" PRIMARY KEY ("child_run_id", "child_attempt", "parent_attempt");
+DROP INDEX "child_run_completion_deliveries_parent_run_id_idx";
+CREATE INDEX "child_run_completion_deliveries_parent_run_id_parent_attemp_idx" ON "child_run_completion_deliveries"("parent_run_id", "parent_attempt");
+CREATE UNIQUE INDEX "child_run_completion_deliveries_one_delivery_per_attempt" ON "child_run_completion_deliveries"("child_run_id", "child_attempt") WHERE "outcome" = 'delivered';
+ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_attempt_check" CHECK ("child_attempt" > 0 AND "parent_attempt" > 0);
+
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_reference_shape_check" CHECK (
+        ("kind" = 'message' AND "message_id" IS NOT NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
+            AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
+            AND "parent_delivery_agent_thread_id" IS NULL AND "payload" IS NULL) OR
+        ("kind" = 'run_event' AND "message_id" IS NULL AND "run_id" IS NOT NULL AND "run_event_sequence" IS NOT NULL
+            AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
+            AND "parent_delivery_agent_thread_id" IS NULL AND "payload" IS NULL) OR
+        ("kind" = 'membership' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
+            AND "membership_event_id" IS NOT NULL AND btrim("membership_event_id") <> '' AND "participant_user_id" IS NOT NULL
+            AND btrim("participant_user_id") <> '' AND "system_event_id" IS NULL AND "parent_delivery_agent_thread_id" IS NULL
+            AND jsonb_typeof("payload") = 'object') OR
+        ("kind" = 'system' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
+            AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NOT NULL
+            AND btrim("system_event_id") <> '' AND "parent_delivery_agent_thread_id" IS NULL AND jsonb_typeof("payload") = 'object') OR
+        ("kind" = 'parent_delivery' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
+            AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
+            AND "parent_delivery_agent_thread_id" IS NOT NULL AND btrim("parent_delivery_agent_thread_id") <> '' AND "payload" IS NULL)
+    );
+
+CREATE OR REPLACE FUNCTION "enforce_conversation_run_event_append"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    previous_sequence INTEGER;
+    terminal_exists BOOLEAN;
+    current_attempt INTEGER;
+    run_state "AgentRunState";
+    run_conversation_id TEXT;
+BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended(NEW."run_id", 0));
+    SELECT "attempt", "state", "conversation_id" INTO current_attempt, run_state, run_conversation_id
+    FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+    IF run_state IS NULL THEN RAISE EXCEPTION 'RunEvent run does not exist'; END IF;
+    IF run_conversation_id IS NULL THEN RAISE EXCEPTION 'RunEvent requires a conversation-bound AgentRun'; END IF;
+    IF NEW."conversation_id" IS DISTINCT FROM run_conversation_id THEN
+        RAISE EXCEPTION 'RunEvent must bind the exact AgentRun Conversation';
+    END IF;
+    IF NEW."attempt" IS DISTINCT FROM current_attempt THEN
+        RAISE EXCEPTION 'RunEvent must bind the current AgentRun attempt';
+    END IF;
+    SELECT COALESCE(MAX("sequence"), 0),
+           COALESCE(bool_or("type" IN ('run.completed', 'run.failed', 'run.cancelled')) FILTER (WHERE "attempt" = NEW."attempt"), false)
+      INTO previous_sequence, terminal_exists
+      FROM "conversation_run_events" WHERE "run_id" = NEW."run_id";
+    IF terminal_exists THEN
+        RAISE EXCEPTION 'RunEvent attempt stream is terminal';
+    END IF;
+    IF NEW."sequence" <> previous_sequence + 1 THEN
+        RAISE EXCEPTION 'RunEvent sequence must be contiguous';
+    END IF;
+    IF NEW."type" = 'run.completed' AND run_state <> 'completed' THEN
+        RAISE EXCEPTION 'run.completed event requires Completed AgentRun authority';
+    ELSIF NEW."type" = 'run.failed' AND run_state <> 'failed' THEN
+        RAISE EXCEPTION 'run.failed event requires Failed AgentRun authority';
+    ELSIF NEW."type" = 'run.cancelled' AND run_state <> 'cancelled' THEN
+        RAISE EXCEPTION 'run.cancelled event requires Cancelled AgentRun authority';
+    ELSIF NEW."type" NOT IN ('run.completed', 'run.failed', 'run.cancelled') AND run_state IN ('completed', 'failed', 'cancelled') THEN
+        RAISE EXCEPTION 'terminal AgentRun accepts only its matching terminal event';
+    END IF;
+    IF NEW."type" IN ('child.run.completed', 'child.run.failed', 'child.run.cancelled') AND NOT EXISTS (
+        SELECT 1
+        FROM "child_run_completion_deliveries" delivery
+        JOIN "agent_runs" child ON child."id" = delivery."child_run_id"
+        WHERE delivery."child_run_id" = NEW."payload"->>'childRunId'
+          AND delivery."child_attempt"::TEXT = NEW."payload"->>'childAttempt'
+          AND delivery."parent_run_id" = NEW."run_id"
+          AND delivery."parent_attempt" = NEW."attempt"
+          AND delivery."parent_event_sequence" = NEW."sequence"
+          AND delivery."outcome" = 'delivered'
+          AND child."attempt" = delivery."child_attempt"
+          AND ((NEW."type" = 'child.run.completed' AND child."state" = 'completed') OR (NEW."type" = 'child.run.failed' AND child."state" = 'failed') OR (NEW."type" = 'child.run.cancelled' AND child."state" = 'cancelled'))
+    ) THEN
+        RAISE EXCEPTION 'child RunEvent requires child completion delivery authority';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION "enforce_conversation_timeline_entry"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    conversation_lifecycle "ConversationLifecycle";
+BEGIN
+    IF TG_OP <> 'INSERT' THEN
+        RAISE EXCEPTION 'ConversationTimelineEntry rows are append-only';
+    END IF;
+    IF NEW."position" <> 0 THEN
+        RAISE EXCEPTION 'ConversationTimelineEntry position is database allocated';
+    END IF;
+    IF NEW."kind" = 'message' THEN
+        IF NEW."message_id" IS NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
+            OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
+            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
+            OR NEW."payload" IS NOT NULL THEN
+            RAISE EXCEPTION 'message timeline entry requires only exact Message provenance';
+        END IF;
+    ELSIF NEW."kind" = 'run_event' THEN
+        IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NULL OR NEW."run_event_sequence" IS NULL
+            OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
+            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
+            OR NEW."payload" IS NOT NULL THEN
+            RAISE EXCEPTION 'run-event timeline entry requires only exact RunEvent provenance';
+        END IF;
+    ELSIF NEW."kind" = 'membership' THEN
+        IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
+            OR NEW."membership_event_id" IS NULL OR NEW."participant_user_id" IS NULL
+            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
+            OR jsonb_typeof(NEW."payload") IS DISTINCT FROM 'object' THEN
+            RAISE EXCEPTION 'membership timeline entry requires only exact participant event provenance';
+        END IF;
+        IF NEW."payload"->>'action' NOT IN ('joined', 'access_ended')
+            OR NEW."payload"->>'userId' IS DISTINCT FROM NEW."participant_user_id" THEN
+            RAISE EXCEPTION 'membership timeline payload must bind its exact participant action';
+        END IF;
+    ELSIF NEW."kind" = 'system' THEN
+        IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
+            OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
+            OR NEW."system_event_id" IS NULL OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
+            OR jsonb_typeof(NEW."payload") IS DISTINCT FROM 'object' THEN
+            RAISE EXCEPTION 'system timeline entry requires only exact system event provenance';
+        END IF;
+    ELSIF NEW."kind" = 'parent_delivery' THEN
+        IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
+            OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
+            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_agent_thread_id" IS NULL
+            OR NEW."payload" IS NOT NULL THEN
+            RAISE EXCEPTION 'parent-delivery timeline entry requires only exact delivery provenance';
+        END IF;
+        IF NOT EXISTS (
+            SELECT 1
+            FROM "agent_thread_parent_deliveries" delivery
+            WHERE delivery."id" = NEW."parent_delivery_agent_thread_id"
+              AND delivery."parent_conversation_id" = NEW."conversation_id"
+        ) THEN
+            RAISE EXCEPTION 'Agent-thread delivery timeline entry requires exact immediate-parent authority';
+        END IF;
+    ELSE
+        RAISE EXCEPTION 'unsupported ConversationTimelineEntry kind';
+    END IF;
+    SELECT "lifecycle" INTO conversation_lifecycle
+    FROM "conversations"
+    WHERE "id" = NEW."conversation_id"
+    FOR UPDATE;
+    IF conversation_lifecycle IS NULL OR conversation_lifecycle <> 'open' THEN
+        RAISE EXCEPTION 'ConversationTimelineEntry requires an open Conversation';
+    END IF;
+    SELECT COALESCE(max("position"), 0) + 1 INTO NEW."position"
+    FROM "conversation_timeline_entries"
+    WHERE "conversation_id" = NEW."conversation_id";
+    NEW."occurred_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+    UPDATE "conversations"
+    SET "updated_at" = NEW."occurred_at",
+        "activity_sequence" = DEFAULT
+    WHERE "id" = NEW."conversation_id";
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION "enforce_child_run_completion_delivery"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    child_attempt INTEGER;
+    child_parent_run_id TEXT;
+    child_root_run_id TEXT;
+    child_silo_id TEXT;
+    child_state "AgentRunState";
+    reservation_parent_run_id TEXT;
+    reservation_root_run_id TEXT;
+    parent_attempt INTEGER;
+    parent_silo_id TEXT;
+    parent_root_run_id TEXT;
+    parent_conversation_id TEXT;
+BEGIN
+    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'child completion deliveries are append-only'; END IF;
+    SELECT "attempt", "parent_run_id", "root_run_id", "silo_id", "state"
+    INTO child_attempt, child_parent_run_id, child_root_run_id, child_silo_id, child_state
+    FROM "agent_runs" WHERE "id" = NEW."child_run_id" FOR UPDATE;
+    IF child_parent_run_id IS NULL OR child_state NOT IN ('completed', 'failed', 'cancelled') THEN RAISE EXCEPTION 'child completion delivery requires terminal child authority'; END IF;
+    SELECT "parent_run_id", "root_run_id" INTO reservation_parent_run_id, reservation_root_run_id FROM "child_run_reservations" WHERE "child_run_id" = NEW."child_run_id" FOR UPDATE;
+    SELECT "attempt", "silo_id", "root_run_id", "conversation_id"
+    INTO parent_attempt, parent_silo_id, parent_root_run_id, parent_conversation_id
+    FROM "agent_runs" WHERE "id" = NEW."parent_run_id" FOR UPDATE;
+    IF NEW."child_attempt" IS DISTINCT FROM child_attempt OR NEW."parent_attempt" IS DISTINCT FROM parent_attempt THEN
+        RAISE EXCEPTION 'child completion delivery must bind the current child and parent attempts';
+    END IF;
+    IF reservation_parent_run_id IS NULL OR parent_silo_id IS NULL OR NEW."parent_run_id" <> child_parent_run_id OR reservation_parent_run_id <> child_parent_run_id OR reservation_root_run_id <> child_root_run_id OR parent_silo_id <> child_silo_id OR parent_root_run_id <> child_root_run_id THEN RAISE EXCEPTION 'child completion delivery lineage mismatch'; END IF;
+    IF NEW."outcome" = 'delivered' THEN
+        IF parent_conversation_id IS NULL OR NEW."parent_event_sequence" IS NULL THEN RAISE EXCEPTION 'delivered child completion requires a parent conversation stream and event sequence'; END IF;
+    ELSIF NEW."outcome" = 'no_parent_stream' THEN
+        IF parent_conversation_id IS NOT NULL OR NEW."parent_event_sequence" IS NOT NULL THEN RAISE EXCEPTION 'no_parent_stream outcome requires no parent conversation stream'; END IF;
+    ELSE
+        IF NEW."parent_event_sequence" IS NOT NULL OR NOT EXISTS (
+            SELECT 1 FROM "conversation_run_events"
+            WHERE "run_id" = NEW."parent_run_id" AND "attempt" = NEW."parent_attempt"
+              AND "type" IN ('run.completed', 'run.failed', 'run.cancelled')
+        ) THEN RAISE EXCEPTION 'parent_stream_terminal outcome requires terminal parent attempt stream'; END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION "enforce_child_run_completion_delivery_event"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    child_state "AgentRunState";
+    expected_event_type TEXT;
+BEGIN
+    IF NEW."outcome" <> 'delivered' THEN RETURN NULL; END IF;
+    SELECT "state" INTO child_state FROM "agent_runs" WHERE "id" = NEW."child_run_id" AND "attempt" = NEW."child_attempt";
+    expected_event_type := CASE child_state WHEN 'completed' THEN 'child.run.completed' WHEN 'failed' THEN 'child.run.failed' ELSE 'child.run.cancelled' END;
+    IF NOT EXISTS (
+        SELECT 1 FROM "conversation_run_events"
+        WHERE "run_id" = NEW."parent_run_id" AND "attempt" = NEW."parent_attempt"
+          AND "sequence" = NEW."parent_event_sequence" AND "type" = expected_event_type
+          AND "payload"->>'childRunId' = NEW."child_run_id"
+          AND "payload"->>'childAttempt' = NEW."child_attempt"::TEXT
+    ) THEN RAISE EXCEPTION 'delivered child completion requires exact parent attempt event'; END IF;
+    RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION "enforce_terminal_agent_run_event"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    expected_type TEXT;
+BEGIN
+    IF NEW."conversation_id" IS NULL OR NEW."state" NOT IN ('completed', 'failed', 'cancelled') THEN RETURN NULL; END IF;
+    expected_type := CASE NEW."state" WHEN 'completed' THEN 'run.completed' WHEN 'failed' THEN 'run.failed' ELSE 'run.cancelled' END;
+    IF NOT EXISTS (SELECT 1 FROM "conversation_run_events" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "type" = expected_type) THEN
+        RAISE EXCEPTION 'terminal conversation AgentRun requires its matching terminal RunEvent';
+    END IF;
+    RETURN NULL;
+END;
+$$;
+CREATE TRIGGER "conversation_run_events_append_only" BEFORE UPDATE OR DELETE ON "conversation_run_events"
+    FOR EACH ROW EXECUTE FUNCTION "reject_conversation_immutable_mutation"();
+CREATE TRIGGER "child_run_completion_deliveries_authority" BEFORE INSERT OR UPDATE OR DELETE ON "child_run_completion_deliveries"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_completion_delivery"();
 CREATE TRIGGER "tool_invocations_authorization_evidence" BEFORE INSERT OR UPDATE ON "tool_invocations" FOR EACH ROW EXECUTE FUNCTION "enforce_tool_invocation_authorization_evidence"();
 CREATE TRIGGER "authorization_grants_immutable" BEFORE UPDATE OR DELETE ON "authorization_grants" FOR EACH ROW EXECUTE FUNCTION "enforce_authorization_grant_update"();
 CREATE TRIGGER "capability_catalog_revisions_immutable" BEFORE UPDATE OR DELETE ON "capability_catalog_revisions" FOR EACH ROW EXECUTE FUNCTION "reject_capability_catalog_revision_mutation"();

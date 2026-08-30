@@ -75,7 +75,7 @@ class PrismaToolInvocationLifecycleEventAppendRepository implements ToolInvocati
 		if (run === null || run.attempt !== event.attempt || !_EventAllowedForRun(run.state, event.eventType)) return false;
 		if (run.conversationId === null) return true;
 		const maximum = await this.transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-		await this.transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: event.eventType, payload: event.payload as Prisma.InputJsonValue, occurredAt: new Date() } });
+		await this.transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, attempt: run.attempt, sequence: (maximum._max.sequence ?? 0) + 1, type: event.eventType, payload: event.payload as Prisma.InputJsonValue, occurredAt: new Date() } });
 		return true;
 	}
 }

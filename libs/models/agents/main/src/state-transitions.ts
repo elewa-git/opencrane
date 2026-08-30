@@ -1,7 +1,6 @@
 import type { AgentRevisionState } from "./agent-revision.types";
 import type { AgentRunState } from "./agent-run.types";
 import type { AgentServiceState } from "./agent-service.types";
-import type { RunEvent } from "./run-event.types";
 
 /** Legal next states for each agent-service lifecycle state. */
 const _AGENT_SERVICE_TRANSITIONS: Readonly<Record<AgentServiceState, readonly AgentServiceState[]>> = {
@@ -61,32 +60,4 @@ export function __IsAgentRevisionTransitionAllowed(current: AgentRevisionState, 
 export function __IsAgentRunTransitionAllowed(current: AgentRunState, next: AgentRunState): boolean
 {
 	return _AGENT_RUN_TRANSITIONS[current].includes(next);
-}
-
-/**
- * Return whether an event may be appended to a run's event stream.
- *
- * The stream has no gaps: the first event is sequence 1, and every later event must belong to the
- * same run and be exactly one higher than the previous. Pass `null` as `previous` for the first
- * event. A false result means the caller is about to create a gap or a duplicate, which would
- * make replay and cursors unreliable.
- *
- * No caller outside this package's tests yet — the rule is the contract writers check against.
- * @param previous - The last stored event for this run, or null when the stream is empty.
- * @param next - The event about to be appended.
- * @returns True only when appending keeps the stream contiguous and in one run.
- */
-export function __CanAppendRunEvent(previous: RunEvent | null, next: RunEvent): boolean
-{
-	if (!Number.isSafeInteger(next.sequence) || next.sequence < 1)
-	{
-		return false;
-	}
-
-	if (previous === null)
-	{
-		return next.sequence === 1;
-	}
-
-	return previous.runId === next.runId && next.sequence === previous.sequence + 1;
 }

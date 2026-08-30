@@ -143,6 +143,18 @@
         "adapter": "PrismaAgentRunAuthorityRepository",
         "contract": "AgentRunRetryTransactionRepository",
         "contractImportPath": "./run-authority.types",
+        "constructs": [
+          {
+            "adapter": "PrismaChildRunCompletionRepository",
+            "importPath": "./prisma-child-run-completion-repository"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-child-run-completion-repository.ts",
+        "adapter": "PrismaChildRunCompletionRepository",
+        "contract": "ChildRunCompletionRepository",
+        "contractImportPath": "./child-run-completion.types",
         "constructs": []
       },
       {
@@ -161,6 +173,10 @@
           {
             "adapter": "PrismaAgentRunWorkflowTaskReadRepository",
             "importPath": "./prisma-agent-run-workflow-task-read-repository"
+          },
+          {
+            "adapter": "PrismaChildRunCompletionRepository",
+            "importPath": "./prisma-child-run-completion-repository"
           }
         ]
       },
@@ -2013,6 +2029,18 @@
 		  {
 			"adapter": "PrismaRuntimeTerminalPendingToolRepository",
 			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-terminal-reporter.ts",
+		"adapter": "PrismaRuntimeTerminalChildDeliveryUnitOfWork",
+		"contract": "ChildRunCompletionRepository",
+		"contractImportPath": "./child-run-completion.types",
+		"constructs": [
+		  {
+			"adapter": "PrismaChildRunCompletionRepository",
+			"importPath": "./prisma-child-run-completion-repository"
 		  }
 		]
 	  },

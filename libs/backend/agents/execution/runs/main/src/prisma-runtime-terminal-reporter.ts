@@ -1,6 +1,7 @@
 import { AgentRunState, AgentRunTerminalReason, Prisma, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
 
-import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository";
+import type { ChildRunCompletionCommand, ChildRunCompletionRepository, ChildRunCompletionResult } from "./child-run-completion.types";
+import { PrismaChildRunCompletionRepository } from "./prisma-child-run-completion-repository";
 import { RuntimeRunFailureReasons } from "./runtime-event-reporter.types";
 import type { RuntimeTerminalEventType, RuntimeTerminalPendingToolRepository, RuntimeTerminalPendingToolUnitOfWork, RuntimeTerminalReportCommand, RuntimeTerminalReporter, RuntimeTerminalReportResult } from "./runtime-terminal-reporter.types";
 
@@ -29,13 +30,37 @@ export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
 		if (run.conversationId !== null)
 		{
 			const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-			await transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: command.eventType, payload: { terminalReason: terminal.payloadReason }, occurredAt: now } });
+			await transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, attempt: run.attempt, sequence: (maximum._max.sequence ?? 0) + 1, type: command.eventType, payload: { terminalReason: terminal.payloadReason }, occurredAt: now } });
 		}
 
 		// A terminal child must notify its parent in this same transaction; the delivery helper records a
 		// durable suppression instead when the parent stream is intentionally unavailable.
-		if (run.parentRunId !== null) await __DeliverChildRunCompletionInTransaction(transaction, { childRunId: run.id });
+		if (run.parentRunId !== null)
+		{
+			const childDelivery = new PrismaRuntimeTerminalChildDeliveryUnitOfWork(transaction);
+			await childDelivery.deliver({ childRunId: run.id });
+		}
 		return { outcome: "reported" };
+	}
+}
+
+/** Owns the transaction-scoped child-delivery repository used by terminal reporting. */
+class PrismaRuntimeTerminalChildDeliveryUnitOfWork implements ChildRunCompletionRepository
+{
+	/** Keeps child delivery in the transaction that contains the child's terminal state change. */
+	private readonly transaction: Prisma.TransactionClient;
+
+	/** Binds child delivery to the terminal report transaction. */
+	constructor(transaction: Prisma.TransactionClient)
+	{
+		this.transaction = transaction;
+	}
+
+	/** Delegates delivery without opening or committing a second transaction. */
+	deliver(command: ChildRunCompletionCommand): Promise<ChildRunCompletionResult>
+	{
+		const repository = new PrismaChildRunCompletionRepository(this.transaction);
+		return repository.deliver(command);
 	}
 }
 

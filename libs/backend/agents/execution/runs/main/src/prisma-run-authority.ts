@@ -1,4 +1,4 @@
-import { AgentRunState, AgentServiceState as PrismaAgentServiceState, type Prisma } from "@prisma/client";
+import { AgentRunState, AgentServiceState as PrismaAgentServiceState, ChildRunCompletionDeliveryOutcome, type Prisma } from "@prisma/client";
 
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
@@ -8,6 +8,7 @@ import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { PrismaAgentRunWorkflowTaskAdmissionUnitOfWork } from "./prisma-agent-run-workflow-task-admission-unit-of-work";
+import { PrismaChildRunCompletionRepository } from "./prisma-child-run-completion-repository";
 import type { AgentRunAuthoritySnapshot, AgentRunRetryTransactionRepository, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
 
 /** Maps a Prisma AgentRun lifecycle identifier to the target contract value. */
@@ -252,12 +253,30 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 		const updated = await transaction.agentRun.findUnique({ where: { id: run.id } });
 		if (updated === null)
 			return { status: "not_found" } as const;
+		await this._redeliverSuppressedChildren(run.id, command.expectedAttempt);
 
 		// 4. Admit the controller task in the same transaction as the advanced attempt. A task failure
 		// rolls the attempt back, so no run can exist without its durable controller task.
 		const admission = new PrismaAgentRunWorkflowTaskAdmissionUnitOfWork(this._transaction);
 		await admission.admit(this._workflow, { siloId: command.siloId, runId: run.id, attempt: nextAttempt });
 		return { status: "started", run: _mapRun(updated) } as const;
+	}
+
+	/** Reconsiders suppressed child results after advancing the parent; an unresolved delivery aborts the retry. */
+	private async _redeliverSuppressedChildren(parentRunId: string, previousParentAttempt: number): Promise<void>
+	{
+		const suppressed = await this._transaction.childRunCompletionDelivery.findMany({ where: { parentRunId, parentAttempt: { lte: previousParentAttempt }, outcome: ChildRunCompletionDeliveryOutcome.ParentStreamTerminal }, select: { childRunId: true } });
+		const childDelivery = new PrismaChildRunCompletionRepository(this._transaction);
+		for (const childRunId of new Set(suppressed.map(function _Child(delivery) { return delivery.childRunId; })))
+		{
+			const result = await childDelivery.deliver({ childRunId });
+			switch (result.outcome)
+			{
+				case "denied":
+				case "suppressed": throw new Error("parent retry could not reconcile a terminal child delivery");
+				default: break;
+			}
+		}
 	}
 
 	/** Reads the committed next attempt after the transaction that tried to create it rolled back. */
