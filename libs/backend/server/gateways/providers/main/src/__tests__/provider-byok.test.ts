@@ -7,6 +7,10 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { _DeprovisionByokKey, _ProvisionByokKey } from "@opencrane/backend/server/gateways/model-routing";
+
+import { _log } from "../log";
+import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, type ProviderEffectCommandExecutor } from "../provider-effect-command.types";
 import type { ProviderGatewayAuthorizationFactory } from "../provider-gateway-authority.types";
 import { providerByokRouter } from "../routes/provider-byok";
 
@@ -20,7 +24,7 @@ const _NS = "opencrane-acme";
  * Builds a Prisma stub for the credential, model, and routing-default calls made while a BYOK key
  * is provisioned.
  */
-function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map()): PrismaClient
+function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map(), commands: Map<string, Row> = new Map()): PrismaClient
 {
   let seq = 0;
   let modelSeq = 0;
@@ -80,6 +84,7 @@ function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map
       {
         return Array.from(store.values()).find(function _m(r) { return match(r, args.where); }) ?? null;
       },
+      findUnique: async function _findUnique(args: { where: { id: string } }) { return store.get(args.where.id) ?? null; },
       create: async function _create(args: { data: Row })
       {
         const id = `cred-${++seq}`;
@@ -104,6 +109,15 @@ function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map
         return { count };
       },
     },
+    providerEffectCommand: {
+      create: async function _createCommand(args: { data: Row })
+      {
+        const now = new Date("2026-06-30T00:00:00.000Z");
+        const row: Row = { state: "Pending", deliveryCount: 0, claimFence: null, claimExpiresAt: null, failureCode: null, result: null, completedAt: null, createdAt: now, updatedAt: now, ...args.data };
+        commands.set(row.id as string, row);
+        return row;
+      },
+    },
   } as unknown as PrismaClient;
 	Object.assign(client, { $transaction: async function _Transaction(operation: (transaction: PrismaClient) => Promise<unknown>) { return operation(client); } });
 	return client;
@@ -115,7 +129,12 @@ function _Authorization(allow: boolean): ProviderGatewayAuthorizationFactory<Pri
 	return (function _CreateAuthorization()
 	{
 		return {
-			admitPrincipal: async function _Admit() { return { outcome: allow ? "allow" : "deny" }; },
+			admitPrincipal: async function _Admit()
+			{
+				if (!allow)
+					return { outcome: "deny", evidence: null };
+				return { outcome: "allow", evidence: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } };
+			},
 			listPrincipalEntitled: async function _List(command: { resources: readonly unknown[] }) { return allow ? command.resources : []; },
 		};
 	}) as unknown as ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>;
@@ -163,8 +182,27 @@ function _mockCoreApi(secrets: Map<string, k8s.V1Secret>): k8s.CoreV1Api
 function _buildApp(store: Map<string, Row>, secrets: Map<string, k8s.V1Secret>, user: { authorized: boolean } = { authorized: true }, models: Map<string, Row> = new Map()): Express
 {
   const app = express();
+  const commands = new Map<string, Row>();
+  const prisma = _mockPrisma(store, models, commands);
+  const coreApi = _mockCoreApi(secrets);
+  const executor = {
+	reconcileNext: async function _ReconcileNext() { return false; },
+    execute: async function _Execute(commandId: string, material = {})
+    {
+      const command = commands.get(commandId)!;
+      const payload = command.payload as { provider: string };
+      if (command.kind === ProviderEffectCommandKinds.SetByokKey)
+      {
+        const providerKey = (material as { providerKey?: string }).providerKey ?? "";
+        const provisioned = await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: payload.provider, apiKey: providerKey, log: _log });
+        return { status: ProviderEffectExecutionStatuses.Succeeded, result: { kind: ProviderEffectCommandKinds.SetByokKey, providerCredentialId: provisioned.row.id, litellmRegistered: provisioned.litellmRegistered } };
+      }
+      await _DeprovisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: payload.provider });
+      return { status: ProviderEffectExecutionStatuses.Succeeded, result: { kind: ProviderEffectCommandKinds.DeleteByokKey } };
+    },
+  } as ProviderEffectCommandExecutor;
   app.use(express.json());
-  app.use("/api/v1/providers/byok", providerByokRouter(_mockPrisma(store, models), _mockCoreApi(secrets), _NS, function _Caller() { return { siloId: "acme", principalId: "principal-1" }; }, _Authorization(user.authorized)));
+  app.use("/api/v1/providers/byok", providerByokRouter(prisma, coreApi, _NS, function _Caller() { return { siloId: "acme", principalId: "principal-1" }; }, _Authorization(user.authorized), executor));
   return app;
 }
 

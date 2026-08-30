@@ -211,8 +211,8 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
 
     await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "anthropic", apiKey: "sk-test", log: _log });
 
-    const infoCalls = fetchMock.mock.calls.filter(function _isInfo(c) { return (c[0] as string).includes("/model/info"); });
-    expect(infoCalls).toHaveLength(0);
+    const embeddingCreates = fetchMock.mock.calls.filter(function _isEmbeddingCreate(c) { return (c[0] as string).includes("/model/new") && String((c[1] as RequestInit).body).includes("embedding"); });
+    expect(embeddingCreates).toHaveLength(0);
   });
 
 	it("does not crash the set when embedding registration fails (best-effort, non-fatal)", async function _resilient()

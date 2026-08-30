@@ -5,6 +5,28 @@ enum ModelRoutingScope {
   ClusterTenant @map("clusterTenant")
 }
 
+/// External provider operations admitted by the product database before Kubernetes or LiteLLM runs.
+enum ProviderEffectCommandKind {
+  SetByokKey    @map("set_byok_key")
+  DeleteByokKey @map("delete_byok_key")
+  RegisterModel @map("register_model")
+}
+
+/// Delivery state for one admitted provider operation. A claim is leased so a crashed executor can retry.
+enum ProviderEffectCommandState {
+  Pending          @map("pending")
+  AwaitingMaterial @map("awaiting_material")
+  Claimed          @map("claimed")
+  Succeeded        @map("succeeded")
+  Failed           @map("failed")
+}
+
+/// Whether an executor can replay a command from stored data or needs a secret supplied in memory.
+enum ProviderEffectMaterialRequirement {
+  None                 @map("none")
+  EphemeralProviderKey @map("ephemeral_provider_key")
+}
+
 /// A provider API credential owned at opencrane-ui (Global) or ClusterTenant scope.
 /// OpenCrane stores only a REFERENCE to the External-Secrets-synced k8s Secret holding the key —
 /// never the raw key. `litellmCredentialName` is set only when registered via LiteLLM /credentials
@@ -49,4 +71,40 @@ model ModelDefinition {
   @@unique([scope, clusterTenant, publicModelName])
   @@index([clusterTenant])
   @@map("model_definitions")
+}
+
+/// One authorization-bound instruction for the control plane to change provider custody or LiteLLM.
+/// Payload stores identifiers and non-secret routing arguments. A raw provider key is represented only
+/// by `argumentsDigest` and must be supplied again in memory if execution has not reached Secret custody.
+model ProviderEffectCommand {
+  id                              String                            @id @default(cuid())
+  siloId                          String                            @map("silo_id")
+  principalId                     String                            @map("principal_id")
+  kind                            ProviderEffectCommandKind
+  resourceKind                    String                            @map("resource_kind")
+  resourceId                      String                            @map("resource_id")
+  resourceRevision                String                            @map("resource_revision")
+  argumentsDigest                 String                            @map("arguments_digest")
+  materialVerifier                String?                           @map("material_verifier")
+  authorizationDecisionDigest     String                            @map("authorization_decision_digest")
+  authorizationPolicyRevisionHash String                            @map("authorization_policy_revision_hash")
+  effectiveAuthorizationDigest    String                            @map("effective_authorization_digest")
+  approvalId                      String?                           @map("approval_id")
+  executorProfile                 String                            @map("executor_profile")
+  materialRequirement             ProviderEffectMaterialRequirement @default(None) @map("material_requirement")
+  payload                         Json
+  state                           ProviderEffectCommandState        @default(Pending)
+  deliveryCount                   Int                               @default(0) @map("delivery_count")
+  claimFence                      String?                           @map("claim_fence")
+  claimExpiresAt                  DateTime?                         @map("claim_expires_at")
+  result                          Json?
+  failureCode                     String?                           @map("failure_code")
+  createdAt                       DateTime                          @default(now()) @map("created_at")
+  updatedAt                       DateTime                          @updatedAt @map("updated_at")
+  completedAt                     DateTime?                         @map("completed_at")
+
+  @@unique([kind, resourceId, resourceRevision])
+  @@index([state, claimExpiresAt])
+  @@index([siloId, createdAt])
+  @@map("provider_effect_commands")
 }

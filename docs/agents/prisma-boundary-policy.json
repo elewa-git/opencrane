@@ -1079,6 +1079,13 @@
         "contract": "RuntimeWaitReasonRepository",
         "contractImportPath": "./runtime-wait-reasons.types",
         "constructs": []
+      },
+      {
+        "path": "libs/backend/server/gateways/providers/main/src/prisma-provider-effect-command-repository.ts",
+        "adapter": "PrismaProviderEffectCommandRepository",
+        "contract": "ProviderEffectCommandRepository",
+        "contractImportPath": "./provider-effect-command.types",
+        "constructs": []
       }
     ],
     "unitsOfWork": [
@@ -1454,6 +1461,18 @@
           {
             "adapter": "PrismaAuthorizationAuthority",
             "importPath": "@opencrane/backend/server/iam/authorization"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/gateways/providers/main/src/prisma-provider-effect-command-unit-of-work.ts",
+        "adapter": "PrismaProviderEffectCommandUnitOfWork",
+        "contract": "ProviderEffectCommandUnitOfWork",
+        "contractImportPath": "./provider-effect-command.types",
+        "constructs": [
+          {
+            "adapter": "PrismaProviderEffectCommandRepository",
+            "importPath": "./prisma-provider-effect-command-repository"
           }
         ]
       },
@@ -2086,6 +2105,9 @@
       "apps/opencrane/src/app/organization-members-composition.ts",
       "apps/opencrane/src/app/user-onboarding-composition.ts",
       "apps/opencrane/src/app/persona-approval-composition.ts",
+      "libs/backend/server/gateways/providers/main/src/provider-effect-command-composition.ts",
+      "libs/backend/server/gateways/providers/main/src/provider-effect-command-handler.ts",
+      "libs/backend/server/gateways/providers/main/src/provider-effect-command-repository.factory.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 		"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
 		"libs/backend/agents/personal/personas/main/src/profile/prisma-persona-workflow-evidence.ts",
@@ -2124,6 +2146,20 @@
     }
   ],
   "exemptions": [
+	{
+	  "path": "libs/backend/server/gateways/providers/main/src/routes/model-registry.ts",
+	  "owner": "provider-gateway",
+	  "operations": ["delegate"],
+	  "reason": "The provider gateway UnitOfWork supplies one authorization-bound transaction to the existing model route callback; move its model projection delegates behind a route repository when the remaining model CRUD callbacks are extracted together.",
+	  "expiresOn": "2026-09-30"
+	},
+	{
+	  "path": "libs/backend/server/gateways/providers/main/src/routes/provider-byok.ts",
+	  "owner": "provider-gateway",
+	  "operations": ["delegate"],
+	  "reason": "The provider gateway UnitOfWork supplies one authorization-bound transaction to the existing BYOK route callback; move its provider projection delegates behind a route repository when the remaining BYOK reads are extracted together.",
+	  "expiresOn": "2026-09-30"
+	},
     {
       "path": "libs/backend/server/gateways/model-routing/main/src/core/provision-byok-key.ts",
       "owner": "model-routing",

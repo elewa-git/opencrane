@@ -31,6 +31,14 @@ function created(description: string, schema: object)
   };
 }
 
+function pending(description: string, includeModelDefinitionId = false)
+{
+  return {
+    description,
+    content: { "application/json": { schema: { type: "object", required: ["error", "code", "commandId"], properties: { error: { type: "string" }, code: { type: "string", enum: ["PROVIDER_EFFECT_PENDING"] }, commandId: { type: "string", format: "uuid" }, ...(includeModelDefinitionId ? { modelDefinitionId: { type: "string", format: "uuid" } } : {}) } } } },
+  };
+}
+
 /** OpenAPI path fragments owned by the providers domain (composed into the opencrane-ui spec). */
 export const _ProvidersOpenapiPaths = {
   "/providers/byok": {
@@ -47,7 +55,7 @@ export const _ProvidersOpenapiPaths = {
   "/providers/byok/{provider}": {
     put: {
       operationId: "setByokProviderKey",
-      summary: "Set or refresh a provider's raw key (writes a k8s Secret + LiteLLM credential)",
+      summary: "Admit and deliver a provider key change through the durable effect authority",
       tags: ["Provider Keys"],
       parameters: [{ name: "provider", in: "path", required: true, schema: { type: "string", enum: ["openai", "anthropic", "gemini", "mistral", "deepseek", "glm"] } }],
       requestBody: {
@@ -57,16 +65,21 @@ export const _ProvidersOpenapiPaths = {
       responses: {
         200: ok("Key set; returns the provider's status.", { $ref: "#/components/schemas/ByokProviderKeyStatus" }),
         400: badRequest("Unsupported provider (code UNSUPPORTED_PROVIDER) or missing apiKey (code VALIDATION_ERROR)."),
+		503: pending("The command is durable but needs a later retry. Resubmit the returned commandId with the same raw key."),
       },
     },
     delete: {
       operationId: "deleteByokProviderKey",
-      summary: "Remove a provider's key (deletes the Secret, LiteLLM credential, and record)",
+      summary: "Admit and deliver durable removal of a provider key",
       tags: ["Provider Keys"],
-      parameters: [{ name: "provider", in: "path", required: true, schema: { type: "string", enum: ["openai", "anthropic", "gemini", "mistral", "deepseek", "glm"] } }],
+      parameters: [
+		{ name: "provider", in: "path", required: true, schema: { type: "string", enum: ["openai", "anthropic", "gemini", "mistral", "deepseek", "glm"] } },
+		{ name: "commandId", in: "query", required: false, schema: { type: "string", format: "uuid" }, description: "Command id returned by a previous PROVIDER_EFFECT_PENDING response." },
+	  ],
       responses: {
         204: { description: "Key removed (idempotent — 204 even when no key was set)." },
         400: badRequest("Unsupported provider (code UNSUPPORTED_PROVIDER)."),
+		503: pending("The removal is durable and the background reconciler or this exact command retry may resume it."),
       },
     },
   },
@@ -149,7 +162,7 @@ export const _ProvidersOpenapiPaths = {
     },
     post: {
       operationId: "createModel",
-      summary: "Create a model definition and register it best-effort with LiteLLM",
+      summary: "Create a model definition and durably register it with LiteLLM",
       tags: ["Model Registry"],
       requestBody: {
         required: true,
@@ -159,6 +172,7 @@ export const _ProvidersOpenapiPaths = {
         201: created("Model definition created.", { $ref: "#/components/schemas/ModelDefinition" }),
         400: badRequest("Request body failed validation, or the providerCredentialId is missing or owned by another ClusterTenant (code CREDENTIAL_SCOPE_MISMATCH)."),
         403: { description: "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE).", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+		503: pending("The model definition and registration command are durable but registration has not completed.", true),
       },
     },
   },
@@ -201,5 +215,21 @@ export const _ProvidersOpenapiPaths = {
         404: notFound("Model definition not found."),
       },
     },
+  },
+
+  "/models/{id}/registration-commands/{commandId}": {
+	post: {
+	  operationId: "resumeModelRegistration",
+	  summary: "Resume one exact durable LiteLLM model registration",
+	  tags: ["Model Registry"],
+	  parameters: [
+		{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+		{ name: "commandId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+	  ],
+	  responses: {
+		200: ok("Model registration completed.", { $ref: "#/components/schemas/ModelDefinition" }),
+		503: pending("The exact model registration remains pending.", true),
+	  },
+	},
   },
 };

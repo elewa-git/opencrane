@@ -19,6 +19,7 @@ import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 import { _RegisterRoutes } from "./routes";
 import { _CreateHttpRequestLogger } from "./telemetry";
 import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
+import type { ProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
 
 /**
  * Build the audit-log appender for the standalone first-owner claim, or null when that claim is not configured.
@@ -54,7 +55,7 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * @param mcpWorkflows - Shared transaction and worker authority for saved MCP jobs.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository & SelfRunCancellationRepository, serverNamespace: string, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition): Express
+export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository & SelfRunCancellationRepository, serverNamespace: string, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects?: ProviderEffectCommandExecutor): Express
 {
 	const app = express();
 
@@ -81,7 +82,7 @@ export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, r
 		app.use(organizationMembers.productAccess);
 
 	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, runCancellation, serverNamespace, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime);
+	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, runCancellation, serverNamespace, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

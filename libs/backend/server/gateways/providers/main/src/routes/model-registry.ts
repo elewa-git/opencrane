@@ -1,13 +1,25 @@
+import { randomUUID } from "node:crypto";
+
 import { Router } from "express";
 import { GeneratedOutputCapability, ModelRoutingScope, type ModelDefinition, type ModelDefinitionWrite } from "@opencrane/contracts";
 import type { Prisma, PrismaClient, ModelDefinition as PrismaModelDefinition } from "@prisma/client";
 
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
-import { _RegisterLiteLlmModel } from "@opencrane/backend/server/gateways/model-routing";
 
-import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCallerResolver } from "../provider-gateway-authority.types";
+import type { ProviderGatewayAuthorizationFactory, ProviderGatewayCaller, ProviderGatewayCallerResolver } from "../provider-gateway-authority.types";
 import { _GrantProviderResourceCreatorUse, _RequireProviderGatewayAdministration, _RequireProviderGatewayCaller, _ResolveProviderGatewayCaller, _SendProviderGatewayAuthorizationError } from "../provider-gateway-authorization";
+import { _CreateProviderEffectCommandExecutor } from "../provider-effect-command-composition";
+import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandExecutor, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 import { PrismaProviderGatewayUnitOfWork } from "../prisma-provider-gateway-unit-of-work";
+
+/** Control-plane profile that may consume model-registration commands created by this route. */
+const _PROVIDER_EFFECT_EXECUTOR_PROFILE = "opencrane-control-plane/provider-effect-v1";
+
+/** Bind model delivery to the current caller, exact definition, and control-plane executor profile. */
+function _effectContext(caller: ProviderGatewayCaller, modelDefinitionId: string): ProviderEffectExecutionContext
+{
+	return { siloId: caller.siloId, principalId: caller.principalId, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: modelDefinitionId, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE };
+}
 
 /**
  * Project a persisted model-definition row into its contract DTO. The Prisma enum values map
@@ -113,7 +125,7 @@ async function _resolveCredential(prisma: Prisma.TransactionClient, providerCred
   {
     return { error: "providerCredentialId is owned by a different ClusterTenant.", code: "CREDENTIAL_SCOPE_MISMATCH" };
   }
-  return { secretRef: credential.secretRef, litellmCredentialName: credential.litellmCredentialName };
+  return { secretRef: credential.secretRef, litellmCredentialName: credential.litellmCredentialName ?? null };
 }
 
 /**
@@ -137,7 +149,7 @@ async function _resolveCredential(prisma: Prisma.TransactionClient, providerCred
  * @param prisma - Prisma client used for persistence.
  * @returns Configured Express router.
  */
-export function modelRegistryRouter(prisma: PrismaClient, resolveCaller: ProviderGatewayCallerResolver = _ResolveProviderGatewayCaller, createAuthorization?: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>): Router
+export function modelRegistryRouter(prisma: PrismaClient, resolveCaller: ProviderGatewayCallerResolver = _ResolveProviderGatewayCaller, createAuthorization?: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>, effectExecutor: ProviderEffectCommandExecutor = _CreateProviderEffectCommandExecutor(prisma)): Router
 {
   const router = Router();
 	const models = new PrismaProviderGatewayUnitOfWork(prisma, createAuthorization);
@@ -203,23 +215,67 @@ export function modelRegistryRouter(prisma: PrismaClient, resolveCaller: Provide
     // 2. Resolve + scope-check the backing credential (when set) — see _resolveCredential.
 	try
 	{
-		const created = await models.run(async function _Create(transaction, authorization)
+		const commandId = randomUUID();
+		const modelDefinitionId = randomUUID();
+		const admitted = await models.runDatabaseMutation(async function _Create(transaction, authorization, effects)
 		{
-			await _RequireProviderGatewayAdministration(authorization, caller, { operation: "create-model-definition", write });
-			const credentialResult = await _resolveCredential(transaction, write.providerCredentialId, scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null);
+			const clusterTenant = scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null;
+			const credentialResult = await _resolveCredential(transaction, write.providerCredentialId, clusterTenant);
 			if ("error" in credentialResult)
 				return credentialResult;
-			const litellmModelId = await _RegisterLiteLlmModel({ publicModelName: write.publicModelName.trim(), upstreamModel: write.upstreamModel.trim(), scope, clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null, apiBase: write.apiBase?.trim() || null, apiKeyEnvRef: credentialResult.secretRef, litellmCredentialName: credentialResult.litellmCredentialName });
-			const model = await transaction.modelDefinition.create({ data: { scope: _toPrismaScope(scope), clusterTenant: scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null, publicModelName: write.publicModelName.trim(), litellmModelId, upstreamModel: write.upstreamModel.trim(), apiBase: write.apiBase?.trim() || null, isDefault: write.isDefault ?? false, providerCredentialId: write.providerCredentialId ?? null, generatedOutputCapabilities: write.generatedOutputCapabilities ?? [] } });
+			const publicModelName = write.publicModelName.trim();
+			const upstreamModel = write.upstreamModel.trim();
+			const apiBase = write.apiBase?.trim() || null;
+			const admission = await _RequireProviderGatewayAdministration(authorization, caller, { operation: "create-model-definition", commandId, modelDefinitionId, scope, clusterTenant, publicModelName, upstreamModel, apiBase, providerCredentialId: write.providerCredentialId ?? null, generatedOutputCapabilities: write.generatedOutputCapabilities ?? [] });
+			const model = await transaction.modelDefinition.create({ data: { id: modelDefinitionId, scope: _toPrismaScope(scope), clusterTenant, publicModelName, litellmModelId: `pending:${commandId}`, upstreamModel, apiBase, isDefault: write.isDefault ?? false, providerCredentialId: write.providerCredentialId ?? null, generatedOutputCapabilities: write.generatedOutputCapabilities ?? [] } });
 			await _GrantProviderResourceCreatorUse(authorization, caller, { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: model.id }, new Date());
-			return model;
+			const command = await effects.admit({ id: commandId, siloId: caller.siloId, principalId: caller.principalId, payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: model.id, publicModelName, upstreamModel, scope, clusterTenant, apiBase, apiKeyEnvRef: credentialResult.secretRef, litellmCredentialName: credentialResult.litellmCredentialName } }, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: model.id, resourceRevision: commandId, argumentsDigest: admission.argumentsDigest, materialVerifier: null, authorization: admission.evidence, approvalId: null, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None });
+			return { command, model };
 		});
-		if ("error" in created)
+		if ("error" in admitted)
 		{
-			res.status(400).json(created);
+			res.status(400).json(admitted);
 			return;
 		}
+		const delivered = await effectExecutor.execute(admitted.command.id, undefined, _effectContext(caller, admitted.model.id));
+		if (delivered.status !== ProviderEffectExecutionStatuses.Succeeded)
+		{
+			res.status(503).json({ error: "Model registration is admitted but has not completed.", code: "PROVIDER_EFFECT_PENDING", commandId: admitted.command.id, modelDefinitionId: admitted.model.id });
+			return;
+		}
+		const created = await models.run(async function _ReadCreated(transaction) { return transaction.modelDefinition.findUnique({ where: { id: admitted.model.id } }); });
+		if (created === null)
+			throw new Error("completed model registration command has no model definition");
 		res.status(201).json(_toContract(created));
+	}
+	catch (caught)
+	{
+		if (!_SendProviderGatewayAuthorizationError(caught, res))
+			throw caught;
+	}
+  });
+
+  /** Resume one admitted model registration without creating another unique definition. */
+  router.post("/:id/registration-commands/:commandId", async function _resumeModelRegistration(req, res)
+  {
+	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
+	if (caller === null)
+		return;
+	try
+	{
+		const delivered = await effectExecutor.execute(req.params.commandId, undefined, _effectContext(caller, req.params.id));
+		if (delivered.status !== ProviderEffectExecutionStatuses.Succeeded && delivered.status !== ProviderEffectExecutionStatuses.AlreadySucceeded)
+		{
+			res.status(503).json({ error: "Model registration has not completed.", code: "PROVIDER_EFFECT_PENDING", commandId: req.params.commandId, modelDefinitionId: req.params.id });
+			return;
+		}
+		const model = await models.run(async function _ReadResumed(transaction) { return transaction.modelDefinition.findUnique({ where: { id: req.params.id } }); });
+		if (model === null || model.litellmModelId.startsWith("pending:"))
+		{
+			res.status(503).json({ error: "Model registration has not completed.", code: "PROVIDER_EFFECT_PENDING", commandId: req.params.commandId, modelDefinitionId: req.params.id });
+			return;
+		}
+		res.json(_toContract(model));
 	}
 	catch (caught)
 	{

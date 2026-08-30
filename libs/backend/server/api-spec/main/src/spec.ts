@@ -142,6 +142,7 @@ const ProviderKeySetRequestSchema = {
   required: ["apiKey"],
   properties: {
     apiKey: { type: "string", description: "The raw upstream provider API key. Accepted only over HTTPS; written to a k8s Secret + LiteLLM and never returned by any read." },
+	commandId: { type: "string", format: "uuid", description: "Command id returned by a previous PROVIDER_EFFECT_PENDING response. Resubmitting it supplies ephemeral key material to that exact admitted command." },
   },
 };
 

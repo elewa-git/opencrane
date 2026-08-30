@@ -3,6 +3,8 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaAuthorizationAuthority, ___RunSerializableAuthorizationTransaction, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 
 import type { ProviderGatewayAuthorizationFactory, ProviderGatewayUnitOfWork } from "./provider-gateway-authority.types";
+import { _CreateProviderEffectCommandRepository } from "./provider-effect-command-repository.factory";
+import type { ProviderEffectCommandRepository } from "./provider-effect-command.types";
 
 /** Runs provider and model operations inside the transaction that owns authorization evidence. */
 export class PrismaProviderGatewayUnitOfWork implements ProviderGatewayUnitOfWork<Prisma.TransactionClient>
@@ -19,20 +21,31 @@ export class PrismaProviderGatewayUnitOfWork implements ProviderGatewayUnitOfWor
 		this.createAuthorization = createAuthorization ?? null;
 	}
 
+	/** Builds the provider-effect repository over the exact protected transaction. */
+	private _effects(transaction: Prisma.TransactionClient): ProviderEffectCommandRepository
+	{
+		return _CreateProviderEffectCommandRepository(transaction);
+	}
+
 	/** Runs one operation that may contain an external effect without retrying the callback. */
-	run<Result>(operation: (transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>
+	run<Result>(operation: (transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority, effects: ProviderEffectCommandRepository) => Promise<Result>): Promise<Result>
 	{
 		const createAuthorization = this.createAuthorization;
+		const effects = this._effects.bind(this);
 		return this.prisma.$transaction(async function _Run(transaction): Promise<Result>
 		{
 			const authorization = createAuthorization === null ? new PrismaAuthorizationAuthority(transaction) : createAuthorization(transaction);
-			return operation(transaction, authorization);
+			return operation(transaction, authorization, effects(transaction));
 		});
 	}
 
 	/** Runs one database-only protected mutation with bounded Serializable conflict retries. */
-	runDatabaseMutation<Result>(operation: (transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>
+	runDatabaseMutation<Result>(operation: (transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority, effects: ProviderEffectCommandRepository) => Promise<Result>): Promise<Result>
 	{
-		return ___RunSerializableAuthorizationTransaction(this.prisma, operation, this.createAuthorization ?? undefined);
+		const effects = this._effects.bind(this);
+		return ___RunSerializableAuthorizationTransaction(this.prisma, async function _Run(transaction, authorization): Promise<Result>
+		{
+			return operation(transaction, authorization, effects(transaction));
+		}, this.createAuthorization ?? undefined);
 	}
 }

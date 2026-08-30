@@ -11,8 +11,9 @@ external models agents may use. It owns the **provider keys** and the **model re
 its model proxy without exposing the raw key afterwards.
 
 It is the entry point that turns a supplied key into usable models. When an authorised administrator sets a BYOK
-key, this package stores it as a Kubernetes Secret, registers it with LiteLLM (the model proxy),
-records a credential row, and seeds the provider's default models. It also owns the model registry —
+key, this package first commits an authorisation-bound command. A post-commit executor then stores
+the key as a Kubernetes Secret, registers it with LiteLLM (the model proxy), records a credential
+row, and seeds the provider's default models. It also owns the model registry —
 the definitions the routing layer later resolves against. A model definition may explicitly admit
 PNG image generation; that allowlist is frozen into each compiled run before the runtime can enable
 the provider-native image tool.
@@ -22,8 +23,8 @@ the provider-native image tool.
         │
         ▼
  ┌────────────────────────────────────┐
- │  providers  ◄── HERE                │  store key → k8s Secret + LiteLLM credential;
- │                                     │  register the provider's models; record credential row
+ │  providers  ◄── HERE                │  commit command → release transaction;
+ │                                     │  store key → Secret + LiteLLM; finalize command
  └────────────────────────────────────┘
         │  registered models + credential status  (the key itself is never echoed back)
         ▼
@@ -33,22 +34,34 @@ the provider-native image tool.
 **In this flow:** [model-routing](../../model-routing/main/README.md) *(owns the provisioning helpers + resolves models)* · LiteLLM *(the proxy the key is registered into)*
 
 Invariant: the raw key is write-only from the API's point of view — reads return presence and
-timestamps (`configured`, `litellmRegistered`, `updatedAt`), never the key. The actual provisioning
-work (Secret write + LiteLLM `/credentials` + credential row + default-model seed) lives in
-`model-routing`'s `_ProvisionByokKey`, so the boot-time bootstrap can reuse the exact same path;
-this domain is the HTTP wrapper plus the reference-only credential variant that rejects raw keys.
-Model registration is best-effort against LiteLLM: a rejected model fails to route until corrected
-but never corrupts the stored key.
+timestamps (`configured`, `litellmRegistered`, `updatedAt`), never the key. A command stores a
+random-command-salted verifier, not the key. A crash before Secret custody leaves the command in
+`AwaitingMaterial`; the administrator resubmits the same key and returned `commandId` to the same
+PUT route. A model registration is resumed through
+`POST /api/v1/models/:id/registration-commands/:commandId`, so it never creates a second unique
+definition. Non-secret `Pending` commands and expired claims are also consumed by the bounded
+control-plane reconciliation loop; a process crash does not require the original HTTP request to
+remain alive. `DELETE /api/v1/providers/byok/:provider?commandId=…` may explicitly retry the exact
+removal returned by a pending response.
+
+| State | Event | Result |
+|---|---|---|
+| `Pending` | valid claim | `Claimed` with a leased fence |
+| `Pending` | provider key missing or different | `AwaitingMaterial` |
+| `AwaitingMaterial` | matching key resubmitted | `Claimed` |
+| `Claimed` | effect and finalization succeed | `Succeeded` (terminal) |
+| `Claimed` | effect fails before attempt three | `Pending` or `AwaitingMaterial` |
+| `Claimed` | third effect attempt fails | `Failed` (terminal) |
+| `Succeeded` / `Failed` | any delivery request | no external call |
 
 Authorization has one path. Credential and model catalogues load lifecycle-eligible rows and then
 filter exact `ProviderConnection/Read` or `ModelDefinition/Read` resources through the central
 `AuthorizationAuthority`. Credential, BYOK, and model-definition mutations explicitly request
-`Organization/<silo>/Administer`. Database-only credential and model mutations commit decision
-evidence and Postgres state through the same Serializable transaction. A P2034 retries that complete
-database-only operation with fresh transaction-scoped adapters, up to three attempts; no other
-failure is retried. BYOK custody and model registration callbacks may call Kubernetes or LiteLLM,
-so they are never automatically repeated by the transaction layer. There is no session-role or
-tenant-scope policy engine beside it.
+`Organization/<silo>/Administer`. Database mutations and provider-effect admissions commit decision
+evidence, protected intent, and the command through the same Serializable transaction. Kubernetes
+and LiteLLM run only after that transaction commits. Delivery claims are leased and fenced; the
+saved executor profile, caller, silo, resource, and central evidence digests must all match before
+execution. There is no session-role or tenant-scope policy engine beside it.
 
 Creating a provider connection or model definition also writes exact `Discover`, `Read`, and `Use`
 grants for its creator in that transaction. Organisation administration permits creation; it does
@@ -59,6 +72,7 @@ not become an implicit grant to use every provider or model.
 - `providerByokRouter`, `providerCredentialsRouter`, `modelRegistryRouter` —
   the routers, mounted at `/api/v1/providers/*` and `/api/v1/models`.
 - `_ProvidersOpenapiPaths` — the OpenAPI (REST API description) path fragments for this surface.
+- `_CreateProviderEffectCommandExecutor` — the shared route and background-reconciler composition.
 
 ## Boundary
 
@@ -75,7 +89,7 @@ domains.
 
 ## Data & persistence
 
-Owns `ProviderCredential` and `ModelDefinition` in
+Owns `ProviderCredential`, `ModelDefinition`, and `ProviderEffectCommand` in
 `apps/opencrane/prisma/schema/providers.prisma`.
 
 ## See also

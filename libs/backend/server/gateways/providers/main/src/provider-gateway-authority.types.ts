@@ -1,5 +1,6 @@
 import type { Request } from "express";
-import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import type { AuthorizationAuthority, ProductAuthorizationAdmissionEvidence } from "@opencrane/backend/server/iam/authorization";
+import type { ProviderEffectCommandRepository } from "./provider-effect-command.types";
 
 /** Authenticated local Principal that requests provider or model administration. */
 export interface ProviderGatewayCaller
@@ -16,13 +17,22 @@ export type ProviderGatewayCallerResolver = (request: Request) => ProviderGatewa
 /** Constructs the central authority over one provider-gateway transaction. */
 export type ProviderGatewayAuthorizationFactory<Transaction> = (transaction: Transaction) => AuthorizationAuthority;
 
+/** Central evidence and argument digest returned after organisation administration is admitted. */
+export interface ProviderGatewayAdministrationAdmission
+{
+	/** Digest supplied to the central decision and bound to the provider command. */
+	readonly argumentsDigest: `sha256:${string}`;
+	/** Authority-derived evidence written by the admission transaction. */
+	readonly evidence: ProductAuthorizationAdmissionEvidence;
+}
+
 /** Opens the transaction shared by provider persistence and central authorization. */
 export interface ProviderGatewayUnitOfWork<Transaction>
 {
 	/** Runs one operation that may contain an external effect without automatic transaction retries. */
-	run<Result>(operation: (transaction: Transaction, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>;
+	run<Result>(operation: (transaction: Transaction, authorization: AuthorizationAuthority, effects: ProviderEffectCommandRepository) => Promise<Result>): Promise<Result>;
 	/** Runs one database-only mutation at Serializable isolation with bounded P2034 retries. */
-	runDatabaseMutation<Result>(operation: (transaction: Transaction, authorization: AuthorizationAuthority) => Promise<Result>): Promise<Result>;
+	runDatabaseMutation<Result>(operation: (transaction: Transaction, authorization: AuthorizationAuthority, effects: ProviderEffectCommandRepository) => Promise<Result>): Promise<Result>;
 }
 
 /** Signals that the central product authority denied a provider-gateway operation. */

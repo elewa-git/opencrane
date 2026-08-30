@@ -4,9 +4,13 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ModelRoutingScope } from "@opencrane/contracts";
+
 // Side-effect import: loads the express-session SessionData.authUser augmentation.
 import "@opencrane/backend/server/infra/auth";
 import type { AuthUser } from "@opencrane/backend/server/infra/auth";
+import { _RegisterLiteLlmModel } from "@opencrane/backend/server/gateways/model-routing";
+import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, type ProviderEffectCommandExecutor } from "../provider-effect-command.types";
 import type { ProviderGatewayAuthorizationFactory } from "../provider-gateway-authority.types";
 import { modelRegistryRouter } from "../routes/model-registry";
 
@@ -28,7 +32,7 @@ function _platformOperator(): AuthUser
 }
 
 /** Build a Prisma stub over an in-memory map keyed by model id, with optional credential rows. */
-function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = new Map()): PrismaClient
+function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = new Map(), commands: Map<string, Row> = new Map()): PrismaClient
 {
   let seq = 0;
 	const client = {
@@ -45,7 +49,7 @@ function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = ne
         const id = `model-${++seq}`;
         const now = new Date("2026-06-18T00:00:00.000Z");
         const row = { id, apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], clusterTenant: null, createdAt: now, updatedAt: now, ...args.data };
-        store.set(id, row);
+        store.set(row.id as string, row);
         return row;
       },
       update: async function _update(args: { where: { id: string }; data: Row })
@@ -59,6 +63,16 @@ function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = ne
     providerCredential: {
       findUnique: async function _findCred(args: { where: { id: string } }) { return credentials.get(args.where.id) ?? null; },
     },
+    providerEffectCommand: {
+      _commands: commands,
+      create: async function _createCommand(args: { data: Row })
+      {
+        const now = new Date("2026-06-18T00:00:00.000Z");
+        const row: Row = { state: "Pending", deliveryCount: 0, claimFence: null, claimExpiresAt: null, result: null, failureCode: null, completedAt: null, createdAt: now, updatedAt: now, ...args.data };
+        commands.set(row.id as string, row);
+        return row;
+      },
+    },
   } as unknown as PrismaClient;
 	Object.assign(client, { $transaction: async function _Transaction(operation: (transaction: PrismaClient) => Promise<unknown>) { return operation(client); } });
 	return client;
@@ -68,7 +82,7 @@ function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = ne
 const _ALLOW_AUTHORIZATION = (function _CreateAuthorization()
 {
 	return {
-		admitPrincipal: async function _Admit() { return { outcome: "allow" }; },
+		admitPrincipal: async function _Admit() { return { outcome: "allow", evidence: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } }; },
 		listPrincipalEntitled: async function _List(command: { resources: readonly unknown[] }) { return command.resources; },
 		replaceManagedGrants: async function _Replace() { return { outcome: "allow", changedCount: 1, evidence: {} }; },
 	};
@@ -88,7 +102,20 @@ function _buildApp(prisma: PrismaClient, user: AuthUser | null = _platformOperat
     });
   }
   const resolveCaller = user === null ? function _NoCaller() { return null; } : function _Caller() { return { siloId: "acme", principalId: "principal-1" }; };
-  app.use("/api/v1/models", modelRegistryRouter(prisma, resolveCaller, authorization));
+  const executor = {
+	reconcileNext: async function _ReconcileNext() { return false; },
+    execute: async function _Execute(commandId: string)
+    {
+      const command = (prisma as unknown as { providerEffectCommand: { _commands?: Map<string, Row> } }).providerEffectCommand._commands?.get(commandId);
+      if (!command)
+        throw new Error("test command was not captured");
+      const payload = command.payload as { modelDefinitionId: string; publicModelName: string; upstreamModel: string; scope: ModelRoutingScope; clusterTenant: string | null; apiBase: string | null; apiKeyEnvRef: string | null; litellmCredentialName: string | null };
+      const litellmModelId = await _RegisterLiteLlmModel({ ...payload, deploymentId: commandId });
+      await prisma.modelDefinition.update({ where: { id: payload.modelDefinitionId }, data: { litellmModelId } });
+      return { status: ProviderEffectExecutionStatuses.Succeeded, result: { kind: ProviderEffectCommandKinds.RegisterModel, litellmModelId } };
+    },
+  } as ProviderEffectCommandExecutor;
+  app.use("/api/v1/models", modelRegistryRouter(prisma, resolveCaller, authorization, executor));
   return app;
 }
 
@@ -117,7 +144,7 @@ describe("modelRegistryRouter", function _suite()
 			["model-2", { id: "model-2", scope: "Global", clusterTenant: null, publicModelName: "anthropic/claude", litellmModelId: "y", upstreamModel: "anthropic/claude", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }],
 		]);
 		const listPrincipalEntitled = vi.fn(async function _List(command: { resources: readonly { id: string }[] }) { return command.resources.filter(resource => resource.id === "model-2"); });
-		const admitPrincipal = vi.fn(async function _Admit() { return { outcome: "allow" }; });
+		const admitPrincipal = vi.fn(async function _Admit() { return { outcome: "allow", evidence: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" } }; });
 		const replaceManagedGrants = vi.fn(async function _Replace() { return { outcome: "allow" }; });
 		const factory = (function _CreateAuthorization() { return { listPrincipalEntitled, admitPrincipal, replaceManagedGrants }; }) as unknown as ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>;
 		const app = _buildApp(_mockPrisma(store), _platformOperator(), factory);
@@ -178,24 +205,23 @@ describe("modelRegistryRouter", function _suite()
     process.env.LITELLM_ENDPOINT = "http://litellm:4000";
     process.env.LITELLM_MASTER_KEY = "master-key";
 
-    const fetchSpy = vi.fn().mockResolvedValue({
-      ok: true,
-      text: async function _text() { return JSON.stringify({ model_id: "deploy-abc123" }); },
-    });
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce({ ok: true, text: async function _inventory() { return JSON.stringify({ data: [] }); } })
+      .mockResolvedValueOnce({ ok: true, text: async function _created() { return JSON.stringify({ model_id: "deploy-abc123" }); } });
     vi.stubGlobal("fetch", fetchSpy);
 
     const res = await request(_buildApp(_mockPrisma(new Map()))).post("/api/v1/models").send({ publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o" });
 
     expect(res.status).toBe(201);
     expect(res.body.litellmModelId).toBe("deploy-abc123");
-    expect(fetchSpy).toHaveBeenCalledOnce();
-    const [url, init] = fetchSpy.mock.calls[0];
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const [url, init] = fetchSpy.mock.calls[1];
     expect(url).toBe("http://litellm:4000/model/new");
     const body = JSON.parse((init as { body: string }).body);
     expect(body.model_name).toBe("openai/gpt-4o");
     expect(body.litellm_params.model).toBe("openai/gpt-4o");
     // GLOBAL registration: never set the Enterprise-gated team_id.
-    expect(body.model_info).toBeUndefined();
+    expect(body.model_info.id).toEqual(expect.any(String));
   });
 
   it("falls back to the placeholder id when LiteLLM returns an error (non-fatal)", async function _createLiteLlmError()

@@ -8,7 +8,7 @@ import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/auth
 import { groupsRouter } from "@opencrane/backend/server/iam/groups";
 import { _IssueAttemptLiteLlmKey, modelRoutingDefaultsRouter } from "@opencrane/backend/server/gateways/model-routing";
 import { _CreateMcpCallerResolver, mcpOperatorRouter, mcpTaskRouter } from "@opencrane/backend/server/gateways/mcp";
-import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
+import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter, type ProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
 import { PrismaResourceShareUnitOfWork, ResourceShareService, resourceSharesRouter, type ResourceShareCallerResolver } from "@opencrane/backend/server/iam/grants";
 import { PrismaAuthenticatedPrincipalDirectoryUnitOfWork, type AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
@@ -56,7 +56,7 @@ import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
  * @param mcpWorkflows - Shared guarded workflow engine plus saved MCP task authorities.
  * @returns The configured public listener.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository & SelfRunCancellationRepository, serverNamespace: string, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository & SelfRunCancellationRepository, serverNamespace: string, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects?: ProviderEffectCommandExecutor): Express
 {
 	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner);
 	const principalDirectory = new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma);
@@ -90,8 +90,8 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/mcp", handler: mcpRuntime.promotion },
 		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma) },
 		{ method: "use", path: "/api/v1/providers/credentials", handler: providerCredentialsRouter(prisma) },
-		{ method: "use", path: "/api/v1/providers/byok", handler: providerByokRouter(prisma, coreApi, serverNamespace) },
-		{ method: "use", path: "/api/v1/models", handler: modelRegistryRouter(prisma) },
+		{ method: "use", path: "/api/v1/providers/byok", handler: providerByokRouter(prisma, coreApi, serverNamespace, undefined, undefined, providerEffects) },
+		{ method: "use", path: "/api/v1/models", handler: modelRegistryRouter(prisma, undefined, undefined, providerEffects) },
 	];
 	const knowledgeRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/third-party-sources", handler: thirdPartySourcesRouter(prisma) },

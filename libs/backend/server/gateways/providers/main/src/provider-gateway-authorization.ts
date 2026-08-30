@@ -5,7 +5,7 @@ import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/autho
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { ProviderGatewayAuthorizationError, type ProviderGatewayCaller, type ProviderGatewayCallerResolver } from "./provider-gateway-authority.types";
+import { ProviderGatewayAuthorizationError, type ProviderGatewayAdministrationAdmission, type ProviderGatewayCaller, type ProviderGatewayCallerResolver } from "./provider-gateway-authority.types";
 
 /** Isolates exact creator grants for model and provider resources. */
 const _PROVIDER_RESOURCE_CREATOR_MANAGER_ID = "provider-resource-creator-bootstrap";
@@ -28,11 +28,13 @@ export function _RequireProviderGatewayCaller(request: Request, response: Respon
 }
 
 /** Require explicit organisation-policy administration and record it in the protected transaction. */
-export async function _RequireProviderGatewayAdministration(authorization: AuthorizationAuthority, caller: ProviderGatewayCaller, argumentsValue: unknown): Promise<void>
+export async function _RequireProviderGatewayAdministration(authorization: AuthorizationAuthority, caller: ProviderGatewayCaller, argumentsValue: unknown): Promise<ProviderGatewayAdministrationAdmission>
 {
-	const admission = await authorization.admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: caller.siloId }, action: ProductAuthorizationActions.Administer, argumentsDigest: ___DigestCanonicalJson(argumentsValue as JsonValue), nowEpochMs: Date.now() });
-	if (admission.outcome !== AuthorizationDecisionOutcomes.Allow)
+	const argumentsDigest = ___DigestCanonicalJson(argumentsValue as JsonValue);
+	const admission = await authorization.admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: caller.siloId }, action: ProductAuthorizationActions.Administer, argumentsDigest, nowEpochMs: Date.now() });
+	if (admission.outcome !== AuthorizationDecisionOutcomes.Allow || admission.evidence === null)
 		throw new ProviderGatewayAuthorizationError();
+	return { argumentsDigest, evidence: admission.evidence };
 }
 
 /** Projects exact read and use grants for a newly created provider resource. */
