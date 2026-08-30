@@ -68,14 +68,14 @@ function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = ne
         store.set(row.id as string, row);
         return row;
       },
-		update: async function _update(args: { where: { id?: string; id_siloId?: { id: string; siloId: string } }; data: Row })
+		update: vi.fn(async function _update(args: { where: { id?: string; id_siloId?: { id: string; siloId: string } }; data: Row })
       {
 		const id = _id(args.where);
 		const row = { ...(store.get(id) as Row), ...args.data, updatedAt: new Date() };
 		store.set(id, row);
         return row;
-      },
-		delete: async function _delete(args: { where: { id?: string; id_siloId?: { id: string; siloId: string } } }) { store.delete(_id(args.where)); return {}; },
+	      }),
+		delete: vi.fn(async function _delete(args: { where: { id?: string; id_siloId?: { id: string; siloId: string } } }) { store.delete(_id(args.where)); return {}; }),
     },
     providerCredential: {
 		findUnique: async function _findCred(args: { where: { id?: string; id_siloId?: { id: string; siloId: string } } })
@@ -112,7 +112,7 @@ function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = ne
 	  updateMany: async function _supersedeCommands() { return { count: 0 }; },
     },
   } as unknown as PrismaClient;
-	Object.assign(client, { $transaction: async function _Transaction(operation: (transaction: PrismaClient) => Promise<unknown>) { return operation(client); } });
+	Object.assign(client, { $transaction: vi.fn(async function _Transaction(operation: (transaction: PrismaClient) => Promise<unknown>) { return operation(client); }) });
 	return client;
 }
 
@@ -127,7 +127,7 @@ const _ALLOW_AUTHORIZATION = (function _CreateAuthorization()
 }) as unknown as ProviderGatewayAuthorizationFactory<Prisma.TransactionClient>;
 
 /** Build a minimal app mounting the model-registry router with an authenticated operator session. */
-function _buildApp(prisma: PrismaClient, user: AuthUser | null = _platformOperator(), authorization: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient> = _ALLOW_AUTHORIZATION): Express
+function _buildApp(prisma: PrismaClient, user: AuthUser | null = _platformOperator(), authorization: ProviderGatewayAuthorizationFactory<Prisma.TransactionClient> = _ALLOW_AUTHORIZATION, injectedExecutor: ProviderEffectCommandExecutor | null = null): Express
 {
   const app = express();
   app.use(express.json());
@@ -140,7 +140,7 @@ function _buildApp(prisma: PrismaClient, user: AuthUser | null = _platformOperat
     });
   }
   const resolveCaller = user === null ? function _NoCaller() { return null; } : function _Caller() { return { siloId: "acme", principalId: "principal-1" }; };
-  const executor = {
+	const executor = injectedExecutor ?? {
 	reconcileNext: async function _ReconcileNext() { return false; },
     execute: async function _Execute(commandId: string)
     {
@@ -152,7 +152,7 @@ function _buildApp(prisma: PrismaClient, user: AuthUser | null = _platformOperat
       await prisma.modelDefinition.update({ where: { id: payload.modelDefinitionId }, data: { litellmModelId } });
       return { status: ProviderEffectExecutionStatuses.Succeeded, result: { kind: ProviderEffectCommandKinds.RegisterModel, litellmModelId } };
     },
-  } as ProviderEffectCommandExecutor;
+	  } as ProviderEffectCommandExecutor;
   app.use("/api/v1/models", modelRegistryRouter(prisma, executor, resolveCaller, authorization));
   return app;
 }
@@ -266,8 +266,22 @@ describe("modelRegistryRouter", function _suite()
     const res = await request(_buildApp(_mockPrisma(new Map()))).post("/api/v1/models").send({ scope: "clusterTenant", publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o" });
 
     expect(res.status).toBe(400);
-    expect(res.body.code).toBe("VALIDATION_ERROR");
+	expect(res.body.code).toBe("VALIDATION_ERROR");
   });
+
+	it.each([
+		{ apiBase: 42 },
+		{ providerCredentialId: { id: "credential-1" } },
+		{ scope: "clusterTenant", clusterTenant: 42 },
+		{ scope: "clusterTenant", clusterTenant: "tenant-a", isDefault: true },
+	] as const)("rejects malformed typed creation input before Prisma sees it: %j", async function _RejectsMalformedType(malformed)
+	{
+		const prisma = _mockPrisma(new Map());
+		const response = await request(_buildApp(prisma)).post("/api/v1/models").send({ publicModelName: "custom/model", upstreamModel: "openai/model", ...malformed });
+
+		expect(response.status).toBe(400);
+		expect(prisma.$transaction).not.toHaveBeenCalled();
+	});
 
   it("returns 404 for an unknown model", async function _get404()
   {
@@ -277,70 +291,28 @@ describe("modelRegistryRouter", function _suite()
     expect(res.body.code).toBe("MODEL_DEFINITION_NOT_FOUND");
   });
 
-  it("deletes an existing model", async function _delete()
-  {
-    const store = new Map<string, Row>([
-      ["model-1", { id: "model-1", scope: "Global", clusterTenant: null, publicModelName: "openai/gpt-4o", litellmModelId: "x", upstreamModel: "openai/gpt-4o", apiBase: null, isDefault: false, providerCredentialId: null, createdAt: new Date(), updatedAt: new Date() }],
-    ]);
-    const res = await request(_buildApp(_mockPrisma(store))).delete("/api/v1/models/model-1");
-
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ id: "model-1", status: "deleted" });
-    expect(store.has("model-1")).toBe(false);
-  });
-
 	it.each([
-		{ method: "put", state: "Pending" },
-		{ method: "delete", state: "Claimed" },
-	] as const)("returns 409 when $method races a $state model registration", async function _BlocksRegistrationLifecycle({ method, state })
+		{ method: "put", path: "/api/v1/models/model-1", body: { publicModelName: "custom/changed", upstreamModel: "openai/changed" } },
+		{ method: "put", path: "/api/v1/models/missing", body: { apiBase: 42 } },
+		{ method: "delete", path: "/api/v1/models/model-1", body: undefined },
+		{ method: "delete", path: "/api/v1/models/missing", body: undefined },
+	] as const)("returns governed 409 for $method $path without DB or LiteLLM drift", async function _BlocksUnsupportedMutation({ method, path, body })
 	{
-		const store = new Map<string, Row>([["model-1", { id: "model-1", scope: "Global", clusterTenant: null, publicModelName: "openai/gpt-4o", litellmModelId: "pending:command-a", upstreamModel: "openai/gpt-4o", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }]]);
-		const commands = new Map<string, Row>([["command-a", { id: "command-a", siloId: "acme", resourceKind: "model-definition", resourceId: "model-1", desiredGeneration: 1, state }]]);
-		const app = _buildApp(_mockPrisma(store, new Map(), commands));
-		const response = method === "put"
-			? await request(app).put("/api/v1/models/model-1").send({ publicModelName: "openai/gpt-4o", upstreamModel: "openai/changed" })
-			: await request(app).delete("/api/v1/models/model-1");
+		const store = new Map<string, Row>([["model-1", { id: "model-1", siloId: "acme", scope: "Global", clusterTenant: null, publicModelName: "custom/openai", litellmModelId: "deployment-1", upstreamModel: "openai/gpt-4o", apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], createdAt: new Date(), updatedAt: new Date() }]]);
+		const prisma = _mockPrisma(store);
+		const execute = vi.fn();
+		const executor = { execute, reconcileNext: vi.fn().mockResolvedValue(false) } as unknown as ProviderEffectCommandExecutor;
+		const app = _buildApp(prisma, _platformOperator(), _ALLOW_AUTHORIZATION, executor);
+		const operation = request(app)[method](path);
+		const response = body === undefined ? await operation : await operation.send(body);
 
 		expect(response.status).toBe(409);
-		expect(response.body).toEqual({ error: "Model registration is still active.", code: "PROVIDER_EFFECT_BUSY", commandId: "command-a" });
+		expect(response.body).toEqual({ error: "Model definition updates and deletion require a durable provider command.", code: "MODEL_DEFINITION_GOVERNED" });
+		expect(prisma.modelDefinition.update).not.toHaveBeenCalled();
+		expect(prisma.modelDefinition.delete).not.toHaveBeenCalled();
+		expect(execute).not.toHaveBeenCalled();
 		expect(store.get("model-1")?.upstreamModel).toBe("openai/gpt-4o");
 	});
-
-  it("rejects a PUT that rebinds a credential owned by another ClusterTenant (400)", async function _putCredentialScopeMismatch()
-  {
-    const store = new Map<string, Row>([
-      ["model-1", { id: "model-1", scope: "ClusterTenant", clusterTenant: "acme", publicModelName: "openai/gpt-4o", litellmModelId: "x", upstreamModel: "openai/gpt-4o", apiBase: null, isDefault: false, providerCredentialId: null, createdAt: new Date(), updatedAt: new Date() }],
-    ]);
-    const credentials = new Map<string, Row>([
-      ["cred-b", { id: "cred-b", scope: "ClusterTenant", clusterTenant: "tenant-b", secretRef: "s" }],
-    ]);
-    const res = await request(_buildApp(_mockPrisma(store, credentials)))
-      .put("/api/v1/models/model-1")
-      .send({ scope: "clusterTenant", clusterTenant: "acme", publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o", providerCredentialId: "cred-b" });
-
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe("CREDENTIAL_SCOPE_MISMATCH");
-    expect((store.get("model-1") as Row).providerCredentialId).toBeNull();
-  });
-
-  it("updates fields and binds a Global credential via PUT", async function _putUpdate()
-  {
-    const store = new Map<string, Row>([
-      ["model-1", { id: "model-1", scope: "Global", clusterTenant: null, publicModelName: "openai/gpt-4o", litellmModelId: "x", upstreamModel: "openai/gpt-4o", apiBase: null, isDefault: false, providerCredentialId: null, createdAt: new Date(), updatedAt: new Date() }],
-    ]);
-    const credentials = new Map<string, Row>([
-      ["cred-g", { id: "cred-g", scope: "Global", clusterTenant: null, secretRef: "s" }],
-    ]);
-    const res = await request(_buildApp(_mockPrisma(store, credentials)))
-      .put("/api/v1/models/model-1")
-      .send({ publicModelName: "openai/custom-gpt-4o", upstreamModel: "openai/gpt-4o-mini", providerCredentialId: "cred-g", isDefault: false });
-
-    expect(res.status).toBe(200);
-    expect(res.body.upstreamModel).toBe("openai/gpt-4o-mini");
-    expect(res.body.providerCredentialId).toBe("cred-g");
-	expect(res.body.publicModelName).toBe("openai/custom-gpt-4o");
-    expect(res.body.isDefault).toBe(false);
-  });
 
 	it.each(["auto", "auto-embedding", "openai/gpt-5.5", "openai/text-embedding-3-large"])("reserves the governed global model name %s", async function _ReservesGovernedNames(publicModelName)
 	{

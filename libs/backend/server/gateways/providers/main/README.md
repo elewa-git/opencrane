@@ -65,8 +65,9 @@ and LiteLLM run only after that transaction commits. Every governed resource has
 generation: admitting a newer Set, Delete, or Register command supersedes older inactive work. A
 claimed command is the external resource's serialization barrier, even after its lease expires, so
 a conflicting admission returns `409 PROVIDER_EFFECT_BUSY` with that existing command id instead of
-creating a newer generation. Only that exact command may be reclaimed after expiry. Model update and
-delete use the same barrier while registration is Pending, AwaitingMaterial, or Claimed. The executor
+creating a newer generation. Only that exact command may be reclaimed after expiry. Model-definition
+`PUT` and `DELETE` return `409 MODEL_DEFINITION_GOVERNED` until durable update and unregister commands
+can converge Postgres and LiteLLM; neither route performs a database-only mutation. The executor
 does not spend the terminal delivery budget or release the barrier when LiteLLM may still complete a
 timed-out fixed-name mutation; the route `commandId` resume must positively converge that same desired
 state before another Set or Delete is admitted. The executor
@@ -97,7 +98,9 @@ reconciliation. The external handler has no Prisma client: it returns a secret-f
 model projection, and `PrismaProviderEffectCommandRepository.complete` persists that projection only
 inside the final current-authority and claim-fence transaction. The command's `result` retains the
 same secret-free external evidence, including the exact confirmed embedding deployment identifiers,
-so recovery can distinguish a qualified target from an assumed one.
+so recovery can distinguish a qualified target from an assumed one. Set-BYOK persists confirmed
+embedding and auto-embedding deployment evidence in `ProviderEffectCommand.result`; it does not create
+chat `ModelDefinition` rows.
 
 ## Boundary
 

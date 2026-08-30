@@ -1109,7 +1109,14 @@
 		"contract": "ProviderGlobalModelAliasRepository",
 		"contractImportPath": "./provider-effect-command.types",
 		"constructs": []
-      }
+	  },
+	  {
+		"path": "libs/backend/server/gateways/providers/main/src/prisma-model-definition-repository.ts",
+		"adapter": "PrismaModelDefinitionRepository",
+		"contract": "ModelDefinitionRepository",
+		"contractImportPath": "./model-definition-repository.types",
+		"constructs": []
+	  }
     ],
     "unitsOfWork": [
       {
@@ -1487,8 +1494,8 @@
           }
         ]
       },
-      {
-        "path": "libs/backend/server/gateways/providers/main/src/prisma-provider-effect-command-unit-of-work.ts",
+	  {
+		"path": "libs/backend/server/gateways/providers/main/src/prisma-provider-effect-command-unit-of-work.ts",
         "adapter": "PrismaProviderEffectCommandUnitOfWork",
         "contract": "ProviderEffectCommandUnitOfWork",
         "contractImportPath": "./provider-effect-command.types",
@@ -1501,7 +1508,19 @@
             "adapter": "PrismaProviderEffectCommandRepository",
             "importPath": "./prisma-provider-effect-command-repository"
           }
-        ]
+		]
+	  },
+	  {
+		"path": "libs/backend/server/gateways/providers/main/src/prisma-model-definition-service.ts",
+		"adapter": "PrismaModelDefinitionUnitOfWork",
+		"contract": "ModelDefinitionService",
+		"contractImportPath": "./model-definition-service.types",
+		"constructs": [
+		  {
+			"adapter": "PrismaModelDefinitionRepository",
+			"importPath": "./prisma-model-definition-repository"
+		  }
+		]
       },
       {
         "path": "libs/backend/server/gateways/model-routing/main/src/routes/prisma-model-routing-unit-of-work.ts",
@@ -2172,13 +2191,6 @@
     }
   ],
   "exemptions": [
-	{
-	  "path": "libs/backend/server/gateways/providers/main/src/routes/model-registry.ts",
-	  "owner": "provider-gateway",
-	  "operations": ["delegate"],
-	  "reason": "The provider gateway UnitOfWork supplies one authorization-bound transaction to the existing model route callback; move its model projection delegates behind a route repository when the remaining model CRUD callbacks are extracted together.",
-	  "expiresOn": "2026-09-30"
-	},
 	{
 	  "path": "libs/backend/server/gateways/providers/main/src/routes/provider-byok.ts",
 	  "owner": "provider-gateway",
