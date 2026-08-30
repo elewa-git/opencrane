@@ -40,7 +40,7 @@ Conversation (`agent_session`; optional run parent)
     ├── attempt 1..n
     ├── ordered RunEvent records
     ├── workload and proof evidence
-    ├── approvals and action receipts
+    ├── ApprovalRequest and ToolInvocation records
     └── terminal outcome and cost
 ```
 

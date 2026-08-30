@@ -23,7 +23,7 @@ difference is a security boundary, not a style choice:
 | Identity & capabilities | The parent's, unchanged | Its own, always **smaller** than the parent's |
 | Budget | The parent's | Carved from the parent's remaining budget |
 | Lifetime | Dies with the parent's attempt | Independent; survives the parent's pod |
-| Audit trail | Part of the parent's record | Its own runs, approvals, and receipts |
+| Audit trail | Part of the parent's record | Its own runs, approvals, and ToolInvocations |
 | Typical use | Lens switches, summaries, judging, clean-context skill execution | Different authority, real spend, long-running or untrusted work |
 
 **Rule of thumb:** if the sub-task only changes *what's in context* (a prompt, a persona lens, a

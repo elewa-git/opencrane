@@ -24,6 +24,27 @@ the control plane; an uploaded image never runs inside the generic agent runtime
 An MCP registration does not grant an agent access. The acting subject and agent service must pass
 membership and grant resolution before a tool revision enters the run's frozen capability set.
 
+## Admission is not execution permission
+
+```text
+ArtifactRevision with OCI Image Layout ZIP
+        │ validate layout and import checked bytes
+        ▼
+OciImageValidation ──► immutable registry reference
+        │ explicit promotion
+        ▼
+McpServerRevision ──► discovery freezes MCP 2026-07-28 tool schemas
+        │ central Use/Invoke decision
+        ▼
+ToolInvocation ──► one exact MCP executor assignment
+```
+
+Each record answers a different question. `OciImageValidation` proves which bytes were accepted and
+imported. `McpServerRevision` and `McpToolRevision` provide governed product identities.
+`AuthorizationAuthority` proves that the Principal may use the selected tool, and `ToolInvocation`
+owns the one-use call and its recovery state. A valid digest cannot substitute for a grant, and a
+grant cannot make an unready revision executable.
+
 ## Execution flow
 
 ```text

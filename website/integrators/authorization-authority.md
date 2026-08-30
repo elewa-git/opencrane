@@ -34,6 +34,12 @@ The authority is an in-process application port backed by the silo PostgreSQL da
 separate network service. A remote check could not participate in the product transaction without a
 second distributed-transaction protocol.
 
+::: tip
+**Central** means one decision contract and one durable grant model, not one extra microservice.
+Each product domain receives an `AuthorizationAuthority` bound to the same Serializable transaction
+as its protected write.
+:::
+
 ## Evidence follows the action
 
 The product catalogue declares the evidence class for every supported resource action. A route does
@@ -61,6 +67,40 @@ escape durable evidence.
 A managed agent never borrows the permissions of the person who created it. Likewise, permission to
 invoke an agent does not automatically grant the agent access to an MCP tool, skill, dataset, model,
 or channel target.
+
+## One authority across product domains
+
+Groups contribute grants; they do not become a second kind of policy engine. Personal-run proposals
+resolve back to the person's Principal. Managed-run proposals resolve to the `AgentService`
+Principal. A verified worker can consume only the command that the control plane already admitted.
+
+```text
+browser request ───────────────► human Principal
+personal-run proposal ─────────► human Principal + agent/run ceiling
+managed-run proposal ──────────► AgentService Principal + revision/run ceiling
+worker delivery ───────────────► Principal frozen into one admitted command
+                                      │
+direct Group memberships ─────────────┤
+                                      ▼
+                         AuthorizationAuthority
+                                      │
+       ┌──────────────────────────────┼──────────────────────────────┐
+       ▼                              ▼                              ▼
+ agents and runs             packages and tools              data and gateways
+```
+
+The same typed resource-action catalogue covers the major product families:
+
+| Family | Examples |
+|---|---|
+| People and organisation | organisation membership, Groups, resource shares and grants |
+| Agents and runs | AgentService, immutable agent revision, AgentRun, schedule and budget |
+| Packages and tools | SkillRevision, MCP server/tool revision, MCP task and ToolInvocation |
+| Data and collaboration | artifact revision, dataset, memory scope, persona, conversation and channel target |
+| Provider gateways | provider connection, model definition and token-usage reporting |
+
+Each domain still validates its own lifecycle facts, but none defines another subject model,
+scope token, product-permission receipt service or allow/deny vocabulary beside this authority.
 
 ## Decision inputs
 
@@ -95,9 +135,9 @@ OAuth DPoP, short for **Demonstrating Proof of Possession**, is another identity
 proof. A client signs a request with its private key so a stolen bearer token cannot simply be
 replayed from another client. DPoP can prove that the request presenter holds the expected key; it
 still does not decide whether that Principal may use an MCP tool, skill, artifact, model, or agent.
-OpenCrane removed its callerless DPoP capability executor and separate action-receipt table during
-this convergence. Live runtime key registration remains workload identity evidence, while
-`ToolInvocation` and domain admission records own one-use effect replay state.
+OpenCrane does not treat that proof as a second product authorization flow. Runtime key registration
+remains workload identity evidence, while `ToolInvocation` and typed domain commands own one-use
+effect replay state.
 
 ```text
 OIDC or workload token ──► identity proof
@@ -142,7 +182,8 @@ used:
 | MCP revision is Ready and its tool schema is frozen | MCP |
 | Skill revision is Published and passed review | Skills |
 | Artifact revision is Published and passed its scan | Artifacts |
-| Model definition is Active | Model routing |
+| Model definition belongs to the exact silo and routing scope | Model routing |
+| Provider connection has a current desired generation | Providers |
 | Conversation, dataset, schedule, or channel target still exists | Owning domain |
 
 Lifecycle eligibility can narrow an allow decision but never create permission on its own.
@@ -195,4 +236,5 @@ channel access merely because they share a silo.
 
 - [`libs/models/authorization/main`](https://github.com/elewa-git/opencrane/blob/main/libs/models/authorization/main/README.md)
 - [`libs/backend/server/iam/authorization/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/authorization/main/README.md)
-- [`docs/adr/0015-central-durable-authorization-authority.md`](https://github.com/elewa-git/opencrane/blob/main/docs/adr/0015-central-durable-authorization-authority.md)
+- [`prisma-authorization-transaction.ts`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/authorization/main/src/prisma-authorization-transaction.ts)
+- [`authorization.prisma`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/prisma/schema/authorization.prisma)

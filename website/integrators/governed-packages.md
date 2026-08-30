@@ -24,6 +24,13 @@ An OCI image is an artifact in general supply-chain language. In the OpenCrane d
 image record. An OCI registry is therefore a storage and distribution substrate, not the product
 catalogue or the authorization authority.
 
+::: info Current registry scope
+The current server imports admitted MCP images into one operator-configured OCI repository.
+OpenCrane platform images come from the release's pinned image references. Containerized skill
+images are a future product class; they may share physical registry infrastructure without gaining
+a separate catalogue or authorization flow.
+:::
+
 ```text
 ArtifactRevision                         OCI image
 ├── content address                      ├── image manifest digest
@@ -79,8 +86,9 @@ Skill
     ├── review, test and scan evidence
     └── ArtifactRevision
              │
-             ├── instruction skill ──► loaded by the agent runtime
-             └── sandboxed code ─────► reviewed source bundle; execution runner 🔶
+             ├── instruction skill ──► revision and artifact pinned at run admission ✅
+             │                         full bundle-to-prompt loading 🔶
+             └── sandboxed code ─────► isolated validation ✅ · execution runner 🔶
 ```
 
 A code skill needs a runnable environment, but it does not always need its own image. The target
@@ -93,7 +101,7 @@ so sandboxed code execution remains a locked follow-up rather than a shipped pat
 
 | Class | Revision content | Execution |
 |---|---|---|
-| Instruction skill | Instructions in an artifact bundle | Loaded into the current agent context or a fresh sub-context |
+| Instruction skill | Instructions in an artifact bundle | Run admission pins and authorises the exact revision; the current compiler exposes a stable revision summary, while full instruction loading is 🔶 |
 | Sandboxed code skill 🔶 | Reviewed code bundle in ArtifactStore | A future fixed OpenCrane runner image loads the bundle in an isolated Job |
 | Containerized code skill 🔶 | Governed OCI image digest | Dedicated skill image plus a fixed OpenCrane companion |
 
@@ -154,6 +162,9 @@ revision or obtain a general registry credential.
 Kubernetes workload identity proves which fixed companion, controller, or worker received that
 admission. It still does not grant product access: the server binds the verified Pod and
 ServiceAccount to the already admitted command before accepting a result.
+
+→ [Configure the MCP image repository](/operators/deployment-configuration#mcp-image-registry) ·
+[Understand OCI MCP execution](/integrators/oci-mcp-runtime)
 
 ## Source
 
