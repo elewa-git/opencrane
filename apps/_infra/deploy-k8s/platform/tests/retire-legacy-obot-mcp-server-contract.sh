@@ -29,6 +29,22 @@ log()
   :
 }
 
+_count_calls_with_prefix()
+{
+  local prefix="$1"
+  awk -v prefix="$prefix" 'index($0, prefix) == 1 { count += 1 } END { print count + 0 }' "$CALLS"
+}
+
+_count_identity_preconditioned_deletes()
+{
+  awk '
+    index($0, "delete-options ") == 1 &&
+    index($0, "\"preconditions\":{\"uid\":\"uid-") > 0 &&
+    index($0, "\",\"resourceVersion\":\"rv-1\"") > 0 { count += 1 }
+    END { print count + 0 }
+  ' "$CALLS"
+}
+
 _resource_from_uri()
 {
   case "$1" in
@@ -120,6 +136,9 @@ kubectl()
 
 source "$RETIREMENT"
 
+: >"$CALLS"
+[[ "$(_count_calls_with_prefix 'delete --raw ')" == "0" ]]
+
 verify_legacy_obot_replacement_ready opencrane-testv4 opencrane-testv4 30 "$SERVER_IMAGE" "$CONTROLLER_IMAGE" "$SCANNER_IMAGE" "$RUNTIME_IMAGE" opencrane-testv4-artifact-scanning opencrane-testv4-runtime opencrane-testv4-managed-runtime
 grep -Fq 'rollout status deployment/opencrane-testv4-opencrane-server --namespace opencrane-testv4 --timeout=30s' "$CALLS"
 grep -Fq 'rollout status deployment/opencrane-testv4-agent-controller --namespace opencrane-testv4 --timeout=30s' "$CALLS"
@@ -138,8 +157,8 @@ retire_legacy_obot_mcp_server_resources opencrane-testv4 30
 : >"$CALLS"
 FOUND_RESOURCES="deployment/sms1obot-mcp-server,service/sms1obot-mcp-server,secret/sms1obot-mcp-server-mcp-config,secret/sms1obot-mcp-server-mcp-config-shim,secret/sms1obot-mcp-server-mcp-files,secret/sms1obot-mcp-server-mcp-run-shim"
 retire_legacy_obot_mcp_server_resources opencrane-testv4 30
-[[ "$(grep -c '^delete --raw ' "$CALLS")" == "6" ]]
-[[ "$(grep -c '^delete-options .*\"preconditions\":{\"uid\":\"uid-.*\"resourceVersion\":\"rv-1\"' "$CALLS")" == "6" ]]
+[[ "$(_count_calls_with_prefix 'delete --raw ')" == "6" ]]
+[[ "$(_count_identity_preconditioned_deletes)" == "6" ]]
 grep -Fq -- '--request-timeout=30s' "$CALLS"
 ! grep -q -- '-o json ' "$CALLS"
 last_snapshot_line="$(grep -n 'get secret/sms1obot-mcp-server-mcp-run-shim .*custom-columns=' "$CALLS" | cut -d: -f1)"
@@ -217,12 +236,12 @@ fi
 INSPECTION_FAILURE_RESOURCE=""
 FOUND_RESOURCES="secret/sms1obot-mcp-server-mcp-files"
 retire_legacy_obot_mcp_server_resources opencrane-testv4 30
-[[ "$(grep -c '^delete --raw ' "$CALLS")" == "1" ]]
+[[ "$(_count_calls_with_prefix 'delete --raw ')" == "1" ]]
 
 : >"$CALLS"
 REPLACEMENT_RESOURCE="secret/sms1obot-mcp-server-mcp-files"
 retire_legacy_obot_mcp_server_resources opencrane-testv4 30
-[[ "$(grep -c '^delete --raw ' "$CALLS")" == "1" ]]
+[[ "$(_count_calls_with_prefix 'delete --raw ')" == "1" ]]
 
 : >"$CALLS"
 RAW_DELETE_FAILURE_RESOURCE="secret/sms1obot-mcp-server-mcp-files"
@@ -231,7 +250,7 @@ if retire_legacy_obot_mcp_server_resources opencrane-testv4 30; then
   echo "Obot retirement ignored a same-name UID replacement" >&2
   exit 1
 fi
-[[ "$(grep -c '^delete --raw ' "$CALLS")" == "1" ]]
+[[ "$(_count_calls_with_prefix 'delete --raw ')" == "1" ]]
 
 : >"$CALLS"
 REPLACEMENT_RESOURCE=""
@@ -240,7 +259,7 @@ if retire_legacy_obot_mcp_server_resources opencrane-testv4 30; then
   echo "Obot retirement ignored a same-UID resource update" >&2
   exit 1
 fi
-[[ "$(grep -c '^delete --raw ' "$CALLS")" == "1" ]]
+[[ "$(_count_calls_with_prefix 'delete --raw ')" == "1" ]]
 
 : >"$CALLS"
 UPDATED_RESOURCE=""
@@ -251,7 +270,7 @@ fi
 FOUND_RESOURCES=""
 RAW_DELETE_FAILURE_RESOURCE=""
 retire_legacy_obot_mcp_server_resources opencrane-testv4 30
-[[ "$(grep -c '^delete --raw ' "$CALLS")" == "1" ]]
+[[ "$(_count_calls_with_prefix 'delete --raw ')" == "1" ]]
 grep -Fq '/api/v1/namespaces/opencrane-testv4/secrets/sms1obot-mcp-server-mcp-files' "$CALLS"
 ! grep -q '^delete-options secret/sms1obot-mcp-server-mcp-config ' "$CALLS"
 
