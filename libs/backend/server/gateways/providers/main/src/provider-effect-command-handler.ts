@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 
 import * as k8s from "@kubernetes/client-node";
 
+import type { Logger } from "@opencrane/backend/observability";
 import { ModelRoutingScope } from "@opencrane/contracts";
 import { _ApplyProviderKeySecret, _BYOK_PROVIDER_CATALOG, _byokCredentialName, _byokSecretName, _ClearProviderKeySecret, _DeleteLiteLlmCredential, _EnsureProviderEmbeddingModels, _RegisterLiteLlmModel, _UpsertLiteLlmCredential, LiteLlmCredentialMutationOutcomes, type ByokProviderCatalog } from "@opencrane/backend/server/gateways/model-routing";
 
-import { _log } from "./log";
 import { ProviderEffectOutcomeUncertainError } from "./provider-effect-command-errors";
 import { ProviderEffectCommandKinds, type ProviderEffectCommandHandler, type ProviderEffectCommandRecord, type ProviderEffectEphemeralMaterial, type ProviderEffectHandlerResult, type ProviderEffectModelProjection } from "./provider-effect-command.types";
 
@@ -24,17 +24,21 @@ export class DefaultProviderEffectCommandHandler implements ProviderEffectComman
 	private readonly coreApi: k8s.CoreV1Api | null;
 	/** Namespace that contains the fixed provider Secret catalogue. */
 	private readonly operatorNamespace: string | null;
+	/** Process-wide logger supplied by the hosting application. */
+	private readonly log: Logger;
 
 	/**
 	 * Binds command delivery to the existing provider-custody and model-registration adapters.
 	 *
 	 * @param coreApi - Kubernetes client restricted to fixed BYOK Secret names.
 	 * @param operatorNamespace - Namespace that owns those Secrets.
+	 * @param log - Hosting process logger used by embedding reconciliation.
 	 */
-	constructor(coreApi: k8s.CoreV1Api | null = null, operatorNamespace: string | null = null)
+	constructor(coreApi: k8s.CoreV1Api | null, operatorNamespace: string | null, log: Logger)
 	{
 		this.coreApi = coreApi;
 		this.operatorNamespace = operatorNamespace;
+		this.log = log;
 	}
 
 	/** @inheritdoc */
@@ -52,7 +56,7 @@ export class DefaultProviderEffectCommandHandler implements ProviderEffectComman
 				const value = command.payload.value;
 				_requireFixedCustodyCoordinates(value.provider, value.secretRef, value.litellmCredentialName);
 				await _ApplyProviderKeySecret(this.coreApi, this.operatorNamespace, value.provider, providerKey);
-				const credentialOutcome = await _UpsertLiteLlmCredential({ credentialName: value.litellmCredentialName, provider: value.provider, apiKey: providerKey });
+				const credentialOutcome = await _UpsertLiteLlmCredential({ credentialName: value.litellmCredentialName, provider: value.provider, apiKey: providerKey }, this.log);
 				const requireLiveRegistration = _litellmConfigured();
 				if (requireLiveRegistration && credentialOutcome !== LiteLlmCredentialMutationOutcomes.Applied)
 					throw new ProviderEffectOutcomeUncertainError();
@@ -60,8 +64,8 @@ export class DefaultProviderEffectCommandHandler implements ProviderEffectComman
 				const catalog = _BYOK_PROVIDER_CATALOG[value.provider];
 				try
 				{
-					const models = await _registerProviderModels(catalog, litellmCredentialName, requireLiveRegistration);
-					const embedding = await _EnsureProviderEmbeddingModels(catalog, litellmCredentialName, _log);
+					const models = await _registerProviderModels(catalog, litellmCredentialName, requireLiveRegistration, this.log);
+					const embedding = await _EnsureProviderEmbeddingModels(catalog, litellmCredentialName, this.log);
 					const defaultPublicModelName = catalog?.models.find(model => model.className === catalog.defaultClass)?.slug ?? null;
 					return { kind: command.payload.kind, provider: value.provider, secretRef: value.secretRef, litellmCredentialName, models, defaultPublicModelName, embedding };
 				}
@@ -77,7 +81,7 @@ export class DefaultProviderEffectCommandHandler implements ProviderEffectComman
 				const value = command.payload.value;
 				_requireFixedCustodyCoordinates(value.provider, value.secretRef, value.litellmCredentialName);
 				await _ClearProviderKeySecret(this.coreApi, this.operatorNamespace, value.provider);
-				const credentialOutcome = await _DeleteLiteLlmCredential(value.litellmCredentialName);
+				const credentialOutcome = await _DeleteLiteLlmCredential(value.litellmCredentialName, this.log);
 				if (credentialOutcome !== LiteLlmCredentialMutationOutcomes.Applied && credentialOutcome !== LiteLlmCredentialMutationOutcomes.Skipped)
 					throw new ProviderEffectOutcomeUncertainError();
 				return { kind: command.payload.kind, provider: value.provider };
@@ -87,7 +91,7 @@ export class DefaultProviderEffectCommandHandler implements ProviderEffectComman
 				const value = command.payload.value;
 				try
 				{
-					const litellmModelId = await _RegisterLiteLlmModel({ deploymentId: _modelDeploymentId(value.modelDefinitionId, value.publicModelName), publicModelName: value.publicModelName, upstreamModel: value.upstreamModel, scope: value.scope, clusterTenant: value.clusterTenant, apiBase: value.apiBase, apiKeyEnvRef: value.apiKeyEnvRef, litellmCredentialName: value.litellmCredentialName, requireLiveRegistration: true });
+					const litellmModelId = await _RegisterLiteLlmModel({ deploymentId: _modelDeploymentId(value.modelDefinitionId, value.publicModelName), publicModelName: value.publicModelName, upstreamModel: value.upstreamModel, scope: value.scope, clusterTenant: value.clusterTenant, apiBase: value.apiBase, apiKeyEnvRef: value.apiKeyEnvRef, litellmCredentialName: value.litellmCredentialName, requireLiveRegistration: true }, this.log);
 					return { kind: command.payload.kind, litellmModelId };
 				}
 				catch
@@ -100,20 +104,20 @@ export class DefaultProviderEffectCommandHandler implements ProviderEffectComman
 }
 
 /** Registers every chat deployment that the provider key must make usable before finalization. */
-async function _registerProviderModels(catalog: ByokProviderCatalog | undefined, litellmCredentialName: string | null, requireLiveRegistration: boolean): Promise<readonly ProviderEffectModelProjection[]>
+async function _registerProviderModels(catalog: ByokProviderCatalog | undefined, litellmCredentialName: string | null, requireLiveRegistration: boolean, log: Logger): Promise<readonly ProviderEffectModelProjection[]>
 {
 	if (catalog === undefined)
 		return [];
 	const models: ProviderEffectModelProjection[] = [];
 	for (const entry of catalog.models)
 	{
-		const litellmModelId = await _RegisterLiteLlmModel({ deploymentId: _modelDeploymentId("global-provider-model", entry.slug), publicModelName: entry.slug, upstreamModel: entry.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration });
+		const litellmModelId = await _RegisterLiteLlmModel({ deploymentId: _modelDeploymentId("global-provider-model", entry.slug), publicModelName: entry.slug, upstreamModel: entry.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration }, log);
 		models.push({ publicModelName: entry.slug, upstreamModel: entry.slug, litellmModelId });
 	}
 	const cheapest = catalog.models.find(model => model.className === "fast") ?? catalog.models[catalog.models.length - 1];
 	if (cheapest !== undefined)
 	{
-		const litellmModelId = await _RegisterLiteLlmModel({ deploymentId: _modelDeploymentId("global-provider-model", "auto"), publicModelName: "auto", upstreamModel: cheapest.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration });
+		const litellmModelId = await _RegisterLiteLlmModel({ deploymentId: _modelDeploymentId("global-provider-model", "auto"), publicModelName: "auto", upstreamModel: cheapest.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration }, log);
 		models.push({ publicModelName: "auto", upstreamModel: cheapest.slug, litellmModelId });
 	}
 	return models;

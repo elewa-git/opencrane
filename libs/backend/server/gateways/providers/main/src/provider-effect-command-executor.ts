@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 
-import { ___DoWithTrace, ___MarkActiveSpanFailed } from "@opencrane/backend/observability";
+import { ___DoWithTrace, ___MarkActiveSpanFailed, type Logger } from "@opencrane/backend/observability";
 
-import { _log } from "./log";
 import { _IsProviderEffectOutcomeUncertain, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "./provider-effect-command-errors";
 import { ProviderEffectExecutionStatuses, type ProviderEffectCommandExecutor, type ProviderEffectCommandHandler, type ProviderEffectCommandUnitOfWork, type ProviderEffectEphemeralMaterial, type ProviderEffectExecutionContext, type ProviderEffectExecutionResult } from "./provider-effect-command.types";
 
@@ -23,6 +22,8 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 	private readonly handler: ProviderEffectCommandHandler;
 	/** Trusted process profile supplied by composition rather than persisted command data. */
 	private readonly trustedExecutorProfile: string;
+	/** Process-wide logger supplied by the hosting application. */
+	private readonly log: Logger;
 
 	/**
 	 * Composes provider-command persistence with its external adapter.
@@ -30,12 +31,14 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 	 * @param unitOfWork - Transaction owner for claims and finalization.
 	 * @param handler - External adapter that consumes a committed claim.
 	 * @param trustedExecutorProfile - Fixed process identity allowed to claim provider commands.
+	 * @param log - Hosting process logger that receives correlated provider outcomes.
 	 */
-	constructor(unitOfWork: ProviderEffectCommandUnitOfWork, handler: ProviderEffectCommandHandler, trustedExecutorProfile: string)
+	constructor(unitOfWork: ProviderEffectCommandUnitOfWork, handler: ProviderEffectCommandHandler, trustedExecutorProfile: string, log: Logger)
 	{
 		this.unitOfWork = unitOfWork;
 		this.handler = handler;
 		this.trustedExecutorProfile = trustedExecutorProfile;
+		this.log = log;
 	}
 
 	/** @inheritdoc */
@@ -55,7 +58,9 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 		const claim = await ___DoWithTrace("provider.effect.claim", { commandId, deliverySource }, function _Claim() { return self.unitOfWork.run(function _PersistClaim(repository, authorization) { return repository.claim(commandId, verifier, context, authorization, new Date()); }); });
 		if (claim.status !== ProviderEffectExecutionStatuses.Claimed || claim.command === null)
 		{
-			_log.debug({ commandId, deliverySource, status: claim.status }, "provider effect delivery did not claim command");
+			if (claim.status !== ProviderEffectExecutionStatuses.Succeeded && claim.status !== ProviderEffectExecutionStatuses.AlreadySucceeded)
+				___MarkActiveSpanFailed();
+			self.log.debug({ commandId, deliverySource, status: claim.status }, "provider effect delivery did not claim command");
 			return { status: claim.status, result: null };
 		}
 		const command = claim.command;
@@ -63,7 +68,8 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 		const preflight = await ___DoWithTrace("provider.effect.preflight", fields, function _Preflight() { return self.unitOfWork.run(function _Verify(repository, authorization) { return repository.preflight(command, context, authorization, new Date()); }); });
 		if (!preflight)
 		{
-			_log.warn(fields, "provider effect delivery became stale or unauthorized before external I/O");
+			___MarkActiveSpanFailed();
+			self.log.warn(fields, "provider effect delivery became stale or unauthorized before external I/O");
 			return { status: ProviderEffectExecutionStatuses.Failed, result: null };
 		}
 
@@ -82,6 +88,7 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 		});
 		if (delivery.failed)
 		{
+			___MarkActiveSpanFailed();
 			const uncertain = _IsProviderEffectOutcomeUncertain(delivery.error) || command.failureCode === _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE;
 			const failureCode = uncertain ? _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE : "provider_effect_failed";
 			const status = await ___DoWithTrace("provider.effect.fail", { ...fields, failureCode }, function _Fail()
@@ -93,11 +100,11 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 			});
 			const logFields = { err: _redactedError(delivery.error), ...fields, failureCode, status };
 			if (uncertain)
-				_log.warn(logFields, "provider effect outcome is uncertain; exact command retains the resource barrier");
+				self.log.warn(logFields, "provider effect outcome is uncertain; exact command retains the resource barrier");
 			else if (status === ProviderEffectExecutionStatuses.Failed)
-				_log.error(logFields, "provider effect delivery failed terminally");
+				self.log.error(logFields, "provider effect delivery failed terminally");
 			else
-				_log.warn(logFields, "provider effect delivery failed and remains recoverable");
+				self.log.warn(logFields, "provider effect delivery failed and remains recoverable");
 			return { status, result: null };
 		}
 		const result = delivery.result;
@@ -105,9 +112,12 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 		// 3. Save the result only for the fence that performed the effect, so a stale worker cannot overwrite a retry.
 		const completed = await ___DoWithTrace("provider.effect.complete", fields, function _Complete() { return self.unitOfWork.run(function _PersistResult(repository, authorization) { return repository.complete(command, result, context, authorization, new Date()); }); });
 		if (completed === ProviderEffectExecutionStatuses.Succeeded)
-			_log.info(fields, "provider effect delivery completed");
+			self.log.info(fields, "provider effect delivery completed");
 		else
-			_log.warn({ ...fields, status: completed }, "provider effect result was fenced from current state");
+		{
+			___MarkActiveSpanFailed();
+			self.log.warn({ ...fields, status: completed }, "provider effect result was fenced from current state");
+		}
 		return completed === ProviderEffectExecutionStatuses.Succeeded ? { status: completed, result } : { status: completed, result: null };
 		});
 	}
@@ -115,7 +125,8 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 	/** @inheritdoc */
 	async reconcileNext(): Promise<boolean>
 	{
-		const command = await this.unitOfWork.run(function _Next(repository) { return repository.nextRecoverable(new Date()); });
+		const self = this;
+		const command = await ___DoWithTrace("provider.effect.reconcile.discover", {}, function _Discover() { return self.unitOfWork.run(function _Next(repository) { return repository.nextRecoverable(new Date()); }); });
 		if (command === null)
 			return false;
 		const context: ProviderEffectExecutionContext = { siloId: command.siloId, principalId: command.principalId, actorKind: "system", actorId: this.trustedExecutorProfile, resourceKind: command.resourceKind, resourceId: command.resourceId, executorProfile: this.trustedExecutorProfile };

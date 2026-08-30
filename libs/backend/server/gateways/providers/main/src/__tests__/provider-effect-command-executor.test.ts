@@ -2,15 +2,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const _TELEMETRY = vi.hoisted(function _Telemetry()
 {
-	return { traceThrown: [] as unknown[], error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
+	return { traceNames: [] as string[], traceThrown: [] as unknown[], markActiveSpanFailed: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
 });
 
 vi.mock("@opencrane/backend/observability", async function _Observability(importOriginal: () => Promise<typeof import("@opencrane/backend/observability")>)
 {
 	return {
 		...await importOriginal(),
-		___DoWithTrace: async function _Trace<Result>(_name: string, _fields: Readonly<Record<string, unknown>>, operation: () => Promise<Result>): Promise<Result>
-		{
+			___DoWithTrace: async function _Trace<Result>(name: string, _fields: Readonly<Record<string, unknown>>, operation: () => Promise<Result>): Promise<Result>
+			{
+				_TELEMETRY.traceNames.push(name);
 			try
 			{
 				return await operation();
@@ -21,7 +22,7 @@ vi.mock("@opencrane/backend/observability", async function _Observability(import
 				throw error;
 			}
 		},
-		___MarkActiveSpanFailed: vi.fn(),
+			___MarkActiveSpanFailed: _TELEMETRY.markActiveSpanFailed,
 	};
 });
 
@@ -33,12 +34,16 @@ vi.mock("../log", function _Log()
 import { DefaultProviderEffectCommandExecutor, _ProviderKeyMaterialVerifier } from "../provider-effect-command-executor";
 import { DefaultProviderEffectCommandHandler } from "../provider-effect-command-handler";
 import { ProviderEffectOutcomeUncertainError, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "../provider-effect-command-errors";
+import type { Logger } from "@opencrane/backend/observability";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandHandler, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectCommandUnitOfWork, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 
 /** Trusted route coordinates shared by executor tests. */
 const _CONTEXT: ProviderEffectExecutionContext = { siloId: "acme", principalId: "principal-1", actorKind: "user", actorId: "principal-1", resourceKind: "provider-connection", resourceId: "byok:openai", executorProfile: "opencrane-control-plane/provider-effect-v1" };
+
+/** Process logger used by the executor and handler under test. */
+const _LOGGER = _TELEMETRY as unknown as Logger;
 
 /** Build one claimed Set-BYOK command without placing raw material in the record. */
 function _command(): ProviderEffectCommandRecord
@@ -66,7 +71,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		const command = _command();
 		const repository = { claim: vi.fn(async function _Claim() { order.push("claim-committed"); return { status: ProviderEffectExecutionStatuses.Claimed, command }; }), preflight: vi.fn(async function _Preflight() { order.push("preflight-committed"); return true; }), complete: vi.fn(async function _Complete() { order.push("result-committed"); return ProviderEffectExecutionStatuses.Succeeded; }) } as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn(async function _Execute() { order.push("external-effect"); return { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], defaultPublicModelName: null, embedding: { status: ProviderEmbeddingReconciliationStatuses.NotApplicable, deployments: [] } } as const; }) } as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
 
 		const result = await executor.execute(command.id, { provider: "openai", providerKey: "sk-test" }, _CONTEXT);
 
@@ -78,7 +83,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 	{
 		const repository = { claim: vi.fn(async function _Claim() { throw new Error("transaction rolled back"); }) } as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
 
 		await expect(executor.execute("command-1", { provider: "openai", providerKey: "sk-test" }, _CONTEXT)).rejects.toThrow("rolled back");
 		expect(handler.execute).not.toHaveBeenCalled();
@@ -88,7 +93,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 	{
 		const repository = { claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.AwaitingMaterial, command: null }; }) } as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
 
 		const result = await executor.execute("command-1", undefined, _CONTEXT);
 
@@ -108,6 +113,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 
 	it("resumes one database-complete command from its persisted execution context", async function _ReconcilesPersistedContext()
 	{
+		_TELEMETRY.traceNames.length = 0;
 		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
 		const repository = {
 			nextRecoverable: vi.fn(async function _Next() { return command; }),
@@ -116,10 +122,11 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 			complete: vi.fn(async function _Complete() { return ProviderEffectExecutionStatuses.Succeeded; }),
 		} as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn(async function _Execute() { return { kind: ProviderEffectCommandKinds.DeleteByokKey, provider: "openai" } as const; }) } as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
 
 		await expect(executor.reconcileNext()).resolves.toBe(true);
 		expect(handler.execute).toHaveBeenCalledOnce();
+		expect(_TELEMETRY.traceNames).toContain("provider.effect.reconcile.discover");
 	});
 
 	it("refuses reconciliation when a saved command names a different executor profile", async function _RejectsSavedProfile()
@@ -134,7 +141,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 			}),
 		} as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
 
 		await expect(executor.reconcileNext()).resolves.toBe(true);
 		expect(handler.execute).not.toHaveBeenCalled();
@@ -144,7 +151,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 	{
 		const repository = { claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.Failed, command: null }; }) } as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
 
 		await expect(executor.execute("command-1", undefined, _CONTEXT)).resolves.toEqual({ status: ProviderEffectExecutionStatuses.Failed, result: null });
 		expect(handler.execute).not.toHaveBeenCalled();
@@ -152,13 +159,15 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 
 	it("does not resume external I/O after current authority is revoked", async function _RevokedResume()
 	{
+		_TELEMETRY.markActiveSpanFailed.mockClear();
 		const command = _command();
 		const repository = { claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.Claimed, command }; }), preflight: vi.fn(async function _Preflight() { return false; }) } as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
 
 		await expect(executor.execute(command.id, { provider: "openai", providerKey: "sk-test" }, _CONTEXT)).resolves.toEqual({ status: ProviderEffectExecutionStatuses.Failed, result: null });
 		expect(handler.execute).not.toHaveBeenCalled();
+		expect(_TELEMETRY.markActiveSpanFailed).toHaveBeenCalledOnce();
 	});
 
 	it("does not reconcile external I/O after current authority is revoked", async function _RevokedReconcile()
@@ -166,7 +175,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
 		const repository = { nextRecoverable: vi.fn(async function _Next() { return command; }), claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.Claimed, command }; }), preflight: vi.fn(async function _Preflight() { return false; }) } as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
 
 		await expect(executor.reconcileNext()).resolves.toBe(true);
 		expect(handler.execute).not.toHaveBeenCalled();
@@ -175,13 +184,14 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 	it("rejects persisted custody coordinates outside the fixed provider catalogue", async function _ValidatesCustodyCoordinates()
 	{
 		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "attacker-secret", litellmCredentialName: "byok-openai" } } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
-		const handler = new DefaultProviderEffectCommandHandler({} as never, "opencrane-system");
+		const handler = new DefaultProviderEffectCommandHandler({} as never, "opencrane-system", _LOGGER);
 
 		await expect(handler.execute(command, {})).rejects.toThrow("invalid custody coordinates");
 	});
 
 	it("returns a secret-free provider catalogue projection without writing product rows", async function _ProjectsProviderCatalogue()
 	{
+		_TELEMETRY.traceNames.length = 0;
 		vi.stubEnv("LITELLM_ENDPOINT", "");
 		vi.stubEnv("LITELLM_MASTER_KEY", "");
 		const replaceNamespacedSecret = vi.fn(async function _Replace() { return {}; });
@@ -189,7 +199,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 			readNamespacedSecret: vi.fn(async function _Read() { return { metadata: { name: "byok-provider-key-openai", resourceVersion: "1" } }; }),
 			replaceNamespacedSecret,
 		} as never;
-		const handler = new DefaultProviderEffectCommandHandler(coreApi, "opencrane-system");
+		const handler = new DefaultProviderEffectCommandHandler(coreApi, "opencrane-system", _LOGGER);
 
 		const result = await handler.execute(_command(), { provider: "openai", providerKey: "sk-test" });
 
@@ -199,6 +209,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		expect(result.models.map(function _Name(model) { return model.publicModelName; })).toEqual(["openai/gpt-5.5", "openai/gpt-5.4", "openai/gpt-5.4-nano", "auto"]);
 		expect(JSON.stringify(result)).not.toContain("sk-test");
 		expect(replaceNamespacedSecret).toHaveBeenCalledOnce();
+		expect(_TELEMETRY.traceNames).toContain("kubernetes.provider-secret.apply");
 		vi.unstubAllEnvs();
 	});
 
@@ -226,7 +237,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		});
 		vi.stubGlobal("fetch", fetchMock);
 		const coreApi = { readNamespacedSecret: vi.fn(async function _Read() { return { metadata: { name: "byok-provider-key-openai", resourceVersion: "1" } }; }), replaceNamespacedSecret: vi.fn(async function _Replace() { return {}; }) } as never;
-		const handler = new DefaultProviderEffectCommandHandler(coreApi, "opencrane-system");
+		const handler = new DefaultProviderEffectCommandHandler(coreApi, "opencrane-system", _LOGGER);
 
 		const first = await handler.execute({ ..._command(), id: "command-a" }, { provider: "openai", providerKey: "sk-first" });
 		const second = await handler.execute({ ..._command(), id: "command-b" }, { provider: "openai", providerKey: "sk-second" });
@@ -243,14 +254,18 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 
 	it("retains the barrier when LiteLLM rejects credential deletion", async function _RejectedDelete()
 	{
+		_TELEMETRY.traceNames.length = 0;
+		_TELEMETRY.markActiveSpanFailed.mockClear();
 		vi.stubEnv("LITELLM_ENDPOINT", "http://litellm:4000");
 		vi.stubEnv("LITELLM_MASTER_KEY", "master");
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("rejected", { status: 500 })));
 		const coreApi = { readNamespacedSecret: vi.fn(async function _Read() { return { metadata: { resourceVersion: "1" } }; }), replaceNamespacedSecret: vi.fn(async function _Replace() { return {}; }) } as never;
-		const handler = new DefaultProviderEffectCommandHandler(coreApi, "opencrane-system");
+		const handler = new DefaultProviderEffectCommandHandler(coreApi, "opencrane-system", _LOGGER);
 		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const, materialRequirement: ProviderEffectMaterialRequirements.None };
 
 		await expect(handler.execute(command, {})).rejects.toBeInstanceOf(ProviderEffectOutcomeUncertainError);
+		expect(_TELEMETRY.traceNames).toContain("kubernetes.provider-secret.clear");
+		expect(_TELEMETRY.markActiveSpanFailed).toHaveBeenCalledOnce();
 		vi.unstubAllGlobals();
 		vi.unstubAllEnvs();
 	});
@@ -260,7 +275,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		vi.stubEnv("LITELLM_ENDPOINT", "http://litellm:4000");
 		vi.stubEnv("LITELLM_MASTER_KEY", "master");
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 })));
-		const handler = new DefaultProviderEffectCommandHandler();
+		const handler = new DefaultProviderEffectCommandHandler(null, null, _LOGGER);
 		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: "global", clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null } } as const, resourceKind: "model-definition", resourceId: "model-1", materialRequirement: ProviderEffectMaterialRequirements.None };
 
 		await expect(handler.execute(command, {})).rejects.toBeInstanceOf(ProviderEffectOutcomeUncertainError);
@@ -286,7 +301,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 			return new Response("not found", { status: 404 });
 		});
 		vi.stubGlobal("fetch", fetchMock);
-		const handler = new DefaultProviderEffectCommandHandler();
+		const handler = new DefaultProviderEffectCommandHandler(null, null, _LOGGER);
 		const payload = { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: "global", clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null } } as const;
 		const command = { ..._command(), payload, resourceKind: "model-definition", resourceId: "model-1", materialRequirement: ProviderEffectMaterialRequirements.None };
 
@@ -302,6 +317,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 	it("keeps raw adapter errors outside trace and log boundaries", async function _RedactsRawFailure()
 	{
 		_TELEMETRY.traceThrown.length = 0;
+		_TELEMETRY.markActiveSpanFailed.mockClear();
 		_TELEMETRY.warn.mockClear();
 		const command = _command();
 		const repository = {
@@ -310,12 +326,13 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 			fail: vi.fn(async function _Fail() { return ProviderEffectExecutionStatuses.AwaitingMaterial; }),
 		} as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn(async function _Execute() { throw new Error("raw Secret body contains sk-provider-material"); }) } as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
 
 		await expect(executor.execute(command.id, { provider: "openai", providerKey: "sk-provider-material" }, _CONTEXT)).resolves.toEqual({ status: ProviderEffectExecutionStatuses.AwaitingMaterial, result: null });
 		expect(_TELEMETRY.traceThrown).toEqual([]);
 		expect(JSON.stringify(_TELEMETRY.warn.mock.calls)).not.toContain("sk-provider-material");
 		expect(_TELEMETRY.warn).toHaveBeenCalledWith(expect.objectContaining({ err: { type: "Error" } }), "provider effect delivery failed and remains recoverable");
+		expect(_TELEMETRY.markActiveSpanFailed).toHaveBeenCalledTimes(2);
 	});
 
 	it.each([ProviderEffectCommandKinds.SetByokKey, ProviderEffectCommandKinds.DeleteByokKey, ProviderEffectCommandKinds.RegisterModel])("keeps generation B blocked until uncertain %s generation A positively converges", async function _UncertainBarrier(kind)
@@ -353,7 +370,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 			? { kind, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], defaultPublicModelName: null, embedding: { status: ProviderEmbeddingReconciliationStatuses.NotApplicable, deployments: [] } } as const
 			: kind === ProviderEffectCommandKinds.DeleteByokKey ? { kind, provider: "openai" } as const : { kind, litellmModelId: "deployment-1" } as const;
 		const handler = { execute: vi.fn().mockReturnValueOnce(uncertainDelivery).mockResolvedValueOnce(successfulResult) } as ProviderEffectCommandHandler;
-		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
+		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
 		const material = kind === ProviderEffectCommandKinds.SetByokKey ? { provider: "openai", providerKey: "sk-test" } : undefined;
 
 		const delayed = executor.execute(first.id, material, context);

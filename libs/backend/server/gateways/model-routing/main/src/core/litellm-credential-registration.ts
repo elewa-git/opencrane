@@ -1,4 +1,4 @@
-import { ___DoWithTrace } from "@opencrane/backend/observability";
+import { ___DoWithTrace, ___MarkActiveSpanFailed, type Logger } from "@opencrane/backend/observability";
 
 import { _log } from "../log";
 import { LiteLlmCredentialMutationOutcomes, type LiteLlmCredentialUpsert } from "./litellm-credential-registration.types";
@@ -23,22 +23,23 @@ const _LITELLM_HTTP_TIMEOUT_MS = 10_000;
  * that permits POST, so a delayed earlier request can never delete a successfully retried key.
  *
  * @param input - The credential name, provider, and raw key to store in LiteLLM.
+ * @param log - Logger that receives the secret-free mutation outcome.
  * @returns The confirmed, skipped, rejected, or uncertain fixed-name mutation outcome.
  */
-export async function _UpsertLiteLlmCredential(input: LiteLlmCredentialUpsert): Promise<LiteLlmCredentialMutationOutcomes>
+export async function _UpsertLiteLlmCredential(input: LiteLlmCredentialUpsert, log: Logger = _log): Promise<LiteLlmCredentialMutationOutcomes>
 {
   const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
   const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";
   if (!endpoint || !masterKey)
   {
-    _log.debug({ credentialName: input.credentialName, provider: input.provider, configured: false }, "litellm credential upsert skipped (unconfigured)");
+	log.debug({ credentialName: input.credentialName, provider: input.provider, configured: false }, "litellm credential upsert skipped (unconfigured)");
     return LiteLlmCredentialMutationOutcomes.Skipped;
   }
 
   return ___DoWithTrace(
     "litellm.credential.upsert",
     { credentialName: input.credentialName, provider: input.provider },
-    function _upsert(): Promise<LiteLlmCredentialMutationOutcomes> { return _upsertLive(endpoint, masterKey, input); },
+	function _upsert(): Promise<LiteLlmCredentialMutationOutcomes> { return _upsertLive(endpoint, masterKey, input, log); },
   );
 }
 
@@ -46,9 +47,10 @@ export async function _UpsertLiteLlmCredential(input: LiteLlmCredentialUpsert): 
  * Deletes a LiteLLM credential by name and reports whether the result is known.
  *
  * @param credentialName - The LiteLLM credential name to remove.
+ * @param log - Logger that receives the secret-free mutation outcome.
  * @returns The confirmed, skipped, rejected, or uncertain fixed-name mutation outcome.
  */
-export async function _DeleteLiteLlmCredential(credentialName: string): Promise<LiteLlmCredentialMutationOutcomes>
+export async function _DeleteLiteLlmCredential(credentialName: string, log: Logger = _log): Promise<LiteLlmCredentialMutationOutcomes>
 {
   const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
   const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";
@@ -60,7 +62,7 @@ export async function _DeleteLiteLlmCredential(credentialName: string): Promise<
   return ___DoWithTrace(
     "litellm.credential.delete",
     { credentialName },
-    function _delete(): Promise<LiteLlmCredentialMutationOutcomes> { return _deleteLive(endpoint, masterKey, credentialName); },
+	function _delete(): Promise<LiteLlmCredentialMutationOutcomes> { return _deleteLive(endpoint, masterKey, credentialName, log); },
   );
 }
 
@@ -72,9 +74,10 @@ export async function _DeleteLiteLlmCredential(credentialName: string): Promise<
  * @param endpoint  - LiteLLM base URL.
  * @param masterKey - LiteLLM bearer credential.
  * @param input     - The credential to upsert.
+ * @param log       - Logger that receives the secret-free mutation outcome.
  * @see https://github.com/BerriAI/litellm/blob/790a5ce0b323c1eefa70c2df25b2780097aa3f80/litellm/proxy/credential_endpoints/endpoints.py
  */
-async function _upsertLive(endpoint: string, masterKey: string, input: LiteLlmCredentialUpsert): Promise<LiteLlmCredentialMutationOutcomes>
+async function _upsertLive(endpoint: string, masterKey: string, input: LiteLlmCredentialUpsert, log: Logger): Promise<LiteLlmCredentialMutationOutcomes>
 {
   try
   {
@@ -98,12 +101,13 @@ async function _upsertLive(endpoint: string, masterKey: string, input: LiteLlmCr
     });
     if (patched.ok)
     {
-      _log.info({ credentialName: input.credentialName, provider: input.provider }, "litellm credential updated");
+	  log.info({ credentialName: input.credentialName, provider: input.provider }, "litellm credential updated");
       return LiteLlmCredentialMutationOutcomes.Applied;
     }
     if (patched.status !== 404)
     {
-      _log.warn({ credentialName: input.credentialName, provider: input.provider, status: patched.status }, "litellm credential update failed; key persisted to Secret only");
+	  ___MarkActiveSpanFailed();
+	  log.warn({ credentialName: input.credentialName, provider: input.provider, status: patched.status }, "litellm credential update failed; key persisted to Secret only");
       return LiteLlmCredentialMutationOutcomes.Rejected;
     }
 
@@ -120,16 +124,18 @@ async function _upsertLive(endpoint: string, masterKey: string, input: LiteLlmCr
 
     if (!created.ok)
     {
-      _log.warn({ credentialName: input.credentialName, provider: input.provider, status: created.status }, "litellm credential create failed; key persisted to Secret only");
+	  ___MarkActiveSpanFailed();
+	  log.warn({ credentialName: input.credentialName, provider: input.provider, status: created.status }, "litellm credential create failed; key persisted to Secret only");
       return LiteLlmCredentialMutationOutcomes.Rejected;
     }
 
-    _log.info({ credentialName: input.credentialName, provider: input.provider }, "litellm credential upserted");
+	log.info({ credentialName: input.credentialName, provider: input.provider }, "litellm credential upserted");
     return LiteLlmCredentialMutationOutcomes.Applied;
   }
   catch (err)
   {
-    _log.warn({ credentialName: input.credentialName, provider: input.provider, err }, "litellm credential upsert errored; key persisted to Secret only");
+	___MarkActiveSpanFailed();
+	log.warn({ credentialName: input.credentialName, provider: input.provider, err }, "litellm credential upsert errored; key persisted to Secret only");
     return LiteLlmCredentialMutationOutcomes.Uncertain;
   }
 }
@@ -140,8 +146,9 @@ async function _upsertLive(endpoint: string, masterKey: string, input: LiteLlmCr
  * @param endpoint       - LiteLLM base URL.
  * @param masterKey      - LiteLLM bearer credential.
  * @param credentialName - The credential name to remove.
+ * @param log            - Logger that receives the secret-free mutation outcome.
  */
-async function _deleteLive(endpoint: string, masterKey: string, credentialName: string): Promise<LiteLlmCredentialMutationOutcomes>
+async function _deleteLive(endpoint: string, masterKey: string, credentialName: string, log: Logger): Promise<LiteLlmCredentialMutationOutcomes>
 {
   try
   {
@@ -153,7 +160,8 @@ async function _deleteLive(endpoint: string, masterKey: string, credentialName: 
 
     if (!response.ok && response.status !== 404)
     {
-      _log.warn({ credentialName, status: response.status }, "litellm credential delete failed");
+	  ___MarkActiveSpanFailed();
+	  log.warn({ credentialName, status: response.status }, "litellm credential delete failed");
       return LiteLlmCredentialMutationOutcomes.Rejected;
     }
 
@@ -161,7 +169,8 @@ async function _deleteLive(endpoint: string, masterKey: string, credentialName: 
   }
   catch (err)
   {
-    _log.warn({ credentialName, err }, "litellm credential delete errored");
+	___MarkActiveSpanFailed();
+	log.warn({ credentialName, err }, "litellm credential delete errored");
     return LiteLlmCredentialMutationOutcomes.Uncertain;
   }
 }

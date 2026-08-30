@@ -72,7 +72,7 @@ export async function _EnsureProviderEmbeddingModels(catalog: ByokProviderCatalo
 			litellmCredentialName,
 			mode: "embedding",
 			requireLiveRegistration: true,
-		});
+		}, log);
 		evidence.push({ ...deployment, litellmModelId });
 		log.info({ publicModelName: deployment.publicModelName, upstreamModel: deployment.upstreamModel }, "embedding model registered with litellm");
 	}

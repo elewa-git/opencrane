@@ -4,6 +4,7 @@ import * as k8s from "@kubernetes/client-node";
 import type { Logger } from "pino";
 import { Prisma, type ModelDefinition as PrismaModelDefinition, type ProviderCredential as PrismaProviderCredential } from "@prisma/client";
 
+import { ___DoWithTrace, ___MarkActiveSpanFailed } from "@opencrane/backend/observability";
 import { ModelRoutingScope } from "@opencrane/contracts";
 import { _DeleteLiteLlmCredential, _UpsertLiteLlmCredential } from "./litellm-credential-registration";
 import { LiteLlmCredentialMutationOutcomes } from "./litellm-credential-registration.types";
@@ -204,43 +205,65 @@ export async function _ApplyProviderKeySecret(coreApi: k8s.CoreV1Api, namespace:
     data: { apiKey: Buffer.from(apiKey).toString("base64") },
   };
 
-  try
+  const delivery = await ___DoWithTrace("kubernetes.provider-secret.apply", { namespace, provider, secretName: name }, async function _Apply()
   {
-    const existing = await coreApi.readNamespacedSecret({ name, namespace });
-    body.metadata!.resourceVersion = existing.metadata?.resourceVersion;
-    await coreApi.replaceNamespacedSecret({ name, namespace, body });
-  }
-  catch (err)
-  {
-    if (_k8sStatus(err) !== 404)
+	try
     {
-      throw err;
+	  const existing = await coreApi.readNamespacedSecret({ name, namespace });
+	  body.metadata!.resourceVersion = existing.metadata?.resourceVersion;
+	  await coreApi.replaceNamespacedSecret({ name, namespace, body });
+	  return { failed: false } as const;
     }
-    await coreApi.createNamespacedSecret({ namespace, body });
-  }
+	catch (err)
+	{
+	  if (_k8sStatus(err) === 404)
+	  {
+		try
+		{
+		  await coreApi.createNamespacedSecret({ namespace, body });
+		  return { failed: false } as const;
+		}
+		catch (createError)
+		{
+		  ___MarkActiveSpanFailed();
+		  return { failed: true, error: createError } as const;
+		}
+	  }
+	  ___MarkActiveSpanFailed();
+	  return { failed: true, error: err } as const;
+	}
+  });
+  if (delivery.failed)
+	throw delivery.error;
 }
 
 /** Blank a provider Secret's value while keeping the object itself — the server's Role may update these fixed names but not create or delete them, so deleting it would make the provider unrecoverable. */
 export async function _ClearProviderKeySecret(coreApi: k8s.CoreV1Api, namespace: string, provider: string): Promise<void>
 {
-  try
+  const name = _byokSecretName(provider);
+  const delivery = await ___DoWithTrace("kubernetes.provider-secret.clear", { namespace, provider, secretName: name }, async function _Clear()
   {
-    const name = _byokSecretName(provider);
-    const existing = await coreApi.readNamespacedSecret({ name, namespace });
-    await coreApi.replaceNamespacedSecret({
-      name,
-      namespace,
-      body: { ...existing, data: { apiKey: Buffer.from("").toString("base64") } },
-    });
-  }
-  catch (err)
-  {
-    if (_k8sStatus(err) === 404)
-    {
-      throw new Error(`Provider custody Secret '${_byokSecretName(provider)}' is missing; deployment must pre-create the fixed provider catalogue`);
-    }
-    throw err;
-  }
+	try
+	{
+	  const existing = await coreApi.readNamespacedSecret({ name, namespace });
+	  await coreApi.replaceNamespacedSecret({
+		name,
+		namespace,
+		body: { ...existing, data: { apiKey: Buffer.from("").toString("base64") } },
+	  });
+	  return { failed: false } as const;
+	}
+	catch (err)
+	{
+	  ___MarkActiveSpanFailed();
+	  const error = _k8sStatus(err) === 404
+		? new Error(`Provider custody Secret '${name}' is missing; deployment must pre-create the fixed provider catalogue`)
+		: err;
+	  return { failed: true, error } as const;
+	}
+  });
+  if (delivery.failed)
+	throw delivery.error;
 }
 
 /** Extract a Kubernetes API status code from the common client error shapes. */

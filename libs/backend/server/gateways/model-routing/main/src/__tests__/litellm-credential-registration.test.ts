@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const _MARK_ACTIVE_SPAN_FAILED = vi.hoisted(function _MarkActiveSpanFailed() { return vi.fn(); });
+
+vi.mock("@opencrane/backend/observability", async function _Observability(importOriginal: () => Promise<typeof import("@opencrane/backend/observability")>)
+{
+	return { ...await importOriginal(), ___MarkActiveSpanFailed: _MARK_ACTIVE_SPAN_FAILED };
+});
+
 import { _DeleteLiteLlmCredential, _UpsertLiteLlmCredential } from "../core/litellm-credential-registration";
 import { LiteLlmCredentialMutationOutcomes } from "../core/litellm-credential-registration.types";
 
@@ -7,8 +14,9 @@ describe("LiteLLM credential mutation outcomes", function _Suite()
 {
   beforeEach(function _Configure()
   {
-    process.env.LITELLM_ENDPOINT = "http://litellm:4000";
-    process.env.LITELLM_MASTER_KEY = "master-key";
+	  process.env.LITELLM_ENDPOINT = "http://litellm:4000";
+	  process.env.LITELLM_MASTER_KEY = "master-key";
+	  _MARK_ACTIVE_SPAN_FAILED.mockClear();
   });
 
   afterEach(function _Restore()
@@ -23,10 +31,19 @@ describe("LiteLLM credential mutation outcomes", function _Suite()
     const fetch = vi.fn().mockRejectedValue(new Error("request aborted before response"));
     vi.stubGlobal("fetch", fetch);
 
-    await expect(_UpsertLiteLlmCredential({ credentialName: "byok-openai", provider: "openai", apiKey: "sk-test" })).resolves.toBe(LiteLlmCredentialMutationOutcomes.Uncertain);
-    expect(fetch).toHaveBeenCalledOnce();
+	  await expect(_UpsertLiteLlmCredential({ credentialName: "byok-openai", provider: "openai", apiKey: "sk-test" })).resolves.toBe(LiteLlmCredentialMutationOutcomes.Uncertain);
+	  expect(fetch).toHaveBeenCalledOnce();
 		expect(fetch.mock.calls[0]?.[1]).toMatchObject({ method: "PATCH" });
-  });
+		expect(_MARK_ACTIVE_SPAN_FAILED).toHaveBeenCalledOnce();
+	});
+
+	it("marks a rejected fixed-name PATCH span failed", async function _RejectedPatch()
+	{
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("rejected", { status: 500 })));
+
+		await expect(_UpsertLiteLlmCredential({ credentialName: "byok-openai", provider: "openai", apiKey: "sk-test" })).resolves.toBe(LiteLlmCredentialMutationOutcomes.Rejected);
+		expect(_MARK_ACTIVE_SPAN_FAILED).toHaveBeenCalledOnce();
+	});
 
 	it("creates only after PATCH confirms the fixed credential is absent", async function _CreateAfterConfirmedAbsence()
 	{
@@ -37,6 +54,7 @@ describe("LiteLLM credential mutation outcomes", function _Suite()
 
 		await expect(_UpsertLiteLlmCredential({ credentialName: "byok-openai", provider: "openai", apiKey: "sk-test" })).resolves.toBe(LiteLlmCredentialMutationOutcomes.Applied);
 		expect(fetch.mock.calls.map(function _Method(call) { return (call[1] as RequestInit).method; })).toEqual(["PATCH", "POST"]);
+		expect(_MARK_ACTIVE_SPAN_FAILED).not.toHaveBeenCalled();
 	});
 
 	it("marks an aborted POST uncertain after confirmed absence", async function _UncertainCreate()
@@ -48,6 +66,7 @@ describe("LiteLLM credential mutation outcomes", function _Suite()
 
 		await expect(_UpsertLiteLlmCredential({ credentialName: "byok-openai", provider: "openai", apiKey: "sk-test" })).resolves.toBe(LiteLlmCredentialMutationOutcomes.Uncertain);
 		expect(fetch.mock.calls.map(function _Method(call) { return (call[1] as RequestInit).method; })).toEqual(["PATCH", "POST"]);
+		expect(_MARK_ACTIVE_SPAN_FAILED).toHaveBeenCalledOnce();
 	});
 
 	it("keeps the desired key when a delayed first PATCH lands after its exact retry", async function _DelayedPatch()
@@ -78,12 +97,22 @@ describe("LiteLLM credential mutation outcomes", function _Suite()
 
 		expect(storedKey).toBe("sk-desired");
 		expect(fetch.mock.calls.map(function _Method(call) { return (call[1] as RequestInit).method; })).toEqual(["PATCH", "PATCH"]);
+		expect(_MARK_ACTIVE_SPAN_FAILED).toHaveBeenCalledOnce();
 	});
 
   it("marks an aborted fixed-name delete uncertain", async function _UncertainDelete()
   {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("request aborted before response")));
 
-    await expect(_DeleteLiteLlmCredential("byok-openai")).resolves.toBe(LiteLlmCredentialMutationOutcomes.Uncertain);
-  });
+	  await expect(_DeleteLiteLlmCredential("byok-openai")).resolves.toBe(LiteLlmCredentialMutationOutcomes.Uncertain);
+	  expect(_MARK_ACTIVE_SPAN_FAILED).toHaveBeenCalledOnce();
+	});
+
+	it("marks a rejected fixed-name delete span failed", async function _RejectedDelete()
+	{
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("rejected", { status: 500 })));
+
+		await expect(_DeleteLiteLlmCredential("byok-openai")).resolves.toBe(LiteLlmCredentialMutationOutcomes.Rejected);
+		expect(_MARK_ACTIVE_SPAN_FAILED).toHaveBeenCalledOnce();
+	});
 });

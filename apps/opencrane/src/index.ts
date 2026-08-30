@@ -60,7 +60,7 @@ async function _Main(): Promise<void>
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
 	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime, workflows);
 	const externalActions = _CreateExternalActionWorker(prisma, mcpRuntime.authority, _log);
-	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace);
+	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
 
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
