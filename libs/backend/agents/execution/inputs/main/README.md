@@ -118,5 +118,5 @@ decides service publication, membership, grant, or boundary attachment policy.
 ## See also
 
 - Parent index: [agents](../../../README.md)
-- Siblings: [runs](../../runs/main/README.md) · [agent memory](../../../memory/main/README.md) ·
+- Siblings: [runs](../../runs/main/README.md) ·
   [personal-memory selection](../../../personal/memory/main/README.md) · [personas](../../../personal/personas/main/README.md)

@@ -6,7 +6,7 @@
   "tags": [
     "type:lib",
     "layer:backend",
-    "scope:audit"
+    "scope:audit-writer"
   ],
   "targets": {
     "lint": {

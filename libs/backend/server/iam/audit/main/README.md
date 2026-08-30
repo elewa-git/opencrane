@@ -38,7 +38,6 @@ revoked grant cannot race a separate audit query. This package never appends or 
 - `auditRouter` and its route types — the read-only `/api/v1/audit` trail API, including the trusted
   caller and injected authority-factory contracts.
 - `_AuditOpenapiPaths` — the OpenAPI (REST API description) path fragment this domain contributes to the aggregated spec.
-- `AuditDecisionRecord` and related contract types.
 
 ## Boundary
 

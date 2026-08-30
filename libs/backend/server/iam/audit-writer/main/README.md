@@ -48,9 +48,9 @@ lifecycle rule.
 
 ## Dependency direction
 
-Tagged `scope:audit`: it may depend on audit and shared contracts, but deliberately has no
-authorization dependency. Packages that decide may depend on this leaf; this leaf never imports
-them back.
+Tagged `scope:audit-writer`: it may depend only on its own leaf scope and shared contracts. The
+separate tag makes the cycle-breaking boundary executable: packages that decide may depend on this
+writer, while this writer cannot import authorization or the audit reader back.
 
 ## Data & persistence
 
