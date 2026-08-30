@@ -78,9 +78,8 @@ install core (`platform/k8s-deploy.sh`). It requires a base domain, a ClusterTen
 (server, LiteLLM, and database administration), and the reviewed single-page application (SPA)
 `--opencrane-ui-digest`. The named email is non-secret and only selects the verified OIDC identity
 that can claim the silo's one subject-bound Owner row at first login; deployment never writes a user
-row directly. A new silo can also pass `--initial-model-provider` with
-`OPENCRANE_INITIAL_MODEL_API_KEY` in its environment; the key never enters Helm values and is
-registered through the release-local LiteLLM before the server becomes ready.
+row or provider credential directly. Provider setup begins after deployment through the
+authenticated durable provider API.
 
 `Entrypoint: teardown.sh` — retires one exact standalone silo after checking the kubectl context,
 tenant, namespace, exact chart identities from `releases/<version>.json`, retained CloudNativePG
@@ -135,9 +134,9 @@ package imports it.
   exists, because a `sub` is scoped to its original OIDC issuer. Later upgrades must restate that
   same `--oidc-issuer-url`; they may not use chart `--values` or `--reset-values`, which could
   replace or erase the binding.
-- `--initial-model-provider` plus `OPENCRANE_INITIAL_MODEL_API_KEY` — optional bootstrap of the first
-  supported model provider. The engine writes the key to the release-local provider-custody Secret;
-  the server then registers its encrypted LiteLLM credential and catalogue before accepting work.
+- `platform/provider-key-secrets.sh` — creates only missing fixed-name provider Secret placeholders.
+  Authenticated durable provider commands later fill or clear them; redeployment never overwrites a
+  previously admitted key.
 - `--opencrane-ui-digest` — required Open Container Initiative (OCI) `sha256:` identity of the reviewed SPA build. The engine
   renders `repository@digest`, waits for the SPA rollout, and refuses success if the Deployment or
   ready Pods do not show that image. `OPENCRANE_ALLOW_TAG_FLOAT=1` is only for a disposable local

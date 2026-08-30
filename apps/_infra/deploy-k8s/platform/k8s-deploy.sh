@@ -26,7 +26,6 @@
 #                            [--platform-operator-seed-email EMAIL]
 #                            [--platform-operator-groups CSV]
 #                            [--first-user-email EMAIL]
-#                            [--initial-model-provider PROVIDER]
 #                            [--preflight] [--multi-ct] [--verify] [--verify-insecure]
 #                            --postgres-credentials-secret NAME
 #                            [--postgres-owner OWNER]
@@ -66,11 +65,6 @@
 # nobody (fail-closed). Also accepted via the OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL
 # env var. Never commit a real owner email into the repo.
 #
-# `--initial-model-provider` pairs with the required environment-only
-# OPENCRANE_INITIAL_MODEL_API_KEY. The installer writes that raw key directly to the release-local
-# provider-custody Secret; the server then registers it with LiteLLM's encrypted credentials API
-# and seeds the provider model catalogue before it becomes ready. Never pass the API key as a flag.
-#
 # --image-tag pins the OpenCrane server image along with every other tag-built component, on a fresh
 # install and on an upgrade alike; --opencrane-server-tag moves the server on its own. An upgrade that
 # passes neither keeps the tag the prior release recorded. The SPA and Cognee require exact OCI digests
@@ -108,7 +102,7 @@ if [[ ! -f "$COGNEE_IMAGE_POLICY" ]]; then
   exit 1
 fi
 source "$COGNEE_IMAGE_POLICY"
-source "$SCRIPT_DIR/initial-model-provider.sh"
+source "$SCRIPT_DIR/provider-key-secrets.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
 source "$SCRIPT_DIR/runtime-continuation-keyring-secret.sh"
 source "$SCRIPT_DIR/database-migration-orchestrator.sh"
@@ -196,8 +190,6 @@ FIRST_USER_EMAIL="${OPENCRANE_FIRST_USER_EMAIL:-}"
 # Platform-operator GROUP mapping (CSV of IdP groups). OR-ed with the seed email; the
 # durable bootstrap once an IdP group exists. Empty → unset (fail-closed).
 PLATFORM_OPERATOR_GROUPS="${OPENCRANE_PLATFORM_OPERATOR_GROUPS:-}"
-INITIAL_MODEL_PROVIDER="${OPENCRANE_INITIAL_MODEL_PROVIDER:-}"
-INITIAL_MODEL_API_KEY="${OPENCRANE_INITIAL_MODEL_API_KEY:-}"
 # CloudNativePG is an external cluster prerequisite. OpenCrane never installs or upgrades
 # the operator. The credentials Secret is also external: this deploy flow only validates and
 # references it, so database passwords never pass through shell generation or repair paths.
@@ -264,7 +256,6 @@ while [[ $# -gt 0 ]]; do
     --platform-operator-seed-email) PLATFORM_OPERATOR_SEED_EMAIL="$2"; shift 2 ;;
     --platform-operator-groups)     PLATFORM_OPERATOR_GROUPS="$2"; shift 2 ;;
     --first-user-email)             FIRST_USER_EMAIL="$2"; shift 2 ;;
-    --initial-model-provider)       INITIAL_MODEL_PROVIDER="$2"; shift 2 ;;
     --preflight)        PREFLIGHT="1"; shift ;;
     --multi-ct)         MULTI_CT="1"; shift ;;
     --verify)           VERIFY="1"; shift ;;
@@ -491,8 +482,6 @@ _require_expandable_artifact_storage() {
   fi
 }
 _require_expandable_artifact_storage
-
-validate_initial_model_provider "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_API_KEY" || exit 1
 
 _gen_secret() { openssl rand -hex 16 2>/dev/null || head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32; }
 _read_secret() { kubectl get secret "$1" -n "$NAMESPACE" -o jsonpath="{.data.$2}" 2>/dev/null | base64 -d || true; }
@@ -778,7 +767,6 @@ kubectl create secret generic opencrane-litellm -n "$NAMESPACE" \
   --from-literal=LITELLM_SALT_KEY="$LITELLM_SALT_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
 ensure_provider_key_secrets "$NAMESPACE"
-publish_initial_model_provider_secret "$NAMESPACE" "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_API_KEY"
 # OIDC secret. The chart references clustertenantManager.oidc.existingSecret for the client + session
 # secrets; previously this installer set only the issuer/clientId/redirect and ASSUMED the
 # Secret already existed, so a fresh OIDC install rendered a UI that crash-looped on a missing
@@ -960,7 +948,6 @@ fi
 if [[ -n "$FIRST_USER_EMAIL" ]]; then
   helm_args+=(--set-string "clustertenantManager.firstUser.email=$FIRST_USER_EMAIL")
 fi
-append_initial_model_provider_helm_args "$INITIAL_MODEL_PROVIDER"
 [[ -n "$VALUES_FILE" ]] && helm_args+=(--values "$VALUES_FILE")
 # macOS Bash 3.2 aborts under `set -u` when it expands an empty array here.
 # Check its length before expansion so a deploy without --set still reaches Helm.

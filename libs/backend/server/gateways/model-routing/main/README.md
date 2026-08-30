@@ -68,13 +68,10 @@ derived from their governed Global resource, so a late first POST cannot create 
   `PrismaDefaultModelDefinitionResolverRepository` — the closed result vocabulary and Postgres
   adapter that turn the configured effective default into one stable, tenant-accessible
   `ModelDefinition` identifier.
-- `_ApplyProviderKeySecret`, `_ClearProviderKeySecret`, `_RegisterLiteLlmModel`,
+- `_byokSecretName`, `_byokCredentialName`, `_ApplyProviderKeySecret`,
+  `_ClearProviderKeySecret`, `_RegisterLiteLlmModel`,
   `_UpsertLiteLlmCredential`, `_DeleteLiteLlmCredential`, and `_EnsureProviderEmbeddingModels` —
-  external-only custody and LiteLLM adapters used after a durable provider command commits.
-- `_ProvisionByokKey` and `_DeprovisionByokKey` — the separate startup/bootstrap convergence path;
-  provider HTTP routes do not call these database-writing helpers.
-  `_RequireLiteLlmModelName` and `_RequireLiteLlmModelDeployment` qualify live startup inventory
-  without rewriting immutable model-definition evidence.
+  fixed-coordinate custody and LiteLLM adapters used only after a durable provider command commits.
 - `_EstimateSavings`, `_ReplayEstimate`, `_DoublyRobustEstimate`, `_OpeEstimateWithCi` — the pure
   shadow-router estimators. `_BYOK_PROVIDER_CATALOG` — the per-provider default model catalogue.
 - `_IssueAttemptLiteLlmKey` — mint one short-lived, alias- and budget-bound LiteLLM virtual key for a
@@ -84,8 +81,8 @@ derived from their governed Global resource, so a late first POST cannot create 
 ## Boundary
 
 The application layer mounts the routers, supplies a `PrismaClient`, and may construct the default
-model repository with an already-open transaction. The provider gateway imports the provisioning
-helpers. This package sets and resolves routing policy — it does not commit another domain's
+model repository with an already-open transaction. The provider gateway imports the external-effect
+adapters. This package sets and resolves routing policy — it does not commit another domain's
 transaction, execute model calls, or hold provider secrets (LiteLLM and the provider gateway do).
 `ModelRoutingDefault` is organisation policy, not a governed model instance, so the API checks the
 organisation capability explicitly instead of inventing a fake `ModelDefinition` resource id. A

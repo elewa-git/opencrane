@@ -16,7 +16,6 @@ import { _CreateExternalActionWorker } from "./app/external-action-composition";
 import { _CreateInternalApp } from "./app/internal-app";
 import { _CreateMcpWorkflowComposition } from "./app/mcp-workflow-composition";
 import { _CreateMcpRuntimeComposition } from "./app/mcp-runtime-composition";
-import { _BootstrapInitialModel } from "./app/initial-model-bootstrap";
 import { _CreateKubernetesClients } from "./app/kubernetes-clients";
 import { _StartProcessLifecycle } from "./app/lifecycle";
 import { _log } from "./app/log";
@@ -45,7 +44,6 @@ async function _Main(): Promise<void>
 	const prisma = ___CreatePrismaClient(_log);
 	const kubernetes = _CreateKubernetesClients();
 	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows);
-	await _BootstrapInitialModel({ prisma, coreApi: kubernetes.coreApi, config: config.initialModelBootstrap, namespace: config.runtime.serverNamespace, siloId: config.runtime.siloId });
 	await _ReconcileChannelTargetRoutes(prisma, config.runtime.channelTargets);
 
 	// 3. Compose one shared capacity gate and deployment-selected membership evidence for every run

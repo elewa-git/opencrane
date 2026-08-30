@@ -39,16 +39,15 @@ their concrete adapters, mounts their routers, and starts and stops them in the 
 [agent-runtime](../agent-runtime/README.md) ·
 [backend capabilities](../../libs/backend/README.md)
 
-Startup proceeds in six visible stages:
+Startup proceeds in five visible stages:
 
 1. initialise telemetry before any instrumented dependency loads;
 2. freeze process configuration and construct Prisma and Kubernetes clients;
-3. when configured, seed the initial provider credential through LiteLLM before serving any agent;
-4. compose one shared-capacity managed admission port and one session-derived personal admission
+3. compose one shared-capacity managed admission port and one session-derived personal admission
    port, both over the same signed membership configuration. A standalone deployment has no Fleet
    key but deliberately denies run admission until it has a local signed-membership issuer;
-5. build the public and internal Express applications; and
-6. start the registered workflow and bounded background workers, then open both listeners and attach
+4. build the public and internal Express applications; and
+5. start the registered workflow and bounded background workers, then open both listeners and attach
    the signed-in conversation WebSocket under one coordinated shutdown path.
 
 The route registry is deliberately a catalogue rather than a second application layer:
@@ -83,8 +82,6 @@ its resources to the lifecycle owner.
 
 - `src/app/config.ts` reads one startup snapshot for listener and worker configuration, including
   the all-or-nothing standalone first-owner contract and HTTPS-only Fleet membership receiver.
-- `src/app/initial-model-bootstrap.ts` makes the deployment-supplied provider key available through
-  the existing provider-custody and LiteLLM-registration authority before the listeners start.
 - `src/app/kubernetes-clients.ts` constructs the exact Kubernetes clients the process needs.
 - `src/app/public-app.ts` builds the browser-session-authenticated API.
 - The neutral [membership](../../libs/backend/server/iam/membership/main/README.md) package owns
@@ -206,7 +203,6 @@ are:
 | `OPENCRANE_OCI_REGISTRY_*` | Fixed HTTPS registry repository, request timeout, and optional Secret-backed authorization used to import admitted MCP images by digest | deployment profile / 30 seconds / no credential |
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
-| `OPENCRANE_INITIAL_MODEL_*` | Optional first provider key; the server persists its custody reference and requires LiteLLM registration before readiness | disabled |
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL`, `CHANNEL_PROXY_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
 | `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal warm runtime Pod boundary | required |

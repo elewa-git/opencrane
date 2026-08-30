@@ -34,9 +34,9 @@ export const _AUTO_EMBEDDING_MODEL_NAME = "auto-embedding";
  * Every Global `ModelDefinition` is tenant-selectable, so embedding deployments deliberately stay
  * outside that table. The provider slug and stable alias both use embedding mode. A registration
  * that finds either deployment already present leaves that deployment in place; reading it from
- * the live inventory also qualifies it during startup without creating a duplicate deployment.
+ * the live inventory also qualifies it during command execution without creating a duplicate.
  *
- * Called by: provider effect delivery and `_ProvisionByokKey` startup bootstrap.
+ * Called by: durable provider-effect delivery after a Set-BYOK command is claimed.
  *
  * @param catalog - Provider catalogue, or undefined for an uncatalogued provider.
  * @param litellmCredentialName - LiteLLM credential name, or null for a Secret-only baseline.

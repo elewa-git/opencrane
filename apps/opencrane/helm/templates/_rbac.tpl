@@ -38,8 +38,7 @@ subjects:
   The provider gateway owns release-local provider-key custody. Kubernetes RBAC cannot express a
   safe dynamic-name prefix, so the deployment engine pre-creates the finite provider catalogue.
   This Role is namespaced (never cluster-scoped), and every verb is resource-name bounded. It is also
-  used once at startup to converge the deployment-supplied initial provider Secret into LiteLLM's
-  encrypted credential store.
+  used only by claimed durable provider commands after central authorization commits.
 */}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -57,7 +56,7 @@ rules:
       - byok-provider-key-mistral
       - byok-provider-key-deepseek
       - byok-provider-key-glm
-    verbs: ["get", "update", "delete"]
+    verbs: ["get", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

@@ -219,20 +219,17 @@ The one thing an agent must never see in plain text is credentials. The conventi
 
 - **`keys/` at the repository root is gitignored** (`/keys/*` in `.gitignore`). Put one secret
   per file, named for what it is:
-  - `keys/initial-model-api-key` — the provider API key that seeds the first routable model.
-    The deploy reads it as an environment variable, never as a flag:
-    `OPENCRANE_INITIAL_MODEL_API_KEY="$(cat keys/initial-model-api-key)"` alongside
-    `--initial-model-provider <openai|anthropic|gemini|mistral|deepseek|glm>`.
   - `keys/zitadel-pat` — the Zitadel service-user PAT for organisation management once the
     mode-scoped credential lands (tracked in the silo org-role issues); standalone silos get a
     full-org credential, fleet-mode silos a claims-only one.
 - The agent reads a key file straight into the environment of the one command that needs it and
-  never echoes it, logs it, or passes it as a command argument — the same custody rule the
-  scripts themselves follow (the API key is environment-only precisely to keep it out of command
-  history and Helm values).
+  never echoes it, logs it, or passes it as a command argument.
+- Provider keys do not enter the deployment command. An authenticated operator admits them after
+  the server is ready; one durable provider command binds authorization, external delivery, and
+  final projection before the provider becomes selectable.
 - Everything else an agent needs is already non-secret: cluster context, base domain, tenant
   name, image digests from the release manifest, and the deploy ledger for cross-run memory.
 
-With `keys/` populated, a fresh silo is one command the agent can compose, run, and verify —
-and the post-deploy verification plus the run report tell it (and you) whether the cluster is
-actually healthy.
+A fresh silo is one command the agent can compose, run, and verify. The post-deploy verification
+and run report prove the model-unconfigured control plane is healthy; provider readiness is a
+separate authenticated product workflow.

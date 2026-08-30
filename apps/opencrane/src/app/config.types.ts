@@ -98,25 +98,11 @@ export interface OpenCraneWorkflowConfig
 	readonly workerConcurrency: number;
 }
 
-/**
- * One deployment-supplied provider credential that must be registered with the release-local
- * LiteLLM before the silo accepts work. The key is read only from a Kubernetes Secret reference.
- */
-export interface InitialModelBootstrapConfig
-{
-	/** Supported upstream provider whose catalogue LiteLLM will register. */
-	readonly provider: string;
-	/** Raw upstream API key read from the mounted Secret and never logged or returned. */
-	readonly apiKey: string;
-}
-
 /** Process-owned settings that shape the OpenCrane server lifecycle. */
 export interface OpenCraneProcessConfig
 {
 	/** Namespace in which OIDC authentication resources are resolved. */
 	readonly authWatchNamespace: string;
-	/** Optional deployment-time model credential that must be seeded into LiteLLM before startup. */
-	readonly initialModelBootstrap: InitialModelBootstrapConfig | null;
 	/** Port exposed only to platform workloads. */
 	readonly internalPort: number;
 	/** Workload-facing identity and dispatch configuration. */

@@ -452,13 +452,6 @@ clustertenantManager:
       authorization:
         existingSecret: ""
         secretKey: authorization
-  # -- Optional first model credential. The deploy engine creates the named provider-custody
-  # Secret from OPENCRANE_INITIAL_MODEL_API_KEY, then the server seeds it through LiteLLM before
-  # becoming ready. Keep both fields empty for a deliberately model-unconfigured install.
-  initialModel:
-    provider: ""
-    existingSecret: ""
-    apiKeySecretKey: apiKey
   # -- One verified OIDC email may claim this standalone silo's first active Owner membership.
   # The deploy profile supplies both values; Helm never writes database membership data itself.
   firstUser:

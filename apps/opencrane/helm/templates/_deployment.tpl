@@ -3,7 +3,6 @@
 {{- $membership := .Values.clustertenantManager.membership -}}
 {{- $standaloneMembership := $membership.standalone -}}
 {{- $fleetMembership := $membership.fleet -}}
-{{- $initialModel := .Values.clustertenantManager.initialModel -}}
 {{- $firstUser := .Values.clustertenantManager.firstUser -}}
 {{- $ociRegistry := .Values.clustertenantManager.workflows.ociRegistry -}}
 {{- $ociRegistryAuthorization := $ociRegistry.authorization -}}
@@ -36,12 +35,6 @@
 {{- end -}}
 {{- if and (eq $membership.mode "fleet") (or (lt (int $fleetMembership.billingGatewayProjectedTokenTtlSeconds) 600) (gt (int $fleetMembership.billingGatewayProjectedTokenTtlSeconds) 3600)) -}}
 {{- fail "clustertenantManager.membership.fleet.billingGatewayProjectedTokenTtlSeconds must be from 600 through 3600" -}}
-{{- end -}}
-{{- if ne (empty $initialModel.provider) (empty $initialModel.existingSecret) -}}
-{{- fail "clustertenantManager.initialModel.provider and existingSecret must be configured together" -}}
-{{- end -}}
-{{- if and $initialModel.provider (empty $initialModel.apiKeySecretKey) -}}
-{{- fail "clustertenantManager.initialModel.apiKeySecretKey is required when an initial model is configured" -}}
 {{- end -}}
 {{- if ne (empty $firstUser.email) (empty $firstUser.clusterTenant) -}}
 {{- fail "clustertenantManager.firstUser.email and clusterTenant must be configured together" -}}
@@ -293,19 +286,6 @@ spec:
                   name: {{ include "opencrane.fullname" . }}-litellm
                   {{- end }}
                   key: {{ .Values.litellm.secretKey }}
-            {{- end }}
-            {{- with $initialModel }}
-            {{- if .provider }}
-            # Deployment-time model bootstrap. The raw key remains in the provider custody Secret;
-            # this process consumes it only to register LiteLLM's encrypted credential and catalog.
-            - name: OPENCRANE_INITIAL_MODEL_PROVIDER
-              value: {{ .provider | quote }}
-            - name: OPENCRANE_INITIAL_MODEL_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .existingSecret }}
-                  key: {{ .apiKeySecretKey }}
-            {{- end }}
             {{- end }}
             {{- include "opencrane.clustertenantManagerDatabaseEnv" . | nindent 12 }}
             # Server-owned Kubernetes operations are restricted to this release namespace.
