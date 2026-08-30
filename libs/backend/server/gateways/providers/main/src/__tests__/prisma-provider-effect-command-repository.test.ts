@@ -6,6 +6,7 @@ import { AuthorizationDecisionOutcomes, ProductAuthorizationResourceKinds } from
 import { ModelRoutingScope } from "@opencrane/contracts";
 
 import { PrismaProviderEffectCommandRepository } from "../prisma-provider-effect-command-repository";
+import { _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "../provider-effect-command-errors";
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandPayload, type ProviderEffectCommandRecord, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 
 /** Stable executor profile shared by current-authority repository tests. */
@@ -54,7 +55,7 @@ function _row(payload: ProviderEffectCommandPayload, overrides: Record<string, u
 /** Converts a Prisma-shaped row into the claimed record passed between executor transactions. */
 function _record(row: Record<string, unknown>, payload: ProviderEffectCommandPayload): ProviderEffectCommandRecord
 {
-	return { id: row.id as string, siloId: row.siloId as string, principalId: row.principalId as string, payload, resourceKind: row.resourceKind as string, resourceId: row.resourceId as string, resourceRevision: row.resourceRevision as string, desiredGeneration: row.desiredGeneration as number, argumentsDigest: row.argumentsDigest as `sha256:${string}`, materialVerifier: null, authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None, state: row.state as ProviderEffectCommandStates, deliveryCount: row.deliveryCount as number, claimFence: row.claimFence as string | null, claimExpiresAt: row.claimExpiresAt as Date | null };
+	return { id: row.id as string, siloId: row.siloId as string, principalId: row.principalId as string, payload, resourceKind: row.resourceKind as string, resourceId: row.resourceId as string, resourceRevision: row.resourceRevision as string, desiredGeneration: row.desiredGeneration as number, argumentsDigest: row.argumentsDigest as `sha256:${string}`, materialVerifier: null, authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, approvalId: null, executorProfile: _PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None, state: row.state as ProviderEffectCommandStates, deliveryCount: row.deliveryCount as number, claimFence: row.claimFence as string | null, claimExpiresAt: row.claimExpiresAt as Date | null, failureCode: row.failureCode as string | null };
 }
 
 /** Builds a transaction stub that distinguishes latest-generation and active-claim queries. */
@@ -104,7 +105,7 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		const updateMany = vi.fn(async function _UpdateMany() { return { count: 1 }; });
 		const transaction = {
 			providerEffectCommand: {
-				findFirst: vi.fn(async function _FindFirst(args: { where?: { state?: string } }) { return args.where?.state === ProviderEffectCommandStates.Claimed ? null : rowA; }),
+				findFirst: vi.fn(async function _FindFirst(args: { where?: { state?: string; OR?: unknown } }) { return args.where?.state === ProviderEffectCommandStates.Claimed || args.where?.OR !== undefined ? null : rowA; }),
 				create,
 				updateMany,
 			},
@@ -169,6 +170,18 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		const reclaimed = await claimRepository.claim("command-a", null, _context(), _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"));
 		expect(reclaimed.status).toBe(ProviderEffectExecutionStatuses.Claimed);
 		expect(database.updateCommands).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ProviderEffectCommandStates.Claimed, deliveryCount: { increment: 1 }, claimFence: expect.any(String) }) }));
+	});
+
+	it("retains an uncertain claim and permits exact-command convergence beyond the normal delivery budget", async function _UncertainBudget()
+	{
+		const uncertain = _row(_DELETE, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 3, claimFence: "fence-old", claimExpiresAt: new Date("2026-08-30T00:30:00.000Z"), failureCode: _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE });
+		const database = _transaction(uncertain, uncertain);
+		const repository = new PrismaProviderEffectCommandRepository(database.transaction);
+
+		await expect(repository.retainClaim(_record(uncertain, _DELETE), _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE)).resolves.toBe(ProviderEffectExecutionStatuses.Retryable);
+		await expect(repository.claim("command-a", null, _context(), _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toMatchObject({ status: ProviderEffectExecutionStatuses.Claimed });
+		expect(database.updateCommands).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ProviderEffectCommandStates.Failed, failureCode: "delivery_budget_exhausted" }) }));
+		expect(database.updateCommands).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ deliveryCount: { increment: 1 }, failureCode: _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE }) }));
 	});
 
 	it.each(["user", "system"] as const)("refuses a %s delivery after organisation administration is revoked", async function _Revoked(actorKind)

@@ -6,12 +6,13 @@ import { Prisma, type ModelDefinition as PrismaModelDefinition, type ProviderCre
 
 import { ModelRoutingScope } from "@opencrane/contracts";
 import { _DeleteLiteLlmCredential, _UpsertLiteLlmCredential } from "./litellm-credential-registration";
+import { LiteLlmCredentialMutationOutcomes } from "./litellm-credential-registration.types";
 import { _RequireLiteLlmModelDeployment } from "./litellm-model-inventory";
 import { _RegisterLiteLlmModel } from "./litellm-model-registration";
 import { _BYOK_PROVIDER_CATALOG } from "./byok-default-models";
 import type { ByokProviderCatalog } from "./byok-default-models.types";
 import { _EnsureProviderEmbeddingModels } from "./provider-embedding-models";
-import type { DeprovisionByokKeyOptions, ProviderProvisioningPrisma, ProvisionByokKeyOptions, ProvisionByokKeyResult } from "./provision-byok-key.types";
+import type { DeprovisionByokKeyOptions, DeprovisionByokKeyResult, ProviderProvisioningPrisma, ProvisionByokKeyOptions, ProvisionByokKeyResult } from "./provision-byok-key.types";
 
 export { _AUTO_EMBEDDING_MODEL_NAME } from "./provider-embedding-models";
 
@@ -117,7 +118,8 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
   // 2. Best-effort push to LiteLLM's /credentials dynamic path; Secret-only when unconfigured/down.
   //    custom_llm_provider is the catalog's litellmProvider (glm ⇒ zai), falling back to the key.
   const credentialName = _byokCredentialName(provider);
-  const litellmRegistered = await _UpsertLiteLlmCredential({ credentialName, provider: catalog?.litellmProvider ?? provider, apiKey });
+  const credentialOutcome = await _UpsertLiteLlmCredential({ credentialName, provider: catalog?.litellmProvider ?? provider, apiKey });
+  const litellmRegistered = credentialOutcome === LiteLlmCredentialMutationOutcomes.Applied;
 
   // 3. Record the credential reference (litellmCredentialName set only when LiteLLM accepted it).
   const secretRef = _byokSecretName(provider);
@@ -148,7 +150,7 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
     log.warn({ provider, err }, "byok embedding model registration failed; key is set but no embedding model was registered");
   }
 
-  return { litellmRegistered, row };
+  return { litellmRegistered, litellmOutcomeCertain: credentialOutcome !== LiteLlmCredentialMutationOutcomes.Uncertain, row };
 }
 
 /**
@@ -171,11 +173,12 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
  * @throws Error when the provider's Secret is missing entirely, which means deployment never
  *         pre-created it; the LiteLLM credential and the row are then left untouched.
  */
-export async function _DeprovisionByokKey(opts: DeprovisionByokKeyOptions): Promise<void>
+export async function _DeprovisionByokKey(opts: DeprovisionByokKeyOptions): Promise<DeprovisionByokKeyResult>
 {
   await _clearProviderKeySecret(opts.coreApi, opts.operatorNamespace, opts.provider);
-  await _DeleteLiteLlmCredential(_byokCredentialName(opts.provider));
+  const credentialOutcome = await _DeleteLiteLlmCredential(_byokCredentialName(opts.provider));
   await opts.prisma.providerCredential.deleteMany({ where: { scope: "Global", clusterTenant: null, provider: opts.provider } });
+  return { litellmOutcomeCertain: credentialOutcome !== LiteLlmCredentialMutationOutcomes.Uncertain };
 }
 
 /**

@@ -4,6 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import { _byokCredentialName, _byokSecretName, _DeprovisionByokKey, _ProvisionByokKey, _RegisterLiteLlmModel } from "@opencrane/backend/server/gateways/model-routing";
 
 import { _log } from "./log";
+import { ProviderEffectOutcomeUncertainError } from "./provider-effect-command-errors";
 import { ProviderEffectCommandKinds, type ProviderEffectCommandHandler, type ProviderEffectCommandRecord, type ProviderEffectEphemeralMaterial, type ProviderEffectHandlerResult } from "./provider-effect-command.types";
 
 /**
@@ -52,13 +53,17 @@ export class DefaultProviderEffectCommandHandler implements ProviderEffectComman
 					throw new Error("Set-BYOK execution requires matching ephemeral provider material");
 				_requireFixedCustodyCoordinates(command.payload.value.provider, command.payload.value.secretRef, command.payload.value.litellmCredentialName);
 				const provisioned = await _ProvisionByokKey({ prisma: this.prisma, coreApi: this.coreApi, operatorNamespace: this.operatorNamespace, provider: command.payload.value.provider, apiKey: providerKey, log: _log });
+				if (!provisioned.litellmOutcomeCertain)
+					throw new ProviderEffectOutcomeUncertainError();
 				return { kind: command.payload.kind, providerCredentialId: provisioned.row.id, litellmRegistered: provisioned.litellmRegistered };
 			}
 			case ProviderEffectCommandKinds.DeleteByokKey:
 				if (this.coreApi === null || this.operatorNamespace === null)
 					throw new Error("Delete-BYOK execution requires the Kubernetes custody adapter");
 				_requireFixedCustodyCoordinates(command.payload.value.provider, command.payload.value.secretRef, command.payload.value.litellmCredentialName);
-				await _DeprovisionByokKey({ prisma: this.prisma, coreApi: this.coreApi, operatorNamespace: this.operatorNamespace, provider: command.payload.value.provider });
+				const deprovisioned = await _DeprovisionByokKey({ prisma: this.prisma, coreApi: this.coreApi, operatorNamespace: this.operatorNamespace, provider: command.payload.value.provider });
+				if (!deprovisioned.litellmOutcomeCertain)
+					throw new ProviderEffectOutcomeUncertainError();
 				return { kind: command.payload.kind };
 			case ProviderEffectCommandKinds.RegisterModel:
 			{

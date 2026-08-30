@@ -50,6 +50,7 @@ removal returned by a pending response.
 | `Pending` | provider key missing or different | `AwaitingMaterial` |
 | `AwaitingMaterial` | matching key resubmitted | `Claimed` |
 | `Claimed` | effect and finalization succeed | `Succeeded` (terminal) |
+| `Claimed` | fixed-name upstream request ends without a response | retains the same claim and resource barrier until the exact command is retried |
 | `Claimed` | effect fails before attempt three | `Pending` or `AwaitingMaterial` |
 | `Claimed` | third effect attempt fails | `Failed` (terminal) |
 | `Succeeded` / `Failed` | any delivery request | no external call |
@@ -65,6 +66,9 @@ claimed command is the external resource's serialization barrier, even after its
 a conflicting admission returns `409 PROVIDER_EFFECT_BUSY` with that existing command id instead of
 creating a newer generation. Only that exact command may be reclaimed after expiry. Model update and
 delete use the same barrier while registration is Pending, AwaitingMaterial, or Claimed. The executor
+does not spend the terminal delivery budget or release the barrier when LiteLLM may still complete a
+timed-out fixed-name mutation; the route `commandId` resume must positively converge that same desired
+state before another Set or Delete is admitted. The executor
 re-admits the saved subject through the current central authority during claim, immediately before
 external I/O, and during finalization. It also rechecks the current model lifecycle and desired
 generation. The

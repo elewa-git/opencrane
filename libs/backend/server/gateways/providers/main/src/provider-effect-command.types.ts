@@ -186,6 +186,8 @@ export interface ProviderEffectCommandRecord extends AdmitProviderEffectCommand
 	readonly claimFence: string | null;
 	/** Time after which another executor may reclaim this command after a crashed delivery. */
 	readonly claimExpiresAt: Date | null;
+	/** Fixed failure classification retained across exact-command retries, or null. */
+	readonly failureCode: string | null;
 }
 
 /**
@@ -278,6 +280,8 @@ export interface ProviderEffectCommandRepository
 	complete(command: ProviderEffectCommandRecord, result: ProviderEffectHandlerResult, context: ProviderEffectExecutionContext, authorization: AuthorizationAuthority, completedAt: Date): Promise<ProviderEffectExecutionStatuses>;
 	/** Releases a failed delivery for retry or marks it terminal when its budget is spent. */
 	fail(command: ProviderEffectCommandRecord, failureCode: string): Promise<ProviderEffectExecutionStatuses>;
+	/** Keeps an uncertain delivery claimed until the exact command positively converges. */
+	retainClaim(command: ProviderEffectCommandRecord, failureCode: string): Promise<ProviderEffectExecutionStatuses>;
 }
 
 /** Opens short Serializable transactions for provider-command delivery state. */

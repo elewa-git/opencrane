@@ -1,87 +1,86 @@
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { _log } from "../log";
-import type { LiteLlmCredentialUpsert } from "./litellm-credential-registration.types";
+import { LiteLlmCredentialMutationOutcomes, type LiteLlmCredentialUpsert } from "./litellm-credential-registration.types";
 
 /**
  * Per-request timeout for the LiteLLM `/credentials` calls. Bounds the boot-time bootstrap (which
- * awaits these) so a hung or unreachable LiteLLM cannot wedge silo controller startup — on timeout
- * the fetch aborts, the catch returns `false`, and the key stays Secret-only until the next attempt.
+ * awaits these) so a hung or unreachable LiteLLM cannot wedge silo controller startup. A timeout
+ * yields an uncertain result because the fixed-name mutation may still complete upstream.
  */
 const _LITELLM_HTTP_TIMEOUT_MS = 10_000;
 
 /**
- * Best-effort upsert of a provider credential into LiteLLM via its `/credentials` API — the
- * BYOK "dynamic no-restart path" the contract describes (see ProviderCredential.litellmCredentialName).
+ * Upserts a provider credential into LiteLLM through its fixed-name `/credentials` API.
  *
  * Guarded by `LITELLM_ENDPOINT` + `LITELLM_MASTER_KEY`: when either is unset (dev / tests) this is
- * a no-op returning `false`, so the BYOK set path stays functional without a live LiteLLM — the
+ * a skipped outcome, so the BYOK set path stays functional without a live LiteLLM. The
  * raw key still persists to its k8s Secret and the ProviderCredential row, and the credential can
- * be reconciled later. The call is non-fatal and isolated: a LiteLLM error also returns `false`
- * rather than failing the request, mirroring the resilient posture of `_RegisterLiteLlmModel`.
+ * be reconciled later. A response distinguishes a confirmed rejection from a transport failure
+ * whose upstream result is unknown, so callers can retain their resource barrier when necessary.
  *
  * Upsert is implemented as delete-then-create so a refreshed key always replaces the stored value
  * regardless of whether the LiteLLM build exposes a credential update verb.
  *
  * @param input - The credential name, provider, and raw key to store in LiteLLM.
- * @returns `true` when LiteLLM accepted the credential; `false` when unconfigured or on any error.
+ * @returns The confirmed, skipped, rejected, or uncertain fixed-name mutation outcome.
  */
-export async function _UpsertLiteLlmCredential(input: LiteLlmCredentialUpsert): Promise<boolean>
+export async function _UpsertLiteLlmCredential(input: LiteLlmCredentialUpsert): Promise<LiteLlmCredentialMutationOutcomes>
 {
   const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
   const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";
   if (!endpoint || !masterKey)
   {
     _log.debug({ credentialName: input.credentialName, provider: input.provider, configured: false }, "litellm credential upsert skipped (unconfigured)");
-    return false;
+    return LiteLlmCredentialMutationOutcomes.Skipped;
   }
 
   return ___DoWithTrace(
     "litellm.credential.upsert",
     { credentialName: input.credentialName, provider: input.provider },
-    function _upsert(): Promise<boolean> { return _upsertLive(endpoint, masterKey, input); },
+    function _upsert(): Promise<LiteLlmCredentialMutationOutcomes> { return _upsertLive(endpoint, masterKey, input); },
   );
 }
 
 /**
- * Best-effort delete of a LiteLLM credential by name (used on BYOK key removal). Mirrors the
- * resilient posture above: unconfigured or any non-OK / error is swallowed and returns `false`,
- * never failing the caller's delete of the Secret + DB row.
+ * Deletes a LiteLLM credential by name and reports whether the result is known.
  *
  * @param credentialName - The LiteLLM credential name to remove.
- * @returns `true` when LiteLLM acknowledged the delete; `false` when unconfigured or on any error.
+ * @returns The confirmed, skipped, rejected, or uncertain fixed-name mutation outcome.
  */
-export async function _DeleteLiteLlmCredential(credentialName: string): Promise<boolean>
+export async function _DeleteLiteLlmCredential(credentialName: string): Promise<LiteLlmCredentialMutationOutcomes>
 {
   const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
   const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";
   if (!endpoint || !masterKey)
   {
-    return false;
+    return LiteLlmCredentialMutationOutcomes.Skipped;
   }
 
   return ___DoWithTrace(
     "litellm.credential.delete",
     { credentialName },
-    function _delete(): Promise<boolean> { return _deleteLive(endpoint, masterKey, credentialName); },
+    function _delete(): Promise<LiteLlmCredentialMutationOutcomes> { return _deleteLive(endpoint, masterKey, credentialName); },
   );
 }
 
 /**
- * Perform the live delete-then-create against LiteLLM. The delete clears any prior value so a
- * refreshed key replaces it; the create stores the new value. Either step failing is logged as a
- * warning and yields `false` — the request still succeeds with the key persisted to its Secret.
+ * Performs the live delete-then-create against LiteLLM. The delete clears any prior value so a
+ * refreshed key replaces it; the create stores the new value. A transport failure yields an
+ * uncertain outcome because the request may still complete after this process stops waiting.
  *
  * @param endpoint  - LiteLLM base URL.
  * @param masterKey - LiteLLM bearer credential.
  * @param input     - The credential to upsert.
  */
-async function _upsertLive(endpoint: string, masterKey: string, input: LiteLlmCredentialUpsert): Promise<boolean>
+async function _upsertLive(endpoint: string, masterKey: string, input: LiteLlmCredentialUpsert): Promise<LiteLlmCredentialMutationOutcomes>
 {
   try
   {
     // 1. Clear any existing value first so a refresh is a true replace (idempotent — 404 is fine).
-    await _deleteLive(endpoint, masterKey, input.credentialName);
+    const deleted = await _deleteLive(endpoint, masterKey, input.credentialName);
+    if (deleted === LiteLlmCredentialMutationOutcomes.Uncertain)
+      return deleted;
 
     // 2. Create the credential carrying the raw key inline. LiteLLM encrypts it at rest with
     //    LITELLM_SALT_KEY; the key is never echoed back or copied into a runtime configuration.
@@ -102,16 +101,16 @@ async function _upsertLive(endpoint: string, masterKey: string, input: LiteLlmCr
     if (!response.ok)
     {
       _log.warn({ credentialName: input.credentialName, provider: input.provider, status: response.status }, "litellm credential upsert failed; key persisted to Secret only");
-      return false;
+      return LiteLlmCredentialMutationOutcomes.Rejected;
     }
 
     _log.info({ credentialName: input.credentialName, provider: input.provider }, "litellm credential upserted");
-    return true;
+    return LiteLlmCredentialMutationOutcomes.Applied;
   }
   catch (err)
   {
     _log.warn({ credentialName: input.credentialName, provider: input.provider, err }, "litellm credential upsert errored; key persisted to Secret only");
-    return false;
+    return LiteLlmCredentialMutationOutcomes.Uncertain;
   }
 }
 
@@ -122,7 +121,7 @@ async function _upsertLive(endpoint: string, masterKey: string, input: LiteLlmCr
  * @param masterKey      - LiteLLM bearer credential.
  * @param credentialName - The credential name to remove.
  */
-async function _deleteLive(endpoint: string, masterKey: string, credentialName: string): Promise<boolean>
+async function _deleteLive(endpoint: string, masterKey: string, credentialName: string): Promise<LiteLlmCredentialMutationOutcomes>
 {
   try
   {
@@ -135,14 +134,14 @@ async function _deleteLive(endpoint: string, masterKey: string, credentialName: 
     if (!response.ok && response.status !== 404)
     {
       _log.warn({ credentialName, status: response.status }, "litellm credential delete failed");
-      return false;
+      return LiteLlmCredentialMutationOutcomes.Rejected;
     }
 
-    return true;
+    return LiteLlmCredentialMutationOutcomes.Applied;
   }
   catch (err)
   {
     _log.warn({ credentialName, err }, "litellm credential delete errored");
-    return false;
+    return LiteLlmCredentialMutationOutcomes.Uncertain;
   }
 }

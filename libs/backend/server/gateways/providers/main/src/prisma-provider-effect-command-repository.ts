@@ -6,6 +6,7 @@ import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuth
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type AdmitProviderEffectCommand, type ProviderEffectAdmissionResult, type ProviderEffectClaimResult, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectExecutionContext, type ProviderEffectHandlerResult, type ProviderEffectResourceBlocker } from "./provider-effect-command.types";
+import { _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "./provider-effect-command-errors";
 import { _ParseProviderEffectCommandPayload, _ValidateProviderEffectCommandResourceBinding } from "./provider-effect-command.validator";
 
 /** Maximum number of external deliveries before a command needs a fresh administrator request. */
@@ -42,9 +43,9 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 	async admit(command: AdmitProviderEffectCommand): Promise<ProviderEffectAdmissionResult>
 	{
 		_ValidateProviderEffectCommandResourceBinding(command.payload, command.resourceKind, command.resourceId);
-		const claimed = await this.transaction.providerEffectCommand.findFirst({ where: { siloId: command.siloId, resourceKind: command.resourceKind, resourceId: command.resourceId, state: ProviderEffectCommandState.Claimed }, orderBy: { desiredGeneration: "desc" } });
+		const claimed = await this.transaction.providerEffectCommand.findFirst({ where: { siloId: command.siloId, resourceKind: command.resourceKind, resourceId: command.resourceId, OR: [{ state: ProviderEffectCommandState.Claimed }, { state: { in: [ProviderEffectCommandState.Pending, ProviderEffectCommandState.AwaitingMaterial] }, failureCode: _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE }] }, orderBy: { desiredGeneration: "desc" } });
 		if (claimed !== null)
-			return { status: ProviderEffectAdmissionStatuses.Busy, command: null, blocker: { commandId: claimed.id, state: ProviderEffectCommandStates.Claimed } };
+			return { status: ProviderEffectAdmissionStatuses.Busy, command: null, blocker: { commandId: claimed.id, state: claimed.state as ProviderEffectCommandStates } };
 		const previous = await this.transaction.providerEffectCommand.findFirst({ where: { siloId: command.siloId, resourceKind: command.resourceKind, resourceId: command.resourceId }, orderBy: { desiredGeneration: "desc" } });
 		const desiredGeneration = (previous?.desiredGeneration ?? 0) + 1;
 		const now = new Date();
@@ -112,7 +113,7 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 		}
 
 		// 3. Replace a pending or expired claim with a new fence so external I/O starts after commit.
-		if (current.deliveryCount >= _MAX_DELIVERIES)
+		if (current.deliveryCount >= _MAX_DELIVERIES && current.failureCode !== _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE)
 		{
 			await this.transaction.providerEffectCommand.updateMany({ where: { id: current.id, state: current.state, updatedAt: current.updatedAt }, data: { state: ProviderEffectCommandState.Failed, failureCode: "delivery_budget_exhausted", claimFence: null, claimExpiresAt: null, completedAt: now } });
 			return { status: ProviderEffectExecutionStatuses.Failed, command: null };
@@ -122,7 +123,8 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 			return { status: ProviderEffectExecutionStatuses.Busy, command: null };
 		const claimFence = randomUUID();
 		const claimExpiresAt = new Date(now.getTime() + _CLAIM_DURATION_MS);
-		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: current.id, state: current.state, deliveryCount: current.deliveryCount, updatedAt: current.updatedAt }, data: { state: ProviderEffectCommandState.Claimed, deliveryCount: { increment: 1 }, claimFence, claimExpiresAt, failureCode: null } });
+		const failureCode = current.failureCode === _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE ? current.failureCode : null;
+		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: current.id, state: current.state, deliveryCount: current.deliveryCount, updatedAt: current.updatedAt }, data: { state: ProviderEffectCommandState.Claimed, deliveryCount: { increment: 1 }, claimFence, claimExpiresAt, failureCode } });
 		if (updated.count !== 1)
 			return { status: ProviderEffectExecutionStatuses.Busy, command: null };
 		const claimed = await this.transaction.providerEffectCommand.findUnique({ where: { id: current.id } });
@@ -156,7 +158,7 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 			await this._terminalize(current, "authorization_or_resource_stale", completedAt);
 			return ProviderEffectExecutionStatuses.Failed;
 		}
-		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Claimed, claimFence: command.claimFence, deliveryCount: command.deliveryCount }, data: { state: ProviderEffectCommandState.Succeeded, result: result as unknown as Prisma.InputJsonValue, claimFence: null, claimExpiresAt: null, completedAt } });
+		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Claimed, claimFence: command.claimFence, deliveryCount: command.deliveryCount }, data: { state: ProviderEffectCommandState.Succeeded, result: result as unknown as Prisma.InputJsonValue, failureCode: null, claimFence: null, claimExpiresAt: null, completedAt } });
 		if (updated.count !== 1)
 			return ProviderEffectExecutionStatuses.Busy;
 		if (result.kind === ProviderEffectCommandKinds.RegisterModel)
@@ -194,6 +196,13 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 		}
 		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Claimed, claimFence: command.claimFence, deliveryCount: command.deliveryCount }, data: { state, failureCode, claimFence: null, claimExpiresAt: null, completedAt: terminal ? new Date() : null } });
 		return updated.count === 1 ? status : ProviderEffectExecutionStatuses.Busy;
+	}
+
+	/** @inheritdoc */
+	async retainClaim(command: ProviderEffectCommandRecord, failureCode: string): Promise<ProviderEffectExecutionStatuses>
+	{
+		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Claimed, claimFence: command.claimFence, deliveryCount: command.deliveryCount }, data: { failureCode } });
+		return updated.count === 1 ? ProviderEffectExecutionStatuses.Retryable : ProviderEffectExecutionStatuses.Busy;
 	}
 
 	/** Loads the newest monotonic desired state for one governed resource. */
@@ -278,5 +287,6 @@ function _toRecord(row: Prisma.ProviderEffectCommandGetPayload<Record<string, ne
 		deliveryCount: row.deliveryCount,
 		claimFence: row.claimFence,
 		claimExpiresAt: row.claimExpiresAt,
+		failureCode: row.failureCode,
 	};
 }

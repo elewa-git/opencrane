@@ -3,14 +3,15 @@ import { createHash } from "node:crypto";
 import { ___DoWithTrace, ___MarkActiveSpanFailed } from "@opencrane/backend/observability";
 
 import { _log } from "./log";
+import { _IsProviderEffectOutcomeUncertain, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "./provider-effect-command-errors";
 import { ProviderEffectExecutionStatuses, type ProviderEffectCommandExecutor, type ProviderEffectCommandHandler, type ProviderEffectCommandUnitOfWork, type ProviderEffectEphemeralMaterial, type ProviderEffectExecutionContext, type ProviderEffectExecutionResult } from "./provider-effect-command.types";
 
 /**
  * Delivers admitted provider commands without holding a database transaction during external I/O.
  *
  * A claim transaction selects one command and commits its fence. The handler then calls Kubernetes
- * or LiteLLM. A second transaction accepts the result only for that fence. Failed raw-key commands
- * return to `AwaitingMaterial`; database-complete commands may be retried by a reconciler.
+ * or LiteLLM. A second transaction accepts the result only for that fence. An upstream mutation
+ * with an unknown outcome retains its claim and resource barrier until the same command converges.
  *
  * Called by: provider BYOK and model-registry HTTP routes after their admission transaction commits.
  */
@@ -81,10 +82,19 @@ export class DefaultProviderEffectCommandExecutor implements ProviderEffectComma
 		});
 		if (delivery.failed)
 		{
-			const failureCode = "provider_effect_failed";
-			const status = await ___DoWithTrace("provider.effect.fail", { ...fields, failureCode }, function _Fail() { return self.unitOfWork.run(function _PersistFailure(repository) { return repository.fail(command, failureCode); }); });
+			const uncertain = _IsProviderEffectOutcomeUncertain(delivery.error) || command.failureCode === _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE;
+			const failureCode = uncertain ? _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE : "provider_effect_failed";
+			const status = await ___DoWithTrace("provider.effect.fail", { ...fields, failureCode }, function _Fail()
+			{
+				return self.unitOfWork.run(function _PersistFailure(repository)
+				{
+					return uncertain ? repository.retainClaim(command, failureCode) : repository.fail(command, failureCode);
+				});
+			});
 			const logFields = { err: _redactedError(delivery.error), ...fields, failureCode, status };
-			if (status === ProviderEffectExecutionStatuses.Failed)
+			if (uncertain)
+				_log.warn(logFields, "provider effect outcome is uncertain; exact command retains the resource barrier");
+			else if (status === ProviderEffectExecutionStatuses.Failed)
 				_log.error(logFields, "provider effect delivery failed terminally");
 			else
 				_log.warn(logFields, "provider effect delivery failed and remains recoverable");

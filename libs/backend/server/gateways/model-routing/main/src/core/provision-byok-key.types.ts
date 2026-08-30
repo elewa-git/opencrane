@@ -73,6 +73,15 @@ export interface ProvisionByokKeyResult
 {
   /** True when LiteLLM's `/credentials` accepted the key (false means Secret-only / env baseline). */
   litellmRegistered: boolean;
+  /** False only when LiteLLM ended without a response and may still apply the fixed-name mutation. */
+  litellmOutcomeCertain: boolean;
   /** The upserted Global ProviderCredential row. */
   row: PrismaProviderCredential;
+}
+
+/** What BYOK removal reports after local custody has converged. */
+export interface DeprovisionByokKeyResult
+{
+  /** False only when LiteLLM ended without a response and may still apply the fixed-name deletion. */
+  litellmOutcomeCertain: boolean;
 }

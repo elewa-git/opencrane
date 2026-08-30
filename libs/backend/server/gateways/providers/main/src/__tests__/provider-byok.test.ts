@@ -110,13 +110,15 @@ function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map
       },
     },
     providerEffectCommand: {
-	  findFirst: async function _findCurrentCommand(args: { where: { siloId: string; resourceKind: string; resourceId: string; state?: string | { in: string[] } } })
+	  findFirst: async function _findCurrentCommand(args: { where: { siloId: string; resourceKind: string; resourceId: string; state?: string | { in: string[] }; OR?: unknown } })
 	  {
 		return Array.from(commands.values())
 			.filter(function _Same(row)
 			{
 				if (row.siloId !== args.where.siloId || row.resourceKind !== args.where.resourceKind || row.resourceId !== args.where.resourceId)
 					return false;
+				if (args.where.OR !== undefined)
+					return row.state === "Claimed" || (["Pending", "AwaitingMaterial"].includes(row.state as string) && row.failureCode === "provider_effect_outcome_uncertain");
 				if (typeof args.where.state === "string")
 					return row.state === args.where.state;
 				return args.where.state === undefined || args.where.state.in.includes(row.state as string);
