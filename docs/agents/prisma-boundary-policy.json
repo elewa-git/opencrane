@@ -761,20 +761,6 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/agents/memory/main/src/prisma-memory-catalog-repository.ts",
-        "adapter": "PrismaMemoryCatalogRepository",
-        "contract": "MemoryCatalogRepository",
-        "contractImportPath": "./memory-catalog.types",
-        "constructs": []
-      },
-      {
-        "path": "libs/backend/agents/memory/main/src/prisma-memory-catalog-collision-repository.ts",
-        "adapter": "PrismaMemoryCatalogCollisionRepository",
-        "contract": "MemoryCatalogCollisionRepository",
-        "contractImportPath": "./memory-catalog.types",
-        "constructs": []
-      },
-      {
         "path": "libs/backend/agents/personal/memory/main/src/prisma-personal-memory-admission-repository.ts",
         "adapter": "PrismaPersonalMemoryAdmissionRepository",
         "contract": "PersonalMemoryAdmissionRepository",
@@ -835,13 +821,6 @@
             "importPath": "@opencrane/backend/server/iam/audit-writer"
           }
         ]
-      },
-      {
-        "path": "libs/backend/server/iam/authorization/main/src/prisma-capability-catalog-repository.ts",
-        "adapter": "PrismaCapabilityCatalogRepository",
-        "contract": "CapabilityCatalogRepository",
-        "contractImportPath": "./capability-catalog.types",
-        "constructs": []
       },
       {
         "path": "libs/backend/server/iam/authorization/main/src/prisma-managed-authorization-grant-repository.ts",
@@ -1679,22 +1658,6 @@
           {
             "adapter": "PrismaPersonaOnboardingStatusRepository",
             "importPath": "./prisma-persona-onboarding-status-repository"
-          }
-        ]
-      },
-      {
-        "path": "libs/backend/agents/memory/main/src/prisma-memory-catalog-unit-of-work.ts",
-        "adapter": "PrismaMemoryCatalogUnitOfWork",
-        "contract": "MemoryCatalogUnitOfWork",
-        "contractImportPath": "./memory-catalog.types",
-        "constructs": [
-          {
-            "adapter": "PrismaMemoryCatalogRepository",
-            "importPath": "./prisma-memory-catalog-repository"
-          },
-          {
-            "adapter": "PrismaMemoryCatalogCollisionRepository",
-            "importPath": "./prisma-memory-catalog-collision-repository"
           }
         ]
       },

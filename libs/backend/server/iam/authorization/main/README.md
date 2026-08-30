@@ -50,13 +50,13 @@ the ordinary exact boundary-matching rules.
 
 ## Public surface
 
-- `AuthorizationAuthority` and `__AuthorizationAuthority` decide one typed action or batch-filter a
-  lifecycle-eligible catalogue.
+- `AuthorizationAuthority` decides one typed action or batch-filters a lifecycle-eligible catalogue.
 - `PrismaAuthorizationAuthority` binds that port to the caller's existing Prisma transaction.
-- `PrismaAuthorizationGrantRepository` loads the Principal, verifies current external membership,
-  expands direct Group subjects, loads matching grants, and resolves stored boundary context.
-- `PrismaCapabilityCatalogRepository` and the managed-grant repository preserve immutable catalogue
-  references and narrowly reconcile one manager's live grants.
+- The transaction-internal authorization grant repository loads the Principal, verifies current
+  external membership, expands direct Group subjects, loads matching grants, and resolves stored
+  boundary context.
+- The managed-grant repository narrowly reconciles one manager's live grants against immutable
+  catalogue references.
 - `__DecideDeferredToolRequest`, `__OpenDeferredToolApproval`,
   `PrismaToolInvocationUnitOfWork`, and their lifecycle contracts own durable human approval and
   provider-effect recovery for tool calls.

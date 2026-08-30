@@ -6,12 +6,11 @@
  *   - OIDC settings read from environment variables ({@link ___LoadOidcAuthConfig}).
  *   - The whole browser login flow — redirect, callback, logout ({@link OidcAuthServiceBase}).
  *   - Session cookie helpers (save, regenerate, destroy, safe return-to paths).
- *   - The rules that turn identity-provider claims into `isPlatformOperator` /
- *     `isOrgAdmin` ({@link _ResolveIdentityClaims}) and the `OrgMembership` lookup that
- *     refreshes org-admin authority ({@link _ResolveOrgMembershipFacts}).
+ *   - The rule that turns identity-provider claims into the fleet identity-plane
+ *     `isPlatformOperator` claim ({@link _ResolveIdentityClaims}) and the `OrgMembership`
+ *     lookup that projects organisation summaries ({@link _ResolveOrgMembershipFacts}).
  *   - Request-derived facts: host, silo (ClusterTenant), principal.
- *   - The authentication middleware ({@link ___AuthMiddleware}) and the two route guards
- *     ({@link _RequireOrgAdmin}, {@link _RequirePlatformOperator}).
+ *   - The authentication middleware ({@link ___AuthMiddleware}).
  *
  * A newcomer should read {@link OidcAuthServiceBase} first (the login flow) and then
  * {@link AuthUser} (what ends up in the session cookie).
@@ -55,8 +54,6 @@ export { OidcAuthServiceBase } from "./oidc-service";
 export { PrismaOrgMembershipRepository } from "./prisma-org-membership-repository";
 export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from "./oidc-service.types";
 export { ___AuthMiddleware } from "./auth-middleware";
-export { _RequirePlatformOperator } from "./require-platform-operator";
-export { _RequireOrgAdmin } from "./require-org-admin";
 export * from "./per-org-client";
 export type * from "./per-org-client.types";
 export * from "./request-silo";

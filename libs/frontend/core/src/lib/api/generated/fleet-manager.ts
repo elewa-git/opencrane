@@ -1136,8 +1136,6 @@ export interface operations {
                             groups: string[];
                             /** @description True iff the caller's groups intersect OPENCRANE_PLATFORM_OPERATOR_GROUPS. Empty/unset config ⇒ false (fail-closed). Introspection only — the API stays the enforcement point and the frontend uses this only to hide UI. */
                             isPlatformOperator: boolean;
-                            /** @description True iff the caller is an organisation admin (groups intersect OPENCRANE_ORG_ADMIN_GROUPS, or the caller is a platform operator). Empty/unset config ⇒ false (fail-closed). Introspection only — the API stays the enforcement point. */
-                            isOrgAdmin: boolean;
                             /** @description Organisations the caller owns or administers, derived fresh from their OrgMembership rows (owner/admin only; members excluded). Empty when the caller administers no org. Introspection only — never taken from request input. */
                             ownedOrgs?: {
                                 /** @description The organisation (ClusterTenant) key. */

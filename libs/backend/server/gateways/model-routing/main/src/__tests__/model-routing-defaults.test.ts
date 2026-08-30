@@ -23,7 +23,6 @@ function _authUser(overrides: Partial<AuthUser> = {}): AuthUser
     groups: [],
 		authorizationExpiresAt: "2099-06-18T00:00:00.000Z",
     isPlatformOperator: false,
-    isOrgAdmin: false,
     email: "user@example.test",
     authenticatedAt: "2026-06-18T00:00:00.000Z",
     ...overrides,
@@ -108,7 +107,7 @@ function _Authorization(allow: boolean): ModelRoutingAuthorizationFactory<Prisma
 }
 
 /** Build a minimal app mounting the defaults router with a canonical authenticated session. */
-function _buildApp(prisma: PrismaClient, user: AuthUser | null = _authUser({ isPlatformOperator: true, isOrgAdmin: true })): Express
+function _buildApp(prisma: PrismaClient, user: AuthUser | null = _authUser({ isPlatformOperator: true })): Express
 {
   const app = express();
   app.use(express.json());
@@ -121,7 +120,7 @@ function _buildApp(prisma: PrismaClient, user: AuthUser | null = _authUser({ isP
     });
   }
   const resolveCaller = user === null ? function _NoCaller() { return null; } : function _Caller() { return { siloId: "acme", principalId: "principal-1" }; };
-  app.use("/api/v1/model-routing/defaults", modelRoutingDefaultsRouter(prisma, resolveCaller, _Authorization(user?.isOrgAdmin === true)));
+  app.use("/api/v1/model-routing/defaults", modelRoutingDefaultsRouter(prisma, resolveCaller, _Authorization(user?.isPlatformOperator === true)));
   app.use(_ErrorHandler({ warn: function _warn() {}, error: function _error() {} } as never));
   return app;
 }

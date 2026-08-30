@@ -22,7 +22,6 @@ function _platformOperator(): AuthUser
     groups: ["platform-operators"],
 		authorizationExpiresAt: "2099-06-18T00:00:00.000Z",
     isPlatformOperator: true,
-    isOrgAdmin: true,
     email: "operator@example.test",
     authenticatedAt: "2026-06-18T00:00:00.000Z",
   };

@@ -189,7 +189,7 @@ export class OidcAuthService extends OidcAuthServiceBase
       throw new Error(`standalone first-user admission denied: ${admission.outcome}`);
     }
 
-    req.session.authUser = { ...authUser, siloId: hostClusterTenant, isOrgAdmin: true };
+    req.session.authUser = { ...authUser, siloId: hostClusterTenant };
     await _saveSession(req);
   }
 

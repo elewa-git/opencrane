@@ -1,10 +1,5 @@
 export { __DigestCanonicalJson } from "./canonical-json-digest";
-export { __AuthorizationAuthority } from "./authorization-authority";
-export type { AdmitPrincipalProductAuthorizationCommand, AdmitProductAuthorizationCommand, AdmitProductAuthorizationResult, AuthorizationAuthority, ListEntitledProductResourcesCommand, ListManagedProductAuthorizationGrantsCommand, ListPrincipalEntitledProductResourcesCommand, ProductAuthorizationActorKind, ProductAuthorizationAdmissionEvidence, ProductAuthorizationDecisionRecorder, ReplaceManagedProductAuthorizationGrantsCommand, ReplaceManagedProductAuthorizationGrantsResult } from "./authorization-authority.types";
-export { __ResolvePrincipalAuthorization } from "./authorization-resolution";
-export type { AuthorizationContextRepository, ResolvePrincipalAuthorizationCommand, ResolvePrincipalAuthorizationResult } from "./authorization-resolution.types";
-export type { CapabilityCatalogRepository } from "./capability-catalog.types";
-export { PrismaCapabilityCatalogRepository } from "./prisma-capability-catalog-repository";
+export type { AdmitPrincipalProductAuthorizationCommand, AdmitProductAuthorizationCommand, AdmitProductAuthorizationResult, AuthorizationAuthority, ListEntitledProductResourcesCommand, ListManagedProductAuthorizationGrantsCommand, ListPrincipalEntitledProductResourcesCommand, ProductAuthorizationActorKind, ProductAuthorizationAdmissionEvidence, ReplaceManagedProductAuthorizationGrantsCommand, ReplaceManagedProductAuthorizationGrantsResult } from "./authorization-authority.types";
 export type { ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantSpec, ReconcileManagedAuthorizationGrantsCommand } from "./managed-authorization-grants.types";
 export { PrismaManagedAuthorizationGrantRepository } from "./prisma-managed-authorization-grant-repository";
 export type { OrganizationAdminGrantBootstrapRepository, ReconcileOrganizationAdminGrantCommand } from "./organization-admin-grant-bootstrap.types";
@@ -34,7 +29,6 @@ export type { AdmitPreparingToolInvocation, ToolInvocationAdmissionResult, ToolI
 export { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle";
 export { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
 export type { ToolInvocationLifecycleInput } from "./tool-invocation-lifecycle.types";
-export { PrismaAuthorizationGrantRepository } from "./prisma-authorization-grants";
 export { PrismaAuthorizationAuthority } from "./prisma-authorization-authority";
 export { PrismaShareAuthorizationRepository } from "./prisma-share-authorization-repository";
 export type { CreateOrFindShareAuthorizationGrantResult, CreateShareAuthorizationGrant, ShareAuthorizationGrant, ShareAuthorizationRepository, ShareCapabilityCatalogRevision } from "./share-authorization-repository.types";

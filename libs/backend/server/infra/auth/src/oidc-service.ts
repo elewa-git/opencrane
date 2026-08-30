@@ -44,9 +44,8 @@ export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from ".
  * {@link onLoginEstablished} and {@link isPostLoginFailureFatal} are hooks for side
  * effects, not for changing the flow above.
  *
- * `/auth/me` does not just echo the cookie: {@link getStatus} re-reads `OrgMembership`
- * on every call, so a user who has just created an organisation counts as an org admin
- * without logging in again.
+ * `/auth/me` does not just echo the cookie: {@link getStatus} re-reads the caller's
+ * `OrgMembership` presentation rows on every call.
  *
  * Called by: `OidcAuthService` in libs/backend/server/iam/identity/main/src/auth/oidc.service.ts
  * extends it; apps/opencrane/src/app/public-app.ts constructs it and mounts
@@ -140,15 +139,10 @@ export abstract class OidcAuthServiceBase
    *
    * Three outcomes:
    *   - OIDC enabled and a session exists — `authenticated: true` plus the stored
-   *     `authUser`, with `isOrgAdmin` recomputed as "the value stored at login OR owns
-   *     or administers at least one organisation now", `ownedOrgs` read fresh from
-   *     `OrgMembership`, and whatever {@link enrichStatusUser} adds.
+   *     `authUser`, with `ownedOrgs` read fresh from `OrgMembership`, and whatever
+   *     {@link enrichStatusUser} adds.
    *   - OIDC enabled and no session — `authenticated: false`, `user: null`.
    *   - OIDC disabled — `mode: "development"`, so the SPA knows not to offer login.
-   *
-   * `isOrgAdmin` is recomputed here rather than trusted from the cookie so that a user
-   * who created an organisation after logging in gets admin rights without logging in
-   * again. Nothing else on the user is recomputed.
    *
    * Called by: libs/backend/server/iam/identity/main/src/auth/auth.router.ts.
    *
@@ -177,7 +171,6 @@ export abstract class OidcAuthServiceBase
         authenticated: true,
         user: {
           ...authUser,
-          isOrgAdmin: authUser.isOrgAdmin || membership.isOrgAdmin,
           ownedOrgs: membership.ownedOrgs,
           ...extra,
         },

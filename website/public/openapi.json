@@ -13893,7 +13893,6 @@
                         "issuer",
                         "groups",
                         "isPlatformOperator",
-                        "isOrgAdmin",
                         "productCapabilities"
                       ],
                       "properties": {
@@ -13914,10 +13913,6 @@
                         "isPlatformOperator": {
                           "type": "boolean",
                           "description": "True when the authenticated middleware admitted a platform-operator claim. Introspection only; the API remains the enforcement point."
-                        },
-                        "isOrgAdmin": {
-                          "type": "boolean",
-                          "description": "Legacy identity-role projection. Product interfaces must use productCapabilities.administerOrganization; the API remains the enforcement point."
                         },
                         "productCapabilities": {
                           "type": "object",

@@ -2,12 +2,11 @@ import type { OrgMembershipFacts, OrgMembershipRepository, OwnedOrg } from "./or
 
 export type { OrgMembershipFacts, OrgMembershipRepository, OrgMembershipRow, OwnedOrg } from "./org-membership.types";
 
-/** Empty (fail-closed) facts: no admin authority, no org scope. */
-const _EMPTY: OrgMembershipFacts = { isOrgAdmin: false, ownedOrgs: [] };
+/** Empty presentation facts for a caller with no administering membership rows. */
+const _EMPTY: OrgMembershipFacts = { ownedOrgs: [] };
 
 /**
- * Work out, from the caller's `OrgMembership` rows, whether they administer any
- * organisation and which ones.
+ * List the organisations the caller owns or administers for session presentation.
  *
  * The rules:
  *   - Holding `owner` or `admin` on at least one organisation makes the caller an org
@@ -25,7 +24,7 @@ const _EMPTY: OrgMembershipFacts = { isOrgAdmin: false, ownedOrgs: [] };
  *
  * @param repository - Supplies the owner/admin rows; see {@link OrgMembershipRepository}.
  * @param subject    - The caller's verified subject; empty or missing returns no authority.
- * @returns Whether the caller administers at least one organisation, plus that list.
+ * @returns The organisations the caller owns or administers.
  * @throws Whatever the repository throws when the lookup fails — deliberately not caught.
  */
 export async function _ResolveOrgMembershipFacts(repository: OrgMembershipRepository, subject: string | undefined): Promise<OrgMembershipFacts>
@@ -43,5 +42,5 @@ export async function _ResolveOrgMembershipFacts(repository: OrgMembershipReposi
     return { clusterTenant: row.clusterTenant, role: row.role === "Owner" ? "owner" : "admin" };
   });
 
-  return { isOrgAdmin: ownedOrgs.length > 0, ownedOrgs };
+  return { ownedOrgs };
 }

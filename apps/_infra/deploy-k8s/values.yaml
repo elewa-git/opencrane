@@ -645,11 +645,10 @@ clustertenantManager:
     #    (OIDC_GROUPS_CLAIM / OIDC_ROLES_CLAIM).
     groupsClaim: "groups"
     rolesClaim: "roles"
-    # -- Comma-separated, lowercased group names that grant platform-operator
-    #    (OPENCRANE_PLATFORM_OPERATOR_GROUPS) and org-admin (OPENCRANE_ORG_ADMIN_GROUPS).
-    #    Empty → nobody is granted via groups (fail-closed).
+    # -- Comma-separated, lowercased group names that grant the fleet identity-plane
+    #    platform-operator claim (OPENCRANE_PLATFORM_OPERATOR_GROUPS).
+    #    Empty means nobody receives this claim from a group.
     platformOperatorGroups: ""
-    orgAdminGroups: ""
     # -- Per-cluster platform-operator SEED email (OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL).
     #    Bootstraps the FIRST platform operator before any IdP group mapping exists: a
     #    caller whose VERIFIED email equals this (case-insensitive) becomes a platform

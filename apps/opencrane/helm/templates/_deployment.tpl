@@ -269,10 +269,6 @@ spec:
             - name: OPENCRANE_PLATFORM_OPERATOR_GROUPS
               value: {{ .platformOperatorGroups | quote }}
             {{- end }}
-            {{- if .orgAdminGroups }}
-            - name: OPENCRANE_ORG_ADMIN_GROUPS
-              value: {{ .orgAdminGroups | quote }}
-            {{- end }}
             {{- if .platformOperatorSeedEmail }}
             # -- Per-cluster platform-operator SEED. A caller whose VERIFIED email equals
             #    this becomes a platform operator (OR-ed with the group check). Empty →

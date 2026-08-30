@@ -170,9 +170,6 @@ CREATE TYPE "MemoryFactState" AS ENUM ('active', 'corrected', 'forget_pending', 
 CREATE TYPE "MemoryConsentState" AS ENUM ('explicit', 'confirmed');
 
 -- CreateEnum
-CREATE TYPE "MemoryOutboxEventKind" AS ENUM ('memory.fact_recorded', 'memory.fact_corrected', 'memory.forget_requested');
-
--- CreateEnum
 CREATE TYPE "OrgRole" AS ENUM ('owner', 'admin', 'member');
 
 -- CreateEnum
@@ -1325,23 +1322,6 @@ CREATE TABLE "memory_fact_catalog" (
     "forgotten_at" TIMESTAMP(3),
 
     CONSTRAINT "memory_fact_catalog_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "memory_outbox_events" (
-    "id" TEXT NOT NULL,
-    "dataset_id" TEXT NOT NULL,
-    "fact_id" TEXT NOT NULL,
-    "kind" "MemoryOutboxEventKind" NOT NULL,
-    "idempotency_key" TEXT NOT NULL,
-    "payload" JSONB NOT NULL,
-    "available_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "claimed_at" TIMESTAMP(3),
-    "published_at" TIMESTAMP(3),
-    "delivery_count" INTEGER NOT NULL DEFAULT 0,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "memory_outbox_events_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2861,12 +2841,6 @@ CREATE UNIQUE INDEX "memory_fact_catalog_dataset_id_cognee_external_id_key" ON "
 CREATE UNIQUE INDEX "memory_fact_catalog_id_dataset_id_key" ON "memory_fact_catalog"("id", "dataset_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "memory_outbox_events_idempotency_key_key" ON "memory_outbox_events"("idempotency_key");
-
--- CreateIndex
-CREATE INDEX "memory_outbox_events_published_at_available_at_idx" ON "memory_outbox_events"("published_at", "available_at");
-
--- CreateIndex
 CREATE UNIQUE INDEX "model_routing_defaults_scope_cluster_tenant_key" ON "model_routing_defaults"("scope", "cluster_tenant");
 
 -- CreateIndex
@@ -3603,9 +3577,6 @@ ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_dataset_id
 
 -- AddForeignKey
 ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_supersedes_fact_id_fkey" FOREIGN KEY ("supersedes_fact_id") REFERENCES "memory_fact_catalog"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "memory_outbox_events" ADD CONSTRAINT "memory_outbox_events_fact_id_dataset_id_fkey" FOREIGN KEY ("fact_id", "dataset_id") REFERENCES "memory_fact_catalog"("id", "dataset_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "persona_questions" ADD CONSTRAINT "persona_questions_question_set_id_question_set_version_fkey" FOREIGN KEY ("question_set_id", "question_set_version") REFERENCES "persona_question_sets"("question_set_id", "version") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -7533,7 +7504,6 @@ ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_forget_che
         ("state" = 'forget_pending' AND "forget_requested_at" IS NOT NULL AND "forgotten_at" IS NULL) OR
         ("state" = 'forgotten' AND "forget_requested_at" IS NOT NULL AND "forgotten_at" IS NOT NULL)
     );
-ALTER TABLE "memory_outbox_events" ADD CONSTRAINT "memory_outbox_events_valid_check" CHECK (btrim("idempotency_key") <> '' AND jsonb_typeof("payload") = 'object' AND "delivery_count" >= 0);
 ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("capability_jti") <> '' AND btrim("media_type") <> '' AND strpos("media_type", '/') > 1);
 ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_expected_content_check" CHECK ("expected_content_address" IS NULL OR "expected_content_address" ~ '^sha256:[0-9a-f]{64}$');
 ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_expected_length_check" CHECK ("expected_byte_length" IS NULL OR "expected_byte_length" >= 0);

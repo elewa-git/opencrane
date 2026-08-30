@@ -22,9 +22,8 @@ both reads occur at the same final identity and revocation fence as every other 
 ```
 
 **In this flow:** [execution inputs](../../../execution/inputs/main/README.md) freezes the selected
-coordinates, [agent memory](../../../memory/main/README.md) owns generic metadata and outbox writes,
-and the [memory gateway](../../../../../server/_infra/memory-gateway-client/README.md) is the only
-fact-content boundary.
+coordinates, and the [memory gateway](../../../../../server/_infra/memory-gateway-client/README.md)
+is the only fact-content boundary.
 
 The invariant is identity-bound selection: neither a request nor a tool argument can choose a
 dataset by identifier. The repository reads only the exact silo, organisation, and verified subject;
@@ -60,7 +59,7 @@ managed service therefore cannot inherit a person's dataset merely because it ha
 Live end-to-end Cognee qualification is still pending; admitting and freezing coordinates does not
 claim that later gateway recall has been qualified in a running environment.
 
-This package itself must not write generic fact metadata, own a transaction, derive a dataset from a
+This package itself must not write fact content, own a transaction, derive a dataset from a
 subject outside admission, read durable fact text, call Cognee, or compose a runtime. It remains the
 narrow identity-bound selection owner and cannot be used as a personal fallback when identity or
 dataset evidence is unavailable.
@@ -68,18 +67,16 @@ dataset evidence is unavailable.
 ## Dependency direction
 
 Tagged `scope:personal-memory`, this backend package may depend only on its own scope and
-`scope:shared`. It has no dependency on generic catalog/outbox authority, a gateway transport, or an
-app composition root.
+`scope:shared`. It has no dependency on a gateway transport or an app composition root.
 
 ## Data & persistence
 
-Reads `MemoryDataset` and `MemoryFactCatalog` through the repository port using the existing
-`RunAdmissionTransaction`. Generic catalog and outbox writes belong to
-[agent memory](../../../memory/main/README.md), which owns the `memory.prisma` persistence boundary.
+Owns `MemoryDataset` and `MemoryFactCatalog` in `memory.prisma` and reads them through the repository
+port using the existing `RunAdmissionTransaction`. The removed generic outbox is not a second
+memory-authority path; durable fact content remains behind the memory gateway.
 
 ## See also
 
 - Parent group: [personal-agent domains](../../README.md)
 - Admission path: [execution admission](../../../execution/admission/main/README.md)
 - Snapshot assembly: [execution inputs](../../../execution/inputs/main/README.md)
-- Generic catalogue: [agent memory](../../../memory/main/README.md)

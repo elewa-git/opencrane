@@ -4,8 +4,8 @@
 
 ## What it owns
 
-This library answers, for every incoming HTTP request, **"who is this, and are they allowed in?"** —
-the sign-in and gatekeeping layer the OpenCrane server sits behind. It uses **OIDC** (OpenID Connect,
+This library answers, for every incoming HTTP request, **"who is this?"** — the sign-in and
+identity-admission layer the OpenCrane server sits behind. It uses **OIDC** (OpenID Connect,
 the standard sign-in protocol where an external identity provider vouches for a user) and keeps a
 **session** (the server-remembered fact that a browser has logged in, carried in a cookie).
 
@@ -33,10 +33,9 @@ issuer, and subject before the middleware attaches `request.authenticatedPrincip
 product route. Projection failure returns unavailable and a stale or mismatched projection returns
 unauthenticated; neither path calls the product router. Around it the library owns: environment-driven OIDC config (`___LoadOidcAuthConfig`),
 session lifecycle helpers (`_saveSession`, `_regenerateSession`, `_destroySession`, safe return-to
-sanitising), identity-claim resolution, organisation **membership** facts (which orgs a user belongs
-to / owns), a **per-org login client** seam (each organisation can have its own OIDC settings), silo
-(one tenant's isolated running environment) resolution from the request host, and the authorization gates `_RequirePlatformOperator` /
-`_RequireOrgAdmin`. It applies an `express-session` type augmentation so `req.session.authUser` is
+sanitising), identity-claim resolution, organisation **membership** presentation facts, a **per-org
+login client** seam (each organisation can have its own OIDC settings), and silo resolution from
+the request host. It applies an `express-session` type augmentation so `req.session.authUser` is
 typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or unverified becomes a
 401/403; the server never treats an unauthenticated request as trusted.
 
@@ -51,21 +50,25 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
   session before returning the callback error; optional projection work remains best-effort.
 - Session helpers + `AuthUser`; `_ResolveIdentityClaims`; `_ResolveOrgMembershipFacts`,
   `OrgMembershipFacts`, `OrgMembershipRepository`, and `PrismaOrgMembershipRepository`.
-- `_ResolveRequestPrincipal`, `RequestPrincipal` — expose the admitted local Principal, independently
-  rechecked host silo, and organisation-admin flag without importing any backend-domain caller type.
+- `_ResolveRequestPrincipal`, `RequestPrincipal` — expose the admitted local Principal and
+  independently rechecked host silo without importing any backend-domain caller type.
 - `_CreateMountedPublicKeySource`, `MountedPublicKeySource` — fail-closed access to an absolute
   projected public-key file, reloaded on each use so Secret rotation takes effect without restart.
-- `_RequirePlatformOperator`, `_RequireOrgAdmin` — authorization gates.
 - `per-org-client`, `request-silo`, `_RequestHost` — per-organisation clients and host/silo resolution.
 
 ## Boundary
 
 Consumed by the `apps/opencrane` server and the IAM, tenancy, and gateway backend domains. It
-establishes *who* the caller is and coarse gates (operator/admin); fine-grained per-action decisions
-belong to the authorization model. Backend routers map `RequestPrincipal` into their own caller
+establishes *who* the caller is; all product permission decisions belong to the central
+authorization authority. Backend routers map `RequestPrincipal` into their own caller
 contracts, keeping this package independent of business types. It reads config, sessions,
 organisation membership, and (optionally) tokens. Its mounted-key source knows only how to reload public material; the consuming
 backend authority decides what that key is trusted to verify. It owns no business tables of its own.
+
+`isPlatformOperator` survives only as a fleet identity-plane claim used by
+`IdentityAuthority.authenticate` and operator-facing introspection. It never grants a product
+action. Product routes must ask `AuthorizationAuthority` for the exact resource and action instead
+of evaluating this claim or mounting a claim-based guard.
 
 ## Dependency direction
 

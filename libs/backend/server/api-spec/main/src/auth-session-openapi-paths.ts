@@ -28,7 +28,7 @@ export const _AuthSessionOpenapiPaths = {
 									user: {
 										type: "object",
 										nullable: true,
-										required: ["sub", "issuer", "groups", "isPlatformOperator", "isOrgAdmin", "productCapabilities"],
+										required: ["sub", "issuer", "groups", "isPlatformOperator", "productCapabilities"],
 										properties: {
 											sub: { type: "string" },
 											issuer: { type: "string", description: "Identity provider that authenticated the user." },
@@ -36,10 +36,6 @@ export const _AuthSessionOpenapiPaths = {
 											isPlatformOperator: {
 												type: "boolean",
 												description: "True when the authenticated middleware admitted a platform-operator claim. Introspection only; the API remains the enforcement point.",
-											},
-											isOrgAdmin: {
-												type: "boolean",
-												description: "Legacy identity-role projection. Product interfaces must use productCapabilities.administerOrganization; the API remains the enforcement point.",
 											},
 											productCapabilities: {
 												type: "object",

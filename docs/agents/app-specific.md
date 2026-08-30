@@ -35,7 +35,6 @@ app's source.
 | Group | Responsibility |
 | --- | --- |
 | `libs/backend/agents/personal/*` | Persona, verified personal-memory selection, and configuration authorities owned by a person. |
-| `libs/backend/agents/memory/*` | Generic durable fact metadata and catalog-outbox authority; fact content remains in Cognee. |
 | `libs/backend/agents/execution/*` | Immutable run inputs, run lifecycle, and runtime protocol admission. |
 | [`libs/backend/agents/execution/elicitation`](../../libs/backend/agents/execution/elicitation/main/README.md) | Recoverable participant input, exact response authority, and purpose-specific completion. |
 | `libs/backend/agents/runtime/*` | Kubernetes Job projection, controller orchestration, and class-neutral workload claim contracts. |

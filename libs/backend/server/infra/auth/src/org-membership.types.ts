@@ -54,18 +54,9 @@ export interface OwnedOrg
   role: "owner" | "admin";
 }
 
-/**
- * The caller's membership-derived org-admin facts. Authority is derived purely
- * from `OrgMembership` rows, never from a global flag or a self-asserted claim.
- */
+/** The caller's organisation-membership presentation rows. */
 export interface OrgMembershipFacts
 {
-  /**
-   * True iff the caller owns or administers at least one organisation — i.e. `ownedOrgs`
-   * is non-empty. The membership-derived half of a session's `isOrgAdmin`.
-   */
-  isOrgAdmin: boolean;
-
   /**
    * The organisations the caller owns or administers (the org scope). Members
    * (role `member`) confer no admin authority and are excluded. Empty when the

@@ -8294,8 +8294,6 @@ export interface operations {
                             groups: string[];
                             /** @description True when the authenticated middleware admitted a platform-operator claim. Introspection only; the API remains the enforcement point. */
                             isPlatformOperator: boolean;
-                            /** @description Legacy identity-role projection. Product interfaces must use productCapabilities.administerOrganization; the API remains the enforcement point. */
-                            isOrgAdmin: boolean;
                             /** @description Current product capabilities read from the central authorization authority. These guide the UI; protected routes repeat authorization in their own transaction. */
                             productCapabilities: {
                                 /** @description Whether the local Principal currently holds organization:administer for this silo. */

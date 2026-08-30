@@ -158,14 +158,13 @@ function _mockCoreApi(secrets: Map<string, k8s.V1Secret>): k8s.CoreV1Api
 
 /**
  * Mount only the BYOK router over the supplied stores, granting the default caller's explicit
- * Organization/Administer admission. Pass `{ isOrgAdmin: false }` to exercise a denied decision.
+ * Organization/Administer admission. Pass `{ authorized: false }` to exercise a denied decision.
  */
-function _buildApp(store: Map<string, Row>, secrets: Map<string, k8s.V1Secret>, user: { isOrgAdmin: boolean } = { isOrgAdmin: true }, models: Map<string, Row> = new Map()): Express
+function _buildApp(store: Map<string, Row>, secrets: Map<string, k8s.V1Secret>, user: { authorized: boolean } = { authorized: true }, models: Map<string, Row> = new Map()): Express
 {
   const app = express();
   app.use(express.json());
-  app.use(function _seedSession(req, _res, next) { (req as unknown as { session: { authUser: { isOrgAdmin: boolean } } }).session = { authUser: user }; next(); });
-  app.use("/api/v1/providers/byok", providerByokRouter(_mockPrisma(store, models), _mockCoreApi(secrets), _NS, function _Caller() { return { siloId: "acme", principalId: "principal-1" }; }, _Authorization(user.isOrgAdmin)));
+  app.use("/api/v1/providers/byok", providerByokRouter(_mockPrisma(store, models), _mockCoreApi(secrets), _NS, function _Caller() { return { siloId: "acme", principalId: "principal-1" }; }, _Authorization(user.authorized)));
   return app;
 }
 
@@ -203,7 +202,7 @@ describe("providerByokRouter", function _suite()
   {
     const store = new Map<string, Row>();
     const models = new Map<string, Row>();
-    const app = _buildApp(store, new Map(), { isOrgAdmin: true }, models);
+    const app = _buildApp(store, new Map(), { authorized: true }, models);
     await request(app).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-live-123" });
 
     // All of OpenAI's model classes are seeded PLUS the stable "auto" model; flagship is default.
@@ -223,7 +222,7 @@ describe("providerByokRouter", function _suite()
   {
     const store = new Map<string, Row>();
     const models = new Map<string, Row>();
-    const app = _buildApp(store, new Map(), { isOrgAdmin: true }, models);
+    const app = _buildApp(store, new Map(), { authorized: true }, models);
     await request(app).put("/api/v1/providers/byok/openai").send({ apiKey: "k1" });
     await request(app).put("/api/v1/providers/byok/anthropic").send({ apiKey: "k2" });
 
@@ -262,7 +261,7 @@ describe("providerByokRouter", function _suite()
   {
     const store = new Map<string, Row>();
     const secrets = new Map<string, k8s.V1Secret>();
-    const app = _buildApp(store, secrets, { isOrgAdmin: false });
+    const app = _buildApp(store, secrets, { authorized: false });
     const res = await request(app).put("/api/v1/providers/byok/openai").send({ apiKey: "sk-live-123" });
 
     expect(res.status).toBe(403);
