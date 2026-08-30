@@ -15,7 +15,7 @@ ATTEMPT_FIXTURE_SQL="$ROOT/apps/opencrane/prisma/migrations/tests/attempt-bound-
 [[ "$(jq -r '.owner' "$MANIFEST")" == "apps/opencrane" ]]
 [[ "$(jq -r '.privilegedExtension' "$MANIFEST")" == "pg_cron" ]]
 [[ "$(jq -r '.sqlSha256' "$MANIFEST")" == "$(shasum -a 256 "$PREREQUISITE_SQL" | awk '{print $1}')" ]]
-if rg -n 'admitted 0\.9\.0 baseline lineage|exact 0\.9\.0 source shape|protected baseline origin does not match|migration convergence' "$PREREQUISITE_SQL"; then
+if grep -En 'admitted 0\.9\.0 baseline lineage|exact 0\.9\.0 source shape|protected baseline origin does not match|migration convergence' "$PREREQUISITE_SQL"; then
   echo "migration SQL still contains removed source-state safeguards" >&2
   exit 1
 fi
@@ -38,10 +38,10 @@ extract_attempt_guard()
   ' "$CENTRAL_MIGRATION_SQL"
 }
 
-if [[ "$(rg -c '^-- Bind durable run events' "$CENTRAL_MIGRATION_SQL")" != "1" ]] \
-  || [[ "$(rg -c '^DO \$attempt_backfill_guard\$$' "$CENTRAL_MIGRATION_SQL")" != "1" ]] \
-  || [[ "$(rg -c '^CREATE TRIGGER "conversation_run_events_append_only" BEFORE UPDATE OR DELETE' "$CENTRAL_MIGRATION_SQL")" != "1" ]] \
-  || [[ "$(rg -c '^CREATE TRIGGER "child_run_completion_deliveries_authority" BEFORE INSERT OR UPDATE OR DELETE' "$CENTRAL_MIGRATION_SQL")" != "1" ]]; then
+if [[ "$(grep -Ec '^-- Bind durable run events' "$CENTRAL_MIGRATION_SQL")" != "1" ]] \
+  || [[ "$(grep -Ec '^DO \$attempt_backfill_guard\$$' "$CENTRAL_MIGRATION_SQL")" != "1" ]] \
+  || [[ "$(grep -Ec '^CREATE TRIGGER "conversation_run_events_append_only" BEFORE UPDATE OR DELETE' "$CENTRAL_MIGRATION_SQL")" != "1" ]] \
+  || [[ "$(grep -Ec '^CREATE TRIGGER "child_run_completion_deliveries_authority" BEFORE INSERT OR UPDATE OR DELETE' "$CENTRAL_MIGRATION_SQL")" != "1" ]]; then
   echo "central migration attempt-authority extraction markers drifted" >&2
   exit 1
 fi
