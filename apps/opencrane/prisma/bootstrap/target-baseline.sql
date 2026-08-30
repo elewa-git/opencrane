@@ -3002,6 +3002,10 @@ CREATE INDEX "model_definitions_cluster_tenant_idx" ON "model_definitions"("clus
 -- CreateIndex
 CREATE UNIQUE INDEX "model_definitions_scope_cluster_tenant_public_model_name_key" ON "model_definitions"("scope", "cluster_tenant", "public_model_name");
 
+CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key" ON "model_definitions"("public_model_name") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL;
+
+CREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions"("scope") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL AND "is_default";
+
 -- CreateIndex
 CREATE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__idx" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation" DESC);
 

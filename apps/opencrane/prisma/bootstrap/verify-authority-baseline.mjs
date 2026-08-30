@@ -11,6 +11,8 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__idx" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation" DESC)',
 	'CREATE INDEX "provider_effect_commands_follow_up_command_id_idx" ON "provider_effect_commands"("follow_up_command_id")',
 	'CREATE UNIQUE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__key" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation")',
+	'CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key" ON "model_definitions"("public_model_name") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
+	'CREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions"("scope") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL AND "is_default"',
 	'CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check"',
 	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_material_check"',

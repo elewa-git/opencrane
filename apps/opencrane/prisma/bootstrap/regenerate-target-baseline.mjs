@@ -61,6 +61,12 @@ normalizedGenerated = _ReplaceExactlyOnce(
 );
 normalizedGenerated = _ReplaceExactlyOnce(
 	normalizedGenerated,
+	'CREATE UNIQUE INDEX "model_definitions_scope_cluster_tenant_public_model_name_key" ON "model_definitions"("scope", "cluster_tenant", "public_model_name");',
+	'CREATE UNIQUE INDEX "model_definitions_scope_cluster_tenant_public_model_name_key" ON "model_definitions"("scope", "cluster_tenant", "public_model_name");\n\nCREATE UNIQUE INDEX "model_definitions_global_public_model_name_key" ON "model_definitions"("public_model_name") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL;\n\nCREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions"("scope") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL AND "is_default";',
+	"global model definition authority indexes",
+);
+normalizedGenerated = _ReplaceExactlyOnce(
+	normalizedGenerated,
 	'CREATE INDEX "conversation_run_events_run_id_message_id_idx" ON "conversation_run_events"("run_id", "message_id");',
 	'CREATE INDEX "conversation_run_events_run_id_message_id_idx" ON "conversation_run_events"("run_id", "message_id");\n\nCREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "message_id") WHERE "type" = \'message.started\';',
 	"conversation message event index",

@@ -93,6 +93,31 @@ BEGIN
     END IF;
 END $$;
 
+-- Fail closed instead of choosing among duplicate global routing rows. PostgreSQL treats NULLs as
+-- distinct in the Prisma-generated compound key, so the product-owned Global scope needs explicit
+-- partial indexes before concurrent provider commands can rely on one stable alias and default.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+          FROM "model_definitions"
+         WHERE "scope" = 'global' AND "cluster_tenant" IS NULL
+         GROUP BY "public_model_name"
+        HAVING count(*) > 1
+    ) THEN
+        RAISE EXCEPTION 'cannot install global model alias authority: duplicate public model names exist';
+    END IF;
+    IF 1 < (
+        SELECT count(*)
+          FROM "model_definitions"
+         WHERE "scope" = 'global' AND "cluster_tenant" IS NULL AND "is_default"
+    ) THEN
+        RAISE EXCEPTION 'cannot install global model default authority: multiple global defaults exist';
+    END IF;
+END $$;
+CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key" ON "model_definitions"("public_model_name") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL;
+CREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions"("scope") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL AND "is_default";
+
 -- Persist one-use authorization for the model-key mint effect after the central authority has
 -- admitted the exact run attempt, model definition, provider connection, and authorization digest.
 CREATE TABLE "run_model_credential_mint_authorizations" (
