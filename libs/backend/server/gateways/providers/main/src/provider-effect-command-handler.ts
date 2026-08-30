@@ -4,7 +4,7 @@ import * as k8s from "@kubernetes/client-node";
 
 import type { Logger } from "@opencrane/backend/observability";
 import { ModelRoutingScope } from "@opencrane/contracts";
-import { _ApplyProviderKeySecret, _BYOK_PROVIDER_CATALOG, _byokCredentialName, _byokSecretName, _ClearProviderKeySecret, _DeleteLiteLlmCredential, _EnsureProviderEmbeddingModels, _RegisterLiteLlmModel, _UpsertLiteLlmCredential, LiteLlmCredentialMutationOutcomes, type ByokProviderCatalog } from "@opencrane/backend/server/gateways/model-routing";
+import { _ApplyProviderKeySecret, _BYOK_PROVIDER_CATALOG, _byokCredentialName, _byokSecretName, _ClearProviderKeySecret, _DeleteLiteLlmCredential, _EnsureProviderEmbeddingModels, _RegisterLiteLlmModel, _RetireLiteLlmModelDeployments, _UpsertLiteLlmCredential, LiteLlmCredentialMutationOutcomes, type ByokProviderCatalog } from "@opencrane/backend/server/gateways/model-routing";
 
 import { ProviderEffectOutcomeUncertainError } from "./provider-effect-command-errors";
 import { ProviderEffectCommandKinds, type ProviderEffectCommandHandler, type ProviderEffectCommandRecord, type ProviderEffectEphemeralMaterial, type ProviderEffectHandlerResult, type ProviderEffectModelProjection } from "./provider-effect-command.types";
@@ -79,11 +79,22 @@ export class DefaultProviderEffectCommandHandler implements ProviderEffectComman
 					throw new Error("Delete-BYOK execution requires the Kubernetes custody adapter");
 				const value = command.payload.value;
 				_requireFixedCustodyCoordinates(value.provider, value.secretRef, value.litellmCredentialName);
-				await _ClearProviderKeySecret(this.coreApi, this.operatorNamespace, value.provider);
-				const credentialOutcome = await _DeleteLiteLlmCredential(value.litellmCredentialName, this.log);
-				if (credentialOutcome !== LiteLlmCredentialMutationOutcomes.Applied && credentialOutcome !== LiteLlmCredentialMutationOutcomes.Skipped)
+				try
+				{
+					if (value.litellmRegistered)
+						await _RetireLiteLlmModelDeployments(value.deployments, value.litellmCredentialName, this.log);
+					else if (value.deployments.length !== 0)
+						throw new Error("unregistered provider retirement contains LiteLLM deployment targets");
+					const credentialOutcome = await _DeleteLiteLlmCredential(value.litellmCredentialName, this.log);
+					if (credentialOutcome !== LiteLlmCredentialMutationOutcomes.Applied && credentialOutcome !== LiteLlmCredentialMutationOutcomes.Skipped)
+						throw new Error("LiteLLM did not confirm provider credential removal");
+					await _ClearProviderKeySecret(this.coreApi, this.operatorNamespace, value.provider);
+					return { kind: command.payload.kind, provider: value.provider };
+				}
+				catch
+				{
 					throw new ProviderEffectOutcomeUncertainError();
-				return { kind: command.payload.kind, provider: value.provider };
+				}
 			}
 			case ProviderEffectCommandKinds.RegisterModel:
 			{

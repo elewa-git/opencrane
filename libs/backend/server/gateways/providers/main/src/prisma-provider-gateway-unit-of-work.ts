@@ -3,6 +3,8 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaAuthorizationAuthority, ___RunSerializableAuthorizationTransaction, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 
 import type { ProviderGatewayAuthorizationFactory, ProviderGatewayUnitOfWork } from "./provider-gateway-authority.types";
+import type { ProviderByokRepository } from "./provider-byok-repository.types";
+import { _CreateProviderByokRepository } from "./provider-byok-repository.factory";
 import { _CreateProviderEffectCommandRepository } from "./provider-effect-command-repository.factory";
 import type { ProviderEffectCommandRepository } from "./provider-effect-command.types";
 
@@ -28,24 +30,24 @@ export class PrismaProviderGatewayUnitOfWork implements ProviderGatewayUnitOfWor
 	}
 
 	/** Runs one operation that may contain an external effect without retrying the callback. */
-	run<Result>(operation: (transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority, effects: ProviderEffectCommandRepository) => Promise<Result>): Promise<Result>
+	run<Result>(operation: (transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority, effects: ProviderEffectCommandRepository, byok: ProviderByokRepository) => Promise<Result>): Promise<Result>
 	{
 		const createAuthorization = this.createAuthorization;
 		const effects = this._effects.bind(this);
 		return this.prisma.$transaction(async function _Run(transaction): Promise<Result>
 		{
 			const authorization = createAuthorization === null ? new PrismaAuthorizationAuthority(transaction) : createAuthorization(transaction);
-			return operation(transaction, authorization, effects(transaction));
+			return operation(transaction, authorization, effects(transaction), _CreateProviderByokRepository(transaction));
 		});
 	}
 
 	/** Runs one database-only protected mutation with bounded Serializable conflict retries. */
-	runDatabaseMutation<Result>(operation: (transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority, effects: ProviderEffectCommandRepository) => Promise<Result>): Promise<Result>
+	runDatabaseMutation<Result>(operation: (transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority, effects: ProviderEffectCommandRepository, byok: ProviderByokRepository) => Promise<Result>): Promise<Result>
 	{
 		const effects = this._effects.bind(this);
 		return ___RunSerializableAuthorizationTransaction(this.prisma, async function _Run(transaction, authorization): Promise<Result>
 		{
-			return operation(transaction, authorization, effects(transaction));
+			return operation(transaction, authorization, effects(transaction), _CreateProviderByokRepository(transaction));
 		}, this.createAuthorization ?? undefined);
 	}
 }

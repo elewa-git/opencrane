@@ -1,6 +1,6 @@
 import type { AutoRoutingConfig, ModelRoutingDefault, ModelRoutingScope } from "@opencrane/contracts";
 import type { AuthorizationAuthority, ProductAuthorizationActorKind, ProductAuthorizationAdmissionEvidence } from "@opencrane/backend/server/iam/authorization";
-import type { ProviderEmbeddingReconciliationResult } from "@opencrane/backend/server/gateways/model-routing";
+import type { LiteLlmModelDeploymentTarget, ProviderEmbeddingReconciliationResult } from "@opencrane/backend/server/gateways/model-routing";
 
 /**
  * External provider operations that must be admitted and saved before another system is changed.
@@ -112,8 +112,14 @@ export interface DeleteByokKeyEffectPayload
 	readonly provider: string;
 	/** Fixed Kubernetes Secret name whose value must be blanked. */
 	readonly secretRef: string;
-	/** Fixed LiteLLM credential name removed after custody is blanked. */
+	/** Fixed LiteLLM credential name removed after its deployments are gone. */
 	readonly litellmCredentialName: string;
+	/** Whether the admitted provider state requires live LiteLLM cleanup. */
+	readonly litellmRegistered: boolean;
+	/** Exact model-definition rows removed during product finalization. */
+	readonly modelDefinitionIds: readonly string[];
+	/** Stable chat and embedding deployments the command may retire, including matching legacy copies. */
+	readonly deployments: readonly LiteLlmModelDeploymentTarget[];
 }
 
 /** Non-secret payload persisted for one LiteLLM model registration. */

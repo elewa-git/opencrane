@@ -1,6 +1,7 @@
 import type { Request } from "express";
 import type { AuthorizationAuthority, ProductAuthorizationAdmissionEvidence } from "@opencrane/backend/server/iam/authorization";
 import type { ProviderEffectCommandRepository } from "./provider-effect-command.types";
+import type { ProviderByokRepository } from "./provider-byok-repository.types";
 
 /** Authenticated local Principal that requests provider or model administration. */
 export interface ProviderGatewayCaller
@@ -30,9 +31,9 @@ export interface ProviderGatewayAdministrationAdmission
 export interface ProviderGatewayUnitOfWork<Transaction>
 {
 	/** Runs one operation that may contain an external effect without automatic transaction retries. */
-	run<Result>(operation: (transaction: Transaction, authorization: AuthorizationAuthority, effects: ProviderEffectCommandRepository) => Promise<Result>): Promise<Result>;
+	run<Result>(operation: (transaction: Transaction, authorization: AuthorizationAuthority, effects: ProviderEffectCommandRepository, byok: ProviderByokRepository) => Promise<Result>): Promise<Result>;
 	/** Runs one database-only mutation at Serializable isolation with bounded P2034 retries. */
-	runDatabaseMutation<Result>(operation: (transaction: Transaction, authorization: AuthorizationAuthority, effects: ProviderEffectCommandRepository) => Promise<Result>): Promise<Result>;
+	runDatabaseMutation<Result>(operation: (transaction: Transaction, authorization: AuthorizationAuthority, effects: ProviderEffectCommandRepository, byok: ProviderByokRepository) => Promise<Result>): Promise<Result>;
 }
 
 /** Signals that the central product authority denied a provider-gateway operation. */

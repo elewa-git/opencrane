@@ -19,7 +19,7 @@ describe("provider effect resource binding", function _Suite()
 
 	it("accepts only the synthetic provider connection derived from the BYOK provider", function _ProviderBinding()
 	{
-		const payload: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } };
+		const payload: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", litellmRegistered: false, modelDefinitionIds: [], deployments: [] } };
 
 		expect(function _Valid() { _ValidateProviderEffectCommandResourceBinding(payload, "silo-1", ProductAuthorizationResourceKinds.ProviderConnection, "byok:silo-1:openai"); }).not.toThrow();
 		expect(function _WrongProvider() { _ValidateProviderEffectCommandResourceBinding(payload, "silo-1", ProductAuthorizationResourceKinds.ProviderConnection, "byok:silo-1:anthropic"); }).toThrow("not bound");

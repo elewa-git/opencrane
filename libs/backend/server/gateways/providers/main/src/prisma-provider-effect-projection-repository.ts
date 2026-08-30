@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import { _BYOK_PROVIDER_CATALOG, ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
 
+import { PrismaProviderByokRepository } from "./prisma-provider-byok-repository";
 import { ProviderEffectCommandKinds, type ProviderEffectCommandRecord, type ProviderEffectHandlerResult } from "./provider-effect-command.types";
 import type { ProviderEffectProjectionRepository } from "./provider-effect-projection.types";
 import { _ByokProviderConnectionId } from "./provider-resource-identity";
@@ -11,11 +12,14 @@ export class PrismaProviderEffectProjectionRepository implements ProviderEffectP
 {
 	/** Transaction that owns every credential and model projection. */
 	private readonly transaction: Prisma.TransactionClient;
+	/** Provider retirement repository bound to the same finalization transaction. */
+	private readonly byok: PrismaProviderByokRepository;
 
 	/** Binds protected product reads and writes to the lifecycle owner's transaction. */
 	constructor(transaction: Prisma.TransactionClient)
 	{
 		this.transaction = transaction;
+		this.byok = new PrismaProviderByokRepository(transaction);
 	}
 
 	/** @inheritdoc */
@@ -23,13 +27,7 @@ export class PrismaProviderEffectProjectionRepository implements ProviderEffectP
 	{
 		const payload = command.payload;
 		if (payload.kind === ProviderEffectCommandKinds.DeleteByokKey)
-		{
-			const credential = await this.transaction.providerCredential.findFirst({ where: { siloId: command.siloId, scope: "Global", clusterTenant: null, provider: payload.value.provider } });
-			if (credential === null)
-				return true;
-			const dependentModel = await this.transaction.modelDefinition.findFirst({ where: { siloId: command.siloId, providerCredentialId: credential.id } });
-			return dependentModel === null;
-		}
+			return this.byok.isRetirementEligible(command.siloId, payload.value);
 		if (payload.kind !== ProviderEffectCommandKinds.RegisterModel)
 			return true;
 		const model = await this.transaction.modelDefinition.findUnique({ where: { id_siloId: { id: payload.value.modelDefinitionId, siloId: command.siloId } }, include: { providerCredential: true } });
@@ -94,7 +92,7 @@ export class PrismaProviderEffectProjectionRepository implements ProviderEffectP
 			case ProviderEffectCommandKinds.DeleteByokKey:
 				if (command.payload.kind !== ProviderEffectCommandKinds.DeleteByokKey || result.provider !== command.payload.value.provider)
 					throw new Error("provider credential removal does not match its claimed command");
-				await this.transaction.providerCredential.deleteMany({ where: { siloId: command.siloId, scope: "Global", clusterTenant: null, provider: result.provider } });
+				await this.byok.persistRetirement(command.siloId, command.payload.value);
 				return;
 			case ProviderEffectCommandKinds.RegisterModel:
 			{

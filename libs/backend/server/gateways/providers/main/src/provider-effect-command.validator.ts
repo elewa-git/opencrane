@@ -11,8 +11,10 @@ import { _ByokProviderConnectionId } from "./provider-resource-identity";
 // provider-effect payload and refuses fields an executor does not understand.
 /** Validates the non-secret payload for a Set-BYOK command. */
 const _SET_BYOK_PAYLOAD = z.object({ provider: z.string().min(1), secretRef: z.string().min(1), litellmCredentialName: z.string().min(1) }).strict();
+/** Validates one LiteLLM deployment whose identity and coordinates were frozen at admission. */
+const _LITELLM_DEPLOYMENT_TARGET = z.object({ deploymentId: z.string().min(1), publicModelName: z.string().min(1), upstreamModel: z.string().min(1), apiBase: z.string().min(1).nullable(), apiKeyReference: z.string().min(1).nullable(), litellmCredentialName: z.string().min(1).nullable(), mode: z.enum(["chat", "embedding"]) }).strict();
 /** Validates the non-secret payload for a Delete-BYOK command. */
-const _DELETE_BYOK_PAYLOAD = z.object({ provider: z.string().min(1), secretRef: z.string().min(1), litellmCredentialName: z.string().min(1) }).strict();
+const _DELETE_BYOK_PAYLOAD = z.object({ provider: z.string().min(1), secretRef: z.string().min(1), litellmCredentialName: z.string().min(1), litellmRegistered: z.boolean(), modelDefinitionIds: z.array(z.string().min(1)), deployments: z.array(_LITELLM_DEPLOYMENT_TARGET) }).strict();
 /** Validates the non-secret payload for a model-registration command. */
 const _REGISTER_MODEL_PAYLOAD = z.object({ modelDefinitionId: z.string().min(1), publicModelName: z.string().min(1), upstreamModel: z.string().min(1), scope: z.nativeEnum(ModelRoutingScope), clusterTenant: z.string().min(1).nullable(), apiBase: z.string().min(1).nullable(), apiKeyEnvRef: z.string().min(1).nullable(), litellmCredentialName: z.string().min(1).nullable(), routingDefaultId: z.string().min(1).nullable(), selectedModelDefinitionId: z.string().min(1).nullable() }).strict().refine(function _CompleteAliasBinding(value) { return (value.routingDefaultId === null) === (value.selectedModelDefinitionId === null); }, { message: "routing default and selected model bindings must be supplied together" });
 /** Validates one secret-free model deployment projection. */
@@ -85,6 +87,18 @@ export function _ValidateProviderEffectCommandResourceBinding(payload: ProviderE
 		if (resourceKind !== ProductAuthorizationResourceKinds.ModelDefinition || resourceId !== payload.value.modelDefinitionId)
 			throw new Error("model registration command is not bound to its model-definition resource");
 		return;
+	}
+	if (payload.kind === ProviderEffectCommandKinds.DeleteByokKey)
+	{
+		const modelIds = new Set(payload.value.modelDefinitionIds);
+		const deploymentIds = new Set(payload.value.deployments.map(deployment => deployment.deploymentId));
+		const deploymentNames = new Set(payload.value.deployments.map(deployment => deployment.publicModelName));
+		if (modelIds.size !== payload.value.modelDefinitionIds.length || deploymentIds.size !== payload.value.deployments.length || deploymentNames.size !== payload.value.deployments.length)
+			throw new Error("provider retirement command contains duplicate product or LiteLLM targets");
+		if (!payload.value.litellmRegistered && payload.value.deployments.length !== 0)
+			throw new Error("provider retirement command cannot delete LiteLLM deployments for an unregistered credential");
+		if (payload.value.deployments.some(deployment => deployment.litellmCredentialName !== payload.value.litellmCredentialName))
+			throw new Error("provider retirement deployment uses a different LiteLLM credential");
 	}
 	if (resourceKind !== ProductAuthorizationResourceKinds.ProviderConnection || resourceId !== _ByokProviderConnectionId(siloId, payload.value.provider))
 		throw new Error("BYOK command is not bound to its provider-connection resource");

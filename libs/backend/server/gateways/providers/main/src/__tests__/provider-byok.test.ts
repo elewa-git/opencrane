@@ -281,10 +281,10 @@ describe("providerByokRouter", function _suite()
 		expect(Array.from(models.values()).find(function _Flagship(model) { return model.publicModelName === "openai/gpt-5.5"; })).toMatchObject({ isDefault: false, providerCredentialId: "byok:acme:openai", litellmModelId: "deployment:openai/gpt-5.5" });
 	});
 
-	it("returns 409 before admitting deletion while any registered model still uses the provider", async function _BlocksProviderWithModels()
+	it("returns 409 before admitting deletion while a frozen model still uses the provider", async function _BlocksProviderWithModels()
 	{
 		const store = new Map<string, Row>([["cred-1", { id: "cred-1", scope: "Global", clusterTenant: null, provider: "openai", updatedAt: new Date() }]]);
-		const models = new Map<string, Row>([["model-1", { id: "model-1", scope: "Global", clusterTenant: null, publicModelName: "openai/gpt-5.5", upstreamModel: "openai/gpt-5.5", providerCredentialId: "cred-1", isDefault: false }]]);
+		const models = new Map<string, Row>([["model-1", { id: "model-1", scope: "Global", clusterTenant: null, publicModelName: "openai/gpt-5.5", upstreamModel: "openai/gpt-5.5", litellmModelId: "deployment-1", apiBase: null, providerCredentialId: "cred-1", isDefault: false, agentRevisions: [{ id: "revision-1" }] }]]);
 		const commands = new Map<string, Row>();
 		const response = await request(_buildApp(store, new Map(), { authorized: true }, models, commands)).delete("/api/v1/providers/byok/openai");
 

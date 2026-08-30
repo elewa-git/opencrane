@@ -5,6 +5,7 @@ import type { Logger } from "pino";
 import { ModelRoutingScope } from "@opencrane/contracts";
 
 import type { ByokProviderCatalog } from "./byok-default-models.types";
+import type { LiteLlmModelDeploymentTarget } from "./litellm-model-deletion.types";
 import { _RegisterLiteLlmModel } from "./litellm-model-registration";
 import type { ProviderEmbeddingDeploymentEvidence, ProviderEmbeddingReconciliationResult } from "./provider-embedding-models.types";
 
@@ -27,6 +28,30 @@ export enum ProviderEmbeddingReconciliationStatuses
  * its consumer configuration.
  */
 export const _AUTO_EMBEDDING_MODEL_NAME = "auto-embedding";
+
+/**
+ * Builds the embedding deployments that a provider command must register or retire together.
+ *
+ * The ids are derived from the same resource name used during registration. Returning the complete
+ * non-secret coordinates lets Delete-BYOK freeze its removal set in the admitted command instead of
+ * rediscovering authority from live LiteLLM state.
+ *
+ * Called by: Set-BYOK embedding registration and Delete-BYOK command admission.
+ *
+ * @param catalog - Provider catalogue, or undefined for an uncatalogued provider.
+ * @param litellmCredentialName - Credential-store name bound to each embedding deployment.
+ * @returns The provider slug and stable alias targets, or an empty list when no embedding exists.
+ */
+export function _ProviderEmbeddingDeploymentTargets(catalog: ByokProviderCatalog | undefined, litellmCredentialName: string | null): readonly LiteLlmModelDeploymentTarget[]
+{
+	if (!catalog?.embeddingModel)
+		return [];
+	const slug = catalog.embeddingModel.slug;
+	return [slug, _AUTO_EMBEDDING_MODEL_NAME].map(function _Target(publicModelName): LiteLlmModelDeploymentTarget
+	{
+		return { deploymentId: _embeddingDeploymentId(publicModelName), publicModelName, upstreamModel: slug, apiBase: null, apiKeyReference: null, litellmCredentialName, mode: "embedding" };
+	});
+}
 
 /**
  * Registers a provider's embedding model directly with LiteLLM without creating chat definitions.
@@ -53,16 +78,12 @@ export async function _EnsureProviderEmbeddingModels(catalog: ByokProviderCatalo
 	if (!endpoint || !masterKey)
 		return { status: ProviderEmbeddingReconciliationStatuses.Skipped, deployments: [] };
 
-	const slug = catalog.embeddingModel.slug;
-	const deployments = [
-		{ publicModelName: slug, upstreamModel: slug },
-		{ publicModelName: _AUTO_EMBEDDING_MODEL_NAME, upstreamModel: slug },
-	];
+	const deployments = _ProviderEmbeddingDeploymentTargets(catalog, litellmCredentialName);
 	const evidence: ProviderEmbeddingDeploymentEvidence[] = [];
 	for (const deployment of deployments)
 	{
 		const litellmModelId = await _RegisterLiteLlmModel({
-			deploymentId: _embeddingDeploymentId(deployment.publicModelName),
+			deploymentId: deployment.deploymentId,
 			publicModelName: deployment.publicModelName,
 			upstreamModel: deployment.upstreamModel,
 			scope: ModelRoutingScope.Global,
@@ -73,7 +94,7 @@ export async function _EnsureProviderEmbeddingModels(catalog: ByokProviderCatalo
 			mode: "embedding",
 			requireLiveRegistration: true,
 		}, log);
-		evidence.push({ ...deployment, litellmModelId });
+		evidence.push({ publicModelName: deployment.publicModelName, upstreamModel: deployment.upstreamModel, litellmModelId });
 		log.info({ publicModelName: deployment.publicModelName, upstreamModel: deployment.upstreamModel }, "embedding model registered with litellm");
 	}
 	return { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: evidence };

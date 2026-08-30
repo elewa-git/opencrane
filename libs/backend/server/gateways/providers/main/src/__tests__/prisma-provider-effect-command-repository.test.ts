@@ -98,7 +98,7 @@ function _authorization(allow: boolean): { readonly authority: AuthorizationAuth
 /** Non-secret Set-BYOK payload shared by monotonic provider-state tests. */
 const _SET: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } };
 /** Non-secret Delete-BYOK payload shared by monotonic provider-state tests. */
-const _DELETE: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } };
+const _DELETE: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", litellmRegistered: false, modelDefinitionIds: [], deployments: [] } };
 /** Model registration payload shared by lifecycle fencing tests. */
 const _REGISTER: ProviderEffectCommandPayload = { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null, routingDefaultId: null, selectedModelDefinitionId: null } };
 
@@ -399,9 +399,12 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 	{
 		const row = _row(_DELETE, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-a", claimExpiresAt: new Date("2026-08-30T02:00:00.000Z") });
 		const database = _transaction(row, row);
-		const transaction = database.transaction as unknown as { providerCredential: { findFirst: ReturnType<typeof vi.fn> }; modelDefinition: { findFirst: ReturnType<typeof vi.fn> } };
-		transaction.providerCredential.findFirst.mockResolvedValue({ id: "credential-1" });
-		transaction.modelDefinition.findFirst.mockResolvedValue({ id: "model-1" });
+		const transaction = database.transaction as unknown as { providerCredential: { findFirst: ReturnType<typeof vi.fn> }; modelDefinition: { findMany: ReturnType<typeof vi.fn> } };
+		transaction.providerCredential.findFirst.mockResolvedValue({ id: "credential-1", litellmCredentialName: "byok-openai", updatedAt: new Date("2026-08-30T00:00:00.000Z") });
+		transaction.modelDefinition.findMany = vi.fn(async function _FindDependentModels()
+		{
+			return [{ id: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", litellmModelId: "deployment-1", apiBase: null, isDefault: false, agentRevisions: [{ id: "revision-1" }] }];
+		});
 		const repository = new PrismaProviderEffectCommandRepository(database.transaction);
 
 		await expect(repository.preflight(_record(row, _DELETE), _context(), _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(false);

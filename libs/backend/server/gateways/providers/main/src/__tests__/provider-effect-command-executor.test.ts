@@ -37,7 +37,7 @@ import { ProviderEffectFinalizationBlockedError, ProviderEffectOutcomeUncertainE
 import type { Logger } from "@opencrane/backend/observability";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
-import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandHandler, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectCommandUnitOfWork, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
+import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type DeleteByokKeyEffectPayload, type ProviderEffectCommandHandler, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectCommandUnitOfWork, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 
 /** Trusted route coordinates shared by executor tests. */
 const _CONTEXT: ProviderEffectExecutionContext = { siloId: "acme", principalId: "principal-1", actorKind: "user", actorId: "principal-1", resourceKind: "provider-connection", resourceId: "byok:acme:openai", executorProfile: "opencrane-control-plane/provider-effect-v1" };
@@ -49,6 +49,12 @@ const _LOGGER = _TELEMETRY as unknown as Logger;
 function _command(): ProviderEffectCommandRecord
 {
 	return { id: "command-1", siloId: "acme", principalId: "principal-1", payload: { kind: ProviderEffectCommandKinds.SetByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } }, resourceKind: "provider-connection", resourceId: "byok:acme:openai", resourceRevision: "revision-1", desiredGeneration: 1, argumentsDigest: "sha256:arguments", materialVerifier: _ProviderKeyMaterialVerifier("command-1", "openai", "sk-test"), authorization: { decisionDigest: "sha256:decision", policyRevisionHash: "sha256:policy", effectiveAuthorizationDigest: "sha256:effective" }, executorProfile: _CONTEXT.executorProfile, materialRequirement: ProviderEffectMaterialRequirements.EphemeralProviderKey, state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-1", claimExpiresAt: new Date("2099-01-01T00:00:00.000Z"), failureCode: null, followUpCommandId: null, result: null };
+}
+
+/** Builds a Delete-BYOK payload without a live LiteLLM registration. */
+function _deletePayload(secretRef = "byok-provider-key-openai"): DeleteByokKeyEffectPayload
+{
+	return { provider: "openai", secretRef, litellmCredentialName: "byok-openai", litellmRegistered: false, modelDefinitionIds: [], deployments: [] };
 }
 
 /** Build a UnitOfWork that forwards every transaction callback to one fake repository. */
@@ -114,7 +120,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 	it("resumes one database-complete command from its persisted execution context", async function _ReconcilesPersistedContext()
 	{
 		_TELEMETRY.traceNames.length = 0;
-		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
+		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: _deletePayload() } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
 		const repository = {
 			nextRecoverable: vi.fn(async function _Next() { return command; }),
 			claim: vi.fn(async function _Claim(_id, _verifier, context) { expect(context).toEqual({ ..._CONTEXT, actorKind: "system", actorId: _CONTEXT.executorProfile }); return { status: ProviderEffectExecutionStatuses.Claimed, command }; }),
@@ -132,7 +138,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 	it("finalizes recovered evidence without repeating external I/O", async function _FinalizesRecoveredEvidence()
 	{
 		const savedResult = { kind: ProviderEffectCommandKinds.DeleteByokKey, provider: "openai" } as const;
-		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None, deliveryCount: 3, failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, result: savedResult };
+		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: _deletePayload() } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None, deliveryCount: 3, failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, result: savedResult };
 		const repository = {
 			nextRecoverable: vi.fn(async function _Next() { return command; }),
 			claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.Claimed, command }; }),
@@ -177,7 +183,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 
 	it("refuses reconciliation when a saved command names a different executor profile", async function _RejectsSavedProfile()
 	{
-		const command = { ..._command(), executorProfile: "untrusted/provider-effect-v1", payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
+		const command = { ..._command(), executorProfile: "untrusted/provider-effect-v1", payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: _deletePayload() } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
 		const repository = {
 			nextRecoverable: vi.fn(async function _Next() { return command; }),
 			claim: vi.fn(async function _Claim(_id, _verifier, context)
@@ -218,7 +224,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 
 	it("does not reconcile external I/O after current authority is revoked", async function _RevokedReconcile()
 	{
-		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
+		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: _deletePayload() } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
 		const repository = { nextRecoverable: vi.fn(async function _Next() { return command; }), claim: vi.fn(async function _Claim() { return { status: ProviderEffectExecutionStatuses.Claimed, command }; }), preflight: vi.fn(async function _Preflight() { return false; }) } as unknown as ProviderEffectCommandRepository;
 		const handler = { execute: vi.fn() } as unknown as ProviderEffectCommandHandler;
 		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile, _LOGGER);
@@ -229,7 +235,7 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 
 	it("rejects persisted custody coordinates outside the fixed provider catalogue", async function _ValidatesCustodyCoordinates()
 	{
-		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "attacker-secret", litellmCredentialName: "byok-openai" } } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
+		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: _deletePayload("attacker-secret") } as const, materialVerifier: null, materialRequirement: ProviderEffectMaterialRequirements.None };
 		const handler = new DefaultProviderEffectCommandHandler({} as never, "opencrane-system", _LOGGER);
 
 		await expect(handler.execute(command, {})).rejects.toThrow("invalid custody coordinates");
@@ -307,10 +313,10 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("rejected", { status: 500 })));
 		const coreApi = { readNamespacedSecret: vi.fn(async function _Read() { return { metadata: { resourceVersion: "1" } }; }), replaceNamespacedSecret: vi.fn(async function _Replace() { return {}; }) } as never;
 		const handler = new DefaultProviderEffectCommandHandler(coreApi, "opencrane-system", _LOGGER);
-		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const, materialRequirement: ProviderEffectMaterialRequirements.None };
+		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: _deletePayload() } as const, materialRequirement: ProviderEffectMaterialRequirements.None };
 
 		await expect(handler.execute(command, {})).rejects.toBeInstanceOf(ProviderEffectOutcomeUncertainError);
-		expect(_TELEMETRY.traceNames).toContain("kubernetes.provider-secret.clear");
+		expect(_TELEMETRY.traceNames).not.toContain("kubernetes.provider-secret.clear");
 		expect(_TELEMETRY.markActiveSpanFailed).toHaveBeenCalledOnce();
 		vi.unstubAllGlobals();
 		vi.unstubAllEnvs();

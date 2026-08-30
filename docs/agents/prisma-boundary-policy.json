@@ -1101,6 +1101,18 @@
 		"adapter": "PrismaProviderEffectProjectionRepository",
 		"contract": "ProviderEffectProjectionRepository",
 		"contractImportPath": "./provider-effect-projection.types",
+		"constructs": [
+		  {
+			"adapter": "PrismaProviderByokRepository",
+			"importPath": "./prisma-provider-byok-repository"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/server/gateways/providers/main/src/prisma-provider-byok-repository.ts",
+		"adapter": "PrismaProviderByokRepository",
+		"contract": "ProviderByokRepository",
+		"contractImportPath": "./provider-byok-repository.types",
 		"constructs": []
 	  },
 	  {
@@ -2153,6 +2165,7 @@
       "apps/opencrane/src/app/persona-approval-composition.ts",
       "libs/backend/server/gateways/providers/main/src/provider-effect-command-composition.ts",
       "libs/backend/server/gateways/providers/main/src/provider-effect-command-repository.factory.ts",
+	  "libs/backend/server/gateways/providers/main/src/provider-byok-repository.factory.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 		"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
 		"libs/backend/agents/personal/personas/main/src/profile/prisma-persona-workflow-evidence.ts",
@@ -2191,13 +2204,6 @@
     }
   ],
   "exemptions": [
-	{
-	  "path": "libs/backend/server/gateways/providers/main/src/routes/provider-byok.ts",
-	  "owner": "provider-gateway",
-	  "operations": ["delegate"],
-	  "reason": "The provider gateway UnitOfWork supplies one authorization-bound transaction to the existing BYOK route callback; move its provider projection delegates behind a route repository when the remaining BYOK reads are extracted together.",
-	  "expiresOn": "2026-09-30"
-	},
     {
       "path": "libs/backend/agents/execution/inputs/main/src/personal-memory-scope-source.ts",
       "owner": "PersonalMemoryScopeSource",

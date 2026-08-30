@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import * as k8s from "@kubernetes/client-node";
 import { ByokProvider, type ProviderKeyStatus } from "@opencrane/contracts";
-import type { Prisma, PrismaClient, ProviderCredential as PrismaProviderCredential } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
 import { _log } from "../log";
@@ -13,8 +13,8 @@ import { _GrantProviderResourceCreatorUse, _RequireProviderGatewayAdministration
 import { _PROVIDER_EFFECT_EXECUTOR_PROFILE } from "../provider-effect-command-composition";
 import { _ProviderKeyMaterialVerifier } from "../provider-effect-command-executor";
 import { _SendProviderEffectBusy } from "../provider-effect-command-http";
+import { ProviderRetirementPlanStatuses, type ProviderByokStatusRecord } from "../provider-byok-repository.types";
 import { _ByokProviderConnectionId } from "../provider-resource-identity";
-import { _GLOBAL_AUTO_MODEL_NAME } from "../prisma-global-model-alias-repository";
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandExecutor, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 import { PrismaProviderGatewayUnitOfWork } from "../prisma-provider-gateway-unit-of-work";
 
@@ -25,23 +25,6 @@ const _BYOK_PROVIDERS = Object.values(ByokProvider) as readonly string[];
 function _effectContext(caller: ProviderGatewayCaller, provider: string): ProviderEffectExecutionContext
 {
 	return { siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: _ByokProviderConnectionId(caller.siloId, provider), executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE };
-}
-
-/** Returns why the current provider credential cannot be removed before a replacement is selected. */
-async function _providerDeletionGovernedReason(transaction: Prisma.TransactionClient, credential: PrismaProviderCredential | null): Promise<string | null>
-{
-	if (credential === null)
-		return null;
-	const selectedModel = await transaction.modelDefinition.findFirst({ where: { siloId: credential.siloId, providerCredentialId: credential.id, OR: [{ agentRevisions: { some: {} } }, { publicModelName: _GLOBAL_AUTO_MODEL_NAME }] } });
-	if (selectedModel !== null)
-		return "The provider still owns a frozen agent model or the current global alias.";
-	const providerModels = await transaction.modelDefinition.findMany({ where: { siloId: credential.siloId, providerCredentialId: credential.id }, select: { publicModelName: true } });
-	if (providerModels.length === 0)
-		return null;
-	const routingDefault = await transaction.modelRoutingDefault.findFirst({ where: { siloId: credential.siloId, scope: "Global", clusterTenant: null, defaultModel: { in: providerModels.map(function _Name(model) { return model.publicModelName; }) } } });
-	if (routingDefault !== null)
-		return "The provider supplies the selected global model; choose a replacement before deleting its key.";
-	return "The provider still owns registered models; retire them through durable model reconciliation before deleting its key.";
 }
 
 /**
@@ -57,7 +40,7 @@ async function _providerDeletionGovernedReason(transaction: Prisma.TransactionCl
  * @returns The status DTO: provider, whether a key is set, whether LiteLLM took it, and when it
  *          last changed.
  */
-function _toStatus(provider: string, row: PrismaProviderCredential | undefined): ProviderKeyStatus
+function _toStatus(provider: string, row: ProviderByokStatusRecord | undefined): ProviderKeyStatus
 {
   return {
     provider: provider as ByokProvider,
@@ -96,12 +79,12 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
 	const caller = _RequireProviderGatewayCaller(req, res, resolveCaller);
 	if (caller === null)
 		return;
-	const result = await providers.run(async function _List(transaction, authorization)
+	const result = await providers.run(async function _List(_transaction, authorization, _effects, byok)
 	{
 		const resources = _BYOK_PROVIDERS.map(provider => ({ kind: ProductAuthorizationResourceKinds.ProviderConnection, id: _ByokProviderConnectionId(caller.siloId, provider) }));
 		const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources, nowEpochMs: Date.now() });
 		const entitledProviders = new Set(entitled.map(resource => resource.id.slice(`byok:${caller.siloId}:`.length)));
-		const rows = await transaction.providerCredential.findMany({ where: { siloId: caller.siloId, scope: "Global", clusterTenant: null, provider: { in: [...entitledProviders] } } });
+		const rows = await byok.listStatuses(caller.siloId, [...entitledProviders]);
 		return { entitledProviders, rows };
 	});
 	const rows = result.rows;
@@ -154,13 +137,13 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
 			res.status(503).json({ error: "Provider key change is admitted but has not completed.", code: "PROVIDER_EFFECT_PENDING", commandId });
 			return;
 		}
-		const row = await providers.run(async function _ReadResult(transaction, authorization)
+		const row = await providers.run(async function _ReadResult(_transaction, authorization, _effects, byok)
 		{
 			const resource = { kind: ProductAuthorizationResourceKinds.ProviderConnection, id: _ByokProviderConnectionId(caller.siloId, provider) } as const;
 			const entitled = await authorization.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, action: ProductAuthorizationActions.Read, resources: [resource], nowEpochMs: Date.now() });
 			if (entitled.length !== 1)
 				throw new ProviderGatewayAuthorizationError();
-			return transaction.providerCredential.findUnique({ where: { id_siloId: { id: resource.id, siloId: caller.siloId } } });
+			return byok.findStatus(caller.siloId, resource.id);
 		});
 		if (row === null)
 			throw new Error("completed provider key command has no credential row");
@@ -193,15 +176,14 @@ export function providerByokRouter(prisma: PrismaClient, coreApi: k8s.CoreV1Api,
 		const commandId = resumeCommandId || randomUUID();
 		if (!resumeCommandId)
 		{
-			const admission = await providers.runDatabaseMutation(async function _Delete(transaction, authorization, effects)
+			const admission = await providers.runDatabaseMutation(async function _Delete(_transaction, authorization, effects, byok)
 			{
-				const current = await transaction.providerCredential.findFirst({ where: { siloId: caller.siloId, scope: "Global", clusterTenant: null, provider } });
-				const governedReason = await _providerDeletionGovernedReason(transaction, current);
-				if (governedReason !== null)
-					return { governedReason } as const;
-				const resourceRevision = `${current?.updatedAt.toISOString() ?? "absent"}:${commandId}`;
-				const admission = await _RequireProviderGatewayAdministration(authorization, caller, { operation: "delete-byok-provider", provider, commandId, resourceRevision });
-				return effects.admit({ id: commandId, siloId: caller.siloId, principalId: caller.principalId, payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider, secretRef: _byokSecretName(provider), litellmCredentialName: _byokCredentialName(provider) } }, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: _ByokProviderConnectionId(caller.siloId, provider), resourceRevision, argumentsDigest: admission.argumentsDigest, materialVerifier: null, authorization: admission.evidence, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None });
+				const plan = await byok.planRetirement(caller.siloId, provider);
+				if (plan.status === ProviderRetirementPlanStatuses.Governed)
+					return { governedReason: plan.reason } as const;
+				const resourceRevision = `${plan.credentialUpdatedAt?.toISOString() ?? "absent"}:${commandId}`;
+				const authorizationAdmission = await _RequireProviderGatewayAdministration(authorization, caller, { operation: "delete-byok-provider", provider, commandId, resourceRevision, modelDefinitionIds: plan.modelDefinitionIds, deployments: plan.deployments });
+				return effects.admit({ id: commandId, siloId: caller.siloId, principalId: caller.principalId, payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider, secretRef: _byokSecretName(provider), litellmCredentialName: _byokCredentialName(provider), litellmRegistered: plan.litellmRegistered, modelDefinitionIds: plan.modelDefinitionIds, deployments: plan.deployments } }, resourceKind: ProductAuthorizationResourceKinds.ProviderConnection, resourceId: _ByokProviderConnectionId(caller.siloId, provider), resourceRevision, argumentsDigest: authorizationAdmission.argumentsDigest, materialVerifier: null, authorization: authorizationAdmission.evidence, executorProfile: _PROVIDER_EFFECT_EXECUTOR_PROFILE, materialRequirement: ProviderEffectMaterialRequirements.None });
 			});
 			if ("governedReason" in admission)
 			{

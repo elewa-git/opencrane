@@ -3,6 +3,7 @@ import type { Logger } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { _log } from "../log";
+import { _ConvergeLiteLlmModelDeployment } from "./litellm-model-deletion";
 import type { LiteLlmModelRegistration } from "./litellm-model-registration.types";
 
 /**
@@ -62,7 +63,7 @@ async function _registerLive(endpoint: string, masterKey: string, input: LiteLlm
   {
     // 2. Reuse the deployment already stored under this product-owned public name. A delivery may
     //    have reached LiteLLM before its database finalization, so retries reconcile before POST.
-    const existing = await _FindMatchingLiteLlmDeployment(endpoint, masterKey, input);
+    const existing = await _ConvergeLiteLlmModelDeployment(endpoint, masterKey, input, log);
     if (existing !== null)
       return existing;
 
@@ -134,69 +135,6 @@ async function _registerLive(endpoint: string, masterKey: string, input: LiteLlm
   }
 }
 
-/**
- * Finds one live deployment only when every admitted routing argument still matches.
- *
- * A command may have reached LiteLLM before its database finalization. Reading before POST makes
- * that retry idempotent, while full argument comparison prevents an out-of-band deployment with the
- * same public name from being accepted as the command's result.
- *
- * @param endpoint - LiteLLM base URL.
- * @param masterKey - LiteLLM administrative bearer token.
- * @param input - Admitted model configuration that an existing deployment must match.
- * @returns The matching deployment id, or null when the public name is absent.
- * @throws When inventory is malformed, the public name is ambiguous, or its configuration differs.
- * @see https://docs.litellm.ai/docs/proxy/model_management for LiteLLM's model inventory contract.
- */
-async function _FindMatchingLiteLlmDeployment(endpoint: string, masterKey: string, input: LiteLlmModelRegistration): Promise<string | null>
-{
-  const response = await fetch(`${endpoint}/model/info`, { headers: { Authorization: `Bearer ${masterKey}` }, signal: AbortSignal.timeout(10_000) });
-  if (!response.ok)
-    throw new Error(`LiteLLM model inventory returned HTTP ${response.status}`);
-  return ___ParseAndValidateJson(await response.text(), "LiteLLM model inventory response", _MatchingDeploymentId, input);
-}
-
-/** Validate the matching inventory entry and return its deployment id. */
-function _MatchingDeploymentId(value: unknown, input: LiteLlmModelRegistration): string | null
-{
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw new Error("LiteLLM model inventory must be an object");
-  const data = (value as Record<string, unknown>)["data"];
-  if (!Array.isArray(data))
-    throw new Error("LiteLLM model inventory data must be an array");
-  const named = data.filter(function _MatchesPublicName(entry)
-  {
-    return typeof entry === "object" && entry !== null && !Array.isArray(entry) && (entry as Record<string, unknown>)["model_name"] === input.publicModelName;
-  });
-  const matches = named.filter(function _HasDeploymentId(entry)
-  {
-    const modelInfo = (entry as Record<string, unknown>)["model_info"];
-    return typeof modelInfo === "object" && modelInfo !== null && !Array.isArray(modelInfo) && typeof (modelInfo as Record<string, unknown>)["id"] === "string";
-  });
-  if (matches.length === 0)
-    return null;
-  if (matches.length !== 1)
-    throw new Error(`LiteLLM reports multiple deployments for unique model '${input.publicModelName}'`);
-  const entry = matches[0] as Record<string, unknown>;
-  const modelInfo = _objectField(entry, "model_info");
-  const params = _objectField(entry, "litellm_params");
-  const id = modelInfo["id"];
-  if (typeof id !== "string" || id.length === 0)
-    throw new Error(`LiteLLM deployment '${input.publicModelName}' has no identifier`);
-  const expectedApiKey = _ExpectedApiKey(input);
-  const expectedMode = input.mode ?? "chat";
-  const actualMode = modelInfo["mode"] ?? "chat";
-  const matchesInput = (input.deploymentId === undefined || id === input.deploymentId)
-    && params["model"] === input.upstreamModel
-    && (params["api_base"] ?? null) === (input.apiBase ?? null)
-    && (params["litellm_credential_name"] ?? null) === (input.litellmCredentialName ?? null)
-    && (params["api_key"] ?? null) === expectedApiKey
-    && actualMode === expectedMode;
-  if (!matchesInput)
-    throw new Error(`LiteLLM deployment '${input.publicModelName}' does not match the admitted model configuration`);
-  return id;
-}
-
 /** Build the optional LiteLLM model_info object without inventing absent values. */
 function _ModelInfo(input: LiteLlmModelRegistration): { readonly model_info?: { readonly id?: string; readonly mode?: string } }
 {
@@ -206,23 +144,6 @@ function _ModelInfo(input: LiteLlmModelRegistration): { readonly model_info?: { 
 	if (input.mode)
 		modelInfo.mode = input.mode;
 	return Object.keys(modelInfo).length === 0 ? {} : { model_info: modelInfo };
-}
-
-/** Build the non-secret environment reference expected in LiteLLM inventory. */
-function _ExpectedApiKey(input: LiteLlmModelRegistration): string | null
-{
-	if (input.litellmCredentialName || !input.apiKeyEnvRef)
-		return null;
-	return `os.environ/${input.apiKeyEnvRef}`;
-}
-
-/** Read one required object field from a LiteLLM inventory entry. */
-function _objectField(parent: Record<string, unknown>, field: string): Record<string, unknown>
-{
-  const value = parent[field];
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw new Error(`LiteLLM model inventory ${field} must be an object`);
-  return value as Record<string, unknown>;
 }
 
 /** Select one non-empty LiteLLM deployment id or use the deterministic local placeholder. */
