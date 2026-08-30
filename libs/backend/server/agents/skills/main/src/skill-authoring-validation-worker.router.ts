@@ -1,6 +1,7 @@
 import { Readable } from "node:stream";
 
 import { Router, type Request, type Response } from "express";
+import rateLimit from "express-rate-limit";
 
 import { __HashSkillAuthoringValidationBootstrapReference, __IsSkillAuthoringValidationBootstrapReference } from "@opencrane/contracts";
 
@@ -14,6 +15,7 @@ const _MAXIMUM_ARCHIVE_BYTES = 16 * 1024 * 1024;
 export function __CreateSkillAuthoringValidationWorkerRouter(dependencies: SkillAuthoringValidationWorkerRouterDependencies): Router
 {
 	const router = Router();
+	router.use(rateLimit({ windowMs: 60_000, limit: 1_000, standardHeaders: true, legacyHeaders: false, validate: { trustProxy: false } }));
 	router.post(/^\/skill-authoring-validations:bootstrap$/u, async function _Bootstrap(request: Request, response: Response): Promise<void>
 	{
 		const reference = _Reference(request.body);

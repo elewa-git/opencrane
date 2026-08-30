@@ -21,15 +21,6 @@ function _buildApp(max: number): express.Express
   return app;
 }
 
-/** Build an app that applies the limiter to its workload-facing route too. */
-function _buildInternalApp(max: number): express.Express
-{
-  const app = express();
-  app.use(_RateLimit({ max, skipInternal: false }));
-  app.get("/api/internal/poll", function _poll(_req, res) { res.json({ ok: true }); });
-  return app;
-}
-
 describe("_RateLimit — per-IP request limiter", function _suite()
 {
   it("allows requests up to the cap, then 429s the next one", async function _enforces()
@@ -58,10 +49,4 @@ describe("_RateLimit — per-IP request limiter", function _suite()
     }
   });
 
-  it("throttles workload routes when the internal listener disables the exemption", async function _limitsInternal()
-  {
-    const app = _buildInternalApp(1);
-    expect((await request(app).get("/api/internal/poll")).status).toBe(200);
-    expect((await request(app).get("/api/internal/poll")).status).toBe(429);
-  });
 });

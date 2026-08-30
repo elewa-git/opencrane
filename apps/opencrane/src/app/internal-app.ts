@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import express, { type Express, type RequestHandler } from "express";
 
 import { ___RequestContext } from "@opencrane/backend/observability";
-import { _ErrorHandler, _RateLimit } from "@opencrane/backend/server/infra/http";
+import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { InternalRuntimeConfig } from "./config.types";
@@ -47,7 +47,6 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 	// 2. Correlate every internal request without treating correlation as authentication.
 	app.use(___RequestContext());
 	app.use(_CreateHttpRequestLogger(_log));
-	app.use(_RateLimit({ skipInternal: false }));
 
 	// 3. Mount only workload-facing routes and terminate failures through the structured handler.
 	_RegisterInternalRoutes(app, prisma, authApi, config, mcpRuntime, workflowExecution);

@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import rateLimit from "express-rate-limit";
 
 import { __ParseSkillAuthoringValidationCompletionRequest, __ParseSkillAuthoringValidationPodBindRequest, __ParseSkillAuthoringValidationRecoveryRequest, __ParseSkillAuthoringValidationReleaseRequest, __ParseSkillAuthoringValidationTaskReceipt, __ParseSkillAuthoringValidationUnboundExpiryRequest, __ParseSkillAuthoringValidationWorkloadBindRequest } from "@opencrane/backend/agents/skills/workflows/contract";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
@@ -19,6 +20,7 @@ import type { SkillAuthoringValidationControllerIdentity, SkillAuthoringValidati
 export function __CreateSkillAuthoringValidationControllerRouter(dependencies: SkillAuthoringValidationControllerRouterDependencies): Router
 {
 	const router = Router();
+	router.use(rateLimit({ windowMs: 60_000, limit: 1_000, standardHeaders: true, legacyHeaders: false, validate: { trustProxy: false } }));
 
 	router.post("/skill-authoring-validations/:validationId/claim", async function _Claim(request: Request, response: Response): Promise<void>
 	{
