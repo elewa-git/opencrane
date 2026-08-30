@@ -4,7 +4,7 @@ import { ProviderEffectCommandState, type Prisma } from "@prisma/client";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
-import { _BYOK_PROVIDER_CATALOG } from "@opencrane/backend/server/gateways/model-routing";
+import { _BYOK_PROVIDER_CATALOG, ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
 
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type AdmitProviderEffectCommand, type ProviderEffectAdmissionResult, type ProviderEffectClaimResult, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectExecutionContext, type ProviderEffectHandlerResult, type ProviderEffectResourceBlocker } from "./provider-effect-command.types";
 import { _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "./provider-effect-command-errors";
@@ -101,6 +101,8 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 			return { status: ProviderEffectExecutionStatuses.Busy, command: null };
 		if (!await this._isCurrentAndEligible(current) || !await _isAuthorized(current, context, authorization, now))
 		{
+			if (current.failureCode === _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE)
+				return { status: ProviderEffectExecutionStatuses.Busy, command: null };
 			await this._terminalize(current, "authorization_or_resource_stale", now);
 			return { status: ProviderEffectExecutionStatuses.Failed, command: null };
 		}
@@ -142,6 +144,8 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 			return false;
 		if (await this._isCurrentAndEligible(current) && await _isAuthorized(current, context, authorization, now))
 			return true;
+		if (current.failureCode === _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE)
+			return false;
 		await this._terminalize(current, "authorization_or_resource_stale", now);
 		return false;
 	}
@@ -155,10 +159,7 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 		if (current === null || !_contextMatches(current, context) || current.state !== ProviderEffectCommandState.Claimed || current.claimFence !== command.claimFence || current.deliveryCount !== command.deliveryCount)
 			return ProviderEffectExecutionStatuses.Busy;
 		if (!await this._isCurrentAndEligible(current) || !await _isAuthorized(current, context, authorization, completedAt))
-		{
-			await this._terminalize(current, "authorization_or_resource_stale", completedAt);
-			return ProviderEffectExecutionStatuses.Failed;
-		}
+			return ProviderEffectExecutionStatuses.Busy;
 		const updated = await this.transaction.providerEffectCommand.updateMany({ where: { id: command.id, state: ProviderEffectCommandState.Claimed, claimFence: command.claimFence, deliveryCount: command.deliveryCount }, data: { state: ProviderEffectCommandState.Succeeded, result: result as unknown as Prisma.InputJsonValue, failureCode: null, claimFence: null, claimExpiresAt: null, completedAt } });
 		if (updated.count !== 1)
 			return ProviderEffectExecutionStatuses.Busy;
@@ -217,6 +218,7 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 		const expectedDefault = catalog?.models.find(function _Default(model) { return model.className === catalog.defaultClass; })?.slug ?? null;
 		if (JSON.stringify(actual) !== JSON.stringify(expected) || result.defaultPublicModelName !== expectedDefault)
 			throw new Error("provider model projection does not match the fixed provider catalogue");
+		this._validateEmbeddingProjection(result, catalog?.embeddingModel?.slug ?? null);
 		for (const projection of result.models)
 		{
 			const existing = await this.transaction.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, publicModelName: projection.publicModelName } });
@@ -242,6 +244,25 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 		}
 		if (selectedDefault !== null && await this.transaction.modelRoutingDefault.findFirst({ where: { scope: "Global", clusterTenant: null } }) === null)
 			await this.transaction.modelRoutingDefault.create({ data: { scope: "Global", clusterTenant: null, defaultModel: selectedDefault.publicModelName } });
+	}
+
+	/** Validates durable embedding evidence against the same fixed provider catalogue. */
+	private _validateEmbeddingProjection(result: Extract<ProviderEffectHandlerResult, { readonly kind: ProviderEffectCommandKinds.SetByokKey }>, embeddingSlug: string | null): void
+	{
+		if (embeddingSlug === null)
+		{
+			if (result.embedding.status !== ProviderEmbeddingReconciliationStatuses.NotApplicable || result.embedding.deployments.length !== 0)
+				throw new Error("provider embedding projection must be not-applicable");
+			return;
+		}
+		if (result.embedding.status === ProviderEmbeddingReconciliationStatuses.Skipped && result.litellmCredentialName === null)
+			return;
+		if (result.embedding.status !== ProviderEmbeddingReconciliationStatuses.Confirmed)
+			throw new Error("provider embedding projection lacks confirmed deployment evidence");
+		const expected = [{ publicModelName: embeddingSlug, upstreamModel: embeddingSlug }, { publicModelName: "auto-embedding", upstreamModel: embeddingSlug }];
+		const actual = result.embedding.deployments.map(function _Deployment(deployment) { return { publicModelName: deployment.publicModelName, upstreamModel: deployment.upstreamModel }; });
+		if (JSON.stringify(actual) !== JSON.stringify(expected) || result.embedding.deployments.some(function _Invalid(deployment) { return deployment.litellmModelId.length === 0 || deployment.litellmModelId.startsWith("placeholder:"); }))
+			throw new Error("provider embedding projection does not match confirmed catalogue deployments");
 	}
 
 	/** @inheritdoc */

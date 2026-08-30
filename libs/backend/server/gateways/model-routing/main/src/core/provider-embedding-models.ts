@@ -3,8 +3,19 @@ import type { Logger } from "pino";
 import { ModelRoutingScope } from "@opencrane/contracts";
 
 import type { ByokProviderCatalog } from "./byok-default-models.types";
-import { _ReadLiteLlmModelDeployments } from "./litellm-model-inventory";
 import { _RegisterLiteLlmModel } from "./litellm-model-registration";
+import type { ProviderEmbeddingDeploymentEvidence, ProviderEmbeddingReconciliationResult } from "./provider-embedding-models.types";
+
+/** Closed outcomes for provider embedding reconciliation. */
+export enum ProviderEmbeddingReconciliationStatuses
+{
+	/** The provider catalogue has no embedding model. */
+	NotApplicable = "not_applicable",
+	/** LiteLLM is not configured, so no external deployment was attempted. */
+	Skipped = "skipped",
+	/** Both fixed embedding deployments were applied or fully confirmed. */
+	Confirmed = "confirmed",
+}
 
 /**
  * Public model name of the stable embedding selection.
@@ -23,38 +34,32 @@ export const _AUTO_EMBEDDING_MODEL_NAME = "auto-embedding";
  * that finds either deployment already present leaves that deployment in place; reading it from
  * the live inventory also qualifies it during startup without creating a duplicate deployment.
  *
- * Called by: `_ProvisionByokKey` in `provision-byok-key.ts`.
+ * Called by: provider effect delivery and `_ProvisionByokKey` startup bootstrap.
  *
  * @param catalog - Provider catalogue, or undefined for an uncatalogued provider.
  * @param litellmCredentialName - LiteLLM credential name, or null for a Secret-only baseline.
  * @param log - Scoped logger for registration outcomes.
- * @param requireLiveModels - Propagates registration failures for names missing from the live
- * inventory during startup qualification.
- * @returns After an uncatalogued or unconfigured provider is skipped, or both deployments have
- * been registered or confirmed present.
- * @throws When startup qualification requires live registration and LiteLLM rejects a deployment.
+ * @returns A closed, secret-free outcome with exact evidence for every confirmed deployment.
+ * @throws When configured LiteLLM cannot qualify or reconcile either required deployment.
  */
-export async function _EnsureProviderEmbeddingModels(catalog: ByokProviderCatalog | undefined, litellmCredentialName: string | null, log: Logger, requireLiveModels: boolean): Promise<void>
+export async function _EnsureProviderEmbeddingModels(catalog: ByokProviderCatalog | undefined, litellmCredentialName: string | null, log: Logger): Promise<ProviderEmbeddingReconciliationResult>
 {
-	if (!catalog?.embeddingModel) return;
+	if (!catalog?.embeddingModel)
+		return { status: ProviderEmbeddingReconciliationStatuses.NotApplicable, deployments: [] };
 	const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
 	const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";
-	if (!endpoint || !masterKey) return;
+	if (!endpoint || !masterKey)
+		return { status: ProviderEmbeddingReconciliationStatuses.Skipped, deployments: [] };
 
 	const slug = catalog.embeddingModel.slug;
 	const deployments = [
 		{ publicModelName: slug, upstreamModel: slug },
 		{ publicModelName: _AUTO_EMBEDDING_MODEL_NAME, upstreamModel: slug },
 	];
-	const registered = await _ReadLiteLlmRegisteredModelNames(endpoint, masterKey, log, requireLiveModels);
+	const evidence: ProviderEmbeddingDeploymentEvidence[] = [];
 	for (const deployment of deployments)
 	{
-		if (registered.has(deployment.publicModelName))
-		{
-			log.debug({ publicModelName: deployment.publicModelName }, "embedding model already registered with litellm");
-			continue;
-		}
-		await _RegisterLiteLlmModel({
+		const litellmModelId = await _RegisterLiteLlmModel({
 			publicModelName: deployment.publicModelName,
 			upstreamModel: deployment.upstreamModel,
 			scope: ModelRoutingScope.Global,
@@ -63,32 +68,10 @@ export async function _EnsureProviderEmbeddingModels(catalog: ByokProviderCatalo
 			apiKeyEnvRef: null,
 			litellmCredentialName,
 			mode: "embedding",
-			requireLiveRegistration: requireLiveModels,
+			requireLiveRegistration: true,
 		});
+		evidence.push({ ...deployment, litellmModelId });
 		log.info({ publicModelName: deployment.publicModelName, upstreamModel: deployment.upstreamModel }, "embedding model registered with litellm");
 	}
-}
-
-/**
- * Reads registered LiteLLM model names and falls back only for interactive reconciliation.
- *
- * @param endpoint - LiteLLM endpoint without a route suffix.
- * @param masterKey - LiteLLM administrative bearer token.
- * @param log - Scoped logger that records why registration idempotency could not be checked.
- * @param requireLiveModels - Propagates inventory failures during strict startup qualification.
- * @returns Validated registered model names, or an empty set when the inventory cannot be read.
- * @throws When strict startup cannot read or validate the inventory.
- */
-async function _ReadLiteLlmRegisteredModelNames(endpoint: string, masterKey: string, log: Logger, requireLiveModels: boolean): Promise<Set<string>>
-{
-	try
-	{
-		return new Set((await _ReadLiteLlmModelDeployments(endpoint, masterKey)).keys());
-	}
-	catch (err)
-	{
-		if (requireLiveModels) throw err;
-		log.warn({ operation: "litellm.embedding.inventory", err }, "embedding model inventory read failed; registration will be reconciled");
-		return new Set();
-	}
+	return { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: evidence };
 }

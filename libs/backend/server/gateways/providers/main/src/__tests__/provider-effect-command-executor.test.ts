@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const _TELEMETRY = vi.hoisted(function _Telemetry()
 {
@@ -34,6 +34,7 @@ import { DefaultProviderEffectCommandExecutor, _ProviderKeyMaterialVerifier } fr
 import { DefaultProviderEffectCommandHandler } from "../provider-effect-command-handler";
 import { ProviderEffectOutcomeUncertainError, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "../provider-effect-command-errors";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
 import { ProviderEffectAdmissionStatuses, ProviderEffectCommandKinds, ProviderEffectCommandStates, ProviderEffectExecutionStatuses, ProviderEffectMaterialRequirements, type ProviderEffectCommandHandler, type ProviderEffectCommandRecord, type ProviderEffectCommandRepository, type ProviderEffectCommandUnitOfWork, type ProviderEffectExecutionContext } from "../provider-effect-command.types";
 
 /** Trusted route coordinates shared by executor tests. */
@@ -53,12 +54,18 @@ function _unitOfWork(repository: ProviderEffectCommandRepository): ProviderEffec
 
 describe("DefaultProviderEffectCommandExecutor", function _Suite()
 {
+	afterEach(function _RestoreEnvironment()
+	{
+		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
+	});
+
 	it("performs the external effect only after the claim operation returns", async function _PostCommitOrdering()
 	{
 		const order: string[] = [];
 		const command = _command();
 		const repository = { claim: vi.fn(async function _Claim() { order.push("claim-committed"); return { status: ProviderEffectExecutionStatuses.Claimed, command }; }), preflight: vi.fn(async function _Preflight() { order.push("preflight-committed"); return true; }), complete: vi.fn(async function _Complete() { order.push("result-committed"); return ProviderEffectExecutionStatuses.Succeeded; }) } as unknown as ProviderEffectCommandRepository;
-		const handler = { execute: vi.fn(async function _Execute() { order.push("external-effect"); return { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], defaultPublicModelName: null } as const; }) } as ProviderEffectCommandHandler;
+		const handler = { execute: vi.fn(async function _Execute() { order.push("external-effect"); return { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], defaultPublicModelName: null, embedding: { status: ProviderEmbeddingReconciliationStatuses.NotApplicable, deployments: [] } } as const; }) } as ProviderEffectCommandHandler;
 		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
 
 		const result = await executor.execute(command.id, { provider: "openai", providerKey: "sk-test" }, _CONTEXT);
@@ -195,6 +202,103 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		vi.unstubAllEnvs();
 	});
 
+	it("converges a second key rotation onto the same catalogue and embedding deployments", async function _StableRotationDeployments()
+	{
+		vi.stubEnv("LITELLM_ENDPOINT", "http://litellm:4000");
+		vi.stubEnv("LITELLM_MASTER_KEY", "master");
+		const inventory: Array<Record<string, unknown>> = [];
+		const fetchMock = vi.fn(async function _Fetch(url: string, init?: RequestInit): Promise<Response>
+		{
+			if (url.endsWith("/model/info"))
+				return new Response(JSON.stringify({ data: inventory }), { status: 200 });
+			if (url.includes("/credentials/"))
+				return new Response("", { status: 404 });
+			if (url.endsWith("/credentials"))
+				return new Response("{}", { status: 200 });
+			if (url.endsWith("/model/new"))
+			{
+				const body = JSON.parse(init?.body as string) as { model_name: string; litellm_params: Record<string, unknown>; model_info?: { id?: string; mode?: string } };
+				const id = body.model_info?.id ?? `embedding-${body.model_name}`;
+				inventory.push({ model_name: body.model_name, litellm_params: body.litellm_params, model_info: { id, ...(body.model_info?.mode === undefined ? {} : { mode: body.model_info.mode }) } });
+				return new Response(JSON.stringify({ model_id: id }), { status: 200 });
+			}
+			return new Response("not found", { status: 404 });
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		const coreApi = { readNamespacedSecret: vi.fn(async function _Read() { return { metadata: { name: "byok-provider-key-openai", resourceVersion: "1" } }; }), replaceNamespacedSecret: vi.fn(async function _Replace() { return {}; }) } as never;
+		const handler = new DefaultProviderEffectCommandHandler(coreApi, "opencrane-system");
+
+		const first = await handler.execute({ ..._command(), id: "command-a" }, { provider: "openai", providerKey: "sk-first" });
+		const second = await handler.execute({ ..._command(), id: "command-b" }, { provider: "openai", providerKey: "sk-second" });
+		if (first.kind !== ProviderEffectCommandKinds.SetByokKey || second.kind !== ProviderEffectCommandKinds.SetByokKey)
+			throw new Error("expected two Set-BYOK projections");
+
+		expect(second.models).toEqual(first.models);
+		expect(second.embedding).toEqual(first.embedding);
+		expect(fetchMock.mock.calls.filter(function _ModelCreates(call) { return (call[0] as string).endsWith("/model/new"); })).toHaveLength(6);
+		expect(JSON.stringify([first, second])).not.toMatch(/sk-first|sk-second/);
+		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
+	});
+
+	it("retains the barrier when LiteLLM rejects credential deletion", async function _RejectedDelete()
+	{
+		vi.stubEnv("LITELLM_ENDPOINT", "http://litellm:4000");
+		vi.stubEnv("LITELLM_MASTER_KEY", "master");
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("rejected", { status: 500 })));
+		const coreApi = { readNamespacedSecret: vi.fn(async function _Read() { return { metadata: { resourceVersion: "1" } }; }), replaceNamespacedSecret: vi.fn(async function _Replace() { return {}; }) } as never;
+		const handler = new DefaultProviderEffectCommandHandler(coreApi, "opencrane-system");
+		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.DeleteByokKey, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const, materialRequirement: ProviderEffectMaterialRequirements.None };
+
+		await expect(handler.execute(command, {})).rejects.toBeInstanceOf(ProviderEffectOutcomeUncertainError);
+		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
+	});
+
+	it("turns an ambiguous direct model registration into sticky uncertainty", async function _UncertainModelRegistration()
+	{
+		vi.stubEnv("LITELLM_ENDPOINT", "http://litellm:4000");
+		vi.stubEnv("LITELLM_MASTER_KEY", "master");
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 })));
+		const handler = new DefaultProviderEffectCommandHandler();
+		const command = { ..._command(), payload: { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: "global", clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null } } as const, resourceKind: "model-definition", resourceId: "model-1", materialRequirement: ProviderEffectMaterialRequirements.None };
+
+		await expect(handler.execute(command, {})).rejects.toBeInstanceOf(ProviderEffectOutcomeUncertainError);
+		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
+	});
+
+	it("uses the model definition identity to reconcile direct registration across command retries", async function _StableDirectRegistration()
+	{
+		vi.stubEnv("LITELLM_ENDPOINT", "http://litellm:4000");
+		vi.stubEnv("LITELLM_MASTER_KEY", "master");
+		let deployment: Record<string, unknown> | null = null;
+		const fetchMock = vi.fn(async function _Fetch(url: string, init?: RequestInit): Promise<Response>
+		{
+			if (url.endsWith("/model/info"))
+				return new Response(JSON.stringify({ data: deployment === null ? [] : [deployment] }), { status: 200 });
+			if (url.endsWith("/model/new"))
+			{
+				const body = JSON.parse(init?.body as string) as { model_name: string; litellm_params: Record<string, unknown>; model_info: { id: string } };
+				deployment = { model_name: body.model_name, litellm_params: body.litellm_params, model_info: { id: body.model_info.id } };
+				return new Response(JSON.stringify({ model_id: body.model_info.id }), { status: 200 });
+			}
+			return new Response("not found", { status: 404 });
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		const handler = new DefaultProviderEffectCommandHandler();
+		const payload = { kind: ProviderEffectCommandKinds.RegisterModel, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: "global", clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null } } as const;
+		const command = { ..._command(), payload, resourceKind: "model-definition", resourceId: "model-1", materialRequirement: ProviderEffectMaterialRequirements.None };
+
+		const first = await handler.execute({ ...command, id: "command-a" }, {});
+		const second = await handler.execute({ ...command, id: "command-b" }, {});
+
+		expect(second).toEqual(first);
+		expect(fetchMock.mock.calls.filter(function _ModelCreates(call) { return (call[0] as string).endsWith("/model/new"); })).toHaveLength(1);
+		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
+	});
+
 	it("keeps raw adapter errors outside trace and log boundaries", async function _RedactsRawFailure()
 	{
 		_TELEMETRY.traceThrown.length = 0;
@@ -214,14 +318,20 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		expect(_TELEMETRY.warn).toHaveBeenCalledWith(expect.objectContaining({ err: { type: "Error" } }), "provider effect delivery failed and remains recoverable");
 	});
 
-	it.each([ProviderEffectCommandKinds.SetByokKey, ProviderEffectCommandKinds.DeleteByokKey])("keeps generation B blocked until uncertain %s generation A positively converges", async function _UncertainBarrier(kind)
+	it.each([ProviderEffectCommandKinds.SetByokKey, ProviderEffectCommandKinds.DeleteByokKey, ProviderEffectCommandKinds.RegisterModel])("keeps generation B blocked until uncertain %s generation A positively converges", async function _UncertainBarrier(kind)
 	{
 		let barrier = true;
 		let releaseUncertain: (() => void) | null = null;
 		const payload = kind === ProviderEffectCommandKinds.SetByokKey
 			? { kind, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const
-			: { kind, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const;
-		const first = { ..._command(), payload, materialRequirement: kind === ProviderEffectCommandKinds.SetByokKey ? ProviderEffectMaterialRequirements.EphemeralProviderKey : ProviderEffectMaterialRequirements.None };
+			: kind === ProviderEffectCommandKinds.DeleteByokKey
+				? { kind, value: { provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai" } } as const
+				: { kind, value: { modelDefinitionId: "model-1", publicModelName: "openai/gpt", upstreamModel: "openai/gpt", scope: "global", clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName: null } } as const;
+		const register = kind === ProviderEffectCommandKinds.RegisterModel;
+		const context = register ? { ..._CONTEXT, resourceKind: "model-definition", resourceId: "model-1" } : _CONTEXT;
+		const materialVerifier = kind === ProviderEffectCommandKinds.SetByokKey ? _command().materialVerifier : null;
+		const materialRequirement = kind === ProviderEffectCommandKinds.SetByokKey ? ProviderEffectMaterialRequirements.EphemeralProviderKey : ProviderEffectMaterialRequirements.None;
+		const first = { ..._command(), payload, resourceKind: context.resourceKind, resourceId: context.resourceId, materialVerifier, materialRequirement };
 		const retry = { ...first, deliveryCount: 4, claimFence: "fence-retry", failureCode: _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE };
 		const repository = {
 			claim: vi.fn()
@@ -240,19 +350,19 @@ describe("DefaultProviderEffectCommandExecutor", function _Suite()
 		} as unknown as ProviderEffectCommandRepository;
 		const uncertainDelivery = new Promise<never>(function _Delayed(_resolve, reject) { releaseUncertain = function _Release() { reject(new ProviderEffectOutcomeUncertainError()); }; });
 		const successfulResult = kind === ProviderEffectCommandKinds.SetByokKey
-			? { kind, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], defaultPublicModelName: null } as const
-			: { kind, provider: "openai" } as const;
+			? { kind, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], defaultPublicModelName: null, embedding: { status: ProviderEmbeddingReconciliationStatuses.NotApplicable, deployments: [] } } as const
+			: kind === ProviderEffectCommandKinds.DeleteByokKey ? { kind, provider: "openai" } as const : { kind, litellmModelId: "deployment-1" } as const;
 		const handler = { execute: vi.fn().mockReturnValueOnce(uncertainDelivery).mockResolvedValueOnce(successfulResult) } as ProviderEffectCommandHandler;
 		const executor = new DefaultProviderEffectCommandExecutor(_unitOfWork(repository), handler, _CONTEXT.executorProfile);
 		const material = kind === ProviderEffectCommandKinds.SetByokKey ? { provider: "openai", providerKey: "sk-test" } : undefined;
 
-		const delayed = executor.execute(first.id, material, _CONTEXT);
+		const delayed = executor.execute(first.id, material, context);
 		await vi.waitFor(function _DeliveryStarted() { expect(handler.execute).toHaveBeenCalledOnce(); });
 		await expect(repository.admit({} as never)).resolves.toMatchObject({ status: ProviderEffectAdmissionStatuses.Busy });
 		releaseUncertain!();
 		await expect(delayed).resolves.toEqual({ status: ProviderEffectExecutionStatuses.Retryable, result: null });
 		await expect(repository.admit({} as never)).resolves.toMatchObject({ status: ProviderEffectAdmissionStatuses.Busy });
-		await expect(executor.execute(first.id, material, _CONTEXT)).resolves.toMatchObject({ status: ProviderEffectExecutionStatuses.Succeeded });
+		await expect(executor.execute(first.id, material, context)).resolves.toMatchObject({ status: ProviderEffectExecutionStatuses.Succeeded });
 		await expect(repository.admit({} as never)).resolves.toMatchObject({ status: ProviderEffectAdmissionStatuses.Admitted });
 		expect(repository.fail).not.toHaveBeenCalled();
 		expect(repository.retainClaim).toHaveBeenCalledWith(first, _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE);

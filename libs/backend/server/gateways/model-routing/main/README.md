@@ -45,6 +45,10 @@ Model registration reads LiteLLM inventory before creating anything. A durable p
 supplies a deterministic deployment identifier; the inventory entry must match that identifier plus
 the admitted upstream model, API base, credential reference, and mode. An absent match permits
 `POST /model/new`; a mismatch or ambiguous public name fails without accepting out-of-band state.
+Embedding reconciliation returns a closed `NotApplicable`, `Skipped`, or `Confirmed` outcome.
+`Confirmed` carries the public name, upstream model, and exact LiteLLM deployment id for both the
+provider embedding slug and `auto-embedding`; provider command finalization validates and stores that
+secret-free evidence with the governed provider generation.
 
 ## Public surface
 

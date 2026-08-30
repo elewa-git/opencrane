@@ -168,12 +168,12 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     {
       if (url.endsWith("/credentials")) return new Response("{}", { status: 200 });
       if (url.endsWith("/model/info")) return new Response(JSON.stringify({ data: [
-        { model_name: "openai/gpt-5.5", model_info: { id: "live-openai/gpt-5.5" } },
-        { model_name: "openai/gpt-5.4", model_info: { id: "live-openai/gpt-5.4" } },
-        { model_name: "openai/gpt-5.4-nano", model_info: { id: "live-openai/gpt-5.4-nano" } },
-        { model_name: "auto", model_info: { id: "live-auto" } },
-        { model_name: "openai/text-embedding-3-large" },
-        { model_name: "auto-embedding" },
+        { model_name: "openai/gpt-5.5", litellm_params: { model: "openai/gpt-5.5", litellm_credential_name: "byok-openai" }, model_info: { id: "live-openai/gpt-5.5" } },
+        { model_name: "openai/gpt-5.4", litellm_params: { model: "openai/gpt-5.4", litellm_credential_name: "byok-openai" }, model_info: { id: "live-openai/gpt-5.4" } },
+        { model_name: "openai/gpt-5.4-nano", litellm_params: { model: "openai/gpt-5.4-nano", litellm_credential_name: "byok-openai" }, model_info: { id: "live-openai/gpt-5.4-nano" } },
+        { model_name: "auto", litellm_params: { model: "openai/gpt-5.4-nano", litellm_credential_name: "byok-openai" }, model_info: { id: "live-auto" } },
+        { model_name: "openai/text-embedding-3-large", litellm_params: { model: "openai/text-embedding-3-large", litellm_credential_name: "byok-openai" }, model_info: { id: "live-embedding", mode: "embedding" } },
+        { model_name: "auto-embedding", litellm_params: { model: "openai/text-embedding-3-large", litellm_credential_name: "byok-openai" }, model_info: { id: "live-auto-embedding", mode: "embedding" } },
       ] }), { status: 200 });
       return new Response("not found", { status: 404 });
     });

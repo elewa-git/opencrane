@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ModelRoutingScope } from "@opencrane/contracts";
+import { ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
 
 import { PrismaProviderEffectCommandRepository } from "../prisma-provider-effect-command-repository";
 import { _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE } from "../provider-effect-command-errors";
@@ -198,6 +199,16 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		expect(database.updateCommands).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ProviderEffectCommandStates.Failed, failureCode: "authorization_or_resource_stale" }) }));
 	});
 
+	it("keeps an uncertain command blocking when authority is revoked before its exact retry", async function _RevokedUncertainRetry()
+	{
+		const row = _row(_DELETE, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 4, claimFence: "fence-old", claimExpiresAt: new Date("2026-08-30T00:30:00.000Z"), failureCode: _PROVIDER_EFFECT_OUTCOME_UNCERTAIN_FAILURE_CODE });
+		const database = _transaction(row, row);
+		const repository = new PrismaProviderEffectCommandRepository(database.transaction);
+
+		await expect(repository.claim("command-a", null, _context("system"), _authorization(false).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toEqual({ status: ProviderEffectExecutionStatuses.Busy, command: null });
+		expect(database.updateCommands).not.toHaveBeenCalled();
+	});
+
 	it("terminalizes a saved executor profile that differs from the trusted delivery profile", async function _ExecutorProfileMismatch()
 	{
 		const row = _row(_DELETE, { executorProfile: "untrusted/provider-effect-v1" });
@@ -264,11 +275,11 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		const repository = new PrismaProviderEffectCommandRepository(database.transaction);
 		const context = { ..._context(), resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: "model-1" };
 
-		await expect(repository.complete(_record(rowA, _REGISTER), { kind: ProviderEffectCommandKinds.RegisterModel, litellmModelId: "deployment-a" }, context, _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(ProviderEffectExecutionStatuses.Failed);
+		await expect(repository.complete(_record(rowA, _REGISTER), { kind: ProviderEffectCommandKinds.RegisterModel, litellmModelId: "deployment-a" }, context, _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(ProviderEffectExecutionStatuses.Busy);
 		expect(database.updateModels).not.toHaveBeenCalled();
 	});
 
-	it("leaves credential, model, and routing projections untouched when final authorization is denied", async function _DeniedProviderProjection()
+	it("keeps the command barrier and projections untouched when authority is revoked after external I/O", async function _DeniedProviderProjection()
 	{
 		const row = _row(_SET, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 1, claimFence: "fence-a", claimExpiresAt: new Date("2026-08-30T02:00:00.000Z") });
 		const credentialCreate = vi.fn();
@@ -285,9 +296,10 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 			modelRoutingDefault: { create: routingCreate },
 		} as unknown as Prisma.TransactionClient;
 		const repository = new PrismaProviderEffectCommandRepository(transaction);
-		const result = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [{ publicModelName: "openai/gpt-5.5", upstreamModel: "openai/gpt-5.5", litellmModelId: "deployment-1" }], defaultPublicModelName: "openai/gpt-5.5" } as const;
+		const result = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [{ publicModelName: "openai/gpt-5.5", upstreamModel: "openai/gpt-5.5", litellmModelId: "deployment-1" }], defaultPublicModelName: "openai/gpt-5.5", embedding: { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: [{ publicModelName: "openai/text-embedding-3-large", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-1" }, { publicModelName: "auto-embedding", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-2" }] } } as const;
 
-		await expect(repository.complete(_record(row, _SET), result, _context(), _authorization(false).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(ProviderEffectExecutionStatuses.Failed);
+		await expect(repository.complete(_record(row, _SET), result, _context(), _authorization(false).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(ProviderEffectExecutionStatuses.Busy);
+		expect(transaction.providerEffectCommand.updateMany).not.toHaveBeenCalled();
 		expect(credentialCreate).not.toHaveBeenCalled();
 		expect(modelCreate).not.toHaveBeenCalled();
 		expect(routingCreate).not.toHaveBeenCalled();
@@ -321,7 +333,7 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		} as unknown as Prisma.TransactionClient;
 		const repository = new PrismaProviderEffectCommandRepository(transaction);
 		const modelNames = ["openai/gpt-5.5", "openai/gpt-5.4", "openai/gpt-5.4-nano"];
-		const result = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [...modelNames.map(function _Projection(publicModelName, index) { return { publicModelName, upstreamModel: publicModelName, litellmModelId: `deployment-${index}` }; }), { publicModelName: "auto", upstreamModel: "openai/gpt-5.4-nano", litellmModelId: "deployment-auto" }], defaultPublicModelName: "openai/gpt-5.5" } as const;
+		const result = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [...modelNames.map(function _Projection(publicModelName, index) { return { publicModelName, upstreamModel: publicModelName, litellmModelId: `deployment-${index}` }; }), { publicModelName: "auto", upstreamModel: "openai/gpt-5.4-nano", litellmModelId: "deployment-auto" }], defaultPublicModelName: "openai/gpt-5.5", embedding: { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: [{ publicModelName: "openai/text-embedding-3-large", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-1" }, { publicModelName: "auto-embedding", upstreamModel: "openai/text-embedding-3-large", litellmModelId: "embedding-2" }] } } as const;
 
 		await expect(repository.complete(_record(row, _SET), result, _context(), _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toBe(ProviderEffectExecutionStatuses.Succeeded);
 		expect(models.size).toBe(4);

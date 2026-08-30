@@ -5,7 +5,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { _BYOK_PROVIDER_CATALOG } from "@opencrane/backend/server/gateways/model-routing";
+import { _BYOK_PROVIDER_CATALOG, ProviderEmbeddingReconciliationStatuses } from "@opencrane/backend/server/gateways/model-routing";
 
 import { ProviderEffectCommandKinds, ProviderEffectExecutionStatuses, type ProviderEffectCommandExecutor } from "../provider-effect-command.types";
 import type { ProviderGatewayAuthorizationFactory } from "../provider-gateway-authority.types";
@@ -216,7 +216,7 @@ function _buildApp(store: Map<string, Row>, secrets: Map<string, k8s.V1Secret>, 
 			models.set(modelId, { id: modelId, scope: "Global", clusterTenant: null, publicModelName: entry.slug, upstreamModel: entry.slug, litellmModelId: `deployment:${entry.slug}`, apiBase: null, isDefault: !hasDefault && entry.className === catalog?.defaultClass, providerCredentialId: id, createdAt: new Date(), updatedAt: new Date() });
 		}
 		const projections = (catalog?.models ?? []).map(function _Projection(entry) { return { publicModelName: entry.slug, upstreamModel: entry.slug, litellmModelId: `deployment:${entry.slug}` }; });
-		return { status: ProviderEffectExecutionStatuses.Succeeded, result: { kind: ProviderEffectCommandKinds.SetByokKey, provider: payload.provider, secretRef: `byok-provider-key-${payload.provider}`, litellmCredentialName: null, models: projections, defaultPublicModelName: catalog?.models.find(function _Default(entry) { return entry.className === catalog.defaultClass; })?.slug ?? null } };
+		return { status: ProviderEffectExecutionStatuses.Succeeded, result: { kind: ProviderEffectCommandKinds.SetByokKey, provider: payload.provider, secretRef: `byok-provider-key-${payload.provider}`, litellmCredentialName: null, models: projections, defaultPublicModelName: catalog?.models.find(function _Default(entry) { return entry.className === catalog.defaultClass; })?.slug ?? null, embedding: { status: catalog?.embeddingModel === undefined ? ProviderEmbeddingReconciliationStatuses.NotApplicable : ProviderEmbeddingReconciliationStatuses.Skipped, deployments: [] } } };
       }
 		for (const [id, row] of store)
 		{

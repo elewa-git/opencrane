@@ -71,7 +71,8 @@ timed-out fixed-name mutation; the route `commandId` resume must positively conv
 state before another Set or Delete is admitted. The executor
 re-admits the saved subject through the current central authority during claim, immediately before
 external I/O, and during finalization. It also rechecks the current model lifecycle and desired
-generation. The
+generation. A revocation or lifecycle change after external I/O leaves the exact claim and resource
+barrier intact; it never reports success or releases potentially late upstream work. The
 background reconciler receives its fixed system executor profile from application composition; it
 never trusts a profile stored on a command as its own identity. There is no session-role or
 tenant-scope policy engine beside it.
@@ -91,7 +92,9 @@ The application root constructs that executor once and injects the same instance
 and the background reconciler. Routes cannot construct a local executor or silently omit durable
 reconciliation. The external handler has no Prisma client: it returns a secret-free credential and
 model projection, and `PrismaProviderEffectCommandRepository.complete` persists that projection only
-inside the final current-authority and claim-fence transaction.
+inside the final current-authority and claim-fence transaction. The command's `result` retains the
+same secret-free external evidence, including the exact confirmed embedding deployment identifiers,
+so recovery can distinguish a qualified target from an assumed one.
 
 ## Boundary
 

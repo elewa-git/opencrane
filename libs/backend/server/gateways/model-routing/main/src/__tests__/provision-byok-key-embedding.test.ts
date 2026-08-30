@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { _BYOK_PROVIDER_CATALOG } from "../core/byok-default-models";
 import { _RequireLiteLlmModelName } from "../core/litellm-model-inventory";
-import { _EnsureProviderEmbeddingModels } from "../core/provider-embedding-models";
+import { _EnsureProviderEmbeddingModels, ProviderEmbeddingReconciliationStatuses } from "../core/provider-embedding-models";
 import { _ProvisionByokKey, _AUTO_EMBEDDING_MODEL_NAME } from "../core/provision-byok-key";
 
 /**
@@ -63,11 +63,21 @@ function _mockCoreApi(): k8s.CoreV1Api
 /** Route every fetch call by URL/method so `/credentials` and `/model/new` always succeed generically. */
 function _routedFetch(modelInfoData: Array<{ model_name: string }>): ReturnType<typeof vi.fn>
 {
+	const inventory = modelInfoData.map(function _Inventory(entry)
+	{
+		const embedding = entry.model_name === "openai/text-embedding-3-large" || entry.model_name === _AUTO_EMBEDDING_MODEL_NAME;
+		let upstreamModel = entry.model_name;
+		if (entry.model_name === _AUTO_EMBEDDING_MODEL_NAME)
+			upstreamModel = "openai/text-embedding-3-large";
+		else if (entry.model_name === "auto")
+			upstreamModel = "openai/gpt-5.4-nano";
+		return { ...entry, litellm_params: { model: upstreamModel, litellm_credential_name: "byok-openai" }, model_info: { id: `existing-${entry.model_name}`, ...(embedding ? { mode: "embedding" } : {}) } };
+	});
   return vi.fn().mockImplementation(async function _fetch(url: string, init?: RequestInit)
   {
     if (url.includes("/model/info"))
     {
-      return new Response(JSON.stringify({ data: modelInfoData }), { status: 200 });
+      return new Response(JSON.stringify({ data: inventory }), { status: 200 });
     }
     if (url.includes("/credentials"))
     {
@@ -125,6 +135,30 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     expect(body["model_info"]).toEqual({ mode: "embedding" });
     expect((body["litellm_params"] as Record<string, unknown>)["model"]).toBe("openai/text-embedding-3-large");
   });
+
+	it("returns confirmed deployment evidence for both fixed embedding names", async function _Evidence()
+	{
+		vi.stubGlobal("fetch", _routedFetch([]));
+
+		const result = await _EnsureProviderEmbeddingModels(_BYOK_PROVIDER_CATALOG["openai"], "byok-openai", _log);
+
+		expect(result.status).toBe(ProviderEmbeddingReconciliationStatuses.Confirmed);
+		expect(result.deployments).toEqual([
+			expect.objectContaining({ publicModelName: "openai/text-embedding-3-large", upstreamModel: "openai/text-embedding-3-large", litellmModelId: expect.any(String) }),
+			expect.objectContaining({ publicModelName: "auto-embedding", upstreamModel: "openai/text-embedding-3-large", litellmModelId: expect.any(String) }),
+		]);
+	});
+
+	it("returns typed skipped and not-applicable outcomes without external calls", async function _InactiveOutcomes()
+	{
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		delete process.env.LITELLM_ENDPOINT;
+
+		await expect(_EnsureProviderEmbeddingModels(_BYOK_PROVIDER_CATALOG["openai"], "byok-openai", _log)).resolves.toEqual({ status: ProviderEmbeddingReconciliationStatuses.Skipped, deployments: [] });
+		await expect(_EnsureProviderEmbeddingModels(_BYOK_PROVIDER_CATALOG["anthropic"], "byok-anthropic", _log)).resolves.toEqual({ status: ProviderEmbeddingReconciliationStatuses.NotApplicable, deployments: [] });
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
 
   it("registers the stable auto-embedding alias pointing at the provider's real embedding upstream", async function _alias()
   {
@@ -187,7 +221,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     expect(registerCalls.find(function _a(c) { return _bodyOf(c)["model_name"] === _AUTO_EMBEDDING_MODEL_NAME; })).toBeDefined();
   });
 
-  it("logs a structured warning before reconciling registrations after an inventory read failure", async function _WarnsOnInventoryFailure()
+	it("logs a structured warning when embedding inventory cannot be qualified", async function _WarnsOnInventoryFailure()
   {
     const fetchMock = _routedFetch([]).mockImplementation(async function _Fetch(url: string)
     {
@@ -201,7 +235,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
 
     await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "openai", apiKey: "sk-test", log });
 
-    expect(warn).toHaveBeenCalledWith({ operation: "litellm.embedding.inventory", err: expect.any(Error) }, "embedding model inventory read failed; registration will be reconciled");
+		expect(warn).toHaveBeenCalledWith({ provider: "openai", err: expect.any(Error) }, "byok embedding model registration failed; key is set but no embedding model was registered");
   });
 
   it("does not register any embedding model for a provider with none catalogued (anthropic)", async function _noneCatalogued()
@@ -242,7 +276,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
 		const fetchMock = vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 }));
 		vi.stubGlobal("fetch", fetchMock);
 
-		await expect(_EnsureProviderEmbeddingModels(_BYOK_PROVIDER_CATALOG["openai"], "byok-openai", _log, true)).rejects.toThrow(/inventory returned HTTP 503/);
+		await expect(_EnsureProviderEmbeddingModels(_BYOK_PROVIDER_CATALOG["openai"], "byok-openai", _log)).rejects.toThrow(/inventory returned HTTP 503/);
 		expect(fetchMock.mock.calls.filter(function _CreatesDeployment(call) { return (call[0] as string).endsWith("/model/new"); })).toHaveLength(0);
 	});
 

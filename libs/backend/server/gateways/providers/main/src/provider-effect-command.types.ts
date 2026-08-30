@@ -1,5 +1,6 @@
 import type { ModelRoutingScope } from "@opencrane/contracts";
 import type { AuthorizationAuthority, ProductAuthorizationActorKind, ProductAuthorizationAdmissionEvidence } from "@opencrane/backend/server/iam/authorization";
+import type { ProviderEmbeddingReconciliationResult } from "@opencrane/backend/server/gateways/model-routing";
 
 /**
  * External provider operations that must be admitted and saved before another system is changed.
@@ -270,7 +271,7 @@ export interface ProviderEffectModelProjection
 
 /** Result returned by a provider effect handler for atomic database finalization. */
 export type ProviderEffectHandlerResult =
-	| { readonly kind: ProviderEffectCommandKinds.SetByokKey; readonly provider: string; readonly secretRef: string; readonly litellmCredentialName: string | null; readonly models: readonly ProviderEffectModelProjection[]; readonly defaultPublicModelName: string | null }
+	| { readonly kind: ProviderEffectCommandKinds.SetByokKey; readonly provider: string; readonly secretRef: string; readonly litellmCredentialName: string | null; readonly models: readonly ProviderEffectModelProjection[]; readonly defaultPublicModelName: string | null; readonly embedding: ProviderEmbeddingReconciliationResult }
 	| { readonly kind: ProviderEffectCommandKinds.DeleteByokKey; readonly provider: string }
 	| { readonly kind: ProviderEffectCommandKinds.RegisterModel; readonly litellmModelId: string };
 

@@ -142,7 +142,7 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
   //    deliberately OUTSIDE step 4's ModelDefinition path (see ByokProviderCatalog.embeddingModel).
   try
   {
-    await _EnsureProviderEmbeddingModels(catalog, litellmCredentialName, log, requireLiveModels);
+    await _EnsureProviderEmbeddingModels(catalog, litellmCredentialName, log);
   }
   catch (err)
   {
