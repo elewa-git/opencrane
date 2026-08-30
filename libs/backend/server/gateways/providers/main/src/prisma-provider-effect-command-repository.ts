@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { ProviderEffectCommandState, type Prisma } from "@prisma/client";
+import { Prisma, ProviderEffectCommandState } from "@prisma/client";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -68,7 +68,7 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 		const row = await this.transaction.providerEffectCommand.findFirst({
 			where: {
 				OR: [
-					{ failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, state: ProviderEffectCommandState.Claimed, claimExpiresAt: { lte: now } },
+					{ failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, result: { not: Prisma.DbNull }, state: ProviderEffectCommandState.Claimed, claimExpiresAt: { lte: now } },
 					{ materialRequirement: ProviderEffectMaterialRequirements.None, deliveryCount: { lt: _MAX_DELIVERIES }, OR: [{ state: ProviderEffectCommandState.Pending }, { state: ProviderEffectCommandState.Claimed, claimExpiresAt: { lte: now } }] },
 				],
 			},
@@ -96,6 +96,8 @@ export class PrismaProviderEffectCommandRepository implements ProviderEffectComm
 		if (current.state === ProviderEffectCommandState.Failed)
 			return { status: ProviderEffectExecutionStatuses.Failed, command: null };
 		if (current.state === ProviderEffectCommandState.Claimed && current.claimExpiresAt !== null && current.claimExpiresAt > now)
+			return { status: ProviderEffectExecutionStatuses.Busy, command: null };
+		if (current.failureCode === _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE && current.result === null)
 			return { status: ProviderEffectExecutionStatuses.Busy, command: null };
 		if (!await this._isCurrentAndEligible(current) || !await _isAuthorized(current, context, authorization, now))
 		{
@@ -370,6 +372,8 @@ function _toRecord(row: Prisma.ProviderEffectCommandGetPayload<Record<string, ne
 	const payload = _ParseProviderEffectCommandPayload(kind, row.payload);
 	_ValidateProviderEffectCommandResourceBinding(payload, row.resourceKind, row.resourceId);
 	const result = row.result === null ? null : _ParseProviderEffectHandlerResult(row.result);
+	if (row.failureCode === _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE && result === null)
+		throw new Error("blocked provider effect finalization lacks durable evidence");
 	if (result !== null && result.kind !== payload.kind)
 		throw new Error("provider effect result kind does not match its persisted command");
 	return {

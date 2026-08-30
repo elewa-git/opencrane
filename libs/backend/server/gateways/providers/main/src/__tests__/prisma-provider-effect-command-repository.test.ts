@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
@@ -220,6 +220,16 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		expect(database.updateCommands).not.toHaveBeenCalled();
 	});
 
+	it("keeps malformed blocked finalization inert instead of replaying external I/O", async function _MalformedFinalization()
+	{
+		const row = _row(_DELETE, { state: ProviderEffectCommandStates.Claimed, deliveryCount: 3, claimFence: "fence-old", claimExpiresAt: new Date("2026-08-30T00:30:00.000Z"), failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, result: null });
+		const database = _transaction(row, row);
+		const repository = new PrismaProviderEffectCommandRepository(database.transaction);
+
+		await expect(repository.claim("command-a", null, _context("system"), _authorization(true).authority, new Date("2026-08-30T01:00:00.000Z"))).resolves.toEqual({ status: ProviderEffectExecutionStatuses.Busy, command: null });
+		expect(database.updateCommands).not.toHaveBeenCalled();
+	});
+
 	it("reclaims saved finalization evidence without material or another delivery attempt", async function _ReclaimsFinalization()
 	{
 		const savedResult = { kind: ProviderEffectCommandKinds.SetByokKey, provider: "openai", secretRef: "byok-provider-key-openai", litellmCredentialName: "byok-openai", models: [], defaultPublicModelName: null, embedding: { status: ProviderEmbeddingReconciliationStatuses.Confirmed, deployments: [] } } as const;
@@ -242,7 +252,7 @@ describe("PrismaProviderEffectCommandRepository current authority and generation
 		const repository = new PrismaProviderEffectCommandRepository(transaction);
 
 		await expect(repository.nextRecoverable(new Date("2026-08-30T01:00:00.000Z"))).resolves.toMatchObject({ id: "command-a", result: savedResult });
-		expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: expect.arrayContaining([expect.objectContaining({ failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, state: ProviderEffectCommandStates.Claimed })]) } }));
+		expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: expect.arrayContaining([expect.objectContaining({ failureCode: _PROVIDER_EFFECT_FINALIZATION_BLOCKED_FAILURE_CODE, result: { not: Prisma.DbNull }, state: ProviderEffectCommandStates.Claimed })]) } }));
 	});
 
 	it("refuses to replace durable finalization evidence with a different outcome", async function _PreservesFinalizationEvidence()
