@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 
-import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateChannelProxyTokenReviewer, _CreateMemoryGatewayServerTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "../projected-token-reviewer";
+import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateChannelProxyTokenReviewer, _CreateMcpExecutorTokenReviewer, _CreateMemoryGatewayServerTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "../projected-token-reviewer";
 
 /** Build a TokenReview API stub with one controlled Kubernetes response. */
 function _ReviewApi(status: object)
@@ -44,6 +44,26 @@ describe("projected Kubernetes workload identity", function _describeProjectedId
 		const username = `system:serviceaccount:preprocess-ns:${ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME}`;
 		const reviewer = _CreateArtifactPreprocessorTokenReviewer(_ReviewApi(_ValidStatus(ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, username)) as never, "preprocess-ns");
 		await expect(reviewer.__Review("token")).resolves.toEqual({ username, namespace: "preprocess-ns", serviceAccountName: ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, audiences: [ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE] });
+	});
+
+	it("binds the MCP executor companion to its audience, account, namespace, and Pod UID", async function _ReviewsMcpExecutor()
+	{
+		const audience = "opencrane-mcp-executor";
+		const subject = "system:serviceaccount:mcp-executor:mcp-executor-default";
+		const reviewer = _CreateMcpExecutorTokenReviewer(_ReviewApi(_ValidStatus(audience, subject)) as never, "mcp-executor");
+
+		await expect(reviewer.__Review("token")).resolves.toEqual({ subject, namespace: "mcp-executor", serviceAccountName: "mcp-executor-default", podUid: "pod-uid-1" });
+	});
+
+	it.each([
+		["wrong audience", _ValidStatus("other", "system:serviceaccount:mcp-executor:mcp-executor-default")],
+		["wrong namespace", _ValidStatus("opencrane-mcp-executor", "system:serviceaccount:other:mcp-executor-default")],
+		["wrong account", _ValidStatus("opencrane-mcp-executor", "system:serviceaccount:mcp-executor:other")],
+		["missing Pod UID", _ValidStatus("opencrane-mcp-executor", "system:serviceaccount:mcp-executor:mcp-executor-default", { user: { username: "system:serviceaccount:mcp-executor:mcp-executor-default", extra: {} } })],
+	])("rejects an MCP executor with %s", async function _RejectsMcpExecutor(_description, status)
+	{
+		const reviewer = _CreateMcpExecutorTokenReviewer(_ReviewApi(status) as never, "mcp-executor");
+		await expect(reviewer.__Review("token")).resolves.toBeNull();
 	});
 
 	it("binds the artifact scanner to its dedicated audience and namespace", async function _reviewsScanner()

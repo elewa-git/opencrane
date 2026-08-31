@@ -489,6 +489,34 @@ runbooks, generated clients, and CI forbidden-reference checks.
 Exit: a fresh checkout builds and deploys only the target product. Operators have one supported path
 to create, share, schedule, observe, revoke, and delete agents and assets.
 
+## 0.10.0 workflow cutover
+
+A workflow is saved work that can continue after a server or worker restarts. The 0.10.0 cutover
+finishes the move from SQL pollers and locks to Absurd workflows in this order:
+
+1. Finish OCI Image Layout ZIP admission, registry import, and immutable digest persistence
+   ([#592](https://github.com/elewa-git/opencrane/issues/592),
+   [#741](https://github.com/elewa-git/opencrane/issues/741)).
+2. Use that digest for MCP installation and real tool execution through `RuntimeWorkloadClaim`, an
+   MCP-specific executor, ToolInvocation, and a class-specific warm pool
+   ([#592](https://github.com/elewa-git/opencrane/issues/592),
+   [#741](https://github.com/elewa-git/opencrane/issues/741)).
+3. Move the existing skill, artifact, and AgentRun lifecycles onto durable tasks, including explicit
+   AgentRun wait reasons ([#695](https://github.com/elewa-git/opencrane/issues/695),
+   [#736](https://github.com/elewa-git/opencrane/issues/736)).
+4. Retire Obot only after OCI-backed MCP installation and execution work
+   ([#592](https://github.com/elewa-git/opencrane/issues/592)).
+5. Delete MCPB routes, schema, workers, old SQL locks and pollers, and unreachable AgentRun residue
+   ([#695](https://github.com/elewa-git/opencrane/issues/695),
+   [#740](https://github.com/elewa-git/opencrane/issues/740)).
+6. As the final integration step, run the forward 0.9.3-to-0.10.0 change with Prisma Migrate as the
+   only database-change record and one dedicated migration Job. The 0.10.0 release closes
+   [#592](https://github.com/elewa-git/opencrane/issues/592),
+   [#695](https://github.com/elewa-git/opencrane/issues/695),
+   [#736](https://github.com/elewa-git/opencrane/issues/736),
+   [#740](https://github.com/elewa-git/opencrane/issues/740), and
+   [#741](https://github.com/elewa-git/opencrane/issues/741) only after the full cutover is qualified.
+
 ## Open issue disposition
 
 | Issue | Target-state action |
@@ -514,7 +542,10 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
 | [#602](https://github.com/elewa-git/opencrane/issues/602) | Retain completed onboarding as closed/read-only workspace history |
 | [#603](https://github.com/elewa-git/opencrane/issues/603) | Build governed conversation attachments and durable agent-created outputs |
 | [#604](https://github.com/elewa-git/opencrane/issues/604) | Build reusable approvals, choices, free-text elicitation, recovery, and safe disclosure |
-| [#695](https://github.com/elewa-git/opencrane/issues/695) | The Absurd foundation, OAuth refresh workflow, and saved MCP protocol check are complete. `.mcpb` validation, Skills MCP tasks, the warm path, existing-workflow pilots, and the later agent-run migration remain open. |
+| [#695](https://github.com/elewa-git/opencrane/issues/695) | The Absurd foundation, OAuth refresh workflow, and saved MCP protocol check are complete. OCI Image Layout admission, Skills MCP tasks, the warm path, existing-workflow pilots, and the later agent-run migration remain open. |
+| [#736](https://github.com/elewa-git/opencrane/issues/736) | Replace the AgentRun pending-input boolean while its lifecycle moves to durable tasks |
+| [#740](https://github.com/elewa-git/opencrane/issues/740) | Delete unreachable AgentRun cancellation and model-key aliases during the 0.10.0 reaper |
+| [#741](https://github.com/elewa-git/opencrane/issues/741) | Run real MCP tools from admitted OCI digests before Obot retirement |
 
 Closed issues are intentionally absent from the active list: [#128](https://github.com/elewa-git/opencrane/issues/128),
 [#129](https://github.com/elewa-git/opencrane/issues/129),

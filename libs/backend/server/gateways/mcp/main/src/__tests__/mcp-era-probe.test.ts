@@ -235,7 +235,7 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 		expect(state.auditCount).toBe(1);
 	});
 
-	it.each([McpEraProbeFailureCodes.UnsafeEndpoint, McpEraProbeFailureCodes.InvalidResponse])("stores terminal failure %s as a rejected result", async function _StoresTerminalFailure(code)
+	it.each([McpEraProbeFailureCodes.UnsafeEndpoint, McpEraProbeFailureCodes.NotMcpServer])("stores terminal failure %s as a rejected result", async function _StoresTerminalFailure(code)
 	{
 		const state = _State();
 		const execution = new __FakeWorkflowEngine();
@@ -269,7 +269,7 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 	it("replays a stored terminal rejection without contacting the remote server", async function _ReplaysStoredFailure()
 	{
 		const state = _State();
-		state.target = { ...state.target, eraProbeStatus: McpEraProbeStates.Rejected, eraProtocolVersion: null, eraProbeEvidenceDigest: `sha256:${"d".repeat(64)}`, eraProbeFailureCode: McpEraProbeFailureCodes.InvalidResponse };
+		state.target = { ...state.target, eraProbeStatus: McpEraProbeStates.Rejected, eraProtocolVersion: null, eraProbeEvidenceDigest: `sha256:${"d".repeat(64)}`, eraProbeFailureCode: McpEraProbeFailureCodes.NotMcpServer };
 		const execution = new __FakeWorkflowEngine();
 		const probe = vi.fn();
 		const workflow = __CreateMcpEraProbeWorkflow({ execution, unitOfWork: _UnitOfWork(state), probe: { probe } });
@@ -278,7 +278,7 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 		await _Drain(execution);
 
 		expect(probe).not.toHaveBeenCalled();
-		expect(execution.taskSnapshot(admitted.receipt).result).toMatchObject({ decision: McpEraProbeDecisions.Rejected, failureCode: McpEraProbeFailureCodes.InvalidResponse });
+		expect(execution.taskSnapshot(admitted.receipt).result).toMatchObject({ decision: McpEraProbeDecisions.Rejected, failureCode: McpEraProbeFailureCodes.NotMcpServer });
 		expect(state.auditCount).toBe(0);
 	});
 

@@ -29,7 +29,7 @@ organisation ingress
                              +-> tool-runner Job namespace
 
 runtime Jobs ----> LiteLLM (attempt model key)
-opencrane server ----> Obot MCP proxy (service credential, durable action fence)
+opencrane server ----> OCI MCP executor Jobs (durable claim + Pod-bound companion)
 
 artifact-service <---- brokered bytes ---- artifact-preprocessor Job namespace
         ^
@@ -50,6 +50,7 @@ Cluster-wide ingress, certificate, DNS, and CloudNativePG controllers are extern
 | Channel edge | `apps/channel-proxy` | none; admitted context only |
 | Memory gateway | `apps/memory-gateway` | none; authenticated read-only Cognee boundary |
 | Runtime controller | `apps/agent-controller` | database-fenced assignment claims |
+| OCI MCP executor companion | `apps/mcp-executor` | one durable discovery or tool-call command |
 | Personal run Job | `apps/agent-runtime` | none; one attempt |
 | Managed run Job | `apps/managed-agent-runtime` | none; one scheduled or triggered attempt |
 | Artifact bytes | `apps/artifact-service` | ArtifactStore behind server-issued leases |
@@ -67,6 +68,9 @@ reusable behaviour and never own a deployment.
 - **Personal runtime namespace** — one restricted Job per personal run attempt.
 - **Managed runtime namespace** — one restricted Job per managed run attempt under a distinct
   service-account class.
+- **OCI MCP executor namespace** — one restricted two-container Job per immutable MCP image
+  discovery or tool call. The uploaded image receives no OpenCrane token; the fixed companion gets
+  a short-lived Pod-bound token and reports one checked result.
 - **Skill-authoring namespace** — candidate-skill Jobs with no standing worker.
 - **Tool-runner namespace** — governed tool Jobs with no standing worker.
 - **Artifact-preprocessor namespace** — bounded document-extraction Jobs with broker-only byte flow.
