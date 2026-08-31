@@ -12,6 +12,7 @@ for contract in \
   initial-model-provider-helm-args-contract.sh \
   tier3-development-auth-contract.sh \
   pooler-deploy-contract.sh \
+  server-kubernetes-api-deploy-contract.sh \
   database-migration-deploy-contract.sh \
   database-superuser-access-contract.sh \
   database-pg-cron-preflight-contract.sh \

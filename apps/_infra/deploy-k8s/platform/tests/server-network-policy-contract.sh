@@ -21,7 +21,8 @@ runtime_rendered="$(helm template opencrane-silo "$CHART_DIR" \
   --set-string agentController.skillWorkloadProfiles.authoring.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
   --set-string agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
   --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
-  --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')"
+  --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
+  --set agentController.kubernetesApiServerEndpointPort=6443)"
 otel_rendered="$(helm template acme "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" --set observability.otel.enabled=true)"
 otel_default_deny_rendered="$(helm template acme "$CHART_DIR" \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
@@ -99,6 +100,9 @@ grep -Fq '              app.kubernetes.io/component: memory-gateway' <<<"$server
 grep -Fq '          port: 8080' <<<"$server_policy"
 grep -Fq '              kubernetes.io/metadata.name: "opencrane-silo-managed-runtime"' <<<"$runtime_server_policy"
 grep -Fq '              app.kubernetes.io/component: agent-runtime' <<<"$runtime_server_policy"
+grep -Fq '            cidr: "10.43.0.1/32"' <<<"$runtime_server_policy"
+grep -Fq '            cidr: "172.18.0.2/32"' <<<"$runtime_server_policy"
+grep -Fq '          port: 6443' <<<"$runtime_server_policy"
 grep -Fq 'value: "http://acme-opencrane-otel-collector.default.svc:4318"' <<<"$otel_rendered"
 grep -Fq '              app.kubernetes.io/component: otel-collector' <<<"$otel_rendered"
 if grep -Fq '          port: 4318' <<<"$otel_default_deny_rendered"; then
