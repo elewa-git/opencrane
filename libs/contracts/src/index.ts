@@ -32,6 +32,7 @@ export * from "./run-input-snapshot.types";
 export * from "./agent-controller-identity.types";
 export * from "./agent-identity.types";
 export * from "./agent-capability-grant.types";
+export * from "./conversation-computer.types";
 // Keep sibling-only `_...` wire schemas and parsers out of the cross-package public surface.
 export { ___IsAgentControllerIdentifier, ___IsEmptyAgentControllerCommand } from "./agent-controller-wire.validator";
 export * from "./agent-runtime-protocol.types";
