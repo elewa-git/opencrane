@@ -503,10 +503,38 @@ BEGIN
     END IF;
 END $$;
 
+-- Suspend referenced-model immutability while this migration replaces the provider id stored by
+-- referenced model definitions. Recreate the target function and trigger immediately afterward so
+-- later model changes remain protected.
+DROP TRIGGER IF EXISTS "referenced_model_definitions_immutable" ON "model_definitions";
 UPDATE "model_definitions" definition
    SET "provider_credential_id" = identity."new_id"
   FROM "global_provider_connection_identity" identity
  WHERE definition."provider_credential_id" = identity."old_id";
+CREATE OR REPLACE FUNCTION "enforce_referenced_model_definition_immutability"() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM "agent_revisions"
+        WHERE "model_definition_id" = OLD."id"
+    ) AND (
+        NEW."scope" IS DISTINCT FROM OLD."scope"
+        OR NEW."cluster_tenant" IS DISTINCT FROM OLD."cluster_tenant"
+        OR NEW."public_model_name" IS DISTINCT FROM OLD."public_model_name"
+        OR NEW."litellm_model_id" IS DISTINCT FROM OLD."litellm_model_id"
+        OR NEW."upstream_model" IS DISTINCT FROM OLD."upstream_model"
+        OR NEW."api_base" IS DISTINCT FROM OLD."api_base"
+        OR NEW."provider_credential_id" IS DISTINCT FROM OLD."provider_credential_id"
+    ) THEN
+        RAISE EXCEPTION 'A ModelDefinition referenced by an AgentRevision is immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "referenced_model_definitions_immutable"
+    BEFORE UPDATE ON "model_definitions"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_referenced_model_definition_immutability"();
 UPDATE "provider_credentials" credential
    SET "id" = identity."new_id"
   FROM "global_provider_connection_identity" identity

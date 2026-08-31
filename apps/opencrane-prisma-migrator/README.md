@@ -41,7 +41,8 @@ understands.
 
 Entrypoint: `run-migrations.sh` accepts only tagged 0.9.2, checks the digest-bound development-candidate
 repair, runs the IAM prerequisite, records the `20260826000000_0_9_2_baseline` Prisma bridge, resolves
-a fully rolled-back 0.10.0 workflow-cutover attempt when a repaired image retries it, and runs
+fully rolled-back `20260827000000_0_10_0_workflow_cutover` and
+`20260829000000_central_authorization_authority` attempts when a repaired image retries them, and runs
 `prisma migrate deploy`. Other migration failures are returned immediately for a forward repair.
 
 The Nx `build` contract checks that the migration image still copies and starts this entrypoint with

@@ -217,6 +217,7 @@ const centralAuthorizationFunctions = [
 	"enforce_child_run_completion_delivery",
 	"enforce_child_run_completion_delivery_event",
 	"enforce_terminal_agent_run_event",
+	"enforce_referenced_model_definition_immutability",
 ];
 for (const name of centralAuthorizationFunctions)
 {
@@ -227,6 +228,28 @@ for (const name of centralAuthorizationFunctions)
 	const migratedFunction = targetFunction.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION");
 	requireContract(centralAuthorizationSql.includes(migratedFunction), `central authorization migration must carry exact target function ${name}`);
 }
+const providerIdentityTriggerDrop = 'DROP TRIGGER IF EXISTS "referenced_model_definitions_immutable" ON "model_definitions";';
+const providerIdentityModelRewrite = 'UPDATE "model_definitions" definition\n   SET "provider_credential_id" = identity."new_id"';
+const providerIdentityCredentialRewrite = 'UPDATE "provider_credentials" credential\n   SET "id" = identity."new_id"';
+const referencedModelTriggerStart = targetBaseline.indexOf('CREATE TRIGGER "referenced_model_definitions_immutable"');
+const referencedModelTriggerEnd = targetBaseline.indexOf(";", referencedModelTriggerStart) + 1;
+requireContract(referencedModelTriggerStart >= 0 && referencedModelTriggerEnd > 0, "target referenced-model trigger must exist");
+const referencedModelTargetTrigger = targetBaseline.slice(referencedModelTriggerStart, referencedModelTriggerEnd);
+const providerIdentityTriggerDropIndex = centralAuthorizationSql.indexOf(providerIdentityTriggerDrop);
+const providerIdentityModelRewriteIndex = centralAuthorizationSql.indexOf(providerIdentityModelRewrite);
+const referencedModelTriggerRestoreIndex = centralAuthorizationSql.indexOf(referencedModelTargetTrigger);
+const providerIdentityCredentialRewriteIndex = centralAuthorizationSql.indexOf(providerIdentityCredentialRewrite);
+requireContract(
+	providerIdentityTriggerDropIndex >= 0
+		&& providerIdentityTriggerDropIndex < providerIdentityModelRewriteIndex
+		&& providerIdentityModelRewriteIndex < referencedModelTriggerRestoreIndex
+		&& referencedModelTriggerRestoreIndex < providerIdentityCredentialRewriteIndex,
+	"central authorization migration must suspend referenced-model immutability only for the provider id rewrite",
+);
+requireContract(
+	centralAuthorizationSql.match(/DROP TRIGGER IF EXISTS "referenced_model_definitions_immutable" ON "model_definitions";/gu)?.length === 1,
+	"central authorization migration must have one scoped referenced-model trigger suspension",
+);
 
 const seedStart = targetBaseline.indexOf('INSERT INTO "persona_question_sets"');
 requireContract(seedStart >= 0, "target governed persona seeds must exist");

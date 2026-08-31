@@ -296,3 +296,14 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: preflight live-Cluster backup capability before the application fence, then recheck it when
   creating the immediate recovery backup. Never translate approval for the schema transition into an
   unbacked-migration override.
+
+## 2026-08-31 · dev · testv4 central-authorization upgrade · e5a9a3a35792e66766a5fb211aa3e6273a812da6 · FAILED
+
+- findings: codebase: PostgreSQL revision 64 stopped in `20260829000000_central_authorization_authority`
+  when the provider-identity backfill updated a referenced `ModelDefinition` and the existing
+  immutability trigger rejected it. The migration transaction fully rolled back, and no application
+  rollout began. script: the failed central-migration ledger row requires a bounded
+  `migrate resolve --rolled-back` before the next deploy can pass Prisma's failed-migration gate.
+- friction: the authorized identity rewrite crossed a target immutability guard that the migration
+  left active, while migrator recovery covered only the earlier workflow-cutover migration.
+- lesson: fixed by PR #752.

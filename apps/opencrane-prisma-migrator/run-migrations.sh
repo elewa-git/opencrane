@@ -8,6 +8,7 @@ candidate_repair_sql="${UNTAGGED_CANDIDATE_REPAIR_SQL:-/app/apps/opencrane/prism
 source_baseline_sha256="5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f"
 baseline_migration="20260826000000_0_9_2_baseline"
 workflow_cutover_migration="20260827000000_0_10_0_workflow_cutover"
+central_authorization_migration="20260829000000_central_authorization_authority"
 
 if [ "${OPENCRANE_MIGRATION_SOURCE_VERSION:-}" != "0.9.2" ]; then
 	echo "The migration Job only accepts the tagged 0.9.2 database as its starting point." >&2
@@ -48,7 +49,8 @@ DATABASE_URL= "$psql_cli" --no-psqlrc --set ON_ERROR_STOP=on \
 
 baseline_output="$(mktemp)"
 cutover_output="$(mktemp)"
-trap 'rm -f "$baseline_output" "$cutover_output"' EXIT
+central_authorization_output="$(mktemp)"
+trap 'rm -f "$baseline_output" "$cutover_output" "$central_authorization_output"' EXIT
 
 # The prerequisite prepares tagged 0.9.2's schema before Prisma starts. Mark the empty bridge as
 # applied so Prisma deploys the forward cutover without replaying pre-0.10 schema history.
@@ -65,6 +67,15 @@ fi
 if ! "$prisma_cli" migrate resolve --rolled-back "$workflow_cutover_migration" >"$cutover_output" 2>&1; then
 	if ! grep -Eq 'P3011|P3012' "$cutover_output"; then
 		cat "$cutover_output" >&2
+		exit 1
+	fi
+fi
+
+# The central authorization migration also runs in one transaction. Mark its failed Prisma record as
+# rolled back before retrying the repaired SQL. P3011 and P3012 mean no failed record needs recovery.
+if ! "$prisma_cli" migrate resolve --rolled-back "$central_authorization_migration" >"$central_authorization_output" 2>&1; then
+	if ! grep -Eq 'P3011|P3012' "$central_authorization_output"; then
+		cat "$central_authorization_output" >&2
 		exit 1
 	fi
 fi

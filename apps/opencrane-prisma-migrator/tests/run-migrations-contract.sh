@@ -31,6 +31,18 @@ case "$PRISMA_SCENARIO:$*" in
 		echo "unexpected database error" >&2
 		exit 1
 		;;
+	central-missing:"migrate resolve --rolled-back 20260829000000_central_authorization_authority")
+		echo "Error: P3011" >&2
+		exit 1
+		;;
+	central-complete:"migrate resolve --rolled-back 20260829000000_central_authorization_authority")
+		echo "Error: P3012" >&2
+		exit 1
+		;;
+	central-resolve-fails:"migrate resolve --rolled-back 20260829000000_central_authorization_authority")
+		echo "unexpected central authorization recovery error" >&2
+		exit 1
+		;;
 	deploy-fails:"migrate deploy")
 		exit 1
 		;;
@@ -102,6 +114,15 @@ run_scenario()
 	invoke_migrator "$scenario" >"$TEST_DIR/scenario-output" 2>&1
 }
 
+assert_successful_call_order()
+{
+	diff -u <(printf '%s\n' \
+		'migrate resolve --applied 20260826000000_0_9_2_baseline' \
+		'migrate resolve --rolled-back 20260827000000_0_10_0_workflow_cutover' \
+		'migrate resolve --rolled-back 20260829000000_central_authorization_authority' \
+		'migrate deploy') "$TEST_DIR/calls"
+}
+
 run_scenario success
 ! grep -Fq -- '--dbname' "$TEST_DIR/psql-calls"
 ! grep -Eq -- 'connection_limit|pool_timeout' "$TEST_DIR/psql-calls"
@@ -112,19 +133,19 @@ grep -Eq -- '--set repair_sql_sha256=[0-9a-f]{64}' "$TEST_DIR/psql-calls"
 grep -Eq -- '--set migration_sql_sha256=[0-9a-f]{64}' "$TEST_DIR/psql-calls"
 grep -q -- '--set migration_silo_id=test-silo' "$TEST_DIR/psql-calls"
 grep -q -- '--set migration_oidc_issuer=https://issuer.example.test' "$TEST_DIR/psql-calls"
-diff -u <(printf '%s\n' \
-	'migrate resolve --applied 20260826000000_0_9_2_baseline' \
-	'migrate resolve --rolled-back 20260827000000_0_10_0_workflow_cutover' \
-	'migrate deploy') "$TEST_DIR/calls"
+assert_successful_call_order
 
 run_scenario baseline-applied
-diff -u <(printf '%s\n' \
-	'migrate resolve --applied 20260826000000_0_9_2_baseline' \
-	'migrate resolve --rolled-back 20260827000000_0_10_0_workflow_cutover' \
-	'migrate deploy') "$TEST_DIR/calls"
+assert_successful_call_order
 
 run_scenario cutover-missing
+assert_successful_call_order
 run_scenario cutover-complete
+assert_successful_call_order
+run_scenario central-missing
+assert_successful_call_order
+run_scenario central-complete
+assert_successful_call_order
 
 : >"$TEST_DIR/calls"
 : >"$TEST_DIR/psql-calls"
@@ -140,14 +161,24 @@ diff -u <(printf '%s\n' \
 
 : >"$TEST_DIR/calls"
 : >"$TEST_DIR/psql-calls"
+: >"$TEST_DIR/scenario-output"
+if invoke_migrator central-resolve-fails >"$TEST_DIR/scenario-output" 2>&1; then
+	echo "migrator ignored an unexpected central-authorization recovery error" >&2
+	exit 1
+fi
+grep -Fq -- 'unexpected central authorization recovery error' "$TEST_DIR/scenario-output"
+diff -u <(printf '%s\n' \
+	'migrate resolve --applied 20260826000000_0_9_2_baseline' \
+	'migrate resolve --rolled-back 20260827000000_0_10_0_workflow_cutover' \
+	'migrate resolve --rolled-back 20260829000000_central_authorization_authority') "$TEST_DIR/calls"
+
+: >"$TEST_DIR/calls"
+: >"$TEST_DIR/psql-calls"
 if invoke_migrator deploy-fails; then
 	echo "migrator accepted a failed deployment" >&2
 	exit 1
 fi
-diff -u <(printf '%s\n' \
-	'migrate resolve --applied 20260826000000_0_9_2_baseline' \
-	'migrate resolve --rolled-back 20260827000000_0_10_0_workflow_cutover' \
-	'migrate deploy') "$TEST_DIR/calls"
+assert_successful_call_order
 
 if PRISMA_CLI="$TEST_DIR/prisma" PRISMA_CALLS="$TEST_DIR/calls" PRISMA_SCENARIO=success \
 	OPENCRANE_MIGRATION_SOURCE_VERSION=0.9.3 "$ENTRYPOINT"; then
