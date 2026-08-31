@@ -623,13 +623,11 @@ POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
-prepare_database_release_transition || exit $?
-# Publish the pooler URI before enabling the Job because the migrator reads this Secret as DATABASE_URL.
-# Five OpenCrane connections keep PgBouncer's thirty-connection logical-database budget authoritative.
+# Publish the pooler URI for the chart workloads. Five OpenCrane connections keep PgBouncer's
+# thirty-connection logical-database budget authoritative.
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
-finish_database_release_transition || exit $?
 
 _assert_distinct_cnpg_app_credentials() {
   local app_secrets=("$@")
