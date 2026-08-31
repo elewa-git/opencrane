@@ -67,3 +67,6 @@ dependencies:
   - name: opencrane-kurrentdb
     version: ">=0.0.0-0"
     repository: "file://../kurrentdb/helm"
+  - name: opencrane-agent-sandbox
+    version: ">=0.0.0-0"
+    repository: "file://../agent-sandbox/helm"

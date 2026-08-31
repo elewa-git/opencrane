@@ -143,3 +143,4 @@ generated clients, and custom integrations are peers over the same contract.
 Every app, library, and grouping directory has a `README.md`. When a package is added, moved, or
 deleted, update its own README, its parent map, and this page in the same change. Follow
 [`package-docs.md`](./package-docs.md).
+| [`apps/_infra/agent-sandbox`](../../apps/_infra/agent-sandbox/README.md) | Release-scoped Agent Sandbox templates, zero-replica warm pools, and claim admission boundaries. |

@@ -39,3 +39,5 @@
 ---
 {{ include "opencrane.kurrentdb.resources" . }}
 ---
+{{ include "opencrane.agentSandbox.resources" . }}
+---

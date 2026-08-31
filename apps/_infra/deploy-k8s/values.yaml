@@ -104,8 +104,8 @@ sharedPlatform:
       #    Required when mode=shared.
       secretStoreName: ""
 
-# -- Private KurrentDB event ledger. The testv5 deploy path enables it only after an immutable image,
-# TLS material, and an administrator-password Secret are supplied.
+# -- Private KurrentDB event ledger. The testv5 deploy path enables it after the KurrentDB and
+# bootstrap image digests, TLS material, and administrator, operations, and service Secrets pass preflight.
 historyStore:
   kurrentdb:
     enabled: false
@@ -119,6 +119,32 @@ historyStore:
       existingSecret: ""
     bootstrapAdmin:
       existingSecret: ""
+    # -- Existing KurrentDB operations credential Secret. KurrentDB receives this password during
+    # bootstrap; neither the application server nor the bootstrap Job mounts it.
+    bootstrapOps:
+      existingSecret: ""
+    # -- Existing least-privilege HistoryStore service credential Secret. It must contain the
+    # `username` and `password` keys that the server uses after bootstrap completes.
+    serviceCredential:
+      existingSecret: ""
+    bootstrap:
+      image:
+        # -- Purpose-built bootstrap image with `sh`, curl, jq, mktemp, tr, and grep. An
+        # operator must set both this repository and its immutable digest before KurrentDB enables.
+        repository: ""
+        digest: ""
+        pullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+      activeDeadlineSeconds: 330
+      backoffLimit: 0
+      # -- Lets the bootstrap script wait for KurrentDB TLS health before it fails.
+      timeoutSeconds: 300
     persistence:
       storageClassName: ""
       size: 20Gi
@@ -129,6 +155,19 @@ historyStore:
       limits:
         cpu: "2"
         memory: 2Gi
+
+# -- Defines release-scoped profiles for the external Kubernetes Agent Sandbox v1beta1 controller.
+# The chart creates profiles and claim admission only; it never installs the controller or CRDs.
+agentSandbox:
+  enabled: false
+  # -- Target namespace where the external controller manages Sandbox Claims and their Pods.
+  namespace: ""
+  # -- Existing RuntimeClass used by every fixed profile, for example `gvisor`.
+  runtimeClassName: ""
+  # -- Zero-RBAC ServiceAccount created by this chart and referenced by every profile.
+  serviceAccountName: ""
+  # -- Each profile creates one SandboxTemplate and a zero-replica SandboxWarmPool.
+  profiles: []
 
 # -- Channel trust-boundary settings
 channelProxy:

@@ -1013,6 +1013,34 @@ wait_for_final_deployment_if_present "${RELEASE}-channel-proxy" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
 wait_for_final_statefulset_if_present "${RELEASE}-kurrentdb" || exit $?
+wait_for_final_kurrentdb_bootstrap_job_if_present()
+{
+  local job_name="${RELEASE}-kurrentdb-bootstrap"
+  local job_resource
+  local command_status
+  if job_resource="$(kubectl get "job/$job_name" -n "$NAMESPACE" --ignore-not-found -o name)"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
+  if (( command_status != 0 )); then
+    err "Unable to inventory final KurrentDB bootstrap Job '$job_name'."
+    return "$command_status"
+  fi
+  if [[ -z "$job_resource" ]]; then
+    return 0
+  fi
+  if kubectl wait --for=condition=complete "job/$job_name" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
+    return 0
+  fi
+  command_status=$?
+  err "KurrentDB bootstrap Job '$job_name' did not complete successfully."
+  kubectl get "job/$job_name" -n "$NAMESPACE" -o wide >&2 || true
+  kubectl describe "job/$job_name" -n "$NAMESPACE" >&2 || true
+  kubectl logs "job/$job_name" -n "$NAMESPACE" --all-containers=true >&2 || true
+  return "$command_status"
+}
+wait_for_final_kurrentdb_bootstrap_job_if_present || exit $?
 
 _wait_for_release_certificate || exit $?
 _post_deploy_verify || exit $?

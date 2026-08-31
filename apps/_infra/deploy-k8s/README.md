@@ -131,11 +131,12 @@ package imports it.
   `<release>-skill-authoring`, so different silos never share its Helm-owned namespace.
 - `--release` — optional only as a restatement of the silo identity. The wrapper derives and
   enforces `opencrane-<cluster-tenant>` so all Helm-owned namespaces stay inside one release.
-- `testv5` — the first 0.11 target silo additionally requires KurrentDB TLS and bootstrap Secrets,
-  an immutable KurrentDB image digest, the ready Agent Sandbox controller with extensions enabled,
-  and each Sandbox, SandboxClaim, SandboxTemplate, and SandboxWarmPool CRD served and stored as
-  `v1beta1`. The deploy script refuses any CRD that does not meet both conditions before changing
-  the silo.
+- `testv5` — the first 0.11 target silo additionally requires immutable KurrentDB and bootstrap
+  image digests; immutable TLS, administrator, operations, and `opencrane-history` service
+  Secrets; the ready Agent Sandbox controller with extensions enabled; and each Sandbox,
+  SandboxClaim, SandboxTemplate, and SandboxWarmPool CRD served and stored as `v1beta1`. The
+  deploy script rejects a missing Secret key, a different service username, or a CRD that does not
+  meet both API conditions before it changes the silo.
 - `crds.install` — resolved authoritatively by the deploy engine: the first silo installs the
   shared `ClusterTenant` CRD, while later silos consume it without competing for Helm ownership.
 - `--first-user-email` — required standalone-onboarding input. It is matched exactly against an
