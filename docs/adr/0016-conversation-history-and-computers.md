@@ -39,7 +39,8 @@ evidence digest. A complete PostgreSQL outbox-to-Kurrent permission-audit stream
 and disaster recovery, but can never authorize a request.
 
 The server depends on a narrow Kurrent-only `HistoryStore` port with `readStream`, `readHead`,
-`append`, `appendAtomic`, and `subscribe`. The admission test must prove the actual client and
+`append`, `appendAtomic`, and `subscribe`. Its adapter uses the official
+`@kurrent/kurrentdb-client` 1.3.x gRPC client. The admission test must prove the actual client and
 topology support every exposed operation. No PostgreSQL event-store implementation is permitted.
 Conversation-local membership and posting contend on the same stream head; stale writers reload and
 are denied. Cross-stream authorization transactions are deliberately not inferred from the port.
