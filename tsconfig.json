@@ -193,6 +193,9 @@
       "@opencrane/backend/server/infra/workload-identity": [
         "./libs/backend/server/infra/workload-identity/src/index.ts"
       ],
+      "@opencrane/backend/server/infra/history-store": [
+        "./libs/backend/server/infra/history-store/src/index.ts"
+      ],
       "@opencrane/backend/agents/runtime/k8s-launcher": [
         "./libs/backend/agents/runtime/k8s-launcher/src/index.ts"
       ],

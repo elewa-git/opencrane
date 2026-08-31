@@ -129,6 +129,7 @@ export default [
             { sourceTag: "scope:agent-runtime-stream", onlyDependOnLibsWithTags: ["scope:agent-runtime-stream", "scope:workload-identity", "scope:shared"] },
             { sourceTag: "scope:agent-runtime-continuation", onlyDependOnLibsWithTags: ["scope:agent-runtime-continuation", "scope:shared"] },
             { sourceTag: "scope:workload-identity", onlyDependOnLibsWithTags: ["scope:workload-identity", "scope:shared"] },
+            { sourceTag: "scope:history-store", onlyDependOnLibsWithTags: ["scope:history-store", "scope:shared"] },
             { sourceTag: "scope:workflows", onlyDependOnLibsWithTags: ["scope:shared", "scope:workflows"] },
             { sourceTag: "scope:runtime-workloads", onlyDependOnLibsWithTags: ["scope:runtime-workloads", "scope:shared"] },
             { sourceTag: "scope:mcp-runtime", onlyDependOnLibsWithTags: ["scope:mcp-runtime", "scope:runtime-workloads", "scope:shared"] },

@@ -15,6 +15,7 @@ remaining grouped with the server code that composes them.
 | [`agent-runtime-stream`](./agent-runtime-stream/README.md) | Projected-token runtime HTTP/SSE framing. |
 | [`agent-runtime-continuation`](./agent-runtime-continuation/README.md) | Secret-backed encryption for durable model-loop checkpoints. |
 | [`workload-identity`](./workload-identity/README.md) | Kubernetes TokenReview and bounded workload identities. |
+| [`history-store`](./history-store/README.md) | KurrentDB-backed append-only stream history. |
 | [`http`](./http/README.md) | Express transport plumbing. |
 | [`memory-gateway-client`](./memory-gateway-client/README.md) | Authenticated memory reads with fail-closed writes. |
 | [`mcp-era-probe`](./mcp-era-probe/README.md) | HTTPS-only, DNS-rebinding-resistant MCP 2026-07-28 discovery probe. |
