@@ -24,8 +24,9 @@ platform/k8s-deploy.sh
         ├──→ current-chart-sources.sh
         │      packages the in-repo subchart sources
         │
-        ├──→ database-migration-orchestrator.sh
-        │      CNPG cluster, databases, migration + privileges Jobs
+        ├──→ publish-initdb-baseline-config-map.sh + postgres-release.sh
+        │      publishes target-baseline.sql as a ConfigMap, then installs the
+        │      CNPG cluster, databases and the database-privileges Job
         │
         ├──→ umbrella helm upgrade
         │      all app subcharts
@@ -45,10 +46,12 @@ platform/k8s-deploy.sh
   (immutable digests, never tags).
 - Cluster-wide prerequisites (ingress-nginx, cert-manager, CloudNativePG) are installed once per
   cluster by `bootstrap-prerequisites.sh` and are never part of a silo release.
-- The tagged 0.9.2 upgrade runs its reviewed IAM prerequisite and then Prisma in one bounded Helm
-  hook Job. A failure is returned directly;
-  the deployer does not require a migration backup, inspect the source schema, pause writes, or roll
-  back the application.
+- A fresh install applies `target-baseline.sql` through CNPG `initdb`; an existing cluster keeps
+  the schema it already has — pre-1.0 there is no in-place database migration path, so a schema
+  change reaches a dev silo by rebuild, not upgrade (see
+  [Versions and migrations](/contributing/versions-and-migrations)). The bounded
+  database-privileges Job still runs as a Helm post-install/post-upgrade hook, and a failure is
+  returned directly.
 - After the umbrella upgrade, the engine stamps a checksum of the published database connection
   Secrets onto the consumer Deployments (`opencrane-server`, `litellm`). An
   unchanged checksum is a no-op; a changed one triggers exactly one rollout. This replaced an

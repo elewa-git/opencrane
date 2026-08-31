@@ -332,3 +332,17 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: express the warm-runtime label-and-port rules through portable
   `networking.k8s.io/v1` `NetworkPolicy`; installing a CRD without its enforcement controller would
   only hide the incompatibility.
+
+## 2026-08-31 · dev · fleet policy decision · 9715dedbb1f6e1c2c357615a20160c88343840b8 · LIVE
+
+- findings: policy: pre-1.0 baseline-only decision approved by Jente Rosseel — the platform keeps a
+  single fresh-install authority (`apps/opencrane/prisma/bootstrap/target-baseline.sql`) and no
+  reviewed version-to-version upgrade paths until the MVP release. testv4 (schema 0.9.0, live
+  invitations and onboarding data), testlynn (schema 0.9.0, four failed 0.9.3 attempts), and testv3
+  (pre-ledger baseline `22cd09a9`, no `opencrane_migrations.schema_history`) are **rebuild, not
+  upgrade**: the accepted path to a newer schema on these silos is teardown plus a fresh install,
+  and the data loss is explicitly accepted.
+- friction: the version-train machinery (transition SQL, digest contracts, per-version manifests)
+  made every schema change a multi-file ceremony while no external user depends on an upgrade path.
+- lesson: do not attempt an in-place schema upgrade on any dev silo while the pre-1.0 policy stands;
+  rebuild instead. Upgrade contracts return at MVP, most likely as a Prisma-ledger migrator Job.

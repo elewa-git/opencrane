@@ -94,10 +94,6 @@
       "chartVersion": "0.10.0",
       "chartAppVersion": "0.10.0"
     },
-    "opencrane-prisma-migrator": {
-      "root": "apps/opencrane-prisma-migrator",
-      "adaptedVersion": "0.10.0"
-    },
     "opencrane-ui": {
       "root": "apps/opencrane-ui",
       "adaptedVersion": "0.10.0",

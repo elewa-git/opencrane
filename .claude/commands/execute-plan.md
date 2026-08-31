@@ -145,9 +145,9 @@ blocker; do not hide it behind an interface.
    design/ADR completely. Extract only accepted, unblocked acceptance criteria.
 2. Run the architecture and reaper preflight above. Build the deployable/dependency ledger and the
    survivor/drop classification; stop on any BLOCK.
-3. Read `docs/agents/versioning.md`. Add each directly touched Nx app, its current adapted/chart
-   versions, and database-schema impact to the wave ledger. Plan the immutable release-manifest
-   update and any previous-to-current Helm/DB transition before editing.
+3. Read `docs/agents/versioning.md`. Note database-schema and PostgreSQL-operand impact in the wave
+   ledger. A schema change updates `target-baseline.sql` and the current release manifest's
+   baseline digest; pre-1.0 there are no per-app version stamps or version-to-version transitions.
 4. Pick the smallest high-impact slice, build its dependency DAG/wave, state the direct target in
    one sentence, record `WAVE_BASE=$(git rev-parse HEAD)`, then implement it without compatibility
    scaffolding. Also record the intended integration target (`origin/main` or the explicitly chosen
@@ -160,7 +160,7 @@ blocker; do not hide it behind an interface.
 6. **Reap before validation or commit.** Delegate `POST-SLICE DIRECT-REPLACEMENT`, apply every
    proven DELETE/REWRITE and resolve every `FORBIDDEN-REPLACEMENT` item. Run the resulting
    diff through `architecture` and resolve every BLOCK.
-7. Run `scripts/agent-style-check.sh`, `npm run check:release-versioning -- --base "$WAVE_BASE"`,
+7. Run `scripts/agent-style-check.sh`, `npm run check:release-versioning`,
    the relevant NX project build/test/lint targets, and any
    manifest-rendering ownership/security checks. Use `npm run build|test -w <package>` or
    `npx nx run <project>:<target>` for a slice, then `npm run lint:boundaries` and

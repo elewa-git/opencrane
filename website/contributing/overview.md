@@ -35,8 +35,9 @@ pull request opened
 
 Two threads run underneath every step of that journey:
 
-- **Versioning.** Every directly changed application, chart and database schema stamps forward
-  together, and CI enforces the whole scheme before anything reaches the deploy path — see
+- **Versioning.** Pre-1.0, one current release manifest binds the repository version and the
+  fresh-install database baseline — there is no version-to-version upgrade path yet, and CI checks
+  that single manifest before anything reaches the deploy path — see
   [Versions and migrations](/contributing/versions-and-migrations).
 - **Automation.** The same deploy scripts an operator would run by hand are scriptable enough
   for an agent to run, verify and triage — see
@@ -48,7 +49,7 @@ Two threads run underneath every step of that journey:
 | --- | --- |
 | [The CI pipeline](/contributing/ci-pipeline) | The three workflows, what each `docker.yml` job gates, and the caching layers that keep it fast |
 | [Deploying](/contributing/deploying) | The script-only rule, the deploy chain, bootstrap prerequisites, and the warnings that save hours |
-| [Versions and migrations](/contributing/versions-and-migrations) | The repository train, the stamp rule, chart and database migrations, and how CI enforces them |
+| [Versions and migrations](/contributing/versions-and-migrations) | The pre-1.0 policy: what the release manifest binds, how a schema change is made, and what CI checks |
 | [Letting an AI agent manage your deployment](/contributing/ai-managed-deployment) | The gitignored `keys/` convention, credential custody, and the deploy agent + `/deploy-loop` skill |
 
 ::: tip

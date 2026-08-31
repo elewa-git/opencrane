@@ -14,7 +14,7 @@
 # WeOwnAI repo, elewa-git/opencrane#150) or apps/_infra/deploy-k8s/deploy.sh — which preset
 # the value flags and exec this core):
 #   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --release-version VERSION
-#     --from-release-version fresh|VERSION --cluster-tenant CLUSTER_TENANT
+#     --cluster-tenant CLUSTER_TENANT
 #                            [--base-domain DOMAIN] [--namespace NS] [--release NAME]
 #                            [--image-tag TAG] [--storage-class SC]
 #                            [--opencrane-server-tag TAG] [--opencrane-ui-tag TAG]
@@ -106,8 +106,8 @@ fi
 source "$COGNEE_IMAGE_POLICY"
 source "$SCRIPT_DIR/provider-key-secrets.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
+source "$SCRIPT_DIR/postgres-release.sh"
 source "$SCRIPT_DIR/runtime-continuation-keyring-secret.sh"
-source "$SCRIPT_DIR/database-migration-orchestrator.sh"
 source "$SCRIPT_DIR/database-release-finalization.sh"
 source "$SCRIPT_DIR/retire-legacy-obot-mcp-server.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
@@ -203,7 +203,6 @@ LITELLM_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_LITELLM_POSTGRES_CREDENTIALS_SE
 LITELLM_POSTGRES_OWNER="${OPENCRANE_LITELLM_POSTGRES_OWNER:-litellm}"
 POSTGRES_ADMIN_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_ADMIN_CREDENTIALS_SECRET:-}"
 POSTGRES_ADMIN_NAME="${OPENCRANE_POSTGRES_ADMIN_NAME:-opencrane_database_admin}"
-PRISMA_MIGRATOR_IMAGE="${OPENCRANE_PRISMA_MIGRATOR_IMAGE:-}"
 # --preflight runs a fail-FAST environment check BEFORE any cluster mutation and exits 0/1
 # without installing. It catches the failures that otherwise surface as a half-installed,
 # crash-looping cluster: no default StorageClass (every PVC pends), a CNI that silently
@@ -230,7 +229,6 @@ VERIFY_INSECURE="${OPENCRANE_VERIFY_INSECURE:-0}"
 
 POSTGRES_RELEASE=""
 RELEASE_VERSION="${OPENCRANE_RELEASE_VERSION:-}"
-FROM_RELEASE_VERSION="${OPENCRANE_FROM_RELEASE_VERSION:-}"
 TIMEOUT="${TIMEOUT_SECONDS:-300}"
 
 log()  { echo -e "\033[0;32m[k8s-deploy]\033[0m $1"; }
@@ -270,10 +268,8 @@ while [[ $# -gt 0 ]]; do
     --litellm-postgres-owner) LITELLM_POSTGRES_OWNER="$2"; shift 2 ;;
     --postgres-admin-credentials-secret) POSTGRES_ADMIN_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --postgres-admin-name) POSTGRES_ADMIN_NAME="$2"; shift 2 ;;
-    --prisma-migrator-image) PRISMA_MIGRATOR_IMAGE="$2"; shift 2 ;;
     --postgres-values) POSTGRES_VALUES_FILE="$2"; shift 2 ;;
     --release-version) RELEASE_VERSION="$2"; shift 2 ;;
-    --from-release-version) FROM_RELEASE_VERSION="$2"; shift 2 ;;
     --values)        VALUES_FILE="$2"; shift 2 ;;
     --reuse-values)  REUSE_VALUES="1"; shift ;;
     --reset-values)  RESET_VALUES="1"; shift ;;
@@ -289,14 +285,14 @@ if [[ ! "$TIMEOUT" =~ ^[1-9][0-9]{0,3}$ ]] || (( TIMEOUT > 3600 )); then
   err "TIMEOUT_SECONDS must be an integer from 1 through 3600."
   exit 1
 fi
-# The profile derives Kubernetes names from this tenant, and the migration writes the same value
+# The profile derives Kubernetes names from this tenant, and the deploy writes the same value
 # into silo-scoped IAM rows. Validate it before PostgreSQL changes.
 if (( ${#CLUSTER_TENANT} > 63 )) || [[ ! "$CLUSTER_TENANT" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
   err "--cluster-tenant must identify the target silo with a DNS label."
   exit 1
 fi
-if [[ -z "$RELEASE_VERSION" || -z "$FROM_RELEASE_VERSION" ]]; then
-  err "--release-version and --from-release-version are required. Use --from-release-version fresh only for an empty initdb install."
+if [[ -z "$RELEASE_VERSION" ]]; then
+  err "--release-version is required."
   exit 1
 fi
 RELEASE_MANIFEST="$REPOSITORY_ROOT/releases/${RELEASE_VERSION}.json"
@@ -591,32 +587,9 @@ if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
   POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP_KEY="$(jq -r '.bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key // empty' <<<"$existing_postgres_values")"
 fi
 
-DATABASE_MIGRATION_ENABLED=false
-if [[ "$FROM_RELEASE_VERSION" == "fresh" && "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
-  err "--from-release-version fresh is only valid when PostgreSQL has not been created."
-  exit 1
-fi
-if [[ "$FROM_RELEASE_VERSION" != "fresh" && ! -f "$REPOSITORY_ROOT/releases/${FROM_RELEASE_VERSION}.json" ]]; then
-  err "Source release manifest 'releases/${FROM_RELEASE_VERSION}.json' does not exist."
-  exit 1
-fi
-EXPECTED_PREDECESSOR_RELEASE_VERSION="$(jq -r '.previousRepositoryVersion // empty' "$RELEASE_MANIFEST")"
-# The migration image contains one forward path, so upgrades must start from the release it expects.
-if [[ "$FROM_RELEASE_VERSION" != "fresh" && "$FROM_RELEASE_VERSION" != "$EXPECTED_PREDECESSOR_RELEASE_VERSION" ]]; then
-  err "Source release '$FROM_RELEASE_VERSION' is not the candidate's exact predecessor '$EXPECTED_PREDECESSOR_RELEASE_VERSION'."
-  exit 1
-fi
-if [[ "$FROM_RELEASE_VERSION" != "fresh" ]]; then
-  DATABASE_MIGRATION_ENABLED=true
-  if [[ -z "$OIDC_ISSUER_URL" ]]; then
-    err "The 0.9.2-to-0.10.0 database prerequisite requires --oidc-issuer-url to bind legacy subjects to their exact issuer."
-    exit 1
-  fi
-  if [[ ! "$PRISMA_MIGRATOR_IMAGE" =~ ^ghcr\.io/elewa-git/opencrane-prisma-migrator@sha256:[0-9a-f]{64}$ ]]; then
-    err "Database migration requires --prisma-migrator-image with the exact OpenCrane Prisma migrator digest."
-    exit 1
-  fi
-fi
+# Pre-1.0 policy: there are no reviewed version-to-version schema upgrades. A fresh install
+# applies the target baseline through CNPG initdb; an existing cluster keeps the schema it has,
+# and a needed schema change means a rebuild (see docs/agents/deploy-ledger.md, 2026-08-31).
 
 _load_kubernetes_api_helm_args networkPolicy "PostgreSQL pooler"
 POSTGRES_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
@@ -643,6 +616,7 @@ if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
   ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"
 fi
 ensure_runtime_continuation_keyring_secret "$NAMESPACE" "$RUNTIME_CONTINUATION_KEYRING_SECRET"
+install_postgres_release true
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
@@ -1018,8 +992,8 @@ if [[ "$RELEASE_PREEXISTED" == "1" ]]; then
     "${RELEASE}-opencrane-server" "${RELEASE}-agent-controller" "${RELEASE}-litellm" || exit $?
 fi
 
-# 4. Wait for the core workloads. The database schema was created by CNPG initdb or converged by
-# the bounded deployment-owned migration Job; application startup never mutates it.
+# 4. Wait for the core workloads. The database schema was created by CNPG initdb from the
+# target baseline; application startup never mutates it.
 # Wait only on the deployment(s) this chart actually rendered: the fleet chart ships
 # the fleet-manager, the silo chart the clustertenant-manager. A fleet-only (or silo-only)
 # install has just one, so guard each wait on the deployment existing rather than waiting
@@ -1041,7 +1015,10 @@ wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
 
 _wait_for_release_certificate || exit $?
-if [[ "$RELEASE_VERSION" == "0.10.0" && "$FROM_RELEASE_VERSION" == "0.9.2" && "$ALLOW_TAG_FLOAT" != "1" ]]; then
+# Only a cluster that existed before this deploy can still hold retired Obot resources. The gate
+# used to name the 0.9.2-to-0.10.0 upgrade; pre-1.0 deploys no longer declare a source release, and
+# every retirement step below tolerates the resources already being gone.
+if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" && "$ALLOW_TAG_FLOAT" != "1" ]]; then
   FINAL_SERVER_REPOSITORY="$(jq -r '.clustertenantManager.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
   FINAL_CONTROLLER_REPOSITORY="$(jq -r '.agentController.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
   FINAL_SCANNER_REPOSITORY="$(jq -r '.artifactScanner.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"

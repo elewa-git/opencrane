@@ -1,7 +1,7 @@
 # deploy-k8s platform tools
 
-This directory contains the shared tools that prepare a cluster, deploy an OpenCrane silo, upgrade
-its database, and verify the result. They live beside the deploy application because no other
+This directory contains the shared tools that prepare a cluster, deploy an OpenCrane silo, and
+verify the result. They live beside the deploy application because no other
 OpenCrane package uses them as a general-purpose library.
 
 ## What these tools are for
@@ -27,7 +27,7 @@ operator-owned, and a retry still proves no unmanaged database or login survived
 | `control-plane-image-policy.sh` | Ensures the browser application is the exact reviewed build. Public deployments must use an immutable image digest; only disposable local test clusters may use a locally imported tag. |
 | `network-policy-cni.sh` | Recognises only exact known NetworkPolicy-enforcing CNI DaemonSet names. The deploy preflight treats a missing match as fatal for multi-tenant topology and advisory for a single silo. |
 | `cluster-tenant-crd-policy.sh` | Protects the cluster-wide tenant definition from conflicting ownership. It checks whether the definition is missing, owned by this release, safely shared, or conflicting before Helm proceeds. |
-| `database-migration-orchestrator.sh` | Runs the dedicated Prisma Migrate Job and waits for it to finish before application rollout. |
+| `postgres-release.sh` | Reconciles the PostgreSQL release. The schema is created once, by CNPG `initdb` from the app-owned target baseline; there is no version-to-version migration path pre-1.0. |
 | `qualify-workflow-engine.sh` | Proves on a live silo that newly queued agent work is picked up within the expected time. It opens a temporary connection to the database proxy, runs the application-owned timing check, and keeps the application password out of its output. |
 | `database-release-finalization.sh` | Restarts database consumers when connection details change and waits for the normal application rollout. |
 | `retire-legacy-obot-mcp-server.sh` | Removes the Obot MCP resources and retained database custody during the exact public 0.9.2-to-0.10.0 upgrade after replacement readiness and exact ownership proofs. |
@@ -60,15 +60,15 @@ belong in sibling `apps/_infra/<service>` projects.
 
 ## Database deployment
 
-Every invocation supplies a release version and the version it is upgrading from. The 0.9.2-to-0.10.0
-upgrade first publishes the OpenCrane connection to the release-local database pool, then runs the
-bounded migration Job before the ordinary application rollout. The Job receives the exact silo and
-OIDC issuer, applies the reviewed IAM prerequisite, and then starts the Prisma ledger used from
-0.10.0 onward. A failed Job returns its failure directly. It does not create a backup,
-inspect the existing schema, pause application writes, or restore a previous release.
+Every invocation supplies `--release-version`; the engine reads the PostgreSQL operand image from
+that `releases/<version>.json` manifest. The schema is created once, by CNPG `initdb` from the
+app-owned target baseline (the baseline publisher prepends the `pg_cron` prerequisite). There is no
+version-to-version migration path pre-1.0: a dev silo that needs a newer schema is rebuilt, and
+upgrade contracts return at MVP (see
+[`docs/agents/versioning.md`](../../../../docs/agents/versioning.md)).
 
-Operational backup and restore configuration remains available in the PostgreSQL chart, but it is not
-a condition for running a migration. Deferred migration hardening work is tracked in issue #699.
+Operational backup and restore configuration remains available in the PostgreSQL chart, but it is
+not a condition for deployment.
 
 ## OIDC upgrades
 

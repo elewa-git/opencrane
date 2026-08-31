@@ -28,24 +28,6 @@ RUN npm run build -w @opencrane/server
 RUN find /app -path '*/node_modules/.prisma/client' -type d | head -1 | \
     xargs -I{} cp -r {} /generated-prisma
 
-# Migration image
-#
-# The migration Job needs Prisma's CLI and the checked-in migration folders, but the server must
-# not carry either runtime responsibility. The separate target ships those exact build inputs.
-FROM build AS migration
-
-WORKDIR /app/apps/opencrane
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends postgresql-client && \
-    rm -rf /var/lib/apt/lists/*
-
-COPY apps/opencrane-prisma-migrator/run-migrations.sh /app/run-migrations.sh
-
-USER node
-
-CMD ["/app/run-migrations.sh"]
-
 # Runtime stage
 FROM node:22-bookworm-slim
 

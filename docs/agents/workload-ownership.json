@@ -18,8 +18,7 @@
     "litellm",
     "postgres-database",
     "postgres-pooler",
-    "postgres-database-privileges",
-    "postgres-database-migration"
+    "postgres-database-privileges"
   ],
   "renderProfiles": [
     {
@@ -249,13 +248,6 @@
       "image": "ghcr.io/elewa-git/opencrane-postgres:<postgres-version>-<qualified-tag>@sha256:<release-digest>",
       "owner": "apps/postgres",
       "source": { "type": "file", "path": "apps/postgres/helm/templates/database-privileges-job.yaml", "anchor": "kind: Job", "coversLocalTemplate": true }
-    },
-    {
-      "id": "postgres-database-migration",
-      "podClass": "Job/postgres-database-migration",
-      "image": "ghcr.io/elewa-git/opencrane-prisma-migrator@sha256:<release-digest>",
-      "owner": "apps/postgres",
-      "source": { "type": "file", "path": "apps/postgres/helm/templates/database-migration-job.yaml", "anchor": "kind: Job", "coversLocalTemplate": true }
     },
     {
       "id": "postgres-pooler",

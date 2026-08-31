@@ -44,11 +44,8 @@ is a direct forward migration from tagged 0.9.2 to 0.10.0. The abandoned 0.9.3 c
 tagged and is not a supported release boundary.
 
 ```text
-  tagged 0.9.2 release state
-          │  forward migration
-          ▼
-  Prisma Migrate ──► dedicated migration Job ──► 0.10.0 schema
-  only record of database changes      │
+  fresh install from the target baseline ──► 0.10.0 schema
+                                      │
                                       ▼
   OCI Image Layout ZIP admission ──► imported immutable image digest
   MCP 2026-07-28 only                 │
@@ -60,9 +57,9 @@ tagged and is not a supported release boundary.
   retire MCPB routes, schema, and workers
 ```
 
-**In this cutover:** [Prisma Migrate](../../../../../../docs/agents/versioning.md) is the only
-record of database changes, and the dedicated migration Job is the one-time Kubernetes task that
-runs those changes before the new release starts. An OCI (Open Container Initiative) Image Layout
+**In this cutover:** the [reviewed target baseline](../../../../../../docs/agents/versioning.md) is
+the only schema authority — pre-1.0 a silo reaches the 0.10.0 schema by a fresh install, not by an
+in-place upgrade. An OCI (Open Container Initiative) Image Layout
 ZIP replaces MCPB, the old MCP bundle format. The new admission accepts only Model Context Protocol
 (MCP) version `2026-07-28` and keeps the remote v2 [era-probe workflow](../../mcp-era-probe/README.md)
 that checks a remote MCP server before it is accepted. OCI admission and import are separate from

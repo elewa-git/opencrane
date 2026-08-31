@@ -13,10 +13,9 @@ Three files track work, each with a distinct role — keep them from drifting:
 ## Planning Discipline
 
 - Keep `plan.md` updated as implementation progresses.
-- Start every implementation wave by reading [`versioning.md`](./versioning.md), identifying the
-  directly changed projects and applications adapted through their Nx dependency graph, and
-  recording whether the wave needs an app stamp, Helm transition, or database migration. Do not
-  postpone version/migration evidence until release day.
+- Read [`versioning.md`](./versioning.md) before a wave that touches the database schema or the
+  release manifest: pre-1.0 the only version evidence is the current manifest's baseline digest —
+  update it in the same wave as the schema change.
 - When a roadmap item changes state due to code, validation, or a discovered blocker, update `plan.md` in the same work cycle.
 - Do not leave completed or partially implemented backlog items stale in `plan.md` after landing the corresponding code.
 - When a track or phase is **fully complete**, move it out of `plan.md` into `plan-done.md` (the historical record) and leave a one-line `✅ COMPLETE (see plan-done.md)` pointer in its place.
@@ -179,7 +178,7 @@ review gate treats a stale or missing package README as a finding. See
 [`package-docs.md`](./package-docs.md) for the standard.
 
 Run `scripts/agent-style-check.sh`, `npm run check:prisma-boundaries -- --diff <base-ref>`,
-`npm run check:module-growth`, `npm run check:release-versioning -- --base <base-ref>`, and
+`npm run check:module-growth`, `npm run check:release-versioning`, and
 `npm run check:pr-stack-integrity -- --current-branch <branch>`
 before delegating. The first checks TypeScript mechanics and invokes
 the same diff-scoped Prisma ownership floor; the explicit Prisma command is useful when reporting

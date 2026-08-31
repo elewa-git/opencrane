@@ -124,10 +124,9 @@ its resources to the lifecycle owner.
   one worker for registered workflow tasks. Its focused source verifiers prove the seeded
   persona and onboarding-bootstrap content against the reviewed files in
   `docs/design/persona-archetypes/`.
-- `prisma/prisma-migrations/` is the active Prisma Migrate ledger for existing databases. The
-  PostgreSQL deployment Job applies it before an incompatible server rollout; server startup never
-  changes the schema. `prisma/migrations/` retains the SQL published before the 0.10.0 cutover as
-  release history, not executable deployment input.
+- There is no `prisma/migrations/` upgrade path pre-1.0: the baseline is the only schema authority,
+  existing dev silos are rebuilt rather than upgraded, and server startup never becomes a
+  schema-migration authority. Upgrade contracts return at MVP.
 
 ## Boundary
 
