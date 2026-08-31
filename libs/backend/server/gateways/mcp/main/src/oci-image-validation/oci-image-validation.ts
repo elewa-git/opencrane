@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { WorkflowTaskRetryableError, WorkflowTaskRetryBackoffKinds, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskRetryBackoffKinds, WorkflowTaskRetryableError, WorkflowTaskTerminalError, ___RetryWorkflowDependency } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTaskContext, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { OciImageValidationRecord } from "./oci-image-validation-repository.types";
@@ -14,18 +14,9 @@ import { __AssertOciImageValidationTaskInput } from "./oci-image-validation.vali
 const _MAXIMUM_ATTEMPTS = 5;
 
 /** Keep temporary database failures retryable without changing deliberate workflow outcomes. */
-async function _RetryablePersistence<TResult>(operation: () => Promise<TResult>): Promise<TResult>
+function _RetryablePersistence<TResult>(operation: () => Promise<TResult>): Promise<TResult>
 {
-	try
-	{
-		return await operation();
-	}
-	catch (error)
-	{
-		if (error instanceof WorkflowTaskRetryableError || error instanceof WorkflowTaskTerminalError)
-			throw error;
-		throw new WorkflowTaskRetryableError("OCI image validation persistence is temporarily unavailable.");
-	}
+	return ___RetryWorkflowDependency(operation, "OCI image validation persistence is temporarily unavailable.");
 }
 
 /** Load the exact product record named by the saved task. */

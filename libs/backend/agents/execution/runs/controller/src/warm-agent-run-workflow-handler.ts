@@ -1,6 +1,6 @@
 import { AgentRunTaskDeclaration, AgentRunTaskTerminalStates, type AgentRunTaskInput, type AgentRunTaskResult, type AgentRunWarmRuntimeDeletionCommand, type AgentRunWorkflowControllerRecord, type AgentRunWorkflowObservation } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import type { WarmRuntimePodCandidate, WarmRuntimePoolProfile } from "@opencrane/backend/agents/runtime/k8s-launcher";
-import { WorkflowTaskRetryableError, WorkflowTaskTerminalError, type IWorkflowTaskContext, type IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskTerminalError, ___RetryWorkflowDependency, type IWorkflowTaskContext, type IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { WarmAgentRunWorkflowHandlerOptions } from "./warm-agent-run-workflow-handler.types";
 
@@ -38,20 +38,9 @@ function _Cancelled(input: AgentRunTaskInput): AgentRunTaskResult
 }
 
 /** Converts an unexpected dependency failure into the task's configured retry policy. */
-async function _Retry<TResult>(operation: () => Promise<TResult>): Promise<TResult>
+function _Retry<TResult>(operation: () => Promise<TResult>): Promise<TResult>
 {
-	try
-	{
-		return await operation();
-	}
-	catch (error)
-	{
-		if (error instanceof WorkflowTaskRetryableError || error instanceof WorkflowTaskTerminalError)
-		{
-			throw error;
-		}
-		throw new WorkflowTaskRetryableError("warm AgentRun dependency is temporarily unavailable");
-	}
+	return ___RetryWorkflowDependency(operation, "warm AgentRun dependency is temporarily unavailable");
 }
 
 /** Finalizes cancellation only when the server proves that this attempt never reserved a warm Pod. */
