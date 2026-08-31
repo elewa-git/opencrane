@@ -118,6 +118,11 @@ transport for workloads; it is not a browser fallback.
 - `BoundConversationWriter` is a one-use, stream-bound KurrentDB append boundary for a currently
   leased computer. Its supporting binding, clock, rate-limit, visibility-policy, and lease-fence
   contracts keep the computer unable to select a target stream or stamp a trusted entry coordinate.
+- `__RunConversationComputerActivationListener` consumes one silo-scoped, persistent KurrentDB
+  activation subscription in delivery order. It validates the stream-bound command before calling
+  the computer authority, parks malformed input and an explicitly parked authority outcome,
+  acknowledges activated, idempotent, or denied outcomes, retries only a transient authority
+  failure, and leaves an acknowledgement failure for KurrentDB to redeliver.
 
 ## Boundary
 
