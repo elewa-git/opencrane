@@ -86,8 +86,10 @@ describe("conversation model validators", function _ConversationValidatorSuite()
 	it("binds timeline entries and replay cursors to conversation positions", function _TimelineCoordinates()
 	{
 		const entry = { conversationId: "conversation-1", position: "1", kind: ConversationTimelineEntryKinds.Message, messageId: "message-1", payload: null, occurredAt: "2026-08-10T08:00:00.000Z" };
+		const parentDelivery = { conversationId: "conversation-1", position: "2", kind: ConversationTimelineEntryKinds.ParentDelivery, parentDeliveryAgentThreadId: "delivery-1", payload: null, occurredAt: "2026-08-10T08:00:01.000Z" };
 
 		expect(___ConversationTimelineEntrySchema.safeParse(entry).success).toBe(true);
+		expect(___ConversationTimelineEntrySchema.safeParse(parentDelivery).success).toBe(true);
 		for (const invalidPosition of ["0", "01", "+1", "-1", "1.5", 1])
 		{
 			expect(___ConversationTimelineEntrySchema.safeParse({ ...entry, position: invalidPosition }).success).toBe(false);

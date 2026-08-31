@@ -1,6 +1,11 @@
 import { AgentRunState, ExternalActionRecoveryMode, Prisma, ToolInvocationState, WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("../prisma-managed-authorization-grant-repository", function _MockManagedGrants()
+{
+	return { __ReconcileManagedAuthorizationGrantsInTransaction: vi.fn().mockResolvedValue(2) };
+});
+
 import { __OpenDeferredToolApproval } from "../prisma-deferred-tool-approval-opener";
 import { __DigestCanonicalJson } from "../canonical-json-digest";
 
@@ -36,6 +41,7 @@ function _LiveTransaction()
 		agentRun: { findUnique: vi.fn(async function _run() { return { id: "run-1", conversationId: "conversation-1", attempt: 1, state: AgentRunState.Running }; }), updateMany: vi.fn(async function _pause() { return { count: 1 }; }) },
 		elicitationRequest: { create: vi.fn(async function _createElicitation() { return { id: "interrupt-1" }; }) },
 		approvalRequest: { create: vi.fn(async function _create() { return { id: "approval-1" }; }), findFirst: vi.fn(async function _existing() { return null; }), count: vi.fn(async function _pending() { return 0; }) },
+		principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
 			toolInvocation: { findUnique: vi.fn(async function _invocation() { return _Invocation(); }), updateMany: vi.fn() },
 		toolResultDelivery: { create: vi.fn(async function _delivery() { return { id: "delivery-1" }; }) },
 	};

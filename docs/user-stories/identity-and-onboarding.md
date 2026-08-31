@@ -93,7 +93,7 @@ that** I understand what I can access and administer.
 Acceptance criteria:
 
 - The UI uses the server-projected name, email, picture, ClusterTenant, groups, owned organisations,
-  `isOrgAdmin`, and `isPlatformOperator` values.
+  product capabilities, and `isPlatformOperator` identity-plane value.
 - Missing role configuration resolves to ordinary-user capability, not optimistic admin access.
 - Host/silo mismatch or lost membership produces a bounded no-access state without leaking another
   silo's existence.

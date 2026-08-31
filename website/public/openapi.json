@@ -591,105 +591,6 @@
           }
         }
       },
-      "EntitledUser": {
-        "type": "object",
-        "description": "A local principal displayed in the MCP access editor or its selectable directory.",
-        "required": [
-          "id",
-          "name",
-          "initials",
-          "color"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable local Principal identifier used by authorization grants."
-          },
-          "name": {
-            "type": "string",
-            "description": "Display name shown in the access editor."
-          },
-          "initials": {
-            "type": "string",
-            "description": "Initials derived from the display name for an avatar."
-          },
-          "color": {
-            "type": "string",
-            "description": "Deterministic avatar colour derived from the identifier."
-          }
-        }
-      },
-      "EntitledGroup": {
-        "type": "object",
-        "description": "A local group that can receive an MCP authorization grant.",
-        "required": [
-          "id",
-          "name"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable local Group identifier used by authorization grants."
-          },
-          "name": {
-            "type": "string",
-            "description": "Display name shown in the access editor. Authorization uses the identifier, not this value."
-          }
-        }
-      },
-      "McpAccessPolicy": {
-        "type": "object",
-        "description": "The user and group grants managed by the MCP access editor for one server. It does not list authorization grants managed by other sources.",
-        "required": [
-          "serverId",
-          "groups",
-          "users"
-        ],
-        "properties": {
-          "serverId": {
-            "type": "string",
-            "description": "Identifier of the governed server."
-          },
-          "groups": {
-            "type": "array",
-            "description": "Groups with an active allow grant managed by the MCP access editor.",
-            "items": {
-              "$ref": "#/components/schemas/EntitledGroup"
-            }
-          },
-          "users": {
-            "type": "array",
-            "description": "Principals with an active allow grant managed by the MCP access editor.",
-            "items": {
-              "$ref": "#/components/schemas/EntitledUser"
-            }
-          }
-        }
-      },
-      "McpDirectory": {
-        "type": "object",
-        "description": "The users and groups that an organisation administrator can select when editing MCP access.",
-        "required": [
-          "users",
-          "groups"
-        ],
-        "properties": {
-          "users": {
-            "type": "array",
-            "description": "All local principals eligible to receive an MCP authorization grant.",
-            "items": {
-              "$ref": "#/components/schemas/EntitledUser"
-            }
-          },
-          "groups": {
-            "type": "array",
-            "description": "All local groups eligible to receive an MCP authorization grant.",
-            "items": {
-              "$ref": "#/components/schemas/EntitledGroup"
-            }
-          }
-        }
-      },
       "OciImageValidationSubmission": {
         "type": "object",
         "description": "An organisation-admin request to admit one exact published OCI image. The idempotency key makes a retried request return the same saved record.",
@@ -1310,88 +1211,11 @@
           "apiKey": {
             "type": "string",
             "description": "The raw upstream provider API key. Accepted only over HTTPS; written to a k8s Secret + LiteLLM and never returned by any read."
-          }
-        }
-      },
-      "ProviderCredential": {
-        "type": "object",
-        "required": [
-          "id",
-          "scope",
-          "provider",
-          "secretRef"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable identifier."
           },
-          "scope": {
+          "commandId": {
             "type": "string",
-            "enum": [
-              "global",
-              "clusterTenant"
-            ],
-            "description": "Whether the credential is platform-wide or owned by one ClusterTenant."
-          },
-          "clusterTenant": {
-            "type": "string",
-            "nullable": true,
-            "description": "Owning ClusterTenant when scope is clusterTenant; null for Global."
-          },
-          "provider": {
-            "type": "string",
-            "description": "Free-text provider key (e.g. openai, anthropic, bedrock)."
-          },
-          "secretRef": {
-            "type": "string",
-            "description": "Name of the External-Secrets-synced k8s Secret carrying the provider key (never the raw key)."
-          },
-          "litellmCredentialName": {
-            "type": "string",
-            "nullable": true,
-            "description": "LiteLLM /credentials name when registered for the dynamic path; null for the env baseline."
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "ProviderCredentialWrite": {
-        "type": "object",
-        "required": [
-          "provider",
-          "secretRef"
-        ],
-        "properties": {
-          "scope": {
-            "type": "string",
-            "enum": [
-              "global",
-              "clusterTenant"
-            ],
-            "description": "Defaults to global when omitted."
-          },
-          "clusterTenant": {
-            "type": "string",
-            "description": "Required when scope is clusterTenant."
-          },
-          "provider": {
-            "type": "string",
-            "description": "Free-text provider key."
-          },
-          "secretRef": {
-            "type": "string",
-            "description": "Name of the External-Secrets-synced k8s Secret carrying the provider key. A raw key field (apiKey/keyValue/key) is rejected with 400."
-          },
-          "litellmCredentialName": {
-            "type": "string",
-            "description": "Optional LiteLLM /credentials name for the dynamic no-restart path."
+            "format": "uuid",
+            "description": "Command id returned by a previous PROVIDER_EFFECT_PENDING response. Resubmitting it supplies ephemeral key material to that exact admitted command."
           }
         }
       },
@@ -2345,7 +2169,7 @@
     "/mcp/servers": {
       "get": {
         "operationId": "listMcpGovernanceServers",
-        "summary": "List every catalogue server regardless of status (org-admin governance view)",
+        "summary": "List every catalogue server after a current Organization/Administer grant check",
         "tags": [
           "MCP Operator"
         ],
@@ -2364,7 +2188,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2466,7 +2290,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2491,7 +2315,7 @@
     "/mcp/servers/{id}/approve": {
       "post": {
         "operationId": "approveMcpServer",
-        "summary": "Approve a server (pending-review → approved). Org-admin only",
+        "summary": "Approve a server (pending-review → approved). Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -2517,7 +2341,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2542,7 +2366,7 @@
     "/mcp/servers/{id}/publish": {
       "post": {
         "operationId": "publishMcpServer",
-        "summary": "Publish a server (approved → published). Org-admin only",
+        "summary": "Publish a server (approved → published). Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -2568,7 +2392,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2593,7 +2417,7 @@
     "/mcp/servers/{id}/reject": {
       "post": {
         "operationId": "rejectMcpServer",
-        "summary": "Reject a server (→ disabled). Org-admin only",
+        "summary": "Reject a server (→ disabled). Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -2619,7 +2443,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2644,7 +2468,7 @@
     "/mcp/servers/{id}/enabled": {
       "post": {
         "operationId": "setMcpServerEnabled",
-        "summary": "Toggle a server's availability (true → published, false → disabled). Org-admin only",
+        "summary": "Toggle a server's availability (true → published, false → disabled). Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -2698,147 +2522,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/mcp/servers/{id}/access": {
-      "get": {
-        "operationId": "getMcpAccessPolicy",
-        "summary": "Read the authorization grants for an MCP server. Org-admin only",
-        "tags": [
-          "MCP Operator"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Access policy.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpAccessPolicy"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not an organisation admin.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP server not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "setMcpAccessPolicy",
-        "summary": "Replace the authorization grants for an MCP server. Org-admin only",
-        "tags": [
-          "MCP Operator"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "groupIds",
-                  "principalIds"
-                ],
-                "properties": {
-                  "groupIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "Stable local Group identifiers."
-                  },
-                  "principalIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "Stable local Principal identifiers."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Access policy updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpAccessPolicy"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "groupIds (array) and principalIds (array) are required.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2863,7 +2547,7 @@
     "/mcp/oci-image-validations": {
       "post": {
         "operationId": "submitOciImageValidation",
-        "summary": "Save an OCI image admission job. Org-admin only",
+        "summary": "Save an OCI image admission job. Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -2899,7 +2583,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2934,7 +2618,7 @@
     "/mcp/oci-image-validations/{id}": {
       "get": {
         "operationId": "getOciImageValidation",
-        "summary": "Read one saved OCI image admission. Org-admin only",
+        "summary": "Read one saved OCI image admission. Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -2970,7 +2654,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2995,7 +2679,7 @@
     "/mcp/oci-image-validations/{id}/server": {
       "post": {
         "operationId": "promoteOciImageValidationToMcpServer",
-        "summary": "Create an MCP server revision from an imported OCI image and start discovery. Org-admin only",
+        "summary": "Create an MCP server revision from an imported OCI image and start discovery. Requires Organization/Administer",
         "tags": [
           "MCP Operator"
         ],
@@ -3125,7 +2809,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an organisation admin.",
+            "description": "Current Organization/Administer grant is required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3156,37 +2840,6 @@
           },
           "503": {
             "description": "MCP runtime authority is unavailable.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/mcp/directory": {
-      "get": {
-        "operationId": "getMcpDirectory",
-        "summary": "List the selectable users and groups for the access editor. Org-admin only",
-        "tags": [
-          "MCP Operator"
-        ],
-        "responses": {
-          "200": {
-            "description": "Directory.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpDirectory"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not an organisation admin.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4055,7 +3708,7 @@
     "/providers/byok/{provider}": {
       "put": {
         "operationId": "setByokProviderKey",
-        "summary": "Set or refresh a provider's raw key (writes a k8s Secret + LiteLLM credential)",
+        "summary": "Admit and deliver a provider key change through the durable effect authority",
         "tags": [
           "Provider Keys"
         ],
@@ -4107,12 +3760,73 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Another claimed provider command owns this provider resource; retry or resume the returned command first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_BUSY"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "description": "Existing command that owns the resource barrier."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The command is durable but needs a later retry. Resubmit the returned commandId with the same raw key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_PENDING"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
       "delete": {
         "operationId": "deleteByokProviderKey",
-        "summary": "Remove a provider's key (deletes the Secret, LiteLLM credential, and record)",
+        "summary": "Admit and deliver durable removal of a provider key",
         "tags": [
           "Provider Keys"
         ],
@@ -4132,6 +3846,16 @@
                 "glm"
               ]
             }
+          },
+          {
+            "name": "commandId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Command id returned by a previous PROVIDER_EFFECT_PENDING response."
           }
         ],
         "responses": {
@@ -4147,254 +3871,85 @@
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "/providers/credentials": {
-      "get": {
-        "operationId": "listProviderCredentials",
-        "summary": "List provider credentials (references only — never the key value)",
-        "tags": [
-          "Provider Credentials"
-        ],
-        "parameters": [
-          {
-            "name": "clusterTenant",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Filter to one owning ClusterTenant."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Provider credential list.",
+          },
+          "409": {
+            "description": "Another provider command owns this resource, or selected/frozen deployments still govern the connection.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProviderCredential"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createProviderCredential",
-        "summary": "Create a provider credential reference (rejects any raw-key field)",
-        "tags": [
-          "Provider Credentials"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProviderCredentialWrite"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Provider credential created.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProviderCredential"
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "code",
+                        "commandId"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "PROVIDER_EFFECT_BUSY"
+                          ]
+                        },
+                        "commandId": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "code"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "PROVIDER_CONNECTION_GOVERNED"
+                          ]
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             }
           },
-          "400": {
-            "description": "Request body failed validation, or carried a raw key (code RAW_KEY_REJECTED).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/providers/credentials/{id}": {
-      "get": {
-        "operationId": "getProviderCredential",
-        "summary": "Get a single provider credential by id",
-        "tags": [
-          "Provider Credentials"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Provider credential detail.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProviderCredential"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Provider credential not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "updateProviderCredential",
-        "summary": "Update a provider credential reference (rejects any raw-key field)",
-        "tags": [
-          "Provider Credentials"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProviderCredentialWrite"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Provider credential updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProviderCredential"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Request body failed validation, or carried a raw key (code RAW_KEY_REJECTED).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Provider credential not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteProviderCredential",
-        "summary": "Delete a provider credential",
-        "tags": [
-          "Provider Credentials"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Provider credential deleted.",
+          "503": {
+            "description": "The removal is durable and the background reconciler or this exact command retry may resume it.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
                   "properties": {
-                    "id": {
+                    "error": {
                       "type": "string"
                     },
-                    "status": {
-                      "type": "string"
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_PENDING"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid"
                     }
                   }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Provider credential not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -4438,7 +3993,7 @@
       },
       "post": {
         "operationId": "createModel",
-        "summary": "Create a model definition and register it best-effort with LiteLLM",
+        "summary": "Create a model definition and durably register it with LiteLLM",
         "tags": [
           "Model Registry"
         ],
@@ -4479,6 +4034,71 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The selected provider has an unsettled custody command.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_BUSY"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "description": "Existing command that owns the resource barrier."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The model definition and registration command are durable but registration has not completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_PENDING"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "modelDefinitionId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
                 }
               }
             }
@@ -4525,10 +4145,12 @@
             }
           }
         }
-      },
-      "put": {
-        "operationId": "updateModel",
-        "summary": "Update a model definition",
+      }
+    },
+    "/models/{id}/registration-commands/{commandId}": {
+      "post": {
+        "operationId": "resumeModelRegistration",
+        "summary": "Resume one exact durable LiteLLM model registration",
         "tags": [
           "Model Registry"
         ],
@@ -4538,23 +4160,23 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "commandId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ModelDefinitionWrite"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
-            "description": "Model definition updated.",
+            "description": "Model registration completed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4563,89 +4185,36 @@
               }
             }
           },
-          "400": {
-            "description": "Request body failed validation.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Model definition not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteModel",
-        "summary": "Delete a model definition",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Model definition deleted.",
+          "503": {
+            "description": "The exact model registration remains pending.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "error",
+                    "code",
+                    "commandId"
+                  ],
                   "properties": {
-                    "id": {
+                    "error": {
                       "type": "string"
                     },
-                    "status": {
-                      "type": "string"
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "PROVIDER_EFFECT_PENDING"
+                      ]
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "modelDefinitionId": {
+                      "type": "string",
+                      "format": "uuid"
                     }
                   }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Model definition not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -14163,7 +13732,7 @@
                         "issuer",
                         "groups",
                         "isPlatformOperator",
-                        "isOrgAdmin"
+                        "productCapabilities"
                       ],
                       "properties": {
                         "sub": {
@@ -14184,9 +13753,18 @@
                           "type": "boolean",
                           "description": "True when the authenticated middleware admitted a platform-operator claim. Introspection only; the API remains the enforcement point."
                         },
-                        "isOrgAdmin": {
-                          "type": "boolean",
-                          "description": "True when the authenticated middleware admitted organisation administration authority. Introspection only; the API remains the enforcement point."
+                        "productCapabilities": {
+                          "type": "object",
+                          "required": [
+                            "administerOrganization"
+                          ],
+                          "description": "Current product capabilities read from the central authorization authority. These guide the UI; protected routes repeat authorization in their own transaction.",
+                          "properties": {
+                            "administerOrganization": {
+                              "type": "boolean",
+                              "description": "Whether the local Principal currently holds organization:administer for this silo."
+                            }
+                          }
                         },
                         "clusterTenant": {
                           "type": [

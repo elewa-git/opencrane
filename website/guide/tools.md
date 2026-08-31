@@ -39,4 +39,6 @@ an earlier run already completed.
 
 ## Going deeper
 
-See the [OCI MCP runtime deep dive](/integrators/oci-mcp-runtime).
+See the [OCI MCP runtime deep dive](/integrators/oci-mcp-runtime),
+[governed packages and container images](/integrators/governed-packages), and the
+[central authorization authority](/integrators/authorization-authority).

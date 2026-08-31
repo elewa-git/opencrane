@@ -1,58 +1,54 @@
 import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 
+import { _ParseMcpOciServerPromotionCommand as _ParsePromotion, _ParseMcpRuntimeAssignment as _ParseAssignment, _ParseMcpRuntimeClaimId, _ParseMcpRuntimeCleanupCommand as _ParseCleanup, _ParseMcpRuntimePodRegistrationCommand as _ParsePodRegistration, _ParseMcpRuntimeReleaseCommand as _ParseRelease } from "./mcp-runtime-wire.validator";
 import type { McpOciServerPromotionCommand, McpRuntimeCleanupCommand, McpRuntimePodRegistrationCommand, McpRuntimeReleaseCommand } from "./mcp-runtime.types";
 
 /** Parse the bounded administrator fields accepted by OCI server promotion. */
 export function __ParseMcpOciServerPromotionCommand(value: unknown): McpOciServerPromotionCommand
 {
-	if (!_Exact(value, ["name", "description"]) || !_Text(value["name"], 120, false) || !_Text(value["description"], 1_000, true))
-		throw new Error("MCP OCI server promotion has an invalid shape");
-	return { name: value["name"].trim(), description: value["description"].trim() };
+	return _ParsePromotion(value);
 }
 
-/** Parse one controller assignment and require the path and body claim IDs to agree. */
+/**
+ * Parses controller assignment evidence and binds its body claim ID to the route claim ID.
+ *
+ * The strict body excludes controller-selected silo, image, and workload-class fields. Correlation
+ * then prevents a valid body from being replayed through another claim URL.
+ *
+ * Called by: mcp-runtime-controller.router.ts.
+ * @param claimId - Controller-supplied claim coordinate from the request path.
+ * @param value - Controller-supplied assignment evidence.
+ * @returns The checked assignment whose body and route claim IDs match.
+ * @throws Error When the route, body, unknown fields, or correlation is invalid.
+ */
 export function __ParseMcpRuntimeAssignment(claimId: string, value: unknown): RuntimeWorkloadBinding
 {
-	const keys = ["claimId", "claimedAt", "deliveryCount", "profileName", "workloadUid"];
-	if (!_Coordinate(claimId, 256) || !_Exact(value, keys) || value["claimId"] !== claimId || !_Instant(value["claimedAt"]) || !_PositiveInteger(value["deliveryCount"]) || !_Coordinate(value["profileName"], 128) || !_Coordinate(value["workloadUid"], 256))
+	// 1. Reject unknown fields before the controller evidence crosses into persistence.
+	const assignment = _ParseAssignment(value);
+
+	// 2. Validate the path independently because it comes from the same untrusted request.
+	const routeClaimId = _ParseMcpRuntimeClaimId(claimId);
+
+	// 3. Bind both coordinates so the evidence cannot be retargeted to another claim.
+	if (assignment.claimId !== routeClaimId)
 		throw new Error("MCP runtime assignment has an invalid shape");
-	return value as unknown as RuntimeWorkloadBinding;
+	return assignment;
 }
 
 /** Parse one release fence without accepting a caller-selected silo, image, or profile. */
 export function __ParseMcpRuntimeReleaseCommand(value: unknown): McpRuntimeReleaseCommand
 {
-	if (!_Exact(value, ["releaseClaimedAt", "releaseDeliveryCount", "workloadUid"]) || !_Instant(value["releaseClaimedAt"]) || !_PositiveInteger(value["releaseDeliveryCount"]) || !_Coordinate(value["workloadUid"], 256))
-		throw new Error("MCP runtime release has an invalid shape");
-	return value as unknown as McpRuntimeReleaseCommand;
+	return _ParseRelease(value);
 }
 
 /** Parse one cleanup fence without accepting a caller-selected silo, image, or profile. */
 export function __ParseMcpRuntimeCleanupCommand(value: unknown): McpRuntimeCleanupCommand
 {
-	if (!_Exact(value, ["cleanupClaimedAt", "cleanupDeliveryCount", "workloadUid"]) || !_Instant(value["cleanupClaimedAt"]) || !_PositiveInteger(value["cleanupDeliveryCount"]) || !_Coordinate(value["workloadUid"], 256))
-		throw new Error("MCP runtime cleanup has an invalid shape");
-	return value as unknown as McpRuntimeCleanupCommand;
+	return _ParseCleanup(value);
 }
 
 /** Parse first-Pod evidence carried under the current release fence. */
 export function __ParseMcpRuntimePodRegistrationCommand(value: unknown): McpRuntimePodRegistrationCommand
 {
-	if (!_Exact(value, ["releaseClaimedAt", "releaseDeliveryCount", "workloadUid", "podUid"]) || !_Instant(value["releaseClaimedAt"]) || !_PositiveInteger(value["releaseDeliveryCount"]) || !_Coordinate(value["workloadUid"], 256) || !_Coordinate(value["podUid"], 128))
-		throw new Error("MCP runtime Pod registration has an invalid shape");
-	return value as unknown as McpRuntimePodRegistrationCommand;
+	return _ParsePodRegistration(value);
 }
-
-function _Exact(value: unknown, keys: readonly string[]): value is Record<string, unknown>
-{
-	return typeof value === "object" && value !== null && !Array.isArray(value) && Object.keys(value).length === keys.length && keys.every(function _HasKey(key) { return Object.hasOwn(value, key); });
-}
-
-function _Text(value: unknown, maximum: number, allowEmpty: boolean): value is string
-{
-	return typeof value === "string" && value.trim().length <= maximum && (allowEmpty || value.trim().length > 0) && !/[\u0000-\u001f\u007f]/u.test(value);
-}
-
-function _Coordinate(value: unknown, maximum: number): value is string { return typeof value === "string" && value.length > 0 && value.length <= maximum && !/[\u0000-\u001f\u007f]/u.test(value); }
-function _Instant(value: unknown): value is string { return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value) && Number.isFinite(Date.parse(value)); }
-function _PositiveInteger(value: unknown): value is number { return Number.isSafeInteger(value) && Number(value) > 0; }

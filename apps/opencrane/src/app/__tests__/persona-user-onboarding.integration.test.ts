@@ -93,7 +93,7 @@ describe("persona and durable onboarding app composition", function _PersonaUser
 		const recordAnswerAtomically = vi.fn().mockResolvedValue({ status: "recorded", answerId: "answer-b" });
 		const logger = { error: vi.fn() } as unknown as Logger;
 		const personaDependencies: PersonaOnboardingRouterDependencies = {
-			resolveCaller: function _Caller() { return { siloId: _OWNER.siloId, userId: _OWNER.subjectId }; },
+			resolveCaller: function _Caller() { return { siloId: _OWNER.siloId, userId: _OWNER.subjectId, principalId: "principal-1" }; },
 			onboarding: { ensureAtomically: vi.fn().mockResolvedValue({ outcome: "ready", personaProfileId: "profile-1", questionSet: { id: "personal-agent-onboarding", version: 1 }, derivation: { scoringPolicyId: "policy", scoringPolicyVersion: 1, interpolationMapId: "map", interpolationMapVersion: 1 } }) },
 			interviews: { startAtomically, recordAnswerAtomically, completeAtomically: vi.fn(), resolveTieAtomically: vi.fn() },
 			questions: { getQuestions: vi.fn().mockResolvedValue([{ id: "q1", category: "Pace", prompt: "How should we work?", ordinal: 1, choices: [{ id: "a", label: "Directly", ordinal: 1 }] }]) },

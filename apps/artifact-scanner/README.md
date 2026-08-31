@@ -45,9 +45,13 @@ utility packages. Libraries never import this app.
 
 The Helm chart deploys the app into its own restricted namespace with a bounded `emptyDir` scratch
 volume. It requires an immutable image digest; scanner engine and definition files are pinned in
-that image. The `image-smoke` target runs the built image without networking as UID 65532, scans a
-clean fixture and the EICAR test signature, and proves the configured engine and definition paths.
-Poll, request, source-size, scan-timeout, claim, and scratch limits are deployment values.
+that image. The `image-smoke` target starts the image's normal command without networking or
+OpenCrane configuration. Startup must reach the first required configuration check rather than fail
+to load a runtime package. The same target runs as UID 65532, scans a clean fixture and the EICAR test
+signature, and proves the configured engine and definition paths. The Deployment must remain
+available continuously for ten seconds before its rollout succeeds, so a transient process start
+cannot qualify the scanner. Poll, request, source-size, scan-timeout, claim, and scratch limits are
+deployment values.
 
 ## See also
 

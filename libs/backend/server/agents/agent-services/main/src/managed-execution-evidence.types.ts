@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import type { ServiceRunInputSnapshotIdentity } from "@opencrane/contracts";
+import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { FleetMembershipSignatureVerifier } from "@opencrane/backend/server/iam/membership";
 
 /** Names the exact run to check: which silo, which managed service, and which revision the caller believes is its published active revision. */
@@ -26,6 +27,8 @@ export interface ManagedExecutionEvidenceTransaction
 {
 	/** Shared Prisma transaction used for every authority read and membership acceptance write. */
 	readonly prisma: Prisma.TransactionClient;
+	/** Central authorization authority bound to the same admission transaction. */
+	readonly authorization: Pick<AuthorizationAuthority, "admit" | "admitPrincipal">;
 	/** Server-owned admission instant in epoch milliseconds. */
 	readonly admittedAtEpochMs: number;
 }

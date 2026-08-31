@@ -1,5 +1,15 @@
 import { AgentRunState, ElicitationPurpose, ElicitationRequestState, ExternalActionClaimKind, PersonalMemoryPermissionReceiptState, Prisma, ToolInvocationState } from "@prisma/client";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const _productAuthorization = vi.hoisted(function _ProductAuthorization()
+{
+	return { canRead: vi.fn().mockResolvedValue(true), filterReadable: vi.fn(async function _All(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); }), admitResponse: vi.fn().mockResolvedValue(true) };
+});
+
+vi.mock("../elicitation-product-authorization", function _MockProductAuthorization()
+{
+	return { PrismaElicitationProductAuthorizationRepository: class { canReadConversation = _productAuthorization.canRead; filterReadableConversationIds = _productAuthorization.filterReadable; admitResponse = _productAuthorization.admitResponse; } };
+});
 
 import { __DigestCanonicalJson, ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import { ElicitationBodyKinds, ElicitationPurposes, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
@@ -48,7 +58,7 @@ function _ResponseTransaction(request = _Request())
 /** Exact personal-memory ToolInvocation projection used by open and verify cases. */
 function _MemoryInvocation(overrides: Partial<ToolInvocationRecord> = {}): ToolInvocationRecord
 {
-	return { id: "invocation-row-1", siloId: "silo-1", runId: "run-1", attempt: 2, mcpTaskId: null, agentRevisionId: "revision-1", subjectId: "user-1", candidateId: "candidate-1", toolInvocationId: "memory-call-1", toolRevisionId: PERSONAL_MEMORY_RECALL_TOOL_REVISION, arguments: { query: "remember this" }, argumentsDigest: __DigestCanonicalJson({ query: "remember this" }), effectiveArguments: { query: "remember this" }, effectiveArgumentsDigest: __DigestCanonicalJson({ query: "remember this" }), requestFingerprint: "sha256:fingerprint", approvalRequired: true, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null, state: ToolInvocationStates.AwaitingApproval, preparationAttempt: 1, retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z"), nextPreparationAttemptAt: NOW, claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 4, ...overrides };
+	return { id: "invocation-row-1", siloId: "silo-1", runId: "run-1", attempt: 2, mcpTaskId: null, agentRevisionId: "revision-1", subjectId: "user-1", candidateId: "candidate-1", toolInvocationId: "memory-call-1", toolRevisionId: PERSONAL_MEMORY_RECALL_TOOL_REVISION, arguments: { query: "remember this" }, argumentsDigest: __DigestCanonicalJson({ query: "remember this" }), effectiveArguments: { query: "remember this" }, effectiveArgumentsDigest: __DigestCanonicalJson({ query: "remember this" }), requestFingerprint: "sha256:fingerprint", approvalRequired: true, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null, state: ToolInvocationStates.AwaitingApproval, preparationAttempt: 1, retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z"), nextPreparationAttemptAt: NOW, claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 4, ...overrides, authorizationEvidence: overrides.authorizationEvidence ?? null };
 }
 
 /** Immutable personal run snapshot whose digest and persona bind the permission. */
@@ -59,6 +69,13 @@ function _MemorySnapshot(): RunInputSnapshot
 
 describe("PrismaElicitationUnitOfWork", function _Suite()
 {
+	beforeEach(function _ResetProductAuthorization()
+	{
+		_productAuthorization.canRead.mockReset().mockResolvedValue(true);
+		_productAuthorization.filterReadable.mockReset().mockImplementation(async function _All(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); });
+		_productAuthorization.admitResponse.mockReset().mockResolvedValue(true);
+	});
+
 	it("pauses and opens one exact server-owned request in one transaction", async function _Opens()
 	{
 		const transaction = {

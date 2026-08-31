@@ -11,6 +11,7 @@ import { PrismaMcpToolAdmissionClaimRepository } from "./prisma-mcp-tool-admissi
 import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "./prisma-revision-tool-policy-source";
 import { PrismaSkillRevisionEligibilityRepository, PrismaSkillRevisionEligibilitySource } from "./prisma-skill-revision-eligibility-source";
 import { PrismaRunAuthoritySource } from "./prisma-run-authority-source";
+import { TransactionBoundProductResourceAuthorizationSource } from "./product-resource-authorization-source";
 import { PrismaConversationContextRepository } from "./prisma-conversation-context-repository";
 import { TransactionBoundConversationContextSource } from "./prisma-conversation-context-source";
 import type { IdentityEnvelopeSource, SessionAssemblyAuthorities } from "./session-assembly.types";
@@ -42,6 +43,7 @@ export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAd
 		memoryScope: new ManagedNoPersonalMemoryScopeSource(),
 		toolPolicy: new PrismaRevisionToolPolicySource(_CreateMcpToolAdmissionClaimRepository),
 		skillEligibility: new PrismaSkillRevisionEligibilitySource(_CreateSkillRevisionEligibilityRepository),
+		productAuthorization: new TransactionBoundProductResourceAuthorizationSource(),
 		budgetPolicy: new PrismaRevisionBudgetPolicySource(),
 		identityEnvelope,
 	};
@@ -69,6 +71,7 @@ export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunA
 		memoryScope: new PersonalMemoryScopeSource(_CreatePersonalMemory),
 		toolPolicy: new PrismaRevisionToolPolicySource(_CreateMcpToolAdmissionClaimRepository),
 		skillEligibility: new PrismaSkillRevisionEligibilitySource(_CreateSkillRevisionEligibilityRepository),
+		productAuthorization: new TransactionBoundProductResourceAuthorizationSource(),
 		budgetPolicy: new PrismaRevisionBudgetPolicySource(),
 		identityEnvelope,
 	};

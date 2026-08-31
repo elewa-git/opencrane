@@ -6,6 +6,8 @@ export interface SelfRunStatusCaller
 {
 	/** Canonical silo selected from the trusted request host. */
 	readonly siloId: string;
+	/** Durable local Principal used by central product authorization. */
+	readonly principalId: string;
 	/** Stable authenticated subject who owns the personal run. */
 	readonly subjectId: string;
 }
@@ -33,9 +35,9 @@ export interface SelfRunStatus
 export interface SelfRunStatusRepository
 {
 	/** Lists the caller's most recent personal runs in one exact selected silo. */
-	listOwned(siloId: string, subjectId: string): Promise<readonly SelfRunStatus[]>;
+	listOwned(caller: SelfRunStatusCaller): Promise<readonly SelfRunStatus[]>;
 	/** Returns the run only when it belongs to the exact authenticated subject in the silo. */
-	readOwned(runId: string, siloId: string, subjectId: string): Promise<SelfRunStatus | null>;
+	readOwned(caller: SelfRunStatusCaller, runId: string): Promise<SelfRunStatus | null>;
 }
 
 /** Composition ports for the authenticated self-run status route. */

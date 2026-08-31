@@ -4,7 +4,7 @@ import type { WarmRuntimePodCandidate, WarmRuntimePoolProfile } from "./warm-run
 
 /** Labels Helm and the controller share without putting run or user identity on a Pod. */
 export const __WARM_RUNTIME_POOL_LABEL = "opencrane.ai/warm-runtime-pool";
-/** Label whose fixed value selects the Cilium profile for a warm Pod. */
+/** Helm and the controller use this label to move a Pod from generic to claimed reachability. */
 export const __WARM_RUNTIME_PROFILE_LABEL = "opencrane.ai/warm-runtime-profile";
 
 /** Validates one deployment-owned pool profile before it reaches a workflow handler. */

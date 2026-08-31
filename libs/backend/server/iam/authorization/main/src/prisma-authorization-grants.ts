@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { OrgMemberStatus, PrincipalProvenance, type Prisma } from "@prisma/client";
 
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationGrantEffects, AuthorizationSubjectKinds } from "@opencrane/models/authorization";
 import type { AuthorizationBoundary, AuthorizationBoundaryContext, AuthorizationGrant, AuthorizationSubject } from "@opencrane/models/authorization";
@@ -127,11 +127,28 @@ export class PrismaAuthorizationGrantRepository implements AuthorizationContextR
 		this.prisma = prisma;
 	}
 
-	/** Resolves the principal and groups that contain a direct membership row. */
+	/** Resolves an active external or managed Principal and Groups with direct membership rows. */
 	async resolvePrincipalSubjects(siloId: string, principalId: string): Promise<readonly AuthorizationSubject[]>
 	{
-		const principal = await this.prisma.principal.findUnique({ where: { id_siloId: { id: principalId, siloId } }, select: { id: true } });
-		if (principal === null) return [];
+		// 1. Load the stored Principal so request data cannot choose its provenance or external subject.
+		const principal = await this.prisma.principal.findUnique({ where: { id_siloId: { id: principalId, siloId } }, select: { id: true, subject: true, provenance: true } });
+		if (principal === null)
+		{
+			return [];
+		}
+
+		// 2. External Principals need a current active organisation membership; internal managed agents
+		// carry their membership through the separately verified AgentService identity path.
+		if (principal.provenance === PrincipalProvenance.External)
+		{
+			const membership = await this.prisma.orgMembership.findFirst({ where: { clusterTenant: siloId, subject: principal.subject, status: OrgMemberStatus.Active }, select: { id: true } });
+			if (membership === null)
+			{
+				return [];
+			}
+		}
+
+		// 3. Resolve direct Group subjects after membership succeeds so a stale login cannot inherit grants.
 		const memberships = await this.prisma.groupMembership.findMany({ where: { siloId, principalId }, select: { groupId: true }, orderBy: { groupId: "asc" } });
 		return [
 			{ kind: AuthorizationSubjectKinds.Principal, principalId },

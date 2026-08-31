@@ -25,12 +25,3 @@ export interface McpEnabledCommand
   /** True publishes the server; false disables it. */
   enabled: boolean;
 }
-
-/** Validated command that replaces the MCP access-editor grant set. */
-export interface McpAccessPolicyCommand
-{
-  /** Stable local Group identifiers that receive group-subject grants. */
-  groupIds: string[];
-  /** Stable local Principal identifiers that receive principal-subject grants. */
-  principalIds: string[];
-}

@@ -34,6 +34,8 @@ runs the bounded migration Job. The Job applies the reviewed IAM prerequisite to
 CloudNativePG first installs `pg_cron` through the OpenCrane `Database` resource and then assigns
 the existing `cron` schema to the application owner in a second observed generation. The migration
 Job never receives a database superuser credential. A failure is returned directly.
+The Job projects the same application-owner Secret as a complete Prisma URL and as discrete
+PostgreSQL client variables, so Prisma-only pool controls never reach `psql`.
 Deployment does not require a migration backup, inspect the existing
 schema, pause application writes, or restore an earlier application release. Issue #699 tracks that
 deferred hardening work.

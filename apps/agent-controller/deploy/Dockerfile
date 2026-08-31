@@ -17,10 +17,10 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY apps/agent-controller/package.json apps/agent-controller/
 RUN npm ci --omit=dev --workspace=apps/agent-controller
-# Shared conversation contracts keep these packages external in the compiled controller bundle.
-# Resolve their public runtime entrypoints now so a production image cannot build without them.
+# The build leaves process dependencies external so Node can load their supported runtime entrypoints.
+# Resolve every emitted package entrypoint now so the image cannot publish with a missing module.
 RUN node --input-type=module --eval \
-    "await Promise.all([import('ajv'), import('@a2ui/web_core/v0_8'), import('@ag-ui/core'), import('@noble/hashes/sha2.js'), import('@opentelemetry/core'), import('openapi-fetch')])"
+    "await Promise.all([import('@a2ui/web_core/v0_8'), import('@kubernetes/client-node'), import('@noble/hashes/sha2.js'), import('@noble/hashes/utils.js'), import('@opentelemetry/api'), import('@opentelemetry/auto-instrumentations-node'), import('@opentelemetry/core'), import('@opentelemetry/exporter-trace-otlp-proto'), import('@opentelemetry/sdk-node'), import('absurd-sdk'), import('ajv'), import('openapi-fetch'), import('pg'), import('pino'), import('zod')])"
 
 COPY --from=build /app/dist/apps/agent-controller dist/apps/agent-controller
 

@@ -1,7 +1,7 @@
 import { Injectable } from "@angular/core";
 
-import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpDirectory, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
-import { MCP_ACCESS_POLICIES, MCP_CATALOGUE, MCP_DIRECTORY, MCP_INSTALLED } from "@opencrane/core/testing";
+import { McpApprovalStatus, McpConnectionStatus, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+import { MCP_CATALOGUE, MCP_INSTALLED } from "@opencrane/core/testing";
 import { McpGateway } from "@opencrane/state/mcp/adapter";
 
 /** In-memory McpGateway for tests — never imported by production code. */
@@ -10,7 +10,6 @@ export class MockMcpGateway implements McpGateway
 {
 	private readonly _installed = new Map<string, McpInstalledServer>(MCP_INSTALLED.map(function e(r: McpInstalledServer): [string, McpInstalledServer] { return [r.serverId, { ...r }]; }));
 	private readonly _catalogue = new Map<string, McpServer>(MCP_CATALOGUE.map(function e(s: McpServer): [string, McpServer] { return [s.id, { ...s }]; }));
-	private readonly _policies = new Map<string, McpAccessPolicy>(Object.values(MCP_ACCESS_POLICIES).map(function e(p: McpAccessPolicy): [string, McpAccessPolicy] { return [p.serverId, { ...p, groups: [...p.groups], users: [...p.users] }]; }));
 
 	public listEntitledCatalogue(): Promise<McpServer[]>
 	{
@@ -37,21 +36,6 @@ export class MockMcpGateway implements McpGateway
 	public publish(id: string): Promise<McpServer> { return Promise.resolve(this._setStatus(id, McpApprovalStatus.Published)); }
 	public reject(id: string): Promise<McpServer> { return Promise.resolve(this._setStatus(id, McpApprovalStatus.Disabled)); }
 	public setEnabled(id: string, on: boolean): Promise<McpServer> { return Promise.resolve(this._setStatus(id, on ? McpApprovalStatus.Published : McpApprovalStatus.Disabled)); }
-
-	public getAccessPolicy(serverId: string): Promise<McpAccessPolicy>
-	{
-		const p = this._policies.get(serverId) ?? { serverId, groups: [], users: [] };
-		return Promise.resolve({ ...p, groups: [...p.groups], users: [...p.users] });
-	}
-
-	public updateAccessPolicy(serverId: string, policy: McpAccessPolicy): Promise<McpAccessPolicy>
-	{
-		const next: McpAccessPolicy = { serverId, groups: [...policy.groups], users: [...policy.users] };
-		this._policies.set(serverId, next);
-		return Promise.resolve({ ...next });
-	}
-
-	public getDirectory(): Promise<McpDirectory> { return Promise.resolve({ users: [...MCP_DIRECTORY.users], groups: [...MCP_DIRECTORY.groups] }); }
 
 	private _setStatus(serverId: string, status: McpApprovalStatus): McpServer
 	{

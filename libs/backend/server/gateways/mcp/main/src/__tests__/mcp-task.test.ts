@@ -104,7 +104,7 @@ function _Repository(state: _TaskState): McpTaskRepository
 			state.task = { ...state.task, inputResponse: response, state: McpTaskStates.Working };
 			return _Record(state);
 		},
-		async admitToolInvocation()
+		async admitAuthorizedToolInvocation()
 		{
 			if (state.task === null)
 				return null;

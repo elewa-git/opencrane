@@ -27,7 +27,7 @@ function _Transaction(rows: readonly _SkillRow[], missingRevisionIds: readonly s
 /** Builds the skill ids a tool policy would name for one run. */
 function _ToolPolicy(skillRevisionIds: readonly string[])
 {
-	return { modelRoute: {}, mcpTools: [], skillRevisionIds, artifactRevisionIds: [] };
+	return { modelDefinitionId: "model-definition-1", modelRoute: {}, mcpTools: [], skillRevisionIds, artifactRevisionIds: [] };
 }
 
 /** Builds the source with a repository bound to the fake admission transaction. */

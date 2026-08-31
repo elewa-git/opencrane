@@ -6,7 +6,7 @@ import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workf
 import { RunEventTypes } from "@opencrane/models/agents";
 
 import type { AgentRunWarmRuntimePersistenceRepository, AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-workflow-controller-authority.types";
-import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository";
+import { PrismaChildRunCompletionRepository } from "./prisma-child-run-completion-repository";
 import { __AgentRunWorkflowBootstrapClaimDigest, __AgentRunWorkflowBootstrapReferenceForTask, __AgentRunWorkflowRuntimeIdentity, __CanCreateOrObserveAgentRunWorkflowTask, __CurrentAgentRunWorkflowTask, PrismaAgentRunWorkflowTaskReadRepository } from "./prisma-agent-run-workflow-task-read-repository";
 
 /** Retries expected unique and serializable conflicts during concurrent reservations. */
@@ -360,11 +360,12 @@ class PrismaAgentRunWarmRuntimeRepository implements AgentRunWarmRuntimePersiste
 		{
 			throw new Error("warm runtime cancellation lost its final state fence");
 		}
-		await __DeliverChildRunCompletionInTransaction(this.transaction, { childRunId: run.id });
+		const childDelivery = new PrismaChildRunCompletionRepository(this.transaction);
+		await childDelivery.deliver({ childRunId: run.id });
 		if (run.conversationId !== null)
 		{
 			const maximum = await this.transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-			await this.transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: RunEventTypes.RunCancelled, payload: { terminalReason: "user_cancelled" }, occurredAt: now } });
+			await this.transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, attempt: run.attempt, sequence: (maximum._max.sequence ?? 0) + 1, type: RunEventTypes.RunCancelled, payload: { terminalReason: "user_cancelled" }, occurredAt: now } });
 		}
 	}
 }

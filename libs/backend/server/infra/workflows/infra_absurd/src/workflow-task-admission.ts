@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
 import type { IWorkflowTaskAdmission, IWorkflowTaskAdmissionReceipt, IWorkflowTaskAdmissionRequest } from "./workflow-task-admission.types";
@@ -129,10 +129,10 @@ export class WorkflowTaskAdmission implements IWorkflowTaskAdmission
 		const admissionOptions = JSON.stringify({ idempotency_key: _TaskScopedIdempotencyKey(taskName, idempotencyKey), max_attempts: request.maximumAttempts, retry_strategy: retryStrategy });
 		try
 		{
-			const rows = await client.$queryRaw<readonly IAdmissionResultRow[]>(Prisma.sql`
+			const rows = await client.$queryRaw<readonly IAdmissionResultRow[]>`
 				SELECT task_id, run_id, attempt, created
 				FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)
-			`);
+			`;
 			return _AdmissionReceipt(rows);
 		}
 		catch (cause)

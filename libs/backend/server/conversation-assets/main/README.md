@@ -36,6 +36,12 @@ participation, the ready asset, and its exact published revision. The server con
 read lease itself and streams the checked bytes with a safe inline-or-attachment header; neither the
 lease nor the storage address reaches the browser.
 
+Artifact and conversation checks evaluate the represented Principal across its current personal and
+direct stored Group boundaries. Group grants therefore use the same central deny precedence,
+expiry, and revocation rules as direct Principal grants. Conversation participation remains a
+separate lifecycle condition for conversation-file routes, so a grant cannot invent timeline bounds
+or restore ended participant access.
+
 Agent output requires the exact registered runtime pod, run attempt, and unique persisted assistant
 `message.started` event on every reserve and finalize operation. The runtime supplies its stable
 message id; the server resolves the database sequence and never trusts a caller-supplied sequence. A retry may reuse a ticket only
@@ -46,6 +52,12 @@ every linked asset on the exact same silo, conversation, run, attempt, event, an
 When the scanner is not configured, both participant and runtime output admission return
 `scanner_unavailable` before a reservation or byte promotion begins. Existing Ready files remain
 readable; the server never accepts new work that would remain indefinitely in Processing.
+
+Participant reservations and generated outputs both require the represented owner's exact
+`ArtifactCollection/Create` grant. Runtime assignment proves which workload is acting; it does not
+replace product authorization. Creating the Artifact atomically projects exact owner grants for
+Discover, Read, Create and Edit. Finalization, attachment binding, upload-target reads and removal
+then use the central transaction-bound authority on that Artifact coordinate.
 
 Processing, ready, and failed transitions append a payload-free `conversation.assets.changed`
 System timeline entry while the conversation is open. The ordinary authorized replay stream carries

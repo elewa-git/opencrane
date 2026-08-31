@@ -6,6 +6,8 @@ import type { ModelRoutingScope } from "@opencrane/contracts";
  */
 export interface LiteLlmModelRegistration
 {
+	/** Optional deterministic deployment id used by a durable command to make `POST /model/new` replay-safe. */
+	deploymentId?: string;
   /** The routable public slug callers request, e.g. `openai/gpt-4o`. */
   publicModelName: string;
   /** The upstream model the deployment targets, e.g. `openai/gpt-4o`. */

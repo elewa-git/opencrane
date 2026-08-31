@@ -1,6 +1,8 @@
 import { Prisma, SkillRevisionState, SkillState } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
+import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
 import { SkillCatalogueRevisionStates, SkillCatalogueStates, type SkillCatalogueEntry, type SkillCatalogueRepository } from "./skill-catalogue.types";
 
@@ -20,21 +22,37 @@ export class PrismaSkillCatalogueRepository implements SkillCatalogueRepository
 {
 	/** Canonical OpenCrane catalog database client. */
 	private readonly prisma: Prisma.TransactionClient;
+	/** Central product authorization authority bound to the same database transaction. */
+	private readonly authorization: AuthorizationAuthority;
 
-	/** Creates the silo-scoped catalogue repository over the product database. */
-	constructor(prisma: Prisma.TransactionClient)
+	/** Creates the silo-scoped catalogue repository and transaction-bound authorization authority. */
+	constructor(prisma: Prisma.TransactionClient, authorization: AuthorizationAuthority)
 	{
 		this.prisma = prisma;
+		this.authorization = authorization;
 	}
 
-	/** Lists at most 200 skills from this silo, most recently updated first and tie-broken by id so repeated calls agree. Wrapped in a trace span named `skills.catalogue.list`. */
-	async listCatalogue(siloId: string): Promise<readonly SkillCatalogueEntry[]>
+	/** Lists at most 200 discoverable skills from this silo in a stable newest-first order. */
+	async listCatalogue(siloId: string, principalId: string): Promise<readonly SkillCatalogueEntry[]>
 	{
 		const self = this;
-		return ___DoWithTrace("skills.catalogue.list", { siloId }, async function _ListCatalogue(): Promise<readonly SkillCatalogueEntry[]>
+		return ___DoWithTrace("skills.catalogue.list", { siloId, principalId }, async function _ListCatalogue(): Promise<readonly SkillCatalogueEntry[]>
 		{
+			// 1. Load only bounded, browser-safe candidates from the authenticated silo.
 			const skills = await self.prisma.skill.findMany({ where: { siloId }, select: { id: true, name: true, description: true, state: true, currentRevisionId: true, currentRevision: { select: { state: true } }, createdAt: true, updatedAt: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: _CATALOGUE_ENTRY_LIMIT });
-			return skills.map(function _MapSkill(skill): SkillCatalogueEntry
+
+			// 2. Filter all candidates through one Principal-and-Group authorization read.
+			const entitled = await self.authorization.listPrincipalEntitled({
+				siloId,
+				principalId,
+				action: ProductAuthorizationActions.Discover,
+				resources: skills.map(skill => ({ kind: ProductAuthorizationResourceKinds.Skill, id: skill.id })),
+				nowEpochMs: Date.now(),
+			});
+			const entitledIds = new Set(entitled.map(resource => resource.id));
+
+			// 3. Preserve the domain query's deterministic order while mapping safe response fields.
+			return skills.filter(skill => entitledIds.has(skill.id)).map(function _MapSkill(skill): SkillCatalogueEntry
 			{
 				return {
 					id: skill.id,

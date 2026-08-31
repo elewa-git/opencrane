@@ -87,13 +87,13 @@ export async function __ChangeAgentServiceState(repository: AgentRevisionLifecyc
  * @param targetRevisionId - Later revision to compare to.
  * @returns The line, scalar, set, and widening diff, or a fail-closed reason.
  */
-export async function __CompareAgentRevisions(repository: AgentRevisionLifecycleRepository, siloId: string, baseRevisionId: AgentRevisionId, targetRevisionId: AgentRevisionId): Promise<CompareAgentRevisionsResult>
+export async function __CompareAgentRevisions(repository: AgentRevisionLifecycleRepository, caller: { readonly principalId: string; readonly siloId: string }, baseRevisionId: AgentRevisionId, targetRevisionId: AgentRevisionId): Promise<CompareAgentRevisionsResult>
 {
-	if (!_AreCompareAgentRevisionsCoordinatesValid(siloId, baseRevisionId, targetRevisionId))
+	if (!_AreCompareAgentRevisionsCoordinatesValid(caller.siloId, baseRevisionId, targetRevisionId) || caller.principalId.trim().length === 0)
 	{
 		return { outcome: "denied", reason: "invalid_command" };
 	}
-	const [base, target] = await Promise.all([repository.getRevision(baseRevisionId, siloId), repository.getRevision(targetRevisionId, siloId)]);
+	const [base, target] = await Promise.all([repository.getRevision(baseRevisionId, caller), repository.getRevision(targetRevisionId, caller)]);
 	if (base === null || target === null)
 	{
 		return { outcome: "denied", reason: "revision_not_found" };
@@ -113,9 +113,9 @@ export async function __CompareAgentRevisions(repository: AgentRevisionLifecycle
  * @param runLimit - Maximum run-history records to return.
  * @returns The revision lineage and run history, newest first.
  */
-export async function __ReadAgentServiceHistory(repository: AgentRevisionLifecycleRepository, agentServiceId: AgentServiceId, siloId: string, runLimit: number): Promise<AgentServiceHistory>
+export async function __ReadAgentServiceHistory(repository: AgentRevisionLifecycleRepository, agentServiceId: AgentServiceId, caller: { readonly principalId: string; readonly siloId: string }, runLimit: number): Promise<AgentServiceHistory>
 {
-	return repository.readHistory(agentServiceId, siloId, runLimit);
+	return repository.readHistory(agentServiceId, caller, runLimit);
 }
 
 /**
@@ -136,7 +136,7 @@ export async function __AdmitManagedRunNow(repository: AgentRevisionLifecycleRep
 	{
 		return { outcome: ManagedRunAdmissionOutcomes.Denied, reason: "invalid_command" };
 	}
-	const service = await repository.getService(command.agentServiceId, command.siloId);
+	const service = await repository.getServiceForAdmission(command.agentServiceId, command.siloId);
 	if (service === null)
 	{
 		return { outcome: ManagedRunAdmissionOutcomes.Denied, reason: "service_not_found" };

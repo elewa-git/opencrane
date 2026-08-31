@@ -28,6 +28,23 @@ if grep -q 'schema convergence\|CURRENT_SCHEMA_VERSION\|SELECTED_SOURCE_PROTECTE
   exit 1
 fi
 
+# The PostgreSQL deployer reuses saved release values during upgrades. Render a saved legacy
+# selector to prove it no longer adds a node selector while both database checks keep their normal
+# resource requests.
+helm template opencrane-postgres "$CHART" "${BASE_VALUES[@]}" \
+  --set-json 'privileges.nodeSelector={"cloud.google.com/compute-class":"opencrane-database-proof"}' \
+  --show-only templates/database-privileges-job.yaml >"$OUTPUT"
+if grep -q 'nodeSelector:\|compute-class' "$OUTPUT"; then
+  echo "privilege job still renders the legacy scheduler selector" >&2
+  exit 1
+fi
+[[ "$(grep -c '^        - name: opencrane-privileges$' "$OUTPUT")" == "1" ]]
+[[ "$(grep -c '^        - name: litellm-privileges$' "$OUTPUT")" == "1" ]]
+[[ "$(grep -c '^        - name:' "$OUTPUT")" == "2" ]]
+[[ "$(grep -c '^        - name: .*privileges$' "$OUTPUT")" == "2" ]]
+[[ "$(grep -c '^              cpu: 50m$' "$OUTPUT")" == "2" ]]
+[[ "$(grep -c '^              memory: 64Mi$' "$OUTPUT")" == "2" ]]
+
 helm template opencrane-postgres "$CHART" "${BASE_VALUES[@]}" --set pgCron.assignSchemaOwnership=false --show-only templates/databases.yaml >"$OUTPUT"
 grep -q 'name: pg_cron' "$OUTPUT"
 if grep -q 'name: cron' "$OUTPUT"; then
@@ -39,15 +56,27 @@ helm template opencrane-postgres "$CHART" "${BASE_VALUES[@]}" "${MIGRATION_VALUE
 grep -q 'name: opencrane-postgres-database-migration' "$OUTPUT"
 grep -q 'image: "ghcr.io/elewa-git/opencrane-prisma-migrator@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "$OUTPUT"
 grep -q 'name: DATABASE_URL' "$OUTPUT"
-grep -q 'name: "opencrane-postgres-opencrane-app"' "$OUTPUT"
+[[ "$(grep -c 'name: "opencrane-postgres-opencrane-app"' "$OUTPUT")" == "6" ]]
 grep -q 'key: uri' "$OUTPUT"
+grep -q 'name: PGHOST' "$OUTPUT"
+grep -q 'key: host' "$OUTPUT"
+grep -q 'name: PGPORT' "$OUTPUT"
+grep -q 'key: port' "$OUTPUT"
+grep -q 'name: PGDATABASE' "$OUTPUT"
+grep -q 'key: dbname' "$OUTPUT"
+grep -q 'name: PGUSER' "$OUTPUT"
+grep -q 'key: username' "$OUTPUT"
+grep -q 'name: PGPASSWORD' "$OUTPUT"
+grep -q 'key: password' "$OUTPUT"
+grep -q 'name: PGSSLMODE' "$OUTPUT"
+grep -q 'value: disable' "$OUTPUT"
 grep -q 'name: OPENCRANE_MIGRATION_SOURCE_VERSION' "$OUTPUT"
 grep -q 'value: "0.9.2"' "$OUTPUT"
 grep -q 'name: OPENCRANE_MIGRATION_SILO_ID' "$OUTPUT"
 grep -q 'value: "test-silo"' "$OUTPUT"
 grep -q 'name: OPENCRANE_MIGRATION_OIDC_ISSUER' "$OUTPUT"
 grep -q 'value: "https://issuer.example.test"' "$OUTPUT"
-if grep -q 'command:\|migration.sql\|EXPECTED_SQL_SHA256\|PGPASSWORD\|POSTGRES_SUPERUSER_PASSWORD' "$OUTPUT"; then
+if grep -q 'command:\|migration.sql\|EXPECTED_SQL_SHA256\|POSTGRES_SUPERUSER_PASSWORD\|postgres-admin-bootstrap' "$OUTPUT"; then
   echo "postgres chart still renders the retired direct-SQL migration path" >&2
   exit 1
 fi

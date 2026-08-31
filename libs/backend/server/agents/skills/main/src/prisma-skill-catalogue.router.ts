@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
-import { PrismaSkillCatalogueRepository } from "./prisma-skill-catalogue-repository";
+import { PrismaSkillCatalogueUnitOfWork } from "./prisma-skill-catalogue-unit-of-work";
 import { __CreateSkillCatalogueRouter } from "./skill-catalogue.router";
 import type { SkillCatalogueCaller } from "./skill-catalogue.router.types";
 
@@ -12,7 +12,7 @@ import type { SkillCatalogueCaller } from "./skill-catalogue.router.types";
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SkillCatalogueCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal ? { siloId: principal.siloId } : null;
+	return principal ? { siloId: principal.siloId, principalId: principal.principalId } : null;
 }
 
 /**
@@ -31,7 +31,7 @@ export function _CreateSkillCatalogueRouter(prisma: PrismaClient, logger: Logger
 {
 	return __CreateSkillCatalogueRouter({
 		resolveCaller: _resolveCaller,
-		catalogue: new PrismaSkillCatalogueRepository(prisma),
+		catalogue: new PrismaSkillCatalogueUnitOfWork(prisma),
 		logger,
 	});
 }

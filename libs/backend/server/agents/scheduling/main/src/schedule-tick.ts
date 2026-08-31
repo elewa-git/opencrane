@@ -83,7 +83,7 @@ export async function __RunScheduleTick(schedule: AgentServiceSchedule, activeRe
 	for (const slot of slotsToAdmit)
 	{
 		const idempotencyKey = __ScheduledRunIdempotencyKey(schedule.agentServiceId, activeRevisionId, slot);
-		const result = await deps.admission.admitManagedRun({ agentServiceId: schedule.agentServiceId, siloId: schedule.siloId, requestedBy: deps.schedulerSubjectId, requestIdempotencyKey: idempotencyKey, trigger: "schedule", scheduledSlot: slot });
+		const result = await deps.admission.admitManagedRun({ agentServiceId: schedule.agentServiceId, siloId: schedule.siloId, requestedByPrincipalId: null, requestedBy: deps.schedulerSubjectId, requestIdempotencyKey: idempotencyKey, trigger: "schedule", scheduledSlot: slot });
 		if (result.outcome === ManagedRunAdmissionOutcomes.Accepted || result.outcome === ManagedRunAdmissionOutcomes.Idempotent)
 		{
 			outcomes.push({ slot, outcome: result.outcome === ManagedRunAdmissionOutcomes.Accepted ? ScheduledSlotOutcomes.Accepted : ScheduledSlotOutcomes.Idempotent, runId: result.runId, idempotencyKey });

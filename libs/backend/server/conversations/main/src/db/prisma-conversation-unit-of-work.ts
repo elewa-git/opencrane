@@ -122,7 +122,7 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	 */
 	async retryRun(caller: ConversationCaller, conversationId: string, runId: string, request: RetryConversationRunRequest): Promise<RetryConversationRunResult>
 	{
-		return ___DoWithTrace("conversation.run.retry", { siloId: caller.siloId, conversationId, runId, expectedAttempt: request.expectedAttempt }, async () => this.runRetry.retry({ runId, expectedAttempt: request.expectedAttempt, siloId: caller.siloId, conversationId, requestedBy: caller.subjectId, acceptedAt: new Date().toISOString() }));
+		return ___DoWithTrace("conversation.run.retry", { siloId: caller.siloId, conversationId, runId, expectedAttempt: request.expectedAttempt }, async () => this.runRetry.retry({ runId, expectedAttempt: request.expectedAttempt, siloId: caller.siloId, conversationId, requestedBy: caller.subjectId, requestedByPrincipalId: caller.principalId, acceptedAt: new Date().toISOString() }));
 	}
 
 	/** Writes the conversation and participant rows atomically; the selected mode can never change. */

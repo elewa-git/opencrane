@@ -52,14 +52,14 @@ BEGIN
 END;
 $$;
 
-INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
-VALUES ('steering-model', 'global', 'steering-model', 'litellm-steering-model', 'steering-model', clock_timestamp());
+INSERT INTO "model_definitions" ("id", "silo_id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
+VALUES ('steering-model', 'silo-steering', 'global', 'steering-model', 'litellm-steering-model', 'steering-model', clock_timestamp());
 INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
 VALUES ('steering-service-principal', 'silo-steering', 'urn:opencrane:agent-service', 'steering-service', 'internal', clock_timestamp());
 INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
 VALUES ('steering-service', 'silo-steering', 'managed', 'Steering test', 'managed-agent', 'steering-service-principal', clock_timestamp());
-INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
-VALUES ('steering-revision', 'steering-service', 1, 'draft', 'sha256:' || repeat('a', 64), 'prompt-v1', 'steering-model', '{}', 'user-steering');
+INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
+VALUES ('steering-revision', 'silo-steering', 'steering-service', 1, 'draft', 'sha256:' || repeat('a', 64), 'prompt-v1', 'steering-model', '{}', 'user-steering');
 UPDATE "agent_revisions" SET "state" = 'published', "published_at" = clock_timestamp() WHERE "id" = 'steering-revision';
 UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'steering-revision' WHERE "id" = 'steering-service';
 INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "trigger", "delegated_user_id", "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest")

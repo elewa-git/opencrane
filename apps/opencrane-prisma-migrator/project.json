@@ -6,9 +6,17 @@
   "metadata": { "release": { "adaptedVersion": "0.10.0" } },
   "tags": ["type:app", "layer:entrypoint", "scope:opencrane"],
   "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash apps/opencrane-prisma-migrator/tests/build-contract.sh" }
+    },
     "test": {
       "executor": "nx:run-commands",
       "options": { "command": "bash apps/opencrane-prisma-migrator/tests/run-migrations-contract.sh" }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash -n apps/opencrane-prisma-migrator/run-migrations.sh apps/opencrane-prisma-migrator/tests/build-contract.sh apps/opencrane-prisma-migrator/tests/run-migrations-contract.sh" }
     },
     "container": {
       "executor": "nx:run-commands",

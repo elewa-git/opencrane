@@ -40,11 +40,11 @@ the server process that runs workers.
 ### Planned 0.10.0 cutover
 
 The next release changes how this workflow path is deployed and how MCP bundles are admitted. This
-is a forward migration from 0.9.3 to 0.10.0. It does not alter, replace, or pretend to re-release
-the history already shipped in 0.9.3.
+is a direct forward migration from tagged 0.9.2 to 0.10.0. The abandoned 0.9.3 candidate was never
+tagged and is not a supported release boundary.
 
 ```text
-  0.9.3 release state
+  tagged 0.9.2 release state
           │  forward migration
           ▼
   Prisma Migrate ──► dedicated migration Job ──► 0.10.0 schema

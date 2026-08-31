@@ -82,7 +82,7 @@ async function _Record(options: OciImageValidationWorkflowOptions, input: OciIma
 
 			// 3. Audit only the transition winner so replayed tasks retain one durable history entry.
 			if (write.changed)
-				await transaction.mcp.appendAudit("Updated", `OciImageValidation/${input.validationId}`, `OCI image admission ${winner.accepted ? "imported" : "rejected"}`);
+				await transaction.mcp.appendAudit(input.siloId, "Updated", `OciImageValidation/${input.validationId}`, `OCI image admission ${winner.accepted ? "imported" : "rejected"}`);
 			return winner;
 		});
 	});

@@ -7,6 +7,8 @@ export enum PersonaOnboardingDenialReasons
 	InvalidCommand = "invalid_command",
 	/** The question set, scoring policy, or interpolation map is missing, or the question set is not Reviewed. */
 	CatalogueUnavailable = "catalogue_unavailable",
+	/** The authenticated Principal lacks personal persona collection creation authority. */
+	NotAuthorized = "not_authorized",
 	/** The database call failed. */
 	PersistenceUnavailable = "persistence_unavailable",
 }
@@ -16,6 +18,8 @@ export interface EnsurePersonaOnboardingCommand
 {
 	/** Silo selected by the authenticated request host. */
 	readonly siloId: string;
+	/** Stable local Principal resolved from the authenticated session. */
+	readonly principalId: string;
 	/** Stable authenticated subject who owns the persona profile. */
 	readonly userId: string;
 	/** Server timestamp used when a new profile is created. */

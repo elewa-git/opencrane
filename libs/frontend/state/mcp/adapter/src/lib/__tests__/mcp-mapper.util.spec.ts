@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { McpApprovalStatus, McpConnectionStatus, McpServerType } from "@opencrane/core";
 
-import { _MapAccessPolicy, _MapDirectory, _MapInstalled, _MapServer } from "../mcp-mapper.util";
+import { _MapInstalled, _MapServer } from "../mcp-mapper.util";
 
 describe("mcp-mapper.util", () =>
 {
@@ -40,14 +40,4 @@ describe("mcp-mapper.util", () =>
 		expect(installed.connectionStatus).toBe(McpConnectionStatus.SharedKey);
 	});
 
-	it("fills missing collections on a policy and a directory", () =>
-	{
-		const policy = _MapAccessPolicy({ serverId: "github" });
-		expect(policy.groups).toEqual([]);
-		expect(policy.users).toEqual([]);
-
-		const directory = _MapDirectory({});
-		expect(directory.users).toEqual([]);
-		expect(directory.groups).toEqual([]);
-	});
 });

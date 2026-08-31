@@ -33,8 +33,8 @@ Kubernetes RBAC, provider credential or unrestricted east-west access.
 | Namespace class | Ingress | Egress |
 |---|---|---|
 | Trusted server | public traffic through Ingress; explicit same-silo service callers | database, same-silo services and declared external dependencies |
-| Personal runtime | none | DNS, same-silo OpenCrane and LiteLLM only |
-| Managed runtime | none | DNS and explicitly declared same-silo agent services |
+| Generic warm runtime | none | DNS and same-silo OpenCrane only |
+| Claimed personal or managed runtime | fixed controller binding port | DNS, same-silo OpenCrane and LiteLLM only |
 | Worker namespaces | none | only the exact broker or service required by that job class |
 
 The chart also applies aggregate Job, Pod, CPU and memory quotas. Admission rejects sidecars,
@@ -52,13 +52,22 @@ Treat `NetworkPolicy` as the portable L3/L4 floor and workload proof as the appl
 boundary. Both must pass.
 :::
 
+::: warning
+A Cilium-based dataplane does not prove that the cluster serves `CiliumNetworkPolicy`. GKE
+Dataplane V2 enforces standard `NetworkPolicy` but does not expose that namespaced custom policy
+kind. Use Cilium-specific resources only after confirming the exact API and its enforcement
+controller; do not install a CRD by itself.
+:::
+
 ## Operator checks
 
 1. Confirm the CNI enforces `NetworkPolicy`.
-2. Confirm the trusted, personal-runtime and managed-runtime namespaces are distinct.
-3. Render the chart and inspect the runtime admission policies and quotas.
-4. Verify runtime Pods have no Service, Ingress, role binding or persistent volume.
-5. Verify only the ingress controller can reach the public API port.
+2. If the render contains a custom policy kind, confirm that exact API and controller are live.
+3. Confirm the trusted, personal-runtime and managed-runtime namespaces are distinct.
+4. Render the chart and inspect the runtime admission policies and quotas.
+5. Verify runtime Pods have no Service, Ingress, role binding or persistent volume.
+6. Verify only the ingress controller can reach the public API port.
 
-Source: [`apps/opencrane/helm/templates/_networkpolicy.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/helm/templates/_networkpolicy.tpl)
+Source: [`apps/opencrane/helm/templates/_networkpolicy.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/helm/templates/_networkpolicy.tpl),
+[`apps/agent-controller/helm/templates/_warm-runtime.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/agent-controller/helm/templates/_warm-runtime.tpl),
 and [`libs/backend/agents/runtime/k8s-launcher`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/runtime/k8s-launcher/README.md).

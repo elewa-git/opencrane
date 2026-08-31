@@ -109,15 +109,6 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		expect(function _readRelativeRegistryCredential() { _ReadProcessConfig(); }).toThrow(/absolute mounted file path/);
 	});
 
-	it("reads the initial model credential only when its provider and key are both present", function _ReadInitialModelBootstrap()
-	{
-		expect(_ReadProcessConfig().initialModelBootstrap).toBeNull();
-
-		vi.stubEnv("OPENCRANE_INITIAL_MODEL_PROVIDER", "OPENAI");
-		vi.stubEnv("OPENCRANE_INITIAL_MODEL_API_KEY", "sk-test");
-		expect(_ReadProcessConfig().initialModelBootstrap).toEqual({ provider: "openai", apiKey: "sk-test" });
-	});
-
 	it("reads the all-or-nothing standalone first-owner admission contract", function _ReadStandaloneFirstUserAdmission()
 	{
 		expect(_ReadProcessConfig().standaloneFirstUserAdmission).toBeNull();
@@ -171,16 +162,6 @@ describe("opencrane process config", function _ProcessConfigSuite()
 
 		vi.stubEnv("OPENCRANE_PUBLIC_BASE_URL", "https://opencrane.example/settings");
 		expect(function _ReadPublicOriginWithPath() { _ReadOrganizationMembershipConfig(); }).toThrow(/credential-free HTTPS origin/);
-	});
-
-	it("rejects a partial or unsupported initial model credential", function _RejectInvalidInitialModelBootstrap()
-	{
-		vi.stubEnv("OPENCRANE_INITIAL_MODEL_PROVIDER", "openai");
-		expect(function _readPartialInitialModel() { _ReadProcessConfig(); }).toThrow(/configured together/);
-
-		vi.stubEnv("OPENCRANE_INITIAL_MODEL_API_KEY", "sk-test");
-		vi.stubEnv("OPENCRANE_INITIAL_MODEL_PROVIDER", "unknown");
-		expect(function _readUnsupportedInitialModel() { _ReadProcessConfig(); }).toThrow(/unsupported/);
 	});
 
 	it("rejects an artifact output ceiling outside the broker boundary", function _RejectInvalidBodyLimit()

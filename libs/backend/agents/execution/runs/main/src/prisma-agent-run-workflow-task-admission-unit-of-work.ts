@@ -10,7 +10,7 @@ import type { AgentRunWorkflowTaskAdmissionUnitOfWork as AgentRunWorkflowTaskAdm
 /**
  * Joins AgentRun task admission to an already-open AgentRun database transaction.
  *
- * Called by: {@link PrismaRunAdmissionRepository} and {@link PrismaAgentRunAuthorityRepository}.
+ * Called by: {@link PrismaRunAdmissionUnitOfWork} and {@link PrismaAgentRunAuthorityRepository}.
  * It creates the transaction-bound task repository in one place, so both first attempts and retries
  * pass the exact same database transaction to the task record and to Absurd.
  *

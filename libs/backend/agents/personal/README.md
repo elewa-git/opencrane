@@ -27,8 +27,8 @@ agent can reuse the machinery without inheriting personal policy.
 [configuration](./configuration/README.md) records changes for later runs; [personas](./personas/README.md)
 makes the personality and instructions reviewable before activation; [personal memory](./memory/README.md)
 chooses already-consented coordinates; [execution inputs](../execution/inputs/main/README.md) freezes
-the accepted inputs; and [agent memory](../memory/main/README.md) owns durable fact metadata and its
-outbox intent.
+the accepted inputs; and [personal memory](./memory/main/README.md) owns the durable dataset and fact
+metadata admitted into that snapshot.
 
 The browser may start a personal conversation run with only its existing `conversationId` and a
 `requestIdempotencyKey` used to make retries return the same run. The server derives the person from
@@ -37,12 +37,10 @@ conversation, personal agent service, signed fleet membership, effective grants,
 personal-memory coordinates inside the admission flow. None of those authority coordinates can be
 supplied in the request body.
 
-The boundary between the two memory packages is deliberate. Personal memory only decides *which*
-verified dataset and preference facts can enter a run. It neither stores fact text nor writes a fact
-catalogue. The generic [agent-memory authority](../memory/main/README.md) records content-free
-catalogue metadata and outbox intent after the [memory gateway](../../../server/_infra/memory-gateway-client/README.md)
-has accepted content. This group never treats a subject identifier or a browser request as permission
-to choose a dataset.
+Personal memory decides *which* verified dataset and preference facts can enter a run and owns their
+content-free catalogue metadata. Durable fact content remains behind the
+[memory gateway](../../../server/_infra/memory-gateway-client/README.md). This group never treats a
+subject identifier or a browser request as permission to choose a dataset.
 
 Each child is a backend domain with a narrow scope tag. It may use shared contracts and its explicitly
 allowed capability ports, but not a deployable app or a server control-plane implementation. The one
@@ -57,5 +55,5 @@ domains in the OpenCrane composition root.
 - Parent index: [agents](../README.md)
 - Shared execution: [execution](../execution/README.md)
 - Trusted entry: [execution admission](../execution/admission/main/README.md)
-- Generic catalogue: [agent memory](../memory/main/README.md)
+- Dataset and fact catalogue: [personal memory](./memory/main/README.md)
 - Fact-content boundary: [memory gateway](../../../server/_infra/memory-gateway-client/README.md)

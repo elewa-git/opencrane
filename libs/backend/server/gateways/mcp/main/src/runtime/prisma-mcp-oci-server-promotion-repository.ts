@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 
 import { McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, McpServerTransport, OciImageValidationState, type Prisma } from "@prisma/client";
 
+import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+
+import { __RequireMcpOrganizationAdministration } from "../core/mcp-operator-authorization";
 import type { McpOciServerPromotionCaller, McpOciServerPromotionCommand, McpOciServerPromotionRepository, McpOciServerPromotionResult, McpRuntimeAuthorityOptions } from "./mcp-runtime.types";
 
 /**
@@ -15,13 +18,16 @@ export class PrismaMcpOciServerPromotionRepository implements McpOciServerPromot
 {
 	/** Transaction that atomically creates catalogue records and discovery work. */
 	private readonly _transaction: Prisma.TransactionClient;
+	/** Product authorization authority bound to the same serializable transaction. */
+	private readonly _authorization: AuthorizationAuthority;
 	/** Fixed deployment policy used to pin the discovery workload profile. */
 	private readonly _options: McpRuntimeAuthorityOptions;
 
 	/** Binds OCI catalogue promotion to the caller's serializable MCP transaction. */
-	constructor(transaction: Prisma.TransactionClient, options: McpRuntimeAuthorityOptions)
+	constructor(transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority, options: McpRuntimeAuthorityOptions)
 	{
 		this._transaction = transaction;
+		this._authorization = authorization;
 		this._options = options;
 	}
 
@@ -39,6 +45,7 @@ export class PrismaMcpOciServerPromotionRepository implements McpOciServerPromot
 	 */
 	async promoteImportedValidation(caller: McpOciServerPromotionCaller, validationId: string, command: McpOciServerPromotionCommand): Promise<McpOciServerPromotionResult>
 	{
+		await __RequireMcpOrganizationAdministration(this._authorization, caller, { operation: "mcp-oci-image-validation-promote", validationId, name: command.name, description: command.description });
 		const validation = await this._transaction.ociImageValidation.findFirst({ where: { id: validationId, siloId: caller.siloId }, select: { id: true, siloId: true, state: true, registryReference: true } });
 		if (validation === null)
 			return { outcome: "not_found" };
@@ -71,7 +78,7 @@ export class PrismaMcpOciServerPromotionRepository implements McpOciServerPromot
 		const revision = await this._transaction.mcpServerRevision.create({ data: { siloId: caller.siloId, mcpServerId: server.id, ociImageValidationId: validation.id, revision: 1, registryReference: validation.registryReference, state: McpServerRevisionState.Discovering }, select: { id: true } });
 		const executionId = randomUUID();
 		await this._transaction.mcpRuntimeExecution.create({ data: { id: executionId, siloId: caller.siloId, serverRevisionId: revision.id, kind: McpRuntimeExecutionKind.Discovery, idempotencyKey: `mcp-discovery:${validation.id}`, executionReference: `mcp-execution-v1_${randomUUID()}`, profileName: this._options.profileName }, select: { id: true } });
-		await this._transaction.auditEntry.create({ data: { action: "mcp.oci_server.promoted", resource: server.id, message: "Imported OCI image promoted into MCP discovery", metadata: { siloId: caller.siloId, actorPrincipalId: caller.principalId, validationId: validation.id, serverRevisionId: revision.id, executionId } }, select: { id: true } });
+		await this._transaction.auditEntry.create({ data: { siloId: caller.siloId, action: "mcp.oci_server.promoted", resource: server.id, message: "Imported OCI image promoted into MCP discovery", metadata: { actorPrincipalId: caller.principalId, validationId: validation.id, serverRevisionId: revision.id, executionId } }, select: { id: true } });
 		this._options.log.info({ siloId: caller.siloId, serverId: server.id, serverRevisionId: revision.id, principalId: caller.principalId }, "promoted imported OCI image into MCP discovery");
 		return { outcome: "created", serverId: server.id, serverRevisionId: revision.id, executionId };
 	}

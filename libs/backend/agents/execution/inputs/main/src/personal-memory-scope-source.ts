@@ -50,6 +50,6 @@ export class PersonalMemoryScopeSource implements MemoryScopeSource
 
 		// 3. Freeze only verified dataset coordinates. The model may later propose a bounded query via
 		//    the declared memory tool, but user text and recalled content never enter the snapshot.
-		return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasetId: resolved.dataset.datasetId, cogneeDatasetId: resolved.dataset.cogneeDatasetId } } };
+		return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasetId: resolved.dataset.datasetId, cogneeDatasetId: resolved.dataset.cogneeDatasetId }, datasetId: resolved.dataset.datasetId } };
 	}
 }

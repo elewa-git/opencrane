@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 
 import { PrismaAgentRunAuthorityRepository } from "./prisma-run-authority";
 import { __StartNextRunAttempt } from "./run-authority";
@@ -108,7 +109,7 @@ export class PrismaAgentRunRetryUnitOfWork implements RunRetryAuthority
 		const workflow = this._workflow;
 		return this._prisma.$transaction(async function _Run(transaction): Promise<Result>
 		{
-			return work(new PrismaAgentRunAuthorityRepository(transaction, workflow));
+			return work(new PrismaAgentRunAuthorityRepository(transaction, workflow, new PrismaAuthorizationAuthority(transaction)));
 		}, { isolationLevel });
 	}
 }

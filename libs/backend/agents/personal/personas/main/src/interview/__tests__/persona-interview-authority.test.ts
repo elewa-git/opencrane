@@ -25,7 +25,7 @@ function _repository(overrides: Partial<PersonaInterviewRepository> = {}): Perso
 /** Creates the valid exact reviewed-question-set request used by lifecycle tests. */
 function _startCommand()
 {
-	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", refreshConfigurationChangeId: null, questionSetId: "onboarding", questionSetVersion: 1, scoringPolicyId: "policy", scoringPolicyVersion: 1, interpolationMapId: "map", interpolationMapVersion: 1, startedAt: "2026-07-23T09:00:00.000Z" } as const;
+	return { siloId: "silo-1", principalId: "principal-1", userId: "user-1", personaProfileId: "profile-1", refreshConfigurationChangeId: null, questionSetId: "onboarding", questionSetVersion: 1, scoringPolicyId: "policy", scoringPolicyVersion: 1, interpolationMapId: "map", interpolationMapVersion: 1, startedAt: "2026-07-23T09:00:00.000Z" } as const;
 }
 
 describe("persona interview authority", function _describePersonaInterviewAuthority()
@@ -42,7 +42,7 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 	it("rejects a blank answer before it can reach the append-only repository", async function _rejectsBlankAnswer()
 	{
 		const recordAnswerAtomically = vi.fn();
-		const result = await __RecordPersonaInterviewAnswer(_repository({ recordAnswerAtomically }), { userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", questionId: "q1", choiceId: " ", answeredAt: "2026-07-23T09:01:00.000Z" });
+		const result = await __RecordPersonaInterviewAnswer(_repository({ recordAnswerAtomically }), { siloId: "silo-1", principalId: "principal-1", userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", questionId: "q1", choiceId: " ", answeredAt: "2026-07-23T09:01:00.000Z" });
 
 		expect(result).toEqual({ outcome: "denied", reason: "invalid_command" });
 		expect(recordAnswerAtomically).not.toHaveBeenCalled();
@@ -51,7 +51,7 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 	it("preserves the incomplete-evidence denial returned by the atomic completion fence", async function _preservesCompletionDenial()
 	{
 		const completeAtomically = vi.fn().mockResolvedValue({ status: "incomplete_answers" });
-		const result = await __CompletePersonaInterview(_repository({ completeAtomically }), { userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", completedAt: "2026-07-23T09:02:00.000Z" });
+		const result = await __CompletePersonaInterview(_repository({ completeAtomically }), { siloId: "silo-1", principalId: "principal-1", userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", completedAt: "2026-07-23T09:02:00.000Z" });
 
 		expect(result).toEqual({ outcome: "denied", reason: "incomplete_answers" });
 		expect(completeAtomically).toHaveBeenCalledOnce();
@@ -97,7 +97,7 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 		};
 		const repository = new PrismaPersonaInterviewRepository(transaction as unknown as Prisma.TransactionClient);
 
-		await expect(repository.recordAnswerAtomically({ userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", questionId: "q1", choiceId: "a", answeredAt: "2026-07-23T09:01:00.000Z" })).resolves.toEqual({ status: "recorded", answerId: "answer-created" });
+		await expect(repository.recordAnswerAtomically({ siloId: "silo-1", principalId: "principal-1", userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", questionId: "q1", choiceId: "a", answeredAt: "2026-07-23T09:01:00.000Z" })).resolves.toEqual({ status: "recorded", answerId: "answer-created" });
 		expect(transaction.personaInterviewAnswer.create).toHaveBeenCalledWith({ data: expect.objectContaining({ interviewId: "interview-1", questionSetId: "onboarding", questionSetVersion: 1, questionId: "q1" }), select: { id: true } });
 	});
 

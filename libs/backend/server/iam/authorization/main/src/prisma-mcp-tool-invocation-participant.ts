@@ -2,69 +2,18 @@ import { type Prisma } from "@prisma/client";
 
 import type { JsonValue } from "@opencrane/util";
 
+import { _AppendMcpToolInvocationCompleted, _AppendMcpToolInvocationFailed, _EnterMcpToolInvocationRecovery, _MCP_AMBIGUOUS_FAILURE_CODE } from "./mcp-tool-invocation-lifecycle-events";
 import { PrismaToolInvocationRepository } from "./prisma-tool-invocation-repository";
 import { PrismaMcpUnusedToolInvocationRepository } from "./prisma-mcp-unused-tool-invocation-repository";
-import { TOOL_INVOCATION_PREPARATION_POLICY, ExternalActionClaimKinds, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
-import { ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults } from "./tool-invocation.types";
+import { ExternalActionClaimKinds, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
+import { ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes } from "./tool-invocation.types";
 import type { McpTaskToolInvocationLifecycleParticipant, McpToolInvocationTransactionParticipant, McpToolInvocationTransactionParticipantFactory } from "./mcp-tool-invocation-participant.types";
-import type { ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationLifecycleEvent, ToolInvocationLifecycleEventSink, ToolInvocationRecord, ToolInvocationRecoveryEvent, ToolInvocationRecoveryEventSink, ToolInvocationRunRecoveryAuthority, ToolInvocationRunRecoveryEnterResult, ToolInvocationTransitionResult, ToolResultDeliveryPayload } from "./tool-invocation.types";
-
-/** Failure code stored when the companion cannot prove what the MCP server did. */
-const _AMBIGUOUS_FAILURE_CODE = "external_action_provider_outcome_ambiguous";
+import type { ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationLifecycleEventSink, ToolInvocationRecord, ToolInvocationRecoveryEventSink, ToolInvocationRunRecoveryAuthority, ToolInvocationTransitionResult, ToolResultDeliveryPayload } from "./tool-invocation.types";
 
 /** Return true only for a persisted MCP task owner. */
 function _IsMcpTaskOwned(invocation: ToolInvocationRecord): boolean
 {
 	return typeof invocation.mcpTaskId === "string";
-}
-
-/** Build the timeline event written after a checked MCP tool result succeeds. */
-function _CompletedEvent(invocation: ToolInvocationRecord): ToolInvocationLifecycleEvent
-{
-	if (invocation.runId === null || invocation.attempt === null)
-		throw new Error("AgentRun tool completion requires a run owner");
-	return { runId: invocation.runId, attempt: invocation.attempt, eventType: ToolInvocationEventTypes.Completed, payload: { toolInvocationId: invocation.toolInvocationId } };
-}
-
-/** Build the timeline event written after a definite or uncertain MCP tool failure. */
-function _FailedEvent(invocation: ToolInvocationRecord, reason: string, retrying: boolean): ToolInvocationLifecycleEvent
-{
-	if (invocation.runId === null || invocation.attempt === null)
-		throw new Error("AgentRun tool failure requires a run owner");
-	return { runId: invocation.runId, attempt: invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: invocation.toolInvocationId, toolRevisionId: invocation.toolRevisionId, reason, retryCount: invocation.preparationAttempt, retryLimit: TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit, retrying } };
-}
-
-/** Append the timeline event or abort the transaction when the owning run refuses it. */
-async function _AppendLifecycleEvent(sink: ToolInvocationLifecycleEventSink, transaction: Prisma.TransactionClient, event: ToolInvocationLifecycleEvent): Promise<void>
-{
-	if (!await sink.appendInTransaction(transaction, event))
-		throw new Error("tool invocation transition requires its canonical lifecycle event");
-}
-
-/** Append the manual-recovery event or abort the transaction when the owning run refuses it. */
-async function _AppendRecoveryEvent(sink: ToolInvocationRecoveryEventSink, transaction: Prisma.TransactionClient, invocation: ToolInvocationRecord): Promise<void>
-{
-	if (invocation.runId === null || invocation.attempt === null)
-		throw new Error("AgentRun tool recovery event requires a run owner");
-	const event: ToolInvocationRecoveryEvent = { runId: invocation.runId, expectedAttempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, preparationRetryCount: invocation.preparationAttempt, preparationRetryLimit: TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit, providerOutcome: "unknown_after_dispatch" };
-	if (!await sink.appendInTransaction(transaction, event))
-		throw new Error("tool recovery state requires its canonical recovery event");
-}
-
-/** Move the run into recovery and write the matching event inside the same transaction. */
-async function _EnterRecoveryRequired(authority: ToolInvocationRunRecoveryAuthority, sink: ToolInvocationRecoveryEventSink, transaction: Prisma.TransactionClient, invocation: ToolInvocationRecord): Promise<void>
-{
-	if (invocation.runId === null || invocation.attempt === null)
-		throw new Error("AgentRun tool recovery requires a run owner");
-	const outcome: ToolInvocationRunRecoveryEnterResult = await authority.enterRecoveryRequiredInTransaction(transaction, { runId: invocation.runId, attempt: invocation.attempt });
-	if (outcome === ToolInvocationRunRecoveryEnterResults.Entered || outcome === ToolInvocationRunRecoveryEnterResults.AlreadyRecoveryRequired)
-	{
-		await _AppendRecoveryEvent(sink, transaction, invocation);
-		return;
-	}
-	if (outcome === ToolInvocationRunRecoveryEnterResults.Cancelling)
-		return;
-	throw new Error("tool recovery state conflicts with its owning run attempt");
 }
 
 /**
@@ -147,7 +96,7 @@ export class PrismaMcpToolInvocationParticipantUnitOfWork implements McpToolInvo
 				if (this._mcpTasks === null || !await this._mcpTasks.completeSucceeded(completed.invocation, result, now))
 					throw new Error("MCP task success requires its durable task projection");
 			}
-			else await _AppendLifecycleEvent(this._lifecycleEvents, this._transaction, _CompletedEvent(completed.invocation));
+			else await _AppendMcpToolInvocationCompleted(this._lifecycleEvents, this._transaction, completed.invocation);
 		}
 		return completed;
 	}
@@ -167,7 +116,7 @@ export class PrismaMcpToolInvocationParticipantUnitOfWork implements McpToolInvo
 				if (this._mcpTasks === null || !await this._mcpTasks.completeFailed(completed.invocation, completed.invocation.failureCode ?? "external_action_failed", now))
 					throw new Error("MCP task failure requires its durable task projection");
 			}
-			else await _AppendLifecycleEvent(this._lifecycleEvents, this._transaction, _FailedEvent(completed.invocation, completed.invocation.failureCode ?? "external_action_failed", false));
+			else await _AppendMcpToolInvocationFailed(this._lifecycleEvents, this._transaction, completed.invocation, completed.invocation.failureCode ?? "external_action_failed", false);
 		}
 		return completed;
 	}
@@ -186,9 +135,9 @@ export class PrismaMcpToolInvocationParticipantUnitOfWork implements McpToolInvo
 			return invocation;
 		}
 		const retrying = invocation.state === ToolInvocationStates.Ready || invocation.state === ToolInvocationStates.Reconciling;
-		await _AppendLifecycleEvent(this._lifecycleEvents, this._transaction, _FailedEvent(invocation, _AMBIGUOUS_FAILURE_CODE, retrying));
+		await _AppendMcpToolInvocationFailed(this._lifecycleEvents, this._transaction, invocation, _MCP_AMBIGUOUS_FAILURE_CODE, retrying);
 		if (invocation.state === ToolInvocationStates.RecoveryRequired)
-			await _EnterRecoveryRequired(this._runRecovery, this._recoveryEvents, this._transaction, invocation);
+			await _EnterMcpToolInvocationRecovery(this._runRecovery, this._recoveryEvents, this._transaction, invocation);
 		return invocation;
 	}
 }

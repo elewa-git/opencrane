@@ -7,6 +7,7 @@ and outcomes; a pre-started Pod has no attempt authority until the durable claim
 > See also: [Run limits and cost](/guide/budgets) (per-run technical ceilings and spending budgets),
 > [Agent delegation](/guide/child-runs) (governed child-run limits),
 > [OCI MCP runtime](/integrators/oci-mcp-runtime) (tool execution),
+> [Central authorization authority](/integrators/authorization-authority) (product action admission),
 > [Memory write, manage and read](/integrators/retrieval-memory) (memory and return boundaries), and
 > [Identity and runtime authentication](/security/identity) (workload proof).
 
@@ -101,9 +102,10 @@ figures are treated as an operational guarantee.
 
 ## External actions
 
-A model tool call becomes an `external_action` candidate. The control plane re-derives its
-arguments digest, checks the frozen grants and approval policy, and issues one durable claim for the
-appropriate executor class. Only the authorised result is returned to the paused loop.
+A model tool call becomes an `external_action` candidate. The control plane re-derives its arguments
+digest, treats the frozen run contract as a ceiling, rechecks current membership, grants, lifecycle,
+cancellation and approval policy, and issues one durable claim for the appropriate executor class.
+Only the authorised result is returned to the paused loop.
 
 ::: warning
 Do not add a direct tool executor or durable store to the runtime image. That would create a

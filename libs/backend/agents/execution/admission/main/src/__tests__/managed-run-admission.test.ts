@@ -9,7 +9,7 @@ import { _CreateManagedRunAdmissionPortWithGate, _CreateRunAdmissionCapacityGate
 /** Produces a valid managed admission command, changing only the fields the test is about. */
 function _command(agentServiceId: string, siloId = "silo-a"): ManagedRunNowCommand
 {
-	return { agentServiceId, siloId, requestedBy: "user-a", requestIdempotencyKey: `${siloId}:${agentServiceId}`, trigger: "managed_invocation", scheduledSlot: null };
+	return { agentServiceId, siloId, requestedByPrincipalId: "principal-user-a", requestedBy: "user-a", requestIdempotencyKey: `${siloId}:${agentServiceId}`, trigger: "managed_invocation", scheduledSlot: null };
 }
 
 describe("managed run admission composition", function _describeManagedRunAdmissionComposition()

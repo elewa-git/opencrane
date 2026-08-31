@@ -10,7 +10,7 @@ ended. You can always answer "what did this agent do, and who let it" without gu
 - organisation and delegated subject;
 - run state, attempt and terminal reason;
 - frozen input and capability digests;
-- approval requests and action receipts;
+- approval requests, authorization decision evidence and ToolInvocations;
 - token use, cost and cancellation evidence; and
 - ordered conversation events where the caller is authorised to replay them.
 

@@ -77,7 +77,7 @@ export function __CreateSteeringIngestRouter(dependencies: SteeringIngestRouterD
 			const idempotencyDigest = _hash(body.idempotencyKey);
 			// 4. Hand over only server-derived coordinates. The silo, the subject, and the time come from
 			// the session and the injected clock; the run attempt is chosen inside the transaction.
-			const result = await dependencies.requests.submitAtomically({ runId, siloId: caller.siloId, subjectId: caller.subjectId, content, idempotencyDigest, digest: `${idempotencyDigest}:${_hash(content)}`, submittedAt: dependencies.clock.now() });
+			const result = await dependencies.requests.submitAtomically({ runId, siloId: caller.siloId, principalId: caller.principalId, subjectId: caller.subjectId, content, idempotencyDigest, digest: `${idempotencyDigest}:${_hash(content)}`, submittedAt: dependencies.clock.now() });
 			// 5. Translate the queue's outcome into a status. 202 means this call created the row, 200
 			// means an earlier identical call did, and a client can treat both as accepted.
 			if (result.outcome === "queued") { response.status(202).json({ steeringRequestId: result.steeringRequestId, attempt: result.attempt, state: "pending" }); return; }

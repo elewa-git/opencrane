@@ -118,10 +118,16 @@ INSERT INTO "agent_runs" (
     ('activity-child-run', 'activity-silo', 'activity-service', 'activity-revision', NULL, 'interactive',
      'activity-child-run-key', 'activity-parent-run', 'activity-parent-run', 'completed', 'sha256:' || repeat('e', 64),
      'sha256:' || repeat('f', 64), clock_timestamp(), 'success');
-INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload")
-VALUES ('activity-conversation', 'activity-parent-run', 1, 'run.started', '{}');
-INSERT INTO "child_run_completion_deliveries" ("child_run_id", "parent_run_id", "parent_event_sequence", "outcome")
-VALUES ('activity-child-run', 'activity-parent-run', 1, 'delivered');
+INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "attempt", "sequence", "type", "payload")
+VALUES ('activity-conversation', 'activity-parent-run', 1, 1, 'run.started', '{}');
+INSERT INTO "agent_thread_parent_deliveries" (
+    "id", "child_conversation_id", "parent_conversation_id", "silo_id", "agent_service_id",
+    "run_id", "kind", "idempotency_key", "label", "detail"
+) VALUES (
+    'activity-agent-thread-delivery', 'activity-child-conversation', 'activity-conversation',
+    'activity-silo', 'activity-service', 'activity-child-run', 'result',
+    'activity-agent-thread-delivery-key', 'Done', 'The child conversation finished.'
+);
 SET LOCAL session_replication_role = origin;
 
 INSERT INTO "conversation_timeline_entries" (
@@ -145,8 +151,8 @@ JOIN "conversations" conversation ON conversation."id" = entry."conversation_id"
 WHERE entry."conversation_id" = 'activity-conversation' AND entry."position" = 4;
 
 INSERT INTO "conversation_timeline_entries" (
-    "conversation_id", "kind", "parent_delivery_child_run_id"
-) VALUES ('activity-conversation', 'parent_delivery', 'activity-child-run');
+    "conversation_id", "kind", "parent_delivery_agent_thread_id"
+) VALUES ('activity-conversation', 'parent_delivery', 'activity-agent-thread-delivery');
 INSERT INTO activity_coordinates
 SELECT 5, "kind", conversation."updated_at", conversation."activity_sequence"
 FROM "conversation_timeline_entries" entry

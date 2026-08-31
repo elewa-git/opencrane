@@ -30,7 +30,7 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 	}
 
 	/** Reads the questions from the question-set version this interview was pinned to. */
-	async getQuestions(interviewId: string, personaProfileId: string, userId: string): ReturnType<PersonaInterviewQuestionReader["getQuestions"]>
+	async getQuestions(_siloId: string, _principalId: string, interviewId: string, personaProfileId: string, userId: string): ReturnType<PersonaInterviewQuestionReader["getQuestions"]>
 	{
 		const interview = await this.transaction.personaInterview.findFirst({ where: { id: interviewId, personaProfileId, userId }, select: { questionSetId: true, questionSetVersion: true } });
 		if (interview === null) return null;

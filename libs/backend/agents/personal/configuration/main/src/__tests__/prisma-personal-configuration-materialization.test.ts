@@ -55,7 +55,17 @@ function _SourceRevision()
 /** Composes the application materializer with its Prisma unit-of-work adapter. */
 function _Materializer(prisma: never, logger?: never): _PersonalConfigurationMaterializer
 {
-	return new _PersonalConfigurationMaterializer(new PrismaPersonalConfigurationMaterializationUnitOfWork(prisma), logger);
+	return new _PersonalConfigurationMaterializer(new PrismaPersonalConfigurationMaterializationUnitOfWork(prisma, function _ProductEffects()
+	{
+		return {
+			resolveCaller: vi.fn().mockResolvedValue({ siloId: "silo-1", subjectId: "user-1", principalId: "principal-1" }),
+			reconcileCurrent: vi.fn().mockResolvedValue(undefined),
+			admitInitialCreation: vi.fn().mockResolvedValue(undefined),
+			admitInitialPublication: vi.fn().mockResolvedValue(undefined),
+			admitRevisionSelection: vi.fn().mockResolvedValue(undefined),
+			admitRevisionPublication: vi.fn().mockResolvedValue(undefined),
+		};
+	}), logger);
 }
 
 /** Build a complete transaction mock for one serializable materialization attempt. */
@@ -78,6 +88,12 @@ function _Transaction(options: { readonly proposal?: unknown; readonly activePer
 			findFirst: vi.fn(async function _FindProfile()
 			{
 				return { activeRevisionId: options.activePersonaRevisionId ?? "persona-1" };
+			}),
+		},
+		personaRevision: {
+			findFirst: vi.fn(async function _FindPersona()
+			{
+				return { personaProfileId: "profile-1" };
 			}),
 		},
 		agentService: {
@@ -157,13 +173,13 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 			isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
 		});
 		expect(transaction.modelDefinition.findMany).toHaveBeenCalledWith(expect.objectContaining({
-			where: expect.objectContaining({ publicModelName: "careful-model" }),
+			where: expect.objectContaining({ siloId: "silo-1", publicModelName: "careful-model" }),
 		}));
 		expect(transaction.agentRevision.create).toHaveBeenCalledWith(expect.objectContaining({
 			data: expect.objectContaining({
 				revision: 2,
-				parentRevision: { connect: { id: "agent-1" } },
-				modelDefinition: { connect: { id: "tenant-model" } },
+				parentRevision: { connect: { id_siloId: { id: "agent-1", siloId: "silo-1" } } },
+				modelDefinition: { connect: { id_siloId: { id: "tenant-model", siloId: "silo-1" } } },
 				changeMessage: "Owner accepted model alias: careful-model",
 				promptPolicyVersion: "prompt-v1",
 				personaRevisionId: "persona-1",
@@ -189,7 +205,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 			}),
 		}));
 		expect(transaction.agentRevision.update).toHaveBeenCalledWith({
-			where: { id: "agent-2" },
+			where: { id_siloId: { id: "agent-2", siloId: "silo-1" } },
 			data: {
 				state: AgentRevisionState.Published,
 				publishedAt: new Date(_Command().materializedAt),

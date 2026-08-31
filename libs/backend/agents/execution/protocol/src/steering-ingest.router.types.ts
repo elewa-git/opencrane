@@ -18,6 +18,8 @@ export interface SteeringIngestCaller
 {
 	/** Silo resolved from the authenticated request host. */
 	readonly siloId: string;
+	/** Durable local Principal used by central product authorization. */
+	readonly principalId: string;
 	/** The caller's identity-provider subject. They may steer only their own run. */
 	readonly subjectId: string;
 }

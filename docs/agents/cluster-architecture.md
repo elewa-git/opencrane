@@ -40,6 +40,31 @@ artifact-service <---- brokered bytes ---- artifact-preprocessor Job namespace
 The `apps/_infra/deploy-k8s` umbrella chart composes the app-owned Helm units for one organisation.
 Cluster-wide ingress, certificate, DNS, and CloudNativePG controllers are external prerequisites.
 
+## Product authorization placement
+
+The central `AuthorizationAuthority` runs inside the OpenCrane API process and uses the same Prisma
+transaction as the protected domain operation. It is not another cluster service, sidecar, or
+policy-engine deployment.
+
+```text
+browser or internal workload
+          |
+          +-- verified OIDC session or TokenReview identity
+          v
+opencrane server + PostgreSQL transaction
+          |
+          +-- AuthorizationAuthority: product resource + action
+          +-- domain lifecycle rule
+          +-- protected write + decision/effect evidence
+          v
+one committed result, or one complete rollback
+```
+
+Kubernetes ServiceAccounts, RBAC, and NetworkPolicy prove and contain workload identity; they do not
+grant access to an agent, skill, MCP tool, artifact, model, dataset, conversation, or channel target.
+Controllers and workers receive one database-fenced assignment after product authorization. They
+cannot list grants, select another product revision, or mint a follow-on admission.
+
 ## Workload ownership
 
 | Workload | Owner | Durable authority |
@@ -115,6 +140,20 @@ Cognee stores indexed organisation memory under OpenCrane-owned scope and proven
 
 Runtime Pods and skill-authoring and preprocessing Jobs receive only bounded scratch. Restarting or
 deleting a workload cannot delete a conversation, run, artifact, skill, or organisation-memory record.
+
+## OCI registry roles
+
+Operators may use the same OCI registry infrastructure for two different ownership classes:
+
+| Image class | Examples | Authority |
+|---|---|---|
+| OpenCrane platform image | API, runtime, controller, MCP companion, skill runner, scanner | Immutable OpenCrane release and deployment manifest |
+| Governed product image | Uploaded MCP server; future containerized-code skill | Product revision, central authorization decision, and one-use workload admission |
+
+An OCI digest proves which bytes a container runtime will execute. It does not prove that a
+Principal may use the related product revision. Conversely, an authorization grant never gives a
+runtime general registry credentials. The server resolves the exact admitted digest; the
+class-specific controller or companion projects only the workload input needed for that one command.
 
 ## Deployment ownership
 

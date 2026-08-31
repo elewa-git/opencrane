@@ -20,27 +20,25 @@ function _request(authUser: Partial<AuthUser> | undefined, host = "acme.opencran
 
 describe("_ResolveRequestPrincipal", function _suite()
 {
-  it("resolves the Principal, silo, and administrator authority from trusted request facts", function _test()
+  it("resolves the Principal and silo from trusted request facts", function _test()
   {
 	const authenticatedAt = "2026-08-11T10:00:00.000Z";
-    expect(_ResolveRequestPrincipal(_request({ sub: " user-1 ", email: "fallback@example.test", isOrgAdmin: true, authenticatedAt }))).toEqual({
+    expect(_ResolveRequestPrincipal(_request({ sub: " user-1 ", email: "fallback@example.test", authenticatedAt }))).toEqual({
 	  principalId: "principal-1",
 	  externalIssuer: "https://issuer.example",
 	  externalSubject: "user-1",
       siloId: "acme",
-      isOrgAdmin: true,
 	  verifiedAuthenticationAt: new Date(authenticatedAt),
     });
   });
 
   it("uses only the durable Principal attached by authenticated admission", function _test()
   {
-    expect(_ResolveRequestPrincipal(_request({ sub: "", email: " User@Example.Test ", isOrgAdmin: false }))).toEqual({
+    expect(_ResolveRequestPrincipal(_request({ sub: "", email: " User@Example.Test " }))).toEqual({
 	  principalId: "principal-1",
 	  externalIssuer: "https://issuer.example",
 	  externalSubject: "user-1",
       siloId: "acme",
-      isOrgAdmin: false,
 	  verifiedAuthenticationAt: null,
     });
   });
