@@ -16,6 +16,7 @@
     "skill-authoring",
     "cognee",
     "litellm",
+    "kurrentdb",
     "postgres-database",
     "postgres-pooler",
     "postgres-database-privileges"
@@ -71,6 +72,29 @@
         "Deployment/opencrane-managed-warm",
         "Deployment/opencrane-cognee",
         "Deployment/opencrane-litellm"
+      ]
+    },
+    {
+      "id": "history-store",
+      "setValues": [
+        "memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32",
+        "memoryGateway.kubernetesApiServerPort=443",
+        "memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32",
+        "memoryGateway.kubernetesApiServerEndpointPort=443",
+        "historyStore.kurrentdb.enabled=true",
+        "historyStore.kurrentdb.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "historyStore.kurrentdb.tls.existingSecret=kurrentdb-tls",
+        "historyStore.kurrentdb.bootstrapAdmin.existingSecret=kurrentdb-bootstrap"
+      ],
+      "expectedRenderedPodClasses": [
+        "Deployment/opencrane-opencrane-server",
+        "Deployment/opencrane-opencrane-ui-spa",
+        "Deployment/opencrane-channel-proxy",
+        "Deployment/opencrane-memory-gateway",
+        "Deployment/opencrane-artifact-service",
+        "Deployment/opencrane-cognee",
+        "Deployment/opencrane-litellm",
+        "StatefulSet/opencrane-kurrentdb"
       ]
     }
   ],
@@ -234,6 +258,15 @@
       "owner": "apps/_infra/litellm",
       "source": { "type": "file", "path": "apps/_infra/litellm/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.litellm.deployment\"" }
+    },
+    {
+      "id": "kurrentdb",
+      "podClass": "StatefulSet/kurrentdb",
+      "renderedPodClass": "StatefulSet/opencrane-kurrentdb",
+      "image": "docker.kurrent.io/kurrent-latest/kurrentdb@sha256:<release-digest>",
+      "owner": "apps/_infra/kurrentdb",
+      "source": { "type": "file", "path": "apps/_infra/kurrentdb/helm/templates/_resources.tpl", "anchor": "kind: StatefulSet", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.kurrentdb.resources\"" }
     },
     {
       "id": "postgres-database",

@@ -51,6 +51,7 @@ app's source.
 | [`libs/backend/server/infra`](../../libs/backend/server/infra/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
 | [`libs/backend/server/infra/agent-runtime-continuation`](../../libs/backend/server/infra/agent-runtime-continuation/README.md) | Secret-backed encryption for durable AgentRun continuation checkpoints. |
 | [`libs/backend/server/infra/history-store`](../../libs/backend/server/infra/history-store/README.md) | KurrentDB stream reads, checked appends, and subscriptions for event-history owners. |
+| [`apps/_infra/kurrentdb`](../../apps/_infra/kurrentdb/README.md) | Private KurrentDB HistoryStore deployment with persistent TLS-only storage. |
 | [`libs/backend/server/infra/workflows`](../../libs/backend/server/infra/workflows/README.md) | Workflow-engine task contract, guardrails, finite respawn chains, the Absurd adapter, and deterministic test support. |
 | [`libs/backend/server/infra/oci-registry`](../../libs/backend/server/infra/oci-registry/README.md) | Digest-checked OCI Distribution client used by image admission. |
 | [`libs/backend/server/infra/organization-membership-gateway`](../../libs/backend/server/infra/organization-membership-gateway/README.md) | HTTPS and projected-token transport to Fleet membership and billing authority. |

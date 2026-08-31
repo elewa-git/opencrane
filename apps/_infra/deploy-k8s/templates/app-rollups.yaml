@@ -37,3 +37,5 @@
 ---
 {{ include "opencrane.litellm.networkPolicy" . }}
 ---
+{{ include "opencrane.kurrentdb.resources" . }}
+---

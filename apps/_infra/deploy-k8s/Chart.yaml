@@ -64,3 +64,6 @@ dependencies:
   - name: opencrane-litellm
     version: ">=0.0.0-0"
     repository: "file://../litellm/helm"
+  - name: opencrane-kurrentdb
+    version: ">=0.0.0-0"
+    repository: "file://../kurrentdb/helm"

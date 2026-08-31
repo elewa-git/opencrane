@@ -104,6 +104,33 @@ sharedPlatform:
       #    Required when mode=shared.
       secretStoreName: ""
 
+# -- Private KurrentDB event ledger. The testv5 deploy path enables it only after an immutable image,
+# TLS material, and an administrator-password Secret are supplied.
+historyStore:
+  kurrentdb:
+    enabled: false
+    image:
+      repository: docker.kurrent.io/kurrent-latest/kurrentdb
+      digest: ""
+      pullPolicy: IfNotPresent
+    service:
+      port: 2113
+    tls:
+      existingSecret: ""
+    bootstrapAdmin:
+      existingSecret: ""
+      passwordKey: password
+    persistence:
+      storageClassName: ""
+      size: 20Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+
 # -- Channel trust-boundary settings
 channelProxy:
   # -- Standalone target channel trust boundary. It leaves all identity, membership,

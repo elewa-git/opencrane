@@ -15,6 +15,13 @@ grep -Fq -- '--first-user-email' "$DEPLOY_SCRIPT"
 grep -Fq -- '--postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap' "$DEPLOY_SCRIPT"
 grep -Fq -- '--opencrane-ui-digest sha256:REVIEWED_BROWSER_BUILD_DIGEST' "$DEPLOY_SCRIPT"
 grep -Fq -- '--cognee-digest sha256:REVIEWED_COGNEE_BUILD_DIGEST' "$DEPLOY_SCRIPT"
+grep -Fq -- '--kurrentdb-image-digest sha256:REVIEWED_KURRENTDB_IMAGE_DIGEST' "$DEPLOY_SCRIPT"
+grep -Fq -- 'testv5 requires the Kubernetes Agent Sandbox CRD' "$DEPLOY_SCRIPT"
+grep -Fq -- 'testv5 requires the Agent Sandbox controller to use an immutable image digest' "$DEPLOY_SCRIPT"
+grep -Fq -- 'testv5 requires the Agent Sandbox extensions reconciler' "$DEPLOY_SCRIPT"
+grep -Fq -- 'testv5 requires a Ready Agent Sandbox controller' "$DEPLOY_SCRIPT"
+grep -Fq -- 'testv5 requires the approved gvisor RuntimeClass' "$DEPLOY_SCRIPT"
+grep -Fq -- 'historyStore.kurrentdb.enabled=true' "$DEPLOY_SCRIPT"
 grep -Fq -- 'Fresh silo deploys require `--opencrane-ui-digest` and `--cognee-digest`' "$DEPLOY_SCRIPT"
 grep -Fq -- 'ensure_provider_key_secrets' "$PROVIDER_SECRET_HELPER"
 grep -Fq -- 'ACME_EMAIL="${OPENCRANE_ACME_EMAIL:-}"' "$DEPLOY_SCRIPT"
@@ -111,6 +118,7 @@ grep -Fq -- 'wait_for_final_deployment_if_present "${RELEASE}-opencrane-ui-spa"'
 grep -Fq -- '_verify_control_plane_spa_rollout' "$DEPLOY_CORE"
 grep -Fq -- 'wait_for_final_deployment_if_present "${RELEASE}-cognee"' "$DEPLOY_CORE"
 grep -Fq -- '_verify_cognee_rollout' "$DEPLOY_CORE"
+grep -Fq -- 'wait_for_final_statefulset_if_present "${RELEASE}-kurrentdb"' "$DEPLOY_CORE"
 
 # Even an operator override assembled through normal Helm passthrough loses to the digest that the
 # deployer verified. This renders the actual chart to prove Helm receives the authority tuple last.

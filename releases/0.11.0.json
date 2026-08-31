@@ -18,6 +18,7 @@
     "cognee": { "root": "apps/_infra/cognee", "adaptedVersion": "0.11.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
     "deploy-k8s": { "root": "apps/_infra/deploy-k8s", "adaptedVersion": "0.11.0", "chartVersion": "0.11.0", "chartAppVersion": "0.11.0" },
     "litellm": { "root": "apps/_infra/litellm", "adaptedVersion": "0.11.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
+    "kurrentdb": { "root": "apps/_infra/kurrentdb", "adaptedVersion": "0.11.0", "chartVersion": "0.11.0", "chartAppVersion": "26.1.1" },
     "mcp-executor": { "root": "apps/mcp-executor", "adaptedVersion": "0.11.0", "packageVersion": "0.10.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
     "memory-gateway": { "root": "apps/memory-gateway", "adaptedVersion": "0.11.0", "packageVersion": "0.10.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },
     "opencrane": { "root": "apps/opencrane", "adaptedVersion": "0.11.0", "packageVersion": "0.10.0", "chartVersion": "0.10.0", "chartAppVersion": "0.10.0" },

@@ -1,0 +1,16 @@
+{
+  "name": "kurrentdb",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": ["type:app", "layer:entrypoint", "scope:history-store"],
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": { "command": "helm lint apps/_infra/kurrentdb/helm --set historyStore.kurrentdb.enabled=true --set historyStore.kurrentdb.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set historyStore.kurrentdb.tls.existingSecret=kurrentdb-tls --set historyStore.kurrentdb.bootstrapAdmin.existingSecret=kurrentdb-bootstrap" }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash apps/_infra/kurrentdb/tests/helm-contract.sh" }
+    }
+  }
+}
