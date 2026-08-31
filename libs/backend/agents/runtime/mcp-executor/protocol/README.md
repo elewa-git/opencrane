@@ -33,9 +33,9 @@ ToolInvocation authority before it builds a call.
 
 ## Boundary
 
-Every response must be a matching JSON-RPC success envelope with valid fields. The future transport
-must enforce the response-byte limit before parsing. Protocol errors and provider failures remain
-failures; the parser never invents an empty success.
+Every response must be a matching JSON-RPC success envelope with valid fields. The companion
+transport enforces its response-byte limit before this package parses the body. Protocol errors and
+provider failures remain failures; the parser never invents an empty success.
 
 ## Dependency direction
 

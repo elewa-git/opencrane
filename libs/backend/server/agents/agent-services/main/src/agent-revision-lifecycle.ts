@@ -1,5 +1,5 @@
 import { MANAGED_AGENT_RUNTIME_PROFILE_NAME } from "@opencrane/contracts";
-import { AgentServiceKinds, AgentServiceStates, __AreReviewedIntegrationToolDefinitionsValid, __DiffAgentRevisions, __IsAgentServiceTransitionAllowed, type AgentRevisionContent, type AgentRevisionId, type AgentServiceId, type AgentServiceState } from "@opencrane/models/agents";
+import { AgentServiceKinds, AgentServiceStates, __DiffAgentRevisions, __IsAgentServiceTransitionAllowed, type AgentRevisionContent, type AgentRevisionId, type AgentServiceId, type AgentServiceState } from "@opencrane/models/agents";
 
 import { ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleRepository, type AgentServiceHistory, type AgentServiceLifecycleAction, type ChangeAgentServiceStateCommand, type ChangeAgentServiceStateResult, type CompareAgentRevisionsResult, type CreateManagedAgentServiceCommand, type CreateManagedAgentServiceResult, type AppendAgentRevisionResult, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand, type RestoreAgentRevisionCommand, type ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types";
 
@@ -23,8 +23,8 @@ function _isUniqueBy<T>(items: readonly T[], key: (item: T) => string): boolean
 
 /**
  * Returns whether executable revision content is structurally valid before persistence.
- * Duplicate composite keys (a skill, an integration, or an exact boundary attachment) are rejected
- * here so they surface as a 400, rather than a Prisma primary-key violation at insert time.
+ * Duplicate skill, MCP tool revision, and boundary attachment keys are rejected here so they
+ * surface as a 400, rather than a Prisma primary-key violation at insert time.
  */
 function _isContentValid(content: AgentRevisionContent): boolean
 {
@@ -36,10 +36,10 @@ function _isContentValid(content: AgentRevisionContent): boolean
 		&& _isPositiveInteger(content.budget.maxCostUsdMicros)
 		&& _isPositiveInteger(content.budget.maxDurationMs)
 		&& content.skills.every(skill => _isPresent(skill.skillId) && _isPresent(skill.revisionId))
-		&& content.integrationAssignments.every(assignment => _isPresent(assignment.integrationId) && _isPresent(assignment.custodyReferenceId) && __AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions))
+		&& content.mcpToolRevisionIds.every(_isPresent)
 		&& content.boundaryAttachments.every(attachment => _isPresent(attachment.boundaryId))
 		&& _isUniqueBy(content.skills, skill => skill.skillId)
-		&& _isUniqueBy(content.integrationAssignments, assignment => assignment.integrationId)
+		&& new Set(content.mcpToolRevisionIds).size === content.mcpToolRevisionIds.length
 		&& _isUniqueBy(content.boundaryAttachments, attachment => `${attachment.boundaryKind}\u0000${attachment.boundaryId}\u0000${attachment.boundaryCoverage}`);
 }
 

@@ -3,13 +3,13 @@ name: opencrane-silo
 description: >-
   OpenCrane SILO install — one per ClusterTenant, into the org's own namespace: the
   opencrane-server (per-silo control plane + in-silo controllers), the channel trust boundary,
-  and its dedicated service planes (Cognee, LiteLLM, Obot/MCP gateway), per-silo
+  and its dedicated service planes (Cognee and LiteLLM), per-silo
   NetworkPolicies, and identity routing. Installed with apps/_infra/deploy-k8s/deploy.sh;
   `crds.install` defaults true, while a release that uses a separately managed shared CRD
   bundle sets it false. Still depends on the cert-manager issuer.
 type: application
-version: 0.9.3
-appVersion: "0.9.3"
+version: 0.10.0
+appVersion: "0.10.0"
 keywords:
   - governed-agents
   - cluster-tenant
@@ -51,17 +51,9 @@ dependencies:
   - name: opencrane-agent-controller
     version: ">=0.0.0-0"
     repository: "file://../../agent-controller/helm"
-  - name: opencrane-managed-agent-runtime
-    alias: managedAgentRuntimePlane
-    version: ">=0.0.0-0"
-    repository: "file://../../managed-agent-runtime/helm"
-    condition: agentController.enabled
   - name: opencrane-skill-authoring
     version: ">=0.0.0-0"
     repository: "file://../../skill-authoring/helm"
-  - name: opencrane-tool-runner
-    version: ">=0.0.0-0"
-    repository: "file://../../tool-runner/helm"
   - name: opencrane-mcp-executor
     version: ">=0.0.0-0"
     repository: "file://../../mcp-executor/helm"
@@ -72,6 +64,3 @@ dependencies:
   - name: opencrane-litellm
     version: ">=0.0.0-0"
     repository: "file://../litellm/helm"
-  - name: opencrane-obot
-    version: ">=0.0.0-0"
-    repository: "file://../obot/helm"

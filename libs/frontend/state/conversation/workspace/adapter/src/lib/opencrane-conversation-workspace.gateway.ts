@@ -159,7 +159,7 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	/** @inheritdoc */
 	public async retry(command: RetryConversationRunCommand): Promise<ConversationRun>
 	{
-		const result = await this._api.client.POST("/me/conversations/{conversationId}/runs/{runId}/retry", { params: { path: { conversationId: command.conversationId, runId: command.runId } }, body: { expectedAttempt: command.expectedAttempt, idempotencyKey: command.idempotencyKey } });
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/runs/{runId}/retry", { params: { path: { conversationId: command.conversationId, runId: command.runId } }, body: { expectedAttempt: command.expectedAttempt } });
 		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
 		return { runId: result.data.runId, attempt: result.data.attempt, state: ConversationRunStates.Accepted, conversationId: command.conversationId };
 	}

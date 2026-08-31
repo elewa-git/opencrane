@@ -199,7 +199,7 @@ function _RequestOptions(request, upstream, upstreamHost, upstreamCertificate, p
 	return requestOptions;
 }
 
-/** Adds the run proof only to the two exact login endpoints that consume it. */
+/** Adds this session's coordinator proof only to the login endpoints that verify it. */
 function _RequiresProxyProof(request)
 {
 	if (request.method !== "GET")

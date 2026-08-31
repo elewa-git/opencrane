@@ -25,10 +25,10 @@ export class PrismaChildRunCompletionRepository implements ChildRunCompletionRep
 		if (command.childRunId.trim().length === 0) return { outcome: "denied", reason: "not_child_run" };
 		try
 		{
-			return await this.prisma.$transaction(async function _deliver(transaction): Promise<ChildRunCompletionResult>
-			{
-				return __DeliverChildRunCompletionInTransaction(transaction, command);
-			});
+				return await this.prisma.$transaction(async function _deliver(transaction): Promise<ChildRunCompletionResult>
+				{
+					return __DeliverChildRunCompletionInTransaction(transaction, command);
+				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 		}
 		catch (error)
 		{
@@ -42,8 +42,6 @@ export class PrismaChildRunCompletionRepository implements ChildRunCompletionRep
  * Delivers a terminal child through an already-open authority transaction.
  *
  * The child ledger and parent event stay in the caller's transaction so they cannot commit separately.
- * Both advisory-lock queries cast their results because Prisma cannot deserialize PostgreSQL's void
- * return type from a raw query.
  *
  * Called by: {@link PrismaChildRunCompletionRepository.deliverAtomically} and
  * {@link PrismaRuntimeTerminalReporter.reportInTransaction}.
@@ -51,9 +49,7 @@ export class PrismaChildRunCompletionRepository implements ChildRunCompletionRep
 export async function __DeliverChildRunCompletionInTransaction(transaction: Prisma.TransactionClient, command: ChildRunCompletionCommand): Promise<ChildRunCompletionResult>
 {
 	if (command.childRunId.trim().length === 0) return { outcome: "denied", reason: "not_child_run" };
-	// 1. Lock immutable child evidence before deriving any cross-run notification.
-	await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${command.childRunId}, 0))::text AS "lock"`);
-	await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${command.childRunId} FOR UPDATE`);
+	// 1. Load immutable child evidence before deriving any cross-run notification.
 	const child = await transaction.agentRun.findUnique({ where: { id: command.childRunId } });
 	if (child === null) return { outcome: "ignored", reason: "child_not_found" };
 	if (!_isTerminal(child.state)) return { outcome: "ignored", reason: "child_not_terminal" };
@@ -61,10 +57,7 @@ export async function __DeliverChildRunCompletionInTransaction(transaction: Pris
 	const replay = await transaction.childRunCompletionDelivery.findUnique({ where: { childRunId: child.id } });
 	if (replay !== null) return _replay(child.parentRunId, replay);
 
-	// 2. Lock the direct parent stream before choosing its next sequence or terminal outcome.
-	await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${child.parentRunId}, 0))::text AS "lock"`);
-	await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${child.parentRunId} FOR UPDATE`);
-	await transaction.$queryRaw(Prisma.sql`SELECT "child_run_id" FROM "child_run_reservations" WHERE "child_run_id" = ${child.id} FOR UPDATE`);
+	// 2. Load the direct parent stream before choosing its next sequence or terminal outcome.
 	const parent = await transaction.agentRun.findUnique({ where: { id: child.parentRunId } });
 	const reservation = await transaction.childRunReservation.findUnique({ where: { childRunId: child.id } });
 	if (parent === null || reservation === null || !_hasExactLineage(child, parent, reservation)) return { outcome: "denied", reason: "lineage_conflict" };

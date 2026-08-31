@@ -33,10 +33,10 @@ describe("PrismaSelfRunCancellationRepository", function _suite()
 	{
 		const dependencies = _dependencies();
 		dependencies.findFirst.mockResolvedValue({ id: "run-1" });
-		dependencies.requestCancellationAtomically.mockResolvedValue({ status: "cancelling", runId: "run-1", attempt: 3, cleanupRequired: true });
+		dependencies.requestCancellationAtomically.mockResolvedValue({ status: "cancelling", runId: "run-1", attempt: 3 });
 		const adapter = new PrismaSelfRunCancellationRepository(dependencies.prisma, dependencies.cancellation);
 		await expect(adapter.requestOwned({ runId: "run-1", expectedAttempt: 3, siloId: "silo-1", subjectId: "user-1" })).resolves.toEqual({ outcome: SelfRunCancellationOutcomes.Cancelling, runId: "run-1", attempt: 3 });
-		expect(dependencies.requestCancellationAtomically).toHaveBeenCalledWith({ runId: "run-1", expectedAttempt: 3, requestedBy: "user-1" });
+		expect(dependencies.requestCancellationAtomically).toHaveBeenCalledWith({ runId: "run-1", expectedAttempt: 3 });
 	});
 
 	it("maps idempotent final cancellation to the same owner-facing success", async function _mapsReplay()

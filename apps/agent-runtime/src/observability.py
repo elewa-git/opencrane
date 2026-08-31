@@ -1,7 +1,7 @@
 """Emit correlation evidence without becoming a second transcript or leaking credentials.
 
 Logs and spans describe control flow using immutable run coordinates and error *types*. Model
-content, tool arguments, tokens, keys, bootstrap references, and checkpoint contents do not belong
+content, tool arguments, tokens, keys, proof evidence, and checkpoint contents do not belong
 here. OpenTelemetry is optional so an unavailable instrumentation dependency cannot prevent the
 isolated runtime from reporting candidates to the control plane.
 """
@@ -21,7 +21,7 @@ def log(event: str, **fields: object) -> None:
     # Stable key ordering improves incident diffs without implying event ordering; causal order comes
     # from runtime/run/attempt coordinates supplied by the caller.
     #
-    # ``flush=True`` is operationally important in short-lived Jobs: termination may follow a denial
+    # ``flush=True`` is operationally important in short-lived Pods: termination may follow a denial
     # or terminal outcome before Python's buffered stdout would otherwise be written.
     print(json.dumps({"component": "agent-runtime", "event": event, **fields}, sort_keys=True), flush=True)
 

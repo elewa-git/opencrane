@@ -1,72 +1,29 @@
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { access, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import type { V1Secret } from "@kubernetes/client-node";
-import { __BuildSuspendedAgentRuntimeJob } from "@opencrane/backend/agents/runtime/k8s-launcher";
 import { LocalAgentRuntimeModelStrategies } from "@opencrane/models/local-development";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { __CreateLocalProcessAgentControllerStore } from "../local-process-agent-controller-store";
 import { __CreateLocalAgentRuntimeTokenReviewer } from "../local-agent-runtime-token";
+import { __CreateLocalProcessWarmRuntimeStore } from "../local-process-agent-controller-store";
 import type { LocalAgentRuntimeSpawnOptions } from "../local-process-agent-controller-store.types";
+import type { WarmRuntimePoolProfiles } from "../warm-runtime-controller.types";
 
-/** Temporary directories removed after each local workload-host test. */
 const _temporaryDirectories: string[] = [];
 
-/** Build the unchanged Kubernetes Job projection consumed by the local replacement host. */
-function _ExpectedJob()
+/** Return the two local pools with distinct loopback listener ports. */
+function _Profiles(): WarmRuntimePoolProfiles
 {
-	return __BuildSuspendedAgentRuntimeJob({
-		runId: "run-local-1",
-		attempt: 1,
-		agentServiceId: "service-1",
-		agentRevisionId: "revision-1",
-		siloId: "silo-1",
-		namespace: "local-development-personal-runtime",
-		bootstrapReference: "bootstrap-local-1",
-		litellmKeySecretName: "attempt-key-local-1"
-	}, {
-		image: "local-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		imagePullPolicy: "Never",
-		runtimeStreamUrl: "http://opencrane.local-development-server.svc.cluster.local/api/internal/agent-runtime",
-		litellmBaseUrl: "http://litellm.local-development-server.svc.cluster.local:4000",
-		serverNamespace: "local-development-server",
-		serviceAccountName: "agent-runtime-default",
-		projectedTokenTtlSeconds: 600,
-		scratchSize: "64Mi",
-		activeDeadlineSeconds: 900,
-		ttlSecondsAfterFinished: 0,
-		resources: {
-			requests: {
-				cpu: "25m",
-				memory: "64Mi"
-			},
-			limits: {
-				cpu: "250m",
-				memory: "128Mi"
-			}
-		}
-	});
-}
-
-/** Build the create-only key projection owned by the prepared workload. */
-function _AttemptKeySecret(workloadUid: string, key: string): V1Secret
-{
+	function _Profile(name: string, namespace: string, serviceAccountName: string, bindingPort: number)
+	{
+		return { namespace, deploymentName: `local-${name}-warm`, serviceAccountName, genericProfile: "generic", claimedProfile: name, image: `local-runtime@sha256:${"a".repeat(64)}`, imagePullPolicy: "Never" as const, bindingPort, genericIdleSeconds: 900, scratchSize: "64Mi", resources: { requests: { cpu: "25m", memory: "64Mi" }, limits: { cpu: "250m", memory: "128Mi" } } };
+	}
 	return {
-		metadata: {
-			name: "attempt-key-local-1",
-			ownerReferences: [{
-				apiVersion: "batch/v1",
-				kind: "Job",
-				name: "local-job",
-				uid: workloadUid,
-				controller: true
-			}]
-		},
-		stringData: { key }
+		"personal-default": _Profile("personal", "local-personal-runtime", "agent-runtime-default", 18_081),
+		"managed-default": _Profile("managed", "local-managed-runtime", "managed-agent-runtime-default", 18_082)
 	};
 }
 
@@ -76,161 +33,69 @@ function _Process(): ChildProcess
 	const processHandle = new EventEmitter() as ChildProcess;
 	Object.defineProperty(processHandle, "killed", { value: false, writable: true });
 	Object.defineProperty(processHandle, "pid", { value: 12345 });
-	processHandle.kill = vi.fn(function _Kill(): boolean
-	{
-		Object.defineProperty(processHandle, "killed", { value: true, writable: true });
-		return true;
-	});
+	processHandle.kill = vi.fn(function _Kill(): boolean { Object.defineProperty(processHandle, "killed", { value: true, writable: true }); return true; });
 	return processHandle;
 }
 
 afterEach(async function _CleanTemporaryDirectories()
 {
-	vi.useRealTimers();
-	await Promise.all(_temporaryDirectories.splice(0).map(path => rm(path, { recursive: true, force: true })));
+	await Promise.all(_temporaryDirectories.splice(0).map(function _Remove(path) { return rm(path, { recursive: true, force: true }); }));
 });
 
-describe("local process Agent controller store", function _Suite()
+describe("local process warm-runtime store", function _Suite()
 {
-	it("projects private files and starts the existing runtime with no inherited credentials", async function _StartsPrivateAttempt()
+	it("starts only a reserved synthetic Pod with private identity files", async function _StartsClaimedRuntime()
 	{
-		vi.useFakeTimers();
-		vi.setSystemTime(new Date("2026-08-24T08:00:00.000Z"));
-		const root = await mkdtemp(join(tmpdir(), "opencrane-local-store-test-"));
+		const root = await mkdtemp(join(tmpdir(), "opencrane-local-warm-test-"));
 		_temporaryDirectories.push(root);
 		const runtimeLaunchSecretPath = join(root, "runtime-launch.secret");
 		await writeFile(runtimeLaunchSecretPath, "local-runtime-launch-secret-with-32-characters", { mode: 0o600 });
 		const spawned: LocalAgentRuntimeSpawnOptions[] = [];
 		const processHandle = _Process();
 		const shutdown = new AbortController();
-		const store = __CreateLocalProcessAgentControllerStore({
+		const profiles = _Profiles();
+		const store = __CreateLocalProcessWarmRuntimeStore({
 			runtimeApplicationDirectory: "/workspace/opencrane/apps/agent-runtime",
 			pythonExecutable: "python3",
-			runtimeStreamUrl: "http://127.0.0.1:3001/api/internal/agent-runtime",
+			runtimeStreamUrl: "http://127.0.0.1:8081/api/internal/warm-runtime",
 			litellmBaseUrl: "http://127.0.0.1:4000",
 			runtimeLaunchSecretPath,
 			modelStrategy: LocalAgentRuntimeModelStrategies.LiteLlm,
+			profiles,
 			shutdownSignal: shutdown.signal,
 			temporaryDirectoryRoot: root,
-			spawnProcess(_executable, _arguments, options)
-			{
-				spawned.push(options);
-				return processHandle;
-			}
+			spawnProcess(_executable, _arguments, options) { spawned.push(options); return processHandle; },
+			fetch: vi.fn(async function _Ready() { return new Response(null, { status: 204 }); })
 		});
-		const expected = _ExpectedJob();
-		const prepared = await store.__EnsureSuspendedJob(expected);
-		const workloadUid = prepared.metadata?.uid ?? "";
-		await store.__EnsureAttemptKeySecret(_AttemptKeySecret(workloadUid, "sk-attempt-local"));
-
-		const released = await store.__EnsureRuntimeJobReleased(expected, workloadUid, "2026-08-24T08:10:00.000Z", "2026-08-24T08:01:00.000Z");
-		const pod = await store.__FindFirstRuntimePod(expected, workloadUid, "agent-runtime-default");
-
-		expect(released.spec?.suspend).toBe(false);
-		expect(pod?.metadata?.uid).toBeTruthy();
+		const profile = profiles["personal-default"]!;
+		const [candidate] = await store.listGenericPods(profile);
+		expect(spawned).toHaveLength(0);
+		const activation = await store.activateProfile(candidate!, profile);
+		await expect(store.proveReadiness(candidate!, activation, profile)).resolves.toMatchObject({ podUid: candidate!.podUid, profile: "personal" });
 		expect(spawned).toHaveLength(1);
-		const environment = spawned[0].env;
-		expect(Object.keys(environment).sort()).toEqual([
-			"OPENCRANE_RUNTIME_BOOTSTRAP_PATH",
-			"OPENCRANE_RUNTIME_CHECKPOINT_DIR",
-			"OPENCRANE_RUNTIME_LITELLM_BASE_URL",
-			"OPENCRANE_RUNTIME_LITELLM_KEY_PATH",
-			"OPENCRANE_RUNTIME_MODEL_STRATEGY",
-			"OPENCRANE_RUNTIME_STREAM_URL",
-			"OPENCRANE_RUNTIME_TOKEN_PATH",
-			"PATH",
-			"POD_UID",
-			"PYTHONUNBUFFERED"
-		].sort());
+		const environment = spawned[0]!.env;
+		expect(Object.keys(environment).sort()).toEqual(["OPENCRANE_RUNTIME_LITELLM_BASE_URL", "OPENCRANE_RUNTIME_MODEL_STRATEGY", "OPENCRANE_RUNTIME_PROOF_EVIDENCE_PATH", "OPENCRANE_RUNTIME_STREAM_URL", "OPENCRANE_RUNTIME_TOKEN_PATH", "OPENCRANE_WARM_BINDING_PORT", "OPENCRANE_WARM_PROFILE", "PATH", "POD_UID", "PYTHONUNBUFFERED"].sort());
 		expect(JSON.stringify(environment)).not.toContain("local-runtime-launch-secret");
-		expect(JSON.stringify(environment)).not.toContain("sk-attempt-local");
-		const tokenPath = environment.OPENCRANE_RUNTIME_TOKEN_PATH;
-		const bootstrapPath = environment.OPENCRANE_RUNTIME_BOOTSTRAP_PATH;
-		const keyPath = environment.OPENCRANE_RUNTIME_LITELLM_KEY_PATH;
-		expect((await stat(tokenPath)).mode & 0o777).toBe(0o600);
-		expect((await stat(bootstrapPath)).mode & 0o777).toBe(0o600);
-		expect((await stat(keyPath)).mode & 0o777).toBe(0o600);
-		const signedToken = await readFile(tokenPath, "utf8");
-		const reviewer = __CreateLocalAgentRuntimeTokenReviewer({
-			launchSecretPath: runtimeLaunchSecretPath,
-			namespace: "local-development-personal-runtime",
-			serviceAccountName: "agent-runtime-default"
-		});
-		expect(await reviewer.__Review(signedToken)).toEqual({
-			subject: "system:serviceaccount:local-development-personal-runtime:agent-runtime-default",
-			namespace: "local-development-personal-runtime",
-			serviceAccountName: "agent-runtime-default",
-			podUid: pod?.metadata?.uid
-		});
-		expect(await reviewer.__Review(`${signedToken}x`)).toBeNull();
-		const wrongNamespace = __CreateLocalAgentRuntimeTokenReviewer({
-			launchSecretPath: runtimeLaunchSecretPath,
-			namespace: "other-runtime",
-			serviceAccountName: "agent-runtime-default"
-		});
-		expect(await wrongNamespace.__Review(signedToken)).toBeNull();
-		expect(await readFile(bootstrapPath, "utf8")).toBe("bootstrap-local-1");
-		expect(await readFile(keyPath, "utf8")).toBe("sk-attempt-local");
-
-		shutdown.abort();
+		expect((await stat(environment.OPENCRANE_RUNTIME_TOKEN_PATH!)).mode & 0o777).toBe(0o600);
+		const reviewer = __CreateLocalAgentRuntimeTokenReviewer({ launchSecretPath: runtimeLaunchSecretPath, namespace: profile.namespace, serviceAccountName: profile.serviceAccountName });
+		expect(await reviewer.__Review(await readFile(environment.OPENCRANE_RUNTIME_TOKEN_PATH!, "utf8"))).toMatchObject({ namespace: profile.namespace, serviceAccountName: profile.serviceAccountName, podUid: candidate!.podUid });
+		await store.deletePod({ namespace: profile.namespace, podName: candidate!.podName, podUid: candidate!.podUid, deploymentUid: candidate!.deploymentUid, profile: profile.claimedProfile }, profile);
 		expect(processHandle.kill).toHaveBeenCalledWith("SIGTERM");
+		expect(await store.listGenericPods(profile)).toHaveLength(1);
 	});
 
-	it("refuses a different key on an idempotent attempt replay", async function _RejectsKeyDrift()
+	it("omits every model endpoint from simulated runtime processes", async function _SimulatedBoundary()
 	{
-		const root = await mkdtemp(join(tmpdir(), "opencrane-local-store-test-"));
+		const root = await mkdtemp(join(tmpdir(), "opencrane-local-warm-test-"));
 		_temporaryDirectories.push(root);
 		const runtimeLaunchSecretPath = join(root, "runtime-launch.secret");
 		await writeFile(runtimeLaunchSecretPath, "local-runtime-launch-secret-with-32-characters", { mode: 0o600 });
-		const spawned: LocalAgentRuntimeSpawnOptions[] = [];
-		const store = __CreateLocalProcessAgentControllerStore({
-			runtimeApplicationDirectory: "/workspace/opencrane/apps/agent-runtime",
-			pythonExecutable: "python3",
-			runtimeStreamUrl: "http://127.0.0.1:3001/api/internal/agent-runtime",
-			litellmBaseUrl: "http://127.0.0.1:4000",
-			runtimeLaunchSecretPath,
-			modelStrategy: LocalAgentRuntimeModelStrategies.LiteLlm,
-			shutdownSignal: new AbortController().signal,
-			temporaryDirectoryRoot: root,
-			spawnProcess(_executable, _arguments, options)
-			{
-				spawned.push(options);
-				return _Process();
-			}
-		});
-		const expected = _ExpectedJob();
-		const prepared = await store.__EnsureSuspendedJob(expected);
-		const workloadUid = prepared.metadata?.uid ?? "";
-		await store.__EnsureAttemptKeySecret(_AttemptKeySecret(workloadUid, "first-key"));
-
-		await expect(store.__EnsureAttemptKeySecret(_AttemptKeySecret(workloadUid, "different-key"))).rejects.toThrow(/different key/);
-		const now = Date.now();
-		await store.__EnsureRuntimeJobReleased(expected, workloadUid, new Date(now + 600_000).toISOString(), new Date(now + 60_000).toISOString());
-		expect(spawned[0].env.OPENCRANE_RUNTIME_LITELLM_BASE_URL).toBe("http://127.0.0.1:4000");
-		expect(spawned[0].env.OPENCRANE_RUNTIME_LITELLM_KEY_PATH).toContain("litellm.key");
-	});
-
-	it("does not write an attempt-key file for simulated model output", async function _OmitsSimulatedKey()
-	{
-		const root = await mkdtemp(join(tmpdir(), "opencrane-local-store-test-"));
-		_temporaryDirectories.push(root);
-		const runtimeLaunchSecretPath = join(root, "runtime-launch.secret");
-		await writeFile(runtimeLaunchSecretPath, "local-runtime-launch-secret-with-32-characters", { mode: 0o600 });
-		const store = __CreateLocalProcessAgentControllerStore({
-			runtimeApplicationDirectory: "/workspace/opencrane/apps/agent-runtime",
-			pythonExecutable: "python3",
-			runtimeStreamUrl: "http://127.0.0.1:3001/api/internal/agent-runtime",
-			runtimeLaunchSecretPath,
-			modelStrategy: LocalAgentRuntimeModelStrategies.Simulated,
-			shutdownSignal: new AbortController().signal,
-			temporaryDirectoryRoot: root
-		});
-		const prepared = await store.__EnsureSuspendedJob(_ExpectedJob());
-		const workloadUid = prepared.metadata?.uid ?? "";
-		await store.__EnsureAttemptKeySecret(_AttemptKeySecret(workloadUid, "unused-key"));
-		const attemptDirectory = (await readdir(root)).find(name => name.startsWith("opencrane-agent-runtime-"));
-
-		expect(attemptDirectory).toBeTruthy();
-		await expect(access(join(root, attemptDirectory ?? "", "litellm.key"))).rejects.toMatchObject({ code: "ENOENT" });
+		let environment: Readonly<Record<string, string>> | undefined;
+		const profiles = _Profiles();
+		const store = __CreateLocalProcessWarmRuntimeStore({ runtimeApplicationDirectory: "/workspace/opencrane/apps/agent-runtime", pythonExecutable: "python3", runtimeStreamUrl: "http://127.0.0.1:8081/api/internal/warm-runtime", runtimeLaunchSecretPath, modelStrategy: LocalAgentRuntimeModelStrategies.Simulated, profiles, shutdownSignal: new AbortController().signal, temporaryDirectoryRoot: root, spawnProcess(_executable, _arguments, options) { environment = options.env; return _Process(); } });
+		const profile = profiles["personal-default"]!;
+		const [candidate] = await store.listGenericPods(profile);
+		await store.activateProfile(candidate!, profile);
+		expect(environment?.OPENCRANE_RUNTIME_LITELLM_BASE_URL).toBeUndefined();
 	});
 });

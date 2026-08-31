@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { AttemptModelKeyIssuer } from "./attempt-model-key.types";
-import type { ClaimedAttemptWithMintInputs, RunAttemptCredentialInput, RunAttemptCredentialMintInputs } from "./run-dispatch-persistence.types";
-import { RunDispatchResultStatuses, type ClaimNextRunAttemptResult } from "./run-dispatch.types";
+import type { RunAttemptCredentialInput, RunAttemptCredentialMintInputs } from "./run-attempt-credential-minting.types";
 
 /** Derive the model-key request from the immutable snapshot and exact claim generation. */
 export function _BuildRunAttemptCredentialMintInputs(input: RunAttemptCredentialInput): RunAttemptCredentialMintInputs | null
@@ -11,19 +9,11 @@ export function _BuildRunAttemptCredentialMintInputs(input: RunAttemptCredential
 	const maxBudgetUsd = _SnapshotMaxBudgetUsd(input.budgetPolicy);
 	if (modelAlias === null || maxBudgetUsd === null) return null;
 	return {
-		keyAlias: _AttemptKeyAlias(input.runId, input.attempt, input.siloId, input.deliveryCount),
+		keyAlias: __BuildRunAttemptKeyAlias(input.runId, input.attempt, input.siloId),
 		modelAlias,
 		maxBudgetUsd,
 		expirySeconds: _AttemptKeyExpirySeconds(input.assignmentTtlMilliseconds),
 	};
-}
-
-/** Mints the short-lived model key, only after the claim transaction has committed and released its database locks. */
-export async function _MintRunAttemptCredentials(claimed: ClaimedAttemptWithMintInputs, issueAttemptModelKey: AttemptModelKeyIssuer): Promise<ClaimNextRunAttemptResult>
-{
-	const minted = await issueAttemptModelKey({ keyAlias: claimed.keyAlias, modelAlias: claimed.modelAlias, siloId: claimed.attempt.siloId, maxBudgetUsd: claimed.maxBudgetUsd, expirySeconds: claimed.expirySeconds });
-	if (typeof minted.key !== "string" || minted.key.length === 0) throw new Error("attempt model key issuer returned no key");
-	return { status: RunDispatchResultStatuses.Claimed, claim: { lease: claimed.lease, attempt: { ...claimed.attempt, litellmKey: minted.key } } };
 }
 
 /** Reads the one model alias the snapshot's model route pins, or null when it is missing or malformed. */
@@ -46,9 +36,9 @@ function _SnapshotMaxBudgetUsd(budgetPolicy: unknown): number | null
 }
 
 /** Derive one attempt- and delivery-unique key alias satisfying the issuer's `attempt-<hex>` grammar. */
-function _AttemptKeyAlias(runId: string, attempt: number, siloId: string, deliveryCount: number): string
+export function __BuildRunAttemptKeyAlias(runId: string, attempt: number, siloId: string): string
 {
-	const canonical = JSON.stringify(["opencrane-attempt-litellm-key-alias-v1", runId, attempt, siloId, deliveryCount]);
+	const canonical = JSON.stringify(["opencrane-attempt-litellm-key-alias-v2", runId, attempt, siloId]);
 	return `attempt-${createHash("sha256").update(canonical, "utf8").digest("hex").slice(0, 32)}`;
 }
 

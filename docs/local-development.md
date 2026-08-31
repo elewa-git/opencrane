@@ -32,8 +32,8 @@ the real server, and runs the UI with live gateways and a fixed local identity.
 npm run dev:tier2
 ```
 
-The core profile leaves models, memory, files, channels, integrations, Obot, Cognee, and Kubernetes
-disabled. Add normal Agent admission and execution with:
+The core profile leaves models, memory, files, channels, Cognee, and Kubernetes disabled. Add normal
+Agent admission and execution with:
 
 ```bash
 npm run dev:tier2 -- --profile agent --alternative simulated-llm

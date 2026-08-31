@@ -8,45 +8,6 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { ArtifactPreprocessorDependencies } from "./preprocessor.types";
 
 /**
- * Claim and process PDF preprocessing jobs until the process is asked to stop.
- *
- * Outbound only: the worker opens every connection itself and OpenCrane never calls in, so the
- * worker needs no inbound network access. It claims a job, processes it, and sleeps for the poll
- * interval when there is nothing to do.
- *
- * The loop never exits on error. A failed job is logged and retried after the poll interval, and
- * only an aborted `signal` ends the loop — so a caller must not rely on this returning to signal
- * a problem.
- *
- * Called by: `apps/artifact-preprocessor/src/index.ts`.
- * @param dependencies - The OpenCrane broker, the PDF converter, scratch directory, size and time limits, and a logger.
- * @param signal - Aborted on shutdown; the loop stops at the next safe point.
- * @returns Resolves when the signal is aborted. It does not reject.
- */
-export async function __RunArtifactPreprocessor(dependencies: ArtifactPreprocessorDependencies, signal: AbortSignal): Promise<void>
-{
-	while (!signal.aborted)
-	{
-		try
-		{
-			const claim = await dependencies.remote.claim(signal);
-			if (claim === null)
-			{
-				await _Wait(dependencies.pollIntervalMilliseconds, signal);
-				continue;
-			}
-			await __ProcessArtifactPreprocessorJob(dependencies, claim, signal);
-		}
-		catch (err)
-		{
-			if (signal.aborted) return;
-			dependencies.logger.warn({ err }, "artifact preprocessing job deferred for fenced retry");
-			await _Wait(dependencies.pollIntervalMilliseconds, signal);
-		}
-	}
-}
-
-/**
  * Process one claimed PDF: fetch the source from OpenCrane, convert it, and submit the text back.
  *
  * Every byte moves through OpenCrane. The worker is given no storage path and no storage
@@ -57,7 +18,7 @@ export async function __RunArtifactPreprocessor(dependencies: ArtifactPreprocess
  * so the caller's loop still sees the failure. OpenCrane, not the worker, decides whether the job
  * is retried.
  *
- * Called by: {@link __RunArtifactPreprocessor}; exported for the package's own tests.
+ * Called by: `apps/artifact-preprocessor/src/index.ts`; exported for the package's own tests.
  * @param dependencies - Broker, converter, scratch directory, and limits.
  * @param claim - The claimed job, including the fence every later call must carry.
  * @param signal - Shutdown signal.
@@ -150,25 +111,4 @@ async function _ReportFailure(dependencies: ArtifactPreprocessorDependencies, co
 function _ClaimCommand(claim: ArtifactPreprocessorJobClaim): ArtifactPreprocessorClaimCommand
 {
 	return { jobId: claim.lease.jobId, attempt: claim.lease.attempt, claimFence: claim.lease.claimFence };
-}
-
-/** Wait for a poll interval while promptly respecting Kubernetes shutdown. */
-async function _Wait(milliseconds: number, signal: AbortSignal): Promise<void>
-{
-	if (signal.aborted) return;
-	await new Promise<void>(function _sleep(resolve)
-	{
-		const timer = setTimeout(_finish, milliseconds);
-		function _finish(): void
-		{
-			signal.removeEventListener("abort", _abort);
-			resolve();
-		}
-		function _abort(): void
-		{
-			clearTimeout(timer);
-			_finish();
-		}
-		signal.addEventListener("abort", _abort, { once: true });
-	});
 }

@@ -20,8 +20,8 @@ Two halves:
   MCP-server, model-routing, memory, approvals, …); others are **re-exported straight from the model
   packages** (`@opencrane/models/{agents,artifacts,authorization,conversations}`) so a caller has
   one import for the whole surface and the wire types stay identical to the domain types. Private
-  controller DTOs use adjacent `*.types.ts`/`*.validator.ts` pairs for runtime attempts and governed
-  skill workloads; those Zod schemas keep runtime acceptance, strict request fields, and TypeScript
+  controller DTOs use adjacent `*.types.ts`/`*.validator.ts` pairs for runtime attempts; those Zod
+  schemas keep runtime acceptance, strict request fields, and TypeScript
   models in one package.
 
 ```
@@ -42,10 +42,10 @@ Invariant: the client's types are a faithful projection of the server's publishe
 after any API change so the two never silently diverge. `RunInputSnapshot` is the cross-domain
 record of one run's frozen persona, transcript, memory references, tools, budgets, model route and
 verified identity provenance; it carries only immutable coordinates and canonical JSON, never
-provider credentials or mutable source objects. Its integration assignments record an integration
-identifier plus each revision-reviewed tool name, description, exact input JSON Schema, and
-canonical schema digest; provider addressing and credentials remain entirely behind the
-server-owned action execution boundary and never enter the snapshot or runtime. The compiled model
+provider credentials or mutable source objects. Its `mcpTools` list records immutable MCP tool
+revision identifiers plus each saved name, description, exact input JSON Schema, and canonical
+schema digest. Registry and provider credentials remain entirely behind server-owned execution
+boundaries and never enter the snapshot or agent runtime. The compiled model
 route also freezes the model registry's generated-output allowlist; the runtime
 cannot infer image-generation authority from a prompt or provider response. Identity is
 explicitly tagged: a user run
@@ -70,7 +70,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   recognisable capability names and categorical availability, never internal topology or errors.
 - `TIER3_DEVELOPMENT_PROXY_PROOF_HEADER` — the private coordinator-to-server header name shared by
   the Tier 3 proxy and development login authority so their proof transport cannot drift.
-- `AG_UI_PROJECTION_VERSION`, `AG_UI_A2UI_ENVELOPE_VERSION`, `AgUiProjectionSourceEvent`,
+- `AG_UI_PROJECTION_VERSION`, `AG_UI_A2UI_ENVELOPE_VERSION`, `AG_UI_RUN_WAIT_STATE_EVENT`, `AgUiProjectionSourceEvent`,
   `AgUiProjectionEvent`, and `AgUiSseRecord` — the stable AG-UI wire vocabulary shared by server and
   browser. Projection and SSE encoding policy live in the separate backend
   [conversation projection package](../backend/conversations/projection/main/README.md).
@@ -89,7 +89,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - Hand-written DTOs/enums: hierarchical `Group` with nullable `parentId`, `ClusterTenant*`,
   `Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, memory-gateway constants, `ThirdPartySource*`, `RuntimeAssignment`,
-  `RunInputSnapshot`/`RunInputSnapshotIdentity`/`RunInputSnapshotIdentityKinds`/`RunInputSnapshotIntegrationAssignment`,
+  `RunInputSnapshot`/`RunInputSnapshotIdentity`/`RunInputSnapshotIdentityKinds`/`RunInputSnapshotMcpTool`,
   `TenantModelSet`, and domain-topology host builders.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
   must name before it can admit a run.
@@ -100,7 +100,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   tagged-execution-identity vocabularies used by catalogue validation and frozen run-input branches.
   Their readable serialised values remain part of the contract; the enums prevent independent
   persistence and admission code from drifting on which branch a value selects.
-- `AGENT_RUNTIME_PROTOCOL_V1`, the personal and managed runtime audience constants and validators,
+- `AGENT_RUNTIME_PROTOCOL_VERSION`, the protocol-v2 continuation contract, personal and managed runtime audience constants and validators,
   `RuntimeStreamOpen`, `RuntimeCommandEnvelope`, and `RuntimeCandidate` — the private workload
   protocol for an agent process that opens its own authenticated stream. The opening frame binds the
   runtime instance to the Pod UID independently verified from its Kubernetes credential. Personal
@@ -109,7 +109,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - `RuntimeCommandKinds` and `RuntimeCandidateKinds` — documented string-backed discriminants that
   keep workload command and candidate control flow exhaustive while preserving protocol bytes.
 - `AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE`, `AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME`, and
-  `AgentControllerRunAttempt*`/`AgentControllerSkillWorkload*` — the private controller handshake for claiming one authorised run or governed skill workload,
+  `AgentControllerRunAttempt*` — the private controller handshake for claiming one authorised run,
   reporting the Kubernetes-issued Job identity, and committing that identity under the same database
   lease. `AgentControllerRunWorkloadRelease*` then carries the separate durable command, including
   the assignment's absolute expiry, for releasing only that assigned Job and registering its first
@@ -122,11 +122,16 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   validators colocated with those DTOs. Response parsers strip untrusted extensions, request parsers
   reject extensions, and contextual result parsers bind echoed Job and Pod coordinates to the exact
   submitted command.
-- `__CreateSkillWorkloadBootstrapReference`, `__HashSkillWorkloadBootstrapReference`, and
-  `__IsSkillWorkloadBootstrapReference` — the browser-safe, deterministic protocol shared by the
-  governed-skill controller and the server authority. It creates the opaque Job reference, stores
+- `__CreateSkillAuthoringValidationBootstrapReference`, `__HashSkillAuthoringValidationBootstrapReference`, and
+  `__IsSkillAuthoringValidationBootstrapReference` — the browser-safe, deterministic protocol used by the
+  workflow-owned skill-authoring path. It creates the opaque Job reference, stores
   only its SHA-256 hash, and rejects any other wire shape; it is not a user credential or a general
   hashing API.
+- `__CreateArtifactPreprocessBootstrapReference`,
+  `__HashArtifactPreprocessBootstrapReference`, and
+  `__IsArtifactPreprocessBootstrapReference` — the shared opaque reference for a one-shot PDF
+  preprocessing Job. It lets the server store a hash rather than a usable worker value, while the
+  worker still has to prove its Kubernetes identity before it can receive brokered bytes.
 - `ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE`,
   `ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME`, `ArtifactPreprocessorJobClaim`, and the
   claim/failure commands — the narrow broker protocol for the isolated PDF converter. These DTOs

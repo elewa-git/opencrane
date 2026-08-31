@@ -31,7 +31,7 @@ their concrete adapters, mounts their routers, and starts and stops them in the 
                      agent-controller
                               │
                               ▼
-                     isolated runtime Job
+                    claimed warm runtime Pod
 ```
 
 **In this flow:** [opencrane-ui](../opencrane-ui/README.md) ·
@@ -58,9 +58,9 @@ The route registry is deliberately a catalogue rather than a second application 
 | Public `:8080` | Identity and access | audit, groups, grants, resource shares |
 | Public `:8080` | Agents | agent-service management and governed skill catalogue |
 | Public `:8080` | Personal workspace | guided onboarding, assets, persona, approvals, runs, configuration, conversations |
-| Public `:8080` | Gateways | MCP catalogue, OCI image promotion, model routing, providers, bring-your-own-key, model registry |
+| Public `:8080` | Gateways | MCP catalogue and durable tool tasks, OCI image promotion, model routing, providers, bring-your-own-key, model registry |
 | Public `:8080` | Knowledge and reporting | retrieval sources, budgets, token usage |
-| Internal `:8081` | Controller | run-attempt, skill-workload, and OCI MCP Job dispatch |
+| Internal `:8081` | Controller | run-attempt, workflow-owned skill-authoring validation, and OCI MCP Job dispatch |
 | Internal `:8081` | Runtime | one-use bootstrap, command stream, candidate ingest, skill-authoring exchange |
 | Internal `:8081` | Workers and replay | Pod-bound MCP command/result exchange, artifact preprocessing, and controller-selected conversation replay |
 
@@ -98,15 +98,16 @@ Kubernetes identity review, and optional infrastructure with local-only adapters
 - `src/app/internal-app.ts` builds the workload-facing API on its separate socket.
 - `src/app/routes.ts` contains named per-area route lists and app-owned transport composition. The
   sharing authority is mounted behind the shared per-IP limiter before identity or database work.
-- `src/app/runtime-composition.ts` binds controller, skill-workload, runtime, and optional-worker
+- `src/app/runtime-composition.ts` binds controller, task-owned validation, runtime, and optional-worker
   authorities by caller plane without choosing transport paths.
 - `src/app/mcp-workflow-composition.ts` creates one Absurd worker for remote MCP protocol checks
   and OCI image admission. A workflow is saved work that may continue after the server restarts.
   Here it checks a registered server, validates a saved OCI Image Layout ZIP, imports the accepted
   image into the configured registry, and saves its immutable digest without keeping the request open.
 - `src/app/mcp-runtime-composition.ts` turns that immutable image into a separate MCP executor Job.
-  It shares one database authority across the administrator promotion route, controller claims,
-  Pod-bound companion reports, and saved tool calls, so no generic worker can also run the call.
+  It shares one database authority across the administrator promotion route, public durable tool
+  tasks, controller claims, Pod-bound companion reports, and saved tool calls, so no generic worker
+  can also run the call.
 - `src/app/persona-approval-composition.ts` adapts agent-service persona selection to the persona
   approval port on one Serializable transaction. It maps agent outcomes but owns no persona or
   AgentRevision persistence.
@@ -114,14 +115,11 @@ Kubernetes identity review, and optional infrastructure with local-only adapters
   mounted lease keys, exact same-silo `artifact-service` route, and durable artifact authority into
   source, read, upload, and output brokers; those pieces are inseparable from this process's private
   configuration and do not expose a reusable ArtifactStore client.
-- `src/infra/obot/*` composes custody and server-side Model Context Protocol (MCP) invocation over
-  one authenticated, bounded Obot session. With no Obot configuration both ports refuse closed.
 - `src/app/background-workers.ts` owns the Absurd worker, schedule ticks, durable external-action
-  passes, expired-run repair, and fenced cleanup loops. Shutdown lets active work finish before
-  Prisma closes.
+  passes, and MCP completion recovery. Shutdown lets active work finish before Prisma closes.
 - `src/app/external-action-composition.ts` binds that worker to the immutable execution snapshot,
   canonical tool lifecycle unit of work, deferred-approval authority, and private provider ports.
-- `src/app/lifecycle.ts` starts workers before both listeners, aborts active Obot exchanges during
+- `src/app/lifecycle.ts` starts workers before both listeners, aborts active external exchanges during
   shutdown, closes conversation sockets, drains requests and workers, disconnects Prisma, and
   flushes telemetry.
 - `prisma/schema/*.prisma` defines the product's durable domain models.
@@ -131,9 +129,10 @@ Kubernetes identity review, and optional infrastructure with local-only adapters
   one worker for registered workflow tasks. Its focused source verifiers prove the seeded
   persona and onboarding-bootstrap content against the reviewed files in
   `docs/design/persona-archetypes/`.
-- `prisma/migrations/<from>-to-<to>/` owns reviewed, adjacent schema upgrades for existing databases.
-  The PostgreSQL deployment Job runs them before an incompatible server rollout; server startup
-  never becomes a schema-migration authority.
+- `prisma/prisma-migrations/` is the active Prisma Migrate ledger for existing databases. The
+  PostgreSQL deployment Job applies it before an incompatible server rollout; server startup never
+  changes the schema. `prisma/migrations/` retains the SQL published before the 0.10.0 cutover as
+  release history, not executable deployment input.
 
 ## Boundary
 
@@ -188,8 +187,8 @@ conversation conditionally owns serial `AgentRun -> ordered RunEvent` streams; d
 messages create no run.
 
 Database triggers protect lifecycle and proof bindings that Prisma cannot express alone. Runtime
-Jobs hold attempt-scoped scratch and checkpoints; they do not replace the server's run,
-conversation, approval, or artifact records.
+Pods hold only a working model-loop copy. The server encrypts durable continuations in PostgreSQL,
+so a replacement Pod can resume a governed pause without trusting local disk.
 
 ## Runtime & config
 
@@ -204,6 +203,7 @@ are:
 | `DATABASE_URL` | PostgreSQL connection string | required |
 | `OPENCRANE_SILO_ID` | Silo that owns tasks admitted by this server | required |
 | `OPENCRANE_WORKFLOW_*` | Absurd database pool, worker concurrency, and polling limits | small development defaults |
+| `AGENT_RUNTIME_CONTINUATION_KEYRING_PATH` | Read-only mounted keyring used to encrypt and decrypt durable runtime continuations | required |
 | `OPENCRANE_MCP_ERA_PROBE_*` | Timeout and response-size limit for remote MCP protocol checks | 5 seconds / 64 KiB |
 | `OPENCRANE_OCI_REGISTRY_*` | Fixed HTTPS registry repository, request timeout, and optional Secret-backed authorization used to import admitted MCP images by digest | deployment profile / 30 seconds / no credential |
 | `OIDC_*` | Production organisation sign-in, callbacks, and server-side session protection | required outside Tier 3 |
@@ -211,10 +211,9 @@ are:
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `OPENCRANE_INITIAL_MODEL_*` | Optional first provider, exact model, and key; the server persists only its custody reference and requires that exact LiteLLM model before readiness | disabled |
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL`, `CHANNEL_PROXY_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
-| `OBOT_GATEWAY_URL`, `OBOT_SERVICE_TOKEN_PATH`, `OBOT_TIMEOUT_SECONDS` | Release-local credential custody and server-side external tool execution | disabled together |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
-| `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal runtime Job boundary | required |
-| `AGENT_RUNTIME_MANAGED_NAMESPACE` | Managed runtime Job boundary | required |
+| `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal warm runtime Pod boundary | required |
+| `AGENT_RUNTIME_MANAGED_NAMESPACE` | Managed warm runtime Pod boundary | required |
 | `AGENT_RUN_ADMISSION_*` | Active and queued personal-and-managed admission limits | bounded defaults |
 | `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` starts without a Fleet key and denies run admission | required |
 | `OPENCRANE_INVITATION_SIGNING_KEY_PATH`, `OPENCRANE_PUBLIC_BASE_URL`, `OPENCRANE_INVITATION_TTL_SECONDS` | Standalone invitation-link signing, public link origin, and bounded lifetime | required in standalone mode |
@@ -232,7 +231,8 @@ For local application work, `npm run dev:tier2` supplies the development entrypo
 loopback PostgreSQL URL, signed local membership keys, and fixed identity values. Agent profiles
 also supply separate owner-only controller and runtime launch-secret paths. The development
 entrypoint refuses production mode, non-loopback databases, identity overrides, and missing Agent
-credentials before it opens a listener.
+credentials before it opens a listener. Tier 2 keeps the governed skill catalogue readable but omits
+skill-validation submission because that Kubernetes-backed worker is not part of the local profile.
 
 The full-silo `npm run dev:tier3` profile selects a separate development authentication mode. Its
 loopback proxy overwrites caller-provided proof with a fresh run secret, while the server requires

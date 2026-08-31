@@ -5,21 +5,19 @@ import { LOCAL_DEVELOPMENT_PROFILES } from "./profiles.mjs";
 const _LOCAL_RUNTIME_IMAGE = "local-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const _RUNTIME_IDENTITIES = JSON.parse(fs.readFileSync(new URL("../../libs/models/local-development/main/profile-contract.json", import.meta.url), "utf8")).runtimeIdentities;
 
-function _runtimeProfile(identityProfile, namespace, serviceAccountName, runtimeStreamUrl, liteLLMBaseUrl)
+function _runtimeProfile(name, namespace, serviceAccountName, bindingPort)
 {
 	return {
-		identityProfile,
 		namespace,
+		deploymentName: `local-${name}-warm`,
+		serviceAccountName,
+		genericProfile: "generic",
+		claimedProfile: name,
 		image: _LOCAL_RUNTIME_IMAGE,
 		imagePullPolicy: "Never",
-		runtimeStreamUrl,
-		litellmBaseUrl: liteLLMBaseUrl,
-		serverNamespace: _RUNTIME_IDENTITIES.serverNamespace,
-		serviceAccountName,
-		projectedTokenTtlSeconds: 600,
+		bindingPort,
+		genericIdleSeconds: 900,
 		scratchSize: "64Mi",
-		activeDeadlineSeconds: 900,
-		ttlSecondsAfterFinished: 0,
 		resources: {
 			requests: {
 				cpu: "25m",
@@ -52,12 +50,9 @@ export function createAgentControllerEnvironment(configuration, credentials)
 	}
 
 	const internalUrl = `http://127.0.0.1:${configuration.internalPort}`;
-	const runtimeStreamUrl = `http://opencrane.${_RUNTIME_IDENTITIES.serverNamespace}.svc.cluster.local/api/internal/agent-runtime`;
-	const liteLLMBaseUrl = `http://litellm.${_RUNTIME_IDENTITIES.serverNamespace}.svc.cluster.local:4000`;
-
 	const profiles = {
-		"personal-default": _runtimeProfile(_RUNTIME_IDENTITIES.personal.identityProfile, _RUNTIME_IDENTITIES.personal.namespace, _RUNTIME_IDENTITIES.personal.serviceAccountName, runtimeStreamUrl, liteLLMBaseUrl),
-		"managed-default": _runtimeProfile(_RUNTIME_IDENTITIES.managed.identityProfile, _RUNTIME_IDENTITIES.managed.namespace, _RUNTIME_IDENTITIES.managed.serviceAccountName, runtimeStreamUrl, liteLLMBaseUrl)
+		"personal-default": _runtimeProfile("personal", _RUNTIME_IDENTITIES.personal.namespace, _RUNTIME_IDENTITIES.personal.serviceAccountName, 18_081),
+		"managed-default": _runtimeProfile("managed", _RUNTIME_IDENTITIES.managed.namespace, _RUNTIME_IDENTITIES.managed.serviceAccountName, 18_082)
 	};
 	const environment = {
 		OPENCRANE_INTERNAL_URL: internalUrl,
@@ -65,7 +60,10 @@ export function createAgentControllerEnvironment(configuration, credentials)
 		OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH: credentials.runtimeLaunchSecretPath,
 		OPENCRANE_LOCAL_RUNTIME_PYTHON: configuration.runtimePythonPath,
 		OPENCRANE_REPOSITORY_ROOT: configuration.repositoryRoot,
-		AGENT_CONTROLLER_PROFILES_JSON: JSON.stringify(profiles)
+		OPENCRANE_SERVER_SERVICE_NAME: "opencrane",
+		OPENCRANE_SERVER_NAMESPACE: _RUNTIME_IDENTITIES.serverNamespace,
+		OPENCRANE_SILO_ID: "local-development",
+		AGENT_CONTROLLER_WARM_PROFILES_JSON: JSON.stringify(profiles)
 	};
 
 	return environment;

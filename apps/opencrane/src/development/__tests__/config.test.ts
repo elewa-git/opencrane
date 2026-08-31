@@ -7,6 +7,7 @@ import { _ReadDevelopmentConfig } from "../config";
 /** Environment keys the development parser owns in these focused tests. */
 const _KEYS = [
 	"DATABASE_URL",
+	"AGENT_RUNTIME_CONTINUATION_KEYRING_PATH",
 	"INTERNAL_PORT",
 	"NODE_ENV",
 	"OPENCRANE_DEVELOPMENT_ENTRYPOINT",
@@ -56,6 +57,7 @@ describe("Tier 2 server configuration", function _Suite()
 		const config = _ReadDevelopmentConfig();
 		expect(config.profile).toBe(LocalDevelopmentProfileKinds.Core);
 		expect(config.controllerTokenPath).toBeNull();
+		expect(config.continuationKeyringPath).toBeNull();
 		expect(config.runtimeLaunchSecretPath).toBeNull();
 		expect(config.identity).toEqual({
 			subjectId: "local-development-user",
@@ -73,19 +75,24 @@ describe("Tier 2 server configuration", function _Suite()
 	{
 		process.env.OPENCRANE_DEVELOPMENT_PROFILE = profile;
 		process.env.OPENCRANE_CONTROLLER_TOKEN_PATH = "/tmp/opencrane-tier-2/controller.token";
+		process.env.AGENT_RUNTIME_CONTINUATION_KEYRING_PATH = "/tmp/opencrane-tier-2/runtime-continuation-keyring.json";
 		process.env.OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH = "/tmp/opencrane-tier-2/runtime-launch.secret";
 		const config = _ReadDevelopmentConfig();
 		expect(config.profile).toBe(profile);
 		expect(config.controllerTokenPath).toBe(process.env.OPENCRANE_CONTROLLER_TOKEN_PATH);
+		expect(config.continuationKeyringPath).toBe(process.env.AGENT_RUNTIME_CONTINUATION_KEYRING_PATH);
 		expect(config.runtimeLaunchSecretPath).toBe(process.env.OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH);
 	});
 
-	it("requires both private identity paths for an Agent profile", function _RequiresIdentityFiles(): void
+	it("requires every private identity path for an Agent profile", function _RequiresIdentityFiles(): void
 	{
 		process.env.OPENCRANE_DEVELOPMENT_PROFILE = LocalDevelopmentProfileKinds.AgentSimulated;
 		expect(_ReadDevelopmentConfig).toThrow(/OPENCRANE_CONTROLLER_TOKEN_PATH/);
 
 		process.env.OPENCRANE_CONTROLLER_TOKEN_PATH = "/tmp/opencrane-tier-2/controller.token";
+		expect(_ReadDevelopmentConfig).toThrow(/AGENT_RUNTIME_CONTINUATION_KEYRING_PATH/);
+
+		process.env.AGENT_RUNTIME_CONTINUATION_KEYRING_PATH = "/tmp/opencrane-tier-2/runtime-continuation-keyring.json";
 		expect(_ReadDevelopmentConfig).toThrow(/OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH/);
 	});
 

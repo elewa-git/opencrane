@@ -22,24 +22,24 @@ afterEach(function _RestoreFetch()
 /** Verify every byte and job operation stays behind the OpenCrane broker. */
 describe("artifact preprocessor remote adapter", function _suite()
 {
-	it("claims with a freshly read projected token and validates the exact response", async function _claim()
+	it("bootstraps the mounted assignment with a freshly read projected token", async function _bootstrap()
 	{
 		const scratch = await mkdtemp(join(tmpdir(), "artifact-preprocessor-remote-"));
 		const tokenPath = join(scratch, "token");
 		await writeFile(tokenPath, "projected-token\n");
 		const fetchMock = vi.fn(async function _fetch(url: string, init: RequestInit)
 		{
-			expect(url).toBe("http://opencrane/api/internal/artifact-preprocessor/jobs:claim");
+			expect(url).toBe("http://opencrane/api/internal/artifact-preprocessor/jobs:bootstrap");
 			expect(init.method).toBe("POST");
 			expect(init.headers).toMatchObject({ authorization: "Bearer projected-token", "content-type": "application/json" });
-			expect(init.body).toBe("{}");
+			expect(init.body).toBe(JSON.stringify({ reference: "bootstrap-reference" }));
 			return Response.json(_Claim());
 		});
 		vi.stubGlobal("fetch", fetchMock);
 		try
 		{
 			const remote = _CreateArtifactPreprocessorRemote({ openCraneInternalUrl: "http://opencrane", tokenPath, requestTimeoutMilliseconds: 1_000 });
-			await expect(remote.claim(new AbortController().signal)).resolves.toEqual(_Claim());
+			await expect(remote.bootstrap("bootstrap-reference", new AbortController().signal)).resolves.toEqual(_Claim());
 		}
 		finally
 		{
@@ -47,7 +47,7 @@ describe("artifact preprocessor remote adapter", function _suite()
 		}
 	});
 
-	it("rejects invalid claim JSON before it can become protocol state", async function _RejectsInvalidClaimJson()
+	it("rejects invalid bootstrap JSON before it can become protocol state", async function _RejectsInvalidClaimJson()
 	{
 		const scratch = await mkdtemp(join(tmpdir(), "artifact-preprocessor-remote-"));
 		const tokenPath = join(scratch, "token");
@@ -56,7 +56,7 @@ describe("artifact preprocessor remote adapter", function _suite()
 		try
 		{
 			const remote = _CreateArtifactPreprocessorRemote({ openCraneInternalUrl: "http://opencrane", tokenPath, requestTimeoutMilliseconds: 1_000 });
-			await expect(remote.claim(new AbortController().signal)).rejects.toThrow(/artifact preprocess authority response must contain valid JSON/);
+			await expect(remote.bootstrap("bootstrap-reference", new AbortController().signal)).rejects.toThrow(/artifact preprocess authority response must contain valid JSON/);
 		}
 		finally
 		{
@@ -64,7 +64,7 @@ describe("artifact preprocessor remote adapter", function _suite()
 		}
 	});
 
-	it("cancels an anomalous claim response before clearing its deadline", async function _cancelRejectedResponse()
+	it("cancels an anomalous bootstrap response before clearing its deadline", async function _cancelRejectedResponse()
 	{
 		const scratch = await mkdtemp(join(tmpdir(), "artifact-preprocessor-remote-"));
 		const tokenPath = join(scratch, "token");
@@ -75,7 +75,7 @@ describe("artifact preprocessor remote adapter", function _suite()
 		try
 		{
 			const remote = _CreateArtifactPreprocessorRemote({ openCraneInternalUrl: "http://opencrane", tokenPath, requestTimeoutMilliseconds: 1_000 });
-			await expect(remote.claim(new AbortController().signal)).rejects.toThrow("HTTP 503");
+			await expect(remote.bootstrap("bootstrap-reference", new AbortController().signal)).rejects.toThrow("HTTP 503");
 			expect(cancel).toHaveBeenCalledOnce();
 		}
 		finally

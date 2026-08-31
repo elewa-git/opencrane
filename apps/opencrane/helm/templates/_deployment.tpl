@@ -1,6 +1,5 @@
 {{- define "opencrane.server.deployment" -}}
-{{- $managedPlane := (index .Values "managedAgentRuntimePlane").managedAgentRuntime -}}
-{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
+{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") .Values.agentController.warmRuntime.managedNamespace -}}
 {{- $membership := .Values.clustertenantManager.membership -}}
 {{- $standaloneMembership := $membership.standalone -}}
 {{- $fleetMembership := $membership.fleet -}}
@@ -10,6 +9,8 @@
 {{- $tier3Auth := .Values.clustertenantManager.tier3DevelopmentAuthentication -}}
 {{- $ociRegistry := .Values.clustertenantManager.workflows.ociRegistry -}}
 {{- $ociRegistryAuthorization := $ociRegistry.authorization -}}
+{{- $continuationKeyring := .Values.clustertenantManager.workflows.continuationKeyring -}}
+{{- $skillAuthoring := (index .Values "opencrane-skill-authoring").skillAuthoring -}}
 {{- $mcpExecutor := (index .Values "opencrane-mcp-executor").mcpExecutor -}}
 {{- $controlPlaneHost := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
 {{- $channelSiloId := .Values.channelProxy.siloId | default $firstUser.clusterTenant | default .Release.Name -}}
@@ -80,6 +81,12 @@
 {{- if and $ociRegistryAuthorization.existingSecret (empty $ociRegistryAuthorization.secretKey) -}}
 {{- fail "clustertenantManager.workflows.ociRegistry.authorization.secretKey is required when an existingSecret is configured" -}}
 {{- end -}}
+{{- if empty $continuationKeyring.existingSecret -}}
+{{- fail "clustertenantManager.workflows.continuationKeyring.existingSecret is required" -}}
+{{- end -}}
+{{- if empty $continuationKeyring.secretKey -}}
+{{- fail "clustertenantManager.workflows.continuationKeyring.secretKey is required" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -146,14 +153,8 @@ spec:
             - name: CHANNEL_PROXY_URL
               value: {{ printf "http://%s-channel-proxy.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.channelProxy.service.port | quote }}
             {{- end }}
-            - name: AGENT_CONTROLLER_CLAIM_LEASE_SECONDS
-              value: {{ .Values.agentController.claimLeaseSeconds | quote }}
             - name: AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS
               value: {{ .Values.agentController.assignmentTtlSeconds | quote }}
-            - name: AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS
-              value: {{ .Values.agentController.outboxRetentionSeconds | quote }}
-            - name: AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE
-              value: {{ .Values.agentController.outboxPruneBatchSize | quote }}
             - name: AGENT_RUN_ADMISSION_MAX_CONCURRENT
               value: {{ .Values.clustertenantManager.runAdmission.maxConcurrent | quote }}
             - name: AGENT_RUN_ADMISSION_MAX_QUEUED
@@ -167,6 +168,8 @@ spec:
               value: {{ .Values.clustertenantManager.workflows.workerConcurrency | quote }}
             - name: OPENCRANE_WORKFLOW_POLL_INTERVAL_MS
               value: {{ .Values.clustertenantManager.workflows.pollIntervalMilliseconds | quote }}
+            - name: AGENT_RUNTIME_CONTINUATION_KEYRING_PATH
+              value: /var/run/opencrane/runtime-continuation/keyring.json
             - name: OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS
               value: {{ .Values.clustertenantManager.workflows.mcpEraProbeTimeoutMilliseconds | quote }}
             - name: OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES
@@ -223,6 +226,8 @@ spec:
             - name: AGENT_RUNTIME_MANAGED_NAMESPACE
               value: {{ $managedRuntimeNamespace | quote }}
             # OCI-backed MCP calls use a separate Job class and Pod-bound companion identity.
+            - name: SKILL_AUTHORING_NAMESPACE
+              value: {{ $skillAuthoring.namespace | quote }}
             - name: MCP_EXECUTOR_NAMESPACE
               value: {{ $mcpExecutor.namespace | quote }}
             - name: MCP_CONTROLLER_CLAIM_LEASE_SECONDS
@@ -342,17 +347,6 @@ spec:
                   key: {{ .apiKeySecretKey }}
             {{- end }}
             {{- end }}
-            {{- if .Values.mcpGateway.serviceTokenExistingSecret }}
-            # Obot server transport: custody provisioning and durable action execution. Rendered only
-            # when the pre-provisioned service-credential Secret is named; otherwise the app composes
-            # fail-closed unavailable adapters and no Obot exchange can occur.
-            - name: OBOT_GATEWAY_URL
-              value: {{ include "opencrane.mcpGatewayUrl" . | quote }}
-            - name: OBOT_SERVICE_TOKEN_PATH
-              value: /var/run/opencrane/obot/token
-            - name: OBOT_TIMEOUT_SECONDS
-              value: {{ .Values.mcpGateway.serverTimeoutSeconds | quote }}
-            {{- end }}
             {{- include "opencrane.clustertenantManagerDatabaseEnv" . | nindent 12 }}
             # Server-owned Kubernetes operations are restricted to this release namespace.
             - name: POD_NAMESPACE
@@ -393,11 +387,9 @@ spec:
             - name: memory-gateway-token
               mountPath: /var/run/opencrane/memory-gateway
               readOnly: true
-            {{- if .Values.mcpGateway.serviceTokenExistingSecret }}
-            - name: obot-service-token
-              mountPath: /var/run/opencrane/obot
+            - name: runtime-continuation-keyring
+              mountPath: /var/run/opencrane/runtime-continuation
               readOnly: true
-            {{- end }}
             {{- if $tier3Auth.enabled }}
             - name: tier3-development-auth
               mountPath: /var/run/opencrane/tier3-auth
@@ -473,16 +465,14 @@ spec:
                   path: token
                   audience: opencrane-memory-gateway
                   expirationSeconds: {{ .Values.clustertenantManager.memoryGateway.projectedTokenTtlSeconds }}
-        {{- if .Values.mcpGateway.serviceTokenExistingSecret }}
-        # Pre-provisioned (out-of-band) Obot service credential; never rendered by the chart.
-        - name: obot-service-token
+        # The server re-reads this keyring for every continuation operation so rotation is live.
+        - name: runtime-continuation-keyring
           secret:
-            secretName: {{ .Values.mcpGateway.serviceTokenExistingSecret | quote }}
+            secretName: {{ $continuationKeyring.existingSecret | quote }}
             defaultMode: 0440
             items:
-               - key: token
-                 path: token
-        {{- end }}
+              - key: {{ $continuationKeyring.secretKey | quote }}
+                path: keyring.json
         {{- if $tier3Auth.enabled }}
         - name: tier3-development-auth
           secret:

@@ -128,8 +128,8 @@ It selects the real HTTP and WebSocket gateways plus the development proxy inste
 in-browser gateway implementations. The Tier 2 coordinator owns its backend, session, and lifecycle.
 
 Core supports onboarding, persisted conversations, direct and group messages, and run admission.
-It deliberately leaves Agent execution, models, memory, files, channels, integrations, Obot,
-Cognee, the memory gateway, and Kubernetes disabled.
+It deliberately leaves Agent execution, models, memory, files, channels, integrations, Cognee, the
+memory gateway, and Kubernetes disabled.
 
 ## Add local Agent chat
 

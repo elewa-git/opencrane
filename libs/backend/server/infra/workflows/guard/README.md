@@ -25,13 +25,15 @@ configured silo — the isolated organisation boundary — and that its task nam
 `workflows/infra_absurd` *(the current PostgreSQL-backed workflow engine adapter)*
 
 The guard refuses cross-silo input, unreviewed task names, non-JSON values, and fields that look like
-credentials before they can become saved database payloads. Its checkpoint wrapper traces only
-task name, step name, silo, queue, a hashed task key, and outcome metadata. It forwards the attempt
-number reported by the workflow engine so retry-aware tasks can make decisions from stored state.
+credentials before they can become saved database payloads. It applies the same queue policy when a
+server declares work for a handler in another process. Its checkpoint wrapper traces only task name,
+step name, silo, queue, a hashed task key, and outcome metadata. It forwards the attempt number
+reported by the workflow engine so retry-aware tasks can make decisions from stored state.
 
 ## Public surface
 
-- `__CreateWorkflowGuard` — apply one silo's policy and shared queue authority to a workflow engine.
+- `__CreateWorkflowGuard` — apply one silo's policy and shared queue authority to local handlers and
+  remote task declarations.
 - `__CreateWorkflowTaskQueueAuthority` — build the immutable reviewed task-to-queue authority that
   both the guard and engine adapter receive.
 - `WorkflowPayloadValidationError`, `WorkflowTaskPolicyError` — fail-closed policy outcomes.

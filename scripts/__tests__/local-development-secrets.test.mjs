@@ -223,6 +223,10 @@ test("disposable development credentials are private and include a valid Ed25519
 		assert.equal(fs.statSync(keyPaths.publicKeyPath).mode & 0o777, 0o600);
 		assert.equal(fs.statSync(keyPaths.controllerTokenPath).mode & 0o777, 0o600);
 		assert.equal(fs.statSync(keyPaths.runtimeLaunchSecretPath).mode & 0o777, 0o600);
+		assert.equal(fs.statSync(keyPaths.continuationKeyringPath).mode & 0o777, 0o600);
+		const continuationKeyring = JSON.parse(fs.readFileSync(keyPaths.continuationKeyringPath, "utf8"));
+		assert.equal(continuationKeyring.activeKeyId, "tier2-session");
+		assert.equal(Buffer.from(continuationKeyring.keys[continuationKeyring.activeKeyId], "base64").byteLength, 32);
 		const runtimeLaunchSecret = fs.readFileSync(keyPaths.runtimeLaunchSecretPath, "utf8").trim();
 		assert.ok(Buffer.byteLength(runtimeLaunchSecret) >= 32);
 		assert.notEqual(fs.readFileSync(keyPaths.controllerTokenPath, "utf8").trim(), runtimeLaunchSecret);
@@ -248,6 +252,7 @@ test("core credentials omit unused Agent controller and runtime secrets", functi
 		assert.equal(fs.existsSync(path.join(keyPaths.directory, "public.pem")), true);
 		assert.equal(fs.existsSync(path.join(keyPaths.directory, "controller.token")), false);
 		assert.equal(fs.existsSync(path.join(keyPaths.directory, "runtime-launch.secret")), false);
+		assert.equal(fs.existsSync(path.join(keyPaths.directory, "runtime-continuation-keyring.json")), false);
 	}
 	finally
 	{

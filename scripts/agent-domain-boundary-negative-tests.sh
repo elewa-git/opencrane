@@ -8,11 +8,10 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 mkdir -p "$TMP_DIR/libs/backend"
 cp -R "$ROOT/libs/backend/agents" "$TMP_DIR/libs/backend/agents"
-mkdir -p "$TMP_DIR/libs/backend/server/iam" "$TMP_DIR/libs/backend/server/agents" "$TMP_DIR/libs/backend/server/gateways"
+mkdir -p "$TMP_DIR/libs/backend/server/iam" "$TMP_DIR/libs/backend/server/agents"
 cp -R "$ROOT/libs/backend/server/iam/membership" "$TMP_DIR/libs/backend/server/iam/membership"
 cp -R "$ROOT/libs/backend/server/iam/authorization" "$TMP_DIR/libs/backend/server/iam/authorization"
 cp -R "$ROOT/libs/backend/server/agents/agent-services" "$TMP_DIR/libs/backend/server/agents/agent-services"
-cp -R "$ROOT/libs/backend/server/gateways/integrations" "$TMP_DIR/libs/backend/server/gateways/integrations"
 cp "$ROOT/tsconfig.json" "$ROOT/eslint.config.mjs" "$TMP_DIR/"
 
 expect_failure()

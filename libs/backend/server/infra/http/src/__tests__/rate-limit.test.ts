@@ -48,4 +48,5 @@ describe("_RateLimit — per-IP request limiter", function _suite()
       expect((await request(app).get("/api/internal/poll")).status).toBe(200);
     }
   });
+
 });

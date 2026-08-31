@@ -142,7 +142,7 @@ export interface McpCompanionRemote
 /** Pod-local MCP operations available to the process orchestrator. */
 export interface McpCompanionServer
 {
-	/** Wait for the uploaded server to answer pinned discovery before OpenCrane work is claimed. */
+	/** Wait under the claimed command's deadline before discovery or invocation starts. */
 	ready(signal: AbortSignal): Promise<void>;
 	/** Complete pinned protocol discovery before returning checked live tools. */
 	discover(signal: AbortSignal): Promise<readonly McpExecutorDiscoveredTool[]>;

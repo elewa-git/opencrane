@@ -146,18 +146,28 @@ describe("MCP companion Pod-local adapter", function _DescribeServer()
 
 	it("refuses the tool side effect when discovery consumes the lease", async function _FencesToolCall()
 	{
-		const methods: string[] = [];
-		const fetcher: McpCompanionFetch = vi.fn(async function _Fetch(_input, init)
+		vi.useFakeTimers();
+		try
 		{
-			const request = JSON.parse(String(init?.body)) as { readonly id: string; readonly method: string };
-			methods.push(request.method);
-			await new Promise<void>(function _Delay(resolve) { setTimeout(resolve, 15); });
-			return _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", supportedVersions: ["2026-07-28"] } });
-		});
-		const server = __CreateMcpCompanionServer({ serverUrl: "http://127.0.0.1:3000/mcp", requestTimeoutMilliseconds: 1_000, maximumRequestBytes: 4_096, maximumResponseBytes: 4_096, fetch: fetcher });
-		const command = { kind: McpCompanionCommandKinds.Invocation, lease: { ..._LEASE, expiresAt: new Date(Date.now() + 5).toISOString() }, invocationId: "invocation-1", toolName: "calendar.read", arguments: {} } as const;
-		await expect(server.call(command, new AbortController().signal)).rejects.toThrow(/expired/u);
-		expect(methods).toEqual(["server/discover"]);
+			const startedAt = new Date("2026-08-29T00:00:00.000Z");
+			vi.setSystemTime(startedAt);
+			const methods: string[] = [];
+			const fetcher: McpCompanionFetch = vi.fn(async function _Fetch(_input, init)
+			{
+				const request = JSON.parse(String(init?.body)) as { readonly id: string; readonly method: string };
+				methods.push(request.method);
+				vi.setSystemTime(new Date(startedAt.getTime() + 6));
+				return _Json({ jsonrpc: "2.0", id: request.id, result: { resultType: "complete", supportedVersions: ["2026-07-28"] } });
+			});
+			const server = __CreateMcpCompanionServer({ serverUrl: "http://127.0.0.1:3000/mcp", requestTimeoutMilliseconds: 1_000, maximumRequestBytes: 4_096, maximumResponseBytes: 4_096, fetch: fetcher });
+			const command = { kind: McpCompanionCommandKinds.Invocation, lease: { ..._LEASE, expiresAt: new Date(startedAt.getTime() + 5).toISOString() }, invocationId: "invocation-1", toolName: "calendar.read", arguments: {} } as const;
+			await expect(server.call(command, new AbortController().signal)).rejects.toThrow(/expired/u);
+			expect(methods).toEqual(["server/discover"]);
+		}
+		finally
+		{
+			vi.useRealTimers();
+		}
 	});
 });
 
@@ -178,6 +188,21 @@ describe("MCP companion orchestration", function _DescribeOrchestration()
 		const dependencies: McpCompanionDependencies = { remote: { claim, complete: vi.fn().mockResolvedValue(undefined), fail: vi.fn() }, server: { ready: vi.fn().mockResolvedValue(undefined), discover: vi.fn().mockResolvedValue([]), call: vi.fn() }, log: _Logger() };
 		await expect(__RunMcpCompanion(dependencies, _IDENTITY, new AbortController().signal)).resolves.toBe(McpCompanionRunOutcomes.Completed);
 		expect(claim).toHaveBeenCalledTimes(2);
+	});
+
+	it("reports readiness failure under the claimed command lease before MCP work starts", async function _ReportsReadinessFailure()
+	{
+		const command: McpCompanionCommand = { kind: McpCompanionCommandKinds.Invocation, lease: _LEASE, invocationId: "invocation-1", toolName: "calendar.read", arguments: {} };
+		const discover = vi.fn();
+		const call = vi.fn();
+		const fail = vi.fn().mockResolvedValue(undefined);
+		const dependencies: McpCompanionDependencies = { remote: { claim: vi.fn().mockResolvedValue(command), complete: vi.fn(), fail }, server: { ready: vi.fn().mockRejectedValue(new Error("server unavailable")), discover, call }, log: _Logger() };
+
+		await expect(__RunMcpCompanion(dependencies, _IDENTITY, new AbortController().signal)).resolves.toBe(McpCompanionRunOutcomes.Failed);
+
+		expect(fail).toHaveBeenCalledWith(_IDENTITY, command.lease, McpCompanionFailureCodes.ToolCallFailed, expect.any(AbortSignal));
+		expect(discover).not.toHaveBeenCalled();
+		expect(call).not.toHaveBeenCalled();
 	});
 
 	it("refuses discovery after its database command lease expires", async function _BoundsDiscovery()

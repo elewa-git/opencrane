@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
 
 import { __BuildSuspendedMcpExecutorJob } from "../mcp-executor-job";
+import type { McpExecutorJobAssignment } from "../mcp-executor-job.types";
 
 /** Builds a valid MCP claim and imported image assignment. */
-function _Assignment()
+function _Assignment(): McpExecutorJobAssignment
 {
 	return { claim: { claimId: "claim-1", siloId: "silo-1", workloadClass: RuntimeWorkloadClaimClasses.McpExecutor, profileName: "mcp-default", idempotencyKey: "invocation-1", claimedAt: "2026-08-26T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-08-26T00:01:00.000Z", executionReference: "mcp-execution-v1_abcdef" }, registryReference: `registry.internal/opencrane/mcp@sha256:${"a".repeat(64)}`, namespace: "opencrane-mcp" };
 }
@@ -27,7 +28,8 @@ describe("OCI-backed MCP executor Job", function _DescribeMcpExecutorJob()
 		const server = job.spec?.template.spec?.initContainers?.find(container => container.name === "mcp-server");
 		const companion = job.spec?.template.spec?.containers.find(container => container.name === "mcp-companion");
 
-		expect(job.spec).toMatchObject({ suspend: true, backoffLimit: 0, completions: 1, parallelism: 1, ttlSecondsAfterFinished: 0 });
+		expect(job.spec).toMatchObject({ suspend: true, backoffLimit: 0, completions: 1, parallelism: 1 });
+		expect(job.spec?.ttlSecondsAfterFinished).toBeUndefined();
 		expect(job.spec?.template.spec).toMatchObject({ automountServiceAccountToken: false, restartPolicy: "Never", serviceAccountName: "mcp-executor-default" });
 		expect(server?.image).toBe(_Assignment().registryReference);
 		expect(server?.restartPolicy).toBe("Always");
@@ -48,5 +50,15 @@ describe("OCI-backed MCP executor Job", function _DescribeMcpExecutorJob()
 		expect(function _ExpiredLease() { __BuildSuspendedMcpExecutorJob(_Assignment(), _Profile(), new Date("2026-08-26T00:02:00.000Z")); }).toThrow(/current MCP claim/);
 		expect(function _WrongServer() { __BuildSuspendedMcpExecutorJob(_Assignment(), { ..._Profile(), opencraneInternalUrl: "http://attacker.other.svc.cluster.local:8081/api/internal/mcp-executor" }, _NOW); }).toThrow(/fixed identity and endpoint/);
 		expect(function _UnboundedCpu() { __BuildSuspendedMcpExecutorJob(_Assignment(), { ..._Profile(), serverResources: { requests: { cpu: "100", memory: "128Mi" }, limits: { cpu: "1m", memory: "512Mi" } } }, _NOW); }).toThrow(/bounded resources/);
+	});
+
+	it("rebuilds the same suspended Job after a database claim delivery expires", function _KeepsAssignmentIdentityStable()
+	{
+		const first = __BuildSuspendedMcpExecutorJob(_Assignment(), _Profile(), _NOW);
+		const retry = { ..._Assignment(), claim: { ..._Assignment().claim, claimedAt: "2026-08-26T00:01:30.000Z", deliveryCount: 2, expiresAt: "2026-08-26T00:02:30.000Z" } };
+		const second = __BuildSuspendedMcpExecutorJob(retry, _Profile(), new Date("2026-08-26T00:02:00.000Z"));
+
+		expect(second).toEqual(first);
+		expect(second.metadata?.annotations).not.toHaveProperty("opencrane.ai/mcp-delivery-count");
 	});
 });

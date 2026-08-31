@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, McpServerTransport, OciImageValidationState, type Prisma } from "@prisma/client";
+import { McpApprovalStatus, McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, McpServerTransport, OciImageValidationState, type Prisma } from "@prisma/client";
 
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { ExternalActionRecoveryModes, ToolInvocationStates, type McpToolInvocationTransactionParticipant } from "@opencrane/backend/server/iam/authorization";
@@ -79,10 +79,14 @@ export class PrismaMcpRuntimeCatalogRepository implements McpRuntimeCatalogRepos
 		const existing = await this._transaction.mcpRuntimeExecution.findUnique({ where: { toolInvocationId: invocation.id }, select: { id: true, serverRevisionId: true } });
 
 		// 2. Resolve the selected immutable tool only inside the invocation's silo and ready server revision.
-		const tool = await this._transaction.mcpToolRevision.findFirst({ where: { id: invocation.toolRevisionId, siloId: invocation.siloId }, select: { serverRevisionId: true, serverRevision: { select: { state: true } } } });
+		const tool = await this._transaction.mcpToolRevision.findFirst({ where: { id: invocation.toolRevisionId, siloId: invocation.siloId }, select: { serverRevisionId: true, serverRevision: { select: { state: true, server: { select: { status: true, approvalStatus: true } } } } } });
 		if (tool === null)
 			return "not_mcp";
-		if (invocation.state !== ToolInvocationStates.Ready || invocation.recoveryMode !== ExternalActionRecoveryModes.Manual || tool.serverRevision.state !== McpServerRevisionState.Ready)
+		if (invocation.state !== ToolInvocationStates.Ready
+			|| invocation.recoveryMode !== ExternalActionRecoveryModes.Manual
+			|| tool.serverRevision.state !== McpServerRevisionState.Ready
+			|| tool.serverRevision.server.status !== McpServerStatus.Active
+			|| tool.serverRevision.server.approvalStatus !== McpApprovalStatus.Published)
 			return "not_ready";
 		if (existing !== null)
 			return existing.serverRevisionId === tool.serverRevisionId ? "idempotent" : "not_mcp";

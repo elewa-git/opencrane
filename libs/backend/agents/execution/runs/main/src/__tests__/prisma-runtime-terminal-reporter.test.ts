@@ -16,7 +16,6 @@ function _run(overrides: Record<string, unknown> = {})
 function _transaction(run: ReturnType<typeof _run> | null, updateCount = 1, unresolvedInvocations = 0, pendingResults = 0)
 {
 	return {
-		$queryRaw: vi.fn().mockResolvedValue([]),
 		agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: updateCount }) },
 		toolInvocation: { count: vi.fn().mockResolvedValue(unresolvedInvocations) },
 		toolResultDelivery: { count: vi.fn().mockResolvedValue(pendingResults) },

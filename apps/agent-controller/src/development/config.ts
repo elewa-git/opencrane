@@ -1,8 +1,8 @@
 import { isAbsolute, resolve } from "node:path";
 
-import { __ValidateAgentControllerRuntimeProfiles } from "@opencrane/backend/agents/runtime/controller";
-import { LocalAgentRuntimeModelStrategies } from "@opencrane/models/local-development";
-import { __ParseLocalDevelopmentProfileKind, LocalDevelopmentProfileKinds } from "@opencrane/models/local-development";
+import { __AssertWarmRuntimePoolProfile } from "@opencrane/backend/agents/runtime/k8s-launcher";
+import type { WarmRuntimePoolProfiles } from "@opencrane/backend/agents/runtime/controller";
+import { LocalAgentRuntimeModelStrategies, __ParseLocalDevelopmentProfileKind, LocalDevelopmentProfileKinds } from "@opencrane/models/local-development";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { LocalAgentControllerModelConfiguration, LocalAgentControllerProcessConfig } from "./config.types";
@@ -11,12 +11,10 @@ import type { LocalAgentControllerModelConfiguration, LocalAgentControllerProces
 function _Required(environment: NodeJS.ProcessEnv, name: string): string
 {
 	const value = environment[name]?.trim();
-
 	if (!value)
 	{
 		throw new Error(`${name} is required`);
 	}
-
 	return value;
 }
 
@@ -25,12 +23,10 @@ function _Integer(environment: NodeJS.ProcessEnv, name: string, fallback: number
 {
 	const raw = environment[name];
 	const value = raw === undefined ? fallback : Number(raw);
-
 	if (!Number.isSafeInteger(value) || value < minimum || value > maximum)
 	{
 		throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
 	}
-
 	return value;
 }
 
@@ -44,12 +40,10 @@ function _IsLoopbackHost(hostname: string): boolean
 function _Origin(value: string, name: string): URL
 {
 	const parsed = URL.parse(value);
-
 	if (!parsed || !["http:", "https:"].includes(parsed.protocol) || parsed.pathname !== "/" || parsed.search || parsed.hash || parsed.username || parsed.password)
 	{
 		throw new Error(`${name} must be one HTTP(S) origin without credentials`);
 	}
-
 	return parsed;
 }
 
@@ -58,12 +52,10 @@ function _Profile(environment: NodeJS.ProcessEnv): Exclude<LocalDevelopmentProfi
 {
 	const value = _Required(environment, "OPENCRANE_DEVELOPMENT_PROFILE");
 	const profile = __ParseLocalDevelopmentProfileKind(value);
-
 	if (profile && profile !== LocalDevelopmentProfileKinds.Core)
 	{
 		return profile;
 	}
-
 	throw new Error("the local Agent controller requires agent-local, agent-remote, or agent-simulated");
 }
 
@@ -74,77 +66,86 @@ function _ModelConfiguration(environment: NodeJS.ProcessEnv, profile: Exclude<Lo
 	{
 		return { modelStrategy: LocalAgentRuntimeModelStrategies.Simulated };
 	}
-
 	const litellmBaseUrl = _Required(environment, "LITELLM_ENDPOINT");
 	const origin = _Origin(litellmBaseUrl, "LITELLM_ENDPOINT");
-
 	if (profile === LocalDevelopmentProfileKinds.AgentLocal && !_IsLoopbackHost(origin.hostname))
 	{
 		throw new Error("agent-local requires a loopback LiteLLM origin");
 	}
-
 	if (profile === LocalDevelopmentProfileKinds.AgentRemote && (origin.protocol !== "https:" || _IsLoopbackHost(origin.hostname)))
 	{
 		throw new Error("agent-remote requires an explicit non-loopback HTTPS LiteLLM origin");
 	}
-
-	return {
-		litellmBaseUrl,
-		modelStrategy: LocalAgentRuntimeModelStrategies.LiteLlm
-	};
+	return { litellmBaseUrl, modelStrategy: LocalAgentRuntimeModelStrategies.LiteLlm };
 }
 
-/**
- * Read the development Agent controller config without importing it into the production entrypoint.
- *
- * Called by: `apps/agent-controller/src/development/index.ts`.
- * @param environment - Process environment supplied by the Tier 2 coordinator.
- * @returns Validated local endpoints, separate token paths, runtime profiles, and timings.
- * @throws When core selects the Agent controller, a token path is shared, or a model endpoint does
- * not match the selected local/remote/simulated boundary.
- */
+/** Validate the two synthetic warm pools supplied by the Tier 2 coordinator. */
+function _WarmRuntimeProfiles(value: unknown): WarmRuntimePoolProfiles
+{
+	if (typeof value !== "object" || value === null || Array.isArray(value) || Object.keys(value).length !== 2)
+	{
+		throw new Error("local warm runtime requires exactly personal and managed profiles");
+	}
+	const profiles = value as Record<string, unknown>;
+	const ports = new Set<number>();
+	for (const candidate of Object.values(profiles))
+	{
+		if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate))
+		{
+			throw new Error("local warm runtime profile must be one object");
+		}
+		__AssertWarmRuntimePoolProfile(candidate as Parameters<typeof __AssertWarmRuntimePoolProfile>[0]);
+		ports.add((candidate as { readonly bindingPort: number }).bindingPort);
+	}
+	if (ports.size !== 2)
+	{
+		throw new Error("local warm runtime profiles require distinct binding ports");
+	}
+	return structuredClone(profiles) as WarmRuntimePoolProfiles;
+}
+
+/** Read and fail-closed validate the Tier 2 warm-runtime controller configuration. */
 export function _ReadDevelopmentConfig(environment: NodeJS.ProcessEnv = process.env): LocalAgentControllerProcessConfig
 {
-	// 1. Select the Agent profile first, because it decides whether a model endpoint may exist.
 	const profile = _Profile(environment);
-	const profiles = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_PROFILES_JSON"), "AGENT_CONTROLLER_PROFILES_JSON", __ValidateAgentControllerRuntimeProfiles);
 	const modelConfiguration = _ModelConfiguration(environment, profile);
-
-	// 2. Keep the controller bearer and runtime signing material in separate private files.
 	const controllerTokenPath = _Required(environment, "OPENCRANE_CONTROLLER_TOKEN_PATH");
 	const runtimeLaunchSecretPath = _Required(environment, "OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH");
-
 	if (!isAbsolute(controllerTokenPath) || !isAbsolute(runtimeLaunchSecretPath) || controllerTokenPath === runtimeLaunchSecretPath)
 	{
 		throw new Error("local controller and runtime token paths must be distinct absolute paths");
 	}
-
-	// 3. Accept only loopback OpenCrane origins; the local identity boundary never trusts network location.
 	const openCraneInternalUrl = _Required(environment, "OPENCRANE_INTERNAL_URL");
 	const internalOrigin = _Origin(openCraneInternalUrl, "OPENCRANE_INTERNAL_URL");
-
 	if (internalOrigin.protocol !== "http:" || !_IsLoopbackHost(internalOrigin.hostname))
 	{
 		throw new Error("the development Agent controller requires a loopback HTTP OpenCrane origin");
 	}
-
-	const runtimeStreamUrl = `${internalOrigin.origin}/api/internal/agent-runtime`;
-
-	// 4. Reuse the production profile validator so durable profile, namespace, and identity checks stay unchanged.
-	const runtimeApplicationDirectory = resolve(_Required(environment, "OPENCRANE_REPOSITORY_ROOT"), "apps/agent-runtime");
+	const databaseUrl = _Required(environment, "DATABASE_URL");
+	const database = new URL(databaseUrl);
+	if (!_IsLoopbackHost(database.hostname))
+	{
+		throw new Error("the development Agent controller requires loopback PostgreSQL");
+	}
 	return {
 		profile,
 		openCraneInternalUrl,
+		serverServiceName: _Required(environment, "OPENCRANE_SERVER_SERVICE_NAME"),
+		serverNamespace: _Required(environment, "OPENCRANE_SERVER_NAMESPACE"),
+		siloId: _Required(environment, "OPENCRANE_SILO_ID"),
+		databaseUrl,
 		controllerTokenPath,
 		runtimeLaunchSecretPath,
-		runtimeApplicationDirectory,
+		runtimeApplicationDirectory: resolve(_Required(environment, "OPENCRANE_REPOSITORY_ROOT"), "apps/agent-runtime"),
 		pythonExecutable: _Required(environment, "OPENCRANE_LOCAL_RUNTIME_PYTHON"),
-		runtimeStreamUrl,
+		runtimeStreamUrl: `${internalOrigin.origin}/api/internal/warm-runtime`,
 		litellmBaseUrl: modelConfiguration.litellmBaseUrl,
 		modelStrategy: modelConfiguration.modelStrategy,
-		profiles,
+		warmRuntimeProfiles: ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_WARM_PROFILES_JSON"), "AGENT_CONTROLLER_WARM_PROFILES_JSON", _WarmRuntimeProfiles),
+		workflowDatabasePoolSize: _Integer(environment, "OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE", 2, 1, 20),
+		workflowWorkerConcurrency: _Integer(environment, "OPENCRANE_WORKFLOW_WORKER_CONCURRENCY", 2, 1, 20),
+		workflowPollIntervalMilliseconds: _Integer(environment, "OPENCRANE_WORKFLOW_POLL_INTERVAL_MS", 100, 10, 60_000),
 		pollIntervalMilliseconds: _Integer(environment, "AGENT_CONTROLLER_POLL_INTERVAL_MS", 1_000, 100, 60_000),
-		outboxPruneIntervalMilliseconds: _Integer(environment, "AGENT_CONTROLLER_OUTBOX_PRUNE_INTERVAL_MS", 3_600_000, 60_000, 86_400_000),
 		requestTimeoutMilliseconds: _Integer(environment, "AGENT_CONTROLLER_REQUEST_TIMEOUT_MS", 10_000, 1_000, 60_000)
 	};
 }

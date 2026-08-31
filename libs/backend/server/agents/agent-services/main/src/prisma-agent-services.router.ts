@@ -11,7 +11,7 @@ import { __CreateAgentServicesRouter } from "./agent-revision.router";
 import type { AgentPublicationAuditEvidencePort, AgentServicePublicationRepository, AtomicAgentRevisionPublication } from "./agent-publication.types";
 import type { ManagedRunAdmissionPort } from "./agent-revision-lifecycle.types";
 import type { ManagementCaller } from "./agent-revision.router.types";
-import { PrismaAgentServicePublicationRepository } from "./db/prisma-agent-publication";
+import { PrismaAgentServicePublicationUnitOfWork } from "./db/prisma-agent-publication";
 import { PrismaAgentRevisionLifecycleUnitOfWork } from "./db/prisma-agent-revision-lifecycle";
 import { PrismaAgentScheduleRepository } from "./db/prisma-agent-schedule";
 import { PrismaBoundaryGrantUnitOfWork } from "./db/prisma-boundary-grant-unit-of-work";
@@ -61,7 +61,7 @@ function _buildPublicationAuditEvidence(caller: ManagementCaller): AgentPublicat
 /** Builds a caller-attributed publication repository so the audit records the real actor. */
 function _publicationFor(prisma: PrismaClient, caller: ManagementCaller): AgentServicePublicationRepository
 {
-	return new PrismaAgentServicePublicationRepository(prisma, _buildPublicationAuditEvidence(caller));
+	return new PrismaAgentServicePublicationUnitOfWork(prisma, _buildPublicationAuditEvidence(caller));
 }
 
 /**

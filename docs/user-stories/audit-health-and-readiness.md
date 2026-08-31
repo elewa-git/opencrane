@@ -44,7 +44,7 @@ which journeys are configured, available, degraded, or deliberately disabled.
 
 Acceptance criteria:
 
-- The projection covers OIDC, membership, LiteLLM, model routing, Obot custody, MCP invocation,
+- The projection covers OIDC, membership, LiteLLM, model routing, OCI MCP invocation,
   agent controller, scheduler, artifact preprocessing, memory gateway, and admission capacity.
 - States distinguish absent/disabled, configured, ready, degraded, and unavailable.
 - Configuration existence is never used as proof of executable readiness.

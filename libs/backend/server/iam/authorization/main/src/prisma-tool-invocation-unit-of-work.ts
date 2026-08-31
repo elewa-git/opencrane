@@ -180,7 +180,7 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 		return this._prisma.$transaction(async function _transaction(transaction): Promise<TResult>
 		{
 			const repository = new PrismaToolInvocationRepository(transaction);
-			const participant = new PrismaMcpToolInvocationParticipantUnitOfWork(transaction, lifecycleEvents, recoveryEvents, runRecovery);
+			const participant = new PrismaMcpToolInvocationParticipantUnitOfWork(transaction, lifecycleEvents, recoveryEvents, runRecovery, null);
 			return operation(repository, transaction, participant);
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
@@ -189,6 +189,8 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 /** Build one secret-free canonical failure or retry event. */
 function _failedEvent(invocation: ToolInvocationRecord, reason: string, retrying: boolean, retryLimit: number): ToolInvocationLifecycleEvent
 {
+	if (invocation.runId === null || invocation.attempt === null)
+		throw new Error("AgentRun tool failure event requires a run owner");
 	return { runId: invocation.runId, attempt: invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: invocation.toolInvocationId, toolRevisionId: invocation.toolRevisionId, reason, retryCount: invocation.preparationAttempt, retryLimit, retrying } };
 }
 
@@ -201,6 +203,8 @@ async function _appendLifecycleEvent(sink: ToolInvocationLifecycleEventSink, tra
 /** Append the "a person must decide this" entry, and throw if the run refuses it, so a tool call can never reach `RecoveryRequired` unnoticed. */
 async function _appendRecoveryEvent(sink: ToolInvocationRecoveryEventSink, transaction: Prisma.TransactionClient, invocation: ToolInvocationRecord): Promise<void>
 {
+	if (invocation.runId === null || invocation.attempt === null)
+		throw new Error("AgentRun tool recovery event requires a run owner");
 	const event: ToolInvocationRecoveryEvent = { runId: invocation.runId, expectedAttempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, preparationRetryCount: invocation.preparationAttempt, preparationRetryLimit: TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit, providerOutcome: "unknown_after_dispatch" };
 	if (!await sink.appendInTransaction(transaction, event)) throw new Error("tool recovery state requires its canonical recovery event");
 }
@@ -208,6 +212,8 @@ async function _appendRecoveryEvent(sink: ToolInvocationRecoveryEventSink, trans
 /** Move the run into manual recovery and record it, in the same transaction as the tool call's change. See the comment inside for why a cancelling run is the one case that records nothing. */
 async function _enterRecoveryRequired(authority: ToolInvocationRunRecoveryAuthority, sink: ToolInvocationRecoveryEventSink, transaction: Prisma.TransactionClient, invocation: ToolInvocationRecord): Promise<void>
 {
+	if (invocation.runId === null || invocation.attempt === null)
+		throw new Error("AgentRun tool recovery requires a run owner");
 	const outcome = await authority.enterRecoveryRequiredInTransaction(transaction, { runId: invocation.runId, attempt: invocation.attempt });
 	// Cancelling is the only valid outcome that suppresses the recovery event. The invocation's
 	// claim-clearing evidence still commits so cancellation can finish without repeating provider I/O.

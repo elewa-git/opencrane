@@ -34,6 +34,8 @@ function _Server(state: _EraState): McpOperatorServerRecord
 		glyph: null,
 		serverType: "MultiUser",
 		approvalStatus: state.target.eraProbeStatus === McpEraProbeStates.Accepted ? "PendingReview" : "Disabled",
+		status: state.target.eraProbeStatus === McpEraProbeStates.Accepted ? "Active" : "Degraded",
+		latestReadyRevision: null,
 		credentialSchema: [],
 		entitlementSummary: null,
 		endpoint: state.target.endpoint,

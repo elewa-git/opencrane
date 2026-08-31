@@ -12,12 +12,12 @@ contract.
 | [`agents`](./agents/) | Agent publication, onboarding, scheduling, channel admission, and artifacts. | agent-services, onboarding, scheduling, skills, artifacts, channel-targets |
 | [`conversations`](./conversations/main/) | Conversation membership, canonical timeline, mode-correct admission, authorised readers and HTTP stream routes. | conversations |
 | [`conversation-assets`](./conversation-assets/main/) | Participant uploads, quarantine, Files projection, and transaction-bound message attachments. | conversation-assets |
-| [`gateways`](./gateways/) | Governance of external model and tool planes. | mcp, integrations, providers, model-routing |
+| [`gateways`](./gateways/) | Governance of external model and tool planes. | mcp, providers, model-routing |
 | [`knowledge`](./knowledge/) | Organisational retrieval and memory access. | retrieval |
 | [`tenancy`](./tenancy/) | The organisation boundary used by server capabilities. | cluster-tenants |
 | [`reporting`](./reporting/) | Agent and model economics. | spend |
 | [`utils`](./utils/) | Server-only helpers shared across capability boundaries. | ZIP package parsing |
-| [`infra`](./infra/) | Process-specific transport, identity, and external-I/O seams. | api, auth, agent-runtime-stream, workload-identity, http, memory-gateway-client, obot-custody, sandbox-execution |
+| [`infra`](./infra/) | Process-specific transport, identity, and external-I/O seams. | api, auth, agent-runtime-stream, workload-identity, http, memory-gateway-client, sandbox-execution |
 
 [`api-spec`](./api-spec/main/) remains flat because it aggregates public paths from every group;
 placing it in one group would imply ownership of those capabilities.

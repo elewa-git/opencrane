@@ -8,7 +8,7 @@ export class PrismaSelfRunCancellationRepository implements SelfRunCancellationR
 {
 	/** Canonical transaction-compatible product-authority database client. */
 	private readonly _prisma: Prisma.TransactionClient;
-	/** Shared attempt-fenced cancellation authority also used by cleanup workers. */
+	/** Shared attempt-fenced cancellation authority used by owner and internal routes. */
 	private readonly _cancellation: RunCancellationRepository;
 
 	/** Construct the owner-bound cancellation repository. */
@@ -25,16 +25,15 @@ export class PrismaSelfRunCancellationRepository implements SelfRunCancellationR
 		// cancellation repository independently fences the exact mutable attempt inside its transaction.
 		const owned = await this._prisma.agentRun.findFirst({ where: { id: command.runId, siloId: command.siloId, delegatedUserId: command.subjectId }, select: { id: true } });
 		if (owned === null) return { outcome: SelfRunCancellationOutcomes.NotFound };
-		const result = await this._cancellation.requestCancellationAtomically({ runId: owned.id, expectedAttempt: command.expectedAttempt, requestedBy: command.subjectId });
+		const result = await this._cancellation.requestCancellationAtomically({ runId: owned.id, expectedAttempt: command.expectedAttempt });
 		return _MapCancellationResult(result);
 	}
 }
 
-/** Translate the package-private cleanup result into the smaller owner-facing vocabulary. */
+/** Translate the shared cancellation result into the smaller owner-facing vocabulary. */
 function _MapCancellationResult(result: RequestRunCancellationResult): SelfRunCancellationResult
 {
 	if (result.status === RunCancellationResultStatuses.Cancelling) return { outcome: SelfRunCancellationOutcomes.Cancelling, runId: result.runId, attempt: result.attempt };
-	if (result.status === RunCancellationResultStatuses.Cancelled) return { outcome: SelfRunCancellationOutcomes.Cancelled, runId: result.runId, attempt: result.attempt };
 	if (result.status === RunCancellationResultStatuses.Idempotent)
 	{
 		const outcome = result.state === SelfRunCancellationOutcomes.Cancelling ? SelfRunCancellationOutcomes.Cancelling : SelfRunCancellationOutcomes.Cancelled;

@@ -14,7 +14,7 @@ const _STATE_BY_ACTION: Readonly<Record<ChangeAgentServiceStateCommand["action"]
 /** Builds valid executable content for a managed revision. */
 function _content(overrides: Partial<AgentRevisionContent> = {}): AgentRevisionContent
 {
-	return { promptPolicyVersion: "prompt-v1", personaRevisionId: null, modelDefinitionId: "model-definition-a", budget: { maxTurns: 5, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 }, skills: [], integrationAssignments: [], boundaryAttachments: [{ boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "proj-1", boundaryCoverage: RevisionBoundaryCoverages.Exact }], ...overrides };
+	return { promptPolicyVersion: "prompt-v1", personaRevisionId: null, modelDefinitionId: "model-definition-a", budget: { maxTurns: 5, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 }, skills: [], mcpToolRevisionIds: [], boundaryAttachments: [{ boundaryKind: RevisionBoundaryKinds.Group, boundaryId: "proj-1", boundaryCoverage: RevisionBoundaryCoverages.Exact }], ...overrides };
 }
 
 /** Minimal in-memory definition-plane repository, silo-scoped like the Prisma adapter. */
@@ -38,7 +38,10 @@ class _Repository implements AgentRevisionLifecycleRepository
 	async getRevision(id: string, siloId: string): Promise<AgentRevision | null>
 	{
 		const revision = this.revisions.find(entry => entry.id === id) ?? null;
-		if (revision === null) return null;
+		if (revision === null)
+		{
+			return null;
+		}
 		const service = this.services.get(revision.agentServiceId) ?? null;
 		return service !== null && service.siloId === siloId ? revision : null;
 	}
@@ -54,30 +57,54 @@ class _Repository implements AgentRevisionLifecycleRepository
 
 	async reviseRevision(command: ReviseAgentRevisionCommand, createdAt: string): Promise<AppendAgentRevisionResult>
 	{
-		if (this._siloService(command.agentServiceId, command.siloId) === null) return { outcome: "denied", reason: "service_not_found" };
+		if (this._siloService(command.agentServiceId, command.siloId) === null)
+		{
+			return { outcome: "denied", reason: "service_not_found" };
+		}
 		const head = this._head(command.agentServiceId);
-		if (head === null || head.id !== command.expectedParentRevisionId) return { outcome: "conflict", currentHeadRevisionId: head?.id ?? null };
+		if (head === null || head.id !== command.expectedParentRevisionId)
+		{
+			return { outcome: "conflict", currentHeadRevisionId: head?.id ?? null };
+		}
 		return { outcome: "revised", revision: this._append(command.agentServiceId, head.revision + 1, head.id, null, command.content, command.authoredBy, command.changeMessage, createdAt) };
 	}
 
 	async restoreRevision(command: RestoreAgentRevisionCommand, createdAt: string): Promise<AppendAgentRevisionResult>
 	{
-		if (this._siloService(command.agentServiceId, command.siloId) === null) return { outcome: "denied", reason: "service_not_found" };
+		if (this._siloService(command.agentServiceId, command.siloId) === null)
+		{
+			return { outcome: "denied", reason: "service_not_found" };
+		}
 		const head = this._head(command.agentServiceId);
-		if (head === null || head.id !== command.expectedParentRevisionId) return { outcome: "conflict", currentHeadRevisionId: head?.id ?? null };
+		if (head === null || head.id !== command.expectedParentRevisionId)
+		{
+			return { outcome: "conflict", currentHeadRevisionId: head?.id ?? null };
+		}
 		// Silo-scope the source lookup exactly like the Prisma adapter: a foreign-silo source is a 404.
 		const source = this.revisions.find(revision => revision.id === command.sourceRevisionId && this._siloService(revision.agentServiceId, command.siloId) !== null);
-		if (source === undefined) return { outcome: "denied", reason: "revision_not_found" };
-		const content: AgentRevisionContent = { promptPolicyVersion: source.promptPolicyVersion, personaRevisionId: source.personaRevisionId, modelDefinitionId: source.modelDefinitionId, budget: source.budget, skills: source.skills.map(skill => ({ skillId: skill.skillId, revisionId: skill.revisionId })), integrationAssignments: source.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, toolDefinitions: assignment.toolDefinitions.map(tool => ({ ...tool })) })), boundaryAttachments: source.boundaryAttachments.map(attachment => ({ ...attachment })) };
+		if (source === undefined)
+		{
+			return { outcome: "denied", reason: "revision_not_found" };
+		}
+		const content: AgentRevisionContent = { promptPolicyVersion: source.promptPolicyVersion, personaRevisionId: source.personaRevisionId, modelDefinitionId: source.modelDefinitionId, budget: source.budget, skills: source.skills.map(skill => ({ skillId: skill.skillId, revisionId: skill.revisionId })), mcpToolRevisionIds: [...source.mcpToolRevisionIds], boundaryAttachments: source.boundaryAttachments.map(attachment => ({ ...attachment })) };
 		return { outcome: "revised", revision: this._append(command.agentServiceId, head.revision + 1, head.id, source.id, content, command.authoredBy, command.changeMessage, createdAt) };
 	}
 
 	async changeServiceState(command: ChangeAgentServiceStateCommand, changedAt: string): Promise<ChangeAgentServiceStateResult>
 	{
 		const service = this._siloService(command.agentServiceId, command.siloId);
-		if (service === null) return { outcome: "denied", reason: "service_not_found" };
-		if (service.state !== command.expectedState) return { outcome: "conflict", currentState: service.state };
-		if (command.action === "enable" && service.activeRevisionId === null) return { outcome: "denied", reason: "service_not_runnable" };
+		if (service === null)
+		{
+			return { outcome: "denied", reason: "service_not_found" };
+		}
+		if (service.state !== command.expectedState)
+		{
+			return { outcome: "conflict", currentState: service.state };
+		}
+		if (command.action === "enable" && service.activeRevisionId === null)
+		{
+			return { outcome: "denied", reason: "service_not_runnable" };
+		}
 		const state = _STATE_BY_ACTION[command.action];
 		const updated: AgentService = { ...service, state, activeRevisionId: command.action === "retire" ? null : service.activeRevisionId, updatedAt: changedAt };
 		this.services.set(service.id, updated);
@@ -86,7 +113,10 @@ class _Repository implements AgentRevisionLifecycleRepository
 
 	async readHistory(agentServiceId: string, siloId: string): Promise<AgentServiceHistory>
 	{
-		if (this._siloService(agentServiceId, siloId) === null) return { revisions: [], runs: [] };
+		if (this._siloService(agentServiceId, siloId) === null)
+		{
+			return { revisions: [], runs: [] };
+		}
 		return { revisions: this.revisions.filter(revision => revision.agentServiceId === agentServiceId).reverse(), runs: [] };
 	}
 
@@ -107,7 +137,7 @@ class _Repository implements AgentRevisionLifecycleRepository
 	/** Appends one immutable draft revision to the in-memory store. */
 	private _append(agentServiceId: string, revision: number, parentRevisionId: string | null, sourceRevisionId: string | null, content: AgentRevisionContent, authoredBy: string, changeMessage: string, createdAt: string): AgentRevision
 	{
-		const record: AgentRevision = { id: `revision-${++this.counter}`, agentServiceId, revision, parentRevisionId, sourceRevisionId, changeMessage, state: "draft", digest: `sha256:${revision}`, promptPolicyVersion: content.promptPolicyVersion, personaRevisionId: content.personaRevisionId, modelDefinitionId: content.modelDefinitionId, skills: content.skills.map(skill => ({ ...skill })), integrationAssignments: content.integrationAssignments.map(assignment => ({ ...assignment, toolDefinitions: assignment.toolDefinitions.map(tool => ({ ...tool })) })), boundaryAttachments: content.boundaryAttachments.map(attachment => ({ ...attachment })), budget: content.budget, authoredBy, createdAt, publishedAt: null };
+		const record: AgentRevision = { id: `revision-${++this.counter}`, agentServiceId, revision, parentRevisionId, sourceRevisionId, changeMessage, state: "draft", digest: `sha256:${revision}`, promptPolicyVersion: content.promptPolicyVersion, personaRevisionId: content.personaRevisionId, modelDefinitionId: content.modelDefinitionId, skills: content.skills.map(skill => ({ ...skill })), mcpToolRevisionIds: [...content.mcpToolRevisionIds], boundaryAttachments: content.boundaryAttachments.map(attachment => ({ ...attachment })), budget: content.budget, authoredBy, createdAt, publishedAt: null };
 		this.revisions.push(record);
 		return record;
 	}
@@ -131,7 +161,10 @@ const _SILO = "silo-1";
 async function _seedService(repository: _Repository, siloId = _SILO): Promise<{ serviceId: string; revisionId: string }>
 {
 	const created = await __CreateManagedAgentService(repository, { siloId, name: "Reporter", workloadProfile: "managed-default", authoredBy: "admin-1", changeMessage: "initial", content: _content() }, _NOW);
-	if (created.outcome !== "created") throw new Error("expected created");
+	if (created.outcome !== "created")
+	{
+		throw new Error("expected created");
+	}
 	return { serviceId: created.service.id, revisionId: created.revision.id };
 }
 
@@ -176,9 +209,15 @@ describe("managed agent revision lifecycle", function _suite()
 		const repository = new _Repository();
 		const seed = await _seedService(repository);
 		const revised = await __ReviseAgentRevision(repository, { siloId: _SILO, agentServiceId: seed.serviceId, expectedParentRevisionId: seed.revisionId, authoredBy: "admin-1", changeMessage: "edit", content: _content({ modelDefinitionId: "model-definition-b" }) }, _NOW);
-		if (revised.outcome !== "revised") throw new Error("expected revised");
+		if (revised.outcome !== "revised")
+		{
+			throw new Error("expected revised");
+		}
 		const restored = await __RestoreAgentRevision(repository, { siloId: _SILO, agentServiceId: seed.serviceId, sourceRevisionId: seed.revisionId, expectedParentRevisionId: revised.revision.id, authoredBy: "admin-1", changeMessage: "restore v1" }, _NOW);
-		if (restored.outcome !== "revised") throw new Error("expected revised");
+		if (restored.outcome !== "revised")
+		{
+			throw new Error("expected revised");
+		}
 		expect(restored.revision.sourceRevisionId).toBe(seed.revisionId);
 		expect(restored.revision.parentRevisionId).toBe(revised.revision.id);
 		expect(restored.revision.modelDefinitionId).toBe("model-definition-a");
@@ -213,9 +252,15 @@ describe("managed agent revision lifecycle", function _suite()
 		const repository = new _Repository();
 		const seed = await _seedService(repository);
 		const revised = await __ReviseAgentRevision(repository, { siloId: _SILO, agentServiceId: seed.serviceId, expectedParentRevisionId: seed.revisionId, authoredBy: "admin-1", changeMessage: "edit", content: _content({ budget: { maxTurns: 50, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 } }) }, _NOW);
-		if (revised.outcome !== "revised") throw new Error("expected revised");
+		if (revised.outcome !== "revised")
+		{
+			throw new Error("expected revised");
+		}
 		const compared = await __CompareAgentRevisions(repository, _SILO, seed.revisionId, revised.revision.id);
-		if (compared.outcome !== "compared") throw new Error("expected compared");
+		if (compared.outcome !== "compared")
+		{
+			throw new Error("expected compared");
+		}
 		expect(compared.diff.widenings.some(widening => widening.kind === "budget")).toBe(true);
 	});
 

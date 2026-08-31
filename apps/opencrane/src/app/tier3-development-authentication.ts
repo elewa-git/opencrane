@@ -24,7 +24,6 @@ export function _CreateTier3DevelopmentAuthentication(prisma: PrismaClient, conf
 	const authService = new Tier3DevelopmentAuthService(config, prisma, new PrismaOrgMembershipUnitOfWork(prisma), __CreateStandaloneFirstUserAdmissionAuditAppender(), _log);
 	return {
 		authMiddleware,
-		productAuthentication: authMiddleware,
 		router: ___Tier3DevelopmentAuthRouter(authService),
 		sessionMiddleware: ___CreateBrowserSessionMiddleware({
 			cookieName: "opencrane_tier3",

@@ -1,6 +1,5 @@
 {{- define "opencrane.server.networkPolicy" -}}
-{{- $managedPlane := (index .Values "managedAgentRuntimePlane").managedAgentRuntime -}}
-{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
+{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") .Values.agentController.warmRuntime.managedNamespace -}}
 {{- if .Values.networkPolicy.enabled }}
 # Network policy for the OpenCrane server.
 #
@@ -130,16 +129,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ (index .Values "opencrane-tool-runner").toolRunner.namespace | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/component: tool-runner
-      ports:
-        - protocol: TCP
-          port: {{ .Values.clustertenantManager.service.internalPort }}
     # OCI MCP companions can reach only the internal command API. TokenReview then binds the
     # projected credential to mcp-executor-default and the registered Pod UID.
     - from:
@@ -233,17 +222,6 @@ spec:
         - protocol: TCP
           port: {{ .Values.litellm.service.port }}
     {{- end }}
-    {{- if and .Values.mcpGateway.enabled (ne (include "opencrane.mcpGatewayShared" .) "true") }}
-    # Release-local Obot transport for server-owned custody and durable action execution.
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: mcp-gateway
-      ports:
-        - protocol: TCP
-          port: {{ .Values.mcpGateway.service.port }}
-    {{- end }}
     {{- if .Values.channelProxy.enabled }}
     # Release-local live conversation-event delivery lets the server check the channel proxy.
     - to:
@@ -295,8 +273,7 @@ spec:
 {{- $serverSelector := include "opencrane.selectorLabels" . }}
 {{- $internalPort := .Values.clustertenantManager.service.internalPort }}
 {{- range $worker := (list
-  (dict "name" "skill-authoring-bootstrap" "namespace" (index $.Values "opencrane-skill-authoring").skillAuthoring.namespace "component" "skill-authoring")
-  (dict "name" "tool-runner-bootstrap" "namespace" (index $.Values "opencrane-tool-runner").toolRunner.namespace "component" "tool-runner")) }}
+  (dict "name" "skill-authoring-bootstrap" "namespace" (index $.Values "opencrane-skill-authoring").skillAuthoring.namespace "component" "skill-authoring")) }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

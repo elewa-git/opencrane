@@ -41,12 +41,6 @@ CREATE TYPE "ArtifactPreprocessJobState" AS ENUM ('pending', 'claimed', 'complet
 CREATE TYPE "ArtifactScanJobState" AS ENUM ('pending', 'claimed', 'clean', 'rejected', 'retryable_failed', 'terminal_failed');
 
 -- CreateEnum
-CREATE TYPE "ConversationAssetProvenance" AS ENUM ('participant_upload', 'agent_output');
-
--- CreateEnum
-CREATE TYPE "ConversationAssetState" AS ENUM ('uploading', 'processing', 'ready', 'failed', 'removed');
-
--- CreateEnum
 CREATE TYPE "AuditDecisionOutcome" AS ENUM ('allow', 'deny', 'error');
 
 -- CreateEnum
@@ -89,13 +83,10 @@ CREATE TYPE "ToolResultDeliveryState" AS ENUM ('pending', 'consumed');
 CREATE TYPE "ChannelInvocationAction" AS ENUM ('events.read');
 
 -- CreateEnum
-CREATE TYPE "OrgRole" AS ENUM ('owner', 'admin', 'member');
+CREATE TYPE "ConversationAssetProvenance" AS ENUM ('participant_upload', 'agent_output');
 
 -- CreateEnum
-CREATE TYPE "OrgMemberStatus" AS ENUM ('active', 'suspended');
-
--- CreateEnum
-CREATE TYPE "OrganizationInvitationStatus" AS ENUM ('pending', 'accepted', 'failed');
+CREATE TYPE "ConversationAssetState" AS ENUM ('uploading', 'processing', 'ready', 'failed', 'removed');
 
 -- CreateEnum
 CREATE TYPE "ConversationMode" AS ENUM ('agent_session', 'direct', 'group');
@@ -137,17 +128,28 @@ CREATE TYPE "GroupMembershipAuthority" AS ENUM ('external', 'local');
 CREATE TYPE "PrincipalProvenance" AS ENUM ('external', 'internal');
 
 -- CreateEnum
-CREATE TYPE "IntegrationState" AS ENUM ('active', 'retired');
+CREATE TYPE "McpServerTransport" AS ENUM ('streamable-http', 'sse', 'websocket', 'oci-image');
 
 -- CreateEnum
-CREATE TYPE "IntegrationCustodyState" AS ENUM ('ready', 'revoked', 'expired');
-
--- CreateEnum
-CREATE TYPE "McpServerTransport" AS ENUM ('streamable-http', 'sse', 'websocket');
-
 CREATE TYPE "McpEraProbeStatus" AS ENUM ('not-required', 'pending', 'accepted', 'rejected');
 
+-- CreateEnum
 CREATE TYPE "OciImageValidationState" AS ENUM ('pending', 'imported', 'rejected');
+
+-- CreateEnum
+CREATE TYPE "McpServerRevisionState" AS ENUM ('discovering', 'ready', 'rejected');
+
+-- CreateEnum
+CREATE TYPE "McpRuntimeExecutionKind" AS ENUM ('discovery', 'invocation');
+
+-- CreateEnum
+CREATE TYPE "McpExecutorWorkloadState" AS ENUM ('pending', 'assigned', 'released', 'registered', 'closed');
+
+-- CreateEnum
+CREATE TYPE "McpExecutorCommandState" AS ENUM ('pending', 'claimed', 'succeeded', 'failed', 'recovery_required');
+
+-- CreateEnum
+CREATE TYPE "McpTaskState" AS ENUM ('working', 'input_required', 'queued', 'running', 'completed', 'cancelled', 'failed', 'recovery_required');
 
 -- CreateEnum
 CREATE TYPE "McpServerStatus" AS ENUM ('active', 'degraded', 'draft');
@@ -174,6 +176,18 @@ CREATE TYPE "MemoryConsentState" AS ENUM ('explicit', 'confirmed');
 CREATE TYPE "MemoryOutboxEventKind" AS ENUM ('memory.fact_recorded', 'memory.fact_corrected', 'memory.forget_requested');
 
 -- CreateEnum
+CREATE TYPE "OrgRole" AS ENUM ('owner', 'admin', 'member');
+
+-- CreateEnum
+CREATE TYPE "OrgMemberStatus" AS ENUM ('active', 'suspended');
+
+-- CreateEnum
+CREATE TYPE "OrganizationInvitationStatus" AS ENUM ('pending', 'accepted', 'failed');
+
+-- CreateEnum
+CREATE TYPE "PersonalConfigurationChangeState" AS ENUM ('proposed', 'accepted', 'applied', 'rejected', 'superseded');
+
+-- CreateEnum
 CREATE TYPE "PersonaInterviewCategory" AS ENUM ('Pace', 'Response', 'Feedback', 'Interaction', 'Openness', 'Risk', 'Initiative', 'Challenge', 'Relationship', 'Tone');
 
 -- CreateEnum
@@ -193,18 +207,6 @@ CREATE TYPE "PersonaInterviewState" AS ENUM ('in_progress', 'completed');
 
 -- CreateEnum
 CREATE TYPE "PersonaRevisionState" AS ENUM ('draft', 'approved');
-
--- CreateEnum
-CREATE TYPE "UserOnboardingState" AS ENUM ('survey_pending', 'survey_in_progress', 'bootstrap_chat_pending', 'bootstrap_chat_in_progress', 'completed');
-
--- CreateEnum
-CREATE TYPE "UserOnboardingCompletionProvenance" AS ENUM ('bootstrap_concluded', 'existing_user_migration');
-
--- CreateEnum
-CREATE TYPE "UserOnboardingBootstrapArchetype" AS ENUM ('commander', 'catalyst', 'anchor', 'analyst');
-
--- CreateEnum
-CREATE TYPE "PersonalConfigurationChangeState" AS ENUM ('proposed', 'accepted', 'applied', 'rejected', 'superseded');
 
 -- CreateEnum
 CREATE TYPE "ModelRoutingScope" AS ENUM ('global', 'clusterTenant');
@@ -234,7 +236,7 @@ CREATE TYPE "WorkloadAssignmentState" AS ENUM ('pending_pod', 'registered', 'rev
 CREATE TYPE "WorkloadKind" AS ENUM ('job', 'deployment');
 
 -- CreateEnum
-CREATE TYPE "RunOutboxEventKind" AS ENUM ('run.accepted', 'run.attempt_requested', 'run.workload_release_requested', 'run.workload_cleanup_requested', 'run.cancellation_requested', 'run.resume_requested');
+CREATE TYPE "WarmRuntimeReservationState" AS ENUM ('reserved', 'profile_activating', 'ready', 'claimed', 'delete_requested', 'deleted');
 
 -- CreateEnum
 CREATE TYPE "ChildRunCompletionDeliveryOutcome" AS ENUM ('delivered', 'no_parent_stream', 'parent_stream_terminal');
@@ -258,10 +260,22 @@ CREATE TYPE "SkillRevisionState" AS ENUM ('draft', 'review', 'published', 'rejec
 CREATE TYPE "SkillTrustClass" AS ENUM ('reviewed_instructions', 'sandboxed_python');
 
 -- CreateEnum
-CREATE TYPE "SkillWorkloadKind" AS ENUM ('authoring', 'tool_runner');
+CREATE TYPE "SkillAuthoringValidationState" AS ENUM ('pending', 'running', 'succeeded', 'failed', 'cancelled');
 
 -- CreateEnum
-CREATE TYPE "SkillWorkloadState" AS ENUM ('pending', 'assigned', 'succeeded', 'failed', 'cancelled');
+CREATE TYPE "SkillAuthoringValidationCompletionOutcome" AS ENUM ('succeeded', 'failed');
+
+-- CreateEnum
+CREATE TYPE "SkillAuthoringValidationWorkloadClass" AS ENUM ('skill_authoring_validation');
+
+-- CreateEnum
+CREATE TYPE "UserOnboardingState" AS ENUM ('survey_pending', 'survey_in_progress', 'bootstrap_chat_pending', 'bootstrap_chat_in_progress', 'completed');
+
+-- CreateEnum
+CREATE TYPE "UserOnboardingCompletionProvenance" AS ENUM ('bootstrap_concluded', 'existing_user_migration');
+
+-- CreateEnum
+CREATE TYPE "UserOnboardingBootstrapArchetype" AS ENUM ('commander', 'catalyst', 'anchor', 'analyst');
 
 -- CreateTable
 CREATE TABLE "agent_services" (
@@ -314,6 +328,25 @@ CREATE TABLE "agent_revision_boundary_attachments" (
 );
 
 -- CreateTable
+CREATE TABLE "agent_revision_skill_assignments" (
+    "agent_revision_id" TEXT NOT NULL,
+    "skill_id" TEXT NOT NULL,
+    "skill_revision_id" TEXT NOT NULL,
+
+    CONSTRAINT "agent_revision_skill_assignments_pkey" PRIMARY KEY ("agent_revision_id","skill_id")
+);
+
+-- CreateTable
+CREATE TABLE "agent_revision_mcp_tool_assignments" (
+    "agent_revision_id" TEXT NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "tool_revision_id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+
+    CONSTRAINT "agent_revision_mcp_tool_assignments_pkey" PRIMARY KEY ("agent_revision_id","tool_revision_id")
+);
+
+-- CreateTable
 CREATE TABLE "agent_service_schedules" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -328,26 +361,6 @@ CREATE TABLE "agent_service_schedules" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "agent_service_schedules_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "agent_revision_skill_assignments" (
-    "agent_revision_id" TEXT NOT NULL,
-    "skill_id" TEXT NOT NULL,
-    "skill_revision_id" TEXT NOT NULL,
-
-    CONSTRAINT "agent_revision_skill_assignments_pkey" PRIMARY KEY ("agent_revision_id","skill_id")
-);
-
--- CreateTable
-CREATE TABLE "agent_revision_integration_assignments" (
-    "agent_revision_id" TEXT NOT NULL,
-    "integration_id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "custody_reference_id" TEXT NOT NULL,
-    "tool_definitions" JSONB NOT NULL,
-
-    CONSTRAINT "agent_revision_integration_assignments_pkey" PRIMARY KEY ("agent_revision_id","integration_id")
 );
 
 -- CreateTable
@@ -410,19 +423,48 @@ CREATE TABLE "artifact_revisions" (
 );
 
 -- CreateTable
-CREATE TABLE "artifact_preprocess_jobs" (
+CREATE TABLE "artifact_scan_jobs" (
     "id" TEXT NOT NULL,
-    "source_revision_id" TEXT NOT NULL,
-    "pipeline_version" TEXT NOT NULL,
-    "state" "ArtifactPreprocessJobState" NOT NULL DEFAULT 'pending',
+    "artifact_revision_id" TEXT NOT NULL,
+    "state" "ArtifactScanJobState" NOT NULL DEFAULT 'pending',
     "attempt" INTEGER NOT NULL DEFAULT 0,
     "claim_fence" TEXT,
     "claim_expires_at" TIMESTAMP(3),
     "next_attempt_at" TIMESTAMP(3),
     "failure_code" TEXT,
+    "scanner_version" TEXT,
+    "completed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "artifact_scan_jobs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "artifact_preprocess_jobs" (
+    "id" TEXT NOT NULL,
+    "source_revision_id" TEXT NOT NULL,
+    "pipeline_version" TEXT NOT NULL,
+    "task_id" TEXT,
+    "task_name" TEXT,
+    "task_key" TEXT,
+    "state" "ArtifactPreprocessJobState" NOT NULL DEFAULT 'pending',
+    "claim_fence" TEXT,
+    "profile_name" TEXT,
+    "claimed_at" TIMESTAMP(3),
+    "delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "claim_expires_at" TIMESTAMP(3),
+    "workload_uid" TEXT,
+    "first_pod_uid" TEXT,
+    "bootstrap_reference_hash" TEXT,
+    "bootstrap_namespace" TEXT,
+    "next_attempt_at" TIMESTAMP(3),
+    "failure_code" TEXT,
     "derived_artifact_id" TEXT,
     "derived_revision_id" TEXT,
     "output_lease_id" TEXT,
+    "completion_digest" TEXT,
+    "completion_consumed_at" TIMESTAMP(3),
     "completed_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
@@ -597,10 +639,11 @@ CREATE TABLE "approval_requests" (
 CREATE TABLE "tool_invocations" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "agent_revision_id" TEXT NOT NULL,
+    "run_id" TEXT,
+    "attempt" INTEGER,
+    "agent_service_id" TEXT,
+    "agent_revision_id" TEXT,
+    "mcp_task_id" TEXT,
     "subject_id" TEXT NOT NULL,
     "runtime_instance_id" TEXT NOT NULL,
     "command_id" TEXT NOT NULL,
@@ -724,55 +767,51 @@ CREATE TABLE "channel_invocation_contexts" (
 );
 
 -- CreateTable
-CREATE TABLE "org_memberships" (
-    "id" TEXT NOT NULL,
-    "cluster_tenant" TEXT NOT NULL,
-    "subject" TEXT NOT NULL,
-    "email" TEXT,
-    "display_name" TEXT,
-    "role" "OrgRole" NOT NULL,
-    "status" "OrgMemberStatus" NOT NULL DEFAULT 'active',
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "org_memberships_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "organization_invitations" (
+CREATE TABLE "conversation_assets" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
-    "email" TEXT NOT NULL,
-    "active_email" TEXT,
-    "role" "OrgRole" NOT NULL,
-    "status" "OrganizationInvitationStatus" NOT NULL DEFAULT 'pending',
-    "generation" INTEGER NOT NULL DEFAULT 1,
-    "token_nonce" TEXT NOT NULL,
-    "invited_by_subject" TEXT NOT NULL,
-    "invited_by_display_name" TEXT NOT NULL,
-    "last_resend_idempotency_key" TEXT,
-    "invited_at" TIMESTAMP(3) NOT NULL,
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "accepted_at" TIMESTAMP(3),
-    "accepted_by_subject" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "organization_invitations_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "organization_invitation_requests" (
-    "id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "actor_subject" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "message_id" TEXT,
+    "run_id" TEXT,
+    "run_attempt" INTEGER,
+    "run_event_sequence" INTEGER,
+    "run_message_id" TEXT,
+    "artifact_id" TEXT,
+    "revision_id" TEXT,
+    "upload_lease_id" TEXT,
+    "output_ticket_id" TEXT,
     "idempotency_key" TEXT NOT NULL,
-    "payload_digest" TEXT NOT NULL,
-    "result_invitation_ids" JSONB NOT NULL,
-    "created_count" INTEGER NOT NULL,
+    "provenance" "ConversationAssetProvenance" NOT NULL,
+    "state" "ConversationAssetState" NOT NULL,
+    "display_name" TEXT NOT NULL,
+    "media_type" TEXT NOT NULL,
+    "byte_length" BIGINT,
+    "failure_code" TEXT,
+    "created_by_user_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "removed_at" TIMESTAMP(3),
+
+    CONSTRAINT "conversation_assets_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "conversation_asset_output_tickets" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "run_attempt" INTEGER NOT NULL,
+    "run_event_sequence" INTEGER NOT NULL,
+    "output_message_id" TEXT NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "finalized_content_address" TEXT,
+    "finalized_receipt_digest" TEXT,
+    "finalized_at" TIMESTAMP(3),
+    "expires_at" TIMESTAMP(3) NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "organization_invitation_requests_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "conversation_asset_output_tickets_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -854,6 +893,41 @@ CREATE TABLE "conversation_timeline_entries" (
 );
 
 -- CreateTable
+CREATE TABLE "conversation_agent_threads" (
+    "child_conversation_id" TEXT NOT NULL,
+    "parent_conversation_id" TEXT NOT NULL,
+    "root_conversation_id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "parent_message_id" TEXT NOT NULL,
+    "initiator_user_id" TEXT NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "persona_profile_id" TEXT NOT NULL,
+    "persona_revision_id" TEXT NOT NULL,
+    "first_run_id" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "conversation_agent_threads_pkey" PRIMARY KEY ("child_conversation_id")
+);
+
+-- CreateTable
+CREATE TABLE "agent_thread_parent_deliveries" (
+    "id" TEXT NOT NULL,
+    "child_conversation_id" TEXT NOT NULL,
+    "parent_conversation_id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "kind" "AgentThreadDeliveryKind" NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "label" TEXT NOT NULL,
+    "detail" TEXT NOT NULL,
+    "asset_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "agent_thread_parent_deliveries_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "conversation_context_revisions" (
     "id" TEXT NOT NULL,
     "conversation_id" TEXT NOT NULL,
@@ -865,6 +939,106 @@ CREATE TABLE "conversation_context_revisions" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "conversation_context_revisions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "elicitation_requests" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "assigned_participant_id" TEXT NOT NULL,
+    "request_key" TEXT NOT NULL,
+    "purpose" "ElicitationPurpose" NOT NULL,
+    "body_kind" "ElicitationBodyKind" NOT NULL,
+    "body" JSONB NOT NULL,
+    "body_digest" TEXT NOT NULL,
+    "purpose_payload" JSONB,
+    "purpose_payload_digest" TEXT NOT NULL,
+    "state" "ElicitationRequestState" NOT NULL DEFAULT 'requested',
+    "requires_step_up" BOOLEAN NOT NULL DEFAULT false,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "resolved_at" TIMESTAMP(3),
+    "resolved_by" TEXT,
+    "safe_reason" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "elicitation_requests_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "elicitation_response_attempts" (
+    "id" TEXT NOT NULL,
+    "request_id" TEXT NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "responding_subject_id" TEXT NOT NULL,
+    "response" JSONB NOT NULL,
+    "response_digest" TEXT NOT NULL,
+    "verified_step_up_at" TIMESTAMP(3),
+    "submitted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "elicitation_response_attempts_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "elicitation_result_deliveries" (
+    "id" TEXT NOT NULL,
+    "request_id" TEXT NOT NULL,
+    "state" "ElicitationResultDeliveryState" NOT NULL DEFAULT 'pending',
+    "payload" JSONB,
+    "payload_digest" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "consumed_at" TIMESTAMP(3),
+
+    CONSTRAINT "elicitation_result_deliveries_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "personal_memory_permission_receipts" (
+    "id" TEXT NOT NULL,
+    "request_id" TEXT NOT NULL,
+    "tool_invocation_id" TEXT NOT NULL,
+    "tool_invocation_revision" INTEGER NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "execution_subject_id" TEXT NOT NULL,
+    "responding_subject_id" TEXT NOT NULL,
+    "query_digest" TEXT NOT NULL,
+    "input_snapshot_digest" TEXT NOT NULL,
+    "persona_revision_id" TEXT NOT NULL,
+    "purpose_digest" TEXT NOT NULL,
+    "state" "PersonalMemoryPermissionReceiptState" NOT NULL DEFAULT 'active',
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "consumed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "personal_memory_permission_receipts_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "resource_shares" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "resource_kind" TEXT NOT NULL,
+    "resource_id" TEXT NOT NULL,
+    "owner_principal_id" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "resource_shares_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "resource_share_recipients" (
+    "silo_id" TEXT NOT NULL,
+    "resource_share_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "granted_by_principal_id" TEXT NOT NULL,
+    "grant_id" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "resource_share_recipients_pkey" PRIMARY KEY ("resource_share_id","principal_id")
 );
 
 -- CreateTable
@@ -907,58 +1081,6 @@ CREATE TABLE "group_memberships" (
 );
 
 -- CreateTable
-CREATE TABLE "resource_shares" (
-    "id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "resource_kind" TEXT NOT NULL,
-    "resource_id" TEXT NOT NULL,
-    "owner_principal_id" TEXT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "resource_shares_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "resource_share_recipients" (
-    "silo_id" TEXT NOT NULL,
-    "resource_share_id" TEXT NOT NULL,
-    "principal_id" TEXT NOT NULL,
-    "granted_by_principal_id" TEXT NOT NULL,
-    "grant_id" TEXT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "resource_share_recipients_pkey" PRIMARY KEY ("resource_share_id","principal_id")
-);
-
--- CreateTable
-CREATE TABLE "integrations" (
-    "id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "obot_catalog_entry_id" TEXT NOT NULL,
-    "display_name" TEXT NOT NULL,
-    "state" "IntegrationState" NOT NULL DEFAULT 'active',
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "integrations_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "integration_custody_references" (
-    "id" TEXT NOT NULL,
-    "integration_id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "obot_custody_reference" TEXT NOT NULL,
-    "state" "IntegrationCustodyState" NOT NULL DEFAULT 'ready',
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "revoked_at" TIMESTAMP(3),
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "integration_custody_references_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "mcp_servers" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -997,7 +1119,16 @@ CREATE TABLE "mcp_registration_claims" (
     "identity_digest" TEXT NOT NULL,
     "touched_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "mcp_registration_claims_pkey" PRIMARY KEY ("silo_id", "identity_digest")
+    CONSTRAINT "mcp_registration_claims_pkey" PRIMARY KEY ("silo_id","identity_digest")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_tool_admission_claims" (
+    "agent_revision_id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "touched_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_tool_admission_claims_pkey" PRIMARY KEY ("agent_revision_id","silo_id")
 );
 
 -- CreateTable
@@ -1006,7 +1137,7 @@ CREATE TABLE "oci_image_validation_claims" (
     "identity_digest" TEXT NOT NULL,
     "touched_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "oci_image_validation_claims_pkey" PRIMARY KEY ("silo_id", "identity_digest")
+    CONSTRAINT "oci_image_validation_claims_pkey" PRIMARY KEY ("silo_id","identity_digest")
 );
 
 -- CreateTable
@@ -1032,6 +1163,112 @@ CREATE TABLE "oci_image_validations" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "oci_image_validations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_server_revisions" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "mcp_server_id" TEXT NOT NULL,
+    "oci_image_validation_id" TEXT NOT NULL,
+    "revision" INTEGER NOT NULL,
+    "registry_reference" TEXT NOT NULL,
+    "protocol_version" TEXT,
+    "state" "McpServerRevisionState" NOT NULL DEFAULT 'discovering',
+    "completed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_server_revisions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_tool_revisions" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "server_revision_id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "input_schema" JSONB NOT NULL,
+    "input_schema_digest" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "mcp_tool_revisions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_task_claims" (
+    "silo_id" TEXT NOT NULL,
+    "identity_digest" TEXT NOT NULL,
+    "touched_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_task_claims_pkey" PRIMARY KEY ("silo_id","identity_digest")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_tasks" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "request_key_digest" TEXT NOT NULL,
+    "call_digest" TEXT NOT NULL,
+    "server_revision_id" TEXT NOT NULL,
+    "tool_revision_id" TEXT NOT NULL,
+    "protocol_version" TEXT NOT NULL,
+    "arguments" JSONB NOT NULL,
+    "task_id" TEXT,
+    "task_name" TEXT,
+    "task_key" TEXT,
+    "state" "McpTaskState" NOT NULL DEFAULT 'working',
+    "input_request" JSONB,
+    "input_response" JSONB,
+    "result" JSONB,
+    "failure_code" TEXT,
+    "cancel_requested_at" TIMESTAMP(3),
+    "completed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_tasks_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_runtime_executions" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "server_revision_id" TEXT NOT NULL,
+    "tool_invocation_id" TEXT,
+    "kind" "McpRuntimeExecutionKind" NOT NULL,
+    "workload_state" "McpExecutorWorkloadState" NOT NULL DEFAULT 'pending',
+    "command_state" "McpExecutorCommandState" NOT NULL DEFAULT 'pending',
+    "idempotency_key" TEXT NOT NULL,
+    "execution_reference" TEXT NOT NULL,
+    "profile_name" TEXT NOT NULL,
+    "claimed_at" TIMESTAMP(3),
+    "delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "claim_expires_at" TIMESTAMP(3),
+    "workload_uid" TEXT,
+    "assigned_at" TIMESTAMP(3),
+    "release_claimed_at" TIMESTAMP(3),
+    "release_delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "release_expires_at" TIMESTAMP(3),
+    "released_at" TIMESTAMP(3),
+    "pod_uid" TEXT,
+    "companion_claim_fence" TEXT,
+    "companion_claim_expires_at" TIMESTAMP(3),
+    "tool_invocation_claim_fence" INTEGER,
+    "tool_invocation_claim_revision" INTEGER,
+    "terminal_outcome" TEXT,
+    "terminal_payload_digest" TEXT,
+    "completed_at" TIMESTAMP(3),
+    "cleanup_claimed_at" TIMESTAMP(3),
+    "cleanup_delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "cleanup_expires_at" TIMESTAMP(3),
+    "cleanup_completed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_runtime_executions_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1151,6 +1388,83 @@ CREATE TABLE "model_routing_defaults" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "model_routing_defaults_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "org_memberships" (
+    "id" TEXT NOT NULL,
+    "cluster_tenant" TEXT NOT NULL,
+    "subject" TEXT NOT NULL,
+    "email" TEXT,
+    "display_name" TEXT,
+    "role" "OrgRole" NOT NULL,
+    "status" "OrgMemberStatus" NOT NULL DEFAULT 'active',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "org_memberships_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "organization_invitations" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "active_email" TEXT,
+    "role" "OrgRole" NOT NULL,
+    "status" "OrganizationInvitationStatus" NOT NULL DEFAULT 'pending',
+    "generation" INTEGER NOT NULL DEFAULT 1,
+    "token_nonce" TEXT NOT NULL,
+    "invited_by_subject" TEXT NOT NULL,
+    "invited_by_display_name" TEXT NOT NULL,
+    "last_resend_idempotency_key" TEXT,
+    "invited_at" TIMESTAMP(3) NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "accepted_at" TIMESTAMP(3),
+    "accepted_by_subject" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "organization_invitations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "organization_invitation_requests" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "actor_subject" TEXT NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "payload_digest" TEXT NOT NULL,
+    "result_invitation_ids" JSONB NOT NULL,
+    "created_count" INTEGER NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "organization_invitation_requests_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "personal_configuration_changes" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "persona_profile_id" TEXT NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "source_conversation_id" TEXT NOT NULL,
+    "source_run_id" TEXT NOT NULL,
+    "source_message_id" TEXT,
+    "requested_patch" JSONB NOT NULL,
+    "requested_patch_digest" TEXT NOT NULL,
+    "expected_persona_revision_id" TEXT,
+    "expected_agent_revision_id" TEXT,
+    "applied_persona_revision_id" TEXT,
+    "applied_agent_revision_id" TEXT,
+    "state" "PersonalConfigurationChangeState" NOT NULL DEFAULT 'proposed',
+    "proposed_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "decided_at" TIMESTAMP(3),
+    "decided_by" TEXT,
+    "rejection_reason" TEXT,
+
+    CONSTRAINT "personal_configuration_changes_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1378,31 +1692,6 @@ CREATE TABLE "persona_insights" (
 );
 
 -- CreateTable
-CREATE TABLE "personal_configuration_changes" (
-    "id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "user_id" TEXT NOT NULL,
-    "persona_profile_id" TEXT NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "source_conversation_id" TEXT NOT NULL,
-    "source_run_id" TEXT NOT NULL,
-    "source_message_id" TEXT,
-    "requested_patch" JSONB NOT NULL,
-    "requested_patch_digest" TEXT NOT NULL,
-    "expected_persona_revision_id" TEXT,
-    "expected_agent_revision_id" TEXT,
-    "applied_persona_revision_id" TEXT,
-    "applied_agent_revision_id" TEXT,
-    "state" "PersonalConfigurationChangeState" NOT NULL DEFAULT 'proposed',
-    "proposed_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "decided_at" TIMESTAMP(3),
-    "decided_by" TEXT,
-    "rejection_reason" TEXT,
-
-    CONSTRAINT "personal_configuration_changes_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "provider_credentials" (
     "id" TEXT NOT NULL,
     "scope" "ModelRoutingScope" NOT NULL DEFAULT 'global',
@@ -1427,7 +1716,7 @@ CREATE TABLE "model_definitions" (
     "api_base" TEXT,
     "is_default" BOOLEAN NOT NULL DEFAULT false,
     "provider_credential_id" TEXT,
-    "generated_output_capabilities" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "generated_output_capabilities" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -1495,32 +1784,61 @@ CREATE TABLE "agent_runs" (
 );
 
 -- CreateTable
-CREATE TABLE "run_input_snapshots" (
-    "id" TEXT NOT NULL,
+CREATE TABLE "warm_runtime_reservations" (
     "run_id" TEXT NOT NULL,
-    "snapshot_version" INTEGER NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "generation" INTEGER NOT NULL DEFAULT 1,
     "silo_id" TEXT NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "agent_revision_id" TEXT NOT NULL,
-    "effective_contract_digest" TEXT NOT NULL,
-    "persona_revision_id" TEXT,
-    "conversation_id" TEXT,
-    "message_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "preference_fact_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "artifact_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "memory_facts" JSONB NOT NULL DEFAULT '[]'::jsonb,
-    "identity_snapshot" JSONB NOT NULL,
-    "model_route" JSONB NOT NULL,
-    "integration_assignments" JSONB NOT NULL,
-    "skill_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "memory_query_policy" JSONB NOT NULL,
-    "budget_policy" JSONB NOT NULL,
-    "capability_set_digest" TEXT NOT NULL,
-    "prompt_compiler_version" TEXT NOT NULL,
-    "input_digest" TEXT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "namespace" TEXT NOT NULL,
+    "deployment_name" TEXT NOT NULL,
+    "deployment_uid" TEXT NOT NULL,
+    "pod_name" TEXT NOT NULL,
+    "pod_uid" TEXT NOT NULL,
+    "pod_resource_version" TEXT NOT NULL,
+    "generic_profile" TEXT NOT NULL,
+    "claimed_profile" TEXT NOT NULL,
+    "service_account_name" TEXT NOT NULL,
+    "state" "WarmRuntimeReservationState" NOT NULL DEFAULT 'reserved',
+    "proof_key_thumbprint" TEXT,
+    "reserved_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "profile_activated_at" TIMESTAMP(3),
+    "readiness_observed_at" TIMESTAMP(3),
+    "bound_at" TIMESTAMP(3),
+    "idle_deadline" TIMESTAMP(3) NOT NULL,
+    "delete_requested_at" TIMESTAMP(3),
+    "deleted_at" TIMESTAMP(3),
 
-    CONSTRAINT "run_input_snapshots_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "warm_runtime_reservations_pkey" PRIMARY KEY ("run_id","attempt","generation")
+);
+
+-- CreateTable
+CREATE TABLE "agent_run_workflow_tasks" (
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "task_key" TEXT NOT NULL,
+    "task_name" TEXT NOT NULL,
+    "task_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "receipt_bound_at" TIMESTAMP(3),
+    "assignment_expires_at" TIMESTAMP(3),
+    "release_claimed_at" TIMESTAMP(3),
+    "release_expires_at" TIMESTAMP(3),
+    "release_delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "attempt_key_digest" TEXT,
+
+    CONSTRAINT "agent_run_workflow_tasks_pkey" PRIMARY KEY ("run_id","attempt")
+);
+
+-- CreateTable
+CREATE TABLE "child_run_completion_deliveries" (
+    "child_run_id" TEXT NOT NULL,
+    "parent_run_id" TEXT NOT NULL,
+    "parent_event_sequence" INTEGER,
+    "outcome" "ChildRunCompletionDeliveryOutcome" NOT NULL,
+    "delivered_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "child_run_completion_deliveries_pkey" PRIMARY KEY ("child_run_id")
 );
 
 -- CreateTable
@@ -1537,14 +1855,32 @@ CREATE TABLE "child_run_reservations" (
 );
 
 -- CreateTable
-CREATE TABLE "child_run_completion_deliveries" (
-    "child_run_id" TEXT NOT NULL,
-    "parent_run_id" TEXT NOT NULL,
-    "parent_event_sequence" INTEGER,
-    "outcome" "ChildRunCompletionDeliveryOutcome" NOT NULL,
-    "delivered_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+CREATE TABLE "run_input_snapshots" (
+    "id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "snapshot_version" INTEGER NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "agent_revision_id" TEXT NOT NULL,
+    "effective_contract_digest" TEXT NOT NULL,
+    "persona_revision_id" TEXT,
+    "conversation_id" TEXT,
+    "message_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "preference_fact_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "artifact_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "memory_facts" JSONB NOT NULL DEFAULT '[]',
+    "identity_snapshot" JSONB NOT NULL,
+    "model_route" JSONB NOT NULL,
+    "mcp_tools" JSONB NOT NULL,
+    "skill_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "memory_query_policy" JSONB NOT NULL,
+    "budget_policy" JSONB NOT NULL,
+    "capability_set_digest" TEXT NOT NULL,
+    "prompt_compiler_version" TEXT NOT NULL,
+    "input_digest" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "child_run_completion_deliveries_pkey" PRIMARY KEY ("child_run_id")
+    CONSTRAINT "run_input_snapshots_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1562,6 +1898,7 @@ CREATE TABLE "workload_assignments" (
     "workload_uid" TEXT NOT NULL,
     "workload_profile" TEXT NOT NULL,
     "pod_uid" TEXT,
+    "binding_generation" INTEGER NOT NULL DEFAULT 1,
     "state" "WorkloadAssignmentState" NOT NULL DEFAULT 'pending_pod',
     "expires_at" TIMESTAMP(3) NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1576,6 +1913,7 @@ CREATE TABLE "workload_bootstraps" (
     "id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
     "attempt" INTEGER NOT NULL,
+    "generation" INTEGER NOT NULL DEFAULT 1,
     "agent_service_id" TEXT NOT NULL,
     "agent_revision_id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -1589,6 +1927,7 @@ CREATE TABLE "workload_bootstraps" (
     "expires_at" TIMESTAMP(3) NOT NULL,
     "consumed_at" TIMESTAMP(3),
     "consumed_by_pod_uid" TEXT,
+    "revoked_at" TIMESTAMP(3),
     "receipt_id" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -1601,6 +1940,7 @@ CREATE TABLE "run_proof_keys" (
     "bootstrap_id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
     "attempt" INTEGER NOT NULL,
+    "generation" INTEGER NOT NULL DEFAULT 1,
     "workload_kind" "WorkloadKind" NOT NULL,
     "workload_uid" TEXT NOT NULL,
     "pod_uid" TEXT NOT NULL,
@@ -1614,26 +1954,6 @@ CREATE TABLE "run_proof_keys" (
 );
 
 -- CreateTable
-CREATE TABLE "run_outbox_events" (
-    "id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "sequence" INTEGER NOT NULL,
-    "kind" "RunOutboxEventKind" NOT NULL,
-    "idempotency_key" TEXT NOT NULL,
-    "payload" JSONB NOT NULL,
-    "available_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "claimed_at" TIMESTAMP(3),
-    "published_at" TIMESTAMP(3),
-    "failed_at" TIMESTAMP(3),
-    "failure_code" TEXT,
-    "delivery_count" INTEGER NOT NULL DEFAULT 0,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "run_outbox_events_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "runtime_command_streams" (
     "run_id" TEXT NOT NULL,
     "attempt" INTEGER NOT NULL,
@@ -1642,10 +1962,35 @@ CREATE TABLE "runtime_command_streams" (
     "runtime_instance_id" TEXT,
     "next_command_sequence" INTEGER NOT NULL DEFAULT 1,
     "accepted_candidate_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "dispatch_blocked_reason" TEXT,
+    "dispatch_blocked_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "runtime_command_streams_pkey" PRIMARY KEY ("run_id", "attempt")
+    CONSTRAINT "runtime_command_streams_pkey" PRIMARY KEY ("run_id","attempt")
+);
+
+-- CreateTable
+CREATE TABLE "runtime_continuation_checkpoints" (
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "input_generation" INTEGER NOT NULL,
+    "format_version" TEXT NOT NULL,
+    "revision" INTEGER NOT NULL,
+    "digest" TEXT NOT NULL,
+    "applied_command_sequence" INTEGER NOT NULL,
+    "source_runtime_instance_id" TEXT NOT NULL,
+    "source_command_id" TEXT NOT NULL,
+    "source_fence" INTEGER NOT NULL,
+    "key_id" TEXT NOT NULL,
+    "ciphertext" BYTEA NOT NULL,
+    "nonce" BYTEA NOT NULL,
+    "authentication_tag" BYTEA NOT NULL,
+    "plaintext_bytes" INTEGER NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "runtime_continuation_checkpoints_pkey" PRIMARY KEY ("run_id","attempt","input_generation")
 );
 
 -- CreateTable
@@ -1660,7 +2005,7 @@ CREATE TABLE "runtime_steering_boundaries" (
     "claimed_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "acked_at" TIMESTAMP(3),
 
-    CONSTRAINT "runtime_steering_boundaries_pkey" PRIMARY KEY ("run_id", "attempt", "boundary_id")
+    CONSTRAINT "runtime_steering_boundaries_pkey" PRIMARY KEY ("run_id","attempt","boundary_id")
 );
 
 -- CreateTable
@@ -1737,45 +2082,69 @@ CREATE TABLE "skill_revisions" (
 );
 
 -- CreateTable
-CREATE TABLE "skill_workloads" (
+CREATE TABLE "skill_authoring_validations" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
-    "kind" "SkillWorkloadKind" NOT NULL,
-    "state" "SkillWorkloadState" NOT NULL DEFAULT 'pending',
     "skill_revision_id" TEXT NOT NULL,
-    "tool_invocation_id" TEXT,
-    "claimed_at" TIMESTAMP(3),
-    "claim_expires_at" TIMESTAMP(3),
-    "delivery_count" INTEGER NOT NULL DEFAULT 0,
-    "workload_uid" TEXT,
-    "worker_pod_uid" TEXT,
-    "release_claimed_at" TIMESTAMP(3),
-    "release_delivery_count" INTEGER NOT NULL DEFAULT 0,
-    "release_expires_at" TIMESTAMP(3),
-    "released_at" TIMESTAMP(3),
+    "artifact_revision_id" TEXT NOT NULL,
+    "artifact_content_address" TEXT NOT NULL,
+    "task_id" TEXT,
+    "task_name" TEXT,
+    "task_key" TEXT NOT NULL,
+    "state" "SkillAuthoringValidationState" NOT NULL DEFAULT 'pending',
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "started_at" TIMESTAMP(3),
     "completed_at" TIMESTAMP(3),
     "failure_code" TEXT,
-    "cancelled_at" TIMESTAMP(3),
 
-    CONSTRAINT "skill_workloads_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "skill_authoring_validations_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "skill_workload_bootstraps" (
+CREATE TABLE "skill_authoring_validation_workload_claims" (
     "id" TEXT NOT NULL,
-    "skill_workload_id" TEXT NOT NULL,
+    "validation_id" TEXT NOT NULL,
+    "workload_class" "SkillAuthoringValidationWorkloadClass" NOT NULL,
+    "profile_name" TEXT NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "execution_reference" TEXT NOT NULL,
+    "claimed_at" TIMESTAMP(3),
+    "delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "expires_at" TIMESTAMP(3),
+    "workload_uid" TEXT,
+    "first_pod_uid" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "skill_authoring_validation_workload_claims_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "skill_authoring_validation_bootstraps" (
+    "id" TEXT NOT NULL,
+    "validation_id" TEXT NOT NULL,
     "reference_hash" TEXT NOT NULL,
-    "audience" TEXT NOT NULL,
-    "service_account_name" TEXT NOT NULL,
     "namespace" TEXT NOT NULL,
-    "workload_uid" TEXT NOT NULL,
-    "expires_at" TIMESTAMP(3) NOT NULL DEFAULT (clock_timestamp() + '00:15:00'::interval),
+    "service_account" TEXT NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
     "consumed_at" TIMESTAMP(3),
     "consumed_by_pod_uid" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "skill_workload_bootstraps_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "skill_authoring_validation_bootstraps_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "skill_authoring_validation_completion_inbox" (
+    "id" TEXT NOT NULL,
+    "validation_id" TEXT NOT NULL,
+    "completion_digest" TEXT NOT NULL,
+    "outcome" "SkillAuthoringValidationCompletionOutcome" NOT NULL,
+    "test_report" JSONB,
+    "scan_result" JSONB,
+    "failure_code" TEXT,
+    "received_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "skill_authoring_validation_completion_inbox_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1856,7 +2225,7 @@ CREATE TABLE "user_onboarding_bootstrap_questions" (
     "ordinal" INTEGER NOT NULL,
     "prompt" TEXT NOT NULL,
 
-    CONSTRAINT "user_onboarding_bootstrap_questions_pkey" PRIMARY KEY ("content_revision_id", "ordinal")
+    CONSTRAINT "user_onboarding_bootstrap_questions_pkey" PRIMARY KEY ("content_revision_id","ordinal")
 );
 
 -- CreateTable
@@ -1887,126 +2256,6 @@ CREATE TABLE "user_onboarding_bootstrap_answers" (
 
     CONSTRAINT "user_onboarding_bootstrap_answers_pkey" PRIMARY KEY ("id")
 );
-
--- CreateTable
-CREATE TABLE "elicitation_requests" (
-    "id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "conversation_id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "assigned_participant_id" TEXT NOT NULL,
-    "request_key" TEXT NOT NULL,
-    "purpose" "ElicitationPurpose" NOT NULL,
-    "body_kind" "ElicitationBodyKind" NOT NULL,
-    "body" JSONB NOT NULL,
-    "body_digest" TEXT NOT NULL,
-    "purpose_payload" JSONB,
-    "purpose_payload_digest" TEXT NOT NULL,
-    "state" "ElicitationRequestState" NOT NULL DEFAULT 'requested',
-    "requires_step_up" BOOLEAN NOT NULL DEFAULT false,
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "resolved_at" TIMESTAMP(3),
-    "resolved_by" TEXT,
-    "safe_reason" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "elicitation_requests_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "elicitation_response_attempts" (
-    "id" TEXT NOT NULL,
-    "request_id" TEXT NOT NULL,
-    "idempotency_key" TEXT NOT NULL,
-    "responding_subject_id" TEXT NOT NULL,
-    "response" JSONB NOT NULL,
-    "response_digest" TEXT NOT NULL,
-    "verified_step_up_at" TIMESTAMP(3),
-    "submitted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "elicitation_response_attempts_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "elicitation_result_deliveries" (
-    "id" TEXT NOT NULL,
-    "request_id" TEXT NOT NULL,
-    "state" "ElicitationResultDeliveryState" NOT NULL DEFAULT 'pending',
-    "payload" JSONB,
-    "payload_digest" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "consumed_at" TIMESTAMP(3),
-
-    CONSTRAINT "elicitation_result_deliveries_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "personal_memory_permission_receipts" (
-    "id" TEXT NOT NULL,
-    "request_id" TEXT NOT NULL,
-    "tool_invocation_id" TEXT NOT NULL,
-    "tool_invocation_revision" INTEGER NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "execution_subject_id" TEXT NOT NULL,
-    "responding_subject_id" TEXT NOT NULL,
-    "query_digest" TEXT NOT NULL,
-    "input_snapshot_digest" TEXT NOT NULL,
-    "persona_revision_id" TEXT NOT NULL,
-    "purpose_digest" TEXT NOT NULL,
-    "state" "PersonalMemoryPermissionReceiptState" NOT NULL DEFAULT 'active',
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "consumed_at" TIMESTAMP(3),
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "personal_memory_permission_receipts_pkey" PRIMARY KEY ("id")
-);
-
--- CreateIndex
-CREATE UNIQUE INDEX "tool_invocations_request_fingerprint_key" ON "tool_invocations"("request_fingerprint");
-
--- CreateIndex
-CREATE INDEX "tool_invocations_run_id_attempt_state_idx" ON "tool_invocations"("run_id", "attempt", "state");
-
--- CreateIndex
-CREATE INDEX "tool_invocations_state_next_preparation_attempt_at_idx" ON "tool_invocations"("state", "next_preparation_attempt_at");
-
--- CreateIndex
-CREATE INDEX "tool_invocations_state_claim_expires_at_idx" ON "tool_invocations"("state", "claim_expires_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "tool_invocations_run_id_attempt_tool_invocation_id_key" ON "tool_invocations"("run_id", "attempt", "tool_invocation_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "tool_invocations_run_id_attempt_candidate_id_key" ON "tool_invocations"("run_id", "attempt", "candidate_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "tool_result_deliveries_tool_invocation_id_key" ON "tool_result_deliveries"("tool_invocation_id");
-
--- CreateIndex
-CREATE INDEX "tool_result_deliveries_state_created_at_idx" ON "tool_result_deliveries"("state", "created_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "runtime_steering_boundaries_run_id_attempt_to_input_generat_key" ON "runtime_steering_boundaries"("run_id", "attempt", "to_input_generation");
-
--- CreateIndex
-CREATE INDEX "runtime_steering_boundaries_run_id_attempt_idx" ON "runtime_steering_boundaries"("run_id", "attempt");
-
--- CreateIndex
-CREATE INDEX "runtime_steering_requests_run_id_attempt_state_submitted_at_idx" ON "runtime_steering_requests"("run_id", "attempt", "state", "submitted_at");
-
--- CreateIndex
-CREATE INDEX "runtime_steering_requests_silo_id_subject_id_submitted_at_idx" ON "runtime_steering_requests"("silo_id", "subject_id", "submitted_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "runtime_dispatched_commands_command_id_key" ON "runtime_dispatched_commands"("command_id");
-
--- CreateIndex
-CREATE INDEX "runtime_dispatched_commands_run_id_attempt_idx" ON "runtime_dispatched_commands"("run_id", "attempt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "runtime_dispatched_commands_run_id_attempt_sequence_key" ON "runtime_dispatched_commands"("run_id", "attempt", "sequence");
 
 -- CreateIndex
 CREATE INDEX "agent_services_silo_id_kind_state_idx" ON "agent_services"("silo_id", "kind", "state");
@@ -2045,16 +2294,19 @@ CREATE INDEX "agent_revision_boundary_attachments_agent_revision_id_bound_idx" O
 CREATE INDEX "agent_revision_boundary_attachments_silo_id_boundary_kind_idx" ON "agent_revision_boundary_attachments"("silo_id", "boundary_kind");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "agent_revision_skill_assignments_agent_revision_id_skill_re_key" ON "agent_revision_skill_assignments"("agent_revision_id", "skill_revision_id");
+
+-- CreateIndex
+CREATE INDEX "agent_revision_mcp_tool_assignments_agent_service_id_silo_i_idx" ON "agent_revision_mcp_tool_assignments"("agent_service_id", "silo_id");
+
+-- CreateIndex
+CREATE INDEX "agent_revision_mcp_tool_assignments_tool_revision_id_silo_i_idx" ON "agent_revision_mcp_tool_assignments"("tool_revision_id", "silo_id");
+
+-- CreateIndex
 CREATE INDEX "agent_service_schedules_silo_id_agent_service_id_idx" ON "agent_service_schedules"("silo_id", "agent_service_id");
 
 -- CreateIndex
 CREATE INDEX "agent_service_schedules_enabled_idx" ON "agent_service_schedules"("enabled");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_revision_skill_assignments_agent_revision_id_skill_re_key" ON "agent_revision_skill_assignments"("agent_revision_id", "skill_revision_id");
-
--- CreateIndex
-CREATE INDEX "agent_revision_integration_assignments_integration_id_silo__idx" ON "agent_revision_integration_assignments"("integration_id", "silo_id");
 
 -- CreateIndex
 CREATE INDEX "artifacts_silo_id_owner_principal_id_state_idx" ON "artifacts"("silo_id", "owner_principal_id", "state");
@@ -2096,19 +2348,49 @@ CREATE UNIQUE INDEX "artifact_revisions_artifact_id_id_key" ON "artifact_revisio
 CREATE UNIQUE INDEX "artifact_revisions_id_content_address_key" ON "artifact_revisions"("id", "content_address");
 
 -- CreateIndex
-CREATE INDEX "artifact_preprocess_jobs_state_next_attempt_at_claim_expires_at_idx" ON "artifact_preprocess_jobs"("state", "next_attempt_at", "claim_expires_at");
+CREATE UNIQUE INDEX "artifact_scan_jobs_artifact_revision_id_key" ON "artifact_scan_jobs"("artifact_revision_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "artifact_preprocess_jobs_source_revision_id_pipeline_version_key" ON "artifact_preprocess_jobs"("source_revision_id", "pipeline_version");
+CREATE INDEX "artifact_scan_jobs_state_next_attempt_at_claim_expires_at_idx" ON "artifact_scan_jobs"("state", "next_attempt_at", "claim_expires_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_task_id_key" ON "artifact_preprocess_jobs"("task_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_task_key_key" ON "artifact_preprocess_jobs"("task_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_claim_fence_key" ON "artifact_preprocess_jobs"("claim_fence");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_workload_uid_key" ON "artifact_preprocess_jobs"("workload_uid");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_first_pod_uid_key" ON "artifact_preprocess_jobs"("first_pod_uid");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_bootstrap_reference_hash_key" ON "artifact_preprocess_jobs"("bootstrap_reference_hash");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_output_lease_id_key" ON "artifact_preprocess_jobs"("output_lease_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_completion_digest_key" ON "artifact_preprocess_jobs"("completion_digest");
+
+-- CreateIndex
+CREATE INDEX "artifact_preprocess_jobs_state_next_attempt_at_claim_expire_idx" ON "artifact_preprocess_jobs"("state", "next_attempt_at", "claim_expires_at");
+
+-- CreateIndex
+CREATE INDEX "artifact_preprocess_jobs_claimed_at_claim_expires_at_idx" ON "artifact_preprocess_jobs"("claimed_at", "claim_expires_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_source_revision_id_pipeline_versio_key" ON "artifact_preprocess_jobs"("source_revision_id", "pipeline_version");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "artifact_preprocess_jobs_derived_artifact_id_key" ON "artifact_preprocess_jobs"("derived_artifact_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "artifact_preprocess_jobs_derived_revision_id_key" ON "artifact_preprocess_jobs"("derived_revision_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "artifact_preprocess_jobs_output_lease_id_key" ON "artifact_preprocess_jobs"("output_lease_id");
 
 -- CreateIndex
 CREATE INDEX "artifact_revision_parents_parent_revision_id_idx" ON "artifact_revision_parents"("parent_revision_id");
@@ -2152,7 +2434,6 @@ CREATE INDEX "authorization_grants_silo_id_resource_kind_resource_id_prio_idx" O
 -- CreateIndex
 CREATE INDEX "authorization_grants_catalog_id_catalog_revision_capability_idx" ON "authorization_grants"("catalog_id", "catalog_revision", "capability_id");
 
--- CreateIndex
 CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"(
   "silo_id", "subject_kind", COALESCE("subject_group_id", ''), COALESCE("subject_principal_id", ''),
   "boundary_kind", COALESCE("boundary_group_id", ''), COALESCE("boundary_principal_id", ''), "boundary_coverage",
@@ -2172,6 +2453,9 @@ CREATE UNIQUE INDEX "capability_catalog_revisions_catalog_id_revision_digest_key
 CREATE UNIQUE INDEX "approval_requests_resume_token_hash_key" ON "approval_requests"("resume_token_hash");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "approval_requests_elicitation_request_id_key" ON "approval_requests"("elicitation_request_id");
+
+-- CreateIndex
 CREATE INDEX "approval_requests_state_expires_at_idx" ON "approval_requests"("state", "expires_at");
 
 -- CreateIndex
@@ -2179,6 +2463,33 @@ CREATE INDEX "approval_requests_subject_id_idx" ON "approval_requests"("subject_
 
 -- CreateIndex
 CREATE UNIQUE INDEX "approval_requests_run_id_attempt_action_digest_key" ON "approval_requests"("run_id", "attempt", "action_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tool_invocations_mcp_task_id_key" ON "tool_invocations"("mcp_task_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tool_invocations_request_fingerprint_key" ON "tool_invocations"("request_fingerprint");
+
+-- CreateIndex
+CREATE INDEX "tool_invocations_run_id_attempt_state_idx" ON "tool_invocations"("run_id", "attempt", "state");
+
+-- CreateIndex
+CREATE INDEX "tool_invocations_state_next_preparation_attempt_at_idx" ON "tool_invocations"("state", "next_preparation_attempt_at");
+
+-- CreateIndex
+CREATE INDEX "tool_invocations_state_claim_expires_at_idx" ON "tool_invocations"("state", "claim_expires_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tool_invocations_run_id_attempt_tool_invocation_id_key" ON "tool_invocations"("run_id", "attempt", "tool_invocation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tool_invocations_run_id_attempt_candidate_id_key" ON "tool_invocations"("run_id", "attempt", "candidate_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tool_result_deliveries_tool_invocation_id_key" ON "tool_result_deliveries"("tool_invocation_id");
+
+-- CreateIndex
+CREATE INDEX "tool_result_deliveries_state_created_at_idx" ON "tool_result_deliveries"("state", "created_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "action_execution_receipts_jti_key" ON "action_execution_receipts"("jti");
@@ -2202,28 +2513,207 @@ CREATE UNIQUE INDEX "channel_runtime_routes_exact_target_key" ON "channel_runtim
 CREATE UNIQUE INDEX "channel_runtime_routes_receiver_service_key" ON "channel_runtime_routes"("receiver_id", "silo_id", "agent_service_id", "action");
 
 -- CreateIndex
-CREATE INDEX "org_memberships_subject_idx" ON "org_memberships"("subject");
+CREATE UNIQUE INDEX "channel_invocation_contexts_digest_key" ON "channel_invocation_contexts"("digest");
 
 -- CreateIndex
-CREATE INDEX "org_memberships_cluster_tenant_idx" ON "org_memberships"("cluster_tenant");
+CREATE INDEX "channel_invocation_contexts_digest_expiry_idx" ON "channel_invocation_contexts"("digest", "expires_at");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "org_memberships_cluster_tenant_subject_key" ON "org_memberships"("cluster_tenant", "subject");
+CREATE INDEX "channel_invocation_contexts_route_expiry_idx" ON "channel_invocation_contexts"("route_id", "expires_at");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "org_memberships_cluster_tenant_email_key" ON "org_memberships"("cluster_tenant", "email");
+CREATE INDEX "channel_invocation_contexts_subject_conversation_idx" ON "channel_invocation_contexts"("subject_id", "silo_id", "conversation_id", "created_at");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "organization_invitations_silo_id_active_email_key" ON "organization_invitations"("silo_id", "active_email");
+CREATE UNIQUE INDEX "conversation_assets_upload_lease_id_key" ON "conversation_assets"("upload_lease_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "organization_invitations_silo_id_last_resend_idempotency_key_key" ON "organization_invitations"("silo_id", "last_resend_idempotency_key");
+CREATE UNIQUE INDEX "conversation_assets_output_ticket_id_key" ON "conversation_assets"("output_ticket_id");
 
 -- CreateIndex
-CREATE INDEX "organization_invitations_silo_id_status_expires_at_idx" ON "organization_invitations"("silo_id", "status", "expires_at");
+CREATE INDEX "conversation_assets_conversation_id_state_created_at_idx" ON "conversation_assets"("conversation_id", "state", "created_at");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "organization_invitation_requests_silo_id_actor_subject_idempotency_key_key" ON "organization_invitation_requests"("silo_id", "actor_subject", "idempotency_key");
+CREATE INDEX "conversation_assets_message_id_idx" ON "conversation_assets"("message_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_assets_run_id_run_attempt_idx" ON "conversation_assets"("run_id", "run_attempt");
+
+-- CreateIndex
+CREATE INDEX "conversation_assets_artifact_id_revision_id_idx" ON "conversation_assets"("artifact_id", "revision_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_assets_conversation_id_id_key" ON "conversation_assets"("conversation_id", "id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_assets_exact_output_ticket_key" ON "conversation_assets"("output_ticket_id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "run_message_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_assets_participant_idempotency_key" ON "conversation_assets"("conversation_id", "created_by_user_id", "idempotency_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_asset_output_tickets_finalized_receipt_digest_key" ON "conversation_asset_output_tickets"("finalized_receipt_digest");
+
+-- CreateIndex
+CREATE INDEX "conversation_asset_output_tickets_conversation_id_created_a_idx" ON "conversation_asset_output_tickets"("conversation_id", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_asset_output_tickets_run_id_run_attempt_idempo_key" ON "conversation_asset_output_tickets"("run_id", "run_attempt", "idempotency_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_asset_output_tickets_exact_asset_key" ON "conversation_asset_output_tickets"("id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "output_message_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversations_activity_sequence_key" ON "conversations"("activity_sequence");
+
+-- CreateIndex
+CREATE INDEX "conversations_silo_id_mode_lifecycle_activity_sequence_idx" ON "conversations"("silo_id", "mode", "lifecycle", "activity_sequence");
+
+-- CreateIndex
+CREATE INDEX "conversations_silo_id_agent_service_id_lifecycle_idx" ON "conversations"("silo_id", "agent_service_id", "lifecycle");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversations_id_silo_id_key" ON "conversations"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversations_exact_service_key" ON "conversations"("id", "silo_id", "agent_service_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversations_id_context_revision_id_key" ON "conversations"("id", "context_revision_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_participants_user_id_archived_at_conversation__idx" ON "conversation_participants"("user_id", "archived_at", "conversation_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_messages_run_id_idx" ON "conversation_messages"("run_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_messages_conversation_id_id_key" ON "conversation_messages"("conversation_id", "id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_messages_conversation_id_idempotency_key_key" ON "conversation_messages"("conversation_id", "idempotency_key");
+
+-- CreateIndex
+CREATE INDEX "conversation_run_events_run_id_message_id_idx" ON "conversation_run_events"("run_id", "message_id");
+
+CREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "message_id") WHERE "type" = 'message.started';
+
+-- CreateIndex
+CREATE INDEX "conversation_run_events_run_id_occurred_at_idx" ON "conversation_run_events"("run_id", "occurred_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_run_events_conversation_id_run_id_sequence_key" ON "conversation_run_events"("conversation_id", "run_id", "sequence");
+
+-- CreateIndex
+CREATE INDEX "conversation_timeline_entries_conversation_id_occurred_at_idx" ON "conversation_timeline_entries"("conversation_id", "occurred_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_message_id_key" ON "conversation_timeline_entries"("conversation_id", "message_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_run_id_run_ev_key" ON "conversation_timeline_entries"("conversation_id", "run_id", "run_event_sequence");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_membership_ev_key" ON "conversation_timeline_entries"("conversation_id", "membership_event_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_system_event__key" ON "conversation_timeline_entries"("conversation_id", "system_event_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_timeline_entries_parent_delivery_child_run_id_key" ON "conversation_timeline_entries"("parent_delivery_child_run_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_timeline_entries_parent_delivery_agent_thread__key" ON "conversation_timeline_entries"("parent_delivery_agent_thread_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_agent_threads_first_run_id_key" ON "conversation_agent_threads"("first_run_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_agent_threads_root_conversation_id_created_at_idx" ON "conversation_agent_threads"("root_conversation_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "conversation_agent_threads_initiator_user_id_created_at_idx" ON "conversation_agent_threads"("initiator_user_id", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_agent_threads_parent_conversation_id_parent_me_key" ON "conversation_agent_threads"("parent_conversation_id", "parent_message_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_agent_threads_child_authority_key" ON "conversation_agent_threads"("child_conversation_id", "silo_id", "agent_service_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_agent_threads_first_run_authority_key" ON "conversation_agent_threads"("first_run_id", "child_conversation_id", "silo_id", "agent_service_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_agent_threads_child_parent_key" ON "conversation_agent_threads"("child_conversation_id", "parent_conversation_id");
+
+-- CreateIndex
+CREATE INDEX "agent_thread_parent_deliveries_parent_conversation_id_creat_idx" ON "agent_thread_parent_deliveries"("parent_conversation_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "agent_thread_parent_deliveries_run_id_created_at_idx" ON "agent_thread_parent_deliveries"("run_id", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_thread_parent_deliveries_child_conversation_id_idempo_key" ON "agent_thread_parent_deliveries"("child_conversation_id", "idempotency_key");
+
+-- CreateIndex
+CREATE INDEX "conversation_context_revisions_created_by_run_id_idx" ON "conversation_context_revisions"("created_by_run_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_context_revisions_conversation_id_revision_key" ON "conversation_context_revisions"("conversation_id", "revision");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_context_revisions_conversation_id_id_key" ON "conversation_context_revisions"("conversation_id", "id");
+
+-- CreateIndex
+CREATE INDEX "elicitation_requests_conversation_id_state_created_at_idx" ON "elicitation_requests"("conversation_id", "state", "created_at");
+
+-- CreateIndex
+CREATE INDEX "elicitation_requests_assigned_participant_id_state_expires__idx" ON "elicitation_requests"("assigned_participant_id", "state", "expires_at");
+
+-- CreateIndex
+CREATE INDEX "elicitation_requests_run_id_attempt_state_idx" ON "elicitation_requests"("run_id", "attempt", "state");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "elicitation_requests_run_id_attempt_request_key_key" ON "elicitation_requests"("run_id", "attempt", "request_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "elicitation_requests_id_run_id_attempt_key" ON "elicitation_requests"("id", "run_id", "attempt");
+
+-- CreateIndex
+CREATE INDEX "elicitation_response_attempts_request_id_submitted_at_idx" ON "elicitation_response_attempts"("request_id", "submitted_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "elicitation_response_attempts_request_id_idempotency_key_key" ON "elicitation_response_attempts"("request_id", "idempotency_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "elicitation_result_deliveries_request_id_key" ON "elicitation_result_deliveries"("request_id");
+
+-- CreateIndex
+CREATE INDEX "elicitation_result_deliveries_state_created_at_idx" ON "elicitation_result_deliveries"("state", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "personal_memory_permission_receipts_request_id_key" ON "personal_memory_permission_receipts"("request_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "personal_memory_permission_receipts_tool_invocation_id_key" ON "personal_memory_permission_receipts"("tool_invocation_id");
+
+-- CreateIndex
+CREATE INDEX "personal_memory_permission_receipts_run_id_attempt_executio_idx" ON "personal_memory_permission_receipts"("run_id", "attempt", "execution_subject_id", "state", "expires_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "personal_memory_permission_receipts_request_id_run_id_attem_key" ON "personal_memory_permission_receipts"("request_id", "run_id", "attempt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "resource_shares_id_silo_id_key" ON "resource_shares"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "resource_shares_silo_id_resource_kind_resource_id_key" ON "resource_shares"("silo_id", "resource_kind", "resource_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "resource_share_recipients_grant_id_key" ON "resource_share_recipients"("grant_id");
+
+-- CreateIndex
+CREATE INDEX "resource_share_recipients_silo_id_principal_id_idx" ON "resource_share_recipients"("silo_id", "principal_id");
 
 -- CreateIndex
 CREATE INDEX "principals_silo_id_email_idx" ON "principals"("silo_id", "email");
@@ -2250,46 +2740,91 @@ CREATE UNIQUE INDEX "groups_silo_id_name_key" ON "groups"("silo_id", "name");
 CREATE INDEX "group_memberships_silo_id_principal_id_idx" ON "group_memberships"("silo_id", "principal_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "resource_shares_id_silo_id_key" ON "resource_shares"("id", "silo_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "resource_shares_silo_id_resource_kind_resource_id_key" ON "resource_shares"("silo_id", "resource_kind", "resource_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "resource_share_recipients_grant_id_key" ON "resource_share_recipients"("grant_id");
-
--- CreateIndex
-CREATE INDEX "resource_share_recipients_silo_id_principal_id_idx" ON "resource_share_recipients"("silo_id", "principal_id");
-
--- CreateIndex
-CREATE INDEX "integrations_silo_id_state_idx" ON "integrations"("silo_id", "state");
-
--- CreateIndex
-CREATE UNIQUE INDEX "integrations_id_silo_id_key" ON "integrations"("id", "silo_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "integrations_silo_id_obot_catalog_entry_id_key" ON "integrations"("silo_id", "obot_catalog_entry_id");
-
--- CreateIndex
-CREATE INDEX "integration_custody_references_integration_id_state_expires_idx" ON "integration_custody_references"("integration_id", "state", "expires_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "integration_custody_references_id_integration_id_silo_id_key" ON "integration_custody_references"("id", "integration_id", "silo_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "integration_custody_references_obot_custody_reference_key" ON "integration_custody_references"("obot_custody_reference");
+CREATE INDEX "mcp_servers_approval_status_idx" ON "mcp_servers"("approval_status");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "mcp_servers_silo_id_name_key" ON "mcp_servers"("silo_id", "name");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_servers_id_silo_id_key" ON "mcp_servers"("id", "silo_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "mcp_servers_silo_id_registration_key_digest_key" ON "mcp_servers"("silo_id", "registration_key_digest");
 
 -- CreateIndex
-CREATE INDEX "mcp_servers_approval_status_idx" ON "mcp_servers"("approval_status");
+CREATE INDEX "oci_image_validations_silo_id_state_created_at_idx" ON "oci_image_validations"("silo_id", "state", "created_at");
 
+-- CreateIndex
 CREATE UNIQUE INDEX "oci_image_validations_silo_id_submission_key_digest_key" ON "oci_image_validations"("silo_id", "submission_key_digest");
 
-CREATE INDEX "oci_image_validations_silo_id_state_created_at_idx" ON "oci_image_validations"("silo_id", "state", "created_at");
+-- CreateIndex
+CREATE UNIQUE INDEX "oci_image_validations_id_silo_id_key" ON "oci_image_validations"("id", "silo_id");
+
+-- CreateIndex
+CREATE INDEX "mcp_server_revisions_silo_id_state_idx" ON "mcp_server_revisions"("silo_id", "state");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_server_revisions_mcp_server_id_revision_key" ON "mcp_server_revisions"("mcp_server_id", "revision");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_server_revisions_oci_image_validation_id_silo_id_key" ON "mcp_server_revisions"("oci_image_validation_id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_server_revisions_silo_id_registry_reference_key" ON "mcp_server_revisions"("silo_id", "registry_reference");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_server_revisions_id_silo_id_key" ON "mcp_server_revisions"("id", "silo_id");
+
+-- CreateIndex
+CREATE INDEX "mcp_tool_revisions_silo_id_name_idx" ON "mcp_tool_revisions"("silo_id", "name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_tool_revisions_server_revision_id_name_key" ON "mcp_tool_revisions"("server_revision_id", "name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_tool_revisions_id_silo_id_key" ON "mcp_tool_revisions"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_tasks_task_id_key" ON "mcp_tasks"("task_id");
+
+-- CreateIndex
+CREATE INDEX "mcp_tasks_silo_id_principal_id_state_created_at_idx" ON "mcp_tasks"("silo_id", "principal_id", "state", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_tasks_silo_id_request_key_digest_key" ON "mcp_tasks"("silo_id", "request_key_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_tasks_silo_id_task_key_key" ON "mcp_tasks"("silo_id", "task_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_runtime_executions_tool_invocation_id_key" ON "mcp_runtime_executions"("tool_invocation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_runtime_executions_idempotency_key_key" ON "mcp_runtime_executions"("idempotency_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_runtime_executions_execution_reference_key" ON "mcp_runtime_executions"("execution_reference");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_runtime_executions_workload_uid_key" ON "mcp_runtime_executions"("workload_uid");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_runtime_executions_pod_uid_key" ON "mcp_runtime_executions"("pod_uid");
+
+-- CreateIndex
+CREATE INDEX "mcp_runtime_executions_workload_state_claim_expires_at_crea_idx" ON "mcp_runtime_executions"("workload_state", "claim_expires_at", "created_at");
+
+-- CreateIndex
+CREATE INDEX "mcp_runtime_executions_workload_state_release_expires_at_cr_idx" ON "mcp_runtime_executions"("workload_state", "release_expires_at", "created_at");
+
+-- CreateIndex
+CREATE INDEX "mcp_runtime_executions_command_state_companion_claim_expire_idx" ON "mcp_runtime_executions"("command_state", "companion_claim_expires_at");
+
+-- CreateIndex
+CREATE INDEX "mcp_runtime_executions_workload_state_cleanup_expires_at_cr_idx" ON "mcp_runtime_executions"("workload_state", "cleanup_expires_at", "created_at");
+
+-- CreateIndex
+CREATE INDEX "mcp_runtime_executions_server_revision_id_kind_idx" ON "mcp_runtime_executions"("server_revision_id", "kind");
 
 -- CreateIndex
 CREATE INDEX "mcp_server_installs_principal_id_idx" ON "mcp_server_installs"("principal_id");
@@ -2358,6 +2893,39 @@ CREATE INDEX "memory_outbox_events_published_at_available_at_idx" ON "memory_out
 CREATE UNIQUE INDEX "model_routing_defaults_scope_cluster_tenant_key" ON "model_routing_defaults"("scope", "cluster_tenant");
 
 -- CreateIndex
+CREATE INDEX "org_memberships_subject_idx" ON "org_memberships"("subject");
+
+-- CreateIndex
+CREATE INDEX "org_memberships_cluster_tenant_idx" ON "org_memberships"("cluster_tenant");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "org_memberships_cluster_tenant_subject_key" ON "org_memberships"("cluster_tenant", "subject");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "org_memberships_cluster_tenant_email_key" ON "org_memberships"("cluster_tenant", "email");
+
+-- CreateIndex
+CREATE INDEX "organization_invitations_silo_id_status_expires_at_idx" ON "organization_invitations"("silo_id", "status", "expires_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "organization_invitations_silo_id_active_email_key" ON "organization_invitations"("silo_id", "active_email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "organization_invitations_silo_id_last_resend_idempotency_ke_key" ON "organization_invitations"("silo_id", "last_resend_idempotency_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "organization_invitation_requests_silo_id_actor_subject_idem_key" ON "organization_invitation_requests"("silo_id", "actor_subject", "idempotency_key");
+
+-- CreateIndex
+CREATE INDEX "personal_configuration_changes_silo_id_user_id_proposed_at_idx" ON "personal_configuration_changes"("silo_id", "user_id", "proposed_at");
+
+-- CreateIndex
+CREATE INDEX "personal_configuration_changes_source_run_id_idx" ON "personal_configuration_changes"("source_run_id");
+
+-- CreateIndex
+CREATE INDEX "personal_configuration_changes_persona_profile_id_state_pro_idx" ON "personal_configuration_changes"("persona_profile_id", "state", "proposed_at");
+
+-- CreateIndex
 CREATE INDEX "persona_questions_question_set_id_question_set_version_cate_idx" ON "persona_questions"("question_set_id", "question_set_version", "category");
 
 -- CreateIndex
@@ -2388,6 +2956,9 @@ CREATE UNIQUE INDEX "persona_profiles_id_user_id_key" ON "persona_profiles"("id"
 CREATE UNIQUE INDEX "persona_profiles_id_active_revision_id_key" ON "persona_profiles"("id", "active_revision_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "persona_interviews_refresh_configuration_change_id_key" ON "persona_interviews"("refresh_configuration_change_id");
+
+-- CreateIndex
 CREATE INDEX "persona_interviews_persona_profile_id_state_idx" ON "persona_interviews"("persona_profile_id", "state");
 
 -- CreateIndex
@@ -2395,9 +2966,6 @@ CREATE UNIQUE INDEX "persona_interviews_id_persona_profile_id_user_id_question_s
 
 -- CreateIndex
 CREATE INDEX "persona_interview_answers_question_set_id_question_set_vers_idx" ON "persona_interview_answers"("question_set_id", "question_set_version", "question_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "persona_interviews_refresh_configuration_change_id_key" ON "persona_interviews"("refresh_configuration_change_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "persona_interview_answers_interview_id_question_id_key" ON "persona_interview_answers"("interview_id", "question_id");
@@ -2451,13 +3019,79 @@ CREATE INDEX "third_party_source_items_source_id_idx" ON "third_party_source_ite
 CREATE UNIQUE INDEX "third_party_source_items_source_id_kind_upstream_id_key" ON "third_party_source_items"("source_id", "kind", "upstream_id");
 
 -- CreateIndex
+CREATE INDEX "agent_runs_agent_service_id_state_idx" ON "agent_runs"("agent_service_id", "state");
+
+-- CreateIndex
+CREATE INDEX "agent_runs_conversation_id_accepted_at_idx" ON "agent_runs"("conversation_id", "accepted_at");
+
+-- CreateIndex
+CREATE INDEX "agent_runs_root_run_id_idx" ON "agent_runs"("root_run_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_silo_id_request_idempotency_key_key" ON "agent_runs"("silo_id", "request_idempotency_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_id_agent_service_id_agent_revision_id_key" ON "agent_runs"("id", "agent_service_id", "agent_revision_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_id_attempt_key" ON "agent_runs"("id", "attempt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_id_silo_id_agent_service_id_agent_revision_id_key" ON "agent_runs"("id", "silo_id", "agent_service_id", "agent_revision_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_id_agent_revision_id_key" ON "agent_runs"("id", "agent_revision_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_id_input_snapshot_digest_key" ON "agent_runs"("id", "input_snapshot_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_conversation_id_id_key" ON "agent_runs"("conversation_id", "id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_thread_authority_key" ON "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_run_snapshot_identity_key" ON "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
+
+-- CreateIndex
+CREATE INDEX "warm_runtime_reservations_state_idle_deadline_idx" ON "warm_runtime_reservations"("state", "idle_deadline");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "warm_runtime_reservations_namespace_pod_uid_key" ON "warm_runtime_reservations"("namespace", "pod_uid");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "warm_runtime_reservations_namespace_deployment_uid_pod_name_key" ON "warm_runtime_reservations"("namespace", "deployment_uid", "pod_name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_run_workflow_tasks_task_id_key" ON "agent_run_workflow_tasks"("task_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_run_workflow_tasks_silo_id_task_key_key" ON "agent_run_workflow_tasks"("silo_id", "task_key");
+
+-- CreateIndex
+CREATE INDEX "child_run_completion_deliveries_parent_run_id_idx" ON "child_run_completion_deliveries"("parent_run_id");
+
+-- CreateIndex
 CREATE INDEX "child_run_reservations_parent_run_id_idx" ON "child_run_reservations"("parent_run_id");
 
 -- CreateIndex
 CREATE INDEX "child_run_reservations_root_run_id_idx" ON "child_run_reservations"("root_run_id");
 
 -- CreateIndex
-CREATE INDEX "child_run_completion_deliveries_parent_run_id_idx" ON "child_run_completion_deliveries"("parent_run_id");
+CREATE UNIQUE INDEX "run_input_snapshots_run_id_key" ON "run_input_snapshots"("run_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "run_input_snapshots_input_digest_key" ON "run_input_snapshots"("input_digest");
+
+-- CreateIndex
+CREATE INDEX "run_input_snapshots_agent_service_id_agent_revision_id_idx" ON "run_input_snapshots"("agent_service_id", "agent_revision_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "run_input_snapshots_run_id_input_digest_key" ON "run_input_snapshots"("run_id", "input_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
 
 -- CreateIndex
 CREATE INDEX "workload_assignments_silo_id_subject_id_idx" ON "workload_assignments"("silo_id", "subject_id");
@@ -2493,10 +3127,7 @@ CREATE UNIQUE INDEX "workload_bootstraps_receipt_id_key" ON "workload_bootstraps
 CREATE INDEX "workload_bootstraps_expires_at_idx" ON "workload_bootstraps"("expires_at");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "workload_bootstraps_run_id_attempt_key" ON "workload_bootstraps"("run_id", "attempt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workload_bootstrap_assignment_identity_key" ON "workload_bootstraps"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid");
+CREATE UNIQUE INDEX "workload_bootstraps_run_id_attempt_generation_key" ON "workload_bootstraps"("run_id", "attempt", "generation");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "run_proof_keys_bootstrap_id_key" ON "run_proof_keys"("bootstrap_id");
@@ -2511,10 +3142,7 @@ CREATE INDEX "run_proof_keys_pod_uid_idx" ON "run_proof_keys"("pod_uid");
 CREATE INDEX "run_proof_keys_expires_at_idx" ON "run_proof_keys"("expires_at");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_run_id_attempt_key" ON "run_proof_keys"("run_id", "attempt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_proof_keys_run_id_attempt_workload_kind_workload_uid_key" ON "run_proof_keys"("run_id", "attempt", "workload_kind", "workload_uid");
+CREATE UNIQUE INDEX "run_proof_keys_run_id_attempt_generation_key" ON "run_proof_keys"("run_id", "attempt", "generation");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "run_proof_keys_run_id_attempt_workload_kind_workload_uid_po_key" ON "run_proof_keys"("run_id", "attempt", "workload_kind", "workload_uid", "pod_uid");
@@ -2529,13 +3157,28 @@ CREATE UNIQUE INDEX "run_proof_key_bound_thumbprint_key" ON "run_proof_keys"("id
 CREATE UNIQUE INDEX "run_proof_key_bound_pod_key" ON "run_proof_keys"("id", "run_id", "attempt", "workload_kind", "workload_uid", "key_thumbprint", "pod_uid");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_outbox_events_idempotency_key_key" ON "run_outbox_events"("idempotency_key");
+CREATE INDEX "runtime_continuation_checkpoints_run_id_attempt_revision_idx" ON "runtime_continuation_checkpoints"("run_id", "attempt", "revision");
 
 -- CreateIndex
-CREATE INDEX "run_outbox_events_published_at_available_at_idx" ON "run_outbox_events"("published_at", "available_at");
+CREATE INDEX "runtime_steering_boundaries_run_id_attempt_idx" ON "runtime_steering_boundaries"("run_id", "attempt");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_outbox_events_run_id_sequence_key" ON "run_outbox_events"("run_id", "sequence");
+CREATE UNIQUE INDEX "runtime_steering_boundaries_run_id_attempt_to_input_generat_key" ON "runtime_steering_boundaries"("run_id", "attempt", "to_input_generation");
+
+-- CreateIndex
+CREATE INDEX "runtime_steering_requests_run_id_attempt_state_submitted_at_idx" ON "runtime_steering_requests"("run_id", "attempt", "state", "submitted_at");
+
+-- CreateIndex
+CREATE INDEX "runtime_steering_requests_silo_id_subject_id_submitted_at_idx" ON "runtime_steering_requests"("silo_id", "subject_id", "submitted_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "runtime_dispatched_commands_command_id_key" ON "runtime_dispatched_commands"("command_id");
+
+-- CreateIndex
+CREATE INDEX "runtime_dispatched_commands_run_id_attempt_idx" ON "runtime_dispatched_commands"("run_id", "attempt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "runtime_dispatched_commands_run_id_attempt_sequence_key" ON "runtime_dispatched_commands"("run_id", "attempt", "sequence");
 
 -- CreateIndex
 CREATE INDEX "skills_silo_id_state_idx" ON "skills"("silo_id", "state");
@@ -2562,34 +3205,43 @@ CREATE UNIQUE INDEX "skill_revisions_skill_id_id_key" ON "skill_revisions"("skil
 CREATE UNIQUE INDEX "skill_revisions_id_artifact_revision_id_artifact_content_ad_key" ON "skill_revisions"("id", "artifact_revision_id", "artifact_content_address");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "skill_workloads_tool_invocation_id_key" ON "skill_workloads"("tool_invocation_id");
+CREATE UNIQUE INDEX "skill_authoring_validations_task_id_key" ON "skill_authoring_validations"("task_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "skill_workloads_workload_uid_key" ON "skill_workloads"("workload_uid");
+CREATE UNIQUE INDEX "skill_authoring_validations_task_key_key" ON "skill_authoring_validations"("task_key");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "skill_workloads_worker_pod_uid_key" ON "skill_workloads"("worker_pod_uid");
+CREATE INDEX "skill_authoring_validations_silo_id_state_created_at_idx" ON "skill_authoring_validations"("silo_id", "state", "created_at");
 
 -- CreateIndex
-CREATE INDEX "skill_workloads_state_release_expires_at_idx" ON "skill_workloads"("state", "release_expires_at");
+CREATE UNIQUE INDEX "skill_authoring_validations_skill_revision_id_artifact_revi_key" ON "skill_authoring_validations"("skill_revision_id", "artifact_revision_id", "artifact_content_address");
 
 -- CreateIndex
-CREATE INDEX "skill_workloads_state_claim_expires_at_idx" ON "skill_workloads"("state", "claim_expires_at");
+CREATE UNIQUE INDEX "skill_authoring_validation_workload_claims_validation_id_key" ON "skill_authoring_validation_workload_claims"("validation_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "skill_workloads_one_authoring_per_revision_key" ON "skill_workloads"("skill_revision_id") WHERE "kind" = 'authoring';
+CREATE UNIQUE INDEX "skill_authoring_validation_workload_claims_idempotency_key_key" ON "skill_authoring_validation_workload_claims"("idempotency_key");
 
 -- CreateIndex
-CREATE INDEX "skill_workloads_silo_id_state_created_at_idx" ON "skill_workloads"("silo_id", "state", "created_at");
+CREATE UNIQUE INDEX "skill_authoring_validation_workload_claims_workload_uid_key" ON "skill_authoring_validation_workload_claims"("workload_uid");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "skill_workload_bootstraps_skill_workload_id_key" ON "skill_workload_bootstraps"("skill_workload_id");
+CREATE UNIQUE INDEX "skill_authoring_validation_workload_claims_first_pod_uid_key" ON "skill_authoring_validation_workload_claims"("first_pod_uid");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "skill_workload_bootstraps_reference_hash_key" ON "skill_workload_bootstraps"("reference_hash");
+CREATE INDEX "skill_authoring_validation_workload_claims_claimed_at_expir_idx" ON "skill_authoring_validation_workload_claims"("claimed_at", "expires_at");
 
 -- CreateIndex
-CREATE INDEX "skill_workload_bootstraps_expires_at_idx" ON "skill_workload_bootstraps"("expires_at");
+CREATE UNIQUE INDEX "skill_authoring_validation_bootstraps_validation_id_key" ON "skill_authoring_validation_bootstraps"("validation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_authoring_validation_bootstraps_reference_hash_key" ON "skill_authoring_validation_bootstraps"("reference_hash");
+
+-- CreateIndex
+CREATE INDEX "skill_authoring_validation_bootstraps_expires_at_idx" ON "skill_authoring_validation_bootstraps"("expires_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_authoring_validation_completion_inbox_validation_id_key" ON "skill_authoring_validation_completion_inbox"("validation_id");
 
 -- CreateIndex
 CREATE INDEX "token_usage_snapshots_sampled_at_idx" ON "token_usage_snapshots"("sampled_at");
@@ -2613,170 +3265,31 @@ CREATE INDEX "user_onboardings_bootstrap_conversation_id_idx" ON "user_onboardin
 CREATE UNIQUE INDEX "user_onboardings_silo_id_user_id_key" ON "user_onboardings"("silo_id", "user_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "user_onboarding_bootstrap_content_revisions_archetype_revision_key" ON "user_onboarding_bootstrap_content_revisions"("archetype", "revision");
-CREATE UNIQUE INDEX "user_onboarding_bootstrap_content_revisions_primary_colour_revision_key" ON "user_onboarding_bootstrap_content_revisions"("primary_colour", "revision");
+CREATE UNIQUE INDEX "user_onboarding_bootstrap_content_revisions_archetype_revis_key" ON "user_onboarding_bootstrap_content_revisions"("archetype", "revision");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "user_onboarding_bootstrap_content_revisions_primary_colour__key" ON "user_onboarding_bootstrap_content_revisions"("primary_colour", "revision");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "user_onboarding_bootstrap_content_revisions_id_digest_key" ON "user_onboarding_bootstrap_content_revisions"("id", "digest");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "user_onboarding_bootstrap_conversations_onboarding_id_key" ON "user_onboarding_bootstrap_conversations"("onboarding_id");
+
+-- CreateIndex
 CREATE INDEX "user_onboarding_bootstrap_conversations_silo_id_user_id_idx" ON "user_onboarding_bootstrap_conversations"("silo_id", "user_id");
+
+-- CreateIndex
 CREATE INDEX "user_onboarding_bootstrap_conversations_persona_revision_id_idx" ON "user_onboarding_bootstrap_conversations"("persona_revision_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "user_onboarding_bootstrap_answers_conversation_id_ordinal_key" ON "user_onboarding_bootstrap_answers"("conversation_id", "ordinal");
-CREATE UNIQUE INDEX "user_onboarding_bootstrap_answers_conversation_id_question_ordinal_key" ON "user_onboarding_bootstrap_answers"("conversation_id", "question_ordinal");
-CREATE UNIQUE INDEX "user_onboarding_bootstrap_answers_conversation_id_idempotency_key" ON "user_onboarding_bootstrap_answers"("conversation_id", "idempotency_key");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "channel_invocation_contexts_digest_key" ON "channel_invocation_contexts"("digest");
+CREATE UNIQUE INDEX "user_onboarding_bootstrap_answers_conversation_id_question__key" ON "user_onboarding_bootstrap_answers"("conversation_id", "question_ordinal");
 
 -- CreateIndex
-CREATE INDEX "channel_invocation_contexts_digest_expiry_idx" ON "channel_invocation_contexts"("digest", "expires_at");
-
--- CreateIndex
-CREATE INDEX "channel_invocation_contexts_route_expiry_idx" ON "channel_invocation_contexts"("route_id", "expires_at");
-
--- CreateIndex
-CREATE INDEX "channel_invocation_contexts_subject_conversation_idx" ON "channel_invocation_contexts"("subject_id", "silo_id", "conversation_id", "created_at");
-
--- CreateIndex
-CREATE INDEX "conversations_silo_id_mode_lifecycle_activity_sequence_idx" ON "conversations"("silo_id", "mode", "lifecycle", "activity_sequence");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversations_activity_sequence_key" ON "conversations"("activity_sequence");
-
--- CreateIndex
-CREATE INDEX "conversations_silo_id_agent_service_id_lifecycle_idx" ON "conversations"("silo_id", "agent_service_id", "lifecycle");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversations_id_silo_id_key" ON "conversations"("id", "silo_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversations_exact_service_key" ON "conversations"("id", "silo_id", "agent_service_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversations_id_context_revision_id_key" ON "conversations"("id", "context_revision_id");
-
--- CreateIndex
-CREATE INDEX "conversation_participants_user_id_archived_at_conversation__idx" ON "conversation_participants"("user_id", "archived_at", "conversation_id");
-
--- CreateIndex
-CREATE INDEX "conversation_messages_run_id_idx" ON "conversation_messages"("run_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_messages_conversation_id_id_key" ON "conversation_messages"("conversation_id", "id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_messages_conversation_id_idempotency_key_key" ON "conversation_messages"("conversation_id", "idempotency_key");
-
--- CreateIndex
-CREATE INDEX "conversation_run_events_run_id_occurred_at_idx" ON "conversation_run_events"("run_id", "occurred_at");
-
-CREATE INDEX "conversation_run_events_run_id_message_id_idx" ON "conversation_run_events"("run_id", "message_id");
-
-CREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "message_id") WHERE "type" = 'message.started';
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_run_events_conversation_id_run_id_sequence_key" ON "conversation_run_events"("conversation_id", "run_id", "sequence");
-
--- CreateIndex
-CREATE INDEX "conversation_timeline_entries_conversation_id_occurred_at_idx" ON "conversation_timeline_entries"("conversation_id", "occurred_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_message_id_key" ON "conversation_timeline_entries"("conversation_id", "message_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_run_id_run_ev_key" ON "conversation_timeline_entries"("conversation_id", "run_id", "run_event_sequence");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_membership_ev_key" ON "conversation_timeline_entries"("conversation_id", "membership_event_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_system_event__key" ON "conversation_timeline_entries"("conversation_id", "system_event_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_timeline_entries_parent_delivery_child_run_id_key" ON "conversation_timeline_entries"("parent_delivery_child_run_id");
-
--- CreateIndex
-CREATE INDEX "conversation_context_revisions_created_by_run_id_idx" ON "conversation_context_revisions"("created_by_run_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_context_revisions_conversation_id_revision_key" ON "conversation_context_revisions"("conversation_id", "revision");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_context_revisions_conversation_id_id_key" ON "conversation_context_revisions"("conversation_id", "id");
-
--- CreateIndex
-CREATE INDEX "personal_configuration_changes_silo_id_user_id_proposed_at_idx" ON "personal_configuration_changes"("silo_id", "user_id", "proposed_at");
-
--- CreateIndex
-CREATE INDEX "personal_configuration_changes_source_run_id_idx" ON "personal_configuration_changes"("source_run_id");
-
--- CreateIndex
-CREATE INDEX "personal_configuration_changes_persona_profile_id_state_pro_idx" ON "personal_configuration_changes"("persona_profile_id", "state", "proposed_at");
-
--- CreateIndex
-CREATE INDEX "agent_runs_agent_service_id_state_idx" ON "agent_runs"("agent_service_id", "state");
-
--- CreateIndex
-CREATE INDEX "agent_runs_conversation_id_accepted_at_idx" ON "agent_runs"("conversation_id", "accepted_at");
-
--- CreateIndex
-CREATE INDEX "agent_runs_root_run_id_idx" ON "agent_runs"("root_run_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_runs_silo_id_request_idempotency_key_key" ON "agent_runs"("silo_id", "request_idempotency_key");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_runs_id_agent_service_id_agent_revision_id_key" ON "agent_runs"("id", "agent_service_id", "agent_revision_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_runs_id_silo_id_agent_service_id_agent_revision_id_key" ON "agent_runs"("id", "silo_id", "agent_service_id", "agent_revision_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_runs_id_agent_revision_id_key" ON "agent_runs"("id", "agent_revision_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_runs_id_input_snapshot_digest_key" ON "agent_runs"("id", "input_snapshot_digest");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_runs_conversation_id_id_key" ON "agent_runs"("conversation_id", "id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_run_snapshot_identity_key" ON "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshots_run_id_key" ON "run_input_snapshots"("run_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshots_input_digest_key" ON "run_input_snapshots"("input_digest");
-
--- CreateIndex
-CREATE INDEX "run_input_snapshots_agent_service_id_agent_revision_id_idx" ON "run_input_snapshots"("agent_service_id", "agent_revision_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshots_run_id_input_digest_key" ON "run_input_snapshots"("run_id", "input_digest");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
-
--- CreateIndex
-CREATE UNIQUE INDEX "approval_requests_elicitation_request_id_key" ON "approval_requests"("elicitation_request_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_runs_id_attempt_key" ON "agent_runs"("id", "attempt");
-
--- CreateIndex
-CREATE INDEX "elicitation_requests_conversation_id_state_created_at_idx" ON "elicitation_requests"("conversation_id", "state", "created_at");
-CREATE INDEX "elicitation_requests_assigned_participant_id_state_expires__idx" ON "elicitation_requests"("assigned_participant_id", "state", "expires_at");
-CREATE INDEX "elicitation_requests_run_id_attempt_state_idx" ON "elicitation_requests"("run_id", "attempt", "state");
-CREATE UNIQUE INDEX "elicitation_requests_run_id_attempt_request_key_key" ON "elicitation_requests"("run_id", "attempt", "request_key");
-CREATE UNIQUE INDEX "elicitation_requests_id_run_id_attempt_key" ON "elicitation_requests"("id", "run_id", "attempt");
-CREATE INDEX "elicitation_response_attempts_request_id_submitted_at_idx" ON "elicitation_response_attempts"("request_id", "submitted_at");
-CREATE UNIQUE INDEX "elicitation_response_attempts_request_id_idempotency_key_key" ON "elicitation_response_attempts"("request_id", "idempotency_key");
-CREATE UNIQUE INDEX "elicitation_result_deliveries_request_id_key" ON "elicitation_result_deliveries"("request_id");
-CREATE INDEX "elicitation_result_deliveries_state_created_at_idx" ON "elicitation_result_deliveries"("state", "created_at");
-CREATE UNIQUE INDEX "personal_memory_permission_receipts_request_id_key" ON "personal_memory_permission_receipts"("request_id");
-CREATE UNIQUE INDEX "personal_memory_permission_receipts_tool_invocation_id_key" ON "personal_memory_permission_receipts"("tool_invocation_id");
-CREATE INDEX "personal_memory_permission_receipts_run_id_attempt_executio_idx" ON "personal_memory_permission_receipts"("run_id", "attempt", "execution_subject_id", "state", "expires_at");
-CREATE UNIQUE INDEX "personal_memory_permission_receipts_request_id_run_id_attem_key" ON "personal_memory_permission_receipts"("request_id", "run_id", "attempt");
-
+CREATE UNIQUE INDEX "user_onboarding_bootstrap_answers_conversation_id_idempoten_key" ON "user_onboarding_bootstrap_answers"("conversation_id", "idempotency_key");
 
 -- AddForeignKey
 ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_id_active_revision_id_fkey" FOREIGN KEY ("id", "active_revision_id") REFERENCES "agent_revisions"("agent_service_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2785,26 +3298,10 @@ ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_id_active_revision_i
 ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_principal_id_silo_id_fkey" FOREIGN KEY ("principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "user_onboarding_bootstrap_questions" ADD CONSTRAINT "user_onboarding_bootstrap_questions_content_revision_id_fkey" FOREIGN KEY ("content_revision_id") REFERENCES "user_onboarding_bootstrap_content_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "user_onboarding_bootstrap_conversations" ADD CONSTRAINT "user_onboarding_bootstrap_conversations_onboarding_id_fkey" FOREIGN KEY ("onboarding_id") REFERENCES "user_onboardings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "user_onboarding_bootstrap_conversations" ADD CONSTRAINT "user_onboarding_bootstrap_conversations_content_revision_fkey" FOREIGN KEY ("content_revision_id", "content_digest") REFERENCES "user_onboarding_bootstrap_content_revisions"("id", "digest") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "user_onboarding_bootstrap_conversations" ADD CONSTRAINT "user_onboarding_bootstrap_conversations_persona_revision_id_fkey" FOREIGN KEY ("persona_revision_id") REFERENCES "persona_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "user_onboarding_bootstrap_answers" ADD CONSTRAINT "user_onboarding_bootstrap_answers_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "user_onboarding_bootstrap_conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_conversation_id_assigned_participant__fkey" FOREIGN KEY ("conversation_id", "assigned_participant_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "elicitation_response_attempts" ADD CONSTRAINT "elicitation_response_attempts_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "elicitation_result_deliveries" ADD CONSTRAINT "elicitation_result_deliveries_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_request_id_run_id_atte_fkey" FOREIGN KEY ("request_id", "run_id", "attempt") REFERENCES "elicitation_requests"("id", "run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_elicitation_request_id_fkey" FOREIGN KEY ("elicitation_request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "user_onboardings" ADD CONSTRAINT "user_onboardings_bootstrap_content_revision_fkey" FOREIGN KEY ("bootstrap_content_revision_id", "bootstrap_content_digest") REFERENCES "user_onboarding_bootstrap_content_revisions"("id", "digest") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "user_onboardings" ADD CONSTRAINT "user_onboardings_bootstrap_conversation_id_fkey" FOREIGN KEY ("bootstrap_conversation_id") REFERENCES "user_onboarding_bootstrap_conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_agent_service_id_fkey" FOREIGN KEY ("agent_service_id") REFERENCES "agent_services"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_id_fkey" FOREIGN KEY ("model_definition_id") REFERENCES "model_definitions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_parent_revision_id_fkey" FOREIGN KEY ("parent_revision_id") REFERENCES "agent_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2822,19 +3319,19 @@ ALTER TABLE "agent_revision_boundary_attachments" ADD CONSTRAINT "agent_revision
 ALTER TABLE "agent_revision_boundary_attachments" ADD CONSTRAINT "agent_revision_boundary_attachments_boundary_principal_id__fkey" FOREIGN KEY ("boundary_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "agent_service_schedules" ADD CONSTRAINT "agent_service_schedules_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "agent_revision_skill_assignments" ADD CONSTRAINT "agent_revision_skill_assignments_agent_revision_id_fkey" FOREIGN KEY ("agent_revision_id") REFERENCES "agent_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "agent_revision_integration_assignments" ADD CONSTRAINT "agent_revision_integration_assignments_agent_revision_id_fkey" FOREIGN KEY ("agent_revision_id") REFERENCES "agent_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_revision_mcp_tool_assignments" ADD CONSTRAINT "agent_revision_mcp_tool_assignments_agent_service_id_agent_fkey" FOREIGN KEY ("agent_service_id", "agent_revision_id") REFERENCES "agent_revisions"("agent_service_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "agent_revision_integration_assignments" ADD CONSTRAINT "agent_revision_integration_assignments_integration_id_silo_fkey" FOREIGN KEY ("integration_id", "silo_id") REFERENCES "integrations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_revision_mcp_tool_assignments" ADD CONSTRAINT "agent_revision_mcp_tool_assignments_agent_service_id_silo__fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "agent_revision_integration_assignments" ADD CONSTRAINT "agent_revision_integration_assignments_custody_reference_i_fkey" FOREIGN KEY ("custody_reference_id", "integration_id", "silo_id") REFERENCES "integration_custody_references"("id", "integration_id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_revision_mcp_tool_assignments" ADD CONSTRAINT "agent_revision_mcp_tool_assignments_tool_revision_id_silo__fkey" FOREIGN KEY ("tool_revision_id", "silo_id") REFERENCES "mcp_tool_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_service_schedules" ADD CONSTRAINT "agent_service_schedules_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "artifacts" ADD CONSTRAINT "artifacts_id_current_revision_id_fkey" FOREIGN KEY ("id", "current_revision_id") REFERENCES "artifact_revisions"("artifact_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2844,6 +3341,9 @@ ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_arti
 
 -- AddForeignKey
 ALTER TABLE "artifact_revisions" ADD CONSTRAINT "artifact_revisions_artifact_id_fkey" FOREIGN KEY ("artifact_id") REFERENCES "artifacts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_artifact_revision_id_fkey" FOREIGN KEY ("artifact_revision_id") REFERENCES "artifact_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "artifact_preprocess_jobs" ADD CONSTRAINT "artifact_preprocess_jobs_source_revision_id_fkey" FOREIGN KEY ("source_revision_id") REFERENCES "artifact_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2885,6 +3385,12 @@ ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_boundary
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_run_id_agent_service_id_agent_revision_i_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_tool_invocation_row_id_fkey" FOREIGN KEY ("tool_invocation_row_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_elicitation_request_id_fkey" FOREIGN KEY ("elicitation_request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_proof_key_id_run_id_attempt_workload_kin_fkey" FOREIGN KEY ("proof_key_id", "run_id", "attempt", "workload_kind", "workload_uid", "proof_key_thumbprint", "pod_uid") REFERENCES "run_proof_keys"("id", "run_id", "attempt", "workload_kind", "workload_uid", "key_thumbprint", "pod_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2894,19 +3400,13 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_run_id_attempt
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_catalog_id_catalog_revision_catalog_dige_fkey" FOREIGN KEY ("catalog_id", "catalog_revision", "catalog_digest") REFERENCES "capability_catalog_revisions"("catalog_id", "revision", "digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_tool_invocation_row_id_fkey" FOREIGN KEY ("tool_invocation_row_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_run_id_agent_service_id_agent_revision_id_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_mcp_task_id_fkey" FOREIGN KEY ("mcp_task_id") REFERENCES "mcp_tasks"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "tool_result_deliveries" ADD CONSTRAINT "tool_result_deliveries_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "runtime_dispatched_commands" ADD CONSTRAINT "runtime_dispatched_commands_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipts_run_id_agent_service_id_agent_re_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2921,43 +3421,187 @@ ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipt
 ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipts_run_id_attempt_agent_service_id__fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody_references_integration_id_silo_id_fkey" FOREIGN KEY ("integration_id", "silo_id") REFERENCES "integrations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_route_id_receiver_id_silo_id_a_fkey" FOREIGN KEY ("route_id", "receiver_id", "silo_id", "agent_service_id", "action") REFERENCES "channel_runtime_routes"("id", "receiver_id", "silo_id", "agent_service_id", "action") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_message_id_fkey" FOREIGN KEY ("conversation_id", "message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_run_event_seque_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_id_silo_id_fkey" FOREIGN KEY ("artifact_id", "silo_id") REFERENCES "artifacts"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_id_revision_id_fkey" FOREIGN KEY ("artifact_id", "revision_id") REFERENCES "artifact_revisions"("artifact_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_upload_lease_id_fkey" FOREIGN KEY ("upload_lease_id") REFERENCES "artifact_upload_leases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_exact_output_ticket_fkey" FOREIGN KEY ("output_ticket_id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "run_message_id") REFERENCES "conversation_asset_output_tickets"("id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "output_message_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_run_id_run_attempt_fkey" FOREIGN KEY ("run_id", "run_attempt") REFERENCES "workload_assignments"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_r_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_id_context_revision_id_fkey" FOREIGN KEY ("id", "context_revision_id") REFERENCES "conversation_context_revisions"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_message_id_fkey" FOREIGN KEY ("conversation_id", "message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_run_id_run_e_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_participant__fkey" FOREIGN KEY ("conversation_id", "participant_user_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_parent_delivery_child_run_id_fkey" FOREIGN KEY ("parent_delivery_child_run_id") REFERENCES "child_run_completion_deliveries"("child_run_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_parent_delivery_agent_thread_fkey" FOREIGN KEY ("parent_delivery_agent_thread_id") REFERENCES "agent_thread_parent_deliveries"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_child_conversation_id_silo_id_a_fkey" FOREIGN KEY ("child_conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_parent_conversation_id_silo_id_fkey" FOREIGN KEY ("parent_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_root_conversation_id_silo_id_fkey" FOREIGN KEY ("root_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_parent_conversation_id_parent_m_fkey" FOREIGN KEY ("parent_conversation_id", "parent_message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_parent_conversation_id_initiato_fkey" FOREIGN KEY ("parent_conversation_id", "initiator_user_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_first_run_id_child_conversation_fkey" FOREIGN KEY ("first_run_id", "child_conversation_id", "silo_id", "agent_service_id") REFERENCES "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_persona_profile_id_initiator_us_fkey" FOREIGN KEY ("persona_profile_id", "initiator_user_id") REFERENCES "persona_profiles"("id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_persona_profile_id_persona_revi_fkey" FOREIGN KEY ("persona_profile_id", "persona_revision_id") REFERENCES "persona_revisions"("persona_profile_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_deliveries_thread_fkey" FOREIGN KEY ("child_conversation_id", "parent_conversation_id") REFERENCES "conversation_agent_threads"("child_conversation_id", "parent_conversation_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_deliveries_child_fkey" FOREIGN KEY ("child_conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_parent_conversation_id_silo_fkey" FOREIGN KEY ("parent_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_run_id_child_conversation_i_fkey" FOREIGN KEY ("run_id", "child_conversation_id", "silo_id", "agent_service_id") REFERENCES "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_parent_conversation_id_asse_fkey" FOREIGN KEY ("parent_conversation_id", "asset_id") REFERENCES "conversation_assets"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_conversation_id_assigned_participant__fkey" FOREIGN KEY ("conversation_id", "assigned_participant_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "elicitation_response_attempts" ADD CONSTRAINT "elicitation_response_attempts_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "elicitation_result_deliveries" ADD CONSTRAINT "elicitation_result_deliveries_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_request_id_run_id_atte_fkey" FOREIGN KEY ("request_id", "run_id", "attempt") REFERENCES "elicitation_requests"("id", "run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "resource_shares" ADD CONSTRAINT "resource_shares_owner_principal_id_silo_id_fkey" FOREIGN KEY ("owner_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "resource_share_recipients" ADD CONSTRAINT "resource_share_recipients_resource_share_id_silo_id_fkey" FOREIGN KEY ("resource_share_id", "silo_id") REFERENCES "resource_shares"("id", "silo_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "resource_share_recipients" ADD CONSTRAINT "resource_share_recipients_principal_id_silo_id_fkey" FOREIGN KEY ("principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "resource_share_recipients" ADD CONSTRAINT "resource_share_recipients_granted_by_principal_id_silo_id_fkey" FOREIGN KEY ("granted_by_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "resource_share_recipients" ADD CONSTRAINT "resource_share_recipients_grant_id_fkey" FOREIGN KEY ("grant_id") REFERENCES "authorization_grants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "groups" ADD CONSTRAINT "groups_parent_id_silo_id_fkey" FOREIGN KEY ("parent_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "group_memberships" ADD CONSTRAINT "group_memberships_group_id_silo_id_fkey" FOREIGN KEY ("group_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "group_memberships" ADD CONSTRAINT "group_memberships_principal_id_silo_id_fkey" FOREIGN KEY ("principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "third_party_sources"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
-ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_registration_digest_check" CHECK (
-    ("registration_key_digest" IS NULL AND "registration_digest" IS NULL)
-    OR ("registration_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registration_digest" ~ '^sha256:[0-9a-f]{64}$')
-);
+-- AddForeignKey
+ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_mcp_server_id_silo_id_fkey" FOREIGN KEY ("mcp_server_id", "silo_id") REFERENCES "mcp_servers"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
-ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_era_probe_evidence_check" CHECK (
-    ("era_probe_status" = 'not-required' AND "era_probe_attempts" = 0 AND "registration_key_digest" IS NULL AND "registration_digest" IS NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
-    OR ("era_probe_status" = 'pending' AND "era_probe_attempts" >= 0 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
-    OR ("era_probe_status" = 'accepted' AND "era_probe_attempts" >= 1 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND btrim("era_protocol_version") <> '' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NOT NULL)
-    OR ("era_probe_status" = 'rejected' AND "era_probe_attempts" >= 1 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probed_at" IS NOT NULL AND ((btrim("era_protocol_version") <> '' AND "era_probe_failure_code" = 'unsupported_mcp_protocol_version') OR ("era_protocol_version" IS NULL AND "era_probe_failure_code" IN ('unsafe_endpoint', 'not_mcp_server', 'retry_exhausted'))))
-);
+-- AddForeignKey
+ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_oci_image_validation_id_silo_id_fkey" FOREIGN KEY ("oci_image_validation_id", "silo_id") REFERENCES "oci_image_validations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
-ALTER TABLE "mcp_registration_claims" ADD CONSTRAINT "mcp_registration_claims_identity_check" CHECK (
-    btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
-);
+-- AddForeignKey
+ALTER TABLE "mcp_tool_revisions" ADD CONSTRAINT "mcp_tool_revisions_server_revision_id_silo_id_fkey" FOREIGN KEY ("server_revision_id", "silo_id") REFERENCES "mcp_server_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
-ALTER TABLE "oci_image_validation_claims" ADD CONSTRAINT "oci_image_validation_claims_identity_check" CHECK (
-    btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
-);
+-- AddForeignKey
+ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_server_revision_id_silo_id_fkey" FOREIGN KEY ("server_revision_id", "silo_id") REFERENCES "mcp_server_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
-ALTER TABLE "oci_image_validations" ADD CONSTRAINT "oci_image_validations_identity_check" CHECK (
-    btrim("silo_id") <> '' AND btrim("artifact_id") <> '' AND btrim("artifact_revision_id") <> '' AND
-    btrim("created_by_principal_id") <> '' AND btrim("media_type") <> '' AND "byte_length" >= 0 AND
-    "content_address" ~ '^sha256:[0-9a-f]{64}$' AND
-    "submission_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "submission_digest" ~ '^sha256:[0-9a-f]{64}$'
-);
+-- AddForeignKey
+ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_tool_revision_id_silo_id_fkey" FOREIGN KEY ("tool_revision_id", "silo_id") REFERENCES "mcp_tool_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
-ALTER TABLE "oci_image_validations" ADD CONSTRAINT "oci_image_validations_result_check" CHECK (
-    ("state" = 'pending' AND "index_digest" IS NULL AND "image_manifest_digest" IS NULL AND "config_digest" IS NULL AND "registry_reference" IS NULL AND "failure_code" IS NULL AND "completed_at" IS NULL)
-    OR ("state" = 'imported' AND "index_digest" ~ '^sha256:[0-9a-f]{64}$' AND "image_manifest_digest" ~ '^sha256:[0-9a-f]{64}$' AND "config_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registry_reference" ~ '^[a-z0-9][a-z0-9.-]*(?::[0-9]+)?/[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$' AND "failure_code" IS NULL AND "completed_at" IS NOT NULL)
-    OR ("state" = 'rejected' AND "index_digest" IS NULL AND "image_manifest_digest" IS NULL AND "config_digest" IS NULL AND "registry_reference" IS NULL AND "failure_code" IN ('artifact_mismatch', 'bundle_too_large', 'malformed_zip_package', 'not_oci_image_layout', 'invalid_layout', 'invalid_index', 'invalid_image_manifest', 'validation_failed', 'registry_import_failed') AND "completed_at" IS NOT NULL)
-);
+-- AddForeignKey
+ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_server_revision_id_silo_id_fkey" FOREIGN KEY ("server_revision_id", "silo_id") REFERENCES "mcp_server_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3059,92 +3703,7 @@ ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_persona_revision
 ALTER TABLE "model_definitions" ADD CONSTRAINT "model_definitions_provider_credential_id_fkey" FOREIGN KEY ("provider_credential_id") REFERENCES "provider_credentials"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_id_fkey" FOREIGN KEY ("model_definition_id") REFERENCES "model_definitions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "third_party_source_items" ADD CONSTRAINT "third_party_source_items_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "third_party_sources"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_run_id_silo_id_agent_service_id_agent_fkey" FOREIGN KEY ("run_id", "silo_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "silo_id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_run_id_attempt_agent_service_id_agent__fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_run_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_assignment_fkey" FOREIGN KEY ("run_id", "attempt", "workload_kind", "workload_uid", "pod_uid") REFERENCES "workload_assignments"("run_id", "attempt", "workload_kind", "workload_uid", "pod_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_bootstrap_id_fkey" FOREIGN KEY ("bootstrap_id") REFERENCES "workload_bootstraps"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "run_outbox_events" ADD CONSTRAINT "run_outbox_events_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "skills" ADD CONSTRAINT "skills_id_current_revision_id_fkey" FOREIGN KEY ("id", "current_revision_id") REFERENCES "skill_revisions"("skill_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_skill_id_fkey" FOREIGN KEY ("skill_id") REFERENCES "skills"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_skill_revision_id_fkey" FOREIGN KEY ("skill_revision_id") REFERENCES "skill_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "skill_workload_bootstraps" ADD CONSTRAINT "skill_workload_bootstraps_skill_workload_id_fkey" FOREIGN KEY ("skill_workload_id") REFERENCES "skill_workloads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
-
--- AddForeignKey
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_route_id_receiver_id_silo_id_agent_service_fkey" FOREIGN KEY ("route_id", "receiver_id", "silo_id", "agent_service_id", "action") REFERENCES "channel_runtime_routes"("id", "receiver_id", "silo_id", "agent_service_id", "action") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversations" ADD CONSTRAINT "conversations_id_context_revision_id_fkey" FOREIGN KEY ("id", "context_revision_id") REFERENCES "conversation_context_revisions"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversations" ADD CONSTRAINT "conversations_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_message_id_fkey" FOREIGN KEY ("conversation_id", "message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_run_id_run_e_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_participant__fkey" FOREIGN KEY ("conversation_id", "participant_user_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_parent_delivery_child_run_id_fkey" FOREIGN KEY ("parent_delivery_child_run_id") REFERENCES "child_run_completion_deliveries"("child_run_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_agent_revision_id_fkey" FOREIGN KEY ("agent_service_id", "agent_revision_id") REFERENCES "agent_revisions"("agent_service_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3153,8 +3712,127 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_agent_revis
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "warm_runtime_reservations" ADD CONSTRAINT "warm_runtime_reservations_run_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "warm_runtime_reservations" ADD CONSTRAINT "warm_runtime_reservations_assignment_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "workload_assignments"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_run_workflow_tasks" ADD CONSTRAINT "agent_run_workflow_tasks_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_input_digest_conversation_id_si_fkey" FOREIGN KEY ("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") REFERENCES "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 
+-- AddForeignKey
+ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_run_id_silo_id_agent_service_id_agent_fkey" FOREIGN KEY ("run_id", "silo_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "silo_id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_run_id_attempt_agent_service_id_agent__fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "audience", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_run_id_attempt_generation_fkey" FOREIGN KEY ("run_id", "attempt", "generation") REFERENCES "warm_runtime_reservations"("run_id", "attempt", "generation") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_run_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_assignment_fkey" FOREIGN KEY ("run_id", "attempt", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_bootstrap_id_fkey" FOREIGN KEY ("bootstrap_id") REFERENCES "workload_bootstraps"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "runtime_continuation_checkpoints" ADD CONSTRAINT "runtime_continuation_checkpoints_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "runtime_dispatched_commands" ADD CONSTRAINT "runtime_dispatched_commands_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skills" ADD CONSTRAINT "skills_id_current_revision_id_fkey" FOREIGN KEY ("id", "current_revision_id") REFERENCES "skill_revisions"("skill_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_skill_id_fkey" FOREIGN KEY ("skill_id") REFERENCES "skills"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_authoring_validations" ADD CONSTRAINT "skill_authoring_validations_skill_revision_id_fkey" FOREIGN KEY ("skill_revision_id") REFERENCES "skill_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_authoring_validation_workload_claims" ADD CONSTRAINT "skill_authoring_validation_workload_claims_validation_id_fkey" FOREIGN KEY ("validation_id") REFERENCES "skill_authoring_validations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_authoring_validation_bootstraps" ADD CONSTRAINT "skill_authoring_validation_bootstraps_validation_id_fkey" FOREIGN KEY ("validation_id") REFERENCES "skill_authoring_validations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_authoring_validation_completion_inbox" ADD CONSTRAINT "skill_authoring_validation_completion_inbox_validation_id_fkey" FOREIGN KEY ("validation_id") REFERENCES "skill_authoring_validations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_onboardings" ADD CONSTRAINT "user_onboardings_bootstrap_conversation_id_fkey" FOREIGN KEY ("bootstrap_conversation_id") REFERENCES "user_onboarding_bootstrap_conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_onboardings" ADD CONSTRAINT "user_onboardings_bootstrap_content_revision_id_bootstrap_c_fkey" FOREIGN KEY ("bootstrap_content_revision_id", "bootstrap_content_digest") REFERENCES "user_onboarding_bootstrap_content_revisions"("id", "digest") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_onboarding_bootstrap_questions" ADD CONSTRAINT "user_onboarding_bootstrap_questions_content_revision_id_fkey" FOREIGN KEY ("content_revision_id") REFERENCES "user_onboarding_bootstrap_content_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_onboarding_bootstrap_conversations" ADD CONSTRAINT "user_onboarding_bootstrap_conversations_onboarding_id_fkey" FOREIGN KEY ("onboarding_id") REFERENCES "user_onboardings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_onboarding_bootstrap_conversations" ADD CONSTRAINT "user_onboarding_bootstrap_conversations_content_revision_i_fkey" FOREIGN KEY ("content_revision_id", "content_digest") REFERENCES "user_onboarding_bootstrap_content_revisions"("id", "digest") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_onboarding_bootstrap_answers" ADD CONSTRAINT "user_onboarding_bootstrap_answers_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "user_onboarding_bootstrap_conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_registration_digest_check" CHECK (
+    ("registration_key_digest" IS NULL AND "registration_digest" IS NULL)
+    OR ("registration_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registration_digest" ~ '^sha256:[0-9a-f]{64}$')
+);
+
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_era_probe_evidence_check" CHECK (
+    ("era_probe_status" = 'not-required' AND "era_probe_attempts" = 0 AND "registration_key_digest" IS NULL AND "registration_digest" IS NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
+    OR ("era_probe_status" = 'pending' AND "era_probe_attempts" >= 0 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
+    OR ("era_probe_status" = 'accepted' AND "era_probe_attempts" >= 1 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND btrim("era_protocol_version") <> '' AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NOT NULL)
+    OR ("era_probe_status" = 'rejected' AND "era_probe_attempts" >= 1 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_probe_evidence_digest" ~ '^sha256:[0-9a-f]{64}$' AND "era_probed_at" IS NOT NULL AND ((btrim("era_protocol_version") <> '' AND "era_probe_failure_code" = 'unsupported_mcp_protocol_version') OR ("era_protocol_version" IS NULL AND "era_probe_failure_code" IN ('unsafe_endpoint', 'not_mcp_server', 'retry_exhausted'))))
+);
+
+ALTER TABLE "mcp_registration_claims" ADD CONSTRAINT "mcp_registration_claims_identity_check" CHECK (
+    btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
+);
+
+ALTER TABLE "oci_image_validation_claims" ADD CONSTRAINT "oci_image_validation_claims_identity_check" CHECK (
+    btrim("silo_id") <> '' AND "identity_digest" ~ '^sha256:[0-9a-f]{64}$'
+);
+
+ALTER TABLE "oci_image_validations" ADD CONSTRAINT "oci_image_validations_identity_check" CHECK (
+    btrim("silo_id") <> '' AND btrim("artifact_id") <> '' AND btrim("artifact_revision_id") <> '' AND
+    btrim("created_by_principal_id") <> '' AND btrim("media_type") <> '' AND "byte_length" >= 0 AND
+    "content_address" ~ '^sha256:[0-9a-f]{64}$' AND
+    "submission_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "submission_digest" ~ '^sha256:[0-9a-f]{64}$'
+);
+
+ALTER TABLE "oci_image_validations" ADD CONSTRAINT "oci_image_validations_result_check" CHECK (
+    ("state" = 'pending' AND "index_digest" IS NULL AND "image_manifest_digest" IS NULL AND "config_digest" IS NULL AND "registry_reference" IS NULL AND "failure_code" IS NULL AND "completed_at" IS NULL)
+    OR ("state" = 'imported' AND "index_digest" ~ '^sha256:[0-9a-f]{64}$' AND "image_manifest_digest" ~ '^sha256:[0-9a-f]{64}$' AND "config_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registry_reference" ~ '^[a-z0-9][a-z0-9.-]*(?::[0-9]+)?/[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$' AND "failure_code" IS NULL AND "completed_at" IS NOT NULL)
+    OR ("state" = 'rejected' AND "index_digest" IS NULL AND "image_manifest_digest" IS NULL AND "config_digest" IS NULL AND "registry_reference" IS NULL AND "failure_code" IN ('artifact_mismatch', 'bundle_too_large', 'malformed_zip_package', 'not_oci_image_layout', 'invalid_layout', 'invalid_index', 'invalid_image_manifest', 'validation_failed', 'registry_import_failed') AND "completed_at" IS NOT NULL)
+);
 
 -- Null-safe immutable run/snapshot binding. SQL composite FKs alone skip checks when conversation_id is NULL.
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_digest_fkey"
@@ -3170,6 +3848,7 @@ ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_input_
     AND btrim("capability_set_digest") <> ''
     AND "capability_set_digest" ~ '^sha256:[0-9a-f]{64}$'
     AND jsonb_typeof("memory_facts") = 'array'
+	AND jsonb_typeof("mcp_tools") = 'array'
 );
 
 -- Channel-target constraints cannot be represented by Prisma relations/indexes alone.
@@ -3274,6 +3953,293 @@ CREATE TRIGGER "org_memberships_last_owner_guard"
     FOR EACH ROW EXECUTE FUNCTION "protect_org_membership_last_owner"();
 
 -- Database-native authority guards omitted by Prisma schema diff.
+-- Install the database clock and locked selectors consumed through Prisma views by the MCP controller.
+CREATE VIEW "mcp_runtime_clock" AS
+    SELECT 1::INTEGER AS "singleton", date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3) AS "now";
+
+CREATE FUNCTION "select_mcp_runtime_claim_candidate"() RETURNS TABLE (
+    "id" TEXT,
+    "silo_id" TEXT,
+    "profile_name" TEXT
+) LANGUAGE plpgsql VOLATILE AS $$
+BEGIN
+    RETURN QUERY
+    SELECT execution."id", execution."silo_id", execution."profile_name"
+      FROM "mcp_runtime_executions" execution
+     WHERE execution."workload_state" = 'pending'
+       AND (execution."claim_expires_at" IS NULL OR execution."claim_expires_at" <= clock_timestamp())
+     ORDER BY execution."created_at", execution."id"
+     FOR UPDATE OF execution SKIP LOCKED
+     LIMIT 1;
+END;
+$$;
+CREATE VIEW "mcp_runtime_claim_candidates" AS SELECT * FROM "select_mcp_runtime_claim_candidate"();
+
+CREATE FUNCTION "select_mcp_runtime_release_claim_candidate"() RETURNS TABLE (
+    "id" TEXT,
+    "silo_id" TEXT,
+    "profile_name" TEXT
+) LANGUAGE plpgsql VOLATILE AS $$
+BEGIN
+    RETURN QUERY
+    SELECT execution."id", execution."silo_id", execution."profile_name"
+      FROM "mcp_runtime_executions" execution
+     WHERE execution."workload_state" IN ('assigned', 'released')
+       AND execution."workload_uid" IS NOT NULL
+       AND execution."pod_uid" IS NULL
+       AND (execution."release_expires_at" IS NULL OR execution."release_expires_at" <= clock_timestamp())
+     ORDER BY execution."created_at", execution."id"
+     FOR UPDATE OF execution SKIP LOCKED
+     LIMIT 1;
+END;
+$$;
+CREATE VIEW "mcp_runtime_release_claim_candidates" AS SELECT * FROM "select_mcp_runtime_release_claim_candidate"();
+
+ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_identity_check" CHECK (
+    btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("server_revision_id") <> ''
+    AND btrim("idempotency_key") <> '' AND btrim("execution_reference") <> '' AND btrim("profile_name") <> ''
+    AND "delivery_count" >= 0 AND "release_delivery_count" >= 0 AND "cleanup_delivery_count" >= 0
+    AND (("claimed_at" IS NULL) = ("claim_expires_at" IS NULL))
+    AND (("release_claimed_at" IS NULL) = ("release_expires_at" IS NULL))
+    AND (("companion_claim_fence" IS NULL) = ("companion_claim_expires_at" IS NULL))
+    AND (("tool_invocation_claim_fence" IS NULL) = ("tool_invocation_claim_revision" IS NULL))
+    AND (("kind" = 'discovery' AND "tool_invocation_id" IS NULL AND "tool_invocation_claim_fence" IS NULL)
+         OR ("kind" = 'invocation' AND "tool_invocation_id" IS NOT NULL))
+    AND ("terminal_outcome" IS NULL OR btrim("terminal_outcome") <> '')
+    AND ("terminal_payload_digest" IS NULL OR "terminal_payload_digest" ~ '^sha256:[0-9a-f]{64}$')
+);
+
+CREATE FUNCTION "enforce_mcp_runtime_execution_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    transition_time TIMESTAMP(3) := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+    requested_lease INTERVAL;
+    terminal_workload "McpExecutorWorkloadState";
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'McpRuntimeExecution rows cannot be deleted';
+    END IF;
+
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."workload_state" <> 'pending' OR NEW."command_state" <> 'pending'
+            OR NEW."claimed_at" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."delivery_count" <> 0
+            OR NEW."workload_uid" IS NOT NULL OR NEW."assigned_at" IS NOT NULL
+            OR NEW."release_claimed_at" IS NOT NULL OR NEW."release_expires_at" IS NOT NULL OR NEW."release_delivery_count" <> 0 OR NEW."released_at" IS NOT NULL
+            OR NEW."pod_uid" IS NOT NULL OR NEW."companion_claim_fence" IS NOT NULL OR NEW."companion_claim_expires_at" IS NOT NULL
+            OR NEW."tool_invocation_claim_fence" IS NOT NULL OR NEW."tool_invocation_claim_revision" IS NOT NULL
+            OR NEW."terminal_outcome" IS NOT NULL OR NEW."terminal_payload_digest" IS NOT NULL OR NEW."completed_at" IS NOT NULL
+            OR NEW."cleanup_claimed_at" IS NOT NULL OR NEW."cleanup_expires_at" IS NOT NULL OR NEW."cleanup_delivery_count" <> 0 OR NEW."cleanup_completed_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'McpRuntimeExecution must begin pending without delivery, assignment, command, terminal, or cleanup evidence';
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."server_revision_id" IS DISTINCT FROM OLD."server_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id"
+        OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
+        OR NEW."execution_reference" IS DISTINCT FROM OLD."execution_reference" OR NEW."profile_name" IS DISTINCT FROM OLD."profile_name"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'McpRuntimeExecution source identity is immutable';
+    END IF;
+
+    IF OLD."workload_uid" IS NOT NULL AND NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" THEN
+        RAISE EXCEPTION 'McpRuntimeExecution workload identity is immutable';
+    END IF;
+    IF OLD."assigned_at" IS NOT NULL AND NEW."assigned_at" IS DISTINCT FROM OLD."assigned_at" THEN
+        RAISE EXCEPTION 'McpRuntimeExecution assignment time is immutable';
+    END IF;
+    IF OLD."pod_uid" IS NOT NULL AND NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid" THEN
+        RAISE EXCEPTION 'McpRuntimeExecution Pod identity is immutable';
+    END IF;
+
+    IF NEW."delivery_count" IS DISTINCT FROM OLD."delivery_count" OR NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."claim_expires_at" IS DISTINCT FROM OLD."claim_expires_at" THEN
+        requested_lease := NEW."claim_expires_at" - NEW."claimed_at";
+        IF OLD."workload_state" <> 'pending' OR NEW."workload_state" <> 'pending'
+            OR NEW."delivery_count" <> OLD."delivery_count" + 1
+            OR NEW."claimed_at" IS DISTINCT FROM TIMESTAMP '1970-01-01 00:00:00'
+            OR requested_lease < interval '1 second' OR requested_lease > interval '5 minutes'
+            OR (OLD."claim_expires_at" IS NOT NULL AND OLD."claim_expires_at" > transition_time) THEN
+            RAISE EXCEPTION 'McpRuntimeExecution controller claim requires an expired prior fence and a bounded lease proposal';
+        END IF;
+        NEW."claimed_at" := CASE WHEN OLD."claimed_at" IS NULL THEN transition_time ELSE GREATEST(transition_time, OLD."claimed_at" + interval '1 millisecond') END;
+        NEW."claim_expires_at" := NEW."claimed_at" + requested_lease;
+    END IF;
+
+    IF NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" OR NEW."assigned_at" IS DISTINCT FROM OLD."assigned_at" THEN
+        terminal_workload := CASE WHEN OLD."command_state" IN ('succeeded', 'failed', 'recovery_required') THEN 'closed' ELSE 'assigned' END;
+        IF OLD."workload_state" <> 'pending' OR NEW."workload_state" IS DISTINCT FROM terminal_workload
+            OR OLD."workload_uid" IS NOT NULL OR NEW."workload_uid" IS NULL OR btrim(NEW."workload_uid") = '' OR NEW."assigned_at" IS NULL
+            OR OLD."claimed_at" IS NULL OR OLD."claim_expires_at" IS NULL OR transition_time >= OLD."claim_expires_at"
+            OR NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."claim_expires_at" IS DISTINCT FROM OLD."claim_expires_at" OR NEW."delivery_count" IS DISTINCT FROM OLD."delivery_count" THEN
+            RAISE EXCEPTION 'McpRuntimeExecution assignment requires the exact current controller claim';
+        END IF;
+        NEW."assigned_at" := transition_time;
+    END IF;
+
+    IF NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at" THEN
+        requested_lease := NEW."release_expires_at" - NEW."release_claimed_at";
+        IF OLD."workload_state" NOT IN ('assigned', 'released') OR NEW."workload_state" IS DISTINCT FROM OLD."workload_state"
+            OR OLD."workload_uid" IS NULL OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" OR OLD."pod_uid" IS NOT NULL OR NEW."pod_uid" IS NOT NULL
+            OR NEW."release_delivery_count" <> OLD."release_delivery_count" + 1
+            OR NEW."release_claimed_at" IS DISTINCT FROM TIMESTAMP '1970-01-01 00:00:00'
+            OR requested_lease < interval '1 second' OR requested_lease > interval '5 minutes'
+            OR (OLD."release_expires_at" IS NOT NULL AND OLD."release_expires_at" > transition_time) THEN
+            RAISE EXCEPTION 'McpRuntimeExecution release claim requires an expired prior fence and a bounded lease proposal';
+        END IF;
+        NEW."release_claimed_at" := CASE WHEN OLD."release_claimed_at" IS NULL THEN transition_time ELSE GREATEST(transition_time, OLD."release_claimed_at" + interval '1 millisecond') END;
+        NEW."release_expires_at" := NEW."release_claimed_at" + requested_lease;
+    END IF;
+
+    IF NEW."released_at" IS DISTINCT FROM OLD."released_at" THEN
+        IF OLD."workload_state" <> 'assigned' OR NEW."workload_state" <> 'released' OR OLD."released_at" IS NOT NULL OR NEW."released_at" IS NULL
+            OR OLD."release_claimed_at" IS NULL OR OLD."release_expires_at" IS NULL OR transition_time >= OLD."release_expires_at"
+            OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" THEN
+            RAISE EXCEPTION 'McpRuntimeExecution release requires the exact current release claim';
+        END IF;
+        NEW."released_at" := transition_time;
+    END IF;
+
+    IF NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid" THEN
+        IF OLD."workload_state" <> 'released' OR NEW."workload_state" <> 'registered' OR OLD."pod_uid" IS NOT NULL OR NEW."pod_uid" IS NULL OR btrim(NEW."pod_uid") = ''
+            OR OLD."released_at" IS NULL OR OLD."release_expires_at" IS NULL OR transition_time >= OLD."release_expires_at"
+            OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" THEN
+            RAISE EXCEPTION 'McpRuntimeExecution Pod registration requires the exact current release fence';
+        END IF;
+    END IF;
+
+    IF NEW."companion_claim_fence" IS DISTINCT FROM OLD."companion_claim_fence"
+        OR NEW."companion_claim_expires_at" IS DISTINCT FROM OLD."companion_claim_expires_at"
+        OR NEW."tool_invocation_claim_fence" IS DISTINCT FROM OLD."tool_invocation_claim_fence"
+        OR NEW."tool_invocation_claim_revision" IS DISTINCT FROM OLD."tool_invocation_claim_revision" THEN
+        IF OLD."command_state" = 'pending' AND NEW."command_state" = 'claimed' THEN
+            requested_lease := NEW."companion_claim_expires_at" - TIMESTAMP '1970-01-01 00:00:00';
+            IF OLD."workload_state" <> 'registered' OR NEW."workload_state" <> 'registered' OR OLD."pod_uid" IS NULL OR NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid"
+                OR OLD."companion_claim_fence" IS NOT NULL OR NEW."companion_claim_fence" IS NULL OR btrim(NEW."companion_claim_fence") = ''
+                OR requested_lease < interval '1 second' OR requested_lease > interval '5 minutes'
+                OR (NEW."kind" = 'discovery' AND (NEW."tool_invocation_claim_fence" IS NOT NULL OR NEW."tool_invocation_claim_revision" IS NOT NULL))
+                OR (NEW."kind" = 'invocation' AND (NEW."tool_invocation_claim_fence" IS NULL OR NEW."tool_invocation_claim_fence" < 1 OR NEW."tool_invocation_claim_revision" IS NULL OR NEW."tool_invocation_claim_revision" < 1)) THEN
+                RAISE EXCEPTION 'McpRuntimeExecution companion claim requires its registered Pod and bounded lease proposal';
+            END IF;
+            NEW."companion_claim_expires_at" := transition_time + requested_lease;
+        ELSIF OLD."kind" = 'discovery' AND OLD."command_state" = 'claimed' AND NEW."command_state" = 'pending'
+            AND OLD."workload_state" = 'registered' AND NEW."workload_state" = 'registered'
+            AND OLD."companion_claim_expires_at" IS NOT NULL AND OLD."companion_claim_expires_at" <= transition_time
+            AND NEW."companion_claim_fence" IS NULL AND NEW."companion_claim_expires_at" IS NULL
+            AND OLD."tool_invocation_claim_fence" IS NULL AND NEW."tool_invocation_claim_fence" IS NULL
+            AND OLD."tool_invocation_claim_revision" IS NULL AND NEW."tool_invocation_claim_revision" IS NULL THEN
+            NULL;
+        ELSE
+            RAISE EXCEPTION 'McpRuntimeExecution companion fence is immutable outside claim or expired discovery reset';
+        END IF;
+    END IF;
+
+    IF NEW."terminal_outcome" IS DISTINCT FROM OLD."terminal_outcome" OR NEW."terminal_payload_digest" IS DISTINCT FROM OLD."terminal_payload_digest" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" THEN
+        IF OLD."command_state" NOT IN ('pending', 'claimed') OR NEW."command_state" NOT IN ('succeeded', 'failed', 'recovery_required')
+            OR NEW."terminal_outcome" IS NULL OR btrim(NEW."terminal_outcome") = '' OR NEW."completed_at" IS NULL THEN
+            RAISE EXCEPTION 'McpRuntimeExecution terminal evidence requires one pending or claimed command transition';
+        END IF;
+        terminal_workload := CASE
+            WHEN OLD."workload_state" = 'pending' AND OLD."delivery_count" > 0 THEN 'pending'
+            WHEN OLD."workload_state" IN ('pending', 'assigned', 'released', 'registered') THEN 'closed'
+            ELSE NULL
+        END;
+        IF NEW."workload_state" IS DISTINCT FROM terminal_workload THEN
+            RAISE EXCEPTION 'McpRuntimeExecution terminal command must preserve or close its exact workload';
+        END IF;
+        NEW."completed_at" := transition_time;
+    END IF;
+
+    IF NEW."cleanup_delivery_count" IS DISTINCT FROM OLD."cleanup_delivery_count" OR NEW."cleanup_claimed_at" IS DISTINCT FROM OLD."cleanup_claimed_at" OR NEW."cleanup_expires_at" IS DISTINCT FROM OLD."cleanup_expires_at" OR NEW."cleanup_completed_at" IS DISTINCT FROM OLD."cleanup_completed_at" THEN
+        IF OLD."workload_state" <> 'closed' OR NEW."workload_state" <> 'closed' OR OLD."command_state" NOT IN ('succeeded', 'failed', 'recovery_required') OR NEW."command_state" IS DISTINCT FROM OLD."command_state" OR OLD."workload_uid" IS NULL THEN
+            RAISE EXCEPTION 'McpRuntimeExecution cleanup requires a terminal workload with an exact Job identity';
+        END IF;
+        IF NEW."cleanup_delivery_count" = OLD."cleanup_delivery_count" + 1 AND NEW."cleanup_completed_at" IS NOT DISTINCT FROM OLD."cleanup_completed_at" THEN
+            requested_lease := NEW."cleanup_expires_at" - NEW."cleanup_claimed_at";
+            IF OLD."cleanup_completed_at" IS NOT NULL OR NEW."cleanup_claimed_at" IS NULL OR NEW."cleanup_expires_at" IS NULL
+                OR requested_lease < interval '1 second' OR requested_lease > interval '5 minutes'
+                OR (OLD."cleanup_expires_at" IS NOT NULL AND OLD."cleanup_expires_at" > transition_time) THEN
+                RAISE EXCEPTION 'McpRuntimeExecution cleanup claim requires an expired prior fence and bounded lease';
+            END IF;
+            NEW."cleanup_claimed_at" := CASE WHEN OLD."cleanup_claimed_at" IS NULL THEN transition_time ELSE GREATEST(transition_time, OLD."cleanup_claimed_at" + interval '1 millisecond') END;
+            NEW."cleanup_expires_at" := NEW."cleanup_claimed_at" + requested_lease;
+        ELSIF NEW."cleanup_delivery_count" = OLD."cleanup_delivery_count" AND OLD."cleanup_completed_at" IS NULL AND NEW."cleanup_completed_at" IS NOT NULL
+            AND NEW."cleanup_claimed_at" IS NOT DISTINCT FROM OLD."cleanup_claimed_at" AND NEW."cleanup_expires_at" IS NOT DISTINCT FROM OLD."cleanup_expires_at"
+            AND OLD."cleanup_expires_at" IS NOT NULL AND transition_time < OLD."cleanup_expires_at" THEN
+            NEW."cleanup_completed_at" := transition_time;
+        ELSE
+            RAISE EXCEPTION 'McpRuntimeExecution cleanup fence may only advance or complete once';
+        END IF;
+    END IF;
+
+    IF NEW."workload_state" IS DISTINCT FROM OLD."workload_state" THEN
+        IF NOT ((OLD."workload_state" = 'pending' AND NEW."workload_state" IN ('assigned', 'closed') AND NEW."workload_uid" IS NOT NULL)
+            OR (OLD."workload_state" = 'pending' AND NEW."workload_state" = 'closed' AND NEW."command_state" IN ('succeeded', 'failed', 'recovery_required'))
+            OR (OLD."workload_state" = 'assigned' AND NEW."workload_state" = 'released')
+            OR (OLD."workload_state" = 'released' AND NEW."workload_state" = 'registered')
+            OR (OLD."workload_state" IN ('assigned', 'released', 'registered') AND NEW."workload_state" = 'closed' AND NEW."command_state" IN ('succeeded', 'failed', 'recovery_required'))) THEN
+            RAISE EXCEPTION 'invalid McpRuntimeExecution workload transition';
+        END IF;
+    END IF;
+
+    IF NEW."command_state" IS DISTINCT FROM OLD."command_state" THEN
+        IF NOT ((OLD."command_state" = 'pending' AND NEW."command_state" = 'claimed')
+            OR (OLD."command_state" = 'claimed' AND NEW."command_state" = 'pending' AND OLD."kind" = 'discovery')
+            OR (OLD."command_state" IN ('pending', 'claimed') AND NEW."command_state" IN ('succeeded', 'failed', 'recovery_required'))) THEN
+            RAISE EXCEPTION 'invalid McpRuntimeExecution command transition';
+        END IF;
+    END IF;
+
+    IF OLD."command_state" IN ('succeeded', 'failed', 'recovery_required')
+        AND (NEW."command_state" IS DISTINCT FROM OLD."command_state"
+            OR ((NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."claim_expires_at" IS DISTINCT FROM OLD."claim_expires_at" OR NEW."delivery_count" IS DISTINCT FROM OLD."delivery_count")
+                AND NOT (OLD."workload_state" = 'pending' AND NEW."workload_state" = 'pending' AND NEW."delivery_count" = OLD."delivery_count" + 1))
+            OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."released_at" IS DISTINCT FROM OLD."released_at"
+            OR NEW."companion_claim_fence" IS DISTINCT FROM OLD."companion_claim_fence" OR NEW."companion_claim_expires_at" IS DISTINCT FROM OLD."companion_claim_expires_at"
+            OR NEW."tool_invocation_claim_fence" IS DISTINCT FROM OLD."tool_invocation_claim_fence" OR NEW."tool_invocation_claim_revision" IS DISTINCT FROM OLD."tool_invocation_claim_revision"
+            OR NEW."terminal_outcome" IS DISTINCT FROM OLD."terminal_outcome" OR NEW."terminal_payload_digest" IS DISTINCT FROM OLD."terminal_payload_digest" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at") THEN
+        RAISE EXCEPTION 'terminal McpRuntimeExecution authority is immutable outside cleanup';
+    END IF;
+
+    IF (NEW."command_state" IN ('succeeded', 'failed', 'recovery_required')) <> (NEW."completed_at" IS NOT NULL AND NEW."terminal_outcome" IS NOT NULL)
+        OR (NEW."workload_state" = 'closed' AND NEW."command_state" NOT IN ('succeeded', 'failed', 'recovery_required'))
+        OR (NEW."workload_state" IN ('assigned', 'released', 'registered', 'closed') AND NEW."workload_uid" IS NOT NULL AND NEW."assigned_at" IS NULL)
+        OR (NEW."workload_state" IN ('released', 'registered') AND (NEW."released_at" IS NULL OR NEW."release_claimed_at" IS NULL OR NEW."release_expires_at" IS NULL))
+        OR (NEW."workload_state" = 'registered' AND NEW."pod_uid" IS NULL)
+        OR (NEW."command_state" = 'claimed' AND (NEW."companion_claim_fence" IS NULL OR NEW."companion_claim_expires_at" IS NULL)) THEN
+        RAISE EXCEPTION 'McpRuntimeExecution state lacks matching delivery, workload, command, or terminal evidence';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "mcp_runtime_executions_authority" BEFORE INSERT OR UPDATE OR DELETE ON "mcp_runtime_executions" FOR EACH ROW EXECUTE FUNCTION "enforce_mcp_runtime_execution_authority"();
+
+CREATE FUNCTION "enforce_mcp_server_revision_runtime_completion"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'McpServerRevision rows cannot be deleted';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'discovering' OR NEW."protocol_version" IS NOT NULL OR NEW."completed_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'McpServerRevision must begin discovering without completion evidence';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."mcp_server_id" IS DISTINCT FROM OLD."mcp_server_id"
+        OR NEW."oci_image_validation_id" IS DISTINCT FROM OLD."oci_image_validation_id" OR NEW."revision" IS DISTINCT FROM OLD."revision"
+        OR NEW."registry_reference" IS DISTINCT FROM OLD."registry_reference" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'McpServerRevision image identity is immutable';
+    END IF;
+    IF OLD."state" <> 'discovering' OR NEW."state" NOT IN ('ready', 'rejected') OR NEW."completed_at" IS NULL
+        OR (NEW."state" = 'ready' AND NEW."protocol_version" IS DISTINCT FROM '2026-07-28')
+        OR (NEW."state" = 'rejected' AND NEW."protocol_version" IS NOT NULL) THEN
+        RAISE EXCEPTION 'McpServerRevision may complete discovery exactly once with checked protocol evidence';
+    END IF;
+    NEW."completed_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "mcp_server_revisions_runtime_completion" BEFORE INSERT OR UPDATE OR DELETE ON "mcp_server_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_mcp_server_revision_runtime_completion"();
+
+
 
 -- Functions
 CREATE FUNCTION "enforce_agent_revision_immutability"() RETURNS trigger
@@ -3481,14 +4447,6 @@ BEGIN
     RETURN NEW;
 END;
 $$;
-CREATE FUNCTION "enforce_accepted_outbox_attempt"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM "agent_runs" WHERE "id" = NEW."run_id" AND "attempt" >= NEW."attempt") THEN
-        RAISE EXCEPTION 'outbox event attempt has not been accepted';
-    END IF;
-    RETURN NEW;
-END;
-$$;
 CREATE FUNCTION "reject_run_input_snapshot_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'RunInputSnapshot rows are immutable';
@@ -3582,9 +4540,6 @@ BEGIN
 END;
 $$;
 CREATE FUNCTION "enforce_agent_run_authority_update"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    assignment_exists BOOLEAN;
-    attempt_event_claimed_at TIMESTAMP(3);
 BEGIN
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
         OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
@@ -3627,7 +4582,8 @@ BEGIN
         IF OLD."state" = 'cancelling' AND NEW."state" = 'cancelled' THEN
             PERFORM 1 FROM "workload_assignments" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
             PERFORM 1 FROM "run_proof_keys" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
-            PERFORM 1 FROM "run_outbox_events" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
+            PERFORM 1 FROM "agent_run_workflow_tasks" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
+            PERFORM 1 FROM "warm_runtime_reservations" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
             IF EXISTS (
                 SELECT 1 FROM "workload_assignments"
                 WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt"
@@ -3640,30 +4596,12 @@ BEGIN
             ) THEN
                 RAISE EXCEPTION 'a Cancelled AgentRun requires every RunProofKey revoked';
             END IF;
-            IF NOT EXISTS (
-                SELECT 1 FROM "run_outbox_events"
-                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "kind" = 'run.cancellation_requested'::"RunOutboxEventKind"
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun requires its RunCancellationRequested event';
-            END IF;
             IF EXISTS (
-                SELECT 1 FROM "run_outbox_events"
+                SELECT 1 FROM "warm_runtime_reservations"
                 WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt"
-                  AND "kind" IN ('run.attempt_requested'::"RunOutboxEventKind", 'run.workload_release_requested'::"RunOutboxEventKind")
-                  AND "published_at" IS NULL AND "failed_at" IS NULL
+                  AND ("state" <> 'deleted'::"WarmRuntimeReservationState" OR "deleted_at" IS NULL)
             ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun requires its attempt and release commands resolved';
-            END IF;
-            SELECT EXISTS (SELECT 1 FROM "workload_assignments" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt") INTO assignment_exists;
-            SELECT "claimed_at" INTO attempt_event_claimed_at
-            FROM "run_outbox_events"
-            WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "kind" = 'run.attempt_requested'::"RunOutboxEventKind";
-            IF (assignment_exists OR attempt_event_claimed_at IS NOT NULL) AND NOT EXISTS (
-                SELECT 1 FROM "run_outbox_events"
-                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "kind" = 'run.workload_cleanup_requested'::"RunOutboxEventKind"
-                  AND "published_at" IS NOT NULL AND "failed_at" IS NULL
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun with possible physical work requires a confirmed WorkloadCleanup';
+                RAISE EXCEPTION 'a Cancelled AgentRun requires every warm runtime reservation deleted';
             END IF;
         END IF;
         IF OLD."started_at" IS NOT NULL AND NEW."started_at" IS DISTINCT FROM OLD."started_at" THEN
@@ -3780,8 +4718,11 @@ DECLARE
     transition_time TIMESTAMP(3) := clock_timestamp();
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending_pod' OR NEW."pod_uid" IS NOT NULL
-            OR NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NOT NULL THEN
+        IF NEW."state" <> 'pending_pod'
+            OR NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NOT NULL
+            OR NOT ((NEW."workload_kind" = 'job' AND NEW."pod_uid" IS NULL)
+                OR (NEW."workload_kind" = 'deployment' AND NEW."pod_uid" IS NOT NULL
+                    AND btrim(NEW."pod_uid") <> '' AND NEW."pod_uid" = NEW."workload_uid")) THEN
             RAISE EXCEPTION 'a new WorkloadAssignment must begin pending_pod';
         END IF;
         RETURN NEW;
@@ -3807,12 +4748,15 @@ BEGIN
     END IF;
     IF OLD."state" = 'pending_pod' AND NEW."state" = 'registered' AND (
         NEW."pod_uid" IS NULL OR NEW."registered_at" IS NULL OR NEW."revoked_at" IS NOT NULL
+        OR (OLD."workload_kind" = 'deployment' AND NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid")
         OR NEW."registered_at" < OLD."created_at" OR NEW."registered_at" > transition_time
     ) THEN
         RAISE EXCEPTION 'registration must bind the current Pod and registration time';
     END IF;
     IF OLD."state" = 'pending_pod' AND NEW."state" = 'revoked' AND (
-        NEW."pod_uid" IS NOT NULL OR NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NULL
+        NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NULL
+        OR (OLD."workload_kind" = 'job' AND NEW."pod_uid" IS NOT NULL)
+        OR (OLD."workload_kind" = 'deployment' AND NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid")
         OR NEW."revoked_at" < OLD."created_at" OR NEW."revoked_at" > transition_time
     ) THEN
         RAISE EXCEPTION 'an unregistered WorkloadAssignment must revoke without Pod registration';
@@ -3842,51 +4786,6 @@ BEGIN
     END IF;
     IF OLD."revoked_at" IS NOT NULL OR NEW."revoked_at" IS NULL THEN
         RAISE EXCEPTION 'RunProofKey may be revoked exactly once';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_run_outbox_event_update"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        IF current_setting('opencrane.run_outbox_prune', true) IS DISTINCT FROM 'true'
-            OR OLD."published_at" IS NULL OR OLD."failed_at" IS NOT NULL THEN
-            RAISE EXCEPTION 'OutboxEvent rows cannot be deleted outside successful-delivery retention';
-        END IF;
-        RETURN OLD;
-    END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."sequence" IS DISTINCT FROM OLD."sequence"
-        OR NEW."kind" IS DISTINCT FROM OLD."kind"
-        OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
-        OR NEW."payload" IS DISTINCT FROM OLD."payload"
-        OR NEW."available_at" IS DISTINCT FROM OLD."available_at"
-        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'OutboxEvent identity, order, and payload are immutable';
-    END IF;
-    IF OLD."published_at" IS NOT NULL OR OLD."failed_at" IS NOT NULL THEN
-        RAISE EXCEPTION 'delivered OutboxEvent status is terminal';
-    END IF;
-    IF OLD."claimed_at" IS NOT NULL AND (
-        NEW."claimed_at" IS NULL OR NEW."claimed_at" < OLD."claimed_at"
-    ) THEN
-        RAISE EXCEPTION 'OutboxEvent claim time cannot move backward or be erased';
-    END IF;
-    IF NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" THEN
-        IF NEW."claimed_at" IS NULL OR NEW."delivery_count" <> OLD."delivery_count" + 1 THEN
-            RAISE EXCEPTION 'each OutboxEvent claim must advance delivery_count exactly once';
-        END IF;
-    ELSIF NEW."delivery_count" <> OLD."delivery_count" THEN
-        RAISE EXCEPTION 'OutboxEvent delivery_count advances only with a new claim';
-    END IF;
-    IF OLD."published_at" IS NOT NULL AND NEW."published_at" IS DISTINCT FROM OLD."published_at" THEN
-        RAISE EXCEPTION 'OutboxEvent publication evidence is immutable';
-    END IF;
-    IF OLD."failed_at" IS NOT NULL AND (
-        NEW."failed_at" IS DISTINCT FROM OLD."failed_at"
-        OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code"
-    ) THEN
-        RAISE EXCEPTION 'OutboxEvent failure evidence is immutable';
     END IF;
     RETURN NEW;
 END;
@@ -5412,11 +6311,11 @@ BEGIN
                 (SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
                  EXCEPT SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
             ) OR EXISTS (
-                (SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
-                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
-                UNION ALL
-                (SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
-                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
+				(SELECT "tool_revision_id", "agent_service_id", "silo_id" FROM "agent_revision_mcp_tool_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
+				 EXCEPT SELECT "tool_revision_id", "agent_service_id", "silo_id" FROM "agent_revision_mcp_tool_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
+				UNION ALL
+				(SELECT "tool_revision_id", "agent_service_id", "silo_id" FROM "agent_revision_mcp_tool_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
+				 EXCEPT SELECT "tool_revision_id", "agent_service_id", "silo_id" FROM "agent_revision_mcp_tool_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
             ) OR EXISTS (
 				(SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
 				 EXCEPT SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
@@ -5510,37 +6409,15 @@ BEGIN
     RETURN NEW;
 END;
 $$;
--- Read-only Prisma delegates expose database time and the existing nonblocking claim selector
--- without granting application code a general raw-SQL capability.
+-- Workflow delivery selects preprocessing tasks, so Prisma exposes only database time here instead
+-- of retaining the retired SQL polling selector or granting application code general raw SQL.
 CREATE VIEW "artifact_authority_clock" AS
     SELECT 1::INTEGER AS "singleton", date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3) AS "now";
-CREATE FUNCTION "select_artifact_preprocess_claim_candidate"() RETURNS TABLE (
-    "job_id" TEXT,
-    "attempt" INTEGER,
-    "derived_artifact_id" TEXT,
-    "source_revision_id" TEXT,
-    "source_artifact_id" TEXT,
-    "silo_id" TEXT,
-    "owner_principal_id" TEXT,
-    "source_byte_length" BIGINT
-) LANGUAGE sql VOLATILE AS $$
-    SELECT job."id", job."attempt", job."derived_artifact_id", revision."id", revision."artifact_id",
-           artifact."silo_id", artifact."owner_principal_id", revision."byte_length"
-      FROM "artifact_preprocess_jobs" job
-      JOIN "artifact_revisions" revision ON revision."id" = job."source_revision_id"
-      JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id"
-     WHERE job."state" IN ('pending', 'retryable_failed')
-       AND (job."next_attempt_at" IS NULL OR job."next_attempt_at" <= clock_timestamp())
-     ORDER BY job."created_at", job."id"
-     FOR UPDATE OF job, revision, artifact SKIP LOCKED
-     LIMIT 1;
-$$;
-CREATE VIEW "artifact_preprocess_claim_candidates" AS
-    SELECT * FROM "select_artifact_preprocess_claim_candidate"();
 CREATE FUNCTION "enforce_artifact_preprocess_job_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE source_state "ArtifactRevisionState"; source_media_type TEXT; source_silo_id TEXT; source_owner_principal_id TEXT; source_artifact_state "ArtifactState";
         output_silo_id TEXT; output_owner_principal_id TEXT; output_kind "ArtifactKind"; output_state "ArtifactState"; output_revision_artifact_id TEXT; output_revision_media_type TEXT; output_revision_state "ArtifactRevisionState"; output_revision_address TEXT; output_revision_length BIGINT;
         output_lease_artifact_id TEXT; output_lease_state "ArtifactUploadLeaseState"; output_lease_address TEXT; output_lease_length BIGINT; output_lease_media_type TEXT; output_lease_expires_at TIMESTAMP(3); output_lease_promoted_address TEXT; output_lease_promoted_length BIGINT;
+        delivery_changed BOOLEAN;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ArtifactPreprocessJob rows cannot be deleted'; END IF;
     SELECT revision."state", revision."media_type", artifact."silo_id", artifact."owner_principal_id", artifact."state" INTO source_state, source_media_type, source_silo_id, source_owner_principal_id, source_artifact_state
@@ -5558,39 +6435,84 @@ BEGIN
     IF NEW."output_lease_id" IS NOT NULL THEN
         SELECT "artifact_id", "state", "expected_content_address", "expected_byte_length", "media_type", "expires_at", "promoted_content_address", "promoted_byte_length" INTO output_lease_artifact_id, output_lease_state, output_lease_address, output_lease_length, output_lease_media_type, output_lease_expires_at, output_lease_promoted_address, output_lease_promoted_length FROM "artifact_upload_leases" WHERE "id" = NEW."output_lease_id" FOR UPDATE;
         IF output_lease_artifact_id IS DISTINCT FROM NEW."derived_artifact_id" OR output_lease_address IS NULL OR output_lease_length IS NULL OR output_lease_media_type <> 'text/plain' THEN RAISE EXCEPTION 'ArtifactPreprocessJob output lease must bind exact text output for its derived Artifact'; END IF;
-        IF NEW."state" = 'claimed' AND (output_lease_state IS DISTINCT FROM 'active' OR output_lease_expires_at > NEW."claim_expires_at") THEN RAISE EXCEPTION 'ArtifactPreprocessJob claimed output lease must remain active within its claim'; END IF;
+        IF NEW."state" = 'claimed' AND NEW."completion_digest" IS NULL AND (output_lease_state IS DISTINCT FROM 'active' OR output_lease_expires_at > NEW."claim_expires_at") THEN RAISE EXCEPTION 'ArtifactPreprocessJob claimed output lease must remain active within its claim'; END IF;
+        IF NEW."state" = 'claimed' AND NEW."completion_digest" IS NOT NULL AND (output_lease_state IS DISTINCT FROM 'finalized' OR output_lease_promoted_address IS DISTINCT FROM output_lease_address OR output_lease_promoted_length IS DISTINCT FROM output_lease_length OR output_lease_promoted_address IS DISTINCT FROM output_revision_address OR output_lease_promoted_length IS DISTINCT FROM output_revision_length) THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion evidence requires its finalized exact output lease'; END IF;
         IF NEW."state" = 'completed' AND (output_lease_state IS DISTINCT FROM 'finalized' OR output_lease_promoted_address IS DISTINCT FROM output_lease_address OR output_lease_promoted_length IS DISTINCT FROM output_lease_length OR output_lease_promoted_address IS DISTINCT FROM output_revision_address OR output_lease_promoted_length IS DISTINCT FROM output_revision_length) THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires its finalized exact output lease'; END IF;
     END IF;
     IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending' OR NEW."attempt" <> 0 OR NEW."claim_fence" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."derived_artifact_id" IS NOT NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."completed_at" IS NOT NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob must begin pending without an output or claim'; END IF;
+        IF NEW."state" <> 'pending' OR NEW."task_key" IS NULL OR NEW."task_key" !~ '^workflows:artifact-preprocess:[0-9a-f]{64}$' OR NEW."task_id" IS NOT NULL OR NEW."task_name" IS NOT NULL OR NEW."delivery_count" <> 0 OR NEW."claim_fence" IS NOT NULL OR NEW."profile_name" IS NOT NULL OR NEW."claimed_at" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."workload_uid" IS NOT NULL OR NEW."first_pod_uid" IS NOT NULL OR NEW."bootstrap_reference_hash" IS NOT NULL OR NEW."bootstrap_namespace" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."derived_artifact_id" IS NOT NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."completion_digest" IS NOT NULL OR NEW."completion_consumed_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob must begin pending with only its stable task key'; END IF;
         RETURN NEW;
     END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."source_revision_id" IS DISTINCT FROM OLD."source_revision_id" OR NEW."pipeline_version" IS DISTINCT FROM OLD."pipeline_version" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN RAISE EXCEPTION 'ArtifactPreprocessJob identity is immutable'; END IF;
-    IF OLD."derived_artifact_id" IS NOT NULL AND NEW."derived_artifact_id" IS DISTINCT FROM OLD."derived_artifact_id" THEN RAISE EXCEPTION 'ArtifactPreprocessJob output Artifact is immutable once allocated'; END IF;
-    IF OLD."derived_revision_id" IS NOT NULL AND NEW."derived_revision_id" IS DISTINCT FROM OLD."derived_revision_id" THEN RAISE EXCEPTION 'ArtifactPreprocessJob output revision is immutable once completed'; END IF;
-    IF NOT ((OLD."state" = 'pending' AND NEW."state" IN ('pending', 'claimed')) OR (OLD."state" = 'retryable_failed' AND NEW."state" IN ('retryable_failed', 'claimed')) OR (OLD."state" = 'claimed' AND NEW."state" IN ('claimed', 'completed', 'retryable_failed', 'terminal_failed')) OR (OLD."state" = 'completed' AND NEW."state" = 'completed') OR (OLD."state" = 'terminal_failed' AND NEW."state" = 'terminal_failed')) THEN RAISE EXCEPTION 'invalid ArtifactPreprocessJob lifecycle transition'; END IF;
-    IF NEW."state" = 'pending' AND (NEW."attempt" <> 0 OR NEW."claim_fence" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."derived_artifact_id" IS NOT NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob pending state cannot carry claim or output facts'; END IF;
-    IF OLD."state" = NEW."state" AND (NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."claim_fence" IS DISTINCT FROM OLD."claim_fence" OR NEW."claim_expires_at" IS DISTINCT FROM OLD."claim_expires_at" OR NEW."next_attempt_at" IS DISTINCT FROM OLD."next_attempt_at" OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" OR (NEW."output_lease_id" IS DISTINCT FROM OLD."output_lease_id" AND NOT (OLD."state" = 'claimed' AND OLD."output_lease_id" IS NULL AND NEW."output_lease_id" IS NOT NULL))) THEN RAISE EXCEPTION 'ArtifactPreprocessJob durable state facts change only through a lifecycle transition'; END IF;
-    IF OLD."state" <> 'claimed' AND NEW."state" = 'claimed' AND (NEW."attempt" <> OLD."attempt" + 1 OR NEW."claim_fence" IS NULL OR NEW."claim_fence" IS NOT DISTINCT FROM OLD."claim_fence" OR NEW."claim_expires_at" IS NULL OR NEW."claim_expires_at" <= clock_timestamp() OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob claim must allocate one fresh fenced output attempt'; END IF;
-    IF OLD."state" = 'claimed' AND NEW."state" = 'retryable_failed' AND OLD."claim_expires_at" <= clock_timestamp() THEN
-        IF NEW."failure_code" <> 'claim_expired' THEN RAISE EXCEPTION 'expired ArtifactPreprocessJob claim may recover only as claim_expired'; END IF;
-    ELSIF OLD."state" = 'claimed' AND (OLD."claim_fence" IS NULL OR OLD."claim_expires_at" IS NULL OR OLD."claim_expires_at" <= clock_timestamp() OR NEW."claim_fence" IS DISTINCT FROM OLD."claim_fence") THEN
-        RAISE EXCEPTION 'ArtifactPreprocessJob completion requires its live claim fence';
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."source_revision_id" IS DISTINCT FROM OLD."source_revision_id" OR NEW."pipeline_version" IS DISTINCT FROM OLD."pipeline_version" OR NEW."task_key" IS DISTINCT FROM OLD."task_key" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN RAISE EXCEPTION 'ArtifactPreprocessJob identity is immutable'; END IF;
+    -- Bind the workflow receipt while pending so a later delivery cannot switch to another task.
+    IF NEW."task_id" IS DISTINCT FROM OLD."task_id" OR NEW."task_name" IS DISTINCT FROM OLD."task_name" THEN
+        IF OLD."state" <> 'pending' OR NEW."state" <> 'pending' OR OLD."task_id" IS NOT NULL OR OLD."task_name" IS NOT NULL OR NEW."task_id" IS NULL OR btrim(NEW."task_id") = '' OR NEW."task_name" <> 'artifacts.preprocess.pdf-to-text/v1' THEN RAISE EXCEPTION 'ArtifactPreprocessJob task receipt binds once while pending'; END IF;
     END IF;
-    IF NEW."state" = 'completed' AND (NEW."claim_fence" IS NULL OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NULL OR NEW."output_lease_id" IS NULL OR NEW."output_lease_id" IS DISTINCT FROM OLD."output_lease_id" OR NEW."completed_at" IS NULL OR NEW."failure_code" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires its fenced derived revision'; END IF;
-    IF NEW."state" = 'completed' AND NOT EXISTS (SELECT 1 FROM "artifact_revision_parents" WHERE "child_revision_id" = NEW."derived_revision_id" AND "parent_revision_id" = NEW."source_revision_id") THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires immutable source lineage'; END IF;
-    IF NEW."state" = 'retryable_failed' AND (NEW."claim_fence" IS NULL OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."failure_code" IS NULL OR NEW."next_attempt_at" IS NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob retryable failure requires bounded retry evidence'; END IF;
-    IF NEW."state" = 'terminal_failed' AND (NEW."claim_fence" IS NULL OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."failure_code" IS NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob terminal failure requires failure evidence'; END IF;
-    IF OLD."state" = 'claimed' AND NEW."state" IN ('retryable_failed', 'terminal_failed') AND OLD."output_lease_id" IS NOT NULL THEN
+    IF OLD."derived_artifact_id" IS NOT NULL AND NEW."derived_artifact_id" IS DISTINCT FROM OLD."derived_artifact_id" THEN RAISE EXCEPTION 'ArtifactPreprocessJob output Artifact is immutable once allocated'; END IF;
+    IF OLD."derived_revision_id" IS NOT NULL AND (NEW."derived_revision_id" IS DISTINCT FROM OLD."derived_revision_id" OR NEW."completion_digest" IS DISTINCT FROM OLD."completion_digest") THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion evidence is immutable once saved'; END IF;
+    IF NOT ((OLD."state" = 'pending' AND NEW."state" IN ('pending', 'claimed')) OR (OLD."state" = 'retryable_failed' AND NEW."state" IN ('retryable_failed', 'claimed')) OR (OLD."state" = 'claimed' AND NEW."state" IN ('claimed', 'completed', 'retryable_failed', 'terminal_failed')) OR (OLD."state" = 'completed' AND NEW."state" = 'completed') OR (OLD."state" = 'terminal_failed' AND NEW."state" = 'terminal_failed')) THEN RAISE EXCEPTION 'invalid ArtifactPreprocessJob lifecycle transition'; END IF;
+    -- Give every workflow delivery a new fence and cleared bindings so it cannot inherit the Job,
+    -- Pod, bootstrap, lease, or completion evidence of an expired attempt.
+    delivery_changed := NEW."delivery_count" IS DISTINCT FROM OLD."delivery_count";
+    IF NEW."state" = 'pending' AND (NEW."delivery_count" <> 0 OR NEW."claim_fence" IS NOT NULL OR NEW."profile_name" IS NOT NULL OR NEW."claimed_at" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."workload_uid" IS NOT NULL OR NEW."first_pod_uid" IS NOT NULL OR NEW."bootstrap_reference_hash" IS NOT NULL OR NEW."bootstrap_namespace" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."derived_artifact_id" IS NOT NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."completion_digest" IS NOT NULL OR NEW."completion_consumed_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob pending state cannot carry delivery or output facts'; END IF;
+    IF NEW."state" = 'claimed' AND delivery_changed THEN
+        IF NEW."delivery_count" <> OLD."delivery_count" + 1 OR NEW."task_id" IS NULL OR NEW."task_name" <> 'artifacts.preprocess.pdf-to-text/v1' OR NEW."claim_fence" IS NULL OR NEW."claim_fence" IS NOT DISTINCT FROM OLD."claim_fence" OR NEW."profile_name" <> 'pdf-preprocessor' OR NEW."claimed_at" IS NULL OR NEW."claim_expires_at" IS NULL OR NEW."claim_expires_at" <= clock_timestamp() OR NEW."claim_expires_at" <= NEW."claimed_at" OR NEW."claim_expires_at" > NEW."claimed_at" + interval '5 minutes' OR NEW."workload_uid" IS NOT NULL OR NEW."first_pod_uid" IS NOT NULL OR NEW."bootstrap_reference_hash" IS NOT NULL OR NEW."bootstrap_namespace" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."completion_digest" IS NOT NULL OR NEW."completion_consumed_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob delivery must use a fresh live bounded fence and clear delivery bindings'; END IF;
+        IF OLD."state" = 'claimed' AND (OLD."claim_expires_at" IS NULL OR OLD."claim_expires_at" > clock_timestamp()) THEN RAISE EXCEPTION 'ArtifactPreprocessJob cannot replace a live delivery'; END IF;
+    ELSIF delivery_changed THEN
+        RAISE EXCEPTION 'ArtifactPreprocessJob delivery count changes only when a delivery is claimed';
+    END IF;
+    IF OLD."state" = NEW."state" AND NOT delivery_changed THEN
+        IF NEW."state" = 'pending' THEN
+            IF NEW."task_id" IS NOT DISTINCT FROM OLD."task_id" AND NEW."task_name" IS NOT DISTINCT FROM OLD."task_name" AND NEW IS DISTINCT FROM OLD THEN RAISE EXCEPTION 'ArtifactPreprocessJob pending state changes only by binding its task receipt'; END IF;
+        ELSIF NEW."state" = 'claimed' THEN
+            IF NEW."claim_fence" IS DISTINCT FROM OLD."claim_fence" OR NEW."profile_name" IS DISTINCT FROM OLD."profile_name" OR NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."claim_expires_at" IS DISTINCT FROM OLD."claim_expires_at" OR NEW."next_attempt_at" IS DISTINCT FROM OLD."next_attempt_at" OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code" OR NEW."completion_consumed_at" IS DISTINCT FROM OLD."completion_consumed_at" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" THEN RAISE EXCEPTION 'ArtifactPreprocessJob delivery facts change only when a delivery is claimed'; END IF;
+            IF NEW."derived_artifact_id" IS DISTINCT FROM OLD."derived_artifact_id" AND NOT (OLD."derived_artifact_id" IS NULL AND NEW."derived_artifact_id" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob derived Artifact binds once'; END IF;
+            IF NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" OR NEW."bootstrap_reference_hash" IS DISTINCT FROM OLD."bootstrap_reference_hash" OR NEW."bootstrap_namespace" IS DISTINCT FROM OLD."bootstrap_namespace" THEN
+                IF OLD."workload_uid" IS NOT NULL OR OLD."bootstrap_reference_hash" IS NOT NULL OR OLD."bootstrap_namespace" IS NOT NULL OR NEW."workload_uid" IS NULL OR NEW."bootstrap_reference_hash" IS NULL OR NEW."bootstrap_namespace" IS NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob workload and bootstrap bind once together'; END IF;
+            END IF;
+            IF NEW."first_pod_uid" IS DISTINCT FROM OLD."first_pod_uid" AND NOT (OLD."first_pod_uid" IS NULL AND NEW."first_pod_uid" IS NOT NULL AND NEW."workload_uid" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob first Pod binds once after its workload'; END IF;
+            IF NEW."output_lease_id" IS DISTINCT FROM OLD."output_lease_id" AND NOT (OLD."output_lease_id" IS NULL AND NEW."output_lease_id" IS NOT NULL AND NEW."derived_artifact_id" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob output lease binds once per delivery'; END IF;
+            IF NEW."derived_revision_id" IS DISTINCT FROM OLD."derived_revision_id" OR NEW."completion_digest" IS DISTINCT FROM OLD."completion_digest" THEN
+                -- Save worker output while the delivery is still claimed; the controller consumes
+                -- this evidence in the separate claimed-to-completed transition below.
+                IF OLD."derived_revision_id" IS NOT NULL OR OLD."completion_digest" IS NOT NULL OR NEW."derived_revision_id" IS NULL OR NEW."completion_digest" IS NULL OR NEW."output_lease_id" IS NULL OR NEW."workload_uid" IS NULL OR NEW."first_pod_uid" IS NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion evidence binds once after its worker output'; END IF;
+            END IF;
+        ELSIF NEW IS DISTINCT FROM OLD THEN
+            RAISE EXCEPTION 'ArtifactPreprocessJob terminal state is immutable';
+        END IF;
+    END IF;
+    IF OLD."state" = 'claimed' AND NEW."state" IN ('retryable_failed', 'terminal_failed') THEN
+        IF OLD."claim_fence" IS NULL OR OLD."claim_expires_at" IS NULL OR (OLD."claim_expires_at" <= clock_timestamp() AND NEW."failure_code" <> 'claim_expired') THEN RAISE EXCEPTION 'ArtifactPreprocessJob failure requires its current delivery or claim_expired evidence'; END IF;
+        IF NEW."delivery_count" <> OLD."delivery_count" OR NEW."claim_fence" IS DISTINCT FROM OLD."claim_fence" OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."completion_digest" IS NOT NULL OR NEW."completion_consumed_at" IS NOT NULL OR NEW."failure_code" IS NULL OR NEW."completed_at" IS NOT NULL OR (NEW."state" = 'retryable_failed' AND NEW."next_attempt_at" IS NULL) OR (NEW."state" = 'terminal_failed' AND NEW."next_attempt_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob failure requires bounded retry or terminal evidence'; END IF;
+    END IF;
+    IF OLD."state" = 'claimed' AND NEW."state" = 'completed' THEN
+        IF NEW."delivery_count" <> OLD."delivery_count" OR NEW."claim_fence" IS DISTINCT FROM OLD."claim_fence" OR NEW."workload_uid" IS NULL OR NEW."first_pod_uid" IS NULL OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NULL OR NEW."output_lease_id" IS NULL OR NEW."completion_digest" IS NULL OR NEW."completion_consumed_at" IS NULL OR NEW."completed_at" IS NULL OR NEW."failure_code" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires consumed fenced worker evidence'; END IF;
+        IF NOT EXISTS (SELECT 1 FROM "artifact_revision_parents" WHERE "child_revision_id" = NEW."derived_revision_id" AND "parent_revision_id" = NEW."source_revision_id") THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires immutable source lineage'; END IF;
+    END IF;
+    IF OLD."state" = 'claimed' AND (NEW."state" IN ('retryable_failed', 'terminal_failed') OR delivery_changed) AND OLD."output_lease_id" IS NOT NULL THEN
         UPDATE "artifact_upload_leases" SET "state" = 'cancelled' WHERE "id" = OLD."output_lease_id" AND "state" IN ('active', 'promoted');
     END IF;
     RETURN NEW;
 END;
 $$;
+CREATE FUNCTION "enforce_artifact_preprocess_claim_completeness"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE current_job "artifact_preprocess_jobs"%ROWTYPE;
+BEGIN
+    -- Check at transaction end so claiming may allocate the derived Artifact in the same commit,
+    -- while still rejecting a claimed delivery that lacks its task, derived Artifact, or live claim.
+    SELECT * INTO current_job FROM "artifact_preprocess_jobs" WHERE "id" = NEW."id";
+    IF current_job."state" = 'claimed' AND (current_job."derived_artifact_id" IS NULL OR current_job."task_id" IS NULL OR current_job."task_name" IS NULL OR current_job."claim_expires_at" IS NULL OR current_job."claim_expires_at" <= clock_timestamp()) THEN
+        RAISE EXCEPTION 'ArtifactPreprocessJob claimed delivery must commit live with its task and derived Artifact';
+    END IF;
+    RETURN NULL;
+END;
+$$;
 CREATE FUNCTION "enforce_artifact_preprocess_output_lease_finalization"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    IF NEW."state" = 'finalized' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" WHERE "output_lease_id" = NEW."id" AND "state" <> 'completed') THEN
-        RAISE EXCEPTION 'ArtifactPreprocessJob output lease may finalize only with its completed job';
+    -- Let the worker finalize its output lease only after saving completion evidence; the controller
+    -- may then consume that evidence and finish the job without extending the worker's expired claim.
+    IF NEW."state" = 'finalized' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" WHERE "output_lease_id" = NEW."id" AND NOT ("state" = 'completed' OR ("state" = 'claimed' AND "derived_revision_id" IS NOT NULL AND "completion_digest" IS NOT NULL))) THEN
+        RAISE EXCEPTION 'ArtifactPreprocessJob output lease may finalize only with saved completion evidence';
     END IF;
     RETURN NULL;
 END;
@@ -5630,125 +6552,273 @@ END;
 $$;
 CREATE VIEW "skill_authority_clock" AS
     SELECT 1::INTEGER AS "singleton", date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3) AS "now";
-CREATE FUNCTION "select_skill_workload_claim_candidate"() RETURNS TABLE (
-    "id" TEXT,
-    "silo_id" TEXT,
-    "kind" "SkillWorkloadKind",
-    "skill_revision_id" TEXT,
-    "revision_state" "SkillRevisionState"
-) LANGUAGE plpgsql VOLATILE AS $$
-DECLARE candidate_id TEXT; candidate_silo_id TEXT; candidate_kind "SkillWorkloadKind";
-        candidate_skill_revision_id TEXT; candidate_revision_state "SkillRevisionState";
-BEGIN
-    SELECT workload."id", workload."silo_id", workload."kind", workload."skill_revision_id", revision."state"
-      INTO candidate_id, candidate_silo_id, candidate_kind, candidate_skill_revision_id, candidate_revision_state
-      FROM "skill_workloads" workload
-      JOIN "skill_revisions" revision ON revision."id" = workload."skill_revision_id"
-     WHERE workload."state" = 'pending'
-       AND (workload."claim_expires_at" IS NULL OR workload."claim_expires_at" <= clock_timestamp())
-       AND ((workload."kind" = 'authoring' AND revision."state" = 'draft')
-         OR (workload."kind" = 'tool_runner' AND revision."state" = 'published'))
-     ORDER BY workload."created_at", workload."id"
-     FOR UPDATE OF revision SKIP LOCKED
-     LIMIT 1;
-    IF candidate_id IS NULL THEN RETURN; END IF;
-    PERFORM 1 FROM "skill_workloads" workload WHERE workload."id" = candidate_id FOR UPDATE;
-    "id" := candidate_id;
-    "silo_id" := candidate_silo_id;
-    "kind" := candidate_kind;
-    "skill_revision_id" := candidate_skill_revision_id;
-    "revision_state" := candidate_revision_state;
-    RETURN NEXT;
-END;
-$$;
-CREATE VIEW "skill_workload_claim_candidates" AS
-    SELECT * FROM "select_skill_workload_claim_candidate"();
-CREATE FUNCTION "select_skill_workload_release_claim_candidate"() RETURNS TABLE ("id" TEXT) LANGUAGE sql VOLATILE AS $$
-    SELECT workload."id"
-      FROM "skill_workloads" workload
-      JOIN "skill_workload_bootstraps" bootstrap ON bootstrap."skill_workload_id" = workload."id"
-     WHERE workload."state" = 'assigned'
-       AND workload."released_at" IS NULL
-       AND workload."workload_uid" IS NOT NULL
-       AND bootstrap."consumed_at" IS NULL
-       AND bootstrap."expires_at" > clock_timestamp()
-       AND (workload."release_expires_at" IS NULL OR workload."release_expires_at" <= clock_timestamp())
-     ORDER BY workload."created_at", workload."id"
-     FOR UPDATE OF workload, bootstrap SKIP LOCKED
-     LIMIT 1;
-$$;
-CREATE VIEW "skill_workload_release_claim_candidates" AS
-    SELECT * FROM "select_skill_workload_release_claim_candidate"();
-CREATE FUNCTION "enforce_skill_workload_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION "enforce_skill_authoring_validation"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE revision_silo_id TEXT; revision_state "SkillRevisionState"; revision_trust "SkillTrustClass";
-        bootstrap_expires_at TIMESTAMP(3); requested_lease INTERVAL;
-        transition_time TIMESTAMP(3) := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+        revision_artifact_revision_id TEXT; revision_address TEXT; artifact_revision_state "ArtifactRevisionState"; artifact_state "ArtifactState";
 BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkload rows cannot be deleted'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'pending' AND NEW."delivery_count" = OLD."delivery_count" + 1 THEN
-        requested_lease := NEW."claim_expires_at" - NEW."claimed_at";
-        IF requested_lease IS NULL OR requested_lease < interval '1 millisecond' OR requested_lease > interval '5 minutes' THEN RAISE EXCEPTION 'SkillWorkload claim lease must be bounded'; END IF;
-        NEW."claimed_at" := CASE WHEN OLD."claimed_at" IS NULL THEN transition_time ELSE GREATEST(transition_time, OLD."claimed_at" + interval '1 millisecond') END;
-        NEW."claim_expires_at" := NEW."claimed_at" + requested_lease;
-    END IF;
-    IF TG_OP = 'UPDATE' AND NEW."released_at" IS NULL AND NEW."release_delivery_count" = OLD."release_delivery_count" + 1 THEN
-        requested_lease := NEW."release_expires_at" - NEW."release_claimed_at";
-        IF requested_lease IS NULL OR requested_lease < interval '1 millisecond' OR requested_lease > interval '5 minutes' THEN RAISE EXCEPTION 'SkillWorkload release claim lease must be bounded'; END IF;
-        SELECT "expires_at" INTO bootstrap_expires_at FROM "skill_workload_bootstraps" WHERE "skill_workload_id" = NEW."id" AND "consumed_at" IS NULL FOR UPDATE;
-        NEW."release_claimed_at" := CASE WHEN OLD."release_claimed_at" IS NULL THEN transition_time ELSE GREATEST(transition_time, OLD."release_claimed_at" + interval '1 millisecond') END;
-        NEW."release_expires_at" := LEAST(NEW."release_claimed_at" + requested_lease, bootstrap_expires_at);
-        IF NEW."release_expires_at" IS NULL OR NEW."release_expires_at" <= NEW."release_claimed_at" THEN RAISE EXCEPTION 'SkillWorkload release claim requires a current bootstrap'; END IF;
-    END IF;
-    IF TG_OP = 'UPDATE' AND OLD."released_at" IS NULL AND NEW."released_at" IS NOT NULL THEN NEW."released_at" := transition_time; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" = 'assigned' AND NEW."state" IN ('succeeded', 'failed') THEN NEW."completed_at" := transition_time; END IF;
-    IF TG_OP = 'INSERT' AND (NEW."state" <> 'pending' OR NEW."claimed_at" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."delivery_count" <> 0 OR NEW."workload_uid" IS NOT NULL OR NEW."worker_pod_uid" IS NOT NULL OR NEW."release_claimed_at" IS NOT NULL OR NEW."release_delivery_count" <> 0 OR NEW."release_expires_at" IS NOT NULL OR NEW."released_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload must begin pending without claim or assignment'; END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."skill_revision_id" IS DISTINCT FROM OLD."skill_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id") THEN
-        RAISE EXCEPTION 'SkillWorkload source coordinates are immutable';
-    END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" IN ('succeeded', 'failed', 'cancelled') AND (NEW."state" IS DISTINCT FROM OLD."state" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code" OR NEW."cancelled_at" IS DISTINCT FROM OLD."cancelled_at") THEN RAISE EXCEPTION 'terminal SkillWorkload is immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."workload_uid" IS NOT NULL AND NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" THEN RAISE EXCEPTION 'SkillWorkload assignment identity is immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."worker_pod_uid" IS NOT NULL AND NEW."worker_pod_uid" IS DISTINCT FROM OLD."worker_pod_uid" THEN RAISE EXCEPTION 'SkillWorkload worker Pod identity is immutable'; END IF;
-    IF NEW."worker_pod_uid" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'succeeded', 'failed', 'cancelled') OR btrim(NEW."worker_pod_uid") = '') THEN RAISE EXCEPTION 'SkillWorkload worker Pod requires its assigned or terminal workload'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."worker_pod_uid" IS NULL AND NEW."worker_pod_uid" IS NOT NULL AND (OLD."state" <> 'assigned' OR NEW."state" <> 'assigned' OR OLD."released_at" IS NULL OR OLD."release_expires_at" IS NULL OR transition_time >= OLD."release_expires_at") THEN RAISE EXCEPTION 'SkillWorkload worker Pod registration requires a current released workload'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."released_at" IS NOT NULL AND (NEW."released_at" IS DISTINCT FROM OLD."released_at" OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at") THEN RAISE EXCEPTION 'released SkillWorkload is terminal'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."released_at" IS NULL AND NEW."released_at" IS NOT NULL AND (OLD."release_claimed_at" IS NULL OR OLD."release_expires_at" IS NULL OR OLD."release_claimed_at" > transition_time OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at" OR NEW."released_at" > transition_time OR transition_time >= OLD."release_expires_at" OR NOT EXISTS (SELECT 1 FROM "skill_workload_bootstraps" WHERE "skill_workload_id" = NEW."id" AND "consumed_at" IS NULL AND "expires_at" > transition_time)) THEN RAISE EXCEPTION 'SkillWorkload release requires a current bootstrap-backed prior release claim'; END IF;
-    IF TG_OP = 'UPDATE' AND NEW."released_at" IS NULL AND (NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at") AND (NEW."release_claimed_at" IS NULL OR NEW."release_expires_at" IS NULL OR NEW."release_expires_at" <= NEW."release_claimed_at" OR NEW."release_delivery_count" <> OLD."release_delivery_count" + 1 OR (OLD."release_claimed_at" IS NOT NULL AND NEW."release_claimed_at" <= OLD."release_claimed_at")) THEN RAISE EXCEPTION 'SkillWorkload release claim generation must advance monotonically'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'pending' AND (NEW."delivery_count" < OLD."delivery_count" OR (NEW."delivery_count" = OLD."delivery_count" AND (NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."claim_expires_at" IS DISTINCT FROM OLD."claim_expires_at")) OR (NEW."delivery_count" > OLD."delivery_count" AND (NEW."delivery_count" <> OLD."delivery_count" + 1 OR NEW."claimed_at" IS NULL OR NEW."claim_expires_at" IS NULL OR NEW."claim_expires_at" <= NEW."claimed_at" OR (OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" <= OLD."claimed_at")))) THEN RAISE EXCEPTION 'SkillWorkload claim generation must advance monotonically'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" IS DISTINCT FROM NEW."state" AND NEW."state" = 'assigned' AND NOT (OLD."state" = 'pending' AND OLD."claimed_at" IS NOT NULL AND OLD."claim_expires_at" IS NOT NULL AND transition_time < OLD."claim_expires_at" AND NEW."claimed_at" = OLD."claimed_at" AND NEW."claim_expires_at" = OLD."claim_expires_at" AND NEW."delivery_count" = OLD."delivery_count" AND NEW."workload_uid" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload assignment requires exact current prior claim'; END IF;
-    IF TG_OP = 'UPDATE' AND NEW."state" IN ('succeeded', 'failed') AND NOT (OLD."state" = 'assigned' AND OLD."released_at" IS NOT NULL AND OLD."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."completed_at" >= OLD."released_at") THEN RAISE EXCEPTION 'SkillWorkload completion requires released registered assignment'; END IF;
-    IF NEW."delivery_count" < 0 OR ((NEW."claimed_at" IS NULL) <> (NEW."claim_expires_at" IS NULL)) OR NEW."release_delivery_count" < 0 OR ((NEW."release_claimed_at" IS NULL) <> (NEW."release_expires_at" IS NULL)) OR (NEW."released_at" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'succeeded', 'failed', 'cancelled') OR NEW."release_claimed_at" IS NULL OR NEW."release_expires_at" IS NULL OR NEW."release_delivery_count" < 1)) OR NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL AND NEW."workload_uid" IS NULL AND NEW."worker_pod_uid" IS NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'assigned' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."claim_expires_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'succeeded' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."claim_expires_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'failed' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."claim_expires_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."failure_code" IS NOT NULL AND btrim(NEW."failure_code") <> '') OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching claim, assignment, completion, and cancellation evidence'; END IF;
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillAuthoringValidation rows cannot be deleted'; END IF;
     IF TG_OP = 'INSERT' THEN
-        SELECT skill."silo_id", revision."state", revision."trust_class" INTO revision_silo_id, revision_state, revision_trust FROM "skill_revisions" revision JOIN "skills" skill ON skill."id" = revision."skill_id" WHERE revision."id" = NEW."skill_revision_id" FOR UPDATE OF revision, skill;
-        IF revision_silo_id IS DISTINCT FROM NEW."silo_id" OR revision_trust IS DISTINCT FROM 'sandboxed_python' THEN RAISE EXCEPTION 'SkillWorkload requires same-silo SandboxedPython SkillRevision'; END IF;
-        IF NEW."kind" = 'authoring' AND (NEW."tool_invocation_id" IS NOT NULL OR revision_state IS DISTINCT FROM 'draft') THEN RAISE EXCEPTION 'authoring SkillWorkload requires Draft revision and no ToolInvocation'; END IF;
-        IF NEW."kind" = 'tool_runner' THEN
-            RAISE EXCEPTION 'tool-runner SkillWorkload requires the later snapshot-bound workload admission authority';
+        IF NEW."state" <> 'pending' OR NEW."task_id" IS NOT NULL OR NEW."task_name" IS NOT NULL OR NEW."started_at" IS NOT NULL
+            OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL THEN
+            RAISE EXCEPTION 'SkillAuthoringValidation must begin pending without task, running, or completion facts';
+        END IF;
+        SELECT skill."silo_id", revision."state", revision."trust_class", revision."artifact_revision_id", revision."artifact_content_address", artifact_revision."state", artifact."state"
+          INTO revision_silo_id, revision_state, revision_trust, revision_artifact_revision_id, revision_address, artifact_revision_state, artifact_state
+          FROM "skill_revisions" revision
+          JOIN "skills" skill ON skill."id" = revision."skill_id"
+          JOIN "artifact_revisions" artifact_revision ON artifact_revision."id" = revision."artifact_revision_id" AND artifact_revision."content_address" = revision."artifact_content_address"
+          JOIN "artifacts" artifact ON artifact."id" = artifact_revision."artifact_id"
+         WHERE revision."id" = NEW."skill_revision_id"
+         FOR UPDATE OF revision, skill, artifact_revision, artifact;
+        IF revision_silo_id IS DISTINCT FROM NEW."silo_id" OR revision_state IS DISTINCT FROM 'draft'
+            OR revision_trust IS DISTINCT FROM 'sandboxed_python' OR revision_artifact_revision_id IS DISTINCT FROM NEW."artifact_revision_id"
+            OR revision_address IS DISTINCT FROM NEW."artifact_content_address" OR artifact_revision_state IS DISTINCT FROM 'published'
+            OR artifact_state IS DISTINCT FROM 'active' THEN
+            RAISE EXCEPTION 'SkillAuthoringValidation requires same-silo Draft Python revision with its active pinned artifact';
         END IF;
     END IF;
-    IF TG_OP = 'UPDATE' AND NEW."state" IN ('succeeded', 'failed') THEN
-        IF NOT EXISTS (SELECT 1 FROM "skill_workload_bootstraps" bootstrap WHERE bootstrap."skill_workload_id" = NEW."id" AND bootstrap."consumed_at" IS NOT NULL AND bootstrap."consumed_by_pod_uid" = OLD."worker_pod_uid") THEN RAISE EXCEPTION 'SkillWorkload completion requires its consumed canonical worker bootstrap'; END IF;
-        IF NEW."kind" <> 'authoring' THEN RAISE EXCEPTION 'tool runner completion has its own ToolInvocation authority'; END IF;
-        IF NEW."state" = 'succeeded' AND NOT EXISTS (SELECT 1 FROM "skill_revisions" revision WHERE revision."id" = NEW."skill_revision_id" AND revision."state" = 'draft' AND jsonb_typeof(revision."test_report") = 'object' AND (SELECT count(*) FROM jsonb_object_keys(revision."test_report")) = 3 AND revision."test_report" @> '{"passed":true}'::jsonb AND jsonb_typeof(revision."test_report"->'summary') = 'string' AND length(revision."test_report"->>'summary') BETWEEN 1 AND 2000 AND jsonb_typeof(revision."test_report"->'checksRun') = 'number' AND (revision."test_report"->>'checksRun') ~ '^(0|[1-9][0-9]{0,3}|10000)$' AND jsonb_typeof(revision."scan_result") = 'object' AND (SELECT count(*) FROM jsonb_object_keys(revision."scan_result")) = 3 AND revision."scan_result" @> '{"passed":true}'::jsonb AND jsonb_typeof(revision."scan_result"->'summary') = 'string' AND length(revision."scan_result"->>'summary') BETWEEN 1 AND 2000 AND jsonb_typeof(revision."scan_result"->'checksRun') = 'number' AND (revision."scan_result"->>'checksRun') ~ '^(0|[1-9][0-9]{0,3}|10000)$') THEN RAISE EXCEPTION 'authoring completion requires bounded passed draft test and scan reports'; END IF;
+    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."skill_revision_id" IS DISTINCT FROM OLD."skill_revision_id"
+        OR NEW."artifact_revision_id" IS DISTINCT FROM OLD."artifact_revision_id" OR NEW."artifact_content_address" IS DISTINCT FROM OLD."artifact_content_address"
+        OR NEW."task_key" IS DISTINCT FROM OLD."task_key") THEN
+        RAISE EXCEPTION 'SkillAuthoringValidation immutable admission facts cannot change';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."task_id" IS NOT NULL AND (NEW."task_id" IS DISTINCT FROM OLD."task_id" OR NEW."task_name" IS DISTINCT FROM OLD."task_name") THEN
+        RAISE EXCEPTION 'SkillAuthoringValidation task receipt is immutable';
+    END IF;
+    IF (NEW."task_id" IS NULL) <> (NEW."task_name" IS NULL) OR NEW."task_key" !~ '^workflows:skill-authoring-validation:[a-f0-9]{64}$' THEN
+        RAISE EXCEPTION 'SkillAuthoringValidation requires paired task receipt and task key';
+    END IF;
+    IF NEW."task_name" IS NOT NULL AND NEW."task_name" <> 'skills.authoring.validate/v1' THEN
+        RAISE EXCEPTION 'SkillAuthoringValidation task receipt must name the reviewed task';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" NOT IN ('pending', 'running', 'failed', 'cancelled') THEN
+        RAISE EXCEPTION 'SkillAuthoringValidation has an invalid transition from pending';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'running' AND NEW."state" NOT IN ('running', 'succeeded', 'failed', 'cancelled') THEN
+        RAISE EXCEPTION 'SkillAuthoringValidation has an invalid transition from running';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'pending' THEN
+        IF NEW."started_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL THEN
+            RAISE EXCEPTION 'pending SkillAuthoringValidation may only bind its task receipt';
+        END IF;
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'running' THEN
+        IF OLD."task_id" IS NULL OR NEW."task_id" IS DISTINCT FROM OLD."task_id" OR NEW."task_name" IS DISTINCT FROM OLD."task_name"
+            OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL
+            OR NOT EXISTS (
+                SELECT 1 FROM "skill_authoring_validation_workload_claims" claim
+                 WHERE claim."validation_id" = NEW."id" AND claim."workload_uid" IS NOT NULL
+            ) THEN
+            RAISE EXCEPTION 'SkillAuthoringValidation may run only after its saved task and bound workload claim';
+        END IF;
+        NEW."started_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'running' AND NEW."state" = 'running' THEN
+        IF NEW."task_id" IS DISTINCT FROM OLD."task_id" OR NEW."task_name" IS DISTINCT FROM OLD."task_name"
+            OR NEW."started_at" IS DISTINCT FROM OLD."started_at"
+            OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL THEN
+            RAISE EXCEPTION 'running SkillAuthoringValidation preserves its task and start time';
+        END IF;
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'failed' THEN
+        IF OLD."task_id" IS NULL OR NEW."task_id" IS DISTINCT FROM OLD."task_id" OR NEW."task_name" IS DISTINCT FROM OLD."task_name"
+            OR NEW."started_at" IS NOT NULL OR NEW."failure_code" IS DISTINCT FROM 'claim_expired_before_workload'
+            OR EXISTS (SELECT 1 FROM "skill_authoring_validation_completion_inbox" inbox WHERE inbox."validation_id" = NEW."id")
+            OR NOT EXISTS (
+                SELECT 1 FROM "skill_authoring_validation_workload_claims" claim
+                 WHERE claim."validation_id" = NEW."id" AND claim."workload_uid" IS NULL AND claim."first_pod_uid" IS NULL
+                   AND claim."delivery_count" >= 3 AND claim."expires_at" <= date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3)
+            ) THEN
+            RAISE EXCEPTION 'unbound SkillAuthoringValidation may fail only after its final database claim expires';
+        END IF;
+        NEW."completed_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'running' AND NEW."state" IN ('succeeded', 'failed') THEN
+        IF NEW."started_at" IS DISTINCT FROM OLD."started_at" OR NOT EXISTS (
+            SELECT 1 FROM "skill_authoring_validation_workload_claims" claim
+             WHERE claim."validation_id" = NEW."id" AND claim."workload_uid" IS NOT NULL
+               AND (NEW."state" = 'failed' OR claim."first_pod_uid" IS NOT NULL)
+        ) THEN
+            RAISE EXCEPTION 'terminal SkillAuthoringValidation preserves its claimed worker identity';
+        END IF;
+        IF NEW."state" = 'succeeded' AND (NEW."failure_code" IS NOT NULL OR NOT EXISTS (
+            SELECT 1 FROM "skill_authoring_validation_completion_inbox" inbox
+             WHERE inbox."validation_id" = NEW."id" AND inbox."outcome" = 'succeeded'
+        )) THEN
+            RAISE EXCEPTION 'successful SkillAuthoringValidation requires its saved successful completion';
+        END IF;
+        IF NEW."state" = 'failed' AND (NEW."failure_code" IS NULL
+            OR (NEW."failure_code" IN ('claim_expired_without_worker', 'job_missing_without_completion', 'job_terminal_without_completion') AND EXISTS (
+                SELECT 1 FROM "skill_authoring_validation_completion_inbox" inbox WHERE inbox."validation_id" = NEW."id"
+            ))
+            OR (NEW."failure_code" = 'claim_expired_without_worker' AND NOT EXISTS (
+                SELECT 1 FROM "skill_authoring_validation_workload_claims" claim
+                 WHERE claim."validation_id" = NEW."id" AND claim."workload_uid" IS NOT NULL
+                   AND claim."expires_at" <= date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3)
+            ))
+            OR (NEW."failure_code" NOT IN ('claim_expired_without_worker', 'job_missing_without_completion', 'job_terminal_without_completion') AND NOT EXISTS (
+                SELECT 1 FROM "skill_authoring_validation_completion_inbox" inbox
+                 WHERE inbox."validation_id" = NEW."id" AND inbox."outcome" = 'failed' AND inbox."failure_code" = NEW."failure_code"
+            ))) THEN
+            RAISE EXCEPTION 'failed SkillAuthoringValidation requires its saved failure completion';
+        END IF;
+        NEW."completed_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" IN ('pending', 'running') AND NEW."state" = 'cancelled' THEN
+        IF NEW."task_id" IS NULL OR NEW."failure_code" IS NOT NULL THEN
+            RAISE EXCEPTION 'cancelled SkillAuthoringValidation preserves its admitted identity without failure evidence';
+        END IF;
+        NEW."completed_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" IN ('succeeded', 'failed', 'cancelled') AND (NEW."state" IS DISTINCT FROM OLD."state" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code") THEN
+        RAISE EXCEPTION 'terminal SkillAuthoringValidation state is immutable';
     END IF;
     RETURN NEW;
 END;
 $$;
-CREATE FUNCTION "enforce_skill_workload_bootstrap"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE workload_kind "SkillWorkloadKind"; workload_state "SkillWorkloadState"; assigned_uid TEXT; assigned_pod_uid TEXT;
+CREATE FUNCTION "enforce_skill_authoring_validation_workload_claim"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE validation_state "SkillAuthoringValidationState"; validation_task_id TEXT;
         transition_time TIMESTAMP(3) := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
 BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkloadBootstrap rows cannot be deleted'; END IF;
-    IF TG_OP = 'INSERT' AND (NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL) THEN RAISE EXCEPTION 'a new SkillWorkloadBootstrap must begin unconsumed'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."consumed_at" IS NULL AND NEW."consumed_at" IS NOT NULL THEN NEW."consumed_at" := transition_time; END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."skill_workload_id" IS DISTINCT FROM OLD."skill_workload_id" OR NEW."reference_hash" IS DISTINCT FROM OLD."reference_hash" OR NEW."audience" IS DISTINCT FROM OLD."audience" OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name" OR NEW."namespace" IS DISTINCT FROM OLD."namespace" OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'SkillWorkloadBootstrap identity is immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."consumed_at" IS NOT NULL AND (NEW."consumed_at" IS DISTINCT FROM OLD."consumed_at" OR NEW."consumed_by_pod_uid" IS DISTINCT FROM OLD."consumed_by_pod_uid") THEN RAISE EXCEPTION 'consumed SkillWorkloadBootstrap is terminal'; END IF;
-    IF TG_OP = 'UPDATE' AND (OLD."consumed_at" IS NOT NULL OR NEW."consumed_at" IS NULL OR NEW."consumed_by_pod_uid" IS NULL) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap may be consumed exactly once'; END IF;
-    IF NEW."reference_hash" !~ '^sha256:[a-f0-9]{64}$' OR NEW."expires_at" <= NEW."created_at" OR (NEW."consumed_at" IS NULL) <> (NEW."consumed_by_pod_uid" IS NULL) OR (NEW."consumed_at" IS NOT NULL AND (NEW."consumed_at" < NEW."created_at" OR btrim(NEW."consumed_by_pod_uid") = '')) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap requires hashed reference, positive expiry, and paired consumption evidence'; END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."consumed_at" > transition_time OR NEW."consumed_at" >= OLD."expires_at" OR transition_time >= OLD."expires_at") THEN RAISE EXCEPTION 'SkillWorkloadBootstrap must be consumed at a current time before expiry'; END IF;
-    SELECT "kind", "state", "workload_uid", "worker_pod_uid" INTO workload_kind, workload_state, assigned_uid, assigned_pod_uid FROM "skill_workloads" WHERE "id" = NEW."skill_workload_id" FOR UPDATE;
-    IF workload_state IS DISTINCT FROM 'assigned' OR assigned_uid IS DISTINCT FROM NEW."workload_uid" THEN RAISE EXCEPTION 'SkillWorkloadBootstrap requires its exact assigned workload UID'; END IF;
-    IF TG_OP = 'UPDATE' AND assigned_pod_uid IS DISTINCT FROM NEW."consumed_by_pod_uid" THEN RAISE EXCEPTION 'bootstrap consumer Pod is not the registered workload Pod'; END IF;
-    IF NEW."namespace" !~ '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$' OR length(NEW."namespace") > 63 OR (workload_kind = 'authoring' AND (NEW."audience" <> 'opencrane-skill-authoring' OR NEW."service_account_name" <> 'skill-authoring-default')) OR (workload_kind = 'tool_runner' AND (NEW."audience" <> 'opencrane-tool-runner' OR NEW."service_account_name" <> 'tool-runner-default')) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap identity must match its workload class'; END IF;
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim rows cannot be deleted'; END IF;
+    SELECT "state", "task_id" INTO validation_state, validation_task_id
+      FROM "skill_authoring_validations" WHERE "id" = NEW."validation_id" FOR UPDATE;
+    IF NOT FOUND OR NEW."workload_class" <> 'skill_authoring_validation' OR NEW."profile_name" <> 'authoring'
+        OR NEW."idempotency_key" !~ '^workflows:skill-authoring-validation-workload:[a-f0-9]{64}$'
+        OR btrim(NEW."execution_reference") = '' OR length(NEW."execution_reference") > 200 THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim requires its fixed authoring executor identity';
+    END IF;
+    IF (NEW."claimed_at" IS NULL) <> (NEW."expires_at" IS NULL) OR NEW."delivery_count" < 0 THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim requires paired lease facts and a non-negative delivery count';
+    END IF;
+    IF NEW."workload_uid" IS NOT NULL AND btrim(NEW."workload_uid") = '' THEN RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim workload identity cannot be blank'; END IF;
+    IF NEW."first_pod_uid" IS NOT NULL AND (NEW."workload_uid" IS NULL OR btrim(NEW."first_pod_uid") = '') THEN RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim Pod identity requires its workload'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF validation_state <> 'pending' OR validation_task_id IS NULL OR NEW."claimed_at" IS NOT NULL OR NEW."delivery_count" <> 0
+            OR NEW."workload_uid" IS NOT NULL OR NEW."first_pod_uid" IS NOT NULL THEN
+            RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim must begin unclaimed after task admission';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."validation_id" IS DISTINCT FROM OLD."validation_id" OR NEW."workload_class" IS DISTINCT FROM OLD."workload_class"
+        OR NEW."profile_name" IS DISTINCT FROM OLD."profile_name" OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
+        OR NEW."execution_reference" IS DISTINCT FROM OLD."execution_reference" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim identity is immutable';
+    END IF;
+    IF OLD."workload_uid" IS NOT NULL AND NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim workload identity is immutable';
+    END IF;
+    IF OLD."first_pod_uid" IS NOT NULL AND NEW."first_pod_uid" IS DISTINCT FROM OLD."first_pod_uid" THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim first Pod identity is immutable';
+    END IF;
+    IF OLD."workload_uid" IS NULL AND NEW."claimed_at" IS NOT DISTINCT FROM OLD."claimed_at" AND NEW."expires_at" IS NOT DISTINCT FROM OLD."expires_at"
+        AND NEW."delivery_count" = OLD."delivery_count" AND NEW."workload_uid" IS NOT DISTINCT FROM OLD."workload_uid"
+        AND NEW."first_pod_uid" IS NOT DISTINCT FROM OLD."first_pod_uid"
+        AND (OLD."claimed_at" IS NULL OR transition_time >= OLD."expires_at") THEN
+        IF validation_state <> 'pending' THEN
+            RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim initial lease requires a pending validation';
+        END IF;
+        NEW."claimed_at" := transition_time;
+        NEW."expires_at" := transition_time + interval '5 minutes';
+        NEW."delivery_count" := OLD."delivery_count" + 1;
+        RETURN NEW;
+    END IF;
+    IF OLD."workload_uid" IS NULL AND NEW."workload_uid" IS NOT NULL THEN
+        IF validation_state <> 'pending' OR validation_task_id IS NULL OR OLD."claimed_at" IS NULL OR OLD."expires_at" IS NULL
+            OR transition_time >= OLD."expires_at" OR NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at"
+            OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."delivery_count" <> OLD."delivery_count" THEN
+            RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim workload binding requires its current pending lease';
+        END IF;
+    ELSIF OLD."first_pod_uid" IS NULL AND NEW."first_pod_uid" IS NOT NULL THEN
+        IF validation_state <> 'running' OR OLD."workload_uid" IS NULL OR transition_time >= OLD."expires_at"
+            OR NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at"
+            OR NEW."delivery_count" <> OLD."delivery_count" THEN
+            RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim Pod binding requires its current running lease';
+        END IF;
+    ELSIF NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at"
+        OR NEW."delivery_count" IS DISTINCT FROM OLD."delivery_count" THEN
+        IF OLD."workload_uid" IS NOT NULL OR NEW."first_pod_uid" IS NOT NULL OR NEW."claimed_at" IS NULL OR NEW."expires_at" IS NULL OR NEW."expires_at" <= NEW."claimed_at"
+            OR NEW."delivery_count" <> OLD."delivery_count" + 1
+            OR (OLD."expires_at" IS NOT NULL AND transition_time < OLD."expires_at")
+            OR (OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" <= OLD."claimed_at")
+            OR validation_state <> 'pending' THEN
+            RAISE EXCEPTION 'SkillAuthoringValidationWorkloadClaim lease generation must advance after expiry';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_skill_authoring_validation_bootstrap"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE validation_pod_uid TEXT; validation_state "SkillAuthoringValidationState";
+        transition_time TIMESTAMP(3) := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillAuthoringValidationBootstrap rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' AND (NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL) THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationBootstrap must begin unconsumed';
+    END IF;
+    IF NEW."reference_hash" !~ '^sha256:[a-f0-9]{64}$'
+        OR (NEW."consumed_at" IS NULL) <> (NEW."consumed_by_pod_uid" IS NULL)
+        OR NEW."namespace" !~ '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$' OR length(NEW."namespace") > 63
+        OR NEW."service_account" <> 'skill-authoring-default' THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationBootstrap has invalid one-use worker identity';
+    END IF;
+    SELECT claim."first_pod_uid", validation."state" INTO validation_pod_uid, validation_state
+      FROM "skill_authoring_validations" validation
+      JOIN "skill_authoring_validation_workload_claims" claim ON claim."validation_id" = validation."id"
+     WHERE validation."id" = NEW."validation_id" FOR UPDATE OF validation, claim;
+    IF validation_state IS DISTINCT FROM 'running' THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationBootstrap requires its running validation claim';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        NEW."expires_at" := transition_time + interval '5 minutes';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."consumed_at" IS NULL AND validation_pod_uid IS NULL
+        AND NEW."validation_id" IS NOT DISTINCT FROM OLD."validation_id" AND NEW."reference_hash" IS NOT DISTINCT FROM OLD."reference_hash"
+        AND NEW."namespace" IS NOT DISTINCT FROM OLD."namespace" AND NEW."service_account" IS NOT DISTINCT FROM OLD."service_account"
+        AND NEW."expires_at" IS NOT DISTINCT FROM OLD."expires_at" THEN
+        IF transition_time >= OLD."expires_at" THEN
+            NEW."expires_at" := transition_time + interval '5 minutes';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF TG_OP = 'UPDATE' AND (NEW."validation_id" IS DISTINCT FROM OLD."validation_id" OR NEW."reference_hash" IS DISTINCT FROM OLD."reference_hash"
+        OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
+        OR NEW."service_account" IS DISTINCT FROM OLD."service_account" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationBootstrap identity is immutable';
+    END IF;
+    IF TG_OP = 'UPDATE' AND (OLD."consumed_at" IS NOT NULL OR NEW."consumed_at" IS NULL OR NEW."consumed_by_pod_uid" IS NULL
+        OR validation_pod_uid IS DISTINCT FROM NEW."consumed_by_pod_uid" OR transition_time >= OLD."expires_at") THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationBootstrap may be consumed once by its registered Pod before expiry';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."consumed_at" IS NULL AND NEW."consumed_at" IS NOT NULL THEN
+        NEW."consumed_at" := transition_time;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_skill_authoring_validation_completion"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE validation_state "SkillAuthoringValidationState"; validation_pod_uid TEXT;
+BEGIN
+    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'SkillAuthoringValidationCompletionInbox rows are immutable'; END IF;
+    SELECT validation."state", claim."first_pod_uid" INTO validation_state, validation_pod_uid
+      FROM "skill_authoring_validations" validation
+      JOIN "skill_authoring_validation_workload_claims" claim ON claim."validation_id" = validation."id"
+     WHERE validation."id" = NEW."validation_id" FOR UPDATE OF validation, claim;
+    IF validation_state IS DISTINCT FROM 'running' OR validation_pod_uid IS NULL OR NEW."completion_digest" !~ '^sha256:[a-f0-9]{64}$'
+        OR NOT EXISTS (
+            SELECT 1 FROM "skill_authoring_validation_bootstraps" bootstrap
+             WHERE bootstrap."validation_id" = NEW."validation_id" AND bootstrap."consumed_at" IS NOT NULL
+               AND bootstrap."consumed_by_pod_uid" = validation_pod_uid
+        ) THEN
+        RAISE EXCEPTION 'SkillAuthoringValidationCompletionInbox requires a running validation and digest';
+    END IF;
+    IF NEW."outcome" = 'succeeded' AND (NEW."failure_code" IS NOT NULL OR jsonb_typeof(NEW."test_report") <> 'object' OR jsonb_typeof(NEW."scan_result") <> 'object') THEN
+        RAISE EXCEPTION 'successful SkillAuthoringValidationCompletionInbox requires reports only';
+    END IF;
+    IF NEW."outcome" = 'failed' AND (NEW."test_report" IS NOT NULL OR NEW."scan_result" IS NOT NULL OR NEW."failure_code" !~ '^[a-z][a-z0-9_]{0,63}$') THEN
+        RAISE EXCEPTION 'failed SkillAuthoringValidationCompletionInbox requires a bounded failure code only';
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -5813,19 +6883,6 @@ BEGIN
         RAISE EXCEPTION 'reconciliation claim requires the exact unclaimed revision and next fence';
     END IF;
     RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "cancel_ineligible_skill_workloads"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_TABLE_NAME = 'skill_revisions' AND NEW."state" <> OLD."state" THEN
-        UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
-          WHERE "state" IN ('pending', 'assigned') AND "skill_revision_id"=NEW."id"
-            AND (("kind"='authoring' AND NEW."state" <> 'draft') OR ("kind"='tool_runner' AND NEW."state" <> 'published'));
-    ELSIF TG_TABLE_NAME = 'tool_invocations' AND NEW."state" <> OLD."state" AND NEW."state" IN ('succeeded', 'failed', 'recovery_required') THEN
-        UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
-          WHERE "state" IN ('pending', 'assigned') AND "kind"='tool_runner' AND "tool_invocation_id"=NEW."id";
-    END IF;
-    RETURN NULL;
 END;
 $$;
 CREATE FUNCTION "enforce_skill_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -5954,89 +7011,6 @@ BEGIN
     RETURN NEW;
 END;
 $$;
-CREATE FUNCTION "has_reviewed_tool_definitions"(JSONB) RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
-  SELECT CASE WHEN jsonb_typeof($1) IS DISTINCT FROM 'array' THEN FALSE ELSE COALESCE(
-    jsonb_array_length($1) > 0
-    AND NOT EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements($1) AS tool("value")
-      WHERE jsonb_typeof(tool."value") IS DISTINCT FROM 'object'
-        OR jsonb_typeof(tool."value"->'name') IS DISTINCT FROM 'string'
-        OR btrim(tool."value"->>'name') = ''
-        OR position(':' in tool."value"->>'name') > 0
-        OR jsonb_typeof(tool."value"->'description') IS DISTINCT FROM 'string'
-        OR btrim(tool."value"->>'description') = ''
-        OR jsonb_typeof(tool."value"->'parametersSchema') IS DISTINCT FROM 'object'
-        OR tool."value"->'parametersSchema'->>'type' IS DISTINCT FROM 'object'
-        OR jsonb_typeof(tool."value"->'parametersSchemaDigest') IS DISTINCT FROM 'string'
-        OR tool."value"->>'parametersSchemaDigest' !~ '^sha256:[0-9a-f]{64}$'
-    )
-    AND jsonb_array_length($1) = (
-      SELECT count(DISTINCT tool."value"->>'name') FROM jsonb_array_elements($1) AS tool("value")
-    ),
-    FALSE
-  ) END;
-$$;
-CREATE FUNCTION "enforce_integration_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    IF NEW."state" <> 'active' THEN RAISE EXCEPTION 'a new Integration must begin Active'; END IF;
-    RETURN NEW;
-  END IF;
-  IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Integration rows cannot be deleted'; END IF;
-  IF OLD."state" = 'retired' THEN RAISE EXCEPTION 'a Retired Integration is closed'; END IF;
-  IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-    OR NEW."obot_catalog_entry_id" IS DISTINCT FROM OLD."obot_catalog_entry_id" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-    RAISE EXCEPTION 'Integration identity is immutable';
-  END IF;
-  IF NEW."state" NOT IN ('active', 'retired') THEN RAISE EXCEPTION 'invalid Integration lifecycle transition'; END IF;
-  RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_integration_custody_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    IF NEW."state" = 'ready' AND NEW."expires_at" <= NEW."created_at" THEN
-      RAISE EXCEPTION 'a Ready custody reference must expire after creation';
-    END IF;
-    RETURN NEW;
-  END IF;
-  IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Integration custody references cannot be deleted'; END IF;
-  IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."integration_id" IS DISTINCT FROM OLD."integration_id"
-    OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."obot_custody_reference" IS DISTINCT FROM OLD."obot_custody_reference"
-    OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-    RAISE EXCEPTION 'Integration custody identity is immutable';
-  END IF;
-  IF OLD."state" <> 'ready' OR NEW."state" NOT IN ('ready', 'revoked', 'expired') THEN
-    RAISE EXCEPTION 'invalid Integration custody lifecycle transition';
-  END IF;
-  IF NEW."state" = 'expired' AND NEW."expires_at" > clock_timestamp() THEN
-    RAISE EXCEPTION 'a custody reference expires only after its expiry instant';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_agent_revision_integration_assignment_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE agent_silo_id TEXT; integration_state "IntegrationState"; custody_state "IntegrationCustodyState"; custody_expiry TIMESTAMP(3); custody_revoked_at TIMESTAMP(3);
-BEGIN
-  SELECT service."silo_id" INTO agent_silo_id
-    FROM "agent_revisions" revision JOIN "agent_services" service ON service."id" = revision."agent_service_id"
-    WHERE revision."id" = NEW."agent_revision_id" FOR UPDATE OF revision, service;
-  SELECT integration."state" INTO integration_state FROM "integrations" integration
-    WHERE integration."id" = NEW."integration_id" AND integration."silo_id" = NEW."silo_id" FOR UPDATE;
-  SELECT custody."state", custody."expires_at", custody."revoked_at"
-    INTO custody_state, custody_expiry, custody_revoked_at FROM "integration_custody_references" custody
-    WHERE custody."id" = NEW."custody_reference_id" AND custody."integration_id" = NEW."integration_id" AND custody."silo_id" = NEW."silo_id" FOR UPDATE;
-  IF agent_silo_id IS DISTINCT FROM NEW."silo_id" OR integration_state IS DISTINCT FROM 'active'::"IntegrationState" THEN
-    RAISE EXCEPTION 'AgentRevision may assign only an Active Integration from the same silo';
-  END IF;
-  IF custody_state IS DISTINCT FROM 'ready'::"IntegrationCustodyState" OR custody_revoked_at IS NOT NULL OR custody_expiry <= clock_timestamp() THEN
-    RAISE EXCEPTION 'AgentRevision may assign only a ready unexpired Integration custody reference';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
 -- Check constraints
 ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_nonempty_check" CHECK (
         btrim("silo_id") <> '' AND btrim("name") <> '' AND btrim("workload_profile") <> ''
@@ -6132,12 +7106,14 @@ ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_posi
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_attempt_check" CHECK ("attempt" > 0);
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_nonempty_check" CHECK (
         btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("silo_id") <> '' AND
-        btrim("subject_id") <> '' AND "audience" = 'opencrane-agent-runtime' AND btrim("service_account_name") <> '' AND
+        btrim("subject_id") <> '' AND "audience" IN ('opencrane-agent-runtime', 'opencrane-managed-agent-runtime') AND btrim("service_account_name") <> '' AND
         btrim("namespace") <> '' AND btrim("workload_uid") <> '' AND btrim("workload_profile") <> ''
     );
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_expiry_check" CHECK ("expires_at" > "created_at");
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_state_check" CHECK (
-        ("state" = 'pending_pod' AND "pod_uid" IS NULL AND "registered_at" IS NULL AND "revoked_at" IS NULL) OR
+        ("state" = 'pending_pod' AND "registered_at" IS NULL AND "revoked_at" IS NULL AND
+            (("workload_kind" = 'job' AND "pod_uid" IS NULL) OR
+             ("workload_kind" = 'deployment' AND "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '' AND "pod_uid" = "workload_uid"))) OR
         ("state" = 'registered' AND "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '' AND "registered_at" IS NOT NULL AND "revoked_at" IS NULL) OR
         ("state" = 'revoked' AND "revoked_at" IS NOT NULL)
     );
@@ -6150,16 +7126,6 @@ ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_consumptio
     );
 ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_nonempty_check" CHECK (btrim("workload_uid") <> '' AND btrim("pod_uid") <> '' AND "key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$');
 ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_expiry_check" CHECK ("expires_at" > "created_at");
-ALTER TABLE "run_outbox_events" ADD CONSTRAINT "run_outbox_events_coordinate_check" CHECK ("attempt" > 0 AND "sequence" > 0);
-ALTER TABLE "run_outbox_events" ADD CONSTRAINT "run_outbox_events_delivery_check" CHECK (
-        "delivery_count" >= 0 AND NOT ("published_at" IS NOT NULL AND "failed_at" IS NOT NULL) AND
-        (("claimed_at" IS NULL AND "delivery_count" = 0 AND "published_at" IS NULL AND "failed_at" IS NULL) OR
-         ("claimed_at" IS NOT NULL AND "delivery_count" > 0)) AND
-        ("published_at" IS NULL OR "published_at" >= "claimed_at") AND
-        ("failed_at" IS NULL OR "failed_at" >= "claimed_at") AND
-        (("failed_at" IS NULL AND "failure_code" IS NULL) OR
-         ("failed_at" IS NOT NULL AND "failure_code" IS NOT NULL AND btrim("failure_code") <> ''))
-    );
 ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check" CHECK (
 		btrim("silo_id") <> '' AND
 		(("subject_kind" = 'group' AND "subject_group_id" IS NOT NULL AND "subject_principal_id" IS NULL) OR
@@ -6216,8 +7182,11 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check
 		("state" = 'cancelled' AND "decided_at" IS NOT NULL AND "decided_by" IS NULL AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL)
     );
 ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_identity_check" CHECK (
-        btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("run_id") <> '' AND "attempt" > 0 AND
-        btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("subject_id") <> '' AND
+        btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND
+        (("mcp_task_id" IS NULL AND btrim("run_id") <> '' AND "attempt" > 0 AND
+          btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '') OR
+         (btrim("mcp_task_id") <> '' AND "run_id" IS NULL AND "attempt" IS NULL AND
+          "agent_service_id" IS NULL AND "agent_revision_id" IS NULL AND NOT "approval_required")) AND
         btrim("runtime_instance_id") <> '' AND btrim("command_id") <> '' AND btrim("candidate_id") <> '' AND
         btrim("tool_revision_id") <> '' AND btrim("tool_invocation_id") <> '' AND
         jsonb_typeof("arguments") = 'object' AND "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND
@@ -6514,7 +7483,11 @@ ALTER TABLE "artifact_revisions" ADD CONSTRAINT "artifact_revisions_index_check"
         ("index_state" <> 'indexed')
     );
 ALTER TABLE "artifact_preprocess_jobs" ADD CONSTRAINT "artifact_preprocess_jobs_identity_check" CHECK (
-        btrim("source_revision_id") <> '' AND btrim("pipeline_version") <> '' AND "attempt" >= 0
+        btrim("source_revision_id") <> '' AND btrim("pipeline_version") <> '' AND btrim("task_key") <> '' AND "delivery_count" >= 0
+        AND ("task_id" IS NULL OR btrim("task_id") <> '') AND ("task_name" IS NULL OR btrim("task_name") <> '')
+        AND ("profile_name" IS NULL OR btrim("profile_name") <> '') AND ("workload_uid" IS NULL OR btrim("workload_uid") <> '')
+        AND ("first_pod_uid" IS NULL OR btrim("first_pod_uid") <> '') AND ("bootstrap_reference_hash" IS NULL OR "bootstrap_reference_hash" ~ '^sha256:[0-9a-f]{64}$')
+        AND ("bootstrap_namespace" IS NULL OR btrim("bootstrap_namespace") <> '') AND ("completion_digest" IS NULL OR "completion_digest" ~ '^sha256:[0-9a-f]{64}$')
         AND ("claim_fence" IS NULL OR btrim("claim_fence") <> '')
         AND ("failure_code" IS NULL OR (btrim("failure_code") <> '' AND length("failure_code") <= 200))
     );
@@ -6536,7 +7509,6 @@ ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_review_check" CHEC
          AND "test_report" @> '{"passed":true}'::jsonb AND "scan_result" @> '{"passed":true}'::jsonb
          AND "signature" IS NOT NULL AND btrim("signature") <> '' AND "signer_key_id" IS NOT NULL AND btrim("signer_key_id") <> '')
     );
-ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_identity_check" CHECK (btrim("silo_id") <> '');
 ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_identity_check" CHECK (
 		btrim("silo_id") <> '' AND btrim("cognee_dataset_id") <> '' AND btrim("created_by") <> '' AND
 		(("boundary_kind" = 'group' AND "boundary_group_id" IS NOT NULL AND "boundary_principal_id" IS NULL) OR
@@ -6567,21 +7539,8 @@ ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_prom
       OR ("state" = 'finalized' AND "promotion_receipt_digest" ~ '^sha256:[0-9a-f]{64}$' AND "promoted_content_address" ~ '^sha256:[0-9a-f]{64}$' AND "promoted_byte_length" >= 0 AND "promoted_at" IS NOT NULL AND "finalized_at" IS NOT NULL)
       OR ("state" IN ('expired', 'cancelled') AND "finalized_at" IS NULL)
     );
-ALTER TABLE "integrations" ADD CONSTRAINT "integrations_identity_nonempty" CHECK (
-    btrim("id") <> '' AND position(':' in "id") = 0 AND btrim("silo_id") <> '' AND btrim("obot_catalog_entry_id") <> '' AND btrim("display_name") <> ''
-  );
-ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody_references_identity_nonempty" CHECK (
-    btrim("integration_id") <> '' AND btrim("silo_id") <> '' AND btrim("obot_custody_reference") <> ''
-  );
-ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody_references_revocation_evidence" CHECK (
-    ("state" = 'revoked' AND "revoked_at" IS NOT NULL) OR ("state" <> 'revoked' AND "revoked_at" IS NULL)
-  );
-ALTER TABLE "agent_revision_integration_assignments" ADD CONSTRAINT "agent_revision_integration_assignments_tool_definitions_check" CHECK ("has_reviewed_tool_definitions"("tool_definitions"));
-
 -- Partial indexes
 CREATE UNIQUE INDEX "memory_fact_catalog_single_successor_key" ON "memory_fact_catalog"("supersedes_fact_id") WHERE "supersedes_fact_id" IS NOT NULL;
-CREATE UNIQUE INDEX "integration_custody_references_one_ready_per_integration"
-  ON "integration_custody_references"("integration_id") WHERE "state" = 'ready' AND "revoked_at" IS NULL;
 
 -- Triggers
 CREATE TRIGGER "agent_revisions_immutable"
@@ -6610,11 +7569,13 @@ CREATE CONSTRAINT TRIGGER "active_agent_revisions_remain_published"
 CREATE TRIGGER "agent_revision_skill_assignments_immutable"
     BEFORE INSERT OR UPDATE OR DELETE ON "agent_revision_skill_assignments"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_assignment_immutability"();
+CREATE TRIGGER "agent_revision_mcp_tool_assignments_immutable"
+    BEFORE INSERT OR UPDATE OR DELETE ON "agent_revision_mcp_tool_assignments"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_assignment_immutability"();
 CREATE TRIGGER "agent_revision_boundary_attachments_immutable"
 	BEFORE INSERT OR UPDATE OR DELETE ON "agent_revision_boundary_attachments"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_assignment_immutability"();
 CREATE TRIGGER "workload_assignments_current_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "workload_assignments" FOR EACH ROW EXECUTE FUNCTION "enforce_current_workload_assignment_attempt"();
-CREATE TRIGGER "run_outbox_events_accepted_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "run_outbox_events" FOR EACH ROW EXECUTE FUNCTION "enforce_accepted_outbox_attempt"();
 CREATE TRIGGER "run_input_snapshots_immutable" BEFORE UPDATE OR DELETE ON "run_input_snapshots" FOR EACH ROW EXECUTE FUNCTION "reject_run_input_snapshot_mutation"();
 CREATE TRIGGER "child_run_reservations_authority" BEFORE INSERT ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_reservation"();
 CREATE TRIGGER "child_run_reservations_immutable" BEFORE UPDATE OR DELETE ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "reject_child_run_reservation_mutation"();
@@ -6631,9 +7592,6 @@ CREATE TRIGGER "workload_bootstraps_single_use" BEFORE INSERT OR UPDATE OR DELET
 CREATE TRIGGER "run_proof_keys_consumed_bootstrap" BEFORE INSERT ON "run_proof_keys" FOR EACH ROW EXECUTE FUNCTION "enforce_run_proof_key_bootstrap"();
 CREATE TRIGGER "workload_assignments_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "workload_assignments" FOR EACH ROW EXECUTE FUNCTION "enforce_workload_assignment_update"();
 CREATE TRIGGER "run_proof_keys_immutable" BEFORE UPDATE OR DELETE ON "run_proof_keys" FOR EACH ROW EXECUTE FUNCTION "enforce_run_proof_key_update"();
-CREATE TRIGGER "run_outbox_events_monotonic"
-    BEFORE UPDATE OR DELETE ON "run_outbox_events"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_run_outbox_event_update"();
 CREATE TRIGGER "runtime_steering_requests_closed_lifecycle"
     BEFORE INSERT OR UPDATE OR DELETE ON "runtime_steering_requests"
     FOR EACH ROW EXECUTE FUNCTION "enforce_runtime_steering_request_lifecycle"();
@@ -6846,10 +7804,10 @@ CREATE TRIGGER "artifact_revision_parents_immutable" BEFORE UPDATE OR DELETE ON 
 CREATE TRIGGER "artifact_revision_parents_same_silo" BEFORE INSERT ON "artifact_revision_parents"
     FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_parent_silo"();
 CREATE TRIGGER "skill_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_revision_lifecycle"();
-CREATE TRIGGER "skill_workloads_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workloads" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_authority"();
-CREATE TRIGGER "skill_workload_bootstraps_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workload_bootstraps" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_bootstrap"();
-CREATE TRIGGER "cancel_ineligible_skill_workloads_on_revision" AFTER UPDATE OF "state" ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "cancel_ineligible_skill_workloads"();
-CREATE TRIGGER "cancel_ineligible_skill_workloads_on_invocation" AFTER UPDATE OF "state" ON "tool_invocations" FOR EACH ROW EXECUTE FUNCTION "cancel_ineligible_skill_workloads"();
+CREATE TRIGGER "skill_authoring_validations_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_authoring_validations" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_authoring_validation"();
+CREATE TRIGGER "skill_authoring_validation_workload_claims_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_authoring_validation_workload_claims" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_authoring_validation_workload_claim"();
+CREATE TRIGGER "skill_authoring_validation_bootstraps_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_authoring_validation_bootstraps" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_authoring_validation_bootstrap"();
+CREATE TRIGGER "skill_authoring_validation_completion_inbox_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_authoring_validation_completion_inbox" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_authoring_validation_completion"();
 CREATE TRIGGER "skills_closed_lifecycle" BEFORE UPDATE OR DELETE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_lifecycle"();
 CREATE TRIGGER "skills_current_revision_published" BEFORE INSERT OR UPDATE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_current_skill_revision"();
 CREATE CONSTRAINT TRIGGER "current_skill_revisions_remain_published" AFTER UPDATE OF "state" ON "skill_revisions" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "protect_current_skill_revision"();
@@ -6864,21 +7822,10 @@ CREATE CONSTRAINT TRIGGER "corrected_memory_facts_require_successor" AFTER INSER
 CREATE TRIGGER "artifact_upload_leases_silo_and_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_upload_leases" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_upload_lease_silo_and_lifecycle"();
 CREATE TRIGGER "artifact_preprocess_jobs_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_preprocess_jobs"
     FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_preprocess_job_lifecycle"();
+CREATE CONSTRAINT TRIGGER "artifact_preprocess_claim_completeness" AFTER INSERT OR UPDATE ON "artifact_preprocess_jobs"
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_preprocess_claim_completeness"();
 CREATE CONSTRAINT TRIGGER "artifact_preprocess_output_lease_finalization" AFTER UPDATE OF "state" ON "artifact_upload_leases"
     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_preprocess_output_lease_finalization"();
-CREATE TRIGGER "integrations_closed_lifecycle"
-  BEFORE INSERT OR UPDATE OR DELETE ON "integrations"
-  FOR EACH ROW EXECUTE FUNCTION "enforce_integration_lifecycle"();
-CREATE TRIGGER "integration_custody_references_closed_lifecycle"
-  BEFORE INSERT OR UPDATE OR DELETE ON "integration_custody_references"
-  FOR EACH ROW EXECUTE FUNCTION "enforce_integration_custody_lifecycle"();
-CREATE TRIGGER "agent_revision_integration_assignments_authority"
-  BEFORE INSERT OR UPDATE ON "agent_revision_integration_assignments"
-  FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_integration_assignment_authority"();
-CREATE TRIGGER "agent_revision_integration_assignments_immutable"
-  BEFORE INSERT OR UPDATE OR DELETE ON "agent_revision_integration_assignments"
-  FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_assignment_immutability"();
-
 -- Run-input snapshot guards
 CREATE FUNCTION enforce_agent_run_input_snapshot_completeness()
 RETURNS TRIGGER
@@ -7344,163 +8291,8 @@ INSERT INTO "user_onboarding_bootstrap_questions" ("content_revision_id", "ordin
     ('bootstrap-analyst-v1', 3, $prompt_analyst_3$What standards or references should I use as authoritative in your field?$prompt_analyst_3$);
 
 -- CreateTable
-CREATE TABLE "artifact_scan_jobs" (
-    "id" TEXT NOT NULL,
-    "artifact_revision_id" TEXT NOT NULL,
-    "state" "ArtifactScanJobState" NOT NULL DEFAULT 'pending',
-    "attempt" INTEGER NOT NULL DEFAULT 0,
-    "claim_fence" TEXT,
-    "claim_expires_at" TIMESTAMP(3),
-    "next_attempt_at" TIMESTAMP(3),
-    "failure_code" TEXT,
-    "scanner_version" TEXT,
-    "completed_at" TIMESTAMP(3),
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-    CONSTRAINT "artifact_scan_jobs_pkey" PRIMARY KEY ("id")
-);
-
-CREATE TABLE "conversation_asset_output_tickets" (
-    "id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "conversation_id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "run_attempt" INTEGER NOT NULL,
-    "run_event_sequence" INTEGER NOT NULL,
-    "output_message_id" TEXT NOT NULL,
-    "idempotency_key" TEXT NOT NULL,
-    "finalized_content_address" TEXT,
-    "finalized_receipt_digest" TEXT,
-    "finalized_at" TIMESTAMP(3),
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "conversation_asset_output_tickets_pkey" PRIMARY KEY ("id")
-);
-
-CREATE TABLE "conversation_assets" (
-    "id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "conversation_id" TEXT NOT NULL,
-    "message_id" TEXT,
-    "run_id" TEXT,
-    "run_attempt" INTEGER,
-    "run_event_sequence" INTEGER,
-    "run_message_id" TEXT,
-    "artifact_id" TEXT,
-    "revision_id" TEXT,
-    "upload_lease_id" TEXT,
-    "output_ticket_id" TEXT,
-    "idempotency_key" TEXT NOT NULL,
-    "provenance" "ConversationAssetProvenance" NOT NULL,
-    "state" "ConversationAssetState" NOT NULL,
-    "display_name" TEXT NOT NULL,
-    "media_type" TEXT NOT NULL,
-    "byte_length" BIGINT,
-    "failure_code" TEXT,
-    "created_by_user_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-    "removed_at" TIMESTAMP(3),
-    CONSTRAINT "conversation_assets_pkey" PRIMARY KEY ("id")
-);
-
 -- One immutable ordinary group-message mention owns one child Agent-session conversation.
-CREATE TABLE "conversation_agent_threads" (
-    "child_conversation_id" TEXT NOT NULL,
-    "parent_conversation_id" TEXT NOT NULL,
-    "root_conversation_id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "parent_message_id" TEXT NOT NULL,
-    "initiator_user_id" TEXT NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "persona_profile_id" TEXT NOT NULL,
-    "persona_revision_id" TEXT NOT NULL,
-    "first_run_id" TEXT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "conversation_agent_threads_pkey" PRIMARY KEY ("child_conversation_id")
-);
-
 -- Display-safe, append-only communication from a child Agent session to its immediate parent group.
-CREATE TABLE "agent_thread_parent_deliveries" (
-    "id" TEXT NOT NULL,
-    "child_conversation_id" TEXT NOT NULL,
-    "parent_conversation_id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "kind" "AgentThreadDeliveryKind" NOT NULL,
-    "idempotency_key" TEXT NOT NULL,
-    "label" TEXT NOT NULL,
-    "detail" TEXT NOT NULL,
-    "asset_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "agent_thread_parent_deliveries_pkey" PRIMARY KEY ("id")
-);
-
-CREATE UNIQUE INDEX "artifact_scan_jobs_artifact_revision_id_key" ON "artifact_scan_jobs"("artifact_revision_id");
-CREATE INDEX "artifact_scan_jobs_state_next_attempt_at_claim_expires_at_idx" ON "artifact_scan_jobs"("state", "next_attempt_at", "claim_expires_at");
-CREATE UNIQUE INDEX "conversation_asset_output_tickets_run_id_run_attempt_idempo_key" ON "conversation_asset_output_tickets"("run_id", "run_attempt", "idempotency_key");
-CREATE UNIQUE INDEX "conversation_asset_output_tickets_exact_asset_key" ON "conversation_asset_output_tickets"("id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "output_message_id");
-CREATE UNIQUE INDEX "conversation_asset_output_tickets_finalized_receipt_digest_key" ON "conversation_asset_output_tickets"("finalized_receipt_digest");
-CREATE INDEX "conversation_asset_output_tickets_conversation_id_created_a_idx" ON "conversation_asset_output_tickets"("conversation_id", "created_at");
-CREATE UNIQUE INDEX "conversation_assets_upload_lease_id_key" ON "conversation_assets"("upload_lease_id");
-CREATE UNIQUE INDEX "conversation_assets_output_ticket_id_key" ON "conversation_assets"("output_ticket_id");
-CREATE UNIQUE INDEX "conversation_assets_exact_output_ticket_key" ON "conversation_assets"("output_ticket_id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "run_message_id");
-CREATE UNIQUE INDEX "conversation_assets_conversation_id_id_key" ON "conversation_assets"("conversation_id", "id");
-CREATE UNIQUE INDEX "conversation_assets_participant_idempotency_key" ON "conversation_assets"("conversation_id", "created_by_user_id", "idempotency_key");
-CREATE INDEX "conversation_assets_conversation_id_state_created_at_idx" ON "conversation_assets"("conversation_id", "state", "created_at");
-CREATE INDEX "conversation_assets_message_id_idx" ON "conversation_assets"("message_id");
-CREATE INDEX "conversation_assets_run_id_run_attempt_idx" ON "conversation_assets"("run_id", "run_attempt");
-CREATE INDEX "conversation_assets_artifact_id_revision_id_idx" ON "conversation_assets"("artifact_id", "revision_id");
-CREATE UNIQUE INDEX "conversation_agent_threads_first_run_id_key" ON "conversation_agent_threads"("first_run_id");
-CREATE INDEX "conversation_agent_threads_root_conversation_id_created_at_idx" ON "conversation_agent_threads"("root_conversation_id", "created_at");
-CREATE INDEX "conversation_agent_threads_initiator_user_id_created_at_idx" ON "conversation_agent_threads"("initiator_user_id", "created_at");
-CREATE UNIQUE INDEX "conversation_agent_threads_parent_conversation_id_parent_me_key" ON "conversation_agent_threads"("parent_conversation_id", "parent_message_id");
-CREATE UNIQUE INDEX "conversation_agent_threads_child_authority_key" ON "conversation_agent_threads"("child_conversation_id", "silo_id", "agent_service_id");
-CREATE UNIQUE INDEX "conversation_agent_threads_first_run_authority_key" ON "conversation_agent_threads"("first_run_id", "child_conversation_id", "silo_id", "agent_service_id");
-CREATE UNIQUE INDEX "conversation_agent_threads_child_parent_key" ON "conversation_agent_threads"("child_conversation_id", "parent_conversation_id");
-CREATE INDEX "agent_thread_parent_deliveries_parent_conversation_id_creat_idx" ON "agent_thread_parent_deliveries"("parent_conversation_id", "created_at");
-CREATE INDEX "agent_thread_parent_deliveries_run_id_created_at_idx" ON "agent_thread_parent_deliveries"("run_id", "created_at");
-CREATE UNIQUE INDEX "agent_thread_parent_deliveries_child_conversation_id_idempo_key" ON "agent_thread_parent_deliveries"("child_conversation_id", "idempotency_key");
-CREATE UNIQUE INDEX "conversation_timeline_entries_parent_delivery_agent_thread__key" ON "conversation_timeline_entries"("parent_delivery_agent_thread_id");
-CREATE UNIQUE INDEX "agent_runs_thread_authority_key" ON "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id");
-
-ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_artifact_revision_id_fkey" FOREIGN KEY ("artifact_revision_id") REFERENCES "artifact_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "groups" ADD CONSTRAINT "groups_parent_id_silo_id_fkey" FOREIGN KEY ("parent_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "group_memberships" ADD CONSTRAINT "group_memberships_group_id_silo_id_fkey" FOREIGN KEY ("group_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "group_memberships" ADD CONSTRAINT "group_memberships_principal_id_silo_id_fkey" FOREIGN KEY ("principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "resource_shares" ADD CONSTRAINT "resource_shares_owner_principal_id_silo_id_fkey" FOREIGN KEY ("owner_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "resource_share_recipients" ADD CONSTRAINT "resource_share_recipients_resource_share_id_silo_id_fkey" FOREIGN KEY ("resource_share_id", "silo_id") REFERENCES "resource_shares"("id", "silo_id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "resource_share_recipients" ADD CONSTRAINT "resource_share_recipients_principal_id_silo_id_fkey" FOREIGN KEY ("principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "resource_share_recipients" ADD CONSTRAINT "resource_share_recipients_granted_by_principal_id_silo_id_fkey" FOREIGN KEY ("granted_by_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "resource_share_recipients" ADD CONSTRAINT "resource_share_recipients_grant_id_fkey" FOREIGN KEY ("grant_id") REFERENCES "authorization_grants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_run_id_run_attempt_fkey" FOREIGN KEY ("run_id", "run_attempt") REFERENCES "workload_assignments"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_run_event_sequence_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_message_id_fkey" FOREIGN KEY ("conversation_id", "message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_run_event_sequence_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_id_silo_id_fkey" FOREIGN KEY ("artifact_id", "silo_id") REFERENCES "artifacts"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_id_revision_id_fkey" FOREIGN KEY ("artifact_id", "revision_id") REFERENCES "artifact_revisions"("artifact_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_upload_lease_id_fkey" FOREIGN KEY ("upload_lease_id") REFERENCES "artifact_upload_leases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_exact_output_ticket_fkey" FOREIGN KEY ("output_ticket_id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "run_message_id") REFERENCES "conversation_asset_output_tickets"("id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "output_message_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_parent_delivery_agent_thread_fkey" FOREIGN KEY ("parent_delivery_agent_thread_id") REFERENCES "agent_thread_parent_deliveries"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_child_conversation_id_silo_id_a_fkey" FOREIGN KEY ("child_conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_parent_conversation_id_silo_id_fkey" FOREIGN KEY ("parent_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_root_conversation_id_silo_id_fkey" FOREIGN KEY ("root_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_parent_conversation_id_parent_m_fkey" FOREIGN KEY ("parent_conversation_id", "parent_message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_parent_conversation_id_initiato_fkey" FOREIGN KEY ("parent_conversation_id", "initiator_user_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_first_run_id_child_conversation_fkey" FOREIGN KEY ("first_run_id", "child_conversation_id", "silo_id", "agent_service_id") REFERENCES "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_persona_profile_id_initiator_us_fkey" FOREIGN KEY ("persona_profile_id", "initiator_user_id") REFERENCES "persona_profiles"("id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_persona_profile_id_persona_revi_fkey" FOREIGN KEY ("persona_profile_id", "persona_revision_id") REFERENCES "persona_revisions"("persona_profile_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_deliveries_thread_fkey" FOREIGN KEY ("child_conversation_id", "parent_conversation_id") REFERENCES "conversation_agent_threads"("child_conversation_id", "parent_conversation_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_deliveries_child_fkey" FOREIGN KEY ("child_conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_parent_conversation_id_silo_fkey" FOREIGN KEY ("parent_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_run_id_child_conversation_i_fkey" FOREIGN KEY ("run_id", "child_conversation_id", "silo_id", "agent_service_id") REFERENCES "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_parent_conversation_id_asse_fkey" FOREIGN KEY ("parent_conversation_id", "asset_id") REFERENCES "conversation_assets"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
 ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_state_check" CHECK (
     ("state" IN ('pending', 'retryable_failed') AND "claim_fence" IS NULL AND "claim_expires_at" IS NULL AND "completed_at" IS NULL)
     OR ("state" = 'claimed' AND "claim_fence" IS NOT NULL AND "claim_expires_at" IS NOT NULL AND "completed_at" IS NULL)
@@ -10991,3 +11783,6 @@ END;
 $$;
 
 SELECT absurd.create_queue('control-plane');
+SELECT absurd.create_queue('artifact-preprocessing');
+SELECT absurd.create_queue('skill-authoring');
+SELECT absurd.create_queue('agent-runs');

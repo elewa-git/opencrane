@@ -38,6 +38,8 @@ def development_open_stream(
     token: str,
     runtime_instance_id: str,
     pod_uid: str,
+    *,
+    attempt_model_key: str,
 ) -> int:
     """Open the authority stream with handlers selected before command dispatch.
 
@@ -49,6 +51,7 @@ def development_open_stream(
         token: Per-attempt bearer read from its private credential file.
         runtime_instance_id: Runtime instance coordinate used by the stream protocol.
         pod_uid: Local process identity bound by development token review.
+        attempt_model_key: Attempt-scoped model credential issued by the server after binding.
 
     Returns:
         The exit status returned by the normal stream client.
@@ -58,13 +61,20 @@ def development_open_stream(
     """
     strategy = environment("OPENCRANE_RUNTIME_MODEL_STRATEGY")
     if strategy == _LITELLM_STRATEGY:
-        return open_stream(control_plane_url, token, runtime_instance_id, pod_uid)
+        return open_stream(
+            control_plane_url,
+            token,
+            runtime_instance_id,
+            pod_uid,
+            attempt_model_key=attempt_model_key,
+        )
     if strategy == _SIMULATED_STRATEGY:
         return open_stream(
             control_plane_url,
             token,
             runtime_instance_id,
             pod_uid,
+            attempt_model_key=attempt_model_key,
             handle_start=_simulated_start,
             handle_resume=_simulated_resume,
         )

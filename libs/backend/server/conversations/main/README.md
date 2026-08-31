@@ -81,7 +81,7 @@ transport for workloads; it is not a browser fallback.
 
 - `_CreateSelfConversationsRouter` composes the privacy-safe creation directory, participant-bound list, create, open, message,
   Agent-thread mark-read, failed-run retry, archive, and close API over Prisma and the internal
-  execution ports. Retry accepts only an observed terminal attempt and a fresh idempotency key; all
+  execution ports. Retry accepts only the observed terminal attempt; all
   identity and authority coordinates come from the signed-in route and are rechecked transactionally.
 - `_CreateConversationReplayRepository` composes replay over one `RepeatableRead` transaction so
   access-ending races cannot expose later events.

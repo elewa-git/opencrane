@@ -11,14 +11,13 @@ for contract in \
   kubernetes-api-helm-args-contract.sh \
   initial-model-provider-helm-args-contract.sh \
   tier3-development-auth-contract.sh \
+  runtime-continuation-keyring-secret-contract.sh \
   pooler-deploy-contract.sh \
   server-kubernetes-api-deploy-contract.sh \
   database-migration-deploy-contract.sh \
-  database-superuser-access-contract.sh \
-  database-pg-cron-preflight-contract.sh \
   workflow-engine-qualification-contract.sh \
   server-key-permissions-contract.sh \
-  server-runtime-cleanup-rbac-contract.sh \
+  server-rbac-contract.sh \
   server-network-policy-contract.sh \
   platform-network-policy-contract.sh \
   post-deploy-health-contract.sh \
@@ -27,6 +26,7 @@ for contract in \
   cluster-tenant-crd-policy-contract.sh \
   silo-deploy-profile-contract.sh \
   silo-teardown-contract.sh \
-  skill-workload-contract.sh; do
+  retire-legacy-obot-mcp-server-contract.sh \
+  skill-authoring-contract.sh; do
   bash "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/$contract"
 done

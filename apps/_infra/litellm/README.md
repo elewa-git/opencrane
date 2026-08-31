@@ -64,4 +64,4 @@ no LiteLLM process and reads no provider or model credential.
 - Parent index: [_infra](../README.md)
 - Silo chart that composes it: [deploy-k8s](../deploy-k8s/README.md)
 - Database it uses: [apps/postgres](../../postgres/README.md)
-- Sibling infra: [cognee](../cognee/README.md) · [obot](../obot/README.md)
+- Sibling infra: [cognee](../cognee/README.md)

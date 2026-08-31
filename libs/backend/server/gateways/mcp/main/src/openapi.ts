@@ -268,4 +268,70 @@ export const _McpOpenapiPaths = {
       },
     },
   },
+
+  "/mcp/tasks": {
+    post: {
+      operationId: "submitMcpTask",
+      summary: "Start one durable OCI-backed MCP tool call",
+      tags: ["MCP Tasks"],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { $ref: "#/components/schemas/McpTaskSubmission" } } },
+      },
+      responses: {
+        201: created("MCP task and Absurd workflow receipt saved together.", { $ref: "#/components/schemas/McpTask" }),
+        400: badRequest("MCP task fields are invalid."),
+        401: { description: "Authenticated principal is unavailable.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        409: { description: "The idempotency key conflicts or the selected installed tool is unavailable.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
+  },
+
+  "/mcp/tasks/{id}": {
+    get: {
+      operationId: "getMcpTask",
+      summary: "Read one caller-owned durable MCP task",
+      tags: ["MCP Tasks"],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", minLength: 1, maxLength: 256 } }],
+      responses: {
+        200: ok("Saved MCP task state, result, or failure.", { $ref: "#/components/schemas/McpTask" }),
+        400: badRequest("MCP task identifier is invalid."),
+        401: { description: "Authenticated principal is unavailable.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        404: notFound("MCP task not found."),
+      },
+    },
+    delete: {
+      operationId: "cancelMcpTask",
+      summary: "Cancel one MCP task before provider dispatch starts",
+      tags: ["MCP Tasks"],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", minLength: 1, maxLength: 256 } }],
+      responses: {
+        200: ok("MCP task cancelled before provider dispatch.", { $ref: "#/components/schemas/McpTask" }),
+        400: badRequest("MCP task identifier is invalid."),
+        401: { description: "Authenticated principal is unavailable.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        404: notFound("MCP task not found."),
+        409: { description: "Provider dispatch already started, so cancellation cannot claim success.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
+  },
+
+  "/mcp/tasks/{id}/input": {
+    post: {
+      operationId: "submitMcpTaskInput",
+      summary: "Resume one waiting MCP task with its exact input response",
+      tags: ["MCP Tasks"],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", minLength: 1, maxLength: 256 } }],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { $ref: "#/components/schemas/McpTaskInputResponse" } } },
+      },
+      responses: {
+        200: ok("Input saved and the same durable task resumed.", { $ref: "#/components/schemas/McpTask" }),
+        400: badRequest("MCP task input is invalid."),
+        401: { description: "Authenticated principal is unavailable.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        404: notFound("MCP task not found."),
+        409: { description: "The response does not match the waiting request or conflicts with a saved response.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
+  },
 };

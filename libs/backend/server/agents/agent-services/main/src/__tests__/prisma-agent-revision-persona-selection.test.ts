@@ -24,7 +24,7 @@ function _Source(personaRevisionId = "persona-old")
 		createdAt: new Date("2026-08-17T08:00:00.000Z"),
 		publishedAt: new Date("2026-08-17T08:00:00.000Z"),
 		skillAssignments: [],
-		integrationAssignments: [],
+		mcpToolAssignments: [],
 		boundaryAttachments: [],
 	};
 }

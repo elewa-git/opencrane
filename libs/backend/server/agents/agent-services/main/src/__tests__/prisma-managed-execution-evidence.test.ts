@@ -15,7 +15,7 @@ function _Revision(principal: { readonly issuer: string; readonly subject: strin
 		budget: {},
 		boundaryAttachments: [],
 		skillAssignments: [],
-		integrationAssignments: [],
+		mcpToolAssignments: [],
 	};
 }
 

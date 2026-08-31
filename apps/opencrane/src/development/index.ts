@@ -19,7 +19,6 @@ import { _CreateOrganizationMembersComposition } from "../app/organization-membe
 import { _log } from "../app/log";
 import { _ProcessShutdownSignal } from "../app/process-shutdown";
 import { ___CreatePrismaClient } from "../infra/db/db";
-import { _CreateObotAdapters } from "../infra/obot/obot-adapters.factory";
 import { _CreateDevelopmentAuthentication } from "./authentication";
 import { _ReadDevelopmentConfig } from "./config";
 import { _CreateDevelopmentHealth } from "./health";
@@ -28,6 +27,7 @@ import { _StartDevelopmentLifecycle } from "./lifecycle";
 import { _CreateDevelopmentMembershipEnvironment } from "./membership-evidence";
 import { _CreateDevelopmentRuntimeConfig } from "./runtime-config";
 import { _CreateUnavailableDevelopmentCoreApi } from "./unavailable-kubernetes";
+import { _CreateDevelopmentWorkflowComposition } from "./workflow";
 
 /** Compose the real API and PostgreSQL Tier 2 profile without loading production infrastructure. */
 async function _Main(): Promise<void>
@@ -36,19 +36,19 @@ async function _Main(): Promise<void>
 	const unbindConsole = ___BindConsole(_log);
 	const config = _ReadDevelopmentConfig();
 	const prisma = ___CreatePrismaClient(_log);
+	const workflows = _CreateDevelopmentWorkflowComposition(config.databaseUrl, config.identity.siloId);
 
 	// 2. Reuse the production run authorities with the coordinator-signed local membership evidence.
 	const membershipEnvironment = _CreateDevelopmentMembershipEnvironment(config.membershipPublicKeyPath);
 	const membershipEvidence = _CreateFleetMembershipEvidenceConfig(membershipEnvironment);
 	const capacityGate = _CreateRunAdmissionCapacityGate(__ReadRunAdmissionConcurrencyPolicy());
-	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, capacityGate, _CreateManagedExecutionEvidenceAuthority(membershipEnvironment));
-	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, capacityGate, membershipEvidence);
+	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, workflows.execution, capacityGate, _CreateManagedExecutionEvidenceAuthority(membershipEnvironment));
+	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, workflows.execution, capacityGate, membershipEvidence);
 	const runtimeConfig = _CreateDevelopmentRuntimeConfig();
-	const runCancellation = _CreateRunCancellationAuthority(prisma, runtimeConfig);
+	const runCancellation = _CreateRunCancellationAuthority(prisma);
 
 	// 3. Compose live browser routes with explicit unavailable infrastructure adapters.
 	const authentication = _CreateDevelopmentAuthentication(config.identity);
-	const obot = _CreateObotAdapters(null);
 	const health = _CreateDevelopmentHealth(prisma, config.profile);
 	const organizationMembership = {
 		mode: OrganizationMembershipDeploymentModes.Standalone,
@@ -66,18 +66,20 @@ async function _Main(): Promise<void>
 		personalRunAdmission,
 		runCancellation,
 		runtimeConfig.serverNamespace,
-		obot.custody,
 		authentication,
 		organizationMembers,
 		false,
 		false,
+		false,
 		health,
+		workflows.execution,
 		null,
 		null
 	);
 	const conversationSockets = _CreatePrismaSelfConversationSocketServer(
 		prisma,
 		personalRunAdmission,
+		workflows.execution,
 		_CreateConversationAttachmentAdmission,
 		_log,
 		_CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware, organizationMembers.productAccess),
@@ -88,10 +90,10 @@ async function _Main(): Promise<void>
 	);
 
 	// 4. Add the authenticated workload listener only for Agent profiles, then bind both to loopback.
-	const internalApp = config.controllerTokenPath && config.runtimeLaunchSecretPath
-		? await _CreateDevelopmentInternalApp(prisma, runtimeConfig, config.profile, config.controllerTokenPath, config.runtimeLaunchSecretPath)
+	const internalApp = config.controllerTokenPath && config.runtimeLaunchSecretPath && config.continuationKeyringPath
+		? await _CreateDevelopmentInternalApp(prisma, runtimeConfig, config.profile, config.controllerTokenPath, config.runtimeLaunchSecretPath, config.continuationKeyringPath)
 		: null;
-	_StartDevelopmentLifecycle(publicApp, internalApp, conversationSockets, prisma, runCancellation, config.publicPort, config.internalPort, unbindConsole);
+	_StartDevelopmentLifecycle(publicApp, internalApp, conversationSockets, prisma, workflows.runtime, config.publicPort, config.internalPort, unbindConsole);
 }
 
 void _Main().catch(function _FatalDevelopmentStartup(err: unknown): void

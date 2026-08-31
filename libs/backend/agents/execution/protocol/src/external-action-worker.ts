@@ -3,7 +3,8 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 
 import { _ExternalActionRecoveryStrategy } from "./external-action-recovery-strategy";
-import { ExternalActionProviderOutcomeKinds, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerDependencies, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types";
+import { _IsAgentRunExternalActionInvocation } from "./external-action-worker-ownership";
+import { ExternalActionProviderOutcomeKinds, type AgentRunExternalActionWorkerInvocation, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerDependencies, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types";
 
 /** Failure code saved when preparation fails before any provider is contacted. */
 const _PREPARATION_FAILURE_CODE = "external_action_preparation_failed";
@@ -94,8 +95,15 @@ export class ExternalActionWorker
 			if (invocation.state === ToolInvocationStates.Ready)
 			{
 				const admission = await dependencies.classAdmission.admitInvocation(invocation.id);
+				if (admission === "not_ready")
+					return _failUnavailableMcp(invocation, now, dependencies);
 				if (admission !== "not_mcp")
 					return true;
+			}
+			if (!_IsAgentRunExternalActionInvocation(invocation))
+			{
+				dependencies.log.warn({ toolInvocationId: invocation.toolInvocationId, mcpTaskId: invocation.mcpTaskId }, "standalone MCP task invocation was excluded from AgentRun execution");
+				return false;
 			}
 			switch (invocation.state)
 			{
@@ -111,6 +119,17 @@ export class ExternalActionWorker
 	}
 }
 
+/** Completes a recognized but unavailable MCP revision without allowing generic provider fallback. */
+async function _failUnavailableMcp(invocation: ExternalActionWorkerInvocation, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
+{
+	const claimed = await dependencies.invocations.claim(invocation.id, ExternalActionClaimKinds.Dispatch, now, dependencies.policy.providerClaimLeaseMilliseconds);
+	if (claimed.outcome !== ToolInvocationClaimOutcomes.Claimed)
+		return claimed.outcome === ToolInvocationClaimOutcomes.Winner;
+	await dependencies.invocations.completeFailed(claimed.claim, "mcp_tool_unavailable", dependencies.clock.now());
+	dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, failureKind: "mcp_tool_unavailable" }, "recognized MCP tool revision was unavailable and did not fall through to generic execution");
+	return true;
+}
+
 /**
  * Rebuilds the run context and its provider adapter, touching no provider.
  *
@@ -118,7 +137,7 @@ export class ExternalActionWorker
  * a mismatched snapshot or an adapter that cannot honour the invocation's frozen recovery mode
  * must stop the invocation before any request could go out. Throws `_PREPARATION_FAILURE_CODE`.
  */
-async function _rebuildAdapter(invocation: ExternalActionWorkerInvocation, dependencies: ExternalActionWorkerDependencies): Promise<{ readonly context: ExternalActionExecutionContext; readonly adapter: PreparedExternalActionAdapter }>
+async function _rebuildAdapter(invocation: AgentRunExternalActionWorkerInvocation, dependencies: ExternalActionWorkerDependencies): Promise<{ readonly context: ExternalActionExecutionContext; readonly adapter: PreparedExternalActionAdapter }>
 {
 	// Load the frozen snapshot, so nothing the runtime can change is used to decide what is allowed.
 	const context = await dependencies.contexts.load(invocation.runId, invocation.attempt);
@@ -129,7 +148,7 @@ async function _rebuildAdapter(invocation: ExternalActionWorkerInvocation, depen
 }
 
 /** Finish preparation without contacting a provider, or record one failed preparation attempt. */
-async function _prepare(invocation: ExternalActionWorkerInvocation, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
+async function _prepare(invocation: AgentRunExternalActionWorkerInvocation, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
 {
 	let context: ExternalActionExecutionContext;
 	let prepared: ToolInvocationRecord | null;
@@ -151,13 +170,16 @@ async function _prepare(invocation: ExternalActionWorkerInvocation, now: Date, d
 		dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, preparationAttempt: invocation.preparationAttempt + 1, failureKind: _PREPARATION_FAILURE_CODE }, "external action preparation failed before provider dispatch");
 		return true;
 	}
-	if (prepared?.state === ToolInvocationStates.AwaitingApproval) return _openApproval(prepared, now, dependencies, context);
+	if (prepared?.state === ToolInvocationStates.AwaitingApproval)
+		return _openApproval(prepared, now, dependencies, context);
 	return true;
 }
 
 /** Open the approval request, or pick up one already open, without letting the provider be called while it is undecided. */
 async function _openApproval(invocation: ExternalActionWorkerInvocation, now: Date, dependencies: ExternalActionWorkerDependencies, preparedContext?: ExternalActionExecutionContext): Promise<boolean>
 {
+	if (!_IsAgentRunExternalActionInvocation(invocation))
+		return false;
 	// 1. Read the snapshot again: after a crash and restart, nothing held in memory can be trusted.
 	const context = preparedContext ?? await dependencies.contexts.load(invocation.runId, invocation.attempt);
 	if (context === null || !_contextMatchesInvocation(context, invocation)) throw new Error("external action approval context is unavailable");
@@ -171,7 +193,7 @@ async function _openApproval(invocation: ExternalActionWorkerInvocation, now: Da
 }
 
 /** Take the claim, run the strategy for this invocation's recovery mode, and save the result only when the provider gave a definite one. */
-async function _execute(invocation: ExternalActionWorkerInvocation, kind: ExternalActionClaimKinds, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
+async function _execute(invocation: AgentRunExternalActionWorkerInvocation, kind: ExternalActionClaimKinds, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
 {
 	// 1. Rebuild the adapter before claiming. A failure here cannot strand provider work in Claimed,
 	// because no provider operation has started yet.
@@ -210,7 +232,7 @@ async function _execute(invocation: ExternalActionWorkerInvocation, kind: Extern
 }
 
 /** Publish the started event, releasing the claim if it fails so no request goes out unannounced. */
-async function _announceStart(invocation: ExternalActionWorkerInvocation, claim: ToolInvocationClaim, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
+async function _announceStart(invocation: AgentRunExternalActionWorkerInvocation, claim: ToolInvocationClaim, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
 {
 	try
 	{
@@ -226,7 +248,7 @@ async function _announceStart(invocation: ExternalActionWorkerInvocation, claim:
 }
 
 /** Commit only a result the provider itself returned; payloads never enter logs or spans. */
-async function _commitProviderOutcome(outcome: ExternalActionProviderOutcome, invocation: ExternalActionWorkerInvocation, claim: ToolInvocationClaim, claimedInvocation: ToolInvocationRecord, dependencies: ExternalActionWorkerDependencies): Promise<void>
+async function _commitProviderOutcome(outcome: ExternalActionProviderOutcome, invocation: AgentRunExternalActionWorkerInvocation, claim: ToolInvocationClaim, claimedInvocation: ToolInvocationRecord, dependencies: ExternalActionWorkerDependencies): Promise<void>
 {
 	switch (outcome.kind)
 	{
@@ -243,7 +265,7 @@ async function _commitProviderOutcome(outcome: ExternalActionProviderOutcome, in
 }
 
 /** Apply the recovery rules to a claim whose lease ran out before any result was saved. */
-async function _recoverExpiredClaim(invocation: ExternalActionWorkerInvocation, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
+async function _recoverExpiredClaim(invocation: AgentRunExternalActionWorkerInvocation, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
 {
 	await dependencies.invocations.recoverExpiredClaim(invocation.id, now);
 	dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, recoveryMode: invocation.recoveryMode, failureKind: "external_action_expired_claim" }, "external action claim expired before a durable outcome");
@@ -251,7 +273,7 @@ async function _recoverExpiredClaim(invocation: ExternalActionWorkerInvocation, 
 }
 
 /** Close out an invocation whose context or adapter could not be rebuilt, without calling a provider. */
-async function _failBeforeProvider(invocation: ExternalActionWorkerInvocation, kind: ExternalActionClaimKinds, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
+async function _failBeforeProvider(invocation: AgentRunExternalActionWorkerInvocation, kind: ExternalActionClaimKinds, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
 {
 	const claimed = await dependencies.invocations.claim(invocation.id, kind, now, dependencies.policy.providerClaimLeaseMilliseconds);
 	if (claimed.outcome !== ToolInvocationClaimOutcomes.Claimed) return claimed.outcome === ToolInvocationClaimOutcomes.Winner;

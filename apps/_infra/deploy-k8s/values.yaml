@@ -13,8 +13,8 @@ global:
   imagePullSecret: ""
 
 # -- Per-ClusterTenant tenant DB (S6 / ADR 0002 decision 3). Each silo runs ONE CNPG server
-#    IN ITS OWN NAMESPACE. It hosts isolated logical databases and credentials for OpenCrane,
-#    Obot and LiteLLM while retaining one
+#    IN ITS OWN NAMESPACE. It hosts isolated logical databases and credentials for OpenCrane
+#    and LiteLLM while retaining one
 #    pod/PVC footprint per silo. The per-namespace Cluster + per-database connection Secrets are
 #    provisioned by the deploy scripts (apps/_infra/deploy-k8s/deploy.sh → k8s-deploy.sh); the
 #    opencrane-ui consumes only its OpenCrane connection Secret. The silo is still the tenant scope,
@@ -91,16 +91,6 @@ sharedPlatform:
       # -- Base endpoint of the shared LiteLLM (e.g. http://litellm.platform.svc:4000).
       #    Required when mode=shared; consumed by the operator as LITELLM_ENDPOINT.
       endpoint: ""
-  # -- Obot MCP gateway plane scope.
-  mcpGateway:
-    # -- `instance` (default): use the release-local Obot Deployment + Service.
-    #    `shared`: reference an external Obot at `shared.url` and skip the in-release
-    #    Deployment/Service.
-    mode: instance
-    shared:
-      # -- Base URL of the shared Obot gateway (e.g. http://mcp-gateway.platform.svc:8080).
-      #    Required when mode=shared; consumed by the operator as MCP_GATEWAY_URL.
-      url: ""
   # -- External Secrets Operator integration scope.
   externalSecrets:
     # -- `instance` (default): render this release's own ClusterSecretStore +
@@ -197,18 +187,6 @@ opencrane-skill-authoring:
       cpu: "2"
       memory: 4Gi
 
-# -- Isolated capability-only tenant tool Job plane. It contains no standing worker.
-# The dependency name is intentional: Helm passes its contents to the child chart.
-opencrane-tool-runner:
-  toolRunner:
-    namespace: opencrane-tools
-    serviceAccountName: tool-runner-default
-    quota:
-      pods: "10"
-      jobs: "10"
-      cpu: "2"
-      memory: 2Gi
-
 # -- Canonical artifact-byte boundary. It owns only content-addressed bytes on an expandable,
 # release-local PVC; OpenCrane remains the catalog and authorization authority.
 artifactService:
@@ -256,10 +234,9 @@ artifactPreprocessor:
     repository: ghcr.io/elewa-git/opencrane-artifact-preprocessor
     digest: ""
     pullPolicy: IfNotPresent
-  replicas: 1
   projectedTokenTtlSeconds: 600
   scratchSize: 128Mi
-  pollIntervalMs: 1000
+  activeDeadlineSeconds: 300
   requestTimeoutMs: 10000
   maximumSourceBytes: 33554432
   maximumOutputBytes: 16777216
@@ -302,37 +279,6 @@ artifactScanner:
       cpu: 2000m
       memory: 1536Mi
 
-# -- Managed runtime-plane chart. It creates no long-lived workload: only the dedicated namespace,
-# connector-scoped identity, and default-deny policy used by controller-created managed Jobs.
-managedAgentRuntimePlane:
-  managedAgentRuntime:
-    # Empty derives `<release>-managed-runtime`; it must differ from the personal and server planes.
-    namespace: ""
-    # Empty binds destinations to the umbrella release namespace.
-    serverNamespace: ""
-    serviceAccountName: managed-agent-runtime-default
-    quota:
-      pods: "20"
-      jobs: "20"
-      secrets: "20"
-      requests:
-        cpu: "2"
-        memory: 4Gi
-      limits:
-        cpu: "20"
-        memory: 20Gi
-    egress:
-      runtimePodComponent: agent-runtime
-      channelProxyComponent: channel-proxy
-      artifactNamespace: ""
-      artifactServiceComponent: artifact-service
-      memoryGatewayComponent: opencrane-server
-      litellmComponent: litellm
-      serverInternalPort: 8081
-      channelProxyPort: 8080
-      artifactServicePort: 8080
-      litellmPort: 4000
-
 # -- Personal and managed runtime workload controller. Disabled until immutable runtime image
 # digests and exact Kubernetes API Service CIDRs are supplied; enabling it never starts a Job directly.
 agentController:
@@ -348,16 +294,10 @@ agentController:
   replicas: 1
   openCraneInternalUrl: ""
   pollIntervalMs: 1000
-  # -- The controller runs retention separately from the fast desired-state polling loop.
-  outboxPruneIntervalMs: 3600000
   # -- Database/server-owned fencing windows. The controller receives their resulting expiries but
   # cannot propose or extend them in its claim/commit requests.
   claimLeaseSeconds: 30
   assignmentTtlSeconds: 3600
-  # -- Delivered commands are operational handshakes, not the permanent run audit record.
-  # The controller deletes only successful records older than this window in bounded batches.
-  outboxRetentionSeconds: 604800
-  outboxPruneBatchSize: 100
   projectedTokenTtlSeconds: 600
   kubernetesTokenTtlSeconds: 600
   # -- Exact Kubernetes Service IP CIDRs admitted by the controller's app-owned NetworkPolicy.
@@ -369,12 +309,10 @@ agentController:
   # implementation-defined, so portable installs should supply both the Service and endpoint paths.
   kubernetesApiServerEndpointCidrs: []
   kubernetesApiServerEndpointPort: 443
-  # -- Aggregate ceiling for the dedicated runtime namespace. Per-Job admission fixes the shape;
-  # this quota limits how many conforming Jobs a compromised controller can consume concurrently.
+  # -- Aggregate ceiling for each warm runtime namespace. The Deployment keeps one fixed Pod pool.
   runtimeQuota:
-    pods: 20
-    jobs: 20
-    secrets: 20
+    pods: 6
+    deployments: 1
     requests:
       cpu: "2"
       memory: 4Gi
@@ -388,17 +326,10 @@ agentController:
       repository: ghcr.io/elewa-git/opencrane-agent-runtime
       digest: ""
       pullPolicy: IfNotPresent
-    runtimeStreamUrl: ""
     # -- Runtime-only in-cluster LiteLLM endpoint. The default is this silo's Service FQDN so the
     #    runtime NetworkPolicy can allow precisely that workload and no arbitrary external model URL.
     litellmBaseUrl: ""
-    serviceAccountName: agent-runtime-default
-    projectedTokenTtlSeconds: 600
     scratchSize: 1Gi
-    activeDeadlineSeconds: 3600
-    # -- Delete the terminal Job/Pod immediately after its assignment-bound active deadline so
-    # runtime-local emptyDir scratch cannot persist beyond durable authority.
-    ttlSecondsAfterFinished: 0
     resources:
       requests:
         cpu: 100m
@@ -406,27 +337,30 @@ agentController:
       limits:
         cpu: 1000m
         memory: 1Gi
-  skillWorkloadProfiles:
-    authoring:
-      image:
-        repository: ghcr.io/elewa-git/opencrane-skill-authoring
-        digest: ""
-        pullPolicy: IfNotPresent
-      scratchSize: 128Mi
-      activeDeadlineSeconds: 300
-      resources:
-        requests: { cpu: 500m, memory: 3Gi }
-        limits: { cpu: "2", memory: 4Gi }
-    toolRunner:
-      image:
-        repository: ghcr.io/elewa-git/opencrane-tool-runner
-        digest: ""
-        pullPolicy: IfNotPresent
-      scratchSize: 64Mi
-      activeDeadlineSeconds: 300
-      resources:
-        requests: { cpu: 100m, memory: 128Mi }
-        limits: { cpu: 500m, memory: 256Mi }
+  # -- Helm-owned generic Pods used once by an AgentRun and then deleted. Each pool keeps 2-5
+  # already-started Pods; changing these fields changes the fixed deployment profile, not a run.
+  warmRuntime:
+    # -- Empty derives `<release>-managed-runtime`; it must differ from personal and server namespaces.
+    managedNamespace: ""
+    replicas: 2
+    serviceAccountName: warm-runtime
+    tokenAudience: opencrane-warm-runtime
+    projectedTokenTtlSeconds: 600
+    bindingPort: 8090
+    genericIdleSeconds: 900
+    genericProfile: generic
+    personalProfile: personal
+    managedProfile: managed
+  skillAuthoringValidation:
+    image:
+      repository: ghcr.io/elewa-git/opencrane-skill-authoring
+      digest: ""
+      pullPolicy: IfNotPresent
+    scratchSize: 128Mi
+    activeDeadlineSeconds: 300
+    resources:
+      requests: { cpu: 500m, memory: 3Gi }
+      limits: { cpu: "2", memory: 4Gi }
   resources:
     requests:
       cpu: 25m
@@ -502,6 +436,11 @@ clustertenantManager:
     databasePoolSize: 2
     workerConcurrency: 2
     pollIntervalMilliseconds: 100
+    # -- Continuations hold the exact paused model state. The deploy script creates this
+    # rotating encryption keyring once and retains it across upgrades.
+    continuationKeyring:
+      existingSecret: opencrane-runtime-continuation
+      secretKey: keyring.json
     mcpEraProbeTimeoutMilliseconds: 5000
     mcpEraProbeMaximumResponseBytes: 65536
     # -- OCI Image Layout ZIP admission imports accepted MCP images into this fixed repository.
@@ -677,8 +616,8 @@ clustertenantManager:
       #    embedding model needs no edit here.
       model: "auto-embedding"
       dimensions: 3072
-    # -- Extra pod-template annotations, same convention as `litellm.podAnnotations` /
-    #    `mcpGateway.podAnnotations`. Also a sanctioned, script-driven rollout trigger: Cognee's
+    # -- Extra pod-template annotations, using the same convention as `litellm.podAnnotations`.
+    #    This is also a sanctioned, script-driven rollout trigger: Cognee's
     #    LiteLLM key Secret is minted by the operator at runtime (not Helm-templated), so a plain
     #    `helm upgrade` has no checksum of it to roll Cognee automatically when the key changes.
     #    Bump this (e.g. `--set clustertenantManager.cognee.podAnnotations.restartedAt=<value>`)
@@ -960,94 +899,6 @@ certManager:
       # Stopgap — prefer GCP-SM + ESO + CMEK for production credential delivery.
       secretData: ""
 
-# -- Obot MCP gateway plane settings.
-# Uses the upstream obot-platform/obot image. Requires a per-instance, release-prefixed
-# `<release>-obot` k8s Secret (resolved by the `opencrane.obotSecretName` helper) with
-# key `dsn` containing the PostgreSQL DSN for Obot's own database. The release prefix
-# stops two instances in one cluster colliding on a fixed `opencrane-obot` name (B5).
-# By default authentication is disabled and access is controlled by NetworkPolicy
-# (in-cluster only); enable `auth.enabled` for per-user credentials + access policies.
-# The MCP catalogue is loaded from `catalog.path` (a local filesystem dir of entry YAMLs)
-# and/or Git Source URLs added at runtime via Obot Admin — NOT from a opencrane-ui poll.
-mcpGateway:
-  enabled: true
-  image:
-    repository: ghcr.io/obot-platform/obot
-    # Pinned to the latest stable Obot tag (verified pullable on ghcr). Bump deliberately;
-    # `latest` would silently roll the gateway across breaking changes.
-    tag: v0.23.1
-    pullPolicy: IfNotPresent
-  replicas: 1
-  service:
-    port: 8080
-  # -- Name of a pre-provisioned Secret (key `token`) carrying the Obot service credential the
-  #    opencrane-server presents for custody provisioning and server-owned tool execution. The
-  #    chart never renders this Secret. Empty (default) leaves the Obot management transport OFF:
-  #    no env/volume renders and the server composes fail-closed unavailable adapters.
-  serviceTokenExistingSecret: ""
-  # -- Hard timeout in whole seconds for one server→Obot management exchange (1 through 300).
-  serverTimeoutSeconds: 30
-  # -- Authentication & per-user isolation (P0.1). Default OFF preserves the in-cluster-only
-  # setup (NetworkPolicy is the only gate; shared-credential multi-user servers ONLY — NO
-  # per-user credentials or access policies).
-  #
-  # Set enabled=true for the per-user model. Obot can only differentiate users it
-  # authenticates, so after enabling you MUST complete a one-time RUNTIME bootstrap:
-  #   1. Log in with the bootstrap token (set `bootstrapTokenSecret`, or let Obot autogenerate
-  #      one and read it from the pod logs) and configure an OIDC auth provider federated to
-  #      OpenCrane's IdP — Obot has no env-only OIDC provider.
-  #   2. Grant Admin to the platform/org admins (also pre-set here via `adminEmails`).
-  #   3. With registry auth on, the registry returns per-user-accessible servers instead of the
-  #      default wildcard "everyone" access — restrict/remove that default access policy in Obot
-  #      Admin so nothing is open by default.
-  # Tenant end-users map to Obot Basic User (connect only; NEVER Power-User+, which can run code
-  # on the host).
-  auth:
-    enabled: false
-    # Comma-separated emails granted the Obot Admin / Owner role on first login.
-    adminEmails: ""
-    ownerEmails: ""
-    # Optional Secret holding OBOT_BOOTSTRAP_TOKEN (>=8 chars); unset ⇒ Obot autogenerates one.
-    bootstrapTokenSecret: ""
-    bootstrapTokenSecretKey: bootstrap-token
-  # -- Default MCP catalogue (P0.2). A LOCAL FILESYSTEM directory of catalogue-entry YAMLs
-  # that Obot loads for all users (Obot's `default-mcpcatalog-path`). Empty (default) renders
-  # no env var. For GitOps, sync a catalogue git repo into this path (e.g. a git-sync sidecar);
-  # alternatively add Git Source URLs at runtime in Obot Admin once `auth.enabled` is true.
-  catalog:
-    path: ""
-  # -- Encryption-at-rest for Obot's credential/token store (P0.3). Default OFF.
-  # When enabled, an `encryptionsetup` init container (replicated verbatim from obot
-  # v0.23.1) writes an apiserver EncryptionConfiguration from the key below into a
-  # Memory-backed volume, and the gateway reads it via OBOT_SERVER_ENCRYPTION_CONFIG_FILE
-  # (provider=custom never consumes the bare key directly). Provision the key Secret
-  # out-of-band, e.g. `kubectl create secret generic opencrane-obot-enc \
-  #   --from-literal=encryption-key=$(openssl rand -base64 32)`.
-  encryptionAtRest:
-    enabled: false
-    # Secret holding the encryption key (operator-provisioned; not templated here).
-    secretName: opencrane-obot-enc
-    secretKey: encryption-key
-  podAnnotations: {}
-  podSecurityContext:
-    runAsNonRoot: false
-    seccompProfile:
-      type: RuntimeDefault
-
-  securityContext:
-    allowPrivilegeEscalation: false
-    capabilities:
-      drop:
-        - ALL
-    readOnlyRootFilesystem: false
-  resources:
-    requests:
-      cpu: 250m
-      memory: 256Mi
-    limits:
-      cpu: 1000m
-      memory: 512Mi
-
 # -- Network policy (default egress control for tenant pods and ingress control
 # for internal platform services)
 networkPolicy:
@@ -1076,7 +927,7 @@ networkPolicy:
   #
   #    CONTEXT: S2 ships per-silo (per-ClusterTenant-namespace) default-deny policies
   #    emitted by the operator. The PLATFORM namespace — where opencrane-ui, LiteLLM,
-  #    channel-proxy, Cognee, Obot (mcp-gateway), and the CNPG Postgres cluster run —
+  #    channel-proxy, Cognee, and the CNPG Postgres cluster run —
   #    has no such policy by default. This section adds one as a gated, additive block.
   #
   #    GATE: `enabled` defaults to FALSE. The whole template is a no-op until an operator
@@ -1085,7 +936,7 @@ networkPolicy:
   #
   #      1. Deploy with the flag off (current default) — all planes work normally.
   #      2. Set enabled=true in a staging/dev cluster and run your full smoke test
-  #         (API calls, model routing, agent skill delivery, Obot MCP connections).
+  #         (API calls, model routing, agent skill delivery, and OCI MCP execution).
   #      3. If any path breaks, check whether the missing allow-list entry is in this
   #         template, networkpolicy-planes.yaml, or the app-owned Cognee Helm unit.
   #      4. Once all planes pass, promote to production.

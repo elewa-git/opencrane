@@ -119,8 +119,8 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 		const transaction = vi.fn();
 		const authority = _Authority({ $transaction: transaction }, {}, { retry } as never);
 
-		await expect(authority.retryRun(_CALLER, "conversation-1", "run-1", { expectedAttempt: 1, idempotencyKey: "retry-1" })).resolves.toMatchObject({ outcome: "started", run: { attempt: 2 } });
-		expect(retry).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", idempotencyKey: "retry-1" }));
+		await expect(authority.retryRun(_CALLER, "conversation-1", "run-1", { expectedAttempt: 1 })).resolves.toMatchObject({ outcome: "started", run: { attempt: 2 } });
+		expect(retry).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1" }));
 		expect(transaction).not.toHaveBeenCalled();
 	});
 

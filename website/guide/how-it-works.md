@@ -30,7 +30,7 @@ OpenCrane checks who's asking and what they're allowed to do
 OpenCrane freezes exactly what this run may use — before anything executes
        │
        ▼
-a fresh, disposable Kubernetes Job carries out the work
+a pre-started Kubernetes Pod is claimed for this run only
        │
        ▼
 you see the ordered events, any actions taken, and the final outcome
@@ -39,11 +39,12 @@ you see the ordered events, any actions taken, and the final outcome
 1. OpenCrane authenticates the caller and resolves the organisation.
 2. It checks membership, grants, model access and budget.
 3. It **freezes** the accepted inputs — which tools, skills, knowledge and model this exact run may
-   use — before any container starts. Nothing can widen its own access mid-run.
-4. A fresh, bounded Job carries out the work and streams results back.
+   use — before the claimed Pod receives any work. Nothing can widen its own access mid-run.
+4. OpenCrane claims one bounded Pod from the warm pool. It streams results back and is deleted after
+   this attempt, so it can never carry data into another run.
 5. Every tool call OpenCrane executes on the agent's behalf is recorded, and any that needs a human
    decision pauses for [approval](/guide/audit).
-6. The run reaches a final outcome. The Job that executed it can disappear — the durable record of
+6. The run reaches a final outcome. The Pod that executed it can disappear — the durable record of
    what ran, what it used and what happened does not.
 
 ::: tip Why "disposable execution, durable record" matters

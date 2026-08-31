@@ -40,8 +40,10 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 {
 	// 1. Bind the approval to the exact live workload and proof key executing the attempt.
 	const assignment = await transaction.workloadAssignment.findUnique({ where: { runId_attempt: { runId: command.runId, attempt: command.attempt } } });
-	const proofKey = await transaction.runProofKey.findUnique({ where: { runId_attempt: { runId: command.runId, attempt: command.attempt } } });
-	if (assignment === null || proofKey === null || assignment.podUid === null || assignment.state !== WorkloadAssignmentState.Registered || assignment.expiresAt.getTime() <= command.now.getTime() || proofKey.revokedAt !== null || proofKey.expiresAt.getTime() <= command.now.getTime()) return { outcome: "unavailable" };
+	const reservation = assignment === null ? null : await transaction.warmRuntimeReservation.findUnique({ where: { runId_attempt_generation: { runId: command.runId, attempt: command.attempt, generation: assignment.bindingGeneration } } });
+	const proofKey = assignment === null ? null : await transaction.runProofKey.findUnique({ where: { runId_attempt_generation: { runId: command.runId, attempt: command.attempt, generation: assignment.bindingGeneration } } });
+	if (assignment === null || reservation === null || proofKey === null || assignment.state !== WorkloadAssignmentState.Registered || assignment.expiresAt.getTime() <= command.now.getTime() || proofKey.podUid !== reservation.podUid || proofKey.revokedAt !== null || proofKey.expiresAt.getTime() <= command.now.getTime())
+		return { outcome: "unavailable" };
 	if (assignment.subjectId.startsWith("agent-service:")) return { outcome: "unavailable" };
 	const expiresAt = new Date(Math.min(command.expiresAt.getTime(), assignment.expiresAt.getTime(), proofKey.expiresAt.getTime()));
 	if (expiresAt.getTime() <= command.now.getTime()) return { outcome: "unavailable" };
@@ -118,7 +120,7 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 				namespace: assignment.namespace,
 				workloadKind: assignment.workloadKind,
 				workloadUid: assignment.workloadUid,
-				podUid: assignment.podUid,
+				podUid: reservation.podUid,
 				resourceKind: "tool",
 				resourceId: command.toolRevisionId,
 				action: "invoke",

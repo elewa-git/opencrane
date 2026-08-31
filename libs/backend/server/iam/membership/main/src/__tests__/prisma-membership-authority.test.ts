@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaFleetMembershipAuthorityRepository } from "../prisma-membership-authority";
+import { PrismaFleetMembershipAuthorityUnitOfWork } from "../prisma-membership-authority";
 
 /** Creates one verified signed membership revision row. */
 function _revisionRow()
@@ -24,34 +24,30 @@ describe("Prisma fleet-membership authority adapter", function _suite()
 {
 	it("maps the latest verified silo-membership assertion without categorical scope fields", async function _latest()
 	{
-		const prisma = { verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(_revisionRow()) } } as unknown as PrismaClient;
-		const repository = new PrismaFleetMembershipAuthorityRepository(prisma);
+		const transaction = { verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(_revisionRow()) } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaFleetMembershipAuthorityUnitOfWork(prisma);
 
 		const revision = await repository.getLatestSignedRevision("fleet-1", "silo-1");
 
 		expect(revision?.assertions[0]).toEqual({ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1" });
 	});
 
-	it("commits a newer high-watermark and audit through one serialized transaction", async function _accept()
+	it("creates a newer high-watermark and audit through one Serializable transaction", async function _accept()
 	{
-		const upsert = vi.fn().mockResolvedValue({ revision: 7 });
+		const create = vi.fn().mockResolvedValue({ revision: 7 });
 		const auditCreate = vi.fn().mockResolvedValue({ id: "audit-1" });
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([]),
-			highestAcceptedFleetMembership: { findUnique: vi.fn().mockResolvedValue(null), upsert },
+			highestAcceptedFleetMembership: { findUnique: vi.fn().mockResolvedValue(null), create },
 			verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(_revisionRow()) },
 			auditDecision: { create: auditCreate },
 		};
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaFleetMembershipAuthorityRepository(prisma);
+		const repository = new PrismaFleetMembershipAuthorityUnitOfWork(prisma);
 
 		await expect(repository.acceptRevisionAtomically({ issuerId: "fleet-1", siloId: "silo-1", revision: 7, payloadDigest: `sha256:${"1".repeat(64)}` })).resolves.toEqual({ status: "accepted", highestAcceptedRevision: 7 });
-		expect(transaction.$queryRaw).toHaveBeenCalledOnce();
-		const lockStatement = transaction.$queryRaw.mock.calls[0]?.[0] as { readonly sql: string; readonly values: readonly unknown[] };
-		expect(lockStatement.sql).toContain('::text AS "lock"');
-		expect(lockStatement.values).toContain("7:fleet-1silo-1");
-		expect(lockStatement.values.filter(function _IsText(value): value is string { return typeof value === "string"; }).join("")).not.toContain(String.fromCharCode(0));
-		expect(upsert).toHaveBeenCalledOnce();
+		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
+		expect(create).toHaveBeenCalledOnce();
 		expect(auditCreate).toHaveBeenCalledOnce();
 	});
 });

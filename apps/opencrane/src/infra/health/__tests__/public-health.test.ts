@@ -20,7 +20,6 @@ function _Dependencies(overrides: Partial<PublicHealthReaderDependencies> = {}):
 		memory: _Probe(true),
 		files: _Probe(true),
 		channels: _Probe(true),
-		integrations: _Probe(true),
 		logger: { warn: vi.fn() },
 		clock: { nowEpochMilliseconds: vi.fn().mockReturnValue(1_000) },
 		cacheMilliseconds: 5_000,
@@ -30,9 +29,9 @@ function _Dependencies(overrides: Partial<PublicHealthReaderDependencies> = {}):
 
 describe("public health report", function _Suite()
 {
-	it("reports every user-visible service and treats disabled integrations as healthy", async function _ReportsCompleteMap()
+	it("reports every user-visible service and treats disabled channels as healthy", async function _ReportsCompleteMap()
 	{
-		const dependencies = _Dependencies({ channels: null, integrations: null });
+		const dependencies = _Dependencies({ channels: null });
 		const reader = _CreatePublicHealthReportReader(dependencies);
 		await expect(reader.read()).resolves.toEqual({
 			status: PublicHealthStatuses.Ok,
@@ -44,7 +43,6 @@ describe("public health report", function _Suite()
 				[PublicHealthServiceNames.Memory]: PublicHealthServiceStatuses.Available,
 				[PublicHealthServiceNames.Files]: PublicHealthServiceStatuses.Available,
 				[PublicHealthServiceNames.Channels]: PublicHealthServiceStatuses.Disabled,
-				[PublicHealthServiceNames.Integrations]: PublicHealthServiceStatuses.Disabled,
 			},
 		});
 	});
@@ -56,7 +54,6 @@ describe("public health report", function _Suite()
 			memory: null,
 			files: null,
 			channels: null,
-			integrations: null,
 		}));
 		const report = await reader.read();
 		expect(report.status).toBe(PublicHealthStatuses.Ok);

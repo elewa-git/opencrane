@@ -1,26 +1,22 @@
 import { randomUUID } from "node:crypto";
 
-import { ArtifactKind, ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState, ArtifactUploadLeaseState, type Prisma } from "@prisma/client";
+import { ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState, ArtifactUploadLeaseState, type Prisma } from "@prisma/client";
 
-import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
+import { ArtifactPreprocessPipelineVersions } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessPodBindCommand, ArtifactPreprocessRecoveryCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
+import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
-import type { ArtifactPreprocessClaimProjection, ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ArtifactPreprocessSourceLeaseProjection, ClaimNextArtifactPreprocessJobResult, CompleteArtifactPreprocessJobResult, FailArtifactPreprocessJobResult, IssueArtifactPreprocessOutputLeaseResult } from "./artifact-preprocessing.types";
+import type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ArtifactPreprocessSourceLeaseProjection, CompleteArtifactPreprocessJobResult, FailArtifactPreprocessJobResult, IssueArtifactPreprocessOutputLeaseResult } from "./artifact-preprocessing.types";
+import { _ARTIFACT_PREPROCESS_RETRY_DELAY_MILLISECONDS, _ArtifactPreprocessFailureTransition } from "./artifact-preprocess-retry-policy";
+import { PrismaArtifactPreprocessControllerRepository } from "./prisma-artifact-preprocess-controller-authority";
 
-/** Maximum time one worker attempt may retain source and output authority. */
-const _CLAIM_LIFETIME_MILLISECONDS = 5 * 60_000;
-
-/** Total attempts a job gets. A failure reported on attempt 3 is marked TerminalFailed and the job never runs again. */
-const _MAX_ATTEMPTS = 3;
-
-/** Base delay applied before an eligible failed job may be reclaimed. */
-const _RETRY_DELAY_MILLISECONDS = 30_000;
-
-/** How long a source-read permission lasts. Deliberately equal to the shortest wait before a failed job can be reclaimed, so a lease from one attempt has expired by the time the next attempt starts.  */
-const _SOURCE_READ_LEASE_MILLISECONDS = _RETRY_DELAY_MILLISECONDS;
+/** How long a source-read permission lasts so it expires before any later delivery can be claimed. */
+const _SOURCE_READ_LEASE_MILLISECONDS = _ARTIFACT_PREPROCESS_RETRY_DELAY_MILLISECONDS;
 
 /** Fixed source pipeline admitted by the dedicated worker. */
-const _PDF_TO_TEXT_PIPELINE_VERSION = "pdf-to-text/v1";
+const _PDF_TO_TEXT_PIPELINE_VERSION = ArtifactPreprocessPipelineVersions.PdfToText;
 
 /** System principal recorded on server-finalized derived revisions. */
 const _PREPROCESSOR_PRINCIPAL = "system:artifact-preprocessor";
@@ -41,42 +37,55 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 {
 	/** Private transaction client supplied only by the preprocessing unit of work. */
 	private readonly transaction: Prisma.TransactionClient;
-
+	/** Task-fenced controller lifecycle bound to the same private transaction. */
+	private readonly controller: PrismaArtifactPreprocessControllerRepository;
 	/** Creates the repository for one already-open preprocessing transaction. */
 	constructor(transaction: Prisma.TransactionClient)
 	{
 		this.transaction = transaction;
+		this.controller = new PrismaArtifactPreprocessControllerRepository(this.transaction);
 	}
 
-	/** Claims one pending or eligible retried job while holding its source and output locks. */
-	async claimNextAtomically(): Promise<ClaimNextArtifactPreprocessJobResult>
+	/** Issues or reloads the controller claim for one exact admitted task. */
+	claimForTask(preprocessJobId: string, task: IWorkflowTaskReceipt): Promise<ArtifactPreprocessControllerRecord | null>
 	{
-		{
-			const transaction = this.transaction;
-			// 1. Recover expired claims first; the lifecycle trigger cancels any stale output lease.
-			const recoveryNow = await this._databaseNow();
-			await transaction.artifactPreprocessJob.updateMany({ where: { state: ArtifactPreprocessJobState.Claimed, claimExpiresAt: { lte: recoveryNow } }, data: { state: ArtifactPreprocessJobState.RetryableFailed, outputLeaseId: null, failureCode: "claim_expired", nextAttemptAt: recoveryNow } });
+		return this.controller.claimForTask(preprocessJobId, task);
+	}
 
-			// 2. Read the candidate view, whose query uses FOR UPDATE SKIP LOCKED: it hands back one job row already locked for this transaction and steps over rows another poller is holding, so two pollers never take the same job.
-			const candidate = await transaction.artifactPreprocessClaimCandidate.findFirst({ select: { jobId: true, attempt: true, derivedArtifactId: true, sourceRevisionId: true, sourceArtifactId: true, siloId: true, ownerPrincipalId: true, sourceByteLength: true } });
-			if (candidate === null) return { status: "none" };
-			if (!_IsSafeByteLength(candidate.sourceByteLength)) throw new Error("artifact preprocess source byte length exceeds the supported range");
+	/** Saves the Job UID and hashed bootstrap under the exact controller delivery. */
+	bindWorkload(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessWorkloadBindCommand): Promise<"bound" | "idempotent" | "conflict">
+	{
+		return this.controller.bindWorkload(preprocessJobId, task, command);
+	}
 
-			// 3. Create the output artifact row on the first claim only, reusing it on later attempts. It stays out of catalogue listings until it has a current revision.
-			const derivedArtifactId = candidate.derivedArtifactId ?? randomUUID();
-			if (candidate.derivedArtifactId === null)
-			{
-				await transaction.artifact.create({ data: { id: derivedArtifactId, siloId: candidate.siloId, ownerPrincipalId: candidate.ownerPrincipalId, kind: ArtifactKind.Generated } });
-			}
+	/** Saves the first Pod UID beneath the Job accepted for the current delivery. */
+	bindFirstPod(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessPodBindCommand): Promise<"bound" | "idempotent" | "conflict">
+	{
+		return this.controller.bindFirstPod(preprocessJobId, task, command);
+	}
 
-			// 4. Compute the claim expiry from database time, so every poller agrees on when this claim dies.
-			const now = await this._databaseNow();
-			const claimFence = randomUUID();
-			const claimExpiresAt = new Date(now.getTime() + _CLAIM_LIFETIME_MILLISECONDS);
-			await transaction.artifactPreprocessJob.update({ where: { id: candidate.jobId }, data: { state: ArtifactPreprocessJobState.Claimed, attempt: candidate.attempt + 1, claimFence, claimExpiresAt, nextAttemptAt: null, failureCode: null, outputLeaseId: null, derivedArtifactId } });
+	/** Persists controller-observed Job failure through the same task and delivery fence. */
+	recordUnreportedFailure(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessRecoveryCommand): Promise<ArtifactPreprocessOutcome | null>
+	{
+		return this.controller.recordUnreportedFailure(preprocessJobId, task, command);
+	}
 
-			return { status: "claimed", claim: { jobId: candidate.jobId, attempt: candidate.attempt + 1, claimFence, claimExpiresAt, sourceRevisionId: candidate.sourceRevisionId, sourceArtifactId: candidate.sourceArtifactId, siloId: candidate.siloId, sourceByteLength: Number(candidate.sourceByteLength) } satisfies ArtifactPreprocessClaimProjection };
-		}
+	/** Loads the persisted delivery outcome through the exact workflow receipt boundary. */
+	loadOutcome(preprocessJobId: string, deliveryCount: number, task: IWorkflowTaskReceipt): Promise<ArtifactPreprocessOutcome | null>
+	{
+		return this.controller.loadOutcome(preprocessJobId, deliveryCount, task);
+	}
+
+	/** Makes a recorded completion terminal once and reports exact replays idempotently. */
+	complete(preprocessJobId: string, completion: ArtifactPreprocessCompletion, task: IWorkflowTaskReceipt): Promise<"completed" | "idempotent" | "conflict">
+	{
+		return this.controller.complete(preprocessJobId, completion, task);
+	}
+
+	/** Exchanges the mounted Job reference for its active controller delivery. */
+	loadWorkerBootstrap(reference: string, namespace: string): Promise<ArtifactPreprocessorJobClaim | null>
+	{
+		return this.controller.loadWorkerBootstrap(reference, namespace);
 	}
 
 	/** Allocates one source-read lease only while the exact claim fence remains current. */
@@ -89,7 +98,7 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: command.jobId }, include: { sourceRevision: { include: { artifact: true } } } });
 			if (job === null
 				|| job.state !== ArtifactPreprocessJobState.Claimed
-				|| job.attempt !== command.attempt
+				|| job.deliveryCount !== command.attempt
 				|| job.claimFence !== command.claimFence
 				|| job.claimExpiresAt === null
 				|| job.claimExpiresAt <= now
@@ -105,7 +114,10 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 
 			// 2. End the read permission at whichever comes first, the claim expiry or the retry wait, so a lease from this attempt is dead before the next attempt can start.
 			const expiresAtEpochSeconds = Math.floor(Math.min(job.claimExpiresAt.getTime(), now.getTime() + _SOURCE_READ_LEASE_MILLISECONDS) / 1_000);
-			if (expiresAtEpochSeconds <= Math.floor(now.getTime() / 1_000)) return null;
+			if (expiresAtEpochSeconds <= Math.floor(now.getTime() / 1_000))
+			{
+				return null;
+			}
 			return {
 				readLease: {
 					leaseId: randomUUID(),
@@ -131,9 +143,15 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			const transaction = this.transaction;
 			const now = await this._databaseNow();
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: request.jobId }, include: { derivedArtifact: true, outputLease: true } });
-			if (job === null || job.derivedArtifact === null) return { status: "conflict", reason: "claim_not_found" };
-			if (job.attempt !== request.attempt || job.claimFence !== request.claimFence) return { status: "conflict", reason: "stale_claim" };
-			if (job.state === ArtifactPreprocessJobState.Completed)
+			if (job === null || job.derivedArtifact === null)
+			{
+				return { status: "conflict", reason: "claim_not_found" };
+			}
+			if (job.deliveryCount !== request.attempt || job.claimFence !== request.claimFence)
+			{
+				return { status: "conflict", reason: "stale_claim" };
+			}
+			if (job.completionDigest !== null || job.state === ArtifactPreprocessJobState.Completed)
 			{
 				return job.outputLease !== null
 					&& job.outputLease.expectedContentAddress === request.contentAddress
@@ -142,8 +160,14 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 					? { status: "completed" }
 					: { status: "conflict", reason: "invalid_output" };
 			}
-			if (job.state !== ArtifactPreprocessJobState.Claimed || job.claimExpiresAt === null || job.claimExpiresAt <= now) return { status: "conflict", reason: "stale_claim" };
-			if (!___IsSha256ContentAddress(request.contentAddress) || !Number.isSafeInteger(request.byteLength) || request.byteLength < 0) return { status: "conflict", reason: "invalid_output" };
+			if (job.state !== ArtifactPreprocessJobState.Claimed || job.claimExpiresAt === null || job.claimExpiresAt <= now)
+			{
+				return { status: "conflict", reason: "stale_claim" };
+			}
+			if (!___IsSha256ContentAddress(request.contentAddress) || !Number.isSafeInteger(request.byteLength) || request.byteLength < 0)
+			{
+				return { status: "conflict", reason: "invalid_output" };
+			}
 
 			// If the worker resends the same bytes because it never saw our reply, hand back the lease already attached to this attempt rather than creating a second one.
 			if (job.outputLease !== null)
@@ -156,28 +180,43 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 				{
 					return { status: "conflict", reason: "invalid_output" };
 				}
-				return { status: "issued", lease: _OutputLeaseProjection(job.id, job.attempt, job.claimFence, job.derivedArtifact.id, job.outputLease.id, job.outputLease.siloId, job.outputLease.expiresAt, request.contentAddress, request.byteLength) };
+				return { status: "issued", lease: _OutputLeaseProjection(job.id, job.deliveryCount, job.claimFence, job.derivedArtifact.id, job.outputLease.id, job.outputLease.siloId, job.outputLease.expiresAt, request.contentAddress, request.byteLength) };
 			}
 
 			const leaseId = randomUUID();
 			await transaction.artifactUploadLease.create({ data: { id: leaseId, artifactId: job.derivedArtifact.id, siloId: job.derivedArtifact.siloId, capabilityJti: randomUUID(), expectedContentAddress: request.contentAddress, expectedByteLength: BigInt(request.byteLength), mediaType: "text/plain", expiresAt: job.claimExpiresAt } });
 			await transaction.artifactPreprocessJob.update({ where: { id: job.id }, data: { outputLeaseId: leaseId } });
-			return { status: "issued", lease: _OutputLeaseProjection(job.id, job.attempt, job.claimFence, job.derivedArtifact.id, leaseId, job.derivedArtifact.siloId, job.claimExpiresAt, request.contentAddress, request.byteLength) };
+			return { status: "issued", lease: _OutputLeaseProjection(job.id, job.deliveryCount, job.claimFence, job.derivedArtifact.id, leaseId, job.derivedArtifact.siloId, job.claimExpiresAt, request.contentAddress, request.byteLength) };
 		}
 	}
 
-	/** Consumes a receipt and publishes the generated text revision in the same transaction. */
+	/** Consumes a receipt, publishes the generated text revision, and records controller completion. */
 	async completeAtomically(request: ArtifactPreprocessCompletionRequest): Promise<CompleteArtifactPreprocessJobResult>
 	{
 		{
 			const transaction = this.transaction;
 			const now = await this._databaseNow();
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: request.jobId }, include: { outputLease: true, derivedArtifact: true } });
-			if (job === null || job.outputLease === null || job.derivedArtifact === null) return { status: "conflict", reason: "claim_not_found" };
-			if (job.attempt !== request.attempt || job.claimFence !== request.claimFence || request.derivedRevisionId !== _DerivedRevisionId(job.outputLease.id)) return { status: "conflict", reason: "stale_claim" };
-			if (!_MatchesPromotion(request, job.outputLease)) return { status: "conflict", reason: "invalid_receipt" };
-			if (job.state === ArtifactPreprocessJobState.Completed) return { status: "completed" };
-			if (job.state !== ArtifactPreprocessJobState.Claimed || job.claimExpiresAt === null || job.claimExpiresAt <= now) return { status: "conflict", reason: "stale_claim" };
+			if (job === null || job.outputLease === null || job.derivedArtifact === null)
+			{
+				return { status: "conflict", reason: "claim_not_found" };
+			}
+			if (job.deliveryCount !== request.attempt || job.claimFence !== request.claimFence || request.derivedRevisionId !== _DerivedRevisionId(job.outputLease.id))
+			{
+				return { status: "conflict", reason: "stale_claim" };
+			}
+			if (!_MatchesPromotion(request, job.outputLease))
+			{
+				return { status: "conflict", reason: "invalid_receipt" };
+			}
+			if (job.completionDigest === request.receiptDigest)
+			{
+				return { status: "completed" };
+			}
+			if (job.state !== ArtifactPreprocessJobState.Claimed || job.claimExpiresAt === null || job.claimExpiresAt <= now)
+			{
+				return { status: "conflict", reason: "stale_claim" };
+			}
 
 			// 1. Mark the lease Promoted and store the receipt digest first, so the receipt is on record before anything becomes visible.
 			await transaction.artifactUploadLease.update({ where: { id: job.outputLease.id }, data: { state: ArtifactUploadLeaseState.Promoted, promotionReceiptDigest: request.receiptDigest, promotedContentAddress: request.promotion.contentAddress, promotedByteLength: BigInt(request.promotion.byteLength), promotedAt: now } });
@@ -187,10 +226,10 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			await transaction.artifact.update({ where: { id: job.derivedArtifact.id }, data: { currentRevisionId: request.derivedRevisionId } });
 			await transaction.artifactRevisionParent.create({ data: { childRevisionId: request.derivedRevisionId, parentRevisionId: job.sourceRevisionId } });
 
-			// 3. Write the same publication event an ordinary upload writes, then mark the lease Finalized and the job Completed in this one commit.
-			await transaction.artifactOutboxEvent.create({ data: { artifactId: job.derivedArtifact.id, revisionId: request.derivedRevisionId, kind: "RevisionPublished", idempotencyKey: `artifact-preprocess:${job.id}:${job.attempt}:revision`, payload: { contentAddress: request.promotion.contentAddress, byteLength: request.promotion.byteLength, mediaType: "text/plain" } } });
+			// 3. Write the same publication event an ordinary upload writes, finalize the lease, and save the controller completion inbox entry in this one commit.
+			await transaction.artifactOutboxEvent.create({ data: { artifactId: job.derivedArtifact.id, revisionId: request.derivedRevisionId, kind: "RevisionPublished", idempotencyKey: `artifact-preprocess:${job.id}:${job.deliveryCount}:revision`, payload: { contentAddress: request.promotion.contentAddress, byteLength: request.promotion.byteLength, mediaType: "text/plain" } } });
 			await transaction.artifactUploadLease.update({ where: { id: job.outputLease.id }, data: { state: ArtifactUploadLeaseState.Finalized, finalizedAt: now } });
-			await transaction.artifactPreprocessJob.update({ where: { id: job.id }, data: { state: ArtifactPreprocessJobState.Completed, derivedRevisionId: request.derivedRevisionId, completedAt: now } });
+			await transaction.artifactPreprocessJob.update({ where: { id: job.id }, data: { derivedRevisionId: request.derivedRevisionId, completionDigest: request.receiptDigest } });
 			return { status: "completed" };
 		}
 	}
@@ -202,17 +241,22 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			const transaction = this.transaction;
 			const now = await this._databaseNow();
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: command.jobId } });
-			if (job === null) return { status: "conflict", reason: "claim_not_found" };
-			if (job.state !== ArtifactPreprocessJobState.Claimed || job.attempt !== command.attempt || job.claimFence !== command.claimFence || job.claimExpiresAt === null || job.claimExpiresAt <= now) return { status: "conflict", reason: "stale_claim" };
+			if (job === null)
+			{
+				return { status: "conflict", reason: "claim_not_found" };
+			}
+			if (job.state !== ArtifactPreprocessJobState.Claimed || job.deliveryCount !== command.attempt || job.claimFence !== command.claimFence || job.claimExpiresAt === null || job.claimExpiresAt <= now)
+			{
+				return { status: "conflict", reason: "stale_claim" };
+			}
 
-			const terminal = job.attempt >= _MAX_ATTEMPTS;
-			const state = terminal ? ArtifactPreprocessJobState.TerminalFailed : ArtifactPreprocessJobState.RetryableFailed;
-			const nextAttemptAt = terminal ? null : new Date(now.getTime() + _RETRY_DELAY_MILLISECONDS * job.attempt);
+			const transition = _ArtifactPreprocessFailureTransition(job.deliveryCount, now);
+			const state = transition.terminal ? ArtifactPreprocessJobState.TerminalFailed : ArtifactPreprocessJobState.RetryableFailed;
 			await transaction.artifactPreprocessJob.update({
 				where: { id: job.id },
-				data: { state, outputLeaseId: null, failureCode: command.failureCode, nextAttemptAt },
+				data: { state, outputLeaseId: null, failureCode: command.failureCode, nextAttemptAt: transition.nextAttemptAt },
 			});
-			return { status: terminal ? "terminal" : "retryable" };
+			return { status: transition.terminal ? "terminal" : "retryable" };
 		}
 	}
 
@@ -220,7 +264,10 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 	private async _databaseNow(): Promise<Date>
 	{
 		const clock = await this.transaction.artifactAuthorityClock.findUnique({ where: { singleton: 1 }, select: { now: true } });
-		if (clock === null || !(clock.now instanceof Date) || Number.isNaN(clock.now.getTime())) throw new Error("artifact authority database clock unavailable");
+		if (clock === null || !(clock.now instanceof Date) || Number.isNaN(clock.now.getTime()))
+		{
+			throw new Error("artifact authority database clock unavailable");
+		}
 		return clock.now;
 	}
 }
@@ -231,7 +278,7 @@ function _IsSafeByteLength(value: bigint): boolean
 	return value >= 0n && value <= BigInt(Number.MAX_SAFE_INTEGER);
 }
 
-/** Build the write-lease claims for the converted text, including the revision id derived from the lease id. */
+/** Builds the write-lease claims for the converted text, including the revision id derived from the lease id. */
 function _OutputLeaseProjection(jobId: string, attempt: number, claimFence: string, artifactId: string, leaseId: string, siloId: string, expiresAt: Date, contentAddress: string, byteLength: number): ArtifactPreprocessOutputLeaseProjection
 {
 	return { jobId, attempt, claimFence, derivedRevisionId: _DerivedRevisionId(leaseId), writeLease: { leaseId, siloId, artifactId, action: "artifact.write" as const, expiresAtEpochSeconds: Math.floor(expiresAt.getTime() / 1_000), expectedContentAddress: contentAddress, expectedByteLength: byteLength, mediaType: "text/plain" } };
@@ -249,7 +296,7 @@ function _MatchesPromotion(request: ArtifactPreprocessCompletionRequest, lease: 
 		&& lease.mediaType === "text/plain";
 }
 
-/** Build the output revision id from its lease id, so completion can prove the receipt belongs to the same lease this attempt was given. */
+/** Builds the output revision id from its lease id, so completion can prove the receipt belongs to the same lease this attempt was given. */
 function _DerivedRevisionId(leaseId: string): string
 {
 	return `artifact-preprocess:${leaseId}`;

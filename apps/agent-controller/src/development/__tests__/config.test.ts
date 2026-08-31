@@ -3,33 +3,28 @@ import { describe, expect, it } from "vitest";
 
 import { _ReadDevelopmentConfig } from "../config";
 
-/** Return a valid Kubernetes projection profile used by the unchanged controller reconciler. */
+/** Return the two synthetic warm pools used by the local workflow controller. */
 function _RuntimeProfiles(): string
 {
-	return JSON.stringify({
-		"personal-default": {
-			namespace: "local-development-personal-runtime",
-			image: "local-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	function _Profile(name: string, namespace: string, serviceAccountName: string, bindingPort: number)
+	{
+		return {
+			namespace,
+			deploymentName: `local-${name}-warm`,
+			serviceAccountName,
+			genericProfile: "generic",
+			claimedProfile: name,
+			image: `local-agent-runtime@sha256:${"a".repeat(64)}`,
 			imagePullPolicy: "Never",
-			runtimeStreamUrl: "http://opencrane.local-development-server.svc.cluster.local/api/internal/agent-runtime",
-			litellmBaseUrl: "http://litellm.local-development-server.svc.cluster.local:4000",
-			serverNamespace: "local-development-server",
-			serviceAccountName: "agent-runtime-default",
-			projectedTokenTtlSeconds: 600,
+			bindingPort,
+			genericIdleSeconds: 900,
 			scratchSize: "64Mi",
-			activeDeadlineSeconds: 900,
-			ttlSecondsAfterFinished: 0,
-			resources: {
-				requests: {
-					cpu: "25m",
-					memory: "64Mi"
-				},
-				limits: {
-					cpu: "250m",
-					memory: "128Mi"
-				}
-			}
-		}
+			resources: { requests: { cpu: "25m", memory: "64Mi" }, limits: { cpu: "250m", memory: "128Mi" } }
+		};
+	}
+	return JSON.stringify({
+		"personal-default": _Profile("personal", "local-development-personal-runtime", "agent-runtime-default", 18_081),
+		"managed-default": _Profile("managed", "local-development-managed-runtime", "managed-agent-runtime-default", 18_082)
 	});
 }
 
@@ -38,13 +33,17 @@ function _Environment(profile: LocalDevelopmentProfileKinds): NodeJS.ProcessEnv
 {
 	return {
 		OPENCRANE_DEVELOPMENT_PROFILE: profile,
+		DATABASE_URL: "postgresql://opencrane:local@127.0.0.1:55432/opencrane",
 		LITELLM_ENDPOINT: "http://127.0.0.1:4000",
 		OPENCRANE_INTERNAL_URL: "http://127.0.0.1:3001",
+		OPENCRANE_SERVER_SERVICE_NAME: "opencrane",
+		OPENCRANE_SERVER_NAMESPACE: "local-development-server",
+		OPENCRANE_SILO_ID: "local-development",
 		OPENCRANE_CONTROLLER_TOKEN_PATH: "/tmp/opencrane-controller.token",
 		OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH: "/tmp/opencrane-runtime-launch.secret",
 		OPENCRANE_LOCAL_RUNTIME_PYTHON: "/workspace/opencrane/apps/agent-runtime/.venv/bin/python",
 		OPENCRANE_REPOSITORY_ROOT: "/workspace/opencrane",
-		AGENT_CONTROLLER_PROFILES_JSON: _RuntimeProfiles()
+		AGENT_CONTROLLER_WARM_PROFILES_JSON: _RuntimeProfiles()
 	};
 }
 

@@ -7,7 +7,16 @@ import type { RuntimeAssignment } from "./runtime-assignment.types";
 import type { RuntimeElicitationProposal } from "./conversation-elicitation.types";
 
 /** The only wire-protocol version the runtime boundary accepts today; a frame declaring anything else is rejected. */
-export const AGENT_RUNTIME_PROTOCOL_V1 = "opencrane.agent-runtime/v1";
+export const AGENT_RUNTIME_PROTOCOL_VERSION = "opencrane.agent-runtime/v2";
+
+/** Selects the continuation format that protocol v2 accepts; another value is rejected before resume. */
+export const AGENT_RUNTIME_CONTINUATION_VERSION = "opencrane.agent-runtime-continuation/v1";
+
+/** Maximum UTF-8 byte length of one plaintext continuation document. */
+export const AGENT_RUNTIME_CONTINUATION_MAX_BYTES = 48 * 1_024;
+
+/** Maximum UTF-8 byte length of one server-sent protocol-v2 command frame. */
+export const AGENT_RUNTIME_COMMAND_MAX_BYTES = 64 * 1_024;
 
 /** Sole projected-token audience accepted from first-party personal-agent runtimes. */
 export const AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE = "opencrane-agent-runtime";
@@ -21,6 +30,12 @@ export const AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE = "opencrane-agent-runtime";
  */
 export const MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE = "opencrane-managed-agent-runtime";
 
+/** Sole audience accepted from a Helm-owned warm runtime Pod. */
+export const WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE = "opencrane-warm-runtime";
+
+/** Fixed credential-free ServiceAccount used by both warm runtime pools. */
+export const WARM_RUNTIME_SERVICE_ACCOUNT_NAME = "warm-runtime";
+
 /**
  * Sole managed-agent workload profile deployed by the initial controller composition.
  *
@@ -29,38 +44,20 @@ export const MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE = "opencrane-managed
  */
 export const MANAGED_AGENT_RUNTIME_PROFILE_NAME = "managed-default";
 
-/**
- * Return whether a ServiceAccount name is a personal-agent runtime name.
- * @param value - Kubernetes ServiceAccount name to validate.
- * @returns True only for a valid personal-runtime-prefixed DNS label.
- */
-export function ___IsAgentRuntimeServiceAccountName(value: string): boolean
-{
-	return value.length <= 63 && /^agent-runtime-[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
-}
-
-/**
- * Return whether a ServiceAccount belongs to the bounded managed (central) agent runtime identity
- * class. This is a NARROWER class than {@link ___IsAgentRuntimeServiceAccountName}: the
- * `managed-agent-runtime-` prefix never overlaps the personal `agent-runtime-` prefix, so a name
- * that satisfies one validator is rejected by the other and the connector-scoped identity of a
- * central agent can never be confused with a personal runtime's.
- * @param value - Kubernetes ServiceAccount name to validate.
- * @returns True only for a valid managed-runtime-prefixed DNS label.
- */
-export function ___IsManagedAgentRuntimeServiceAccountName(value: string): boolean
-{
-	return value.length <= 63 && /^managed-agent-runtime-[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
-}
-
 /** Exact protocol version literal carried by every runtime frame. */
-export type AgentRuntimeProtocolVersion = typeof AGENT_RUNTIME_PROTOCOL_V1;
+export type AgentRuntimeProtocolVersion = typeof AGENT_RUNTIME_PROTOCOL_VERSION;
+
+/** Carries the continuation format selected by {@link AGENT_RUNTIME_CONTINUATION_VERSION}. */
+export type AgentRuntimeContinuationVersion = typeof AGENT_RUNTIME_CONTINUATION_VERSION;
 
 /** Exact audience literal for a personal-agent runtime's projected ServiceAccount token. */
 export type AgentRuntimeProjectedTokenAudience = typeof AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE;
 
 /** Exact audience literal for a managed (central) agent runtime's projected ServiceAccount token. */
 export type ManagedAgentRuntimeProjectedTokenAudience = typeof MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE;
+
+/** Exact audience literal for a warm runtime Pod's projected token. */
+export type WarmRuntimeProjectedTokenAudience = typeof WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE;
 
 /** Exact workload-profile literal accepted for managed agents by the initial composition. */
 export type ManagedAgentRuntimeProfileName = typeof MANAGED_AGENT_RUNTIME_PROFILE_NAME;
@@ -74,6 +71,81 @@ export interface RuntimeStreamOpen
 	readonly runtimeInstanceId: string;
 	/** Pod UID read from the Kubernetes Downward API. It must match the identity in the runtime's projected token. */
 	readonly podUid: string;
+}
+
+/** Links a saved tool invocation to the framework call that will receive its result after replacement. */
+export interface RuntimeContinuationPendingToolCall
+{
+	/** Server-owned ToolInvocation identifier admitted for this attempt. */
+	readonly toolInvocationId: string;
+	/** Model-framework call identifier used to put the eventual result back in the right message. */
+	readonly frameworkCallId: string;
+}
+
+/** Links a saved participant request to the framework call that will receive its answer after replacement. */
+export interface RuntimeContinuationPendingElicitation
+{
+	/** Server request identifier, when the runtime has already observed the admitted request. */
+	readonly requestId?: string;
+	/** Caller-stable request key used by the server's durable elicitation authority. */
+	readonly requestKey: string;
+	/** Model-framework call identifier used to put the eventual answer back in the right message. */
+	readonly frameworkCallId: string;
+}
+
+/**
+ * Saves the model-loop state needed to resume after a runtime process is replaced.
+ *
+ * `digest` is the canonical JSON SHA-256 digest of this object with the `digest` field omitted.
+ * The server verifies it before encryption and again after decryption. These fields do not approve
+ * a tool call or an answer: pending identifiers must match saved `ToolInvocation` and
+ * `ElicitationRequest` rows before the state can be used.
+ */
+export interface RuntimeAttemptContinuation
+{
+	/** Version of this continuation document, independent from the HTTP/SSE protocol version. */
+	readonly version: AgentRuntimeContinuationVersion;
+	/** Monotonic checkpoint revision within one run, attempt, and input generation. */
+	readonly revision: number;
+	/** Digest covering every other field in this document. */
+	readonly digest: string;
+	/** Logical run restored by this document. */
+	readonly runId: AgentRunId;
+	/** Attempt restored by this document. */
+	readonly attempt: number;
+	/** Server-owned input generation at the pause boundary. */
+	readonly inputGeneration: number;
+	/** Highest command sequence whose effects are included in this state. */
+	readonly appliedCommandSequence: number;
+	/** Immutable compiled input used to start the model loop. */
+	readonly compiledInput: CompiledRunInput;
+	/** Serializable framework message history in exact replay order. */
+	readonly modelMessages: readonly JsonValue[];
+	/** Tool calls awaiting a server-owned result. */
+	readonly pendingToolCalls: readonly RuntimeContinuationPendingToolCall[];
+	/** Participant requests awaiting a server-owned result. */
+	readonly pendingElicitations: readonly RuntimeContinuationPendingElicitation[];
+}
+
+/** Carries a waiting attempt's next continuation revision from its authenticated runtime process. */
+export interface RuntimeContinuationSaveRequest
+{
+	/** Exact private protocol spoken by the runtime. */
+	readonly protocolVersion: AgentRuntimeProtocolVersion;
+	/** Runtime process currently bound to the command stream. */
+	readonly runtimeInstanceId: string;
+	/** Accepted command that produced this waiting state. */
+	readonly commandId: string;
+	/** Logical run receiving this continuation. */
+	readonly runId: AgentRunId;
+	/** Current attempt number. */
+	readonly attempt: number;
+	/** Current server-owned stream fence. */
+	readonly fence: number;
+	/** Current server-owned input generation. */
+	readonly inputGeneration: number;
+	/** Plaintext continuation that the server encrypts before persistence. */
+	readonly continuation: RuntimeAttemptContinuation;
 }
 
 /** Header fields present on every command the control plane sends a runtime. */
@@ -126,6 +198,8 @@ export interface ResumeAttemptCommand
 	readonly steeringRequests: JsonValue;
 	/** Exact server-owned elicitation results whose one-time delivery rows were consumed. */
 	readonly elicitationResults: readonly RuntimeElicitationResult[];
+	/** Restores the model-loop state for every protocol-v2 resume, even when the same Pod receives it. */
+	readonly continuation: RuntimeAttemptContinuation;
 }
 
 /** Exact elicitation outcome delivered after the server accepts participant input. */

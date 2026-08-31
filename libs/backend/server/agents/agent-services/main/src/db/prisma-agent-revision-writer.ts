@@ -1,15 +1,14 @@
 import { AgentRevisionState, AuthorizationBoundaryCoverage, AuthorizationBoundaryKind, Prisma } from "@prisma/client";
 
 import { __DigestAgentRevisionContent } from "@opencrane/models/agents";
-import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentBudget, type AgentRevisionContent, type RevisionBoundaryAttachment, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
-import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
+import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentBudget, type AgentRevisionContent, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
 
 import { type AgentRevisionWriterRepository, type CreateAgentRevisionWithinTransactionCommand } from "./prisma-agent-revision-writer.types";
 
 /** Include every nested assignment required to map a persisted revision back to the domain model. */
 export const _AGENT_REVISION_INCLUDE = {
 	skillAssignments: true,
-	integrationAssignments: true,
+	mcpToolAssignments: true,
 	boundaryAttachments: true,
 } as const;
 
@@ -36,14 +35,7 @@ export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments):
 		{
 			return { skillId: skill.skillId, revisionId: skill.skillRevisionId };
 		}),
-		integrationAssignments: row.integrationAssignments.map(function _MapIntegration(assignment)
-		{
-			return {
-				integrationId: assignment.integrationId,
-				custodyReferenceId: assignment.custodyReferenceId,
-				toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as unknown as readonly ReviewedIntegrationToolDefinition[],
-			};
-		}),
+		mcpToolRevisionIds: row.mcpToolAssignments.map(function _MapMcpTool(assignment): string { return assignment.toolRevisionId; }).sort(),
 		boundaryAttachments: row.boundaryAttachments.map(function _MapBoundary(attachment)
 		{
 			return _FromPrismaBoundary(attachment);
@@ -54,7 +46,7 @@ export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments):
 /**
  * Builds the one Prisma create input used for every new agent revision.
  *
- * The stored digest and the nested skill, integration, and boundary rows all come from the same content
+ * The stored digest and the nested skill, MCP tool, and boundary rows all come from the same content
  * value, so the digest always describes exactly what was written. Every writer goes through here —
  * the lifecycle repository and the model-selection strategy both call it — so no second place can
  * drift on how a revision is stored, while each keeps its own transaction.
@@ -94,15 +86,10 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 				return { skillId: skill.skillId, skillRevisionId: skill.revisionId };
 			}),
 		},
-		integrationAssignments: {
-			create: command.content.integrationAssignments.map(function _MapIntegration(assignment)
+		mcpToolAssignments: {
+			create: command.content.mcpToolRevisionIds.map(function _MapMcpTool(toolRevisionId)
 			{
-				return {
-					integrationId: assignment.integrationId,
-					siloId: command.siloId,
-					custodyReferenceId: assignment.custodyReferenceId,
-					toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as Prisma.InputJsonValue,
-				};
+				return { toolRevisionId, agentServiceId: command.agentServiceId, siloId: command.siloId };
 			}),
 		},
 		boundaryAttachments: {

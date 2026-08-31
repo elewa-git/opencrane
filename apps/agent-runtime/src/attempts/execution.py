@@ -10,18 +10,15 @@ import threading
 from collections.abc import Callable, Iterable
 from urllib.error import HTTPError, URLError
 
-from ..model_loop.checkpoints import read_checkpoint, write_checkpoint
 from ..model_loop.driver import pydantic_ai_event_source, pydantic_ai_resume_source
-from ..model_loop.histories import clear_model_history
-from ..observability import log, run_evidence, trace
+from ..observability import run_evidence, trace
 from ..protocol.candidates import (
     candidate,
     command_coordinates,
 )
 from ..protocol.event_projector import RuntimeEventProjector
-from .pending_elicitations import clear_pending_elicitations
+from .continuation import checkpoint_continuation, clear_continuation, continuation_compiled_input, initialize_continuation, restore_continuation
 from .resume_results import resolve_resume_results
-from .pending_tools import record_pending_tool_call
 from .terminal import TerminalGate
 
 
@@ -31,16 +28,17 @@ def execute_start_attempt(
     post_candidate: Callable[[dict[str, object]], None],
     event_source: Callable[..., Iterable[dict[str, object]]] = pydantic_ai_event_source,
     cancel_event: threading.Event | None = None,
-    checkpoint_cipher: object | None = None,
     terminal_gate: "TerminalGate | None" = None,
     publish_output: Callable[[dict[str, object], str, dict[str, object]], None] | None = None,
+    attempt_model_key: str | None = None,
+    save_continuation: Callable[[dict[str, object], int, dict[str, object]], None] | None = None,
 ) -> None:
     """Execute one admitted ``start_attempt`` command.
 
-    Sequence: derive trusted coordinates, validate compiled input, emit ``run.started``, write a
-    best-effort checkpoint, stream neutral model events, then claim ``run.completed``. Expected
-    executor/transport failures become one ``run.failed`` terminal candidate unless cancellation has
-    already suppressed local terminal delivery.
+    Sequence: derive trusted coordinates, validate compiled input, emit ``run.started``, stream
+    neutral model events, save a durable continuation before waiting, then claim ``run.completed``.
+    Expected executor or transport failures become one ``run.failed`` terminal candidate unless
+    cancellation has already suppressed local terminal delivery.
     """
     # Coordinates are the runtime's capability fence for this command. Resolve them before reading
     # payload data so unbound input can neither start model work nor elicit a candidate.
@@ -71,6 +69,22 @@ def execute_start_attempt(
             candidate(coordinates, "run.failed", {"reason": "compiled_input_coordinate_mismatch"}),
         )
         return
+    input_generation = _snapshot_input_generation(payload)
+    if input_generation is None:
+        terminal_gate.post_completion(
+            post_candidate,
+            candidate(coordinates, "run.failed", {"reason": "invalid_input_generation"}),
+        )
+        return
+    # Create one empty aggregate before announcing or running the attempt. Every history and pending
+    # call written by the adapter now lands in this serializable state instead of a separate global.
+    initialize_continuation(
+        str(coordinates["runId"]),
+        int(coordinates["attempt"]),
+        input_generation,
+        int(coordinates["sequence"]),
+        compiled_input,
+    )
     # Announce the attempt before touching the model adapter. This keeps the candidate stream ordered
     # even when model construction fails immediately after admission.
     post_candidate(
@@ -81,27 +95,24 @@ def execute_start_attempt(
         ),
     )
     run_evidence(coordinates, "started")
-    # Checkpoint only after ``run.started``: local recovery state must never suggest that an attempt
-    # began before the server has seen the corresponding lifecycle candidate.
-    _try_write_checkpoint(
-        coordinates,
-        payload if isinstance(payload, dict) else {},
-        compiled_input,
-        checkpoint_cipher,
-    )
     # A fresh start has no carried steering. The mutable list is intentionally attempt-local and is
     # drained only by the model adapter at pre-request boundaries.
     steering_buffer: list[str] = []
     # Projection is the protocol firewall: execution observes neutral events, while the projector
     # alone binds them to canonical candidate kinds, command coordinates, and frozen tool grants.
-    projector = RuntimeEventProjector(coordinates, compiled_input, post_candidate, record_pending_tool_call, publish_output)
+    projector = RuntimeEventProjector(coordinates, compiled_input, post_candidate, publish_output)
     with trace(
         "agent_runtime.start_attempt",
         runId=coordinates["runId"],
         attempt=coordinates["attempt"],
     ):
         try:
-            for neutral_event in event_source(compiled_input, cancel_event, steering_buffer):
+            source = (
+                event_source(compiled_input, cancel_event, steering_buffer, attempt_model_key=attempt_model_key)
+                if attempt_model_key is not None
+                else event_source(compiled_input, cancel_event, steering_buffer)
+            )
+            for neutral_event in source:
                 if cancel_event.is_set():
                     # Cancellation is checked again after the source yields so a racing provider
                     # response cannot become a late candidate.
@@ -111,19 +122,20 @@ def execute_start_attempt(
             # where output actually stopped, rather than adding an ending the model never produced. The
             # stored messages and pending questions go too, because no resume will follow.
             if cancel_event.is_set():
-                clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
-                clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
+                clear_continuation(str(coordinates["runId"]), int(coordinates["attempt"]))
                 return
             projector.complete_message()
-            if projector.has_pending_input:
-                # A tool call or a question stops the loop here. The run is finished only once the server
-                # sends back a result and a later resume carries on from it. Keep the stored messages and
-                # the pending questions: that resume needs both to find its way back.
+            if projector.wait_reasons:
+                _save_waiting_continuation(coordinates, input_generation, save_continuation)
+                # Report only the fixed categories this process can prove. The server decides whether
+                # an outside action also needs approval after it checks the saved invocation and policy.
+                run_evidence(coordinates, "waiting", waitReasons=sorted(reason.value for reason in projector.wait_reasons))
+                # Keep the stored messages and pending questions because a later server-owned resume
+                # needs both to reconnect the returned results to this command.
                 return
             # Nothing is waiting, so this turn ended the run. Drop what was kept for a resume before
             # reporting completion, so memory lasts no longer than the attempt does.
-            clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
-            clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
+            clear_continuation(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(coordinates, "run.completed", {}),
@@ -133,8 +145,7 @@ def execute_start_attempt(
             # Report the exception type and nothing else. The message can hold provider URLs, request
             # content, or credentials, none of which belong in a candidate or a log line.
             # A failed attempt will get no resume, so drop the stored messages and pending questions.
-            clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
-            clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
+            clear_continuation(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(
@@ -157,9 +168,10 @@ def execute_resume_attempt(
     post_candidate: Callable[[dict[str, object]], None],
     resume_event_source: Callable[..., Iterable[dict[str, object]]] = pydantic_ai_resume_source,
     cancel_event: threading.Event | None = None,
-    checkpoint_cipher: object | None = None,
     terminal_gate: "TerminalGate | None" = None,
     publish_output: Callable[[dict[str, object], str, dict[str, object]], None] | None = None,
+    attempt_model_key: str | None = None,
+    save_continuation: Callable[[dict[str, object], int, dict[str, object]], None] | None = None,
 ) -> None:
     """Execute one admitted ``resume_attempt`` with saved tool results.
 
@@ -215,18 +227,40 @@ def execute_resume_attempt(
             candidate(coordinates, "run.failed", {"reason": "invalid_resume_steering"}),
         )
         return
-    # Recover context before consuming pending calls, but treat missing local scratch as an empty,
-    # fail-closed grant set rather than asking the runtime to reconstruct authority.
-    compiled_input = _recover_compiled_input(
-        coordinates,
-        input_generation,
-        checkpoint_cipher,
-    )
-    # Recovered input has to belong to this attempt. If it does not, the checkpoint on disk is from
-    # another run or attempt, and the messages stored under these coordinates cannot be trusted either,
-    # so they go. Pending questions stay: they were keyed from the command and are not in doubt.
+    continuation = payload.get("continuation")
+    if not isinstance(input_generation, int) or isinstance(input_generation, bool) or input_generation < 0:
+        terminal_gate.post_completion(
+            post_candidate,
+            candidate(coordinates, "run.failed", {"reason": "invalid_input_generation"}),
+        )
+        return
+    # Restore the exact server-supplied state before looking at any result. A replacement runtime has
+    # no local fallback, and a malformed or stale continuation cannot reach the model provider.
+    try:
+        restore_continuation(
+            continuation,
+            str(coordinates["runId"]),
+            int(coordinates["attempt"]),
+            input_generation,
+            int(coordinates["sequence"]),
+        )
+    except RuntimeError:
+        terminal_gate.post_completion(
+            post_candidate,
+            candidate(coordinates, "run.failed", {"reason": "invalid_continuation"}),
+        )
+        return
+    compiled_input = continuation_compiled_input(str(coordinates["runId"]), int(coordinates["attempt"]))
+    if compiled_input is None:
+        terminal_gate.post_completion(
+            post_candidate,
+            candidate(coordinates, "run.failed", {"reason": "invalid_continuation"}),
+        )
+        return
+    # Recovered input has to belong to this attempt. If it does not, discard the whole working copy:
+    # its messages and pending calls all came from a continuation that this command cannot use.
     if compiled_input and not _compiled_input_matches_coordinates(compiled_input, coordinates):
-        clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
+        clear_continuation(str(coordinates["runId"]), int(coordinates["attempt"]))
         terminal_gate.post_completion(
             post_candidate,
             candidate(coordinates, "run.failed", {"reason": "compiled_input_coordinate_mismatch"}),
@@ -257,19 +291,19 @@ def execute_resume_attempt(
     steering_buffer = [item["text"].strip() for item in steering_requests]
     # Construct a new projector for this command: message lifecycle and candidate identifiers are
     # command-scoped, even though the model context continues the same durable run attempt.
-    projector = RuntimeEventProjector(coordinates, compiled_input, post_candidate, record_pending_tool_call, publish_output)
+    projector = RuntimeEventProjector(coordinates, compiled_input, post_candidate, publish_output)
     with trace(
         "agent_runtime.resume_attempt",
         runId=coordinates["runId"],
         attempt=coordinates["attempt"],
     ):
         try:
-            for neutral_event in resume_event_source(
-                compiled_input,
-                model_resume_results,
-                cancel_event,
-                steering_buffer,
-            ):
+            source = (
+                resume_event_source(compiled_input, model_resume_results, cancel_event, steering_buffer, attempt_model_key=attempt_model_key)
+                if attempt_model_key is not None
+                else resume_event_source(compiled_input, model_resume_results, cancel_event, steering_buffer)
+            )
+            for neutral_event in source:
                 if cancel_event.is_set():
                     # A resume is subject to the same late-output suppression as a fresh attempt.
                     break
@@ -277,24 +311,23 @@ def execute_resume_attempt(
             # A resumed turn follows the same rule as a fresh one: no message ending added after
             # cancellation, and nothing kept for a resume that is not going to happen.
             if cancel_event.is_set():
-                clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
-                clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
+                clear_continuation(str(coordinates["runId"]), int(coordinates["attempt"]))
                 return
             projector.complete_message()
-            if projector.has_pending_input:
-                # Additional tool calls or questions create another control-plane round trip. A
-                # resume may pause repeatedly, and none of those pauses is a completed run.
+            if projector.wait_reasons:
+                _save_waiting_continuation(coordinates, input_generation, save_continuation)
+                # A resume may pause repeatedly. Record the closed reason set without copying model
+                # questions, tool arguments, or any other command content.
+                run_evidence(coordinates, "waiting", waitReasons=sorted(reason.value for reason in projector.wait_reasons))
                 return
-            clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
-            clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
+            clear_continuation(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(coordinates, "run.completed", {}),
             ):
                 run_evidence(coordinates, "completed")
         except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:
-            clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
-            clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
+            clear_continuation(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(
@@ -329,8 +362,7 @@ def execute_cancel_attempt(
         # Set the shared event before recording evidence so the worker observes cancellation as soon
         # as possible and cannot race a late completion through the terminal gate.
         cancel_event.set()
-    clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
-    clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
+    clear_continuation(str(coordinates["runId"]), int(coordinates["attempt"]))
     # The reason is evidence only. It cannot alter cancellation semantics or select a different local
     # worker, because command routing already paired this signal with the active attempt.
     payload = command.get("payload")
@@ -338,14 +370,13 @@ def execute_cancel_attempt(
     run_evidence(coordinates, "cancelled", reason=reason)
 
 
-def _snapshot_input_generation(payload: dict[str, object]) -> object:
-    """Read the accepted input generation, using zero when it is missing or malformed (older commands included)."""
-    # Generation is copied from the server snapshot rather than derived locally, preserving the
-    # control plane's ordering across accepted input changes.
+def _snapshot_input_generation(payload: dict[str, object]) -> int | None:
+    """Read the accepted non-negative input generation without a legacy fallback."""
     snapshot = payload.get("snapshot") if isinstance(payload, dict) else None
-    if isinstance(snapshot, dict) and isinstance(snapshot.get("inputGeneration"), int):
-        return snapshot["inputGeneration"]
-    return 0
+    generation = snapshot.get("inputGeneration") if isinstance(snapshot, dict) else None
+    if isinstance(generation, int) and not isinstance(generation, bool) and generation >= 0:
+        return generation
+    return None
 
 
 def _compiled_input_matches_coordinates(
@@ -366,58 +397,18 @@ def _compiled_input_matches_coordinates(
     )
 
 
-def _try_write_checkpoint(
+def _save_waiting_continuation(
     coordinates: dict[str, object],
-    payload: dict[str, object],
-    compiled_input: dict[str, object],
-    cipher: object | None,
+    input_generation: int,
+    save_continuation: Callable[[dict[str, object], int, dict[str, object]], None] | None,
 ) -> None:
-    """Best-effort persist compiled context without making checkpointing load-bearing.
-
-    Any local crypto or filesystem failure is reduced to safe evidence. The active model attempt
-    continues because server authority and emitted candidates do not depend on local scratch.
-    """
-    # Checkpoint failure is intentionally outside the model-loop failure path. Local scratch improves
-    # continuation only; it cannot veto execution of an otherwise admitted command.
-    try:
-        write_checkpoint(
-            coordinates["runId"],
-            coordinates["attempt"],
-            _snapshot_input_generation(payload),
-            {"compiledInput": compiled_input},
-            cipher=cipher,
-        )
-    except Exception:  # noqa: BLE001 - checkpoints never become load-bearing
-        log(
-            "checkpoint_skipped",
-            runId=coordinates.get("runId"),
-            attempt=coordinates.get("attempt"),
-        )
-
-
-def _recover_compiled_input(
-    coordinates: dict[str, object],
-    input_generation: object,
-    cipher: object | None,
-) -> dict[str, object]:
-    """Recover compiled context only from a coordinate-matching subordinate checkpoint.
-
-    An empty mapping is deliberately fail-closed: any subsequent tool call resolves as unknown
-    rather than inheriting a stale or unverifiable grant set.
-    """
-    # Decrypt and validate through the checkpoint owner rather than reading the file here. Keeping a
-    # single validation point prevents resume code from accidentally accepting weaker coordinates.
-    try:
-        state = read_checkpoint(
-            coordinates["runId"],
-            coordinates["attempt"],
-            input_generation,
-            cipher=cipher,
-        )
-    except Exception:  # noqa: BLE001 - checkpoints never crash resume
-        return {}
-    # Return only the one state member execution understands. Other checkpoint fields, including any
-    # introduced by a future format, cannot silently become model input.
-    if isinstance(state, dict) and isinstance(state.get("compiledInput"), dict):
-        return state["compiledInput"]
-    return {}
+    """Persist the complete continuation before the runtime enters a waiting state."""
+    if save_continuation is None:
+        raise RuntimeError("durable continuation transport is unavailable")
+    document = checkpoint_continuation(
+        str(coordinates["runId"]),
+        int(coordinates["attempt"]),
+        int(coordinates["sequence"]),
+        input_generation,
+    )
+    save_continuation(coordinates, input_generation, document)

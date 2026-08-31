@@ -66,9 +66,6 @@ carries a concrete, currently authorized human approval subject.
   gated on current signed membership; returns only the intersection.
 - `__VerifyCapabilityProof`, `__ComputeEs256JwkThumbprint`, `__NormalizeDpopTargetUri` — verify the
   cryptographic proof an agent presents that it is that workload and is calling this exact endpoint.
-- `__ConsumeRuntimeBootstrap` — validates and atomically spends a one-time startup token that binds a
-  run to its pod and attempt, and accepts only the `opencrane-agent-runtime` projected-token audience,
-  so it cannot be reused or confused with a service-specific action token.
 - `__ExecuteCapabilityAction` — verifies the proof, reserves its unique id durably, then runs the
   effect exactly once (or returns the earlier result on an allowed idempotent retry).
 - `__CancelPendingRunApprovalAuthority` — closes pending approvals and only provider-free or
@@ -183,11 +180,10 @@ adapter's dispatch method begins, a missing acknowledgement is ambiguous rather 
 | `Reconciling` | absent or inconclusive | `Ready` or `RecoveryRequired` |
 | `RecoveryRequired` | cancellation | `Failed`; no implicit retry or result exists before resolution |
 
-The current Obot integration declares manual recovery: it provides neither provider idempotency nor
-trusted readback. An ambiguous Obot result therefore pauses the run visibly and remains cancellable;
-it is never dispatched again automatically. Terminal invocation state and its delivery intent share
-one transaction. Runtime command persistence consumes that intent, and reconnect replays the stored
-command body byte for byte.
+An adapter without provider idempotency or trusted readback declares manual recovery. An ambiguous
+result therefore pauses the run visibly and remains cancellable; it is never dispatched again
+automatically. Terminal invocation state and its delivery intent share one transaction. Runtime
+command persistence consumes that intent, and reconnect replays the stored command body byte for byte.
 
 ### Deferred approval lifecycle
 

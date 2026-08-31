@@ -36,7 +36,8 @@ function _Projects(target)
 
 function _ContainerProjects()
 {
-  const forced = selectForcedContainerProjects(process.env.FORCE_DEPLOYABLES);
+  const allProjects = process.env.FORCE_DEPLOYABLES === "all" ? _Projects("container") : [];
+  const forced = selectForcedContainerProjects(process.env.FORCE_DEPLOYABLES, allProjects);
   if (forced !== null) return forced;
   return _AffectedProjects("container");
 }

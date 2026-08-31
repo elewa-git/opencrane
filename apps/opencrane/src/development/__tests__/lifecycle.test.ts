@@ -3,13 +3,7 @@ import type { Server } from "node:http";
 import type { Express } from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { SelfConversationSocketServer } from "@opencrane/backend/server/conversations";
-
-vi.mock("../../app/runtime-repair", function _RuntimeRepair()
-{
-	return { _StartRuntimeRepair: vi.fn(function _Start() { return { stop: vi.fn() }; }) };
-});
 
 import { _StartDevelopmentLifecycle } from "../lifecycle";
 
@@ -41,7 +35,7 @@ describe("Tier 2 development lifecycle", function _Suite()
 			null,
 			conversationSockets,
 			{ $disconnect: vi.fn() } as never,
-			{} as RunCancellationRepository,
+			{ startWorkers: vi.fn(), close: vi.fn() },
 			8080,
 			8081,
 			vi.fn()

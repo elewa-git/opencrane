@@ -46,17 +46,22 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	{
 		const transaction = this._transaction;
 		const bodyDigest = __DigestCanonicalJson(command.body as unknown as JsonValue);
-		if (!await this._canParticipantAccess(command.siloId, command.conversationId, command.assignedParticipantId)) return null;
+		if (!await this._canParticipantAccess(command.siloId, command.conversationId, command.assignedParticipantId))
+			return null;
 		const existing = await transaction.elicitationRequest.findUnique({ where: { runId_attempt_requestKey: { runId: command.runId, attempt: command.attempt, requestKey: command.requestKey } } });
-		if (existing !== null) return _ElicitationRequestMatchesOpenCommand(existing, command, bodyDigest, _PrismaPurpose(command.purpose), _PrismaBodyKind(command.body.kind)) ? _Projection(existing) : null;
+		if (existing !== null)
+			return _ElicitationRequestMatchesOpenCommand(existing, command, bodyDigest, _PrismaPurpose(command.purpose), _PrismaBodyKind(command.body.kind)) ? _Projection(existing) : null;
 		const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
-		if (run === null || run.siloId !== command.siloId || run.conversationId !== command.conversationId || run.attempt !== command.attempt || command.expiresAt.getTime() <= command.now.getTime()) return null;
+		if (run === null || run.siloId !== command.siloId || run.conversationId !== command.conversationId || run.attempt !== command.attempt || command.expiresAt.getTime() <= command.now.getTime())
+			return null;
 		if (run.state === AgentRunState.Running)
 		{
 			const paused = await transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: AgentRunState.Running }, data: { state: AgentRunState.WaitingForInput } });
-			if (paused.count !== 1) return null;
+			if (paused.count !== 1)
+				return null;
 		}
-		else if (run.state !== AgentRunState.WaitingForInput) return null;
+		else if (run.state !== AgentRunState.WaitingForInput)
+			return null;
 		const created = await transaction.elicitationRequest.create({ data: {
 			id: command.requestId, siloId: command.siloId, conversationId: command.conversationId,
 			runId: command.runId, attempt: command.attempt, assignedParticipantId: command.assignedParticipantId,
@@ -73,14 +78,15 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	async openMemoryPermission(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, now: Date): Promise<boolean>
 	{
 		const payload = _BuildMemoryPermissionPayload(invocation, snapshot);
-		if (payload === null) return false;
+		if (payload === null)
+			return false;
 		const body = { kind: ElicitationBodyKinds.Approval, prompt: "Allow this agent to use your personal memory for this answer?", action: "Use personal memory", target: "Your saved memory", dataUse: "Use remembered facts only for this answer", consequence: "The agent will answer this request using relevant saved memory" } as const;
 		const opened = await this.open({
 			requestId: `memory-permission-${invocation.id}`,
 			siloId: invocation.siloId,
 			conversationId: snapshot.conversationId as string,
-			runId: invocation.runId,
-			attempt: invocation.attempt,
+			runId: payload.runId,
+			attempt: payload.attempt,
 			assignedParticipantId: invocation.subjectId,
 			requestKey: `memory-permission:${invocation.id}`,
 			purpose: ElicitationPurposes.PersonalMemoryPermission,
@@ -98,9 +104,11 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	async verifyMemoryPermission(invocation: ToolInvocationRecord, claim: ToolInvocationClaim, snapshot: RunInputSnapshot, now: Date): Promise<PersonalMemoryPermissionVerificationResult>
 	{
 		const expectedPayload = _BuildMemoryPermissionPayloadForClaimedInvocation(invocation, snapshot);
-		if (expectedPayload === null || !await this._toolInvocations.verifyActiveDispatchClaim(invocation, claim, now)) return { outcome: PersonalMemoryPermissionVerificationOutcomes.Denied };
+		if (expectedPayload === null || !await this._toolInvocations.verifyActiveDispatchClaim(invocation, claim, now))
+			return { outcome: PersonalMemoryPermissionVerificationOutcomes.Denied };
 		const receipt = await this._transaction.personalMemoryPermissionReceipt.findUnique({ where: { toolInvocationId: invocation.id }, include: { request: true } });
-		if (receipt === null) return { outcome: PersonalMemoryPermissionVerificationOutcomes.Denied };
+		if (receipt === null)
+			return { outcome: PersonalMemoryPermissionVerificationOutcomes.Denied };
 		const request = receipt.request;
 		const matches = receipt.state === PersonalMemoryPermissionReceiptState.Active
 			&& receipt.consumedAt === null
@@ -127,39 +135,50 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	{
 		const transaction = this._transaction;
 		const request = await transaction.elicitationRequest.findUnique({ where: { id: command.requestId } });
-		if (request === null || request.siloId !== command.siloId || request.conversationId !== command.conversationId) return { outcome: "not_found" };
-		if (request.assignedParticipantId !== command.subjectId) return { outcome: "unauthorized" };
-		if (!await this._canParticipantAccess(command.siloId, command.conversationId, command.subjectId)) return { outcome: "unauthorized" };
+		if (request === null || request.siloId !== command.siloId || request.conversationId !== command.conversationId)
+			return { outcome: "not_found" };
+		if (request.assignedParticipantId !== command.subjectId)
+			return { outcome: "unauthorized" };
+		if (!await this._canParticipantAccess(command.siloId, command.conversationId, command.subjectId))
+			return { outcome: "unauthorized" };
 		const responseDigest = __DigestCanonicalJson(command.submission.response as unknown as JsonValue);
 		const prior = await transaction.elicitationResponseAttempt.findUnique({ where: { requestId_idempotencyKey: { requestId: request.id, idempotencyKey: command.submission.idempotencyKey } } });
 		if (prior !== null)
 		{
-			if (prior.responseDigest !== responseDigest || request.resolvedAt === null) return { outcome: "conflict" };
+			if (prior.responseDigest !== responseDigest || request.resolvedAt === null)
+				return { outcome: "conflict" };
 			return { outcome: "accepted", projection: { requestId: request.id, state: _PublicState(request.state), idempotent: true, resolvedAt: request.resolvedAt.toISOString() } };
 		}
-		if (request.state !== ElicitationRequestState.Requested) return { outcome: "conflict" };
+		if (request.state !== ElicitationRequestState.Requested)
+			return { outcome: "conflict" };
 		const run = await transaction.agentRun.findUnique({ where: { id: request.runId } });
-		if (run === null || run.attempt !== request.attempt || run.state !== AgentRunState.WaitingForInput) return { outcome: "unauthorized" };
+		if (run === null || run.attempt !== request.attempt || run.state !== AgentRunState.WaitingForInput)
+			return { outcome: "unauthorized" };
 		if (request.expiresAt.getTime() <= command.now.getTime())
 		{
 			await this._expireRequest(request, command.now);
 			return { outcome: "expired" };
 		}
-		if (request.requiresStepUp && (command.verifiedStepUpAt === null || command.verifiedStepUpAt.getTime() < request.createdAt.getTime())) return { outcome: "step_up_required" };
+		if (request.requiresStepUp && (command.verifiedStepUpAt === null || command.verifiedStepUpAt.getTime() < request.createdAt.getTime()))
+			return { outcome: "step_up_required" };
 		const body = request.body as unknown as ElicitationBody;
-		if (!_IsElicitationResponseValid(body, command.submission.response)) return { outcome: "invalid_response" };
+		if (!_IsElicitationResponseValid(body, command.submission.response))
+			return { outcome: "invalid_response" };
 		await transaction.elicitationResponseAttempt.create({ data: { requestId: request.id, idempotencyKey: command.submission.idempotencyKey, respondingSubjectId: command.subjectId, response: command.submission.response as unknown as Prisma.InputJsonValue, responseDigest, verifiedStepUpAt: command.verifiedStepUpAt, submittedAt: command.now } });
 		const publicState = _ElicitationStateForResponse(command.submission.response);
 		const state = publicState === ElicitationRequestStates.Answered ? ElicitationRequestState.Answered : ElicitationRequestState.Declined;
 		const resolved = await transaction.elicitationRequest.updateMany({ where: { id: request.id, state: ElicitationRequestState.Requested }, data: { state, resolvedAt: command.now, resolvedBy: command.subjectId } });
-		if (resolved.count !== 1) throw new Error("elicitation response lost its request fence");
-		if (!await this._purposeStrategies.forPurpose(_PublicPurpose(request.purpose)).apply(request, command.submission.response, command.subjectId, command.now)) throw new Error("elicitation purpose strategy rejected an admitted response");
+		if (resolved.count !== 1)
+			throw new Error("elicitation response lost its request fence");
+		if (!await this._purposeStrategies.forPurpose(_PublicPurpose(request.purpose)).apply(request, command.submission.response, command.subjectId, command.now))
+			throw new Error("elicitation purpose strategy rejected an admitted response");
 		const pendingElicitations = await transaction.elicitationRequest.count({ where: { runId: request.runId, attempt: request.attempt, state: ElicitationRequestState.Requested } });
 		const pendingApprovals = await transaction.approvalRequest.count({ where: { runId: request.runId, attempt: request.attempt, state: ApprovalRequestState.Pending } });
 		if (pendingElicitations === 0 && pendingApprovals === 0)
 		{
 			const resumed = await transaction.agentRun.updateMany({ where: { id: request.runId, attempt: request.attempt, state: AgentRunState.WaitingForInput }, data: { state: AgentRunState.Running } });
-			if (resumed.count !== 1) throw new Error("elicitation response lost its waiting run fence");
+			if (resumed.count !== 1)
+				throw new Error("elicitation response lost its waiting run fence");
 		}
 		return { outcome: "accepted", projection: { requestId: request.id, state: publicState, idempotent: false, resolvedAt: command.now.toISOString() } };
 	}
@@ -167,16 +186,19 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** Read one request only for its still-active assigned participant. */
 	async readOwned(siloId: string, conversationId: string, requestId: string, subjectId: string, now: Date): Promise<ConversationElicitation | null>
 	{
-		if (!await this._canParticipantAccess(siloId, conversationId, subjectId)) return null;
+		if (!await this._canParticipantAccess(siloId, conversationId, subjectId))
+			return null;
 		const row = await this._transaction.elicitationRequest.findFirst({ where: { id: requestId, siloId, conversationId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null } } });
-		if (row === null) return null;
+		if (row === null)
+			return null;
 		return _ProjectionAt(row, now);
 	}
 
 	/** List still-actionable requests for one exact conversation and participant. */
 	async listOpenOwned(siloId: string, conversationId: string, subjectId: string, now: Date): Promise<readonly ConversationElicitation[]>
 	{
-		if (!await this._canParticipantAccess(siloId, conversationId, subjectId)) return [];
+		if (!await this._canParticipantAccess(siloId, conversationId, subjectId))
+			return [];
 		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, conversationId, assignedParticipantId: subjectId, state: ElicitationRequestState.Requested, expiresAt: { gt: now }, assignedParticipant: { accessEndedPosition: null } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 50 });
 		return rows.map(_Projection);
 	}
@@ -184,9 +206,11 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** List recent requests as references to canonical conversation/run authority. */
 	async listActivityOwned(siloId: string, subjectId: string, limit: number, now: Date): Promise<readonly ConversationElicitation[]>
 	{
-		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new TypeError("elicitation activity limit must be between one and one hundred");
+		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+			throw new TypeError("elicitation activity limit must be between one and one hundred");
 		const membership = await this._transaction.orgMembership.count({ where: { clusterTenant: siloId, subject: subjectId, status: OrgMemberStatus.Active } });
-		if (membership !== 1) return [];
+		if (membership !== 1)
+			return [];
 		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null, conversation: _ConversationAccessWhere(siloId, subjectId) } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit });
 		return rows.map(function _ProjectActivity(row) { return _ProjectionAt(row, now); });
 	}
@@ -201,7 +225,8 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	private async _canParticipantAccess(siloId: string, conversationId: string, subjectId: string): Promise<boolean>
 	{
 		const membership = await this._transaction.orgMembership.count({ where: { clusterTenant: siloId, subject: subjectId, status: OrgMemberStatus.Active } });
-		if (membership !== 1) return false;
+		if (membership !== 1)
+			return false;
 		const participant = await this._transaction.conversationParticipant.findFirst({ where: {
 			conversationId,
 			userId: subjectId,
@@ -215,7 +240,8 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	async expireDue(command: ExpireElicitationBatchCommand): Promise<ExpireElicitationBatchResult>
 	{
 		const run = await this._transaction.agentRun.findUnique({ where: { id: command.runId } });
-		if (run === null || run.attempt !== command.attempt || run.state !== AgentRunState.WaitingForInput) return { expiredCount: 0, resumed: false };
+		if (run === null || run.attempt !== command.attempt || run.state !== AgentRunState.WaitingForInput)
+			return { expiredCount: 0, resumed: false };
 		const due = await this._transaction.elicitationRequest.findMany({ where: { runId: command.runId, attempt: command.attempt, state: ElicitationRequestState.Requested, expiresAt: { lte: command.now } }, orderBy: { id: "asc" } });
 		let expiredCount = 0;
 		for (const request of due)
@@ -237,9 +263,11 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** Bridge one answer into the existing protected tool authority. */
 	private async _applyToolApproval(request: ElicitationPurposeRequest, response: ElicitationResponseValue, subjectId: string, now: Date): Promise<boolean>
 	{
-		if (response.kind !== ElicitationBodyKinds.Approval) return false;
+		if (response.kind !== ElicitationBodyKinds.Approval)
+			return false;
 		const approval = await this._transaction.approvalRequest.findUnique({ where: { elicitationRequestId: request.id } });
-		if (approval === null || approval.reviewedToolArguments === null) return false;
+		if (approval === null || approval.reviewedToolArguments === null)
+			return false;
 		const decision = response.approved ? DeferredToolDecisionKinds.Approved : DeferredToolDecisionKinds.Denied;
 		const approvedArguments = response.approved ? approval.reviewedToolArguments as JsonValue : undefined;
 		const result = await __DecideDeferredToolRequest(this._transaction, { approvalRequestId: approval.id, siloId: approval.siloId, subjectId, decision, arguments: approvedArguments, decidedBy: subjectId, now });
@@ -249,12 +277,15 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** Create only a one-invocation personal-memory permission receipt. */
 	private async _applyMemoryPermission(request: ElicitationPurposeRequest, response: ElicitationResponseValue, subjectId: string, now: Date): Promise<boolean>
 	{
-		if (response.kind !== ElicitationBodyKinds.Approval) return false;
+		if (response.kind !== ElicitationBodyKinds.Approval)
+			return false;
 		const payload = _ParsePersonalMemoryPermissionPayload(request.purposePayload);
-		if (payload === null || __DigestCanonicalJson(request.purposePayload as JsonValue) !== request.purposePayloadDigest) return false;
+		if (payload === null || __DigestCanonicalJson(request.purposePayload as JsonValue) !== request.purposePayloadDigest)
+			return false;
 		const invocation = await this._toolInvocations.findById(payload.toolInvocationId);
 		const snapshot = await this._transaction.runInputSnapshot.findUnique({ where: { runId: request.runId } });
-		if (invocation === null || snapshot === null) return false;
+		if (invocation === null || snapshot === null)
+			return false;
 		const exact = invocation.toolRevisionId === PERSONAL_MEMORY_RECALL_TOOL_REVISION
 			&& invocation.state === ToolInvocationStates.AwaitingApproval
 			&& invocation.revision === payload.toolInvocationRevision
@@ -268,10 +299,13 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			&& payload.personaRevisionId === snapshot.personaRevisionId
 			&& payload.expiresAt === request.expiresAt.toISOString()
 			&& request.expiresAt.getTime() > now.getTime();
-		if (!exact) return false;
-		if (!response.approved) return this._toolInvocations.reject({ invocationId: invocation.id, now, failureCode: "memory_permission_declined" });
+		if (!exact)
+			return false;
+		if (!response.approved)
+			return this._toolInvocations.reject({ invocationId: invocation.id, now, failureCode: "memory_permission_declined" });
 		const approved = await this._toolInvocations.approve({ invocationId: invocation.id, expectedArguments: invocation.arguments, expectedArgumentsDigest: invocation.argumentsDigest, effectiveArguments: invocation.effectiveArguments, effectiveArgumentsDigest: invocation.effectiveArgumentsDigest });
-		if (!approved) return false;
+		if (!approved)
+			return false;
 		await this._transaction.personalMemoryPermissionReceipt.create({ data: { requestId: request.id, toolInvocationId: invocation.id, toolInvocationRevision: payload.toolInvocationRevision + 1, runId: request.runId, attempt: request.attempt, executionSubjectId: subjectId, respondingSubjectId: subjectId, queryDigest: payload.queryDigest, inputSnapshotDigest: payload.inputSnapshotDigest, personaRevisionId: payload.personaRevisionId, purposeDigest: request.purposePayloadDigest, state: PersonalMemoryPermissionReceiptState.Active, expiresAt: request.expiresAt } });
 		return true;
 	}
@@ -279,11 +313,13 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** Bind a display-only A2UI answer back to server-owned action coordinates. */
 	private async _applyA2uiAction(request: ElicitationPurposeRequest, response: ElicitationResponseValue): Promise<boolean>
 	{
-		if (!_Record(request.purposePayload) || __DigestCanonicalJson(request.purposePayload as JsonValue) !== request.purposePayloadDigest) return false;
+		if (!_Record(request.purposePayload) || __DigestCanonicalJson(request.purposePayload as JsonValue) !== request.purposePayloadDigest)
+			return false;
 		const displayedActionId = request.purposePayload["displayedActionId"];
 		const sourceComponentId = request.purposePayload["sourceComponentId"];
 		const actionDigest = request.purposePayload["actionDigest"];
-		if (typeof displayedActionId !== "string" || displayedActionId.length === 0 || typeof sourceComponentId !== "string" || sourceComponentId.length === 0 || typeof actionDigest !== "string" || actionDigest.length === 0) return false;
+		if (typeof displayedActionId !== "string" || displayedActionId.length === 0 || typeof sourceComponentId !== "string" || sourceComponentId.length === 0 || typeof actionDigest !== "string" || actionDigest.length === 0)
+			return false;
 		const payload = { kind: "a2ui_action", displayedActionId, sourceComponentId, actionDigest, response };
 		await this._transaction.elicitationResultDelivery.create({ data: { requestId: request.id, payload, payloadDigest: __DigestCanonicalJson(payload) } });
 		return true;
@@ -304,7 +340,8 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			|| payload.runId !== request.runId
 			|| payload.attempt !== request.attempt
 			|| payload.executionSubjectId !== request.assignedParticipantId
-			|| payload.expiresAt !== request.expiresAt.toISOString()) throw new Error("personal-memory permission expiry lost its protected payload fence");
+			|| payload.expiresAt !== request.expiresAt.toISOString())
+			throw new Error("personal-memory permission expiry lost its protected payload fence");
 		const invocation = await this._toolInvocations.findById(payload.toolInvocationId);
 		if (invocation === null
 			|| invocation.id !== payload.toolInvocationId
@@ -313,8 +350,10 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			|| invocation.revision !== payload.toolInvocationRevision
 			|| invocation.runId !== payload.runId
 			|| invocation.attempt !== payload.attempt
-			|| invocation.subjectId !== payload.executionSubjectId) throw new Error("personal-memory permission expiry lost its invocation fence");
-		if (!await this._toolInvocations.reject({ invocationId: payload.toolInvocationId, now, failureCode: "memory_permission_expired" })) throw new Error("personal-memory permission expiry lost its invocation fence");
+			|| invocation.subjectId !== payload.executionSubjectId)
+			throw new Error("personal-memory permission expiry lost its invocation fence");
+		if (!await this._toolInvocations.reject({ invocationId: payload.toolInvocationId, now, failureCode: "memory_permission_expired" }))
+			throw new Error("personal-memory permission expiry lost its invocation fence");
 	}
 
 	/** Publish an empty terminal delivery for runtime-visible expiry. */
@@ -328,12 +367,15 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	{
 		await this._purposeStrategies.forPurpose(_PublicPurpose(request.purpose)).expire(request, now);
 		const expired = await this._transaction.elicitationRequest.updateMany({ where: { id: request.id, state: ElicitationRequestState.Requested, expiresAt: { lte: now } }, data: { state: ElicitationRequestState.Expired, resolvedAt: now, safeReason: "response_window_expired" } });
-		if (expired.count !== 1) throw new Error("elicitation expiry lost its request fence");
+		if (expired.count !== 1)
+			throw new Error("elicitation expiry lost its request fence");
 		const pendingElicitations = await this._transaction.elicitationRequest.count({ where: { runId: request.runId, attempt: request.attempt, state: ElicitationRequestState.Requested } });
 		const pendingApprovals = await this._transaction.approvalRequest.count({ where: { runId: request.runId, attempt: request.attempt, state: ApprovalRequestState.Pending } });
-		if (pendingElicitations !== 0 || pendingApprovals !== 0) return;
+		if (pendingElicitations !== 0 || pendingApprovals !== 0)
+			return;
 		const resumed = await this._transaction.agentRun.updateMany({ where: { id: request.runId, attempt: request.attempt, state: AgentRunState.WaitingForInput }, data: { state: AgentRunState.Running } });
-		if (resumed.count !== 1) throw new Error("elicitation expiry lost its waiting run fence");
+		if (resumed.count !== 1)
+			throw new Error("elicitation expiry lost its waiting run fence");
 	}
 }
 
@@ -430,7 +472,8 @@ function _Projection(row: { id: string; conversationId: string; runId: string; a
 /** Derive deadline expiry for reads without mutating the stored request. */
 function _ProjectionAt(row: Parameters<typeof _Projection>[0], now: Date): ConversationElicitation
 {
-	if (row.state !== ElicitationRequestState.Requested || row.expiresAt.getTime() > now.getTime()) return _Projection(row);
+	if (row.state !== ElicitationRequestState.Requested || row.expiresAt.getTime() > now.getTime())
+		return _Projection(row);
 	return { ..._Projection(row), state: ElicitationRequestStates.Expired, resolvedAt: now.toISOString(), safeReason: "response_window_expired" };
 }
 

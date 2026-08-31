@@ -39,12 +39,22 @@ export interface AtomicAgentRevisionPublication
 	readonly publishedAt: string;
 }
 
-/** Names the durable publication transaction outcomes. */
+/**
+ * Reports which branch the publication transaction took so the use case can return the right
+ * denial or the committed revision.
+ *
+ * The Prisma adapter returns these values to `__PublishAgentRevision`; they are not stored in the
+ * database. The set is closed inside this repository port, and changing a string value changes the
+ * contract between the adapter and use case.
+ * @see AtomicAgentRevisionPublicationResult for the payload carried by each status.
+ */
 export enum AtomicAgentRevisionPublicationStatuses
 {
-	/** The transaction published the revision and updated the active service pointer. */
+	/** The transaction committed both writes; the caller may return the active service and revision. */
 	Published = "published",
-	/** Another publication changed the expected service or revision state first. */
+	/** An assigned MCP tool was no longer eligible, so the transaction wrote nothing and publication is denied. */
+	InvalidRevision = "invalid_revision",
+	/** Stored authority no longer matched the caller's snapshot, so nothing was published and the caller must refresh. */
 	Conflict = "conflict",
 }
 
@@ -64,6 +74,7 @@ export enum AtomicAgentRevisionPublicationStatuses
  */
 export type AtomicAgentRevisionPublicationResult =
 	| { readonly status: `${AtomicAgentRevisionPublicationStatuses.Published}`; readonly service: AgentService; readonly revision: AgentRevision }
+	| { readonly status: `${AtomicAgentRevisionPublicationStatuses.InvalidRevision}` }
 	| { readonly status: `${AtomicAgentRevisionPublicationStatuses.Conflict}`; readonly currentActiveRevisionId: AgentRevisionId | null };
 
 /**
@@ -71,10 +82,10 @@ export type AtomicAgentRevisionPublicationResult =
  *
  * Both read methods are silo-scoped and return `null` for anything outside the caller's silo, so a
  * caller cannot tell a foreign service from a missing one. `publishRevisionAtomically` is the only
- * write, and it is built as one locked transaction so two administrators publishing at the same
- * moment cannot both succeed.
+ * write, and it uses exact conditional writes so two administrators publishing at the same moment
+ * cannot both succeed.
  *
- * Implemented by: `PrismaAgentServicePublicationRepository` in `db/prisma-agent-publication.ts`.
+ * Implemented by: `PrismaAgentServicePublicationUnitOfWork` in `db/prisma-agent-publication.ts`.
  * Called by: {@link __PublishAgentRevision} in `agent-publication.ts`; a caller-attributed instance
  * is built per request by `_publicationFor` in `prisma-agent-services.router.ts` so the audit row
  * names the real administrator.
@@ -88,8 +99,8 @@ export interface AgentServicePublicationRepository
 	/**
 	 * Marks the draft published and points the service at it, in one transaction.
 	 *
-	 * The implementation locks the service row, then the revision row, always in that order, so
-	 * concurrent publishes queue instead of deadlocking. It then re-checks the service state, the
+		 * The implementation conditionally claims the exact service state, then the exact draft. It
+		 * re-checks the service state, the
 	 * active revision, the revision's parent service, and that the revision is still a draft. Any
 	 * mismatch aborts with `conflict` and writes nothing. An audit row is appended before commit, so a
 	 * failed audit write rolls the whole publication back.
@@ -112,12 +123,12 @@ export interface AgentServicePublicationRepository
  * back the publication with it.
  *
  * Implemented by: `_buildPublicationAuditEvidence` in `prisma-agent-services.router.ts`.
- * Called by: `PrismaAgentServicePublicationRepository.publishRevisionAtomically` in
+ * Called by: `PrismaAgentServicePublicationUnitOfWork.publishRevisionAtomically` in
  * `db/prisma-agent-publication.ts`.
  */
 export interface AgentPublicationAuditEvidencePort
 {
-	/** Builds the audit evidence from the locked records that will commit. */
+	/** Builds the audit evidence from the records the conditional writes will commit. */
 	build(publication: AtomicAgentRevisionPublication, service: AgentService, revision: AgentRevision): AuditDecisionRecord;
 }
 

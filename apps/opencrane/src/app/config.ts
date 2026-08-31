@@ -5,7 +5,7 @@ import { ByokProvider } from "@opencrane/contracts";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneObotConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneTier3DevelopmentAuthenticationConfig, OpenCraneWorkflowConfig } from "./config.types";
+import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneTier3DevelopmentAuthenticationConfig, OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -249,30 +249,6 @@ function _readChannelTargetConfig(): ChannelTargetRuntimeConfig | null
 	return { ...values, invocationContextTtlMilliseconds: _readBoundedSeconds("CHANNEL_INVOCATION_CONTEXT_TTL_SECONDS", 60, 1, 300) };
 }
 
-/**
- * Read the optional Obot management-transport block from the startup environment.
- *
- * With both values set the authenticated transport is composed; with both absent the feature stays off
- * (fail-closed unavailable adapters). A partial block is a deployment mistake, so startup refuses it
- * rather than half-composing an authority that would fail on first use.
- */
-function _readObotConfig(): OpenCraneObotConfig | null
-{
-	const gatewayUrl = process.env.OBOT_GATEWAY_URL?.trim();
-	const serviceTokenPath = process.env.OBOT_SERVICE_TOKEN_PATH?.trim();
-	if (!gatewayUrl && !serviceTokenPath)
-		return null;
-	if (!gatewayUrl || !serviceTokenPath)
-	{
-		throw new Error("OBOT_GATEWAY_URL and OBOT_SERVICE_TOKEN_PATH must be configured together or not at all");
-	}
-	if (!isAbsolute(serviceTokenPath))
-	{
-		throw new Error("OBOT_SERVICE_TOKEN_PATH must be an absolute mounted file path");
-	}
-	return { gatewayUrl, serviceTokenPath, requestTimeoutMilliseconds: _readBoundedSeconds("OBOT_TIMEOUT_SECONDS", 30, 1, 300) };
-}
-
 /** Read the one bounded Absurd worker and remote MCP protocol-check configuration. */
 function _readWorkflowConfig(): OpenCraneWorkflowConfig
 {
@@ -297,8 +273,8 @@ function _readWorkflowConfig(): OpenCraneWorkflowConfig
 /**
  * Read process settings once so listeners and workers share one startup snapshot.
  *
- * The workers, not this parser, still check that runtime namespaces are present and distinct, because those values grant
- * Kubernetes cleanup authority; parsing configuration alone must not make that trust decision.
+ * Runtime authorities, not this parser, still check that runtime namespaces are present and
+ * distinct before using those namespaces in trusted workload routes.
  */
 export function _ReadProcessConfig(): OpenCraneProcessConfig
 {
@@ -307,7 +283,6 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
 		initialModelBootstrap: _readInitialModelBootstrap(),
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
-		obot: _readObotConfig(),
 		publicPort: Number(process.env.PORT ?? "8080"),
 			runtime: {
 			artifactScannerEnabled: process.env.ARTIFACT_SCANNER_ENABLED === "true",
@@ -318,9 +293,9 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			artifactPreprocessorNamespace: process.env.ARTIFACT_PREPROCESSOR_NAMESPACE?.trim(),
 			assignmentTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS", 3_600, 60, 86_400),
 			channelTargets: _readChannelTargetConfig(),
-			claimLeaseMilliseconds: _readBoundedSeconds("AGENT_CONTROLLER_CLAIM_LEASE_SECONDS", 30, 1, 300),
 			commandRecoveryMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS", 5, 5, 300),
 			commandTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300),
+			continuationKeyringPath: _readRequiredAbsolutePath("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH"),
 				managedRuntimeNamespace: process.env.AGENT_RUNTIME_MANAGED_NAMESPACE?.trim(),
 				mcpCompanionClaimLeaseMilliseconds: _readBoundedSeconds("MCP_COMPANION_CLAIM_LEASE_SECONDS", 150, 1, 300),
 				mcpControllerClaimLeaseMilliseconds: _readBoundedSeconds("MCP_CONTROLLER_CLAIM_LEASE_SECONDS", 30, 1, 300),
@@ -328,9 +303,8 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			memoryGatewayTimeoutMilliseconds: _readBoundedSeconds("MEMORY_GATEWAY_TIMEOUT_SECONDS", 30, 1, 300),
 			memoryGatewayTokenPath: _readRequiredAbsolutePath("MEMORY_GATEWAY_TOKEN_PATH"),
 			memoryGatewayUrl: _readRequired("MEMORY_GATEWAY_URL"),
-			outboxPruneBatchSize: _readBoundedInteger("AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE", 100, 1, 1_000),
 			personalRuntimeNamespace: process.env.AGENT_RUNTIME_PERSONAL_NAMESPACE?.trim(),
-			publishedOutboxRetentionMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS", 604_800, 3_600, 7_776_000),
+			skillAuthoringNamespace: _readRequired("SKILL_AUTHORING_NAMESPACE"),
 				serverNamespace: process.env.POD_NAMESPACE?.trim() || "default",
 				siloId: _readRequired("OPENCRANE_SILO_ID"),
 		},

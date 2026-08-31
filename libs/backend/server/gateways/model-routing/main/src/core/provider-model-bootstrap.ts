@@ -16,6 +16,12 @@ const _AUTO_MODEL_NAME = "auto";
  * namespace, so a mismatched model can never consume another provider's key.
  *
  * Called by: `_ProvisionByokKey` before it writes the provider key Secret.
+ *
+ * @param provider - Provider whose credential will be bound.
+ * @param catalog - Reviewed provider catalogue, when the provider has one.
+ * @param selectedModel - Provider-prefixed model selected by the deployment coordinator.
+ * @param requireLiveModels - Whether bootstrap must register models through live LiteLLM.
+ * @throws When the selected model does not belong to the provider or live registration is disabled.
  */
 export function _ValidateBootstrapModel(provider: string, catalog: ByokProviderCatalog | undefined, selectedModel: string | undefined, requireLiveModels: boolean): void
 {
@@ -49,8 +55,14 @@ export function _ValidateBootstrapModel(provider: string, catalog: ByokProviderC
  *
  * Called by: `_ProvisionByokKey` after it has stored the provider credential.
  *
+ * @param repositories - Stores the provider credential's models and first routing default.
  * @param catalog - Provider catalogue; undefined is a no-op unless a selected model is supplied.
- * @throws Whatever live LiteLLM registration or inventory qualification throws.
+ * @param providerCredentialId - Credential projection that every admitted model will reference.
+ * @param litellmCredentialName - LiteLLM credential name already published by the custody boundary.
+ * @param requireLiveModels - Whether every model must retain a live LiteLLM deployment.
+ * @param selectedModel - Exact provider-prefixed model selected by the deployment coordinator.
+ * @returns Resolves after the model definitions and first routing default are reconciled.
+ * @throws When existing routing evidence conflicts, the Global default is ambiguous, or live LiteLLM qualification fails.
  */
 export async function _EnsureProviderModels(repositories: ProviderModelBootstrapRepositories, catalog: ByokProviderCatalog | undefined, providerCredentialId: string, litellmCredentialName: string | null, requireLiveModels: boolean, selectedModel?: string): Promise<void>
 {

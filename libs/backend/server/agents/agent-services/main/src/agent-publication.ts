@@ -1,4 +1,4 @@
-import { AgentRevisionStates, AgentServiceStates, __AreReviewedIntegrationToolDefinitionsValid, __DigestAgentRevisionContent, type AgentRevision } from "@opencrane/models/agents";
+import { AgentRevisionStates, AgentServiceStates, __DigestAgentRevisionContent, type AgentRevision } from "@opencrane/models/agents";
 
 import { AtomicAgentRevisionPublicationStatuses, type AgentServicePublicationRepository, type PublishAgentRevisionCommand, type PublishAgentRevisionFailureReason, type PublishAgentRevisionResult } from "./agent-publication.types";
 
@@ -26,7 +26,8 @@ function _isPublishableRevision(revision: AgentRevision): boolean
 		&& revision.budget.maxCostUsdMicros > 0
 		&& Number.isSafeInteger(revision.budget.maxDurationMs)
 		&& revision.budget.maxDurationMs > 0
-		&& revision.integrationAssignments.every(function _Assignment(assignment): boolean { return __AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions); })
+		&& revision.mcpToolRevisionIds.every(_isPresent)
+		&& new Set(revision.mcpToolRevisionIds).size === revision.mcpToolRevisionIds.length
 		&& revision.digest === __DigestAgentRevisionContent(revision.agentServiceId, revision.revision, revision);
 }
 
@@ -90,6 +91,10 @@ export async function __PublishAgentRevision(repository: AgentServicePublication
 		expectedActiveRevisionId: command.expectedActiveRevisionId,
 		publishedAt: command.publishedAt,
 	});
+	if (publication.status === AtomicAgentRevisionPublicationStatuses.InvalidRevision)
+	{
+		return _deny("invalid_revision");
+	}
 	if (publication.status === AtomicAgentRevisionPublicationStatuses.Conflict)
 	{
 		return { outcome: "denied", reason: "publication_conflict", currentActiveRevisionId: publication.currentActiveRevisionId };

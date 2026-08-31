@@ -105,6 +105,9 @@ export function createApplicationEnvironment(configuration, secrets, development
 		OPENCRANE_DEVELOPMENT_PROFILE: configuration.developmentProfile,
 		OPENCRANE_DEVELOPMENT_MEMBERSHIP_PRIVATE_KEY_PATH: developmentCredentials.privateKeyPath,
 		OPENCRANE_DEVELOPMENT_MEMBERSHIP_PUBLIC_KEY_PATH: developmentCredentials.publicKeyPath,
+		...(typeof developmentCredentials.continuationKeyringPath === "string"
+			? { AGENT_RUNTIME_CONTINUATION_KEYRING_PATH: developmentCredentials.continuationKeyringPath }
+			: {}),
 		PORT: String(configuration.publicPort),
 		INTERNAL_PORT: String(configuration.internalPort),
 		DATABASE_URL: `postgresql://opencrane:${secrets.postgresPassword}@127.0.0.1:${configuration.postgresPort}/opencrane`

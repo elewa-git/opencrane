@@ -37,6 +37,7 @@ function _invocation(state: ToolInvocationStates, recoveryMode: ExternalActionRe
 		siloId: "silo-1",
 		runId: "run-1",
 		attempt: 1,
+		mcpTaskId: null,
 		agentRevisionId: "revision-1",
 		subjectId: "user-1",
 		candidateId: "candidate-1",
@@ -62,6 +63,14 @@ function _invocation(state: ToolInvocationStates, recoveryMode: ExternalActionRe
 		failureCode: null,
 		revision: 1,
 	};
+}
+
+/** Return the exact AgentRun coordinates required by lifecycle events in this fake authority. */
+function _agentRunCoordinates(invocation: ExternalActionWorkerInvocation): { readonly runId: string; readonly attempt: number }
+{
+	if (invocation.runId === null || invocation.attempt === null || invocation.mcpTaskId !== null)
+		throw new Error("test invocation is not owned by an AgentRun");
+	return { runId: invocation.runId, attempt: invocation.attempt };
 }
 
 /** Build the few snapshot fields the worker compares against the invocation. */
@@ -212,7 +221,8 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 	async recordPreparationFailure(_invocationId: string, _expectedRevision: number, _now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationRecord | null>
 	{
 		this.preparationFailures.push(policy);
-		this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: failureCode, retryCount: this.invocation.preparationAttempt + 1, retryLimit: policy.attemptLimit, retrying: true } });
+		const owner = _agentRunCoordinates(this.invocation);
+		this.lifecycleEvents.push({ ...owner, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: failureCode, retryCount: this.invocation.preparationAttempt + 1, retryLimit: policy.attemptLimit, retrying: true } });
 		return this.invocation;
 	}
 	/** Acquire one exact provider-operation claim. */
@@ -224,18 +234,19 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 		return { outcome: ToolInvocationClaimOutcomes.Claimed, claim: { invocationId: invocation.id, kind, fence: 1, revision: invocation.revision + 1 }, invocation };
 	}
 	/** Commit one successful provider result. */
-	async completeSucceeded(_claim: ToolInvocationClaim, result: JsonValue, _now: Date): Promise<ToolInvocationCompletionResult> { this.successes.push(result); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Completed, payload: { toolInvocationId: this.invocation.toolInvocationId } }); return { outcome: ToolInvocationCompletionOutcomes.Winner, invocation: this.invocation }; }
+	async completeSucceeded(_claim: ToolInvocationClaim, result: JsonValue, _now: Date): Promise<ToolInvocationCompletionResult> { const owner = _agentRunCoordinates(this.invocation); this.successes.push(result); this.lifecycleEvents.push({ ...owner, eventType: ToolInvocationEventTypes.Completed, payload: { toolInvocationId: this.invocation.toolInvocationId } }); return { outcome: ToolInvocationCompletionOutcomes.Winner, invocation: this.invocation }; }
 	/** Commit one proven provider failure. */
-	async completeFailed(_claim: ToolInvocationClaim, failureCode: string, _now: Date): Promise<ToolInvocationCompletionResult> { this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: failureCode, retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: false } }); return { outcome: ToolInvocationCompletionOutcomes.Winner, invocation: this.invocation }; }
+	async completeFailed(_claim: ToolInvocationClaim, failureCode: string, _now: Date): Promise<ToolInvocationCompletionResult> { const owner = _agentRunCoordinates(this.invocation); this.lifecycleEvents.push({ ...owner, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: failureCode, retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: false } }); return { outcome: ToolInvocationCompletionOutcomes.Winner, invocation: this.invocation }; }
 	/** Record an ambiguous result for frozen recovery policy. */
-	async completeAmbiguous(claim: ToolInvocationClaim, _now: Date): Promise<ToolInvocationRecord | null> { this.ambiguous.push(claim); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: "external_action_provider_outcome_ambiguous", retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: this.invocation.recoveryMode !== ExternalActionRecoveryModes.Manual } }); return this.invocation; }
+	async completeAmbiguous(claim: ToolInvocationClaim, _now: Date): Promise<ToolInvocationRecord | null> { const owner = _agentRunCoordinates(this.invocation); this.ambiguous.push(claim); this.lifecycleEvents.push({ ...owner, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: "external_action_provider_outcome_ambiguous", retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: this.invocation.recoveryMode !== ExternalActionRecoveryModes.Manual } }); return this.invocation; }
 	/** Recover one expired provider claim without dispatching. */
 	async recoverExpiredClaim(_invocationId: string, _now: Date): Promise<ToolInvocationRecord | null> { this.expiredRecoveries += 1; return this.invocation; }
 	/** Release the claim and record the failure event a later retry will see. */
 	async releaseClaimBeforeDispatch(claim: ToolInvocationClaim, _now: Date): Promise<ToolInvocationRecord | null>
 	{
 		this.releasedClaims.push(claim);
-		this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: "external_action_start_event_failed", retryCount: this.invocation.preparationAttempt + 1, retryLimit: 3, retrying: true } });
+		const owner = _agentRunCoordinates(this.invocation);
+		this.lifecycleEvents.push({ ...owner, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: "external_action_start_event_failed", retryCount: this.invocation.preparationAttempt + 1, retryLimit: 3, retrying: true } });
 		return this.invocation;
 	}
 }
@@ -359,6 +370,34 @@ describe("external action worker", function _suite()
 		expect(dependencies.value.classAdmission.admitInvocation).toHaveBeenCalledWith("invocation-row-1");
 		expect(adapter.dispatchKeys).toEqual([]);
 		expect(dependencies.invocations.claims).toEqual([]);
+	});
+
+	it("keeps a standalone MCP task out of AgentRun execution when class admission declines it", async function _RejectsStandaloneMcpTaskFallback()
+	{
+		const adapter = new _Adapter(ExternalActionRecoveryModes.Manual);
+		const invocation = { ..._invocation(ToolInvocationStates.Ready), runId: null, attempt: null, mcpTaskId: "mcp-task-1" };
+		const dependencies = _dependencies(invocation, adapter);
+
+		await expect(new ExternalActionWorker(dependencies.value).runOnce()).resolves.toBe(false);
+
+		expect(dependencies.value.classAdmission.admitInvocation).toHaveBeenCalledWith("invocation-row-1");
+		expect(dependencies.adapters.prepareCount).toBe(0);
+		expect(dependencies.invocations.claims).toEqual([]);
+		expect(dependencies.events).toEqual([]);
+		expect(dependencies.approvalOpen).not.toHaveBeenCalled();
+	});
+
+	it("fails a recognized unavailable MCP revision without generic provider fallback", async function _FailsUnavailableMcp()
+	{
+		const adapter = new _Adapter(ExternalActionRecoveryModes.Manual);
+		const dependencies = _dependencies(_invocation(ToolInvocationStates.Ready), adapter);
+		dependencies.value.classAdmission.admitInvocation = vi.fn().mockResolvedValue("not_ready");
+
+		await expect(new ExternalActionWorker(dependencies.value).runOnce()).resolves.toBe(true);
+
+		expect(adapter.dispatchKeys).toEqual([]);
+		expect(dependencies.invocations.lifecycleEvents).toEqual([expect.objectContaining({ eventType: "tool.failed", payload: expect.objectContaining({ reason: "mcp_tool_unavailable" }) })]);
+		expect(dependencies.logWarn).toHaveBeenCalledWith(expect.objectContaining({ failureKind: "mcp_tool_unavailable" }), expect.any(String));
 	});
 
 	it("logs a bounded definite provider failure after its durable outcome commits", async function _definiteFailure()

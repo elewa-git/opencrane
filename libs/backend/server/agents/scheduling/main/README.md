@@ -70,7 +70,7 @@ work alone owns the root Prisma client and creates three narrow transaction-scop
 enabled schedule snapshots, active scheduled-run lookup, and cursor CAS. Each database operation is
 short and finishes before run admission begins; a database transaction never spans external
 admission. `ManagedRunAdmissionPort` remains the sole run-creation boundary. This package never
-touches Kubernetes or Obot, and it never executes shell or agent business logic.
+touches Kubernetes or external tools, and it never executes shell or agent business logic.
 
 ## Dependency direction
 

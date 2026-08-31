@@ -4,9 +4,9 @@
 #
 # A thin profile over the shared install core (k8s-deploy.sh). It installs ONE
 # per-ClusterTenant silo — the dedicated stack a single ClusterTenant runs on shared
-# nodes: its own operator + channel proxy + Obot + LiteLLM + Cognee + opencrane-ui,
+# nodes: its own operator + channel proxy + LiteLLM + Cognee + opencrane-ui,
 # per-CT networking, and one app-owned PostgreSQL server with isolated logical databases
-# and credentials for OpenCrane, Obot, and LiteLLM.
+# and credentials for OpenCrane and LiteLLM.
 #
 # The CLUSTER-WIDE infrastructure (ingress controller, CloudNativePG, cert-manager) is an
 # external prerequisite. A silo never installs these shared controllers. It creates only
@@ -23,7 +23,6 @@
 #       --initial-model openai/gpt-5.4-nano \
 #       # OPENCRANE_INITIAL_MODEL_API_KEY is required in the environment \
 #       --postgres-credentials-secret opencrane-postgres-bootstrap \
-#       --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
 #       --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
 #       --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap \
 #       --opencrane-ui-digest sha256:REVIEWED_BROWSER_BUILD_DIGEST \
@@ -33,8 +32,8 @@
 #
 # --base-domain, --cluster-tenant, --acme-email, and --first-user-email are required. The first
 # user must sign in with this exact verified OIDC email to claim the standalone silo's first owner.
-# `--initial-model-provider` and `--initial-model` plus
-# OPENCRANE_INITIAL_MODEL_API_KEY seed the first exact routable model through LiteLLM. The silo is installed into namespace
+# The initial provider and model arguments plus OPENCRANE_INITIAL_MODEL_API_KEY seed the first
+# selected routable model through LiteLLM. The silo is installed into namespace
 # `opencrane-<cluster-tenant>` unless --namespace overrides it.
 # Fresh silo deploys require `--opencrane-ui-digest` and `--cognee-digest`. An upgrade may omit
 # either only to retain the exact digest already recorded by the release. Tags are accepted only by
@@ -88,11 +87,6 @@ done
 [[ -n "$ACME_EMAIL" ]]      || { err "--acme-email is required to issue a browser-trusted certificate for this public silo host."; exit 1; }
 [[ -n "$FIRST_USER_EMAIL" ]] || { err "--first-user-email is required to claim this standalone silo's first owner from a verified OIDC login."; exit 1; }
 
-# The reviewed 0.9.3 IAM migration binds every legacy row to this exact silo instead of
-# inferring tenancy from database placement. The platform deploy engine consumes this only when
-# it executes that adjacent migration.
-PASSTHROUGH+=(--database-migration-silo-id "$CLUSTER_TENANT")
-
 # Fail fast if the external CloudNativePG prerequisite is absent.
 command -v kubectl >/dev/null 2>&1 || { err "kubectl not found."; exit 1; }
 if ! kubectl get crd clusters.postgresql.cnpg.io >/dev/null 2>&1; then
@@ -106,7 +100,7 @@ fi
 
 # The silo lives in its own namespace so its per-CT DB + planes are isolated from every other
 # silo and from the central release. One CNPG Cluster in that namespace hosts its isolated
-# OpenCrane, Obot, and LiteLLM logical databases. Default `opencrane-<cluster-tenant>`;
+# OpenCrane and LiteLLM logical databases. Default `opencrane-<cluster-tenant>`;
 # --namespace overrides.
 [[ -n "$NAMESPACE" ]] || NAMESPACE="opencrane-${CLUSTER_TENANT}"
 EXPECTED_RELEASE="opencrane-${CLUSTER_TENANT}"

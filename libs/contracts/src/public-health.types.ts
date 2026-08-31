@@ -23,8 +23,6 @@ export enum PublicHealthServiceNames
 	Files = "files",
 	/** Represents the service that delivers live conversation events. */
 	Channels = "channels",
-	/** Represents the optional service for external tools and connectors. */
-	Integrations = "integrations",
 }
 
 /**

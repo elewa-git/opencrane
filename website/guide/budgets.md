@@ -66,8 +66,9 @@ The model-routing service mints an attempt-scoped LiteLLM virtual key. The key c
 - an expiry aligned with the workload assignment; and
 - no upstream provider secret.
 
-The controller writes that key directly to a Job-owned Secret. The runtime reads it from a
-file; it never receives the LiteLLM master key.
+After the database binds the exact claimed Pod and its one-use proof key, OpenCrane returns that
+attempt key to the runtime. The runtime keeps it only in process memory and never receives the
+LiteLLM master key.
 
 ## When a spending limit is reached
 
@@ -84,6 +85,6 @@ Use the run id and attempt when reconciling spend. A Kubernetes Pod can be repla
 
 Organisation administrators can configure upstream provider keys through the provider
 surfaces documented by the current OpenAPI contract. OpenCrane stores the raw key outside
-runtime Jobs and returns status rather than key material from read endpoints.
+runtime Pods and returns status rather than key material from read endpoints.
 
 → [Model routing](/guide/model-routing) · [Review activity](/guide/audit)
