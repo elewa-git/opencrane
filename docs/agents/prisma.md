@@ -57,7 +57,12 @@ Production TypeScript reaches Prisma through reviewed capability boundaries, enf
 	SHA-256 registered in the checker and mirrored in the checked policy. Recompute and update the
 	enforcement-owned source pin only after reviewing the complete adapter; any import, helper, or
 	statement change deliberately invalidates the raw-procedure exception.
-3. Only an exact declared UnitOfWork adapter may call `$transaction`.
+3. Only an exact declared UnitOfWork adapter may call `$transaction`. New unit-of-work adapters do
+	not call `$transaction` themselves: they pass their work callback to the reviewed
+	`___RunInPrismaUnitOfWork` helper (`@opencrane/backend/server/infra/prisma-unit-of-work`), which
+	owns transaction opening, the explicit isolation level, and bounded retry of proven rollbacks.
+	The checker grants that callback's first parameter transaction-client authority, exactly as it
+	does for `___RunSerializableAuthorizationTransaction`.
 4. Passing a transaction client into another repository is also policy-owned. Every declared
 	repository constructor accepts `Prisma.TransactionClient`, and each declared construction must
 	receive the exact `$transaction` callback binding (or an owning repository's typed transaction

@@ -1,13 +1,6 @@
-import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
+import { RuntimeWorkloadClaimClasses, __IsCanonicalUtcMilliseconds } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { SkillAuthoringValidationBindOutcome, SkillAuthoringValidationCompletion, SkillAuthoringValidationControllerRecord, SkillAuthoringValidationCurrentStatus, SkillAuthoringValidationRecoveryOutcome, SkillAuthoringValidationReleaseOutcome } from "@opencrane/backend/agents/skills/workflows/contract";
 import { z, type ZodType } from "zod";
-
-/** Checks the canonical UTC timestamp carried by a database-issued workload lease. */
-function _IsCanonicalUtcMilliseconds(value: string): boolean
-{
-	const date = new Date(value);
-	return !Number.isNaN(date.getTime()) && date.toISOString() === value;
-}
 
 /** Validates the complete record returned before it can select Kubernetes work. */
 const _RecordSchema: ZodType<SkillAuthoringValidationControllerRecord> = z.object({
@@ -20,9 +13,9 @@ const _RecordSchema: ZodType<SkillAuthoringValidationControllerRecord> = z.objec
 		workloadClass: z.literal(RuntimeWorkloadClaimClasses.SkillAuthoringValidation),
 		profileName: z.string().min(1).max(63),
 		idempotencyKey: z.string().min(1).max(512),
-		claimedAt: z.string().datetime({ offset: true, precision: 3 }).refine(_IsCanonicalUtcMilliseconds),
+		claimedAt: z.string().datetime({ offset: true, precision: 3 }).refine(__IsCanonicalUtcMilliseconds),
 		deliveryCount: z.number().int().min(1),
-		expiresAt: z.string().datetime({ offset: true, precision: 3 }).refine(_IsCanonicalUtcMilliseconds),
+		expiresAt: z.string().datetime({ offset: true, precision: 3 }).refine(__IsCanonicalUtcMilliseconds),
 		executionReference: z.string().min(1).max(512),
 	}).strict(),
 }).strict();

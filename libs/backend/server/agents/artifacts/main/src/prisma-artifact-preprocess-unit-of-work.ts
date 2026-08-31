@@ -1,20 +1,17 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
+
+import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
 import { PrismaArtifactPreprocessRepository } from "./prisma-artifact-preprocessing";
 import type { ArtifactPreprocessUnitOfWork, ArtifactPreprocessWork } from "./artifact-unit-of-work.types";
 
-/** Total attempts allowed, not retries on top of the first try: the loop runs attempts 1 to 3, so a collision is retried at most twice. */
-const _PREPROCESS_ATTEMPT_LIMIT = 3;
-
-/** Prisma codes that confirm no partial preprocessing transition committed. */
-const _RETRYABLE_PREPROCESS_CODES = new Set(["P2002", "P2034"]);
-
 /**
  * Opens one SERIALIZABLE transaction per preprocessing operation and retries safe collisions.
  *
- * Up to three complete attempts. A fresh `PrismaArtifactPreprocessRepository` is built for each
- * one, because a repository from a rolled-back attempt holds a dead transaction client. Only the
- * two codes in `_RETRYABLE_PREPROCESS_CODES` are retried; anything else is rethrown immediately.
+ * The shared unit-of-work envelope runs up to three complete attempts. A fresh
+ * `PrismaArtifactPreprocessRepository` is built for each one, because a repository from a
+ * rolled-back attempt holds a dead transaction client. Only the envelope's proven-rollback codes
+ * (P2002 and P2034) are retried; anything else is rethrown immediately.
  *
  * Unlike `PrismaArtifactPublicationUnitOfWork`, this one does not convert an exhausted collision
  * into a domain error - the Prisma error reaches the caller, and the preprocessing router turns
@@ -39,36 +36,13 @@ export class PrismaArtifactPreprocessUnitOfWork implements ArtifactPreprocessUni
 	 *   because a retry starts it from the beginning.
 	 * @returns Whatever the work returned, from the attempt that committed.
 	 * @throws The original Prisma error when the last attempt collides, or immediately for any
-	 *   error that does not prove a full rollback. Also throws
-	 *   "artifact preprocessing exhausted without a result" if the loop ever falls through, which
-	 *   should be unreachable and means the retry logic was changed incorrectly.
+	 *   error that does not prove a full rollback.
 	 */
 	async run<Result>(work: ArtifactPreprocessWork<Result>): Promise<Result>
 	{
-		for (let attempt = 1; attempt <= _PREPROCESS_ATTEMPT_LIMIT; attempt += 1)
+		return ___RunInPrismaUnitOfWork(this.prisma, async function _Run(transaction): Promise<Result>
 		{
-			try
-			{
-				return await this.prisma.$transaction(async function _Run(transaction): Promise<Result>
-				{
-					return work(new PrismaArtifactPreprocessRepository(transaction));
-				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-			}
-			catch (error)
-			{
-				if (_IsRetryablePreprocessConflict(error) && attempt < _PREPROCESS_ATTEMPT_LIMIT)
-				{
-					continue;
-				}
-				throw error;
-			}
-		}
-		throw new Error("artifact preprocessing exhausted without a result");
+			return work(new PrismaArtifactPreprocessRepository(transaction));
+		}, { isolationLevel: "Serializable", operation: "artifact preprocessing", attemptLimit: 3 });
 	}
-}
-
-/** Returns whether Prisma confirms the entire failed preprocessing operation rolled back. */
-function _IsRetryablePreprocessConflict(error: unknown): boolean
-{
-	return error instanceof Prisma.PrismaClientKnownRequestError && _RETRYABLE_PREPROCESS_CODES.has(error.code);
 }

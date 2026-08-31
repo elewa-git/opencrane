@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { __ValidateWarmRuntimeLease } from "@opencrane/backend/agents/execution/runs";
 import { ArtifactKind, ArtifactRevisionState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, ConversationLifecycle, ConversationTimelineEntryKind, WarmRuntimeReservationState, WorkloadAssignmentState, type Prisma } from "@prisma/client";
 
 import type { ArtifactPromotionReceiptClaims } from "@opencrane/backend/artifacts/authorization";
@@ -121,9 +122,11 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 	/** Requires the exact live attempt and exact projected pod identity on every operation. */
 	private async _assignment(identity: ConversationAssetOutputRuntimeIdentity, runId: string, runAttempt: number)
 	{
-		const now = new Date();
-		const assignment = await this.transaction.workloadAssignment.findFirst({ where: { runId, attempt: runAttempt, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, state: WorkloadAssignmentState.Registered, expiresAt: { gt: now }, run: { attempt: runAttempt } }, include: { run: true, warmRuntimeReservations: { where: { namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, podUid: identity.podUid, state: WarmRuntimeReservationState.Claimed, idleDeadline: { gt: now } }, select: { generation: true } } } });
-		return assignment !== null && assignment.warmRuntimeReservations.some(function _CurrentGeneration(reservation) { return reservation.generation === assignment.bindingGeneration; }) ? assignment : null;
+		const assignment = await this.transaction.workloadAssignment.findUnique({ where: { runId_attempt: { runId, attempt: runAttempt } }, include: { run: true } });
+		if (assignment === null || assignment.run.attempt !== runAttempt)
+			return null;
+		const reservation = await this.transaction.warmRuntimeReservation.findUnique({ where: { runId_attempt_generation: { runId, attempt: runAttempt, generation: assignment.bindingGeneration } } });
+		return __ValidateWarmRuntimeLease(identity, assignment, reservation, new Date()) ? assignment : null;
 	}
 
 	/** Requires the canonical assistant message-start coordinate owned by this run. */

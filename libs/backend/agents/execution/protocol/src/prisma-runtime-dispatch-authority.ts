@@ -252,9 +252,10 @@ export class PrismaRuntimeDispatchAuthorityUnitOfWork implements RuntimeCommandS
 	/** Opens the serializable stream-release transaction. */
 	private async _ReleaseStream(config: RuntimeDispatchAuthorityConfig, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen): Promise<void>
 	{
+		const now = new Date(this.clock.nowEpochMs());
 		await this._Run(async function _Release(_transaction, repository): Promise<void>
 		{
-			await _releaseStream(repository, config, identity, open);
+			await _releaseStream(repository, config, identity, open, now);
 		});
 	}
 
@@ -275,7 +276,7 @@ async function _nextCommand(transaction: Prisma.TransactionClient, repository: P
 	if (!Number.isSafeInteger(afterSequence) || afterSequence < 0) return null;
 		const elicitationUnitOfWork = elicitationUnitOfWorkFactory.bind(transaction);
 		// 1. Load the live assignment, run, and snapshot before any authority decision.
-		let context = await repository.loadContext(config, identity);
+		let context = await repository.loadContext(config, identity, new Date(clock.nowEpochMs()));
 		if (context === null) return null;
 		// An attempt waiting for approval cannot move on until overdue approvals are closed. That runs
 		// in this same transaction, and then the context is read again, so
@@ -285,7 +286,7 @@ async function _nextCommand(transaction: Prisma.TransactionClient, repository: P
 		if (expiry === "unavailable") return null;
 		if (expiry === "applied")
 		{
-			context = await repository.loadContext(config, identity);
+			context = await repository.loadContext(config, identity, new Date(clock.nowEpochMs()));
 			if (context === null) return null;
 		}
 		if (context.runState === "waiting_for_input")
@@ -386,7 +387,7 @@ async function _admitCandidate(transaction: Prisma.TransactionClient, repository
 	if (_RuntimeCandidateRequiresEventReporter(candidate) && eventReporter === null) return { accepted: false, reason: "event_reporter_unavailable" };
 			const elicitationUnitOfWork = elicitationUnitOfWorkFactory.bind(transaction);
 			// 1. Load the live assignment, run, and snapshot for the Pod that is asking.
-			const context = await repository.loadContext(config, identity);
+			const context = await repository.loadContext(config, identity, new Date(clock.nowEpochMs()));
 			if (context === null) return { accepted: false, reason: "unknown_workload" };
 			const stream = await repository.readStream(context.runId, context.attempt);
 			if (stream === null || stream.runtimeInstanceId === null) return { accepted: false, reason: "no_active_stream" };
@@ -442,9 +443,9 @@ async function _admitCandidate(transaction: Prisma.TransactionClient, repository
 }
 
 /** Unbind the runtime instance from its stream if the closing connection still owns it. */
-async function _releaseStream(repository: PrismaRuntimeDispatchRepository, config: RuntimeDispatchAuthorityConfig, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen): Promise<void>
+async function _releaseStream(repository: PrismaRuntimeDispatchRepository, config: RuntimeDispatchAuthorityConfig, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen, now: Date): Promise<void>
 {
-		const context = await repository.loadContext(config, identity);
+		const context = await repository.loadContext(config, identity, now);
 		if (context === null) return;
 		await repository.release(context.runId, context.attempt, open.runtimeInstanceId);
 }

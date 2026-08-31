@@ -1,4 +1,4 @@
-import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
+import { __ParseWorkloadWireBody, __RuntimeWorkloadBindingSchema, __WorkflowTaskReceiptSchema } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { __IsArtifactPreprocessBootstrapReference } from "@opencrane/contracts";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { z, type ZodType } from "zod";
@@ -8,45 +8,17 @@ import type { ArtifactPreprocessPodBindCommand, ArtifactPreprocessRecoveryComman
 import type { ArtifactPreprocessPodBindRequest, ArtifactPreprocessRecoveryRequest, ArtifactPreprocessWorkloadBindRequest } from "./artifact-preprocess-controller-http.types";
 import { ArtifactPreprocessTaskNames } from "./artifact-preprocess-task.types";
 
-/** Checks the UTC timestamp format that fences a controller delivery. */
-function _IsCanonicalUtcMilliseconds(value: string): boolean
-{
-	const date = new Date(value);
-	return !Number.isNaN(date.getTime()) && date.toISOString() === value;
-}
-
 /** Defines the saved task receipt that may act for a PDF conversion. */
-const _TaskReceiptSchema: ZodType<IWorkflowTaskReceipt> = z.object({
-	taskId: z.string().min(1).max(128),
-	taskName: z.literal(ArtifactPreprocessTaskNames.Convert),
-	idempotencyKey: z.string().regex(/^workflows:artifact-preprocess:[a-f0-9]{64}$/u),
-}).strict();
-
-/** Defines the delivery fence and Kubernetes identities a controller may return. */
-const _BindingSchema: ZodType<RuntimeWorkloadBinding> = z.object({
-	claimId: z.string().min(1).max(128),
-	claimedAt: z.string().datetime({ offset: true, precision: 3 }).refine(_IsCanonicalUtcMilliseconds),
-	deliveryCount: z.number().int().min(1),
-	profileName: z.string().min(1).max(63),
-	workloadUid: z.string().min(1).max(128),
-	firstPodUid: z.string().min(1).max(128).optional(),
-}).strict();
+const _TaskReceiptSchema: ZodType<IWorkflowTaskReceipt> = __WorkflowTaskReceiptSchema(ArtifactPreprocessTaskNames.Convert, /^workflows:artifact-preprocess:[a-f0-9]{64}$/u);
 
 /** Defines a Job bind body before the server compares its namespace with deployment configuration. */
-const _WorkloadBindBodySchema = z.object({ task: _TaskReceiptSchema, binding: _BindingSchema, bootstrapReference: z.string().min(1).max(512), namespace: z.string().min(1).max(63) }).strict();
+const _WorkloadBindBodySchema = z.object({ task: _TaskReceiptSchema, binding: __RuntimeWorkloadBindingSchema, bootstrapReference: z.string().min(1).max(512), namespace: z.string().min(1).max(63) }).strict();
 
 /** Defines a first-Pod bind body. */
-const _PodBindBodySchema = z.object({ task: _TaskReceiptSchema, binding: _BindingSchema }).strict();
+const _PodBindBodySchema = z.object({ task: _TaskReceiptSchema, binding: __RuntimeWorkloadBindingSchema }).strict();
 
 /** Defines a recovery body with the complete saved binding and one controller-owned reason. */
-const _RecoveryBodySchema = z.object({ task: _TaskReceiptSchema, binding: _BindingSchema, reason: z.enum([ArtifactPreprocessRecoveryReasons.JobTerminalWithoutOutcome, ArtifactPreprocessRecoveryReasons.JobMissingWithoutOutcome]) }).strict();
-
-/** Parses strict JSON without exposing schema details through the private controller API. */
-function _Parse<T>(schema: ZodType<T>, value: unknown): T | null
-{
-	const parsed = schema.safeParse(value);
-	return parsed.success ? parsed.data : null;
-}
+const _RecoveryBodySchema = z.object({ task: _TaskReceiptSchema, binding: __RuntimeWorkloadBindingSchema, reason: z.enum([ArtifactPreprocessRecoveryReasons.JobTerminalWithoutOutcome, ArtifactPreprocessRecoveryReasons.JobMissingWithoutOutcome]) }).strict();
 
 /**
  * Parses a Job bind request against the PDF worker namespace fixed by deployment.
@@ -61,7 +33,7 @@ function _Parse<T>(schema: ZodType<T>, value: unknown): T | null
  */
 export function __ParseArtifactPreprocessWorkloadBindRequest(value: unknown, workerNamespace: string): ArtifactPreprocessWorkloadBindRequest | null
 {
-	const parsed = _Parse(_WorkloadBindBodySchema, value);
+	const parsed = __ParseWorkloadWireBody(_WorkloadBindBodySchema, value);
 	if (parsed === null || parsed.binding.firstPodUid !== undefined || parsed.namespace !== workerNamespace || !__IsArtifactPreprocessBootstrapReference(parsed.bootstrapReference))
 	{
 		return null;
@@ -81,7 +53,7 @@ export function __ParseArtifactPreprocessWorkloadBindRequest(value: unknown, wor
  */
 export function __ParseArtifactPreprocessPodBindRequest(value: unknown): ArtifactPreprocessPodBindRequest | null
 {
-	const parsed = _Parse(_PodBindBodySchema, value);
+	const parsed = __ParseWorkloadWireBody(_PodBindBodySchema, value);
 	if (parsed === null || parsed.binding.firstPodUid === undefined)
 	{
 		return null;
@@ -101,7 +73,7 @@ export function __ParseArtifactPreprocessPodBindRequest(value: unknown): Artifac
  */
 export function __ParseArtifactPreprocessRecoveryRequest(value: unknown): ArtifactPreprocessRecoveryRequest | null
 {
-	const parsed = _Parse(_RecoveryBodySchema, value);
+	const parsed = __ParseWorkloadWireBody(_RecoveryBodySchema, value);
 	if (parsed === null || parsed.binding.firstPodUid === undefined)
 	{
 		return null;
@@ -121,5 +93,5 @@ export function __ParseArtifactPreprocessRecoveryRequest(value: unknown): Artifa
  */
 export function __ParseArtifactPreprocessTaskReceipt(value: unknown): IWorkflowTaskReceipt | null
 {
-	return _Parse(_TaskReceiptSchema, value);
+	return __ParseWorkloadWireBody(_TaskReceiptSchema, value);
 }

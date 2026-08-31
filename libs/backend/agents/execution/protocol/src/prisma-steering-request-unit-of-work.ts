@@ -1,25 +1,21 @@
 import { createHash } from "node:crypto";
 
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { ___IsRolledBackConflict, ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
 import { PrismaSteeringRequestRepository } from "./prisma-steering-request-repository";
 import type { SteeringRequestRepository, SteeringRequestTransactionRepository, SubmitSteeringRequestCommand, SubmitSteeringRequestResult } from "./steering-request.types";
-
-/** Maximum number of complete steering transactions after PostgreSQL reports a safe rollback. */
-const _STEERING_ATTEMPT_LIMIT = 3;
-
-/** Prisma codes that prove the complete transaction rolled back before another attempt begins. */
-const _RETRYABLE_STEERING_CODES = new Set(["P2002", "P2034"]);
 
 /**
  * Owns the Serializable transaction and conflict recovery for owner-authored steering.
  *
  * Each request receives a primary key derived from the authenticated owner, run, and hashed browser
- * key. Up to three transactions may run, and only after Prisma reports P2002 or P2034. If all three
- * lose, a fresh read verifies the committed row: the same digest is a successful replay and a
- * different digest is a reused-key conflict. An absent winner leaves the final Prisma error intact.
+ * key. The shared unit-of-work envelope runs up to three attempts, and only after Prisma reports a
+ * proven full rollback. If all three lose, a fresh read verifies the committed row: the same digest
+ * is a successful replay and a different digest is a reused-key conflict. An absent winner leaves
+ * the final Prisma error intact.
  *
  * Called by: `_CreateSteeringIngestRouter` in prisma-steering-ingest.router.ts.
  * @implements SteeringRequestRepository
@@ -40,46 +36,37 @@ export class PrismaSteeringRequestUnitOfWork implements SteeringRequestRepositor
 	 * @param command - Owner-bound request assembled by the steering HTTP authority.
 	 * @returns The queue, replay, conflict, ownership, or lifecycle result.
 	 * @throws The last Prisma conflict when three rolled-back attempts have no committed winner, or
-	 * any non-P2002/P2034 error immediately.
+	 * any non-rollback error immediately.
 	 */
 	async submitAtomically(command: SubmitSteeringRequestCommand): Promise<SubmitSteeringRequestResult>
 	{
 		const steeringRequestId = _SteeringRequestId(command);
-		let lastConflict: unknown = null;
-		for (let attempt = 1; attempt <= _STEERING_ATTEMPT_LIMIT; attempt += 1)
+		try
 		{
-			try
-			{
-				return await this._Run(function _Submit(repository) { return repository.submit(command, steeringRequestId); });
-			}
-			catch (error)
-			{
-				if (!_IsRetryableSteeringConflict(error)) throw error;
-				lastConflict = error;
-			}
+			return await this._Run(3, function _Submit(repository) { return repository.submit(command, steeringRequestId); });
 		}
-		const winner = await this._ReadWinner(command, steeringRequestId);
-		if (winner !== null) return winner;
-		if (lastConflict !== null) throw lastConflict;
-		throw new Error("steering retry loop exhausted without a recorded database conflict");
-	}
-
-	/** Reads the committed row after all rolled-back submission attempts are exhausted. */
-	private async _ReadWinner(command: SubmitSteeringRequestCommand, steeringRequestId: string): Promise<SubmitSteeringRequestResult | null>
-	{
-		return this._Run(function _Read(repository): Promise<SubmitSteeringRequestResult | null>
+		catch (error)
 		{
-			return repository.readWinner(command, steeringRequestId);
-		});
+			if (!___IsRolledBackConflict(error))
+			{
+				throw error;
+			}
+			const winner = await this._Run(1, function _Read(repository) { return repository.readWinner(command, steeringRequestId); });
+			if (winner !== null)
+			{
+				return winner;
+			}
+			throw error;
+		}
 	}
 
 	/** Runs one steering operation with a repository bound to a fresh Serializable transaction. */
-	private async _Run<Result>(work: (repository: SteeringRequestTransactionRepository) => Promise<Result>): Promise<Result>
+	private async _Run<Result>(attemptLimit: number, work: (repository: SteeringRequestTransactionRepository) => Promise<Result>): Promise<Result>
 	{
-		return this._prisma.$transaction(async function _Run(transaction): Promise<Result>
+		return ___RunInPrismaUnitOfWork(this._prisma, async function _Bind(transaction): Promise<Result>
 		{
 			return work(new PrismaSteeringRequestRepository(transaction, new PrismaAuthorizationAuthority(transaction)));
-		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+		}, { isolationLevel: "Serializable", operation: "steering request", attemptLimit });
 	}
 }
 
@@ -88,10 +75,4 @@ function _SteeringRequestId(command: SubmitSteeringRequestCommand): string
 {
 	const digest = createHash("sha256").update(JSON.stringify(["opencrane-steering-request-v1", command.runId, command.siloId, command.subjectId, command.idempotencyDigest])).digest("hex");
 	return `steering-${digest}`;
-}
-
-/** Returns whether Prisma confirms the whole transaction was rolled back by a known race. */
-function _IsRetryableSteeringConflict(error: unknown): boolean
-{
-	return error instanceof Prisma.PrismaClientKnownRequestError && _RETRYABLE_STEERING_CODES.has(error.code);
 }

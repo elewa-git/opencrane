@@ -1,24 +1,7 @@
-import { RuntimeWorkloadClaimClasses, type RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
+import { RuntimeWorkloadClaimClasses, __IsCanonicalUtcMilliseconds, __RuntimeWorkloadBindingSchema, type RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { __ParseArtifactPreprocessOutcome } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { z, type ZodType } from "zod";
-
-/** Check the canonical UTC timestamp carried by one database-issued workload claim. */
-function _IsCanonicalUtcMilliseconds(value: string): boolean
-{
-	const date = new Date(value);
-	return !Number.isNaN(date.getTime()) && date.toISOString() === value;
-}
-
-/** Validate the workload fence that a controller returns for server persistence. */
-const _BindingSchema: ZodType<RuntimeWorkloadBinding> = z.object({
-	claimId: z.string().min(1).max(128),
-	claimedAt: z.string().datetime({ offset: true, precision: 3 }).refine(_IsCanonicalUtcMilliseconds),
-	deliveryCount: z.number().int().min(1),
-	profileName: z.string().min(1).max(63),
-	workloadUid: z.string().min(1).max(128),
-	firstPodUid: z.string().min(1).max(128).optional(),
-}).strict();
 
 /** Validate the complete server record before it can select a PDF preprocessing Job. */
 const _RecordSchema: ZodType<ArtifactPreprocessControllerRecord> = z.object({
@@ -30,9 +13,9 @@ const _RecordSchema: ZodType<ArtifactPreprocessControllerRecord> = z.object({
 		workloadClass: z.literal(RuntimeWorkloadClaimClasses.ArtifactPreprocess),
 		profileName: z.string().min(1).max(63),
 		idempotencyKey: z.string().min(1).max(512),
-		claimedAt: z.string().datetime({ offset: true, precision: 3 }).refine(_IsCanonicalUtcMilliseconds),
+		claimedAt: z.string().datetime({ offset: true, precision: 3 }).refine(__IsCanonicalUtcMilliseconds),
 		deliveryCount: z.number().int().min(1),
-		expiresAt: z.string().datetime({ offset: true, precision: 3 }).refine(_IsCanonicalUtcMilliseconds),
+		expiresAt: z.string().datetime({ offset: true, precision: 3 }).refine(__IsCanonicalUtcMilliseconds),
 		executionReference: z.string().min(1).max(512),
 	}).strict(),
 }).strict();
@@ -92,5 +75,5 @@ export function _ParseArtifactPreprocessOutcome(value: unknown, preprocessJobId:
 /** Validates the fenced binding shape for controller HTTP boundaries. */
 export function _ParseArtifactPreprocessBinding(value: unknown): RuntimeWorkloadBinding
 {
-	return _BindingSchema.parse(value);
+	return __RuntimeWorkloadBindingSchema.parse(value);
 }
