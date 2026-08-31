@@ -39,8 +39,9 @@
 #
 # Prereqs: kubectl, helm, the cluster-wide controllers, and the PostgreSQL credentials
 # Secrets already present in the target namespace. testv5 also requires a ready Agent Sandbox
-# controller with its extensions and the gvisor RuntimeClass, plus KurrentDB TLS keys
-# (tls.crt, tls.key, ca.crt) and an administrator password key in the named Secrets.
+# controller with its extensions; each Sandbox, SandboxClaim, SandboxTemplate, and SandboxWarmPool
+# CRD serving and storing v1beta1; the gvisor RuntimeClass; and KurrentDB TLS keys (tls.crt,
+# tls.key, ca.crt) plus an administrator password key in the named Secrets.
 # =============================================================================
 set -euo pipefail
 
@@ -112,6 +113,8 @@ if [[ "$CLUSTER_TENANT" == "testv5" ]]; then
   [[ "$KURRENTDB_BOOTSTRAP_ADMIN_SECRET" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { err "testv5 requires --kurrentdb-bootstrap-admin-secret."; exit 1; }
   for crd in sandboxes.agents.x-k8s.io sandboxclaims.extensions.agents.x-k8s.io sandboxtemplates.extensions.agents.x-k8s.io sandboxwarmpools.extensions.agents.x-k8s.io; do
     kubectl get crd "$crd" >/dev/null 2>&1 || { err "testv5 requires the Kubernetes Agent Sandbox CRD '$crd'."; exit 1; }
+    AGENT_SANDBOX_V1BETA1_STATE="$(kubectl get crd "$crd" -o 'jsonpath={range .spec.versions[?(@.name=="v1beta1")]}{.served}:{.storage}{end}')"
+    [[ "$AGENT_SANDBOX_V1BETA1_STATE" == "true:true" ]] || { err "testv5 requires Agent Sandbox CRD '$crd' to serve and store v1beta1 resources."; exit 1; }
   done
   AGENT_SANDBOX_IMAGE="$(kubectl get deployment agent-sandbox-controller --namespace agent-sandbox-system -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)"
   [[ "$AGENT_SANDBOX_IMAGE" == *@sha256:* ]] || { err "testv5 requires the Agent Sandbox controller to use an immutable image digest."; exit 1; }

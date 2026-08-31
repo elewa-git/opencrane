@@ -227,6 +227,9 @@ fi
 
 cat >"$wrapper_test_dir/bin/kubectl" <<'EOF'
 #!/usr/bin/env bash
+if [[ "$1 $2" == "get crd" && "$*" == *jsonpath* ]]; then
+  printf '%s' "${AGENT_SANDBOX_V1BETA1_STATE:-true:true}"
+fi
 if [[ "$1 $2 $3" == "get deployment agent-sandbox-controller" ]]; then
   if [[ "$*" == *args* ]]; then
     printf '%s\n' '--extensions'
@@ -258,6 +261,23 @@ for missing_kurrentdb_secret_key in tls.crt tls.key ca.crt password; do
   fi
   grep -Fq "requires key '$missing_kurrentdb_secret_key'" "$testv5_error_file"
 done
+
+testv5_version_error_file="$wrapper_test_dir/testv5-agent-sandbox-version.error"
+if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" AGENT_SANDBOX_V1BETA1_STATE='true:false' \
+  bash "$wrapper_test_dir/deploy.sh" \
+    --base-domain dev.opencrane.ai \
+    --cluster-tenant testv5 \
+    --acme-email operator@example.com \
+    --first-user-email owner@example.com \
+    --oidc-issuer-url https://issuer.example.com/ \
+    --oidc-client-id test-client \
+    --kurrentdb-image-digest sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+    --kurrentdb-tls-secret kurrentdb-tls \
+    --kurrentdb-bootstrap-admin-secret kurrentdb-bootstrap > /dev/null 2>"$testv5_version_error_file"; then
+  echo "testv5 accepted an Agent Sandbox CRD without v1beta1 storage" >&2
+  exit 1
+fi
+grep -Fq "to serve and store v1beta1 resources" "$testv5_version_error_file"
 
 provider_secret_calls=()
 kubectl()

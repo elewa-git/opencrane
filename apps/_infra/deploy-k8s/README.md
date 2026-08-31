@@ -32,7 +32,7 @@ wires the pieces and the per-silo networking together.
  └────────────────────────────────────────────────────────────┘
         │  requires (external prerequisites, NOT installed here)
         ▼
- ingress controller · serving DNS · CloudNativePG · cert-manager
+ ingress controller · serving DNS · CloudNativePG · cert-manager · Agent Sandbox controller
 ```
 
 **In this flow:** [opencrane server](../../opencrane/README.md) · [opencrane-ui](../../opencrane-ui/README.md)
@@ -51,8 +51,8 @@ it changes either Helm release. This is a release-set check: an advanced values 
 disables one of these services does not remove its image from qualification. The local k3d smoke
 keeps using images imported directly into its nodes and proves them through the same blocking
 Deployment rollout gates.
-Cluster-wide controllers (ingress,
-CloudNativePG, cert-manager) and serving DNS are external prerequisites a silo never installs.
+Cluster-wide controllers (ingress, CloudNativePG, cert-manager, and the Agent Sandbox controller)
+and serving DNS are external prerequisites a silo never installs.
 "External" here means outside the organisation release: a cluster operator may explicitly install
 the pinned development controller set with `platform/bootstrap-prerequisites.sh`, but `deploy.sh`
 never invokes that helper. The app-owned chart helper runs `helm dependency update --skip-refresh`
@@ -131,6 +131,11 @@ package imports it.
   `<release>-skill-authoring`, so different silos never share its Helm-owned namespace.
 - `--release` — optional only as a restatement of the silo identity. The wrapper derives and
   enforces `opencrane-<cluster-tenant>` so all Helm-owned namespaces stay inside one release.
+- `testv5` — the first 0.11 target silo additionally requires KurrentDB TLS and bootstrap Secrets,
+  an immutable KurrentDB image digest, the ready Agent Sandbox controller with extensions enabled,
+  and each Sandbox, SandboxClaim, SandboxTemplate, and SandboxWarmPool CRD served and stored as
+  `v1beta1`. The deploy script refuses any CRD that does not meet both conditions before changing
+  the silo.
 - `crds.install` — resolved authoritatively by the deploy engine: the first silo installs the
   shared `ClusterTenant` CRD, while later silos consume it without competing for Helm ownership.
 - `--first-user-email` — required standalone-onboarding input. It is matched exactly against an
