@@ -29,7 +29,7 @@ export interface MaterializePersonalConfigurationChangeCommand
 export type MaterializePersonalConfigurationChangeResult =
 	| { readonly outcome: PersonalConfigurationMaterializationCodes.Applied; readonly agentRevisionId: string }
 	| { readonly outcome: PersonalConfigurationMaterializationCodes.NotApplicable }
-	| { readonly outcome: PersonalConfigurationMaterializationCodes.Denied; readonly reason: PersonalConfigurationMaterializationCodes.InvalidCommand | PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner | PersonalConfigurationMaterializationCodes.NotAccepted | PersonalConfigurationMaterializationCodes.StaleProposal | PersonalConfigurationMaterializationCodes.ModelUnavailable | PersonalConfigurationMaterializationCodes.PersistenceUnavailable };
+	| { readonly outcome: PersonalConfigurationMaterializationCodes.Denied; readonly reason: PersonalConfigurationMaterializationCodes.InvalidCommand | PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner | PersonalConfigurationMaterializationCodes.NotAccepted | PersonalConfigurationMaterializationCodes.StaleProposal | PersonalConfigurationMaterializationCodes.ModelUnavailable | PersonalConfigurationMaterializationCodes.AuthorizationDenied | PersonalConfigurationMaterializationCodes.PersistenceUnavailable };
 
 /**
  * What the materialisation transaction returned, before the outer function narrows it.
@@ -40,7 +40,7 @@ export type MaterializePersonalConfigurationChangeResult =
  */
 export type PersonalConfigurationMaterializationPersistenceResult =
 	| { readonly status: PersonalConfigurationMaterializationCodes.Applied; readonly agentRevisionId: string }
-	| { readonly status: PersonalConfigurationMaterializationCodes.NotApplicable | PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner | PersonalConfigurationMaterializationCodes.NotAccepted | PersonalConfigurationMaterializationCodes.StaleProposal | PersonalConfigurationMaterializationCodes.ModelUnavailable | PersonalConfigurationMaterializationCodes.PersistenceUnavailable };
+	| { readonly status: PersonalConfigurationMaterializationCodes.NotApplicable | PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner | PersonalConfigurationMaterializationCodes.NotAccepted | PersonalConfigurationMaterializationCodes.StaleProposal | PersonalConfigurationMaterializationCodes.ModelUnavailable | PersonalConfigurationMaterializationCodes.AuthorizationDenied | PersonalConfigurationMaterializationCodes.PersistenceUnavailable };
 
 /**
  * Applies one accepted proposal, creating a new immutable AgentRevision.
@@ -114,6 +114,8 @@ export enum PersonalConfigurationMaterializationCodes
 	StaleProposal = "stale_proposal",
 	/** The requested model alias is not available in the owner silo. */
 	ModelUnavailable = "model_unavailable",
+	/** The central authority refused the AgentService, AgentRevision, Persona, or model effect. */
+	AuthorizationDenied = "authorization_denied",
 	/**
 	 * The only retryable code. The write failed after the unit of work used up its retries, so
 	 * whether anything committed is unknown. Re-read the proposal's state before retrying, and

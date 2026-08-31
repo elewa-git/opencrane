@@ -14,6 +14,10 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY apps/artifact-scanner/package.json apps/artifact-scanner/
 RUN npm ci --omit=dev --workspace=apps/artifact-scanner
+# The build leaves process dependencies external so Node can load their supported runtime entrypoints.
+# Resolve every emitted package entrypoint now so the image cannot publish with a missing module.
+RUN node --input-type=module --eval \
+    "await Promise.all([import('@a2ui/web_core/v0_8'), import('@noble/hashes/sha2.js'), import('@noble/hashes/utils.js'), import('@opentelemetry/api'), import('@opentelemetry/auto-instrumentations-node'), import('@opentelemetry/core'), import('@opentelemetry/exporter-trace-otlp-proto'), import('@opentelemetry/sdk-node'), import('ajv'), import('openapi-fetch'), import('pino'), import('zod')])"
 
 # Keep the pinned scanner executable, its dynamic libraries, and its offline definitions together.
 FROM clamav/clamav-debian:1.5.2@sha256:14e2e0805c6a5ff6728ea591c05565e0f0954d93e8701919012c3a8c44e20674

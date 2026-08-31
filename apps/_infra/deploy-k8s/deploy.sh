@@ -19,8 +19,6 @@
 #       --cluster-tenant acme \
 #       --acme-email operator@example.com \
 #       --first-user-email owner@example.com \
-#       --initial-model-provider openai \
-#       # OPENCRANE_INITIAL_MODEL_API_KEY is required in the environment \
 #       --postgres-credentials-secret opencrane-postgres-bootstrap \
 #       --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
 #       --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap \
@@ -31,9 +29,7 @@
 #
 # --base-domain, --cluster-tenant, --acme-email, and --first-user-email are required. The first
 # user must sign in with this exact verified OIDC email to claim the standalone silo's first owner.
-# `--initial-model-provider` plus
-# OPENCRANE_INITIAL_MODEL_API_KEY seed the first routable model through LiteLLM. The silo is installed into namespace
-# `opencrane-<cluster-tenant>` unless --namespace overrides it.
+# The silo is installed into namespace `opencrane-<cluster-tenant>` unless --namespace overrides it.
 # Fresh silo deploys require `--opencrane-ui-digest` and `--cognee-digest`. An upgrade may omit
 # either only to retain the exact digest already recorded by the release. Tags are accepted only by
 # the disposable local k3d smoke.
@@ -69,7 +65,6 @@ while [[ $# -gt 0 ]]; do
     --first-user-email) FIRST_USER_EMAIL="$2"; PASSTHROUGH+=(--first-user-email "$2"); shift 2 ;;
     --oidc-issuer-url) OIDC_ISSUER_URL="$2"; PASSTHROUGH+=(--oidc-issuer-url "$2"); shift 2 ;;
     --oidc-client-id)  OIDC_CLIENT_ID="$2"; PASSTHROUGH+=(--oidc-client-id "$2"); shift 2 ;;
-    --initial-model-provider) PASSTHROUGH+=(--initial-model-provider "$2"); shift 2 ;;
     -h|--help)         grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)                 PASSTHROUGH+=("$1"); shift ;;
   esac
@@ -109,6 +104,7 @@ EXPECTED_RELEASE="opencrane-${CLUSTER_TENANT}"
 # Silo value profile: a per-ClusterTenant install in its own namespace. Shared cluster
 # controllers remain external.
 PROFILE_SET=(
+  --cluster-tenant "$CLUSTER_TENANT"
   --namespace "$NAMESPACE"
   --release "$RELEASE"
   --set "multiInstance.enabled=false"

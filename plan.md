@@ -29,15 +29,17 @@ workload behind a **language-neutral** `AgentRuntimeProtocol v2` ([ADR 0010](doc
    `own-personal-ai-agent-setup`; independent
    work lanes inside the active phase run in parallel where their dependency graph allows.
 4. **Architecture:** Postgres is product authority; artifacts live behind `ArtifactStore` on PVC;
-   authorization is per silo with proof-bound run/action capabilities; runtimes receive no
-   Kubernetes mutation RBAC; Cilium/default-deny enforces workload isolation; Python Jobs are
+   authorization is per silo through the central durable authority and one-use ToolInvocation
+   admissions; runtimes receive no
+   Kubernetes mutation RBAC; a NetworkPolicy-enforcing CNI and default-deny policies enforce
+   workload isolation; Python Jobs are
    isolated; controller and channel-proxy trust boundaries are separate apps; legacy CRDs and
    OpenClaw authorities disappear.
 
 Toolkit selection remains evidence-driven: the offline Phase E conformance harness, immutable
 managed run admission and tagged personal/managed input contract, fault-injection matrix,
-controller, and runtime boundaries are built and CI-runnable. Live PostgreSQL, Obot, Cognee, and
-LiteLLM qualification remains gated on
+controller, and runtime boundaries are built and CI-runnable. Live PostgreSQL, OCI MCP execution,
+Cognee, and LiteLLM qualification remains gated on
 [#337](https://github.com/elewa-git/opencrane/issues/337)
 (→ [#246](https://github.com/elewa-git/opencrane/issues/246)); only passing evidence adopts the
 exact-pinned driver and permits deletion of the replaced live path.
@@ -109,8 +111,8 @@ path and ownership refactor; it adds no compatibility aliases and changes no run
 Build the target Postgres models for AgentService/Revision, Conversation/Message/canonical timeline,
 conditional AgentRun/RunEvent, Approval, Persona, Artifact, SkillRevision, audit, and membership
 projection. Build the authorization facade,
-proof-bound capabilities, channel proxy, agent controller, ArtifactStore CAS, outbox, app-owned
-Cognee/Obot adapters, default-deny Cilium profiles, workload identities, and deterministic creation
+central product grants, channel proxy, agent controller, ArtifactStore CAS, outbox, app-owned
+Cognee integration, OCI-backed MCP execution, default-deny network profiles, workload identities, and deterministic creation
 of fresh application stores and credentials. Every durable store uses an expandable mounted volume;
 agent-runtime storage is mounted scratch and never the long-term home for user data.
 
@@ -118,10 +120,8 @@ Delete replaced legacy schemas, Tenant/AccessPolicy authority, OpenClaw imports,
 paths, broad secret broadcasts, obsolete topology switches, and unowned deployables in the same
 slices. CI rejects reintroduction. [#117](https://github.com/elewa-git/opencrane/issues/117) supplies
 the enforcing-CNI work; [#221](https://github.com/elewa-git/opencrane/issues/221) generalizes the
-identity matrix; [#128](https://github.com/elewa-git/opencrane/issues/128) becomes the target Obot
-adapter and fresh user-authorized integration flow — seeded by porting PR #241's reviewed Obot
-custody/credential/discovery slices from `main` per
-[#255](https://github.com/elewa-git/opencrane/issues/255).
+identity matrix. The 0.10 cutover removes Obot custody and transport; admitted MCP revisions now
+execute from imported immutable OCI images under central authorization.
 
 Exit: a fresh environment is created from reviewed target artifacts alone; IAM and network negative
 tests fail closed; backup/restore reconstructs target-owned stores; no legacy contract is reachable.
@@ -185,7 +185,8 @@ one-way personal→managed boundary ([#129](https://github.com/elewa-git/opencra
 **Central agents** — org-, department-, team-, or otherwise shared managed AgentServices that run on a
 schedule or a specific trigger to do one bounded task — run on the same runtime substrate as personal
 agents but under a narrower, connector-scoped workload identity independent of any human user. They
-reach external systems only through Obot-custodied MCP servers, instantiable per connected source. The
+reach external systems only through centrally authorised MCP revisions imported as immutable OCI
+images. The
 legacy ingestion interval worker and its direct Cognee writes are deleted.
 Conversation-initiated config changes (always-granted `upgrade_session` tool,
 logged persona refresh, apply-at-next-snapshot) → [#318](https://github.com/elewa-git/opencrane/issues/318).
@@ -195,25 +196,23 @@ logged persona refresh, apply-at-next-snapshot) → [#318](https://github.com/el
 (`backend-server-agent-scheduling`, composed inside `apps/opencrane`: cron+timezone eval, missed-run
 catch-up, overlap/backoff/suspension, idempotent run creation through the existing
 `ManagedRunAdmissionPort` with `trigger: schedule`), the `AgentServiceSchedule` model + management
-API, the connector-scoped managed identity (`managed-agent-runtime-*` SA class + distinct token
-audience, the launcher's selectable identity profile, and the chart-only `apps/managed-agent-runtime`
-plane), execution authority via the durable ToolInvocation lifecycle with the Obot transports
-composed (authenticated custody provisioning plus server-owned, allow-listed action execution;
-provider addressing and credentials never enter a runtime Job), the scoped-memory
+API, the connector-scoped managed identity (a managed-runtime service-account class + distinct token
+audience, the launcher's selectable identity profile, and separate personal and managed warm pools
+that run the `apps/agent-runtime` image), execution authority via the durable ToolInvocation
+lifecycle and the MCP-specific OCI executor (provider addressing and credentials never enter a
+runtime Pod), the scoped-memory
 contract freezes the gateway-native dataset selected by admitted authority while the authenticated
 read transport returns through the same durable attempt-fenced result delivery, and the
-attach-authority + runtime
-effective-access intersection over the grant compiler (closes the slice-5 deferral; scope-isolation
-tested). Scoped injection and personal record/correct/forget remain fail-closed pending a durable,
-recoverable gateway write lifecycle. NOT done — a NAMED LATER GATE: **create and qualify the harvesting central agent against
-live Obot**, tracked under [#337](https://github.com/elewa-git/opencrane/issues/337); the composed
-custody and server action data plane validates Obot responses defensively until that live
-qualification pins the exact shapes. The repository
-does not retain an unqualified offline definition alongside that live acceptance gate.
+attach authority plus the central runtime authorization/grant intersection (closes the slice-5
+deferral; scope isolation tested). Scoped injection and personal record/correct/forget remain
+fail-closed pending a durable,
+recoverable gateway write lifecycle. Live qualification must prove the harvesting central agent
+against the admitted MCP revision and immutable executor path; the repository does not retain an
+Obot fallback beside that acceptance gate.
 
 Here, **built and CI-qualified** means the source, contracts, fault tests, and rendered deployment
 artifacts pass without depending on a live external environment. It does not mean PostgreSQL,
-Kubernetes Jobs, LiteLLM, Obot, Zitadel login, TLS, recovery, or isolation have passed together on a
+Kubernetes Jobs, LiteLLM, OCI MCP execution, Zitadel login, TLS, recovery, or isolation have passed together on a
 real cluster.
 
 **Live qualification status (2026-08-06):** the app-owned Terraform path created the regional
@@ -228,7 +227,7 @@ project has no default Compute Engine KMS key, so this deployment cannot qualify
 durable-storage gate.
 
 The first real `testv2` release created and kept its namespace, CNPG Cluster/PgBouncer, ingress,
-certificate, UI, Cognee, LiteLLM, and Obot gateway. PostgreSQL and its original privileges hook
+certificate, UI, Cognee, LiteLLM, and the then-current Obot gateway that 0.10 later retired. PostgreSQL and its original privileges hook
 completed. The release exposed an invalid architecture assumption: its server treated every silo as
 Fleet-attached and required an external `public-key.pem`, despite this test being a standalone
 ClusterTenant. The deployment contract now has explicit `standalone` and `fleet` membership modes;
@@ -246,11 +245,13 @@ approved clients. The server is Ready with a healthy Prisma query, public `/heal
 `{"status":"ok","db":true}`, and its liveness no longer restarts an otherwise recoverable database
 path. `testv2.dev.opencrane.ai` now has a browser-trusted Let's Encrypt HTTP-01 certificate and the
 login endpoint redirects to the configured Zitadel confidential client. The privileges proof remains
-intact: Autopilot provisions its isolated ComputeClass node and the three-container Job completes;
-this cold-node/image-pull delay is operational friction, not an application memory leak. The final
+intact: the historical three-container Job completed after Autopilot provisioned its isolated
+ComputeClass node; that cold-node and image-pull delay was operational friction, not an application
+memory leak. The current chart runs two PostgreSQL client containers through ordinary Autopilot
+scheduling, each with 50 millicores of processor time and 64 mebibytes of memory. The final
 monthly cost, CMEK durable-storage gate, browser completion of the Zitadel callback, runtime-job
 execution/isolation, local standalone membership issuer for runnable personal/managed agents, and
-the wider Phase E live-LiteLLM/Obot/recovery qualification remain open live gates.
+the wider Phase E live-LiteLLM/OCI-MCP/recovery qualification remain open live gates.
 
 **Live single-silo update (2026-08-07):** `testv2` now runs OpenCrane Helm revision 32 and PostgreSQL
 revision 49. The CI-published server image `sha-fc53af6` and artifact-service image `sha-7ebcfa8`
@@ -276,6 +277,15 @@ Zitadel callback/origin/logout entries were retired, then its four legacy namesp
 through a reviewed, UID- and full-inventory-bound app-owned retirement path. The one-time legacy
 script was removed after its evidence was recorded in the deploy ledger.
 
+**Live 0.10 qualification update (2026-08-31):** testv4 proved the repaired central migration and
+ordinary-scheduled PostgreSQL privileges path through revision 73. The following application render
+then stopped before apply because the warm-runtime chart required four `CiliumNetworkPolicy`
+resources that GKE Dataplane V2 does not expose. Those rules use only namespace labels, Pod labels,
+and ports, so the 0.10 candidate replaces them with profile-specific standard `NetworkPolicy`
+resources: generic Pods retain only DNS and OpenCrane egress, while claimed Pods add the fixed
+controller ingress and same-silo LiteLLM path. The prior application revision remained installed;
+the portable-policy candidate requires a fresh exact-SHA qualification and deployment.
+
 Repository train `0.8.0` also replaces the earlier fresh-database-only decision with explicit
 version-to-version authority. Every Nx application records the last root train that adapted its
 production contract, directly or through its dependency graph; immutable release manifests map the
@@ -288,6 +298,79 @@ manual plan.
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.
 
+### Cross-cutting track — central durable authorization authority
+
+**Status: IN PROGRESS — follow-up to #745; blocks code-skill execution and complete package-authority convergence.**
+
+Replace the repository's separate product-authorization paths with one logical
+`AuthorizationAuthority`. The authority is a transaction-bound application port backed by the silo
+PostgreSQL database, not a separate network service: the authorization decision, protected product
+write, and one-use effect admission must commit or roll back together.
+
+Authentication, workload identity, lifecycle eligibility, and product authorization remain distinct:
+
+- OIDC and membership prove which human or service is calling;
+- Kubernetes TokenReview proves the controller or Pod identity assigned to admitted work;
+- domain owners decide whether a revision is operationally eligible, such as an MCP revision being
+  Ready or a skill revision being Published;
+- the central authority alone decides whether a principal may perform the product action; and
+- NetworkPolicy and Kubernetes RBAC constrain infrastructure reachability but never grant product
+  permission.
+
+Humans, Groups, managed `AgentService` principals, and personal-agent runs use the same grant
+semantics. A managed agent's resource grants and a human caller's permission to invoke or administer
+that agent are separate decisions. A personal agent uses its human principal's current grants
+intersected with its approved revision and frozen run ceilings. Frozen state is a maximum, not a
+permanent grant: revocation or membership loss denies the next external effect.
+
+#### Adoption and deletion chain
+
+Deliver the track in this one follow-up PR through internally gated waves and commits. Each wave
+adopts a bounded caller set and deletes what it replaces before the next wave starts.
+
+1. Inventory every route, use case, background consumer, and executor that makes a product
+   permission decision. Record its actor, resource, action, current guard, target authority call,
+   eligibility owner, and receipt need. Add a checked enforcement inventory and forbid new raw role,
+   owner, silo, visibility, or product-specific entitlement guards.
+2. Harden the common authorization kernel with typed resources and actions, principal and Group
+   resolution, deny precedence, expiry, batch catalogue filtering, transaction-bound effect
+   admission, durable decision evidence, and safe decision explanations.
+3. Adopt human and agent management. Gate agent discovery, creation, revision, publication,
+   invocation, scheduling, delegation, retirement, and administration through the authority. Treat
+   managed agents as durable Principals and personal runs as the human-principal intersection.
+4. Converge governed packages. Move MCP and skill discovery, assignment, publication, installation,
+   and use to the shared authority. Keep their lifecycle and executor rules separate. Delete MCP-only
+   access reconciliation, owner-only skill execution, and silo-wide skill visibility as their callers
+   move.
+5. Adopt artifacts, conversations, datasets and memory, models, provider connections, channel
+   targets, schedules, budgets, approvals, and child-run delegation. Recheck current grants before
+   every external effect and bind the principal, revision, arguments, approval subject, and workload
+   assignment into a one-use admission record.
+6. Reduce workload authorization to assignment proof. Controllers and Pods may exercise the exact
+   admitted action or fail closed; they may not reinterpret grants, membership, ownership, or roles.
+7. Delete `_RequireOrgAdmin`, owner-or-silo shortcuts, visibility-as-permission checks,
+   package-specific entitlement engines, duplicate evaluators, direct product role checks, and every
+   stale schema, configuration, API, UI, test, export, dependency, and document they leave behind.
+   Bootstrap ordinary owner/admin product powers as managed grants. Retain only separately documented
+   cluster bootstrap or operator controls that are not product authorization.
+8. Qualify direct humans, inherited Groups, managed agents, personal runs, delegated runs, and
+   workloads. Cover wrong silo/principal/agent, stale membership, deny precedence, expiry, nested
+   Groups, revocation, lifecycle changes, altered arguments, replay, cancellation, approval mismatch,
+   and transaction failure. Prove grant → attach → publish → invoke → revoke → next effect denied,
+   plus clean installation and the supported predecessor upgrade for any schema change.
+
+Each wave names its survivor and deletion sets before implementation, reads
+`docs/agents/versioning.md`, updates fresh and upgrade paths together, runs architecture and reaper
+before and after structural work, and closes with focused tests. The PR closes with independent
+review, residue cleanup, and the comments gate. Do not add compatibility shims, dual policy
+evaluation, or delayed cleanup.
+
+Exit: every product permission decision uses the central authority port; humans and agents share one
+grant model; external effects have replay-safe ToolInvocation admissions and durable authorization
+evidence; revocation takes effect at
+the next external boundary; CI rejects bypasses; and no replaced authorization code, data,
+configuration, API, UI, test, or documentation remains.
+
 ### Phase F — product and operator surfaces
 
 Deliver one OpenCrane API/UI for conversation, persona, memory, agent catalog and revisions,
@@ -297,8 +380,9 @@ health, model/cost/budget, and runtime versions
 [#226](https://github.com/elewa-git/opencrane/issues/226)). Upstream consoles remain diagnostic.
 
 **Current implementation status:** the Angular shell has same-origin OIDC/session guards and early
-operator screens for catalogue, access policy, and model keys. Persona sorting now runs through the
-target API and authoritative `/onboarding` shell: an owner can answer the reviewed
+operator screens for catalogue and model keys. The former access-policy screen and MCP-only access
+API were removed; generic grant administration remains a blocked successor. Persona sorting now
+runs through the target API and authoritative `/onboarding` shell: an owner can answer the reviewed
 interview, resolve ties, inspect the derived immutable persona, and approve it into durable onboarding
 state. Bootstrap chat, main-app admission and fencing, conversation/thread/prompt streaming, memory,
 run history, schedules, membership, audit, assets, skills, and the remaining approval journeys are
@@ -441,13 +525,13 @@ only bounded internal preparation before dispatch; after dispatch it must replay
 check the provider when supported, or stop visibly in **Needs recovery** without sending the action
 again. That recovery model is implemented through a transaction-bound ToolInvocation unit of work:
 durable claims, result replay, provider-check strategy, and the visible recovery projection share one
-canonical lifecycle authority. Server-owned Obot invocation, credential isolation, safe result
+canonical lifecycle authority. Server-owned MCP invocation, credential isolation, safe result
 redaction, lifecycle-event ownership, and the provider-free replay digest check are covered by
 focused tests. The exact State×Event planner owns every invocation transition; claim kind, fence and
 revision prevent overlapping dispatch/reconciliation; approved argument edits become the effective
 provider request; and cancellation waits for in-flight claims to settle without admitting new work.
 Provider failures now retain failed spans without exporting raw exceptions, idle polls create no
-trace noise, and process shutdown aborts Obot before draining durable work. Correctness, security,
+trace noise, and process shutdown aborts external dispatch before draining durable work. Correctness, security,
 architecture, observability, and residue rechecks pass; fresh and upgraded 0.8 databases converge
 under live PostgreSQL qualification; and package, ownership, style, boundary, and release gates pass.
 The legacy 0.7 route-expiry replacement is approved and
@@ -455,7 +539,7 @@ implemented: migrated route ids, endpoint/registration coordinates, prior revoca
 expiry evidence survive as permanently inactive rows, while startup reconciliation creates the
 sole usable stable receiver route. Fresh 0.8 and migrated 0.7 databases converge under the live
 PostgreSQL test. F1.4 remains in progress until the rebased PR head passes live CI and merges. #337
-remains LiteLLM-only; retirement and replacement of the remaining Obot path is tracked by #592.
+remains LiteLLM-only; #592 tracks live qualification of the OCI-backed MCP replacement.
 
 Track F1 closes [#351](https://github.com/elewa-git/opencrane/issues/351),
 [#600](https://github.com/elewa-git/opencrane/issues/600),
@@ -515,8 +599,11 @@ finishes the move from SQL pollers and locks to Absurd workflows in this order:
 5. Delete MCPB routes, schema, workers, old SQL locks and pollers, and unreachable AgentRun residue
    ([#695](https://github.com/elewa-git/opencrane/issues/695),
    [#740](https://github.com/elewa-git/opencrane/issues/740)).
-6. As the final integration step, run the forward 0.9.3-to-0.10.0 change with Prisma Migrate as the
-   only database-change record and one dedicated migration Job. The 0.10.0 release closes
+6. As the final integration step, run the forward 0.9.2-to-0.10.0 change with one dedicated
+   migration Job. It carries the tagged release's 0.9.0 schema through the reviewed IAM prerequisite,
+   after CloudNativePG has installed `pg_cron` and assigned its schema to the application owner in
+   two observed `Database` generations. The Job receives no superuser credential and then uses
+   Prisma Migrate as the database-change ledger from 0.10.0 onward. The 0.10.0 release closes
    [#592](https://github.com/elewa-git/opencrane/issues/592),
    [#695](https://github.com/elewa-git/opencrane/issues/695),
    [#736](https://github.com/elewa-git/opencrane/issues/736),
@@ -543,8 +630,8 @@ finishes the move from SQL pollers and locks to Absurd workflows in this order:
 | [#351](https://github.com/elewa-git/opencrane/issues/351) | Deliver and qualify the authenticated conversation workspace through Track F1 |
 | [#513](https://github.com/elewa-git/opencrane/issues/513) | Low priority: evaluate LiteLLM-native OTLP GenAI spans through an operator-supplied collector, with message content disabled by default |
 | [#592](https://github.com/elewa-git/opencrane/issues/592) | OCI admission, immutable import, MCP executor claims, and Obot retirement are complete in the 0.10 review stack. Keep the issue open for the pre-started generic runtime pool, reconciliation, and live latency qualification. |
-| **0.10.0 workflow execution order** | **1.** Let product database transactions declare work that remote workflow workers execute. **2.** Run MCP tools from imported immutable OCI images through an MCP-specific executor and `RuntimeWorkloadClaim`; never put an uploaded image in the fixed generic agent Pod. **3.** Move skill validation, artifact preprocessing, and AgentRun lifecycle onto durable tasks. **4.** Remove each replaced polling, locking, lease, dispatch, MCPB, and Obot path after its durable owner exists. **5.** Finish with the forward database migration and dedicated migration Job. **6.** Run live pickup-latency and deployment qualification on the frozen candidate. The separate legacy integration API remains an explicit retirement decision. |
-| **0.10.0 forward workflow cutover** | Move from the released 0.9.3 schema to 0.10.0 with Prisma Migrate as the only record of database changes and one dedicated migration Job. OCI Image Layout ZIP admission accepts MCP `2026-07-28` only. Keep the remote v2 era-probe workflow and remove the MCPB routes, schema, and workers. This is a new version-to-version migration; it does not rewrite released 0.9.3 history. |
+| **0.10.0 workflow execution order** | **1.** Let product database transactions declare work that remote workflow workers execute. **2.** Run MCP tools from imported immutable OCI images through an MCP-specific executor and `RuntimeWorkloadClaim`; never put an uploaded image in the fixed generic agent Pod. **3.** Move skill validation, artifact preprocessing, and AgentRun lifecycle onto durable tasks. **4.** Remove each replaced polling, locking, lease, dispatch, MCPB, Obot, and legacy integration path after its durable owner exists. **5.** Finish with the forward database migration and dedicated migration Job. **6.** Run live pickup-latency and deployment qualification on the frozen candidate. |
+| **0.10.0 forward workflow cutover** | Move directly from tagged release 0.9.2 to 0.10.0 with one dedicated migration Job. Carry its 0.9.0 database schema through the reviewed IAM prerequisite, then use Prisma Migrate as the ledger from 0.10.0 onward. OCI Image Layout ZIP admission accepts MCP `2026-07-28` only. Keep the remote v2 era-probe workflow and remove the MCPB routes, schema, and workers. The untagged 0.9.3 candidate is not a supported release boundary. |
 | [#600](https://github.com/elewa-git/opencrane/issues/600) | Build immutable conversation modes, strategy ownership, ordinary messaging, and the mixed canonical timeline |
 | [#601](https://github.com/elewa-git/opencrane/issues/601) | Build group `@agent` child sessions, immediate-parent delivery, compact summaries, and breadcrumb navigation |
 | [#602](https://github.com/elewa-git/opencrane/issues/602) | Retain completed onboarding as closed/read-only workspace history |

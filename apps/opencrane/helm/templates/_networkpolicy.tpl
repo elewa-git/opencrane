@@ -1,5 +1,4 @@
 {{- define "opencrane.server.networkPolicy" -}}
-{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") .Values.agentController.warmRuntime.managedNamespace -}}
 {{- if .Values.networkPolicy.enabled }}
 # Network policy for the OpenCrane server.
 #
@@ -11,7 +10,7 @@
 #     to this port, so the internal routes are unreachable from the internet even though the
 #     org ingress forwards `/api`. Permitted to the internal port:
 #       - Channel proxy: /api/internal/channel-targets:resolve (TokenReview + delegated session).
-#       - Per-attempt agent-runtime Job: outbound `/api/internal/agent-runtime/*` only; its projected
+#       - Fixed warm-runtime Pod: outbound `/api/internal/agent-runtime/*` only; its projected
 #         ServiceAccount token is TokenReviewed inside the route, so this rule only opens the network path — it proves no identity.
 #       - Governed skill Jobs: bootstrap acknowledgement, authoring input, and terminal completion only.
 #         Their default-deny namespaces permit this single server destination and DNS; TokenReview binds
@@ -94,26 +93,28 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
-    # Runtime Jobs own no listener and can only initiate this connection. TokenReview fixes each
-    # personal or managed audience to its distinct namespace and ServiceAccount subject in-process.
+    # Warm runtime Pods own no public listener and can only initiate this connection. TokenReview
+    # fixes each personal or managed audience to its namespace and ServiceAccount in-process.
     {{- if .Values.agentController.enabled }}
+    {{- $personalRuntimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
+    {{- $managedRuntimeNamespace := include "opencrane.agentController.managedRuntimeNamespace" . }}
     - from:
         - namespaceSelector:
             matchLabels:
+              kubernetes.io/metadata.name: {{ $personalRuntimeNamespace | quote }}
               opencrane.ai/runtime-release: {{ include "opencrane.agentController.runtimeNamespaceLabelValue" . | quote }}
           podSelector:
             matchLabels:
-              app.kubernetes.io/component: agent-runtime
-      ports:
-        - protocol: TCP
-          port: {{ .Values.clustertenantManager.service.internalPort }}
-    - from:
+              app.kubernetes.io/component: warm-runtime
+              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-personal-warm
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ $managedRuntimeNamespace | quote }}
+              opencrane.ai/runtime-release: {{ include "opencrane.agentController.runtimeNamespaceLabelValue" . | quote }}
           podSelector:
             matchLabels:
-              app.kubernetes.io/component: agent-runtime
+              app.kubernetes.io/component: warm-runtime
+              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-managed-warm
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
@@ -189,14 +190,15 @@ spec:
           port: 5432
     # Kubernetes API calls and external OIDC/provider APIs use HTTPS. Standard
     # NetworkPolicy cannot select the API Service or constrain external FQDNs, so
-    # this is intentionally port-scoped; use Cilium to narrow external hostnames.
+    # this is intentionally port-scoped. A separately qualified Cilium policy can narrow hostnames.
     - ports:
         - protocol: TCP
           port: 443
     {{- if and (eq .Values.clustertenantManager.membership.mode "fleet") (ne (int .Values.clustertenantManager.membership.fleet.billingGatewayEgressPort) 443) }}
     # Fleet is the fail-closed membership and paid-seat authority in this mode. The application
     # refuses non-HTTPS receiver origins. Standard NetworkPolicy cannot select its external FQDN,
-    # so the operator supplies the exact TLS port and may narrow the hostname with Cilium.
+    # so the operator supplies the exact TLS port. A separately qualified Cilium policy may narrow
+    # the hostname.
     - ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.membership.fleet.billingGatewayEgressPort }}

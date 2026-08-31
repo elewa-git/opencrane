@@ -1,59 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
-import { RuntimeWorkloadClaimClasses, __IsImmutableRegistryReference, type RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
+import { type RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
+import { _ParseMcpExecutorControllerClaim, _ParseMcpExecutorControllerCleanupClaim, _ParseMcpExecutorControllerOutcome, _ParseMcpExecutorControllerReleaseClaim } from "./mcp-executor-controller.validator";
 import type { McpExecutorCleanupCommand, McpExecutorControllerAuthority, McpExecutorControllerClaim, McpExecutorControllerCleanupClaim, McpExecutorControllerFetch, McpExecutorControllerHttpAuthorityOptions, McpExecutorControllerReleaseClaim, McpExecutorControllerTokenReader, McpExecutorPodRegistrationCommand, McpExecutorReleaseCommand } from "./mcp-executor-controller.types";
 
 /** Largest server response this controller accepts. */
 const _MAX_RESPONSE_BYTES = 32 * 1024;
-
-/** Accepts one database coordinate without control characters. */
-function _IsCoordinate(value: unknown): value is string { return typeof value === "string" && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value); }
-
-/** Accepts a UTC instant with millisecond precision. */
-function _IsInstant(value: unknown): value is string { return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) && Number.isFinite(Date.parse(value)); }
-
-/** Parses an untrusted claim response into the MCP controller contract. */
-function _Claim(value: unknown): McpExecutorControllerClaim
-{
-	if (typeof value !== "object" || value === null || Array.isArray(value))
-		throw new Error("OpenCrane MCP executor claim was invalid");
-	const record = value as Record<string, unknown>;
-	const claim = record["claim"];
-	if (Object.keys(record).length !== 2 || typeof claim !== "object" || claim === null || Array.isArray(claim))
-		throw new Error("OpenCrane MCP executor claim was invalid");
-	const candidate = claim as Record<string, unknown>;
-	const keys = ["claimId", "siloId", "workloadClass", "profileName", "idempotencyKey", "claimedAt", "deliveryCount", "expiresAt", "executionReference"];
-	if (Object.keys(candidate).length !== keys.length || !keys.every(function _HasKey(key): boolean { return Object.hasOwn(candidate, key); }) || ![candidate["claimId"], candidate["siloId"], candidate["profileName"], candidate["idempotencyKey"], candidate["executionReference"]].every(_IsCoordinate) || candidate["workloadClass"] !== RuntimeWorkloadClaimClasses.McpExecutor || !_IsInstant(candidate["claimedAt"]) || !_IsInstant(candidate["expiresAt"]) || !Number.isSafeInteger(candidate["deliveryCount"]) || Number(candidate["deliveryCount"]) < 1 || !__IsImmutableRegistryReference(record["registryReference"]))
-		throw new Error("OpenCrane MCP executor claim was invalid");
-	return { claim: candidate as unknown as McpExecutorControllerClaim["claim"], registryReference: record["registryReference"] };
-}
-
-/** Parses a release claim and keeps its assignment and release fences. */
-function _ReleaseClaim(value: unknown): McpExecutorControllerReleaseClaim
-{
-	if (typeof value !== "object" || value === null || Array.isArray(value))
-		throw new Error("OpenCrane MCP executor release claim was invalid");
-	const record = value as Record<string, unknown>;
-	const base = _Claim({ claim: record["claim"], registryReference: record["registryReference"] });
-	if (Object.keys(record).length !== 6 || !_IsCoordinate(record["workloadUid"]) || !_IsInstant(record["releaseClaimedAt"]) || !Number.isSafeInteger(record["releaseDeliveryCount"]) || Number(record["releaseDeliveryCount"]) < 1 || !_IsInstant(record["releaseExpiresAt"]))
-		throw new Error("OpenCrane MCP executor release claim was invalid");
-	return { ...base, workloadUid: record["workloadUid"], releaseClaimedAt: record["releaseClaimedAt"], releaseDeliveryCount: record["releaseDeliveryCount"] as number, releaseExpiresAt: record["releaseExpiresAt"] };
-}
-
-/** Parses a cleanup claim and keeps its assignment and cleanup fences. */
-function _CleanupClaim(value: unknown): McpExecutorControllerCleanupClaim
-{
-	if (typeof value !== "object" || value === null || Array.isArray(value))
-		throw new Error("OpenCrane MCP executor cleanup claim was invalid");
-	const record = value as Record<string, unknown>;
-	const base = _Claim({ claim: record["claim"], registryReference: record["registryReference"] });
-	if (Object.keys(record).length !== 5 || !_IsCoordinate(record["workloadUid"]) || !_IsInstant(record["cleanupClaimedAt"]) || !Number.isSafeInteger(record["cleanupDeliveryCount"]) || Number(record["cleanupDeliveryCount"]) < 1)
-		throw new Error("OpenCrane MCP executor cleanup claim was invalid");
-	return { ...base, workloadUid: record["workloadUid"], cleanupClaimedAt: record["cleanupClaimedAt"], cleanupDeliveryCount: record["cleanupDeliveryCount"] as number };
-}
 
 /** Reads and parses a bounded JSON response. */
 async function _Json(response: Response): Promise<unknown>
@@ -116,13 +71,21 @@ function _Signal(signal: AbortSignal, timeout: number): AbortSignal { return Abo
 /** Checks an echoed outcome without trusting other response fields. */
 async function _Outcome(response: Response, allowed: readonly string[]): Promise<string>
 {
-	const value = await _Json(response);
-	if (typeof value !== "object" || value === null || Array.isArray(value) || Object.keys(value).length !== 1 || !allowed.includes(String((value as Record<string, unknown>)["outcome"])))
-		throw new Error("OpenCrane MCP executor outcome was invalid");
-	return String((value as Record<string, unknown>)["outcome"]);
+	return _ParseMcpExecutorControllerOutcome(await _Json(response), allowed);
 }
 
-/** Creates the authenticated server adapter for MCP workload claims and binding writes. */
+/**
+ * Creates the authenticated server adapter for MCP workload claims and fenced writes.
+ *
+ * The agent controller uses this adapter to receive server-selected MCP work and report Kubernetes
+ * evidence. Every response is byte-bounded and checked against a strict schema before the adapter
+ * returns it. A missing claim becomes `null`, while a conflict remains distinct from success.
+ *
+ * Called by: apps/agent-controller/src/index.ts.
+ * @param options - In-cluster destination, rotating token reader, request deadline, and test seam.
+ * @returns The controller authority backed by authenticated internal HTTP calls.
+ * @throws Error When configuration, transport, response size, JSON, or response shape is invalid.
+ */
 export function __CreateHttpMcpExecutorControllerAuthority(options: McpExecutorControllerHttpAuthorityOptions): McpExecutorControllerAuthority
 {
 	const baseUrl = _BaseUrl(options.openCraneInternalUrl);
@@ -147,7 +110,7 @@ export function __CreateHttpMcpExecutorControllerAuthority(options: McpExecutorC
 					return null;
 				if (response.status !== 200)
 					throw new Error(`OpenCrane MCP executor claim failed with HTTP ${response.status}`);
-				return _Claim(await _Json(response));
+				return _ParseMcpExecutorControllerClaim(await _Json(response));
 			});
 		},
 		async __CommitAssignment(binding: RuntimeWorkloadBinding, signal: AbortSignal): Promise<"assigned" | "idempotent" | "conflict">
@@ -166,7 +129,7 @@ export function __CreateHttpMcpExecutorControllerAuthority(options: McpExecutorC
 				return null;
 			if (response.status !== 200)
 				throw new Error(`OpenCrane MCP executor release claim failed with HTTP ${response.status}`);
-			return _ReleaseClaim(await _Json(response));
+			return _ParseMcpExecutorControllerReleaseClaim(await _Json(response));
 		},
 		async __CommitRelease(claimId: string, command: McpExecutorReleaseCommand, signal: AbortSignal): Promise<"released" | "idempotent" | "conflict">
 		{
@@ -184,7 +147,7 @@ export function __CreateHttpMcpExecutorControllerAuthority(options: McpExecutorC
 				return null;
 			if (response.status !== 200)
 				throw new Error(`OpenCrane MCP executor cleanup claim failed with HTTP ${response.status}`);
-			return _CleanupClaim(await _Json(response));
+			return _ParseMcpExecutorControllerCleanupClaim(await _Json(response));
 		},
 		async __CommitCleanup(claimId: string, command: McpExecutorCleanupCommand, signal: AbortSignal): Promise<"cleaned" | "idempotent" | "conflict">
 		{

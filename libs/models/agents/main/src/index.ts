@@ -1,7 +1,6 @@
 export { __DiffAgentRevisions } from "./agent-revision-diff";
 export { __DigestAgentRevisionContent } from "./agent-revision-content";
 export type { AgentRevisionDiff, RevisionLineDiff, RevisionScalarChange, RevisionSetChange, RevisionWidening, RevisionWideningKind } from "./agent-revision-diff.types";
-export { AgentRevisionStates } from "./agent-revision.types";
 export type { AgentBudget, AgentRevision, AgentRevisionContent, AgentRevisionState, SkillRevisionReference } from "./agent-revision.types";
 export { AgentRunStates } from "./agent-run.types";
 export type { AgentRun, AgentRunLineage, AgentRunState, AgentRunTerminalReason, AgentRunTrigger } from "./agent-run.types";
@@ -13,4 +12,4 @@ export type { AgentRevisionId, AgentRunId, AgentServiceId, PersonaProfileId, Per
 export { RunEventTypes } from "./run-event.types";
 export type { RunEvent, RunEventType } from "./run-event.types";
 export { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "./tool-revision.constants";
-export { __CanAppendRunEvent, __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed } from "./state-transitions";
+export { __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed } from "./state-transitions";

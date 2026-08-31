@@ -48,7 +48,7 @@ interface ConversationSocketProgress
  * messages, and the adapter tests also construct this class directly.
  *
  * @implements ConversationEventStream
- * @see AG-UI protocol docs — the events on the wire: https://docs.ag-ui.com
+ * @see https://github.com/ag-ui-protocol/ag-ui/tree/54f13419055b4d0f442c71e1efab18b310982ce1 — the `@ag-ui/core` 0.0.57 event schemas accepted here.
  */
 @Injectable()
 export class OpenCraneConversationEventStream implements ConversationEventStream

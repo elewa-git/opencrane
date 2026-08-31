@@ -16,7 +16,6 @@ import { _CreateExternalActionWorker } from "./app/external-action-composition";
 import { _CreateInternalApp } from "./app/internal-app";
 import { _CreateMcpWorkflowComposition } from "./app/mcp-workflow-composition";
 import { _CreateMcpRuntimeComposition } from "./app/mcp-runtime-composition";
-import { _BootstrapInitialModel } from "./app/initial-model-bootstrap";
 import { _CreateKubernetesClients } from "./app/kubernetes-clients";
 import { _StartProcessLifecycle } from "./app/lifecycle";
 import { _log } from "./app/log";
@@ -27,6 +26,7 @@ import { _ProcessShutdownSignal } from "./app/process-shutdown";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory";
 import { ___CreatePrismaClient } from "./infra/db/db";
 import { ___CreatePublicHealthReportReader } from "./infra/health/public-health";
+import { _CreateProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
 
 /**
  * Compose the process once, from telemetry through coordinated shutdown.
@@ -44,7 +44,6 @@ async function _Main(): Promise<void>
 	const prisma = ___CreatePrismaClient(_log);
 	const kubernetes = _CreateKubernetesClients();
 	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows);
-	await _BootstrapInitialModel({ prisma, coreApi: kubernetes.coreApi, config: config.initialModelBootstrap, namespace: config.runtime.serverNamespace });
 	await _ReconcileChannelTargetRoutes(prisma, config.runtime.channelTargets);
 
 	// 3. Compose one shared capacity gate and deployment-selected membership evidence for every run
@@ -59,17 +58,18 @@ async function _Main(): Promise<void>
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
 	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime, workflows);
 	const externalActions = _CreateExternalActionWorker(prisma, mcpRuntime.authority, _log);
+	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
 
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
-	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, authentication, _ReadOrganizationMembershipConfig(), true, config.runtime.artifactScannerEnabled, true, publicHealth, workflows.execution, workflows, mcpRuntime);
+	const publicApp = _CreatePublicApp(prisma, managedRunAdmission, personalRunAdmission, runCancellation, authentication, _ReadOrganizationMembershipConfig(), true, config.runtime.artifactScannerEnabled, true, publicHealth, workflows.execution, workflows, mcpRuntime, providerEffects);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware, mcpRuntime, workflows.execution);
 	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, workflows.execution, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware, authentication.authMiddleware), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	await _StartProcessLifecycle(publicApp, internalApp, prisma, managedRunAdmission, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, mcpRuntime.authority, workflows.runtime);
+	await _StartProcessLifecycle(publicApp, internalApp, prisma, managedRunAdmission, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, mcpRuntime.authority, workflows.runtime, providerEffects);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)

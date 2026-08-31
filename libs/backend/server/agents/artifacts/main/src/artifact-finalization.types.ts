@@ -110,7 +110,7 @@ export interface ArtifactAuthorityRepository
  * outbox data. `byteLength` is a decimal string because the column is a 64-bit integer and JSON
  * numbers would lose precision on large files.
  *
- * @see {@link PersonalArtifactCatalogueRepository.listOwnedCatalogue} which produces these.
+ * @see {@link PersonalArtifactCatalogueRepository.listCatalogue} which produces these.
  */
 export interface PersonalArtifactEntry
 {
@@ -156,7 +156,7 @@ export interface PersonalArtifactCatalogueRepository
 	 *   answer, not an error.
 	 * @throws Whatever the database driver throws; the router logs it and answers 503.
 	 */
-	listOwnedCatalogue(siloId: string, ownerPrincipalId: string): Promise<readonly PersonalArtifactEntry[]>;
+	listCatalogue(siloId: string, principalId: string): Promise<readonly PersonalArtifactEntry[]>;
 }
 
 /**

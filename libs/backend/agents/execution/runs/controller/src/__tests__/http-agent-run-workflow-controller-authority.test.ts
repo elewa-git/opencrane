@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { __CreateHttpWarmAgentRunWorkflowControllerAuthority } from "../http-agent-run-workflow-controller-authority";
-import type { AgentRunWorkflowControllerFetch } from "../agent-run-workflow-http-authority.types";
+import type { ControllerExchangeFetch } from "@opencrane/backend/agents/runtime/workloads/controller-transport";
 
 /** Creates a controller authority whose requests are answered by one local fetch double. */
-function _Authority(fetch: AgentRunWorkflowControllerFetch)
+function _Authority(fetch: ControllerExchangeFetch)
 {
 	return __CreateHttpWarmAgentRunWorkflowControllerAuthority({ openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", serverServiceName: "opencrane-server", serverNamespace: "silo-a", tokenPath: "/token", requestTimeoutMilliseconds: 5_000, fetch, readToken: async function _ReadToken() { return "rotated-token"; } });
 }

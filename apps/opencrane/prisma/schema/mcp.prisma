@@ -131,36 +131,36 @@ enum McpConnectionStatus {
 }
 
 model McpServer {
-  id                     String             @id @default(cuid())
-  siloId                 String             @map("silo_id")
+  id                     String              @id @default(cuid())
+  siloId                 String              @map("silo_id")
   name                   String
-  description            String             @default("")
+  description            String              @default("")
   endpoint               String
   transport              McpServerTransport
-  status                 McpServerStatus    @default(Draft)
-  requiresApproval       Boolean            @default(false) @map("requires_approval")
-  capabilities           String[]           @default([])
+  status                 McpServerStatus     @default(Draft)
+  requiresApproval       Boolean             @default(false) @map("requires_approval")
+  capabilities           String[]            @default([])
   publisher              String?
   glyph                  String?
-  serverType             McpServerType      @default(SingleUser) @map("server_type")
-  approvalStatus         McpApprovalStatus  @default(PendingReview) @map("approval_status")
-  credentialSchema       Json               @default("[]") @map("credential_schema")
-  entitlementSummary     String?            @map("entitlement_summary")
-  registrationKeyDigest  String?            @map("registration_key_digest")
-  registrationDigest     String?            @map("registration_digest")
-  eraProbeStatus         McpEraProbeStatus  @default(NotRequired) @map("era_probe_status")
-  eraProtocolVersion     String?            @map("era_protocol_version")
-  eraProbeEvidenceDigest String?            @map("era_probe_evidence_digest")
-  eraProbeFailureCode    String?            @map("era_probe_failure_code")
-  eraProbeAttempts       Int                @default(0) @map("era_probe_attempts")
-  eraProbedAt            DateTime?          @map("era_probed_at")
-  sourceId               String?            @map("source_id")
-  lastSyncedAt           DateTime?          @map("last_synced_at")
-  createdAt              DateTime           @default(now()) @map("created_at")
-  updatedAt              DateTime           @updatedAt @map("updated_at")
+  serverType             McpServerType       @default(SingleUser) @map("server_type")
+  approvalStatus         McpApprovalStatus   @default(PendingReview) @map("approval_status")
+  credentialSchema       Json                @default("[]") @map("credential_schema")
+  entitlementSummary     String?             @map("entitlement_summary")
+  registrationKeyDigest  String?             @map("registration_key_digest")
+  registrationDigest     String?             @map("registration_digest")
+  eraProbeStatus         McpEraProbeStatus   @default(NotRequired) @map("era_probe_status")
+  eraProtocolVersion     String?             @map("era_protocol_version")
+  eraProbeEvidenceDigest String?             @map("era_probe_evidence_digest")
+  eraProbeFailureCode    String?             @map("era_probe_failure_code")
+  eraProbeAttempts       Int                 @default(0) @map("era_probe_attempts")
+  eraProbedAt            DateTime?           @map("era_probed_at")
+  sourceId               String?             @map("source_id")
+  lastSyncedAt           DateTime?           @map("last_synced_at")
+  createdAt              DateTime            @default(now()) @map("created_at")
+  updatedAt              DateTime            @updatedAt @map("updated_at")
   installs               McpServerInstall[]
   revisions              McpServerRevision[]
-  source                 ThirdPartySource?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  source                 ThirdPartySource?   @relation(fields: [sourceId], references: [id], onDelete: SetNull)
 
   @@unique([siloId, name])
   @@unique([id, siloId])
@@ -202,26 +202,26 @@ model OciImageValidationClaim {
 
 // Saves the result of checking and importing one immutable OCI image layout.
 model OciImageValidation {
-  id                      String              @id @default(cuid())
-  siloId                  String              @map("silo_id")
-  artifactId              String              @map("artifact_id")
-  artifactRevisionId      String              @map("artifact_revision_id")
-  contentAddress          String              @map("content_address")
-  byteLength              BigInt              @map("byte_length")
-  mediaType               String              @map("media_type")
-  submissionKeyDigest     String              @map("submission_key_digest")
-  submissionDigest        String              @map("submission_digest")
-  state                   OciImageValidationState @default(Pending)
-  indexDigest             String?                 @map("index_digest")
-  imageManifestDigest     String?                 @map("image_manifest_digest")
-  configDigest            String?                 @map("config_digest")
-  registryReference       String?                 @map("registry_reference")
-  failureCode             String?             @map("failure_code")
-  createdByPrincipalId    String              @map("created_by_principal_id")
-  completedAt             DateTime?           @map("completed_at")
-  createdAt               DateTime            @default(now()) @map("created_at")
-  updatedAt               DateTime            @updatedAt @map("updated_at")
-  serverRevision          McpServerRevision?
+  id                   String                  @id @default(cuid())
+  siloId               String                  @map("silo_id")
+  artifactId           String                  @map("artifact_id")
+  artifactRevisionId   String                  @map("artifact_revision_id")
+  contentAddress       String                  @map("content_address")
+  byteLength           BigInt                  @map("byte_length")
+  mediaType            String                  @map("media_type")
+  submissionKeyDigest  String                  @map("submission_key_digest")
+  submissionDigest     String                  @map("submission_digest")
+  state                OciImageValidationState @default(Pending)
+  indexDigest          String?                 @map("index_digest")
+  imageManifestDigest  String?                 @map("image_manifest_digest")
+  configDigest         String?                 @map("config_digest")
+  registryReference    String?                 @map("registry_reference")
+  failureCode          String?                 @map("failure_code")
+  createdByPrincipalId String                  @map("created_by_principal_id")
+  completedAt          DateTime?               @map("completed_at")
+  createdAt            DateTime                @default(now()) @map("created_at")
+  updatedAt            DateTime                @updatedAt @map("updated_at")
+  serverRevision       McpServerRevision?
 
   @@unique([siloId, submissionKeyDigest])
   @@unique([id, siloId])
@@ -258,17 +258,17 @@ model McpServerRevision {
 
 /// A tool schema frozen from one successful MCP 2026-07-28 discovery exchange.
 model McpToolRevision {
-  id                    String            @id @default(cuid())
-  siloId                String            @map("silo_id")
-  serverRevisionId      String            @map("server_revision_id")
-  name                  String
-  description           String?
-  inputSchema           Json              @map("input_schema")
-  inputSchemaDigest     String            @map("input_schema_digest")
-  createdAt             DateTime          @default(now()) @map("created_at")
-  serverRevision        McpServerRevision @relation(fields: [serverRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
+  id                       String                           @id @default(cuid())
+  siloId                   String                           @map("silo_id")
+  serverRevisionId         String                           @map("server_revision_id")
+  name                     String
+  description              String?
+  inputSchema              Json                             @map("input_schema")
+  inputSchemaDigest        String                           @map("input_schema_digest")
+  createdAt                DateTime                         @default(now()) @map("created_at")
+  serverRevision           McpServerRevision                @relation(fields: [serverRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
   agentRevisionAssignments AgentRevisionMcpToolAssignment[]
-  tasks                 McpTask[]
+  tasks                    McpTask[]
 
   @@unique([serverRevisionId, name])
   @@unique([id, siloId])
@@ -288,30 +288,30 @@ model McpTaskClaim {
 
 /// One authenticated asynchronous call of an exact tool on an immutable OCI MCP revision.
 model McpTask {
-  id                  String            @id @default(cuid())
-  siloId              String            @map("silo_id")
-  principalId         String            @map("principal_id")
-  requestKeyDigest    String            @map("request_key_digest")
-  callDigest          String            @map("call_digest")
-  serverRevisionId    String            @map("server_revision_id")
-  toolRevisionId      String            @map("tool_revision_id")
-  protocolVersion     String            @map("protocol_version")
-  arguments           Json
-  taskId              String?           @unique @map("task_id")
-  taskName            String?           @map("task_name")
-  taskKey             String?           @map("task_key")
-  state               McpTaskState      @default(Working)
-  inputRequest        Json?             @map("input_request")
-  inputResponse       Json?             @map("input_response")
-  result              Json?
-  failureCode         String?           @map("failure_code")
-  cancelRequestedAt   DateTime?         @map("cancel_requested_at")
-  completedAt         DateTime?         @map("completed_at")
-  createdAt           DateTime          @default(now()) @map("created_at")
-  updatedAt           DateTime          @updatedAt @map("updated_at")
-  serverRevision      McpServerRevision @relation(fields: [serverRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
-  toolRevision        McpToolRevision   @relation(fields: [toolRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
-  toolInvocation      ToolInvocation?
+  id                String            @id @default(cuid())
+  siloId            String            @map("silo_id")
+  principalId       String            @map("principal_id")
+  requestKeyDigest  String            @map("request_key_digest")
+  callDigest        String            @map("call_digest")
+  serverRevisionId  String            @map("server_revision_id")
+  toolRevisionId    String            @map("tool_revision_id")
+  protocolVersion   String            @map("protocol_version")
+  arguments         Json
+  taskId            String?           @unique @map("task_id")
+  taskName          String?           @map("task_name")
+  taskKey           String?           @map("task_key")
+  state             McpTaskState      @default(Working)
+  inputRequest      Json?             @map("input_request")
+  inputResponse     Json?             @map("input_response")
+  result            Json?
+  failureCode       String?           @map("failure_code")
+  cancelRequestedAt DateTime?         @map("cancel_requested_at")
+  completedAt       DateTime?         @map("completed_at")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  serverRevision    McpServerRevision @relation(fields: [serverRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
+  toolRevision      McpToolRevision   @relation(fields: [toolRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
+  toolInvocation    ToolInvocation?
 
   @@unique([siloId, requestKeyDigest])
   @@unique([siloId, taskKey])
@@ -327,7 +327,7 @@ model McpRuntimeExecution {
   toolInvocationId            String?                  @unique @map("tool_invocation_id")
   kind                        McpRuntimeExecutionKind
   workloadState               McpExecutorWorkloadState @default(Pending) @map("workload_state")
-  commandState                McpExecutorCommandState @default(Pending) @map("command_state")
+  commandState                McpExecutorCommandState  @default(Pending) @map("command_state")
   idempotencyKey              String                   @unique @map("idempotency_key")
   executionReference          String                   @unique @map("execution_reference")
   profileName                 String                   @map("profile_name")

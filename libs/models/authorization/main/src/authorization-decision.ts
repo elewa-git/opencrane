@@ -93,7 +93,7 @@ function _grantIsActive(grant: AuthorizationGrant, nowEpochMs: number): boolean
  * clock all produce a deny, never an allow. The same inputs always give the same answer, so a
  * decision can be re-derived from an audit record.
  *
- * Called by: `libs/backend/server/iam/authorization/main/src/effective-access.ts`.
+ * Called by: the central authorization authority after it resolves current grant and boundary facts.
  * @param request - The action being attempted, including the caller's trusted current time.
  * @param grants - Every grant that might apply; unrelated grants are safe to include.
  * @returns The outcome, a stable `reason` for audit, and the grant ids that decided it — including the offending ids when the deny was caused by malformed data.

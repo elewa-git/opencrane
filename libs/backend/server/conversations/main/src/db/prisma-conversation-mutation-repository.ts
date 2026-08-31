@@ -1,7 +1,10 @@
 import { AgentServiceKind, AgentServiceState, ConversationLifecycle, ConversationMessageRole, ConversationMessageState, ConversationMode, OrgMemberStatus, PersonaRevisionState, Prisma } from "@prisma/client";
 
 import type { AgentThreadOrigin } from "@opencrane/backend/conversations/agent-threads";
+import { PrismaChannelTargetParticipantGrantProjectionRepository } from "@opencrane/backend/server/agents/channel-targets";
 import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, ConversationLifecycles, ConversationModes, MessageSources } from "@opencrane/models/conversations";
+import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import type { JsonValue } from "@opencrane/util";
 
 import { AgentThreadReadDenialReasons, ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial, type CreateConversationResult, type MarkAgentThreadReadResult, type MutateConversationResult } from "../types/conversation-authority-result.types";
 import type { ConversationCaller } from "../types/conversation-caller.types";
@@ -10,6 +13,7 @@ import type { ConversationDetail } from "../types/conversation-view.types";
 import type { ConversationMutationRepository } from "./prisma-conversation-mutation-repository.types";
 import type { ConversationAttachmentAdmissionPort } from "../conversation-message-admission.types";
 import { PrismaConversationQueryRepository } from "./prisma-conversation-query-repository";
+import { PrismaConversationProductAuthorizationRepository } from "./conversation-product-authorization";
 
 /** Exhaustive adapter mapping from model-owned creation modes to Prisma's generated enum. */
 const _PERSISTED_MODE_BY_MODE: Readonly<Record<ConversationModes, ConversationMode>> = {
@@ -44,12 +48,16 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 {
 	private readonly transaction: Prisma.TransactionClient;
 	private readonly query: PrismaConversationQueryRepository;
+	private readonly authorization: PrismaConversationProductAuthorizationRepository;
+	private readonly channelTargets: PrismaChannelTargetParticipantGrantProjectionRepository;
 
 	/** Creates the writer and its query collaborator over the same transaction snapshot. */
 	constructor(transaction: Prisma.TransactionClient)
 	{
 		this.transaction = transaction;
 		this.query = new PrismaConversationQueryRepository(this.transaction);
+		this.authorization = new PrismaConversationProductAuthorizationRepository(this.transaction);
+		this.channelTargets = new PrismaChannelTargetParticipantGrantProjectionRepository(this.transaction);
 	}
 
 	/**
@@ -77,12 +85,19 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 		// is nothing to put in a participant row.
 		const authority = await this._creationAuthority(caller, request);
 		if (authority === null) return { outcome: ConversationAuthorityOutcomes.Denied, reason: request.mode === ConversationModes.AgentSession ? ConversationWriteDenialReasons.AgentServiceUnavailable : ConversationWriteDenialReasons.ParticipantUnavailable };
+		const creationAllowed = await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.ConversationCollection, id: caller.siloId }, ProductAuthorizationActions.Create, { conversationId, request } as unknown as JsonValue);
+		if (!creationAllowed)
+			return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ParticipantUnavailable };
 
 		// 2. Write the conversation and its participants in the caller's transaction. Both rows must
 		// land together — a conversation with no participants would be unreadable by anyone, since
 		// every read filters on a participant row.
 		await this.transaction.conversation.create({ data: { id: conversationId, siloId: caller.siloId, mode: _prismaMode(request.mode), agentServiceId: authority.agentServiceId } });
 		for (const userId of authority.participantUserIds) await this.transaction.conversationParticipant.create({ data: { conversationId, userId } });
+		await this.authorization.reconcileParticipants( caller.siloId, conversationId, authority.participantUserIds, caller.principalId, new Date());
+		await this.authorization.reconcileCreator( caller.siloId, conversationId, caller.principalId, new Date());
+		if (request.mode === ConversationModes.AgentSession)
+			await this.channelTargets.reconcileConversation(conversationId, caller.siloId, new Date());
 		const conversation = _requireWrittenConversation(await this.query.open(caller, conversationId));
 		return { outcome: ConversationAuthorityOutcomes.Created, conversation };
 	}
@@ -126,6 +141,8 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 			// another silo simply does not come back, and one missing row fails the entire creation.
 			const memberships = await this.transaction.orgMembership.findMany({ where: { id: { in: uniqueReferences }, clusterTenant: caller.siloId, status: OrgMemberStatus.Active }, select: { subject: true }, orderBy: { id: "asc" } });
 			if (memberships.length !== uniqueReferences.length) return null;
+			if (!await this.authorization.canReadResources(caller, uniqueReferences.map(id => ({ kind: ProductAuthorizationResourceKinds.OrganizationMembership, id }))))
+				return null;
 			const participantUserIds = [caller.subjectId, ...memberships.map(function _Subject(row): string { return row.subject; })];
 			return { participantUserIds, agentServiceId: null };
 		}
@@ -136,10 +153,16 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 		// found. That is why naming someone else's AgentService cannot work, and why two matching
 		// services fail closed instead of picking one — the same rule the directory reports as
 		// `PersonalAgentDirectoryStatuses.Ambiguous`.
-		const profile = await this.transaction.personaProfile.findUnique({ where: { siloId_userId: { siloId: caller.siloId, userId: caller.subjectId } }, select: { activeRevisionId: true } });
+		const profile = await this.transaction.personaProfile.findUnique({ where: { siloId_userId: { siloId: caller.siloId, userId: caller.subjectId } }, select: { id: true, activeRevisionId: true } });
 		if (profile?.activeRevisionId === null || profile?.activeRevisionId === undefined) return null;
 		const services = await this.transaction.agentService.findMany({ where: { siloId: caller.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: { not: null }, activeRevision: { is: { personaRevisionId: profile.activeRevisionId } } }, select: { id: true }, orderBy: { id: "asc" }, take: 2 });
 		if (services.length !== 1 || services[0]?.id !== request.personalAgentRef) return null;
+		if (!await this.authorization.canReadResources(caller, [{ kind: ProductAuthorizationResourceKinds.AgentService, id: services[0].id }]))
+			return null;
+		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.AgentService, id: services[0].id }, ProductAuthorizationActions.Invoke, { conversationMode: request.mode }))
+			return null;
+		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Persona, id: profile.id }, ProductAuthorizationActions.Use, { conversationMode: request.mode }))
+			return null;
 		return { participantUserIds: [caller.subjectId], agentServiceId: services[0].id };
 	}
 
@@ -161,6 +184,8 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 	{
 		// 1. Revalidate active silo membership inside the serializable archive transaction.
 		if (!await this.query.hasActiveCallerMembership(caller)) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ConversationUnavailable };
+		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }, ProductAuthorizationActions.Edit, { archived }))
+			return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ConversationUnavailable };
 
 		// 2. Change only the continuing participant's local visibility coordinate.
 		const changed = await this.transaction.conversationParticipant.updateMany({ where: { conversationId, userId: caller.subjectId, accessEndedPosition: null, conversation: { siloId: caller.siloId } }, data: { archivedAt: archived ? new Date() : null } });
@@ -196,10 +221,14 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 		if (!decision.allowed) return { outcome: ConversationAuthorityOutcomes.Denied, reason: _writeDenialForDecision(decision.reason) };
 		if (decision.action !== ConversationCommandActions.CloseConversation) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.CommandNotSupported };
 		if (context.activeRunId !== null) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ActiveRun };
+		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }, ProductAuthorizationActions.Delete, { lifecycle: "closed" }))
+			return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ConversationUnavailable };
 
 		// 3. Apply the monotonic transition and project its result before this serializable transaction commits.
 		const update = await this.transaction.conversation.updateMany({ where: { id: conversationId, siloId: caller.siloId, lifecycle: ConversationLifecycle.Open }, data: { lifecycle: ConversationLifecycle.Closed, closedAt: new Date() } });
 		if (update.count !== 1) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ConversationUnavailable };
+		if (context.mode === ConversationModes.AgentSession)
+			await this.channelTargets.reconcileConversation(conversationId, caller.siloId, new Date());
 		const conversation = _requireWrittenConversation(await this.query.open(caller, conversationId));
 		return { outcome: ConversationAuthorityOutcomes.Changed, conversation };
 	}
@@ -222,6 +251,8 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 	async markAgentThreadRead(caller: ConversationCaller, parentConversationId: string, childConversationId: string, observedPosition: bigint): Promise<MarkAgentThreadReadResult>
 	{
 		if (!await this.query.hasActiveCallerMembership(caller)) return { outcome: ConversationAuthorityOutcomes.Denied, reason: AgentThreadReadDenialReasons.ConversationUnavailable };
+		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: childConversationId }, ProductAuthorizationActions.Edit, { parentConversationId, observedPosition: observedPosition.toString(10) }))
+			return { outcome: ConversationAuthorityOutcomes.Denied, reason: AgentThreadReadDenialReasons.ConversationUnavailable };
 		const thread = await this.transaction.conversationAgentThread.findFirst({
 			where: { parentConversationId, childConversationId, siloId: caller.siloId, parentConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } }, childConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } },
 			select: { childConversation: { select: { participants: { where: { userId: caller.subjectId, accessEndedPosition: null }, select: { readThroughPosition: true } } } } },
@@ -255,6 +286,8 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 		if (context === null) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ConversationUnavailable };
 		const decision = __DecideConversationCommand({ ...context, command: { kind: ConversationCommandKinds.SubmitMessage } });
 		if (!decision.allowed || decision.action !== ConversationCommandActions.AdmitOrdinaryMessage) return { outcome: ConversationAuthorityOutcomes.Denied, reason: context.lifecycle === ConversationLifecycles.Closed ? ConversationWriteDenialReasons.ConversationClosed : ConversationWriteDenialReasons.CommandNotSupported };
+		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }, ProductAuthorizationActions.Use, { idempotencyKey: request.idempotencyKey, messageId }))
+			return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ConversationUnavailable };
 		await this.transaction.conversationMessage.create({ data: _messageData(messageId, conversationId, caller.subjectId, request, null) });
 		await attachments.bindReadyAssets(caller, conversationId, messageId, request.blocks);
 		return { outcome: ConversationAuthorityOutcomes.Accepted };
@@ -281,6 +314,8 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 		// 2. Re-dispatch persisted mode and lifecycle through the exhaustive strategy after the run is staged.
 		const decision = __DecideConversationCommand({ ...context, command: { kind: ConversationCommandKinds.SubmitMessage } });
 		if (!decision.allowed || decision.action !== ConversationCommandActions.AdmitAgentRun) throw new Error("Conversation command unavailable");
+		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }, ProductAuthorizationActions.Use, { idempotencyKey: request.idempotencyKey, messageId, runId }))
+			throw new Error("Conversation product authorization unavailable");
 
 		// 3. Persist the message only after every caller and immutable-mode fence remains valid.
 		await this.transaction.conversationMessage.create({ data: _messageData(messageId, conversationId, caller.subjectId, request, runId) });
@@ -309,9 +344,19 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 		if (request.agentTarget === undefined) throw new Error("Agent target unavailable");
 		const context = await this.query.loadCommandContext(caller, parentConversationId);
 		if (context?.mode !== ConversationModes.Group || context.lifecycle !== ConversationLifecycles.Open) throw new Error("Agent-thread parent unavailable");
+		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: parentConversationId }, ProductAuthorizationActions.Use, { childConversationId, idempotencyKey: request.idempotencyKey }))
+			throw new Error("Agent-thread product authorization unavailable");
+		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.ConversationCollection, id: caller.siloId }, ProductAuthorizationActions.Create, { childConversationId, parentConversationId }))
+			throw new Error("Agent-thread creation authorization unavailable");
 		const service = await this.transaction.agentService.findFirst({ where: { id: request.agentTarget.agentServiceId, siloId: caller.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: { not: null } }, select: { id: true } });
 		const persona = await this.transaction.personaProfile.findFirst({ where: { siloId: caller.siloId, userId: caller.subjectId, activeRevision: { is: { state: PersonaRevisionState.Approved } } }, select: { id: true, activeRevisionId: true } });
 		if (service === null || persona === null || persona.activeRevisionId === null) throw new Error("Agent-thread identity unavailable");
+		if (!await this.authorization.canReadResources(caller, [{ kind: ProductAuthorizationResourceKinds.AgentService, id: service.id }]))
+			throw new Error("Agent-thread product authorization unavailable");
+		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.AgentService, id: service.id }, ProductAuthorizationActions.Invoke, { childConversationId, parentConversationId }))
+			throw new Error("Agent-thread product authorization unavailable");
+		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Persona, id: persona.id }, ProductAuthorizationActions.Use, { childConversationId, parentConversationId }))
+			throw new Error("Agent-thread product authorization unavailable");
 		const participants = await this.transaction.conversationParticipant.findMany({ where: { conversationId: parentConversationId, accessEndedPosition: null }, select: { userId: true }, orderBy: { userId: "asc" } });
 		if (participants.length < 2 || !participants.some(function _Caller(row): boolean { return row.userId === caller.subjectId; })) throw new Error("Agent-thread participants unavailable");
 		const userIds = participants.map(function _Id(row): string { return row.userId; });
@@ -320,6 +365,9 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 		await attachments.bindReadyAssets(caller, parentConversationId, parentMessageId, request.blocks);
 		await this.transaction.conversation.create({ data: { id: childConversationId, siloId: caller.siloId, mode: ConversationMode.AgentSession, agentServiceId: service.id } });
 		for (const userId of userIds) await this.transaction.conversationParticipant.create({ data: { conversationId: childConversationId, userId } });
+		await this.authorization.reconcileParticipants( caller.siloId, childConversationId, userIds, caller.principalId, new Date());
+		await this.authorization.reconcileCreator( caller.siloId, childConversationId, caller.principalId, new Date());
+		await this.channelTargets.reconcileConversation(childConversationId, caller.siloId, new Date());
 		return { personaProfileId: persona.id, personaRevisionId: persona.activeRevisionId };
 	}
 

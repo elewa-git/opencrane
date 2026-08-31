@@ -1,5 +1,6 @@
 import { Router, type Request, type RequestHandler } from "express";
 
+import type { AuthenticatedPrincipalCapabilityReader } from "@opencrane/backend/server/iam/identity";
 import { LOCAL_DEVELOPMENT_PRINCIPAL_ID, LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER, type LocalDevelopmentIdentity } from "@opencrane/models/local-development";
 
 import type { PublicAuthenticationComposition } from "../app/public-app.types";
@@ -104,7 +105,6 @@ function _CreateDevelopmentSessionMiddleware(identity: LocalDevelopmentIdentity)
 				issuer: LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER,
 				groups: [],
 				isPlatformOperator: false,
-				isOrgAdmin: true,
 				email: identity.email,
 				emailVerified: true,
 				name: identity.displayName,
@@ -137,11 +137,16 @@ function _DevelopmentProductAuthentication(identity: LocalDevelopmentIdentity): 
 }
 
 /** Build the small auth router consumed by the live frontend session gateway. */
-function _CreateDevelopmentAuthRouter(identity: LocalDevelopmentIdentity): Router
+function _CreateDevelopmentAuthRouter(identity: LocalDevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader): Router
 {
 	const router = Router();
-	router.get("/me", function _ReadDevelopmentSession(_request, response): void
+	router.get("/me", async function _ReadDevelopmentSession(_request, response): Promise<void>
 	{
+		const administerOrganization = await capabilities.canAdministerOrganization({
+			siloId: identity.siloId,
+			issuer: LOCAL_DEVELOPMENT_PRINCIPAL_ISSUER,
+			subject: identity.subjectId,
+		});
 		response.json({
 			mode: "development",
 			authenticated: true,
@@ -151,7 +156,7 @@ function _CreateDevelopmentAuthRouter(identity: LocalDevelopmentIdentity): Route
 				name: identity.displayName,
 				groups: [],
 				isPlatformOperator: false,
-				isOrgAdmin: true,
+				productCapabilities: { administerOrganization },
 				clusterTenant: identity.siloId,
 			},
 		});
@@ -164,13 +169,13 @@ function _CreateDevelopmentAuthRouter(identity: LocalDevelopmentIdentity): Route
 }
 
 /** Compose fixed local authentication without importing it from the production entrypoint. */
-export function _CreateDevelopmentAuthentication(identity: LocalDevelopmentIdentity): PublicAuthenticationComposition
+export function _CreateDevelopmentAuthentication(identity: LocalDevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader): PublicAuthenticationComposition
 {
 	const authMiddleware = _DevelopmentProductAuthentication(identity);
 
 	return {
 		authMiddleware,
-		router: _CreateDevelopmentAuthRouter(identity),
+		router: _CreateDevelopmentAuthRouter(identity, capabilities),
 		sessionMiddleware: [_CreateDevelopmentSessionMiddleware(identity)],
 	};
 }

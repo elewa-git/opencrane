@@ -7,12 +7,13 @@ import { __CreatePersonaOnboardingRouter } from "./persona-onboarding.router";
 import type { PersonaOnboardingCaller, PersonaOnboardingWorkflowPort } from "./persona-onboarding.router.types";
 import type { PersonaAgentRevisionSelectionFactory } from "../profile/prisma-persona-persistence-composition.types";
 import { PrismaPersonaPersistenceUnitOfWork } from "../profile/prisma-persona-persistence-unit-of-work";
+import { PrismaPersonaProductAuthorizationRepository } from "../profile/prisma-persona-product-authorization";
 
 /** Turns the authenticated request principal into the caller shape persona onboarding expects; null when the request is not authenticated. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): PersonaOnboardingCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal ? { userId: principal.externalSubject, siloId: principal.siloId } : null;
+	return principal ? { userId: principal.externalSubject, principalId: principal.principalId, siloId: principal.siloId } : null;
 }
 
 /**
@@ -33,7 +34,7 @@ function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
  */
 export function _CreatePersonaOnboardingRouter(prisma: PrismaClient, logger: Logger, workflow: PersonaOnboardingWorkflowPort, agentRevisionSelection: PersonaAgentRevisionSelectionFactory<Prisma.TransactionClient>): Router
 {
-	const persistence = new PrismaPersonaPersistenceUnitOfWork(prisma, logger, agentRevisionSelection);
+	const persistence = new PrismaPersonaPersistenceUnitOfWork(prisma, logger, agentRevisionSelection, { create(transaction) { return new PrismaPersonaProductAuthorizationRepository(transaction); } });
 	return __CreatePersonaOnboardingRouter({
 		resolveCaller: _resolveCaller,
 		onboarding: persistence,

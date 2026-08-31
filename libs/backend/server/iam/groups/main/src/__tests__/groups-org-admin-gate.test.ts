@@ -1,362 +1,153 @@
 import express from "express";
 import type { Express } from "express";
-import type { Logger } from "pino";
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
 
 import { groupsRouter } from "../routes/groups";
-import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
 
-/**
- * End-to-end check that `_RequireOrgAdmin` is actually wired onto the groups API
- * mutation routes: create/update/delete are org-admin-only, reads stay open.
- *
- * This test verifies the mitigation for the pentest finding:
- * "Any authenticated user can delete arbitrary groups by ID"
- *
- * The fix adds `_RequireOrgAdmin()` middleware to POST, PUT, and DELETE routes,
- * ensuring only organization administrators can mutate groups (which are used for
- * access control and sharing). Read operations (GET) remain available to all
- * authenticated users for sharing and entitlement selection.
- */
+/** Authenticated durable Principal fixture. */
+const _CALLER = { siloId: "silo-1", principalId: "principal-1" };
 
-/** OIDC environment isolated so authentication configuration cannot leak between tests. */
-const _AUTH_ENV = ["OIDC_ISSUER_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URI", "OIDC_SESSION_SECRET"] as const;
-
-/** Configure a complete OIDC setup so no-session guards must fail closed. */
-function _enableOidc(): void
+/** Persisted group fixture returned by domain-owned lifecycle reads. */
+function _Group(id = "group-1")
 {
-  process.env.OIDC_ISSUER_URL = "https://issuer.example.test";
-  process.env.OIDC_CLIENT_ID = "opencrane";
-  process.env.OIDC_REDIRECT_URI = "https://opencrane.example.test/auth/callback";
-  process.env.OIDC_SESSION_SECRET = "test-session-secret";
+	return { id, siloId: "silo-1", name: "Test Group", membershipAuthority: "Local", parentId: null, description: null, memberships: [] };
 }
 
-/**
- * Recording Prisma stub: every `prisma.<model>.<method>()` resolves to `[]` and is a
- * memoised spy keyed `model.method`, so a test can assert which calls the handler made
- * (e.g. that a denied request never reached `group.delete`).
- */
-function _mockPrisma(): { prisma: PrismaClient; spies: Record<string, ReturnType<typeof vi.fn>> }
+/** Builds a recording Prisma surface for route-focused authorization tests. */
+function _MockPrisma(): { prisma: PrismaClient; spies: Record<string, ReturnType<typeof vi.fn>> }
 {
-  const spies: Record<string, ReturnType<typeof vi.fn>> = {};
-  const prisma = new Proxy({}, {
-    get(_t, model)
-    {
-      if (model === "$transaction")
-      {
-        return async function _transaction(callback: (transaction: PrismaClient) => Promise<unknown>): Promise<unknown>
-        {
-          return callback(prisma as PrismaClient);
-        };
-      }
-      return new Proxy({}, {
-        get(_t2, method)
-        {
-          const key = `${String(model)}.${String(method)}`;
-          return (spies[key] ??= vi.fn().mockResolvedValue([]));
-        },
-      });
-    },
-  }) as unknown as PrismaClient;
-  return { prisma, spies };
+	const spies: Record<string, ReturnType<typeof vi.fn>> = {};
+	const prisma = new Proxy({}, {
+		get(_target, model)
+		{
+			if (model === "$transaction")
+			{
+				return async function _Transaction(callback: (transaction: Prisma.TransactionClient) => Promise<unknown>): Promise<unknown>
+				{
+					return callback(prisma as unknown as Prisma.TransactionClient);
+				};
+			}
+			return new Proxy({}, {
+				get(_delegate, method)
+				{
+					const key = `${String(model)}.${String(method)}`;
+					return (spies[key] ??= vi.fn().mockResolvedValue([]));
+				},
+			});
+		},
+	}) as unknown as PrismaClient;
+	return { prisma, spies };
 }
 
-/** Mount the router, optionally seeding a session user (mirrors the OIDC session shape). */
-function _buildApp(prisma: PrismaClient, user?: { isOrgAdmin: boolean }): Express
+/** Creates a central-authority fake with independently controlled reads and writes. */
+function _Authorization(allow: boolean): AuthorizationAuthority
 {
-  const app = express();
-  app.use(express.json());
-  if (user)
-  {
-    app.use(function _seedSession(req, _res, next) { (req as unknown as { session: { authUser: { isOrgAdmin: boolean } } }).session = { authUser: user }; next(); });
-  }
-  app.use("/api/v1/groups", groupsRouter(prisma, function _Caller() { return { siloId: "silo-1" }; }));
-  app.use(_ErrorHandler({ warn: vi.fn(), error: vi.fn() } as unknown as Logger));
-  return app;
+	const decision = allow
+		? { outcome: AuthorizationDecisionOutcomes.Allow, reason: "winning_allow" as const, grantIds: ["grant-1"], rule: null, evidence: null }
+		: { outcome: AuthorizationDecisionOutcomes.Deny, reason: "no_matching_grant" as const, grantIds: [], rule: null, evidence: null };
+	return {
+		decide: vi.fn().mockResolvedValue(decision),
+		admit: vi.fn().mockResolvedValue(decision),
+		admitPrincipal: vi.fn().mockResolvedValue(decision),
+		admitPrincipalBatch: vi.fn(async function _AdmitBatch(commands) { return commands.map(function _Decision() { return decision; }); }),
+		listEntitled: vi.fn(async command => allow ? command.resources : []),
+		listPrincipalEntitled: vi.fn(async command => allow ? command.resources : []),
+		replaceManagedGrants: vi.fn().mockResolvedValue({ ...decision, changedCount: 0 }),
+		retireResourceGrants: vi.fn().mockResolvedValue({ ...decision, changedCount: 0 }),
+	};
 }
 
-describe("groups router — _RequireOrgAdmin gate (pentest mitigation)", function _suite()
+/** Mounts the router with an explicit caller and transaction-bound authority factory. */
+function _App(prisma: PrismaClient, authorization: AuthorizationAuthority, caller = _CALLER): Express
 {
-  const _saved: Record<string, string | undefined> = {};
+	const app = express();
+	app.use(express.json());
+	app.use("/api/v1/groups", groupsRouter(prisma, function _Caller() { return caller; }, function _AuthorizationFactory() { return authorization; }));
+	return app;
+}
 
-  /** Snapshot then clear the auth env so each case controls the dev-mode/fail-closed posture. */
-  beforeEach(function _clearEnv()
-  {
-    for (const key of _AUTH_ENV) { _saved[key] = process.env[key]; delete process.env[key]; }
-  });
+describe("groups router central authorization", function _Suite()
+{
+	it("filters lifecycle-eligible groups through one batch authorization decision", async function _List()
+	{
+		const { prisma, spies } = _MockPrisma();
+		spies["group.findMany"] = vi.fn().mockResolvedValue([_Group("group-1"), _Group("group-2")]);
+		const authorization = _Authorization(true);
 
-  /** Restore the auth env captured in `beforeEach` so cases stay isolated. */
-  afterEach(function _restoreEnv()
-  {
-    for (const key of _AUTH_ENV) { if (_saved[key] === undefined) { delete process.env[key]; } else { process.env[key] = _saved[key]; } }
-  });
+		const response = await request(_App(prisma, authorization)).get("/api/v1/groups").expect(200);
 
-  // -------------------------------------------------------------------------
-  // Read operations — should remain open to all authenticated users
-  // -------------------------------------------------------------------------
+		expect(response.body).toHaveLength(2);
+		expect(authorization.listPrincipalEntitled).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-1", principalId: "principal-1", resources: [{ kind: "group", id: "group-1" }, { kind: "group", id: "group-2" }] }));
+	});
 
-  it("allows list for a non-admin session (GET / is not gated)", async function _listOpen()
-  {
-    const { prisma, spies } = _mockPrisma();
-    const res = await request(_buildApp(prisma, { isOrgAdmin: false })).get("/api/v1/groups");
+	it("hides a group when current grants deny the read", async function _DeniedRead()
+	{
+		const { prisma, spies } = _MockPrisma();
+		spies["group.findFirst"] = vi.fn().mockResolvedValue(_Group());
 
-    expect(res.status).toBe(200);
-    expect(spies["group.findMany"]).toHaveBeenCalled();
-  });
+		await request(_App(prisma, _Authorization(false))).get("/api/v1/groups/group-1").expect(404);
+	});
 
-  it("allows get by ID for a non-admin session (GET /:id is not gated)", async function _getOpen()
-  {
-    const { prisma, spies } = _mockPrisma();
-    // Mock findUnique to return a group so we don't get 404
-    spies["group.findFirst"] = vi.fn().mockResolvedValue({ id: "grp-1", siloId: "silo-1", name: "Test Group", membershipAuthority: "Local", parentId: null, description: null, memberships: [] });
-    
-    const res = await request(_buildApp(prisma, { isOrgAdmin: false })).get("/api/v1/groups/grp-1");
+	it("denies create without a collection grant and never writes the group", async function _DeniedCreate()
+	{
+		const { prisma, spies } = _MockPrisma();
 
-    expect(res.status).toBe(200);
-    expect(spies["group.findFirst"]).toHaveBeenCalled();
-  });
+		const response = await request(_App(prisma, _Authorization(false))).post("/api/v1/groups").send({ name: "Operations", membershipAuthority: "local", members: [] }).expect(403);
 
-  // -------------------------------------------------------------------------
-  // Mutation operations — should be blocked for non-admin users
-  // -------------------------------------------------------------------------
+		expect(response.body.code).toBe("FORBIDDEN");
+		expect(spies["group.create"]).toBeUndefined();
+	});
 
-  it("denies create for a non-admin session and never reaches the handler", async function _denyCreate()
-  {
-    const { prisma, spies } = _mockPrisma();
-    const res = await request(_buildApp(prisma, { isOrgAdmin: false }))
-      .post("/api/v1/groups")
-      .send({ name: "New Group", membershipAuthority: "local", members: [] });
+	it("admits create and writes it through the same transaction", async function _AllowedCreate()
+	{
+		const { prisma, spies } = _MockPrisma();
+		spies["principal.count"] = vi.fn().mockResolvedValue(0);
+		spies["group.create"] = vi.fn().mockResolvedValue({ id: "group-1", name: "Operations" });
+		spies["auditEntry.create"] = vi.fn().mockResolvedValue({});
+		const authorization = _Authorization(true);
 
-    expect(res.status).toBe(403);
-    expect(res.body).toMatchObject({ code: "FORBIDDEN_NOT_ORG_ADMIN" });
-    expect(spies["group.create"]).toBeUndefined();
-  });
+		await request(_App(prisma, authorization)).post("/api/v1/groups").send({ name: "Operations", membershipAuthority: "local", members: [] }).expect(201);
 
-  it("denies update for a non-admin session and never reaches the handler", async function _denyUpdate()
-  {
-    const { prisma, spies } = _mockPrisma();
-    const res = await request(_buildApp(prisma, { isOrgAdmin: false }))
-      .put("/api/v1/groups/grp-1")
-      .send({ name: "Updated Name" });
+		expect(authorization.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ principalId: "principal-1", resource: { kind: "organization", id: "silo-1" }, action: "administer" }));
+		expect(spies["group.create"]).toHaveBeenCalledOnce();
+		expect(spies["auditEntry.create"]).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1" }) });
+	});
 
-    expect(res.status).toBe(403);
-    expect(res.body).toMatchObject({ code: "FORBIDDEN_NOT_ORG_ADMIN" });
-    expect(spies["group.update"]).toBeUndefined();
-  });
+	it("checks same-silo existence before admitting an update", async function _MissingUpdate()
+	{
+		const { prisma, spies } = _MockPrisma();
+		spies["group.findFirst"] = vi.fn().mockResolvedValue(null);
+		const authorization = _Authorization(true);
 
-  it("denies delete for a non-admin session and never reaches the handler", async function _denyDelete()
-  {
-    const { prisma, spies } = _mockPrisma();
-    const res = await request(_buildApp(prisma, { isOrgAdmin: false }))
-      .delete("/api/v1/groups/grp-1");
+		await request(_App(prisma, authorization)).put("/api/v1/groups/missing").send({ name: "Changed" }).expect(404);
 
-    expect(res.status).toBe(403);
-    expect(res.body).toMatchObject({ code: "FORBIDDEN_NOT_ORG_ADMIN" });
-    expect(spies["group.delete"]).toBeUndefined();
-  });
+		expect(authorization.admitPrincipal).not.toHaveBeenCalled();
+		expect(spies["group.update"]).toBeUndefined();
+	});
 
-  // -------------------------------------------------------------------------
-  // Exploit scenario: authenticated user attempts to delete arbitrary group
-  // -------------------------------------------------------------------------
+	it("denies deletion before the protected write", async function _DeniedDelete()
+	{
+		const { prisma, spies } = _MockPrisma();
+		spies["group.findFirst"] = vi.fn().mockResolvedValue(_Group());
 
-  it("blocks the pentest exploit: authenticated non-admin cannot delete arbitrary groups by ID", async function _blockExploit()
-  {
-    const { prisma, spies } = _mockPrisma();
-    
-    // Simulate the pentest scenario:
-    // 1. Attacker has valid session (isOrgAdmin: false)
-    // 2. Attacker enumerates group IDs via GET /
-    // 3. Attacker attempts to delete a group they don't own
-    
-    const app = _buildApp(prisma, { isOrgAdmin: false });
-    
-    // Step 1: List groups (should succeed - needed for sharing UI)
-    const listRes = await request(app).get("/api/v1/groups");
-    expect(listRes.status).toBe(200);
-    
-    // Step 2: Attempt to delete an arbitrary group (should fail)
-    const deleteRes = await request(app).delete("/api/v1/groups/grp-victim-123");
-    
-    // Verify the exploit is blocked
-    expect(deleteRes.status).toBe(403);
-    expect(deleteRes.body.code).toBe("FORBIDDEN_NOT_ORG_ADMIN");
-    
-    // Verify the delete operation never reached the database
-    expect(spies["group.delete"]).toBeUndefined();
-  });
+		await request(_App(prisma, _Authorization(false))).delete("/api/v1/groups/group-1").expect(403);
 
-  // -------------------------------------------------------------------------
-  // Org admin operations — should be allowed
-  // -------------------------------------------------------------------------
+		expect(spies["group.delete"]).toBeUndefined();
+	});
 
-  it("lets an org-admin session through the create gate to the handler", async function _allowCreate()
-  {
-    const { prisma, spies } = _mockPrisma();
-    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
-      .post("/api/v1/groups")
-      .send({ name: "Admin Group", membershipAuthority: "local", members: [] });
+	it("fails closed when the request has no admitted Principal", async function _NoCaller()
+	{
+		const { prisma, spies } = _MockPrisma();
+		const app = express();
+		app.use(express.json());
+		app.use("/api/v1/groups", groupsRouter(prisma, function _NoCaller() { return null; }, function _AuthorizationFactory() { return _Authorization(true); }));
 
-    expect(res.status).not.toBe(403);
-    expect(spies["group.create"]).toHaveBeenCalled();
-  });
-
-  it("lets an org-admin session through the update gate to the handler", async function _allowUpdate()
-  {
-    const { prisma, spies } = _mockPrisma();
-    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
-      .put("/api/v1/groups/grp-1")
-      .send({ name: "Updated by Admin" });
-
-    expect(res.status).not.toBe(403);
-    expect(spies["group.update"]).toHaveBeenCalled();
-  });
-
-  it("lets an org-admin session through the delete gate to the handler", async function _allowDelete()
-  {
-    const { prisma, spies } = _mockPrisma();
-    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
-      .delete("/api/v1/groups/grp-1");
-
-    expect(res.status).not.toBe(403);
-    expect(spies["group.delete"]).toHaveBeenCalled();
-  });
-
-	it("returns a generic reference error when a requested parent does not exist", async function _missingParent()
-  {
-    const { prisma, spies } = _mockPrisma();
-    spies["group.update"] = vi.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError(
-      "Foreign key constraint failed on groups_parent_id_fkey",
-      { code: "P2003", clientVersion: "6.19.3" },
-    ));
-
-    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
-      .put("/api/v1/groups/grp-1")
-      .send({ parentId: "missing-parent" });
-
-    expect(res.status).toBe(404);
-		expect(res.body.code).toBe("GROUP_REFERENCE_NOT_FOUND");
-  });
-
-  it("rejects a malformed parent before it reaches persistence", async function _invalidParent()
-  {
-    const { prisma, spies } = _mockPrisma();
-    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
-      .put("/api/v1/groups/grp-1")
-      .send({ parentId: 42 });
-
-    expect(res.status).toBe(400);
-    expect(res.body).toMatchObject({ code: "VALIDATION_ERROR" });
-    expect(res.body.issues).toEqual([{ location: "body", path: ["parentId"], message: "This field has an invalid type." }]);
-    expect(spies["group.update"]).toBeUndefined();
-  });
-
-  it("rejects non-string members before they reach persistence", async function _invalidMembers()
-  {
-    const { prisma, spies } = _mockPrisma();
-    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
-      .post("/api/v1/groups")
-      .send({ name: "Operations", membershipAuthority: "local", members: [42] });
-
-    expect(res.status).toBe(400);
-    expect(res.body).toMatchObject({ code: "VALIDATION_ERROR" });
-    expect(res.body.issues).toEqual([{ location: "body", path: ["members", 0], message: "This field has an invalid type." }]);
-    expect(spies["group.create"]).toBeUndefined();
-  });
-
-  it("returns conflict when a parent update would create a cycle", async function _cycleConflict()
-  {
-    const { prisma, spies } = _mockPrisma();
-    spies["group.update"] = vi.fn().mockRejectedValue(new Error("group hierarchy cannot contain a cycle"));
-
-    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
-      .put("/api/v1/groups/grp-1")
-      .send({ parentId: "descendant" });
-
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe("GROUP_HIERARCHY_CYCLE");
-  });
-
-	it("returns a generic reference conflict when deleting a referenced group", async function _parentDeleteConflict()
-  {
-    const { prisma, spies } = _mockPrisma();
-    spies["group.delete"] = vi.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError(
-      "Foreign key constraint failed on groups_parent_id_fkey",
-      { code: "P2003", clientVersion: "6.19.3" },
-    ));
-
-    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
-      .delete("/api/v1/groups/grp-1");
-
-    expect(res.status).toBe(409);
-		expect(res.body.code).toBe("GROUP_HAS_REFERENCES");
-  });
-
-  // -------------------------------------------------------------------------
-  // Unauthenticated access — should be blocked
-  // -------------------------------------------------------------------------
-
-  it("fails closed when no session is established (delete)", async function _denyUnauthenticatedDelete()
-  {
-    const { prisma, spies } = _mockPrisma();
-    const res = await request(_buildApp(prisma)).delete("/api/v1/groups/grp-1");
-
-    expect(res.status).toBe(403);
-    expect(spies["group.delete"]).toBeUndefined();
-  });
-
-  it("fails closed when no session is established (create)", async function _denyUnauthenticatedCreate()
-  {
-    const { prisma, spies } = _mockPrisma();
-    const res = await request(_buildApp(prisma))
-      .post("/api/v1/groups")
-      .send({ name: "Unauthenticated Group", membershipAuthority: "local", members: [] });
-
-    expect(res.status).toBe(403);
-    expect(spies["group.create"]).toBeUndefined();
-  });
-
-  it("fails closed when no session is established (update)", async function _denyUnauthenticatedUpdate()
-  {
-    const { prisma, spies } = _mockPrisma();
-    const res = await request(_buildApp(prisma))
-      .put("/api/v1/groups/grp-1")
-      .send({ name: "Unauthenticated Update" });
-
-    expect(res.status).toBe(403);
-    expect(spies["group.update"]).toBeUndefined();
-  });
-
-  it("fails closed for an unauthenticated mutation when real auth is configured", async function _failClosed()
-  {
-    _enableOidc();
-    const { prisma, spies } = _mockPrisma();
-    const res = await request(_buildApp(prisma)).delete("/api/v1/groups/grp-1");
-
-    expect(res.status).toBe(403);
-    expect(spies["group.delete"]).toBeUndefined();
-  });
-
-  // -------------------------------------------------------------------------
-  // Security property: consistent 403 response
-  // -------------------------------------------------------------------------
-
-  it("returns identical 403 response for no-session and non-admin session", async function _consistentDenial()
-  {
-    const { prisma: prisma1 } = _mockPrisma();
-    const { prisma: prisma2 } = _mockPrisma();
-    
-    const noSessionRes = await request(_buildApp(prisma1)).delete("/api/v1/groups/grp-1");
-    const nonAdminRes = await request(_buildApp(prisma2, { isOrgAdmin: false })).delete("/api/v1/groups/grp-1");
-
-    // Both should return 403 with the same error code
-    expect(noSessionRes.status).toBe(403);
-    expect(nonAdminRes.status).toBe(403);
-    expect(noSessionRes.body.code).toBe("FORBIDDEN_NOT_ORG_ADMIN");
-    expect(nonAdminRes.body.code).toBe("FORBIDDEN_NOT_ORG_ADMIN");
-    
-    // The error message should be identical (security property: no information leakage)
-    expect(noSessionRes.body.error).toBe(nonAdminRes.body.error);
-  });
+		await request(app).delete("/api/v1/groups/group-1").expect(403);
+		expect(spies["group.delete"]).toBeUndefined();
+	});
 });

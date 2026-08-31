@@ -13,6 +13,7 @@ QUALIFIER="$RUNNER_ROOT/apps/_infra/deploy-k8s/platform/qualify-workflow-engine.
 mkdir -p "$RUNNER_ROOT/apps/_infra/deploy-k8s/platform" "$RUNNER_ROOT/libs/backend/server/infra/workflows/infra_absurd" "$RUNNER_ROOT/node_modules/.bin"
 ln -s "$QUALIFIER_SOURCE" "$QUALIFIER"
 ln -s "$ROOT_DIR/releases" "$RUNNER_ROOT/releases"
+ln -s "$ROOT_DIR/package.json" "$RUNNER_ROOT/package.json"
 
 cat >"$MOCK_BIN/helm" <<'EOF'
 #!/usr/bin/env bash

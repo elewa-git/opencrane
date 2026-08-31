@@ -39,7 +39,7 @@ describe("conversation timeline projection", function _Suite()
 {
 	it("copies only display-safe message fields", function _Redacts()
 	{
-		const projected = __ProjectConversationEvent({ cursor: "c.cursor", conversationId: "conversation-1", runId: "run-1", position: "1", type: "message.delta", payload: { messageId: "message-1", delta: "hello", capabilityProof: "secret", fence: 3 }, occurredAt: "2026-07-23T10:00:00.000Z" });
+		const projected = __ProjectConversationEvent({ cursor: "c.cursor", conversationId: "conversation-1", runId: "run-1", position: "1", type: "message.delta", payload: { messageId: "message-1", delta: "hello", unknownSecret: "secret", fence: 3 }, occurredAt: "2026-07-23T10:00:00.000Z" });
 		expect(projected?.payload).toEqual({ messageId: "message-1", delta: "hello" });
 	});
 
@@ -96,7 +96,7 @@ describe("conversation timeline projection", function _Suite()
 			_A2uiEnvelope([{ surfaceUpdate: { surfaceId: "surface-1", components: [{ id: "choice-1", component: { SingleChoice: {} } }] } }]),
 			{ ..._A2uiEnvelope([{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }]), conversationId: "conversation-other" },
 			{ ..._A2uiEnvelope([{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }]), state: "locally_inferred" },
-			{ ..._A2uiEnvelope([{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }]), capabilityProof: "forbidden" }
+			{ ..._A2uiEnvelope([{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }]), unknownField: "forbidden" }
 		];
 		for (const envelope of cases) expect(__ProjectConversationEvent(_A2uiRow(envelope))?.payload).toEqual({});
 	});

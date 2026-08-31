@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { __AssembleRunInputSnapshot, __CreatePrismaPersonalSessionAssemblyAuthorities, PersonalExecutionIdentityEnvelopeSource } from "@opencrane/backend/agents/execution/inputs";
 import { ___CreateLogger } from "@opencrane/backend/observability";
-import { PrismaRunAdmissionRepository } from "@opencrane/backend/agents/execution/runs";
+import { PrismaRunAdmissionUnitOfWork } from "@opencrane/backend/agents/execution/runs";
 import type { FleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -39,10 +39,10 @@ import type { RunAdmissionCapacityGate } from "./managed-run-admission.types";
  */
 export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">, capacityGate: RunAdmissionCapacityGate, identityEvidence: FleetMembershipEvidenceConfig): PersonalRunAdmissionPort
 {
-	// 1. The repository writes the AgentRun, its input snapshot, and its workflow
-	// task in one database transaction. Serializable isolation and the unique idempotency key make two
-	// racing calls resolve to one run instead of two.
-	const admission = new PrismaRunAdmissionRepository(prisma, workflow);
+	// 1. The repository that owns the admission transaction and writes the AgentRun row with its input
+	// snapshot. It also takes the advisory lock on silo plus idempotency key, which is what makes two
+	// racing calls with the same key resolve to one run instead of two.
+	const admission = new PrismaRunAdmissionUnitOfWork(prisma, workflow);
 
 	// 2. The input sources session assembly reads inside that transaction. Identity and skill
 	// eligibility are passed in because signed membership and grant policy are owned elsewhere; the

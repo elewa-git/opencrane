@@ -32,7 +32,7 @@
       "path": "../../libs/frontend/platform"
     },
     {
-      "path": "../../libs/frontend/state/core"
+      "path": "../../libs/frontend/state/session/main"
     },
     {
       "path": "../../libs/frontend/core"

@@ -4,7 +4,7 @@ import { Button } from "primeng/button";
 import { Card } from "primeng/card";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { SessionStore } from "@opencrane/state/core";
+import { SessionStore } from "@opencrane/state/session";
 
 import { _SafeLoginReturnTo } from "./login-return-to";
 

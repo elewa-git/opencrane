@@ -39,6 +39,8 @@ export interface SelfRunCancellationCaller
 {
 	/** Canonical silo selected from the trusted request host. */
 	readonly siloId: string;
+	/** Durable local Principal used by the central product authorization authority. */
+	readonly principalId: string;
 	/** Stable authenticated subject who owns the personal run. */
 	readonly subjectId: string;
 }

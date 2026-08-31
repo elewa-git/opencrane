@@ -17,7 +17,7 @@
       "path": "../../elements/ui"
     },
     {
-      "path": "../../state/core"
+      "path": "../../state/session/main"
     },
     {
       "path": "../../core"

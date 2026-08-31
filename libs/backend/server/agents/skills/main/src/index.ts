@@ -1,5 +1,6 @@
 export { __CreateSkillCatalogueRouter } from "./skill-catalogue.router";
 export { _CreateSkillCatalogueRouter } from "./prisma-skill-catalogue.router";
+export { PrismaSkillCatalogueUnitOfWork } from "./prisma-skill-catalogue-unit-of-work";
 export { PrismaSkillAuthoringValidationRepository } from "./prisma-skill-authoring-validation-repository";
 export { PrismaSkillAuthoringValidationSubmissionUnitOfWork } from "./prisma-skill-authoring-validation-submission";
 export { __CreateSkillAuthoringValidationSubmissionRouter } from "./skill-authoring-validation-submission.router";

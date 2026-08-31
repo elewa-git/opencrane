@@ -237,9 +237,10 @@ export async function _RunLocalDevelopmentSeed(dependencies: LocalDevelopmentSee
 				}
 			});
 			await transaction.modelDefinition.upsert({
-				where: { id: _MODEL_DEFINITION_ID },
+				where: { id_siloId: { id: _MODEL_DEFINITION_ID, siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId } },
 				create: {
 					id: _MODEL_DEFINITION_ID,
+					siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
 					scope: ModelRoutingScope.Global,
 					clusterTenant: null,
 					publicModelName: "auto",
@@ -254,9 +255,10 @@ export async function _RunLocalDevelopmentSeed(dependencies: LocalDevelopmentSee
 				},
 			});
 			await transaction.modelRoutingDefault.upsert({
-				where: { id: _MODEL_ROUTING_DEFAULT_ID },
+				where: { id_siloId: { id: _MODEL_ROUTING_DEFAULT_ID, siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId } },
 				create: {
 					id: _MODEL_ROUTING_DEFAULT_ID,
+					siloId: LOCAL_DEVELOPMENT_IDENTITY.siloId,
 					scope: ModelRoutingScope.Global,
 					clusterTenant: null,
 					defaultModel: "auto",

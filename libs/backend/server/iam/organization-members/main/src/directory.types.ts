@@ -52,9 +52,9 @@ export interface OrganizationMember
 /** Authoritative member and invitation directory for one host-selected organisation. */
 export interface OrganizationMemberDirectory
 {
-	/** Every membership visible to the active administrator. */
+	/** Every membership visible to the authorized caller. */
 	readonly members: readonly OrganizationMember[];
-	/** Every current or recent invitation visible to the active administrator. */
+	/** Every current or recent invitation visible to the authorized caller. */
 	readonly invitations: readonly import("./invitations.types").OrganizationInvitation[];
 	/** Number of active memberships. */
 	readonly activeCount: number;

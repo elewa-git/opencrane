@@ -1,30 +1,8 @@
 import type { AgentRevisionId, AgentServiceId, PersonaRevisionId, UserId } from "./identifiers.types";
 import type { RevisionBoundaryAttachment } from "./boundary-attachment.types";
 
-/**
- * Determines whether an agent revision may be published, selected for execution, or moved to its
- * next lifecycle state.
- *
- * Publication code and the revision transition table branch on these lowercase domain values. The
- * Prisma mapper converts its stored enum to this closed set and throws when storage contains an
- * unknown state. Renaming a string value therefore changes the serialized domain contract even
- * though Prisma stores its own enum representation.
- * @see AgentRevisionState for the serialized value type used by revision records.
- */
-export enum AgentRevisionStates
-{
-	/** The revision cannot execute; publication may accept it, and review may reject it. */
-	Draft = "draft",
-	/** The revision may execute while active and may later move to `Retired`. */
-	Published = "published",
-	/** Review refused the revision. This state is terminal and cannot execute. */
-	Rejected = "rejected",
-	/** The published revision has ended permanently. This state is terminal and cannot execute. */
-	Retired = "retired",
-}
-
-/** Keeps persisted revision states compatible with their serialized enum values. */
-export type AgentRevisionState = `${AgentRevisionStates}`;
+/** Where a revision sits in review. Only `published` may execute; `draft`, `rejected`, and `retired` must never be selected for a run. */
+export type AgentRevisionState = "draft" | "published" | "rejected" | "retired";
 
 /** Immutable reference to a skill revision assigned to an agent revision. */
 export interface SkillRevisionReference
@@ -42,8 +20,6 @@ export interface AgentBudget
 	readonly maxTurns: number;
 	/** Maximum input and output tokens permitted in one run. */
 	readonly maxTokens: number;
-	/** Maximum spend permitted in one run, expressed in micro-US-dollars. */
-	readonly maxCostUsdMicros: number;
 	/** Maximum wall-clock duration permitted in milliseconds. */
 	readonly maxDurationMs: number;
 }

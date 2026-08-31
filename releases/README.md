@@ -1,34 +1,17 @@
-# Release compatibility ledger
+# Release manifests
 
-Each JSON file named after a root `package.json` version is the immutable composition record for
-that repository train. It records the database schema and the last repository version in which each
-Nx application was adapted directly or by a changed project in its Nx dependency graph. An
-unchanged app keeps its older stamp, so a repository release
-can truthfully combine independently evolved server, UI, database, worker, and chart revisions.
-The `adoptionBaseline` is a one-time observed-composition stamp for history that predates this
-ledger; all later stamps identify the exact last adapted train.
+One manifest, `releases/<version>.json`, matches the root `package.json` version and describes the
+current release. Deployment reads three things from it: the PostgreSQL operand image
+(`database.operandImage`), the fresh-install baseline path and digest (`database.baselinePath` and
+`database.baselineSha256`), and — in `teardown.sh` — the chart identities of the installed version
+being retired.
 
-Before its predecessor version is tagged, a candidate manifest records `previousRepositoryCommit`.
-That immutable commit identifies the exact predecessor state used by PR validation. Release
-qualification still requires the predecessor's Git tag before publishing the candidate.
+Pre-1.0 there are no upgrade contracts: the current manifest is not immutable, no new manifest is
+required per change, and a schema change simply updates `database.baselineSha256` in place after
+editing the target baseline. Historical manifests are kept only so `teardown.sh` can retire silos
+installed from them; they can go once those silos are rebuilt.
 
-The release manifest records the version and database images used by a deployment. When the database
-schema version changes, the deployer runs the dedicated Prisma migration image. Prisma Migrate reads
-the one ledger under `apps/opencrane/prisma/prisma-migrations/`; there is no second version-pair SQL
-ledger.
-
-When a project changes production source or deployment configuration, update the owning Nx
-application and every application that depends on that project to the current root version in
-`metadata.release.adaptedVersion`, and mirror that value into any app `package.json`. A changed
-app-owned chart also updates `Chart.yaml` and carries an explicit
-`helm/migrations/<from>-to-<to>.json` transition bound by `fromChartVersion` and `toChartVersion`,
-including `kind: "noop"` when the rendered object/value shape needs no migration or a non-empty
-value migration only after the deployment workflow has an executable, regression-tested consumer.
-Unsupported value-transform declarations fail validation rather than being ignored. A database
-schema change updates the clean target baseline, the manifest's schema version and digest, and the
-reviewed Prisma migration ledger.
-
-Run `npm run check:release-versioning -- --base <ref>` before review. The checker uses directly
-changed project roots plus reverse dependencies from the Nx project graph rather than Nx's broader
-`affected` result, because shared inputs can make untouched apps affected without adapting their
-release contract.
+`npm run check:release-versioning` verifies the current manifest exists, passes the schema, binds
+the root version, that the baseline file matches its recorded digest, and that the operand tag
+major matches the PostgreSQL chart's `externalAppVersion`. The full pre-1.0 policy lives in
+[`docs/agents/versioning.md`](../docs/agents/versioning.md).

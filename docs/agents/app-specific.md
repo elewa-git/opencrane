@@ -13,7 +13,6 @@ root version in the same slice. Documentation-only changes do not advance an app
 | App | Responsibility |
 | --- | --- |
 | [`apps/opencrane`](../../apps/opencrane/README.md) | Authenticated REST API, durable product authority, process composition, Prisma, and the server Helm unit. |
-| [`apps/opencrane-prisma-migrator`](../../apps/opencrane-prisma-migrator/README.md) | Dedicated Prisma Migrate image for the forward 0.10.0 database cutover. |
 | [`apps/opencrane-ui`](../../apps/opencrane-ui/README.md) | Angular web client for organisation and employee surfaces. |
 | [`apps/channel-proxy`](../../apps/channel-proxy/README.md) | Inbound channel authentication and routing boundary. |
 | [`apps/memory-gateway`](../../apps/memory-gateway/README.md) | Private Cognee transport boundary that TokenReviews the server identity. |
@@ -35,7 +34,6 @@ app's source.
 | Group | Responsibility |
 | --- | --- |
 | `libs/backend/agents/personal/*` | Persona, verified personal-memory selection, and configuration authorities owned by a person. |
-| `libs/backend/agents/memory/*` | Generic durable fact metadata and catalog-outbox authority; fact content remains in Cognee. |
 | `libs/backend/agents/execution/*` | Immutable run inputs, run lifecycle, and runtime protocol admission. |
 | [`libs/backend/agents/execution/elicitation`](../../libs/backend/agents/execution/elicitation/main/README.md) | Recoverable participant input, exact response authority, and purpose-specific completion. |
 | `libs/backend/agents/runtime/*` | Kubernetes Job projection, controller orchestration, and class-neutral workload claim contracts. |
@@ -46,6 +44,7 @@ app's source.
 | [`libs/backend/conversations/projection`](../../libs/backend/conversations/projection/main/README.md) | Transport-neutral redaction, AG-UI mapping, cursoring, and live streaming for every conversation mode. |
 | [`libs/backend/server`](../../libs/backend/server/README.md) | API capabilities grouped by agents, IAM, gateways, knowledge, reporting, and organisation scope. |
 | [`libs/backend/server/iam/organization-members`](../../libs/backend/server/iam/organization-members/main/README.md) | Settings member directory and standalone invitation authority, or fail-closed delegation of the whole capability to Fleet billing. |
+| [`libs/backend/server/iam/audit-writer`](../../libs/backend/server/iam/audit-writer/main/README.md) | Transaction-scoped append-only authorization decision evidence with no read or policy dependency. |
 | [`libs/backend/server/agents/onboarding`](../../libs/backend/server/agents/onboarding/main/README.md) | Durable, session-owner-bound onboarding route state and exact persona/bootstrap references. |
 | [`libs/backend/server/conversations`](../../libs/backend/server/conversations/main/README.md) | Mode-correct conversation authority, participant visibility, canonical timeline, authorised stream readers, and HTTP routes. |
 | [`libs/backend/server/conversation-assets`](../../libs/backend/server/conversation-assets/main/README.md) | Participant upload, quarantine, scan, and message-attachment authority. |
@@ -119,9 +118,9 @@ The normal conversation workspace keeps transport, state, and presentation separ
 
 Application-wide identity and development composition keep the same port direction:
 
-- [`state/core`](../../libs/frontend/state/core/README.md) owns `SessionStore`, capability derivation,
+- [`state/session/main`](../../libs/frontend/state/session/main/README.md) owns `SessionStore`, capability derivation,
   and the transport-neutral session port;
-- [`state/core/adapter`](../../libs/frontend/state/core/adapter/README.md) implements that port with
+- [`state/session/adapter`](../../libs/frontend/state/session/adapter/README.md) implements that port with
   the live organization or platform API; and
 - [`state/local-development`](../../libs/frontend/state/local-development/README.md) implements the
   OpenCrane UI's onboarding and chat ports over one disposable in-memory lifecycle for backend-free
@@ -138,7 +137,7 @@ Organisation membership uses the same browser authority boundary:
 
 Legacy frontend packages use `scope:web`; new capability slices use bounded ownership scopes. The
 persona onboarding feature, state port, and adapter use `scope:persona-onboarding` plus role tags
-that enforce feature → state and adapter → state/core direction. Cross-cutting core and UI elements
+that enforce feature → state and adapter → session-state direction. Cross-cutting core and UI elements
 use `scope:shared`. The pure first-chat projection and validator live in
 [`models/user-onboarding`](../../libs/models/user-onboarding/main/README.md) under
 `scope:user-onboarding`; both onboarding state and conversation workspace may consume that model,

@@ -15,12 +15,6 @@ enum MemoryConsentState {
   Confirmed @map("confirmed")
 }
 
-enum MemoryOutboxEventKind {
-  FactRecorded    @map("memory.fact_recorded")
-  FactCorrected   @map("memory.fact_corrected")
-  ForgetRequested @map("memory.forget_requested")
-}
-
 model MemoryDataset {
   id                  String                    @id @default(cuid())
   siloId              String                    @map("silo_id")
@@ -62,7 +56,6 @@ model MemoryFactCatalog {
   dataset                  MemoryDataset       @relation(fields: [datasetId], references: [id], onDelete: Restrict)
   supersedes               MemoryFactCatalog?  @relation("MemoryFactCorrections", fields: [supersedesFactId], references: [id], onDelete: Restrict)
   corrections              MemoryFactCatalog[] @relation("MemoryFactCorrections")
-  outboxEvents             MemoryOutboxEvent[]
 
   @@unique([datasetId, cogneeExternalId])
   @@unique([id, datasetId])
@@ -70,22 +63,4 @@ model MemoryFactCatalog {
   @@index([sourceMessageId])
   @@index([datasetId, state])
   @@map("memory_fact_catalog")
-}
-
-model MemoryOutboxEvent {
-  id             String                @id @default(cuid())
-  datasetId      String                @map("dataset_id")
-  factId         String                @map("fact_id")
-  kind           MemoryOutboxEventKind
-  idempotencyKey String                @unique @map("idempotency_key")
-  payload        Json
-  availableAt    DateTime              @default(now()) @map("available_at")
-  claimedAt      DateTime?             @map("claimed_at")
-  publishedAt    DateTime?             @map("published_at")
-  deliveryCount  Int                   @default(0) @map("delivery_count")
-  createdAt      DateTime              @default(now()) @map("created_at")
-  fact           MemoryFactCatalog     @relation(fields: [factId, datasetId], references: [id, datasetId], onDelete: Restrict)
-
-  @@index([publishedAt, availableAt])
-  @@map("memory_outbox_events")
 }

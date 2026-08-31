@@ -1,8 +1,19 @@
 import type { CanonicalJsonSha256Digest } from "@opencrane/util";
 
-import type { AuthorizationResourceLocator } from "./resource-locator.types";
-
 export type { CanonicalJsonSha256Digest } from "@opencrane/util";
+
+/** Public P-256 key registered to one verified workload assignment. */
+export interface Es256PublicJwk
+{
+	/** JSON Web Key type required by the live workload binding. */
+	readonly kty: "EC";
+	/** Named curve required by the runtime binding authority. */
+	readonly crv: "P-256";
+	/** Base64url-encoded affine x-coordinate. */
+	readonly x: string;
+	/** Base64url-encoded affine y-coordinate. */
+	readonly y: string;
+}
 
 /** Immutable reference to a published capability catalog revision. */
 export interface CapabilityCatalogReference
@@ -22,51 +33,4 @@ export interface CapabilityReference
 	catalog: CapabilityCatalogReference;
 	/** Stable capability identifier inside the referenced catalog. */
 	capabilityId: string;
-}
-
-/** Exact authority conveyed by a proof-of-possession-bound action capability. */
-export interface ActionCapability
-{
-	/** Globally unique capability-instance identifier used for replay handling. */
-	readonly jti: string;
-	/** Exact audience accepted by the policy-enforcement point. */
-	readonly audience: string;
-	/** Silo in which the capability is valid. */
-	readonly siloId: string;
-	/** Subject allowed to exercise the capability. */
-	readonly subjectId: string;
-	/** Exact projected Kubernetes service account of the exercising workload. */
-	readonly serviceAccountName: string;
-	/** Exact Kubernetes namespace containing the exercising workload. */
-	readonly namespace: string;
-	/** Controller-managed Kubernetes workload kind exercising the capability. */
-	readonly workloadKind: "job" | "deployment";
-	/** Immutable Kubernetes Job or Deployment UID assigned by the controller. */
-	readonly workloadUid: string;
-	/** Immutable Kubernetes Pod UID registered for this run attempt. */
-	readonly podUid: string;
-	/** Stable AgentService executed by the workload. */
-	readonly agentServiceId: string;
-	/** Immutable AgentRevision executed by the workload. */
-	readonly agentRevisionId: string;
-	/** Logical AgentRun to which the capability belongs. */
-	readonly runId: string;
-	/** Positive attempt number within the single logical AgentRun. */
-	readonly attempt: number;
-	/** Immutable catalog capability authorizing the action. */
-	readonly capability: CapabilityReference;
-	/** Exact resource to which the action may be applied. */
-	readonly resource: AuthorizationResourceLocator;
-	/** Exact action name from the referenced capability definition. */
-	readonly action: string;
-	/** SHA-256 digest of the RFC 8785 canonical action arguments. */
-	readonly argumentsDigest: CanonicalJsonSha256Digest;
-	/** RFC 7638 SHA-256 thumbprint of the ES256 public proof key. */
-	readonly proofKeyThumbprint: string;
-	/** Digest binding the exact effective policy and grant set used for issuance. */
-	readonly effectiveAuthorizationDigest: CanonicalJsonSha256Digest;
-	/** NumericDate at which the capability becomes valid. */
-	readonly notBefore: number;
-	/** NumericDate after which the capability must be rejected. */
-	readonly expiresAt: number;
 }

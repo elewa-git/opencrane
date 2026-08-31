@@ -1,6 +1,11 @@
 import { ElicitationPurpose, ElicitationRequestState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("../elicitation-product-authorization", function _MockProductAuthorization()
+{
+	return { PrismaElicitationProductAuthorizationRepository: class { canReadConversation = vi.fn().mockResolvedValue(true); filterReadableConversationIds = vi.fn(async function _All(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); }); admitResponse = vi.fn().mockResolvedValue(true); } };
+});
+
 import { ElicitationBodyKinds } from "@opencrane/contracts";
 
 import { _CreateElicitationInterruptReader } from "../prisma-elicitation-interrupt-reader";

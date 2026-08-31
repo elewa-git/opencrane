@@ -37,8 +37,9 @@ feature — e.g. "drivable from `POST /api/v1/awareness/rollout/promote`".
    - `git tag --list --sort=creatordate` — the version → date mapping.
    - `git log <prevTag>..<tag> --format='%s'` (or `<lastTag>..HEAD` for `[Unreleased]`) —
      the raw work; **mine it for capabilities, do not transcribe it**.
-5. `releases/<version>.json` and `docs/agents/versioning.md` — the compatible app, chart, and
-   database versions. Never claim a release section absent from the immutable composition ledger.
+5. `releases/<version>.json` and `docs/agents/versioning.md` — the current release binding:
+   repository version, database baseline digest, and PostgreSQL operand image. Never claim a
+   release section the current release manifest does not back.
 
 Never invent a capability. If something isn't backed by the plan, the code, or the diff,
 don't list it. If a feature shipped only partially (a live seam remains), say what works

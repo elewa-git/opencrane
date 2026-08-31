@@ -1,5 +1,15 @@
 import { AgentRunState, ApprovalRequestState, ExternalActionRecoveryMode, OrgMemberStatus, Prisma, ToolInvocationState, WorkloadAssignmentState } from "@prisma/client";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const _managedGrantMocks = vi.hoisted(function _ManagedGrantMocks()
+{
+	return { reconcile: vi.fn().mockResolvedValue(0) };
+});
+
+vi.mock("../prisma-managed-authorization-grant-repository", function _MockManagedRepository()
+{
+	return { __ReconcileManagedAuthorizationGrantsInTransaction: _managedGrantMocks.reconcile };
+});
 
 import { __DecideDeferredToolRequest, __DeferToolRequest, __ExpireDeferredToolApprovalBatch } from "../deferred-tool-approval";
 import { __DigestCanonicalJson } from "../canonical-json-digest";
@@ -37,7 +47,7 @@ function _pending(): unknown
 const NOW = new Date("2026-07-21T09:00:00.000Z");
 
 /** Build a transaction for one command-poll expiry sweep over already-selected due rows. */
-function _expiryTransaction(due: readonly { id: string; runId: string; attempt: number; toolInvocationRowId: string; elicitationRequestId: string | null }[], pendingCounts: readonly number[], resumed: boolean, pendingElicitations = 0): { readonly transaction: Prisma.TransactionClient; readonly approvalUpdateMany: ReturnType<typeof vi.fn>; readonly invocationUpdateMany: ReturnType<typeof vi.fn>; readonly runUpdateMany: ReturnType<typeof vi.fn> }
+function _expiryTransaction(due: readonly { id: string; siloId: string; runId: string; attempt: number; toolInvocationRowId: string; elicitationRequestId: string | null }[], pendingCounts: readonly number[], resumed: boolean, pendingElicitations = 0): { readonly transaction: Prisma.TransactionClient; readonly approvalUpdateMany: ReturnType<typeof vi.fn>; readonly invocationUpdateMany: ReturnType<typeof vi.fn>; readonly runUpdateMany: ReturnType<typeof vi.fn> }
 {
 	const approvalUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
 	const invocationUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
@@ -65,6 +75,8 @@ function _expiryTransaction(due: readonly { id: string; runId: string; attempt: 
 
 describe("deferred tool approval authority", function _suite()
 {
+	beforeEach(function _ResetManagedGrants() { _managedGrantMocks.reconcile.mockClear(); });
+
 	it("approves and records the complete validated replacement arguments", async function _approve()
 	{
 		const { transaction, updateMany, invocationUpdateMany } = _transaction(_pending(), 1);
@@ -72,6 +84,7 @@ describe("deferred tool approval authority", function _suite()
 		expect(result).toEqual({ outcome: "approved", argumentsDigest: __DigestCanonicalJson({ query: "edited" }) });
 		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "approval-1", state: ApprovalRequestState.Pending, expiresAt: { gt: NOW } }), data: expect.objectContaining({ state: ApprovalRequestState.Approved, finalArguments: { query: "edited" }, finalArgumentsDigest: __DigestCanonicalJson({ query: "edited" }) }) }));
 		expect(invocationUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ToolInvocationState.Ready, effectiveArguments: { query: "edited" }, effectiveArgumentsDigest: __DigestCanonicalJson({ query: "edited" }) }) }));
+		expect(_managedGrantMocks.reconcile).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ siloId: "silo-1", managerId: "deferred-tool-approval-assignee", resource: { kind: "approval-request", id: "approval-1" }, grants: [] }));
 	});
 
 	it("conflicts when the awaiting tool invocation is missing or belongs to another attempt", async function _brokenInvocationLink()
@@ -163,8 +176,8 @@ describe("deferred tool approval authority", function _suite()
 	it("expires every due request and resumes only after the batch is empty", async function _expiresDueBatch()
 	{
 		const due = [
-			{ id: "approval-1", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-1", elicitationRequestId: null },
-			{ id: "approval-2", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-2", elicitationRequestId: null },
+			{ id: "approval-1", siloId: "silo-1", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-1", elicitationRequestId: null },
+			{ id: "approval-2", siloId: "silo-1", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-2", elicitationRequestId: null },
 		];
 		const context = _expiryTransaction(due, [1, 0], true);
 
@@ -176,7 +189,7 @@ describe("deferred tool approval authority", function _suite()
 
 	it("keeps a mixed due and future batch waiting after expiring only the due row", async function _keepsFutureApprovalWaiting()
 	{
-		const context = _expiryTransaction([{ id: "approval-due", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-due", elicitationRequestId: null }], [1], false);
+		const context = _expiryTransaction([{ id: "approval-due", siloId: "silo-1", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-due", elicitationRequestId: null }], [1], false);
 
 		await expect(__ExpireDeferredToolApprovalBatch(context.transaction, { runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: false });
 		expect(context.runUpdateMany).not.toHaveBeenCalled();
@@ -184,7 +197,7 @@ describe("deferred tool approval authority", function _suite()
 
 	it("keeps a tool expiry paused while a generic request remains pending", async function _KeepsPendingGenericRequest()
 	{
-		const context = _expiryTransaction([{ id: "approval-due", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-due", elicitationRequestId: null }], [0], false, 1);
+		const context = _expiryTransaction([{ id: "approval-due", siloId: "silo-1", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-due", elicitationRequestId: null }], [0], false, 1);
 
 		await expect(__ExpireDeferredToolApprovalBatch(context.transaction, { runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: false });
 		expect(context.runUpdateMany).not.toHaveBeenCalled();
@@ -230,6 +243,8 @@ function _deferCommand(): Parameters<typeof __DeferToolRequest>[1]
 
 describe("defer tool request authority", function _deferSuite()
 {
+	beforeEach(function _ResetManagedGrants() { _managedGrantMocks.reconcile.mockClear(); });
+
 	it("opens a pending approval bound to the awaiting tool invocation and live workload", async function _defers()
 	{
 		const create = vi.fn().mockResolvedValue({ id: "approval-9" });
@@ -241,6 +256,7 @@ describe("defer tool request authority", function _deferSuite()
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", conversationId: "conversation-1", attempt: 2, state: AgentRunState.Running }), updateMany: pause },
 			elicitationRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }) },
 			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
+			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
@@ -249,6 +265,7 @@ describe("defer tool request authority", function _deferSuite()
 		expect(result).toEqual({ outcome: "deferred", approvalRequestId: "approval-9" });
 		expect(pause).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 2, state: AgentRunState.Running }, data: { state: AgentRunState.WaitingForInput } });
 		expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ApprovalRequestState.Pending, toolInvocationRowId: "tool-1", resourceKind: "tool", resourceId: "integration:search:query", proofKeyId: "proof-1", expiresAt: PROOF_KEY.expiresAt }) }));
+		expect(_managedGrantMocks.reconcile).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ siloId: "silo-1", managerId: "deferred-tool-approval-assignee", resource: { kind: "approval-request", id: "approval-9" }, grants: [expect.objectContaining({ capability: expect.objectContaining({ capabilityId: "approval-request:read" }), createdByPrincipalId: "principal-1" }), expect.objectContaining({ capability: expect.objectContaining({ capabilityId: "approval-request:decide" }), createdByPrincipalId: "principal-1" })] }));
 	});
 
 	it("adds a second pending request without changing an already-waiting run", async function _batches()
@@ -262,6 +279,7 @@ describe("defer tool request authority", function _deferSuite()
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", conversationId: "conversation-1", attempt: 2, state: AgentRunState.WaitingForInput }), updateMany: pause },
 			elicitationRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }) },
 			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(1) },
+			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
@@ -302,6 +320,7 @@ describe("defer tool request authority", function _deferSuite()
 			warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(RESERVATION) },
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
 			approvalRequest: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue({ id: "approval-existing", elicitationRequestId: "approval-existing", argumentsDigest: _deferCommand().argumentsDigest, reviewedToolSchemaDigest: _deferCommand().reviewedParametersSchemaDigest }) },
+			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
@@ -317,10 +336,29 @@ describe("defer tool request authority", function _deferSuite()
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", conversationId: "conversation-1", attempt: 2, state: AgentRunState.Running }), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
 			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
+			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
 		expect(await __DeferToolRequest(transaction, _deferCommand())).toEqual({ outcome: "unavailable" });
+		expect(create).not.toHaveBeenCalled();
+	});
+
+	it("fails closed before pausing when the assigned subject has no exact Principal", async function _MissingPrincipal()
+	{
+		const pause = vi.fn();
+		const create = vi.fn();
+		const transaction = {
+			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(ASSIGNMENT) },
+			warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(RESERVATION) },
+			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
+			principal: { findMany: vi.fn().mockResolvedValue([]) },
+			agentRun: { findUnique: vi.fn(), updateMany: pause },
+			approvalRequest: { create },
+		} as unknown as Prisma.TransactionClient;
+
+		expect(await __DeferToolRequest(transaction, _deferCommand())).toEqual({ outcome: "unavailable" });
+		expect(pause).not.toHaveBeenCalled();
 		expect(create).not.toHaveBeenCalled();
 	});
 });

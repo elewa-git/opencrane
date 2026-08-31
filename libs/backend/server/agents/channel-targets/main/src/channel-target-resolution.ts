@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
 
-import { __AuthorizeConversationRead } from "./conversation-read-authorization";
 import { __DigestChannelInvocationContext } from "./channel-invocation-context-digest";
 import type { AuthorizedChannelTargetResult, ChannelOpaqueContextSource, ChannelTargetClock, ChannelTargetResolutionDependencies, ResolveChannelTargetCommand, ResolveChannelTargetResult } from "./channel-target-resolution.types";
 
@@ -86,23 +85,14 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 	}
 
 	// 5. Require an open agent session bound to the same silo, service, and explicit participant.
-	const conversation = await dependencies.repository.getConversationAuthority(command.conversationId);
+	const conversation = await dependencies.repository.getConversationAuthority(command.conversationId, subjectId);
 	if (conversation === null || conversation.mode !== "agent_session" || conversation.lifecycle !== "open" || conversation.siloId !== hostBinding.siloId || !conversation.agentServiceId.trim())
 	{
 		return { outcome: "denied", reason: "conversation_denied" };
 	}
 
-	// 6. Authorize the event-read action without manufacturing command or run authority.
-	const authorization = __AuthorizeConversationRead(conversation, {
-		subjectId,
-		siloId: hostBinding.siloId,
-		conversationId: conversation.conversationId,
-		agentServiceId: conversation.agentServiceId,
-		requiredActions: ["conversation.read"],
-		membershipRevision: membership.revision,
-		nowEpochMs,
-	});
-	if (authorization.outcome !== "allowed" || !/^sha256:[0-9a-f]{64}$/u.test(authorization.authorizationDigest))
+	// 6. Require an unambiguous local Principal; the final transaction performs product admission.
+	if (conversation.participantPrincipalId === null)
 	{
 		return { outcome: "denied", reason: "authorization_denied" };
 	}
@@ -119,7 +109,7 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 	{
 		return { outcome: "denied", reason: "membership_denied" };
 	}
-	const issued = await dependencies.repository.issueInvocationContextAtomically({ digest, subjectId, siloId: hostBinding.siloId, conversationId: conversation.conversationId, agentServiceId: conversation.agentServiceId, action: command.action, membershipRevision: membership.revision, authorizationDigest: authorization.authorizationDigest, nowEpochMs, expiresAtEpochMs, allowedRouteHostSuffixes: dependencies.config.allowedRouteHostSuffixes, receiverId: dependencies.config.receiverId });
+	const issued = await dependencies.repository.issueInvocationContextAtomically({ digest, subjectId, principalId: conversation.participantPrincipalId, siloId: hostBinding.siloId, conversationId: conversation.conversationId, agentServiceId: conversation.agentServiceId, action: command.action, membershipRevision: membership.revision, nowEpochMs, expiresAtEpochMs, allowedRouteHostSuffixes: dependencies.config.allowedRouteHostSuffixes, receiverId: dependencies.config.receiverId });
 	if (issued.status !== "issued" || !_endpointIsAllowed(issued.context.endpoint, dependencies.config.allowedRouteHostSuffixes))
 	{
 		return { outcome: "denied", reason: "route_denied" };

@@ -1,12 +1,16 @@
 import type { AgentRunTerminalReason, Prisma, RuntimeCommandKind, WorkloadKind } from "@prisma/client";
 
-import type { CompiledRunInput, RunInputSnapshot, RuntimeAssignmentIdentity } from "@opencrane/contracts";
+import type { CompiledRunInput, RunInputSnapshot, RuntimeAssignmentIdentity, RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import type { ExpireElicitationBatchCommand, OpenElicitationCommand, RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import type { JsonValue } from "@opencrane/util";
 import type { ToolInvocationRunRecoveryAuthority } from "@opencrane/backend/server/iam/authorization";
 
 import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types";
 import type { RuntimeWaitReasons } from "./runtime-wait-reasons.types";
+import type { RuntimeExternalActionAuthorizationEvidence } from "./runtime-external-action-authorization.types";
+
+/** Exact Prisma transaction shared by runtime admission collaborators. */
+export type RuntimeDispatchTransaction = Prisma.TransactionClient;
 
 /**
  * Turns an immutable snapshot into the literal input carried on `start_attempt`.
@@ -70,6 +74,27 @@ export interface RuntimeEventReporter
 
 /** Runs-owned recovery transition used when no safe runtime command can be built. */
 export type RuntimeDispatchRecoveryAuthority = Pick<ToolInvocationRunRecoveryAuthority, "enterRecoveryRequiredInTransaction">;
+
+/** Rechecks current product authority before dispatch admits one durable external effect. */
+export interface RuntimeExternalActionAuthorization
+{
+	/**
+	 * Admit the exact frozen tool action through the central authority on the dispatch transaction.
+	 *
+	 * The implementation must recheck current lifecycle and grant state. Returning null leaves both
+	 * the candidate id and its ToolInvocation absent, so a runtime can never interpret a stale frozen
+	 * snapshot as current permission. An admitted result carries all authority-derived evidence that
+	 * the caller must persist with the ToolInvocation on this transaction.
+	 */
+	admitInTransaction(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, candidate: RuntimeExternalActionCandidate, now: Date): Promise<RuntimeExternalActionAuthorizationEvidence | null>;
+}
+
+/** Transaction-bound lifecycle and central-grant adapter used by runtime effect admission. */
+export interface RuntimeExternalActionAuthorizationRepository
+{
+	/** Recheck and record the exact external action using this repository's transaction. */
+	admit(context: RuntimeDispatchContext, candidate: RuntimeExternalActionCandidate, now: Date): Promise<RuntimeExternalActionAuthorizationEvidence | null>;
+}
 
 /**
  * Closes approvals whose deadline has passed, in the caller's transaction.
@@ -239,7 +264,7 @@ export interface DispatchedCommandRow
  * acceptance performs an effect the server has no record of, and nothing will ever deliver its
  * result.
  *
- * The reasons fall into four groups, and the right response differs for each.
+ * The reasons fall into five groups, and the right response differs for each.
  * - Stale connection - `namespace_mismatch`, `unknown_workload`, `no_active_stream`,
  *   `runtime_instance_mismatch`, `fence_mismatch`, `assignment_mismatch`, `expired`,
  *   `command_not_accepted`: this Pod no longer owns the work. Stop and let the stream be rebound;
@@ -250,6 +275,8 @@ export interface DispatchedCommandRow
  * - The runtime asked for something it may not do - `invalid_candidate`, `unsupported_protocol`,
  *   `runtime_cancellation_not_authoritative`, `runtime_tool_lifecycle_not_authoritative`,
  *   `external_action_invalid`: a bug in the runtime, not a race. Do not retry.
+ * - Current permission was withdrawn - `external_action_not_authorized`: abandon the exact action;
+ *   a new run admission is required before current grants may authorize another proposal.
  * - The server could not take it - `event_reporter_unavailable`, `event_report_denied` or any
  *   reason the injected event reporter returns, `external_action_conflict`,
  *   `external_action_replay_conflict`: nothing was written.

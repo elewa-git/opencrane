@@ -1,5 +1,5 @@
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
-import { AgentRevisionModelSelectionMaterializationCodes } from "@opencrane/backend/server/agents/agent-services";
+import { AgentRevisionModelSelectionMaterializationCodes, PersonalAgentProductEffectDenied } from "@opencrane/backend/server/agents/agent-services";
 
 import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationChangeMaterializationRepository, type PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types";
 import { PersonalConfigurationMaterializationResolutionOutcomes } from "./personal-configuration-materialization-state.types";
@@ -43,7 +43,7 @@ export class _PersonalConfigurationMaterializer implements PersonalConfiguration
 	 *
 	 * @param command - Server-derived owner, proposal id and time.
 	 * @returns `Applied` with the new revision id; `NotApplicable` for a persona refresh;
-	 * `StaleProposal` or `ModelUnavailable` when agent-services refuses; or
+	 * `StaleProposal`, `ModelUnavailable`, or `AuthorizationDenied` when agent-services refuses; or
 	 * `PersistenceUnavailable` when the transaction failed after the unit of work used up its
 	 * retries. Never throws: the failure is logged once here and returned as a result.
 	 */
@@ -77,6 +77,10 @@ export class _PersonalConfigurationMaterializer implements PersonalConfiguration
 				{
 					return { status: PersonalConfigurationMaterializationCodes.ModelUnavailable };
 				}
+				if (materialized.status === AgentRevisionModelSelectionMaterializationCodes.Unauthorized)
+				{
+					return { status: PersonalConfigurationMaterializationCodes.AuthorizationDenied };
+				}
 
 				// 3. Do the proposal's compare-and-set last, so if it loses, the new revision rolls back with it.
 				return transaction.proposals.apply(command, materialized.agentRevisionId);
@@ -84,6 +88,8 @@ export class _PersonalConfigurationMaterializer implements PersonalConfiguration
 		}
 		catch (err)
 		{
+			if (err instanceof PersonalAgentProductEffectDenied)
+				return { status: PersonalConfigurationMaterializationCodes.AuthorizationDenied };
 			this.logger.error({ err, operation: "personal_configuration.materialize", siloId: command.siloId, changeId: command.changeId }, "Personal configuration materialization failed");
 			return { status: PersonalConfigurationMaterializationCodes.PersistenceUnavailable };
 		}

@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { AgentRevisionId, AgentRunId, AgentServiceId, AgentServiceKind, SiloId } from "@opencrane/models/agents";
 import type { ConversationId, MessageContentBlock, MessageId } from "@opencrane/models/conversations";
@@ -61,6 +62,8 @@ export interface UserRunAdmissionCommand extends RunAdmissionCommandCoordinates
 /** Initial admission requested for an autonomous managed AgentService. */
 export interface ServiceRunAdmissionCommand extends RunAdmissionCommandCoordinates
 {
+	/** Human Principal that explicitly invoked the service, or null for scheduler admission. */
+	readonly requestingPrincipalId: string | null;
 	/** Discriminant that prevents a caller from supplying a user-shaped service identity. */
 	readonly identityKind: "service";
 	/** Managed roots are admitted by an explicit invocation or the scheduler, never interactively. */
@@ -75,6 +78,8 @@ export interface RunAdmissionTransaction
 {
 	/** Prisma transaction through which all admission reads and durable writes must occur. */
 	readonly prisma: Prisma.TransactionClient;
+	/** Central product authority bound to this exact admission transaction. */
+	readonly authorization?: Pick<AuthorizationAuthority, "admit" | "admitPrincipal" | "admitPrincipalBatch" | "listPrincipalEntitled">;
 	/** Canonical server-owned admission time used by every fenced authority read and immutable snapshot. */
 	readonly admittedAt: string;
 	/** Epoch-millisecond form of the same canonical server-owned admission time. */
@@ -223,7 +228,7 @@ export type RunAdmissionPrepare = (transaction: RunAdmissionTransaction) => Prom
  * Called by: `__AssembleRunInputSnapshot` in
  * `execution/inputs/main/src/session-assembly.ts`, which passes its own compile step as the
  * `build` callback. Wired by `prisma-session-assembly-authorities.ts`; implemented by
- * `PrismaRunAdmissionRepository`.
+ * `PrismaRunAdmissionUnitOfWork`.
  */
 export interface RunAdmissionRepository
 {

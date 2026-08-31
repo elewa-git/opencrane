@@ -6,8 +6,8 @@ OpenCrane every such delegation is a **child run**: a full agent run with its ow
 own budget, its own capability set, and its own audit trail, linked to the run that spawned it.
 
 ::: info Target design
-Child runs build on the run authority that is already implemented (run trees, capability proofs,
-input snapshots). The spawn tool and runtime behaviour land with the personal-agent runtime
+Child runs build on the run authority that is already implemented (run trees, central product
+authorization, input snapshots). The spawn tool and runtime behaviour land with the personal-agent runtime
 (Phase E of the [platform architecture](https://github.com/elewa-git/opencrane/blob/main/docs/design/personal-agent-platform-architecture.md);
 tracked in [#320](https://github.com/elewa-git/opencrane/issues/320)).
 :::
@@ -23,7 +23,7 @@ difference is a security boundary, not a style choice:
 | Identity & capabilities | The parent's, unchanged | Its own, always **smaller** than the parent's |
 | Budget | The parent's | Carved from the parent's remaining budget |
 | Lifetime | Dies with the parent's attempt | Independent; survives the parent's pod |
-| Audit trail | Part of the parent's record | Its own runs, approvals, and receipts |
+| Audit trail | Part of the parent's record | Its own runs, approvals, and ToolInvocations |
 | Typical use | Lens switches, summaries, judging, clean-context skill execution | Different authority, real spend, long-running or untrusted work |
 
 **Rule of thumb:** if the sub-task only changes *what's in context* (a prompt, a persona lens, a
@@ -45,7 +45,7 @@ accountable:
   including everything it delegated" is one query. See [Manage cost](/guide/budgets).
 - **Limits are enforced at spawn time**: depth cap, fan-out cap, and child budgets carved from
   the parent's remainder. A runaway delegation tree cannot drain the parent.
-- **Audit sees the tree.** Each child's proposals, approvals, and execution receipts are recorded
+- **Audit sees the tree.** Each child's proposals, authorization decisions, approvals, and tool invocations are recorded
   against *its* identity, not blurred into the parent's. See [Review activity](/guide/audit).
 
 ## The parent brokers all context

@@ -10,7 +10,7 @@ import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from
 /** The active managed run facts these tests share. */
 const _RUN = { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Managed, effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null } as const;
 /** Fixed session-assembly command scoped to the active managed service. */
-const _COMMAND: RunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "service", trigger: "managed_invocation", requestIdempotencyKey: "request-1" };
+const _COMMAND: RunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "service", requestingPrincipalId: "principal-1", trigger: "managed_invocation", requestIdempotencyKey: "request-1" };
 
 /** Creates one MCP tool assignment backed by a Ready revision on an active, published server. */
 function _McpToolAssignment(overrides: Record<string, unknown> = {})
@@ -34,7 +34,7 @@ function _ToolPolicySource(): PrismaRevisionToolPolicySource
 /** Creates a current revision with one MCP tool and one published skill artifact. */
 function _Revision(overrides: Record<string, unknown> = {})
 {
-	return { modelDefinition: { id: "model-definition-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" }, mcpToolAssignments: [_McpToolAssignment()], skillAssignments: [{ skillRevisionId: "skill-revision-1" }], budget: { maxTurns: 4, maxTokens: 1024, maxCostUsdMicros: 5_000_000, maxDurationMs: 60_000 }, ...overrides };
+	return { modelDefinition: { id: "model-definition-1", siloId: "silo-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" }, mcpToolAssignments: [_McpToolAssignment()], skillAssignments: [{ skillRevisionId: "skill-revision-1" }], budget: { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000 }, ...overrides };
 }
 
 /** Creates one same-silo active skill whose selected revision is published. */
@@ -48,7 +48,7 @@ describe("PrismaRevisionToolPolicySource", function _DescribePrismaRevisionToolP
 	it("freezes only live model, MCP, skill, and artifact references", async function _LoadsLivePolicy()
 	{
 		const transaction = _Transaction(_Revision(), [_Skill()], [{ id: "artifact-revision-1", state: ArtifactRevisionState.Published }]);
-		await expect(_ToolPolicySource().load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "loaded", value: { modelRoute: { alias: "tenant-model", modelDefinitionId: "model-definition-1", litellmModelId: "litellm-deployment-1" }, mcpTools: [{ toolRevisionId: "mcp-tool-revision-1", name: "calendar.read", description: "Read a calendar", inputSchema: { type: "object", additionalProperties: false }, inputSchemaDigest: ___DigestCanonicalJson({ type: "object", additionalProperties: false }) }], skillRevisionIds: ["skill-revision-1"], artifactRevisionIds: ["artifact-revision-1"] } });
+		await expect(_ToolPolicySource().load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "loaded", value: { modelDefinitionId: "model-definition-1", modelRoute: { alias: "tenant-model", modelDefinitionId: "model-definition-1", litellmModelId: "litellm-deployment-1" }, mcpTools: [{ toolRevisionId: "mcp-tool-revision-1", name: "calendar.read", description: "Read a calendar", inputSchema: { type: "object", additionalProperties: false }, inputSchemaDigest: ___DigestCanonicalJson({ type: "object", additionalProperties: false }) }], skillRevisionIds: ["skill-revision-1"], artifactRevisionIds: ["artifact-revision-1"] } });
 		expect(transaction.prisma.mcpToolAdmissionClaim.upsert).toHaveBeenCalledWith({ where: { agentRevisionId_siloId: { agentRevisionId: "revision-1", siloId: "silo-1" } }, create: { agentRevisionId: "revision-1", siloId: "silo-1", touchedAt: new Date("2026-07-26T00:00:00.000Z") }, update: { touchedAt: new Date("2026-07-26T00:00:00.000Z") } });
 	});
 
@@ -63,7 +63,7 @@ describe("PrismaRevisionToolPolicySource", function _DescribePrismaRevisionToolP
 
 	it("denies a foreign model and an unpublished skill", async function _DeniesUnavailablePolicy()
 	{
-		await expect(_ToolPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision({ modelDefinition: { id: "model-definition-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-other", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" } }), [_Skill()], [{ id: "artifact-revision-1" }]))).resolves.toEqual({ outcome: "denied", reason: "tool_policy_unavailable" });
+		await expect(_ToolPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision({ modelDefinition: { id: "model-definition-1", siloId: "silo-other", scope: ModelRoutingScope.Global, clusterTenant: null, publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" } }), [_Skill()], [{ id: "artifact-revision-1" }]))).resolves.toEqual({ outcome: "denied", reason: "tool_policy_unavailable" });
 		await expect(_ToolPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision(), [_Skill({ state: SkillRevisionState.Draft })], [{ id: "artifact-revision-1" }]))).resolves.toEqual({ outcome: "denied", reason: "tool_policy_unavailable" });
 	});
 });
@@ -72,11 +72,11 @@ describe("PrismaRevisionBudgetPolicySource", function _DescribePrismaRevisionBud
 {
 	it("freezes complete positive ceilings into a server-time deadline", async function _LoadsBudget()
 	{
-		await expect(new PrismaRevisionBudgetPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision()))).resolves.toEqual({ outcome: "loaded", value: { budgetPolicy: { maxModelTurns: 4, maxTotalTokens: 1024, maxCostUsdMicros: 5_000_000, wallClockDeadlineEpochMs: Date.parse("2026-07-26T00:01:00.000Z") } } });
+		await expect(new PrismaRevisionBudgetPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision()))).resolves.toEqual({ outcome: "loaded", value: { budgetPolicy: { maxModelTurns: 4, maxTotalTokens: 1024, wallClockDeadlineEpochMs: Date.parse("2026-07-26T00:01:00.000Z") } } });
 	});
 
 	it("denies malformed budget policy before it can enter an immutable snapshot", async function _DeniesMalformedBudget()
 	{
-		await expect(new PrismaRevisionBudgetPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision({ budget: { maxTurns: 0, maxTokens: 1024, maxCostUsdMicros: 5_000_000, maxDurationMs: 60_000 } })))).resolves.toEqual({ outcome: "denied", reason: "budget_unavailable" });
+		await expect(new PrismaRevisionBudgetPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision({ budget: { maxTurns: 0, maxTokens: 1024, maxDurationMs: 60_000 } })))).resolves.toEqual({ outcome: "denied", reason: "budget_unavailable" });
 	});
 });

@@ -4,12 +4,16 @@ import { INITIAL_PERSONAL_AGENT_POLICY } from "../initial-personal-agent-policy"
 import type { InitialPersonalAgentDefaultModelResolver } from "../initial-personal-agent-publication.types";
 import { AgentRevisionPersonaSelectionMaterializationCodes } from "../agent-revision-persona-selection.types";
 import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapRepository, type PersonalAgentBootstrapResult, type ReadyPersonalAgentBootstrapResult } from "../personal-agent-bootstrap.types";
+import type { PersonalAgentProductCaller, PersonalAgentProductEffects } from "../personal-agent-product-effects.types";
+import { PrismaPersonalAgentProductEffectsAuthority } from "../prisma-personal-agent-product-effects";
 import { PrismaAgentRevisionPersonaSelectionRepository } from "./prisma-agent-revision-persona-selection";
 import { PrismaInitialPersonalAgentPublicationRepository } from "./prisma-initial-personal-agent-publication";
 
 /** Immutable evidence returned after validating the approved active persona. */
 interface _ApprovedPersona
 {
+	/** Stable profile protected by the central Persona resource. */
+	readonly profileId: string;
 	/** Current approved persona revision used only when a personal service must be created. */
 	readonly id: string;
 	/** Display name inherited by the stable personal AgentService. */
@@ -29,6 +33,8 @@ interface _ReadyPersonalService
 	readonly workloadProfile: string;
 	/** Persona revision frozen into the active executable revision. */
 	readonly personaRevisionId: string;
+	/** Model definition frozen into the active executable revision. */
+	readonly modelDefinitionId: string;
 }
 
 /** Returns a stable denied result without writing authority state. */
@@ -80,12 +86,15 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 	private readonly transaction: Prisma.TransactionClient;
 	/** App-provided adapter to model-routing's transaction-scoped default resolver. */
 	private readonly defaultModelResolver: InitialPersonalAgentDefaultModelResolver;
+	/** Shared product-effect adapter bound to the onboarding transaction. */
+	private readonly productEffects: PersonalAgentProductEffects;
 
 	/** Creates the personal-agent strategy inside an existing Serializable transaction. */
-	constructor(transaction: Prisma.TransactionClient, defaultModelResolver: InitialPersonalAgentDefaultModelResolver)
+	constructor(transaction: Prisma.TransactionClient, defaultModelResolver: InitialPersonalAgentDefaultModelResolver, productEffects: PersonalAgentProductEffects | null = null)
 	{
 		this.transaction = transaction;
 		this.defaultModelResolver = defaultModelResolver;
+		this.productEffects = productEffects ?? new PrismaPersonalAgentProductEffectsAuthority(transaction);
 	}
 
 	/**
@@ -111,6 +120,9 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 			return persona;
 		if (command.readinessKind === "completion" && persona.id !== command.onboardingPersonaRevisionId)
 			return _Denied(PersonalAgentBootstrapDenialReasons.PersonaNotActive);
+		const caller = await this.productEffects.resolveCaller(command.siloId, command.subjectId);
+		if (caller === null)
+			return _Denied(PersonalAgentBootstrapDenialReasons.PrincipalUnavailable);
 
 		// 2. Resolve every matching runnable service before creating anything, because ambiguity must
 		// fail closed and an earlier successful retry must return its existing winner.
@@ -120,8 +132,8 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 
 		// 3. Inspect the deterministic identity independently so an unrelated row can never be adopted.
 		const deterministic = await this.transaction.agentService.findUnique({
-			where: { id: command.onboardingId },
-			select: { id: true, siloId: true, kind: true, state: true, activeRevisionId: true, workloadProfile: true, activeRevision: { select: { personaRevisionId: true } } },
+			where: { id_siloId: { id: command.onboardingId, siloId: command.siloId } },
+			select: { id: true, siloId: true, kind: true, state: true, activeRevisionId: true, workloadProfile: true, activeRevision: { select: { personaRevisionId: true, modelDefinitionId: true } } },
 		});
 		if (deterministic !== null)
 		{
@@ -136,7 +148,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 			const activeRevision = deterministic.activeRevision;
 			if (activeRevision === null || activeRevision.personaRevisionId === null)
 				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
-			return this._EnsureCurrentPersona(command, persona, { id: deterministic.id, activeRevisionId: deterministic.activeRevisionId, workloadProfile: deterministic.workloadProfile, personaRevisionId: activeRevision.personaRevisionId });
+			return this._EnsureCurrentPersona(command, persona, { id: deterministic.id, activeRevisionId: deterministic.activeRevisionId, workloadProfile: deterministic.workloadProfile, personaRevisionId: activeRevision.personaRevisionId, modelDefinitionId: activeRevision.modelDefinitionId }, caller);
 		}
 		if (matching.length === 1)
 		{
@@ -145,22 +157,26 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
 			if (existing.workloadProfile !== INITIAL_PERSONAL_AGENT_POLICY.workloadProfile)
 				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
-			return this._EnsureCurrentPersona(command, persona, existing);
+			return this._EnsureCurrentPersona(command, persona, existing, caller);
 		}
 
 		// 4. Delegate initial publication after bootstrap has proved that no service exists.
-		const publicationRepository = new PrismaInitialPersonalAgentPublicationRepository(this.transaction, this.defaultModelResolver);
-		return publicationRepository.publish(command, persona);
+		const publicationRepository = new PrismaInitialPersonalAgentPublicationRepository(this.transaction, this.defaultModelResolver, this.productEffects);
+		return publicationRepository.publish(command, persona, caller);
 	}
 
 	/** Reconcile one existing service to the owner's current approved persona without replacing it. */
-	private async _EnsureCurrentPersona(command: PersonalAgentBootstrapCommand, persona: _ApprovedPersona, service: _ReadyPersonalService): Promise<PersonalAgentBootstrapResult>
+	private async _EnsureCurrentPersona(command: PersonalAgentBootstrapCommand, persona: _ApprovedPersona, service: _ReadyPersonalService, caller: PersonalAgentProductCaller): Promise<PersonalAgentBootstrapResult>
 	{
 		if (service.personaRevisionId === persona.id)
+		{
+			await this.productEffects.reconcileCurrent(caller, { agentServiceId: service.id, agentRevisionId: service.activeRevisionId, personaProfileId: persona.profileId, modelDefinitionId: service.modelDefinitionId }, command.provisionedAt);
 			return _Ready(service, false, false);
+		}
 		const cmd = {
 			siloId: command.siloId,
 			subjectId: command.subjectId,
+			principalId: caller.principalId,
 			agentServiceId: service.id,
 			expectedSourceRevisionId: service.activeRevisionId,
 			targetPersonaRevisionId: persona.id,
@@ -168,7 +184,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 			materializedAt: command.provisionedAt,
 			changeMessage: "Selected the current approved persona during onboarding readiness repair.",
 		};
-		const task = new PrismaAgentRevisionPersonaSelectionRepository(this.transaction);
+		const task = new PrismaAgentRevisionPersonaSelectionRepository(this.transaction, this.productEffects);
 		const materialized = await task.materialize(cmd);
 		if (materialized.status !== AgentRevisionPersonaSelectionMaterializationCodes.Materialized && materialized.status !== AgentRevisionPersonaSelectionMaterializationCodes.AlreadyCurrent)
 		{
@@ -187,6 +203,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 				approvedAt: true,
 				profile: {
 					select: {
+						id: true,
 						siloId: true,
 						userId: true,
 						activeRevision: { select: { id: true, state: true, approvedAt: true, soulTemplate: { select: { displayName: true } } } },
@@ -204,7 +221,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 		{
 			return _Denied(PersonalAgentBootstrapDenialReasons.PersonaNotActive);
 		}
-		return { id: active.id, displayName: active.soulTemplate.displayName, approvedRevisionIds: revision.profile.revisions.map(function _RevisionId(candidate) { return candidate.id; }) };
+		return { profileId: revision.profile.id, id: active.id, displayName: active.soulTemplate.displayName, approvedRevisionIds: revision.profile.revisions.map(function _RevisionId(candidate) { return candidate.id; }) };
 	}
 
 	/** Reads at most two runnable services owned through any approved persona revision of this subject. */
@@ -216,9 +233,9 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 				kind: AgentServiceKind.Personal,
 				state: AgentServiceState.Active,
 				activeRevisionId: { not: null },
-				activeRevision: { is: { state: AgentRevisionState.Published, personaRevisionId: { in: [...persona.approvedRevisionIds] } } },
+				activeRevision: { is: { siloId: command.siloId, state: AgentRevisionState.Published, personaRevisionId: { in: [...persona.approvedRevisionIds] } } },
 			},
-			select: { id: true, activeRevisionId: true, workloadProfile: true, activeRevision: { select: { personaRevisionId: true } } },
+			select: { id: true, activeRevisionId: true, workloadProfile: true, activeRevision: { select: { personaRevisionId: true, modelDefinitionId: true } } },
 			orderBy: { id: "asc" },
 			take: 2,
 		}).then(function _Flatten(services)
@@ -228,7 +245,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 				const activeRevision = service.activeRevision;
 				return service.activeRevisionId === null || activeRevision === null || activeRevision.personaRevisionId === null
 					? []
-					: [{ id: service.id, activeRevisionId: service.activeRevisionId, workloadProfile: service.workloadProfile, personaRevisionId: activeRevision.personaRevisionId }];
+					: [{ id: service.id, activeRevisionId: service.activeRevisionId, workloadProfile: service.workloadProfile, personaRevisionId: activeRevision.personaRevisionId, modelDefinitionId: activeRevision.modelDefinitionId }];
 			});
 		});
 	}

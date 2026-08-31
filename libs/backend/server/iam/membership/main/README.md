@@ -79,6 +79,9 @@ throws, a failed check, or a concurrent-acceptance conflict all return "denied".
 personal-session assembler may supply its existing Prisma transaction. In that mode the repository
 must not open a nested transaction: membership acceptance, its audit decision, and the resulting run
 snapshot share one commit or rollback together.
+Runtime effects use `PrismaRuntimeMembershipEligibilityAuthority` on their existing dispatch
+transaction to reverify the current signed assertion and require every frozen membership coordinate,
+revision, payload digest, and trust deadline to remain exact.
 
 ## Dependency direction
 

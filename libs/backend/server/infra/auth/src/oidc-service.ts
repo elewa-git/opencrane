@@ -6,8 +6,8 @@ import type { Logger } from "pino";
 
 import { ___LoadOidcAuthConfig } from "./oidc-config";
 import type { OidcAuthConfig } from "./oidc-config.types";
-import { _ResolveOrgMembershipFacts } from "./org-membership";
-import type { OrgMembershipRepository } from "./org-membership.types";
+import { _ResolveOwnedOrgSummaries } from "./org-membership";
+import type { OwnedOrgSummaryRepository } from "./org-membership.types";
 import type { AuthStatus, LoginClient } from "./oidc-service.types";
 import { ___BuildOidcAuthUser, ___ResolveOidcClaims } from "./oidc-claims";
 import { ___BuildOidcEndSessionUrl } from "./oidc-logout";
@@ -44,9 +44,8 @@ export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from ".
  * {@link onLoginEstablished} and {@link isPostLoginFailureFatal} are hooks for side
  * effects, not for changing the flow above.
  *
- * `/auth/me` does not just echo the cookie: {@link getStatus} re-reads `OrgMembership`
- * on every call, so a user who has just created an organisation counts as an org admin
- * without logging in again.
+ * `/auth/me` does not just echo the cookie: {@link getStatus} re-reads the caller's
+ * `OrgMembership` presentation rows on every call.
  *
  * Called by: `OidcAuthService` in libs/backend/server/iam/identity/main/src/auth/oidc.service.ts
  * extends it; apps/opencrane/src/app/public-app.ts constructs it and mounts
@@ -76,13 +75,13 @@ export abstract class OidcAuthServiceBase
   private clientDiscovered = new Map<string, Promise<client.Configuration>>();
 
   /** Repository for resolving the caller's membership-derived org-admin facts. */
-  protected membershipRepository: OrgMembershipRepository;
+  protected membershipRepository: OwnedOrgSummaryRepository;
 
   /**
    * @param log              - Parent logger; a child scoped to `oidc-auth` is derived.
-   * @param membershipRepository - Repository providing membership facts.
+   * @param membershipRepository - Repository providing organisation labels for session presentation.
    */
-  constructor(log: Logger, membershipRepository: OrgMembershipRepository)
+  constructor(log: Logger, membershipRepository: OwnedOrgSummaryRepository)
   {
     this.log = log.child({ component: "oidc-auth" });
     this.membershipRepository = membershipRepository;
@@ -140,15 +139,10 @@ export abstract class OidcAuthServiceBase
    *
    * Three outcomes:
    *   - OIDC enabled and a session exists — `authenticated: true` plus the stored
-   *     `authUser`, with `isOrgAdmin` recomputed as "the value stored at login OR owns
-   *     or administers at least one organisation now", `ownedOrgs` read fresh from
-   *     `OrgMembership`, and whatever {@link enrichStatusUser} adds.
+   *     `authUser`, with `ownedOrgs` read fresh from `OrgMembership`, and whatever
+   *     {@link enrichStatusUser} adds.
    *   - OIDC enabled and no session — `authenticated: false`, `user: null`.
    *   - OIDC disabled — `mode: "development"`, so the SPA knows not to offer login.
-   *
-   * `isOrgAdmin` is recomputed here rather than trusted from the cookie so that a user
-   * who created an organisation after logging in gets admin rights without logging in
-   * again. Nothing else on the user is recomputed.
    *
    * Called by: libs/backend/server/iam/identity/main/src/auth/auth.router.ts.
    *
@@ -168,7 +162,7 @@ export abstract class OidcAuthServiceBase
       }
 
       const [membership, extra] = await Promise.all([
-        _ResolveOrgMembershipFacts(this.membershipRepository, authUser.sub),
+        _ResolveOwnedOrgSummaries(this.membershipRepository, authUser.sub),
         this.enrichStatusUser(req, authUser),
       ]);
 
@@ -177,7 +171,6 @@ export abstract class OidcAuthServiceBase
         authenticated: true,
         user: {
           ...authUser,
-          isOrgAdmin: authUser.isOrgAdmin || membership.isOrgAdmin,
           ownedOrgs: membership.ownedOrgs,
           ...extra,
         },

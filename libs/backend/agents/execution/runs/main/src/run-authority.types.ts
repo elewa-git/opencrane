@@ -27,6 +27,8 @@ export interface StartNextRunAttemptCommand
 	readonly conversationId: string;
 	/** The authenticated subject asking. Must still be an active org member and a current participant when the write happens. */
 	readonly requestedBy: string;
+	/** Durable Principal resolved from the authenticated request before the retry transaction starts. */
+	readonly requestedByPrincipalId: string;
 	/** ISO-8601 instant from the server's clock, stored as the new attempt's `acceptedAt`. */
 	readonly acceptedAt: string;
 }

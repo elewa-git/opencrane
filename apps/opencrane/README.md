@@ -39,16 +39,15 @@ their concrete adapters, mounts their routers, and starts and stops them in the 
 [agent-runtime](../agent-runtime/README.md) ·
 [backend capabilities](../../libs/backend/README.md)
 
-Startup proceeds in six visible stages:
+Startup proceeds in five visible stages:
 
 1. initialise telemetry before any instrumented dependency loads;
 2. freeze process configuration and construct Prisma and Kubernetes clients;
-3. when configured, seed the initial provider credential through LiteLLM before serving any agent;
-4. compose one shared-capacity managed admission port and one session-derived personal admission
+3. compose one shared-capacity managed admission port and one session-derived personal admission
    port, both over the same signed membership configuration. A standalone deployment has no Fleet
    key but deliberately denies run admission until it has a local signed-membership issuer;
-5. build the public and internal Express applications; and
-6. start the registered workflow and bounded background workers, then open both listeners and attach
+4. build the public and internal Express applications; and
+5. start the registered workflow and bounded background workers, then open both listeners and attach
    the signed-in conversation WebSocket under one coordinated shutdown path.
 
 The route registry is deliberately a catalogue rather than a second application layer:
@@ -87,8 +86,6 @@ Kubernetes identity review, and optional infrastructure with local-only adapters
 
 - `src/app/config.ts` reads one startup snapshot for listener and worker configuration, including
   the all-or-nothing standalone first-owner contract and HTTPS-only Fleet membership receiver.
-- `src/app/initial-model-bootstrap.ts` makes the deployment-supplied provider key available through
-  the existing provider-custody and LiteLLM-registration authority before the listeners start.
 - `src/app/kubernetes-clients.ts` constructs the exact Kubernetes clients the process needs.
 - `src/app/public-app.ts` builds the browser-session-authenticated API.
 - The neutral [membership](../../libs/backend/server/iam/membership/main/README.md) package owns
@@ -109,6 +106,10 @@ Kubernetes identity review, and optional infrastructure with local-only adapters
 - `src/app/persona-approval-composition.ts` adapts agent-service persona selection to the persona
   approval port on one Serializable transaction. It maps agent outcomes but owns no persona or
   AgentRevision persistence.
+- `src/app/user-onboarding-composition.ts` binds onboarding completion, configured-default model
+  resolution, personal-agent persistence, managed grants, and the central `AuthorizationAuthority`
+  to one Serializable transaction. Owner identity remains onboarding eligibility; the app does not
+  provide a parallel permission evaluator.
 - `src/infra/artifacts/*` is one app-only artifact-broker composition slice. It binds the server's
   mounted lease keys, exact same-silo `artifact-service` route, and durable artifact authority into
   source, read, upload, and output brokers; those pieces are inseparable from this process's private
@@ -127,10 +128,9 @@ Kubernetes identity review, and optional infrastructure with local-only adapters
   one worker for registered workflow tasks. Its focused source verifiers prove the seeded
   persona and onboarding-bootstrap content against the reviewed files in
   `docs/design/persona-archetypes/`.
-- `prisma/prisma-migrations/` is the active Prisma Migrate ledger for existing databases. The
-  PostgreSQL deployment Job applies it before an incompatible server rollout; server startup never
-  changes the schema. `prisma/migrations/` retains the SQL published before the 0.10.0 cutover as
-  release history, not executable deployment input.
+- There is no `prisma/migrations/` upgrade path pre-1.0: the baseline is the only schema authority,
+  existing dev silos are rebuilt rather than upgraded, and server startup never becomes a
+  schema-migration authority. Upgrade contracts return at MVP.
 
 ## Boundary
 
@@ -206,7 +206,6 @@ are:
 | `OPENCRANE_OCI_REGISTRY_*` | Fixed HTTPS registry repository, request timeout, and optional Secret-backed authorization used to import admitted MCP images by digest | deployment profile / 30 seconds / no credential |
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
-| `OPENCRANE_INITIAL_MODEL_*` | Optional first provider key; the server persists its custody reference and requires LiteLLM registration before readiness | disabled |
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL`, `CHANNEL_PROXY_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
 | `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal warm runtime Pod boundary | required |

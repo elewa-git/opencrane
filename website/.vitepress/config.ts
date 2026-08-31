@@ -111,7 +111,7 @@ export default defineConfig({
           { text: 'Organisation boundary', link: '/operators/organisation-boundary' },
           { text: 'DNS configuration', link: '/operators/dns-config' },
           { text: 'Networking & isolation', link: '/operators/networking' },
-          { text: 'Identity & network isolation (Cilium + SPIFFE)', link: '/operators/cilium-spiffe-identity' },
+          { text: 'Identity & network isolation (Cilium)', link: '/operators/cilium-spiffe-identity' },
           { text: 'Identity & runtime auth', link: '/security/identity' },
           { text: 'Runbook', link: '/operators/runbook' },
           { text: 'Telemetry & logging', link: '/operators/telemetry-logging' },
@@ -121,6 +121,8 @@ export default defineConfig({
         text: 'Deep dives',
         collapsed: true,
         items: [
+          { text: 'Central authorization authority', link: '/integrators/authorization-authority' },
+          { text: 'Governed packages & container images', link: '/integrators/governed-packages' },
           { text: 'Governed agent runtime', link: '/integrators/agent-runtime' },
           { text: 'OCI MCP runtime', link: '/integrators/oci-mcp-runtime' },
           { text: 'Memory write, manage & read', link: '/integrators/retrieval-memory' },

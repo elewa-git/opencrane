@@ -2,66 +2,27 @@ import type { PrismaClient } from "@prisma/client";
 import type { Router } from "express";
 import type { Logger } from "pino";
 
-import type { AgentRevision, AgentService } from "@opencrane/models/agents";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
-import type { AuditDecisionRecord } from "@opencrane/backend/server/iam/audit";
-import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 
 import { __CreateAgentServicesRouter } from "./agent-revision.router";
-import type { AgentPublicationAuditEvidencePort, AgentServicePublicationRepository, AtomicAgentRevisionPublication } from "./agent-publication.types";
+import type { AgentServicePublicationRepository } from "./agent-publication.types";
 import type { ManagedRunAdmissionPort } from "./agent-revision-lifecycle.types";
 import type { ManagementCaller } from "./agent-revision.router.types";
 import { PrismaAgentServicePublicationUnitOfWork } from "./db/prisma-agent-publication";
-import { PrismaAgentRevisionLifecycleUnitOfWork } from "./db/prisma-agent-revision-lifecycle";
-import { PrismaAgentScheduleRepository } from "./db/prisma-agent-schedule";
-import { PrismaBoundaryGrantUnitOfWork } from "./db/prisma-boundary-grant-unit-of-work";
-
-/** Stable capability-catalogue reference recorded for a management publish decision. */
-const _MANAGEMENT_CATALOG_ID = "opencrane-agent-management";
+import { PrismaAgentRevisionLifecycleUnitOfWork } from "./db/prisma-agent-revision-lifecycle-unit-of-work";
+import { PrismaAgentScheduleUnitOfWork } from "./db/prisma-agent-schedule";
 
 /** Maps authenticated request facts to the caller contract owned by agent management. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): ManagementCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal ? { principalId: principal.principalId, externalSubject: principal.externalSubject, siloId: principal.siloId, isOrgAdmin: principal.isOrgAdmin } : null;
+	return principal ? { principalId: principal.principalId, externalSubject: principal.externalSubject, siloId: principal.siloId } : null;
 }
 
-/** Builds caller-attributed publication audit evidence for one publish decision. */
-function _buildPublicationAuditEvidence(caller: ManagementCaller): AgentPublicationAuditEvidencePort
-{
-	return {
-		build(publication: AtomicAgentRevisionPublication, service: AgentService, revision: AgentRevision): AuditDecisionRecord
-		{
-			const argumentsDigest = __DigestCanonicalJson({ agentServiceId: publication.agentServiceId, agentRevisionId: publication.agentRevisionId, expectedActiveRevisionId: publication.expectedActiveRevisionId, publishedAt: publication.publishedAt });
-			const effectiveAuthorizationDigest = __DigestCanonicalJson({ actor: caller.principalId, siloId: service.siloId, revision: revision.revision, digest: revision.digest });
-			const decisionDigest = __DigestCanonicalJson({ argumentsDigest, effectiveAuthorizationDigest, action: "publish", resourceId: service.id });
-			return {
-				decisionDigest,
-				siloId: service.siloId,
-				actorKind: "user",
-				actorId: caller.principalId,
-				resourceKind: "agent-service",
-				resourceId: service.id,
-				agentServiceId: service.id,
-				agentRevisionId: revision.id,
-				action: "publish",
-				catalogId: _MANAGEMENT_CATALOG_ID,
-				catalogRevision: 1,
-				catalogDigest: __DigestCanonicalJson({ catalog: _MANAGEMENT_CATALOG_ID, revision: 1 }),
-				argumentsDigest,
-				policyRevisionHash: __DigestCanonicalJson({ policy: "agent-management", role: "org-admin" }),
-				effectiveAuthorizationDigest,
-				outcome: "allow",
-				reasonCode: "authorized",
-			};
-		},
-	};
-}
-
-/** Builds a caller-attributed publication repository so the audit records the real actor. */
+/** Builds a caller-attributed publication repository for central admission evidence. */
 function _publicationFor(prisma: PrismaClient, caller: ManagementCaller): AgentServicePublicationRepository
 {
-	return new PrismaAgentServicePublicationUnitOfWork(prisma, _buildPublicationAuditEvidence(caller));
+	return new PrismaAgentServicePublicationUnitOfWork(prisma, caller);
 }
 
 /**
@@ -85,8 +46,7 @@ export function _CreateAgentServicesRouter(prisma: PrismaClient, runAdmission: M
 		lifecycle: new PrismaAgentRevisionLifecycleUnitOfWork(prisma),
 		publicationFor(caller: ManagementCaller): AgentServicePublicationRepository { return _publicationFor(prisma, caller); },
 		runAdmission,
-		schedules: new PrismaAgentScheduleRepository(prisma),
-		boundaryGrantResolver: new PrismaBoundaryGrantUnitOfWork(prisma),
+		schedules: new PrismaAgentScheduleUnitOfWork(prisma),
 		resolveCaller: _resolveCaller,
 		clock: { now(): Date { return new Date(); } },
 		logger,

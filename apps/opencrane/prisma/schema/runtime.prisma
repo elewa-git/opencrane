@@ -29,20 +29,20 @@ enum RuntimeSteeringRequestState {
 /// its stream and is never edited from a non-owning domain; the dispatch adapter reloads and locks
 /// the live WorkloadAssignment on every call rather than trusting a foreign-key snapshot.
 model RuntimeCommandStream {
-  runId                String                     @map("run_id")
-  attempt              Int
-  fence                Int                        @default(1)
-  inputGeneration      Int                        @default(0) @map("input_generation")
-  runtimeInstanceId    String?                    @map("runtime_instance_id")
-  nextCommandSequence  Int                        @default(1) @map("next_command_sequence")
-  acceptedCandidateIds String[]                   @default([]) @map("accepted_candidate_ids")
-  dispatchBlockedReason String?                   @map("dispatch_blocked_reason")
-  dispatchBlockedAt     DateTime?                 @map("dispatch_blocked_at")
-  createdAt            DateTime                   @default(now()) @map("created_at")
-  updatedAt            DateTime                   @updatedAt @map("updated_at")
-  commands             RuntimeDispatchedCommand[]
+  runId                 String                     @map("run_id")
+  attempt               Int
+  fence                 Int                        @default(1)
+  inputGeneration       Int                        @default(0) @map("input_generation")
+  runtimeInstanceId     String?                    @map("runtime_instance_id")
+  nextCommandSequence   Int                        @default(1) @map("next_command_sequence")
+  acceptedCandidateIds  String[]                   @default([]) @map("accepted_candidate_ids")
+  dispatchBlockedReason String?                    @map("dispatch_blocked_reason")
+  dispatchBlockedAt     DateTime?                  @map("dispatch_blocked_at")
+  createdAt             DateTime                   @default(now()) @map("created_at")
+  updatedAt             DateTime                   @updatedAt @map("updated_at")
+  commands              RuntimeDispatchedCommand[]
 
-  continuations        RuntimeContinuationCheckpoint[]
+  continuations RuntimeContinuationCheckpoint[]
 
   @@id([runId, attempt])
   @@map("runtime_command_streams")
@@ -63,7 +63,7 @@ model RuntimeContinuationCheckpoint {
   sourceRuntimeInstanceId String               @map("source_runtime_instance_id")
   sourceCommandId         String               @map("source_command_id")
   sourceFence             Int                  @map("source_fence")
-  keyId                    String               @map("key_id")
+  keyId                   String               @map("key_id")
   ciphertext              Bytes
   nonce                   Bytes
   authenticationTag       Bytes                @map("authentication_tag")

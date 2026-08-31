@@ -70,6 +70,8 @@ export interface RunEvent
 {
 	/** Run whose history this event belongs to. */
 	readonly runId: AgentRunId;
+	/** Identifies the run attempt that emitted this event; sequence remains global across retries. */
+	readonly attempt: number;
 	/** Position in this run's history, starting at 1 with no gaps. */
 	readonly sequence: number;
 	/** What happened. */

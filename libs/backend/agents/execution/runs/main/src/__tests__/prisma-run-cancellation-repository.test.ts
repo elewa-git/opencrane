@@ -24,7 +24,8 @@ function _Transaction(run: ReturnType<typeof _Run>, task: ReturnType<typeof _Tas
 		workloadAssignment: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 		runProofKey: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 		elicitationRequest: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-		approvalRequest: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+		approvalRequest: { findMany: vi.fn().mockResolvedValue([{ id: "approval-1", siloId: "silo-1" }]), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+		authorizationGrant: { findMany: vi.fn().mockResolvedValue([]) },
 		toolInvocation: {
 			findMany: vi.fn().mockResolvedValue([{ id: "invocation-1", toolInvocationId: "tool-call-1", state: ToolInvocationState.Ready, recoveryMode: ExternalActionRecoveryMode.Manual, claimKind: null, preparationAttempt: 0, retryDeadlineAt: new Date("2099-01-01T00:00:00.000Z"), revision: 1 }]),
 			updateMany: vi.fn().mockResolvedValue({ count: 1 }),

@@ -40,6 +40,7 @@ function _invocation(state: ToolInvocationStates, recoveryMode: ExternalActionRe
 		mcpTaskId: null,
 		agentRevisionId: "revision-1",
 		subjectId: "user-1",
+		authorizationEvidence: null,
 		candidateId: "candidate-1",
 		toolInvocationId: "tool-call-1",
 		toolRevisionId: "integration:calendar:calendar.read",

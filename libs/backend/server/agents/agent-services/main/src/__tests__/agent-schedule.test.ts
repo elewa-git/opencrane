@@ -31,7 +31,7 @@ function _record(cron: string, timezone: string, at: string): AgentServiceSchedu
 /** Builds a valid create command with optional overrides. */
 function _create(overrides: Partial<CreateAgentScheduleCommand> = {}): CreateAgentScheduleCommand
 {
-	return { siloId: "silo-1", agentServiceId: "svc-1", cron: "0 9 * * 1-5", timezone: "Europe/Brussels", overlapPolicy: AgentScheduleOverlapPolicies.Skip, enabled: true, catchupWindowSeconds: 3600, ...overrides };
+	return { principalId: "admin-1", siloId: "silo-1", agentServiceId: "svc-1", cron: "0 9 * * 1-5", timezone: "Europe/Brussels", overlapPolicy: AgentScheduleOverlapPolicies.Skip, enabled: true, catchupWindowSeconds: 3600, ...overrides };
 }
 
 describe("schedule create/update validation", function _Suite()
@@ -69,9 +69,9 @@ describe("schedule create/update validation", function _Suite()
 	it("validates the same rules on update", async function _UpdateValidates()
 	{
 		const repository = new _Repository();
-		const bad = await __UpdateAgentSchedule(repository, { siloId: "silo-1", agentServiceId: "svc-1", scheduleId: "sched-1", cron: "bad", timezone: "UTC", overlapPolicy: AgentScheduleOverlapPolicies.Allow, enabled: false, catchupWindowSeconds: 60 }, "2026-07-01T00:00:00.000Z");
+		const bad = await __UpdateAgentSchedule(repository, { principalId: "admin-1", siloId: "silo-1", agentServiceId: "svc-1", scheduleId: "sched-1", cron: "bad", timezone: "UTC", overlapPolicy: AgentScheduleOverlapPolicies.Allow, enabled: false, catchupWindowSeconds: 60 }, "2026-07-01T00:00:00.000Z");
 		expect(bad).toEqual({ outcome: "denied", reason: "invalid_cron" });
-		const ok = await __UpdateAgentSchedule(repository, { siloId: "silo-1", agentServiceId: "svc-1", scheduleId: "sched-1", cron: "*/15 * * * *", timezone: "UTC", overlapPolicy: AgentScheduleOverlapPolicies.Allow, enabled: false, catchupWindowSeconds: 60 }, "2026-07-01T00:00:00.000Z");
+		const ok = await __UpdateAgentSchedule(repository, { principalId: "admin-1", siloId: "silo-1", agentServiceId: "svc-1", scheduleId: "sched-1", cron: "*/15 * * * *", timezone: "UTC", overlapPolicy: AgentScheduleOverlapPolicies.Allow, enabled: false, catchupWindowSeconds: 60 }, "2026-07-01T00:00:00.000Z");
 		expect(ok.outcome).toBe("ok");
 	});
 });

@@ -2,15 +2,16 @@ import { SkillRevisionState, SkillTrustClass } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { SkillAuthoringValidationTaskNames } from "@opencrane/backend/agents/skills/workflows/contract";
+import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
-import { PrismaSkillAuthoringValidationSubmissionUnitOfWork } from "../prisma-skill-authoring-validation-submission";
+import { PrismaSkillAuthoringValidationSubmissionRepository } from "../prisma-skill-authoring-validation-submission-repository";
 
 /** Build one transaction harness that satisfies validation admission and task binding. */
 function _Harness()
 {
 	const transaction = {
 		skillRevision: {
-			findFirst: vi.fn().mockResolvedValue({ id: "revision-1", artifactRevisionId: "artifact-revision-1", artifactContentAddress: `sha256:${"a".repeat(64)}` }),
+			findFirst: vi.fn().mockResolvedValue({ id: "revision-1", artifactRevisionId: "artifact-revision-1", artifactContentAddress: `sha256:${"a".repeat(64)}`, skill: { ownerPrincipalId: "principal-owner" } }),
 			findUnique: vi.fn().mockResolvedValue({ skill: { siloId: "silo-a" }, state: SkillRevisionState.Draft, trustClass: SkillTrustClass.SandboxedPython, artifactRevisionId: "artifact-revision-1", artifactContentAddress: `sha256:${"a".repeat(64)}` }),
 		},
 		artifactRevision: { findFirst: vi.fn().mockResolvedValue({ id: "artifact-revision-1" }) },
@@ -29,27 +30,28 @@ function _Harness()
 		const saved = await transaction.skillAuthoringValidation.upsert.mock.results.at(-1)?.value;
 		return saved ?? null;
 	});
-	const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) };
 	const workflow = {
 		spawn: vi.fn().mockImplementation(async function _Spawn(_context: unknown, command: { readonly taskName: string; readonly idempotencyKey: string })
 		{
 			return { taskId: "task-1", taskName: command.taskName, idempotencyKey: command.idempotencyKey };
 		}),
 	};
-	return { transaction, prisma, workflow };
+	const authorization = { admitPrincipal: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow }) };
+	return { transaction, workflow, authorization };
 }
 
-describe("Prisma skill authoring validation submission unit of work", function _DescribeSubmissionUnitOfWork()
+describe("Prisma skill authoring validation submission repository", function _DescribeSubmissionRepository()
 {
 	it("derives artifact facts and saves the remote task through the same transaction", async function _SubmitsAtomically()
 	{
 		const harness = _Harness();
-		const authority = new PrismaSkillAuthoringValidationSubmissionUnitOfWork(harness.prisma as never, harness.workflow as never);
+		const authority = new PrismaSkillAuthoringValidationSubmissionRepository(harness.transaction as never, harness.workflow as never, harness.authorization as never);
 
 		const result = await authority.submit({ siloId: "silo-a", principalId: "principal-1" }, "revision-1");
 
 		expect(result).toEqual({ validationId: "validation-1", taskId: "task-1" });
-		expect(harness.transaction.skillRevision.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "revision-1", skill: { siloId: "silo-a", ownerPrincipalId: "principal-1" } } }));
+		expect(harness.transaction.skillRevision.findFirst).toHaveBeenCalledWith({ where: { id: "revision-1", skill: { siloId: "silo-a" } }, select: { id: true, artifactRevisionId: true, artifactContentAddress: true, skill: { select: { ownerPrincipalId: true } } } });
+		expect(harness.authorization.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-a", principalId: "principal-1", action: ProductAuthorizationActions.Review, resource: { kind: ProductAuthorizationResourceKinds.SkillRevision, id: "revision-1" }, actorKind: "user", actorId: "principal-1" }));
 		expect(harness.workflow.spawn).toHaveBeenCalledWith({ client: harness.transaction }, expect.objectContaining({ taskName: SkillAuthoringValidationTaskNames.Validate, input: { siloId: "silo-a", validationId: "validation-1" } }));
 		expect(harness.transaction.skillAuthoringValidation.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { taskId: "task-1", taskName: SkillAuthoringValidationTaskNames.Validate } }));
 	});
@@ -58,9 +60,22 @@ describe("Prisma skill authoring validation submission unit of work", function _
 	{
 		const harness = _Harness();
 		harness.transaction.skillRevision.findFirst.mockResolvedValue(null);
-		const authority = new PrismaSkillAuthoringValidationSubmissionUnitOfWork(harness.prisma as never, harness.workflow as never);
+		const authority = new PrismaSkillAuthoringValidationSubmissionRepository(harness.transaction as never, harness.workflow as never, harness.authorization as never);
 
-		await expect(authority.submit({ siloId: "silo-a", principalId: "principal-1" }, "foreign-revision")).rejects.toThrow(/requires ownership/);
+		await expect(authority.submit({ siloId: "silo-a", principalId: "principal-1" }, "foreign-revision")).rejects.toThrow(/requires permission/);
+
+		expect(harness.authorization.admitPrincipal).not.toHaveBeenCalled();
+		expect(harness.workflow.spawn).not.toHaveBeenCalled();
+		expect(harness.transaction.skillAuthoringValidation.upsert).not.toHaveBeenCalled();
+	});
+
+	it("rejects a current revision when the central review action is denied", async function _RejectsDeniedReview()
+	{
+		const harness = _Harness();
+		harness.authorization.admitPrincipal.mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Deny });
+		const authority = new PrismaSkillAuthoringValidationSubmissionRepository(harness.transaction as never, harness.workflow as never, harness.authorization as never);
+
+		await expect(authority.submit({ siloId: "silo-a", principalId: "principal-1" }, "revision-1")).rejects.toThrow(/requires permission/);
 
 		expect(harness.workflow.spawn).not.toHaveBeenCalled();
 		expect(harness.transaction.skillAuthoringValidation.upsert).not.toHaveBeenCalled();

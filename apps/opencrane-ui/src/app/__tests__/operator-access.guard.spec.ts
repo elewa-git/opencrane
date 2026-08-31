@@ -6,7 +6,7 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@ang
 import { ActivatedRouteSnapshot, Router, RouterStateSnapshot, UrlTree } from "@angular/router";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { SessionStore } from "@opencrane/state/core";
+import { SessionStore } from "@opencrane/state/session";
 
 import { ___OperatorAccessGuard } from "../operator-access.guard";
 

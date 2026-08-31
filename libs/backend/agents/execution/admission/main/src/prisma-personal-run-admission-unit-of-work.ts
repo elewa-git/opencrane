@@ -1,4 +1,6 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
+
+import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
 import type { PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunAdmissionUnitOfWork, PersonalRunIdempotencyResult, PersonalRunConversationAuthority } from "./personal-run-admission.types";
 import { PrismaPersonalRunAdmissionRepository } from "./prisma-personal-run-admission-repository";
@@ -9,8 +11,8 @@ import { PrismaPersonalRunAdmissionRepository } from "./prisma-personal-run-admi
  * One transaction per call, not one for all three: these reads happen at different points in
  * admission (two in the preflight, one only after a commit failed), so they must not be forced to
  * share a snapshot. `Serializable` here is PostgreSQL's SERIALIZABLE isolation level, requested
- * through Prisma's `$transaction` option: the idempotency check decides whether a run is created, and
- * under a weaker level two concurrent requests could both read "not found" and both create one.
+ * through the shared unit-of-work envelope: the idempotency check decides whether a run is created,
+ * and under a weaker level two concurrent requests could both read "not found" and both create one.
  * Callers must therefore expect a serialization failure and retry rather than treat it as fatal.
  *
  * Constructed by: `__CreatePersonalRunAdmissionPort` (personal-run-admission.composition.ts).
@@ -66,9 +68,9 @@ export class PrismaPersonalRunAdmissionUnitOfWork implements PersonalRunAdmissio
 	 */
 	private async _run<TResult>(work: (repository: PersonalRunAdmissionReadRepository) => Promise<TResult>): Promise<TResult>
 	{
-		return this.prisma.$transaction(async function _Run(transaction)
+		return ___RunInPrismaUnitOfWork(this.prisma, async function _Run(transaction)
 		{
 			return work(new PrismaPersonalRunAdmissionRepository(transaction));
-		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+		}, { isolationLevel: "Serializable", operation: "personal run admission" });
 	}
 }

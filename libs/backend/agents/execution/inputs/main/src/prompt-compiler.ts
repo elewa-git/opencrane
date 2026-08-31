@@ -81,7 +81,7 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.mcpTools));
 	const artifactSummaries = await repositories.loadArtifactSummaries([...snapshot.artifactRevisionIds].sort());
 	const skillSummaries = await repositories.loadSkillSummaries([...snapshot.skillRevisionIds].sort());
-	const model = await repositories.resolveModelRoute(snapshot.modelRoute);
+	const model = await repositories.resolveModelRoute(snapshot.siloId, snapshot.modelRoute);
 
 	// 3. Assemble instructions and budget deterministically, then seal the payload with its digest.
 	const instructions = _assembleInstructions(personaInstructions, artifactSummaries, skillSummaries);

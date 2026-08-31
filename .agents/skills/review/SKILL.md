@@ -202,10 +202,11 @@ finding instead.
    - Trace Prisma-model ownership across package boundaries. A package that writes
      another domain's models through a shared client can bypass the owning authority
      even when NX reports no import-boundary violation.
-   - Read `docs/agents/versioning.md`. Every directly changed or dependency-adapted Nx app must be
-     stamped to the root version with matching package/chart mirrors. Chart and schema changes must update the immutable
-     compatibility manifest and carry the exact previous-to-current Helm/DB transition plus real
-     upgrade evidence; a chart transition may be an explicit reviewed no-op.
+   - Read `docs/agents/versioning.md`. Pre-1.0 one current `releases/<version>.json` binds the
+     repository version, the fresh-install database baseline digest (`target-baseline.sql`), and
+     the PostgreSQL operand image. A schema or operand change that leaves that binding stale is a
+     finding; there are no version-to-version transitions or upgrade proofs until MVP — existing
+     silos are rebuilt, not upgraded in place.
    - Flag dense anonymous query/object construction when it hides domain choices,
      represents the same invariant twice, or makes drift likely. Raw function or line
      length alone is never sufficient evidence.

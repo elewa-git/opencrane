@@ -1,11 +1,10 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 
-import { ByokProvider } from "@opencrane/contracts";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
+import type { ChannelTargetRuntimeConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -82,30 +81,6 @@ function _readArtifactPreprocessorBodyLimit(): number
 		throw new Error(`ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES must be an integer from ${_MINIMUM_ARTIFACT_OUTPUT_BYTES} through ${_MAXIMUM_ARTIFACT_OUTPUT_BYTES}`);
 	}
 	return value;
-}
-
-/**
- * Read the optional initial provider credential injected only by the silo deployment contract.
- * The pair is all-or-nothing so an operator cannot accidentally start with a provider name but no
- * key (or expose a key without a declared LiteLLM provider).
- */
-function _readInitialModelBootstrap(): InitialModelBootstrapConfig | null
-{
-	const provider = process.env.OPENCRANE_INITIAL_MODEL_PROVIDER?.trim().toLowerCase() ?? "";
-	const apiKey = process.env.OPENCRANE_INITIAL_MODEL_API_KEY?.trim() ?? "";
-	if (!provider && !apiKey)
-	{
-		return null;
-	}
-	if (!provider || !apiKey)
-	{
-		throw new Error("OPENCRANE_INITIAL_MODEL_PROVIDER and OPENCRANE_INITIAL_MODEL_API_KEY must be configured together");
-	}
-	if (!Object.values(ByokProvider).includes(provider as ByokProvider))
-	{
-		throw new Error(`OPENCRANE_INITIAL_MODEL_PROVIDER '${provider}' is unsupported`);
-	}
-	return { provider, apiKey };
 }
 
 /** Read the email and ClusterTenant that let one verified OIDC user claim this standalone silo's owner slot; both must be set or neither. */
@@ -214,7 +189,6 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 {
 	return {
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
-		initialModelBootstrap: _readInitialModelBootstrap(),
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
 		publicPort: Number(process.env.PORT ?? "8080"),
 			runtime: {

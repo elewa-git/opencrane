@@ -3,14 +3,21 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ExternalActionRecoveryModes, ToolInvocationStates } from "@opencrane/backend/server/iam/authorization";
 
-import { PrismaMcpRuntimeCatalogRepository } from "../prisma-mcp-runtime-catalog-repository";
 import { PrismaMcpRuntimeCompanionRepository } from "../prisma-mcp-runtime-companion-repository";
 import { PrismaMcpRuntimeControllerRepository } from "../prisma-mcp-runtime-controller-repository";
+import { PrismaMcpOciServerPromotionRepository } from "../prisma-mcp-oci-server-promotion-repository";
+import { PrismaMcpToolInvocationAdmissionRepository } from "../prisma-mcp-tool-invocation-admission-repository";
 
 /** Fixed runtime settings used by transaction-scoped repository tests. */
 function _Options()
 {
 	return { siloId: "silo-1", executorNamespace: "mcp-executors", executorServiceAccountName: "mcp-executor-default", profileName: "mcp-default", controllerClaimLeaseMilliseconds: 30_000, companionClaimLeaseMilliseconds: 60_000, log: { info: vi.fn() } as never };
+}
+
+/** Permits the current Organization/Administer grant through the central authority in promotion tests. */
+function _Authorization(): { readonly admitPrincipal: ReturnType<typeof vi.fn> }
+{
+	return { admitPrincipal: vi.fn().mockResolvedValue({ outcome: "allow", reason: "winning_allow", grantIds: ["grant-1"], evidence: { decisionDigest: `sha256:${"a".repeat(64)}`, policyRevisionHash: `sha256:${"b".repeat(64)}`, effectiveAuthorizationDigest: `sha256:${"c".repeat(64)}` } }) };
 }
 
 describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRepositories()
@@ -24,12 +31,13 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 			mcpRuntimeExecution: { create: vi.fn().mockResolvedValue({ id: "execution-1" }) },
 			auditEntry: { create: vi.fn().mockResolvedValue({ id: 1 }) },
 		};
-		const toolInvocations = { findById: vi.fn(), claim: vi.fn(), completeSucceeded: vi.fn(), completeFailed: vi.fn(), completeAmbiguous: vi.fn() };
-		const repository = new PrismaMcpRuntimeCatalogRepository(transaction as never, toolInvocations as never, _Options());
+		const authorization = _Authorization();
+		const repository = new PrismaMcpOciServerPromotionRepository(transaction as never, authorization as never, _Options());
 
 		await expect(repository.promoteImportedValidation({ siloId: "silo-1", principalId: "principal-1" }, "validation-1", { name: "Search", description: "Search records" })).resolves.toMatchObject({ outcome: "created", serverId: "server-1", serverRevisionId: "revision-1" });
 		expect(transaction.mcpServer.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ transport: McpServerTransport.OciImage, status: McpServerStatus.Draft }) }));
 		expect(transaction.mcpRuntimeExecution.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: McpRuntimeExecutionKind.Discovery, profileName: "mcp-default" }) }));
+		expect(authorization.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ resource: { kind: "organization", id: "silo-1" }, action: "administer" }));
 	});
 
 	it("admits only a ready manual-recovery ToolInvocation selected by a ready MCP tool revision", async function _AdmitsReadyInvocation()
@@ -40,7 +48,7 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: { state: McpServerRevisionState.Ready, server: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Published } } }) },
 		};
 		const toolInvocations = { findById: vi.fn().mockResolvedValue(invocation), claim: vi.fn(), completeSucceeded: vi.fn(), completeFailed: vi.fn(), completeAmbiguous: vi.fn() };
-		const repository = new PrismaMcpRuntimeCatalogRepository(transaction as never, toolInvocations as never, _Options());
+		const repository = new PrismaMcpToolInvocationAdmissionRepository(transaction as never, toolInvocations as never, _Options());
 
 		await expect(repository.admitInvocation("invocation-row-1")).resolves.toBe("admitted");
 		expect(transaction.mcpRuntimeExecution.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ toolInvocationId: "invocation-row-1", kind: McpRuntimeExecutionKind.Invocation }) }));
@@ -54,7 +62,7 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: { state: McpServerRevisionState.Ready, server: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Disabled } } }) },
 		};
 		const toolInvocations = { findById: vi.fn().mockResolvedValue(invocation), claim: vi.fn(), completeSucceeded: vi.fn(), completeFailed: vi.fn(), completeAmbiguous: vi.fn() };
-		const repository = new PrismaMcpRuntimeCatalogRepository(transaction as never, toolInvocations as never, _Options());
+		const repository = new PrismaMcpToolInvocationAdmissionRepository(transaction as never, toolInvocations as never, _Options());
 
 		await expect(repository.admitInvocation("invocation-row-1")).resolves.toBe("not_ready");
 		expect(transaction.mcpRuntimeExecution.create).not.toHaveBeenCalled();

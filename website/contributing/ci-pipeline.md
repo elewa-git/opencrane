@@ -7,7 +7,7 @@ enough to stay in the loop.
 > See also: [Contributing overview](/contributing/overview) (where this fits in the PR-to-cluster
 > journey), [Deploying](/contributing/deploying) (what consumes the images this pipeline
 > publishes), and [Versions and migrations](/contributing/versions-and-migrations) (the
-> `check:release-versioning` gate enforced inside the `test` job).
+> pre-1.0 release-manifest check that `check:release-versioning` runs inside the `test` job).
 
 ## The three workflows
 
@@ -30,7 +30,7 @@ pull request / push to develop, main
    comparison base, and whether the k3d smoke can be skipped
         │
         ├──→ test                 build, test, lint, every policy guard
-        ├──→ database             SQL authority suites, migration proofs
+        ├──→ database             fresh-baseline apply, SQL authority suites
         ├──→ api_contract         OpenAPI + generated client (when affected)
         ├──→ storybook_visual     component contracts, cached Chromium
         ├──→ develop_smoke        k3d silo smoke — the long pole
@@ -53,7 +53,7 @@ pull request / push to develop, main
 | --- | --- | --- |
 | `prepare` | Computes the Nx affected graph, the deployable matrix, the guard comparison base, and whether the k3d smoke can be skipped. | 1–2 min |
 | `test` | Builds, tests and lints affected projects, and runs every policy guard: workload ownership, agent-domain boundary, mechanical style, module growth, release versioning, Prisma boundaries, config-docs coverage, dependency boundaries. | 3–10 min |
-| `database` | Everything PostgreSQL-bound, beside `test` instead of inside it: the migration contracts and convergence proofs, the generated client, the target baseline, and the SQL authority suites. | 2–4 min |
+| `database` | Everything PostgreSQL-bound, beside `test` instead of inside it: generates the database client, verifies the reviewed target baseline authority, applies the fresh `target-baseline.sql` to a disposable database, and runs every SQL authority suite. | 2–4 min |
 | `api_contract` | Rebuilds the server and proves the OpenAPI reference and generated client are in sync. Runs only when the API contract changed. | skipped, or ~3–5 min |
 | `storybook_visual` | Storybook build/behaviour/visual contracts for affected frontend projects, on cached Chromium. Runs beside `test`, not after it. | seconds when nothing affected; ~5 min otherwise |
 | `develop_smoke` | Boots a disposable k3d cluster, deploys the full current silo through the real deploy scripts, and proves database isolation, TLS ingress and workload health. | 6–15 min |
@@ -85,28 +85,25 @@ reach ~700MB — so layer caches were evicted almost immediately and every image
 Registry-backed caches (`type=registry`) have no such quota, and moving them out of the Actions
 cache also stops the node/Nx caches from being evicted alongside them.
 
-### The layer cache has a trust boundary
+### The layer cache is push-only to write
 
-Two cache repositories exist, and a layer produced by unreviewed code never becomes part of a
-published image:
+One registry-backed cache repository exists, and only a `develop`/`main` push may extend it — a
+layer produced by unreviewed code never becomes part of a published image:
 
 ```text
-same-repository pull request build
+pull request build (same-repository or fork)
         reads  ← opencrane-buildcache        (trusted: written only by develop/main pushes)
-        writes → opencrane-buildcache-pr      (pull-request cache, read back by later PR builds)
-
-fork pull request build
-        reads  ← opencrane-buildcache        (trusted; fork tokens are read-only)
-        writes → nothing
+        writes → nothing                     (no cache export on pull requests, forks included)
 
 develop / main push
         reads  ← opencrane-buildcache
-        writes → opencrane-buildcache          (becomes the new trusted layer set)
+        writes → opencrane-buildcache          (mode=max; becomes the new trusted layer set)
 ```
 
-`opencrane-buildcache` is the only cache a publishable build reads. Same-repository pull
-requests write to the separate `opencrane-buildcache-pr` cache; fork pull requests read the
-trusted cache and write nothing at all.
+`opencrane-buildcache` is the only cache image any build reads (`cache-from`), and `cache-to` is
+set only on push events. The separate `opencrane-buildcache-pr` cache repository that pull
+requests used to export to has been deleted: a pull request build — same-repository or fork — is
+now a read-only proof against the last trusted push.
 
 ::: info
 Chromium binaries restore from the Actions cache; the apt-driven `--with-deps` install runs only

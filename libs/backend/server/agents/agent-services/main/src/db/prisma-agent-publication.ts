@@ -2,8 +2,10 @@ import { AgentRevisionState, AgentServiceState, McpApprovalStatus, McpServerRevi
 
 import type { AgentRevision, AgentService } from "@opencrane/models/agents";
 
-import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
-import { AtomicAgentRevisionPublicationStatuses, type AgentPublicationAuditEvidencePort, type AgentServicePublicationRepository, type AtomicAgentRevisionPublication, type AtomicAgentRevisionPublicationResult } from "../agent-publication.types";
+import { PrismaAuthorizationAuthority, type AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
+import type { AgentServicePublicationRepository, AtomicAgentRevisionPublication, AtomicAgentRevisionPublicationResult } from "../agent-publication.types";
 import { _mapRevision, _mapService, _serviceState } from "./prisma-agent-mappers";
 
 /** Signals that a conditional publication write lost ownership and must roll its transaction back. */
@@ -20,20 +22,22 @@ class _PublicationConflict extends Error {}
  */
 export class PrismaAgentServicePublicationRepository implements AgentServicePublicationRepository
 {
-	/** Transaction that owns the publication and audit row. */
+	/** Transaction that owns central admission and the publication writes. */
 	private readonly prisma: Prisma.TransactionClient;
-	/** Exact audit evidence builder supplied by the authenticated driving use case. */
-	private readonly auditEvidence: AgentPublicationAuditEvidencePort;
+	/** Central authority bound to the publication transaction. */
+	private readonly authorization: Pick<AuthorizationAuthority, "admitPrincipal">;
+	/** Authenticated management Principal and silo. */
+	private readonly caller: { readonly principalId: string; readonly siloId: string };
 
 	/**
 	 * Creates a publication adapter over the canonical Postgres authority.
 	 * @param prisma - OpenCrane Prisma client.
-	 * @param auditEvidence - Authenticated publication evidence builder.
 	 */
-	constructor(prisma: Prisma.TransactionClient, auditEvidence: AgentPublicationAuditEvidencePort)
+	constructor(prisma: Prisma.TransactionClient, authorization: Pick<AuthorizationAuthority, "admitPrincipal">, caller: { readonly principalId: string; readonly siloId: string })
 	{
 		this.prisma = prisma;
-		this.auditEvidence = auditEvidence;
+		this.authorization = authorization;
+		this.caller = caller;
 	}
 
 	/** Loads one stable service identity scoped to the caller's silo. */
@@ -46,7 +50,7 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 	/** Loads one immutable revision whose parent service is in the caller's silo. */
 	async getRevision(agentRevisionId: string, siloId: string): Promise<AgentRevision | null>
 	{
-		const row = await this.prisma.agentRevision.findFirst({ where: { id: agentRevisionId, agentService: { is: { siloId } } }, include: { skillAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } });
+		const row = await this.prisma.agentRevision.findFirst({ where: { id: agentRevisionId, siloId, agentService: { is: { siloId } } }, include: { skillAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } });
 		return row === null ? null : _mapRevision(row);
 	}
 
@@ -54,10 +58,10 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 	async publishRevisionAtomically(publication: AtomicAgentRevisionPublication): Promise<AtomicAgentRevisionPublicationResult>
 	{
 		// Read the expected authority state before trying to own its exact coordinates.
-		const serviceRow = await this.prisma.agentService.findUnique({ where: { id: publication.agentServiceId } });
-		const revisionRow = await this.prisma.agentRevision.findUnique({ where: { id: publication.agentRevisionId }, include: { skillAssignments: true, mcpToolAssignments: { include: { toolRevision: { include: { serverRevision: { include: { server: true } } } } } }, boundaryAttachments: true } });
+		const serviceRow = await this.prisma.agentService.findUnique({ where: { id_siloId: { id: publication.agentServiceId, siloId: this.caller.siloId } } });
+		const revisionRow = await this.prisma.agentRevision.findUnique({ where: { id_siloId: { id: publication.agentRevisionId, siloId: this.caller.siloId } }, include: { skillAssignments: true, mcpToolAssignments: { include: { toolRevision: { include: { serverRevision: { include: { server: true } } } } } }, boundaryAttachments: true } });
 		if (serviceRow === null || revisionRow === null || _serviceState(serviceRow.state) !== publication.expectedServiceState || serviceRow.activeRevisionId !== publication.expectedActiveRevisionId || revisionRow.agentServiceId !== publication.agentServiceId || revisionRow.state !== AgentRevisionState.Draft)
-			return { status: AtomicAgentRevisionPublicationStatuses.Conflict, currentActiveRevisionId: serviceRow?.activeRevisionId ?? null } as const;
+			return { status: "conflict", currentActiveRevisionId: serviceRow?.activeRevisionId ?? null } as const;
 		if (revisionRow.mcpToolAssignments.some(function _UnavailableMcpTool(assignment): boolean
 		{
 			return assignment.siloId !== serviceRow.siloId
@@ -65,7 +69,11 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 				|| assignment.toolRevision.serverRevision.server.status !== McpServerStatus.Active
 				|| assignment.toolRevision.serverRevision.server.approvalStatus !== McpApprovalStatus.Published;
 		}))
-			return { status: AtomicAgentRevisionPublicationStatuses.InvalidRevision } as const;
+			return { status: "invalid_revision" } as const;
+		const argumentsValue = { agentServiceId: publication.agentServiceId, agentRevisionId: publication.agentRevisionId, expectedActiveRevisionId: publication.expectedActiveRevisionId };
+		const admission = await this.authorization.admitPrincipal({ siloId: this.caller.siloId, principalId: this.caller.principalId, actorKind: "user", actorId: this.caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: this.caller.siloId }, action: ProductAuthorizationActions.Administer, argumentsDigest: ___DigestCanonicalJson(argumentsValue as JsonValue), nowEpochMs: new Date(publication.publishedAt).getTime() });
+		if (admission.outcome !== AuthorizationDecisionOutcomes.Allow)
+			return { status: "unauthorized" } as const;
 
 		// Claim the exact service state, then publish the exact draft. A lost second write throws so
 		// the first write also rolls back.
@@ -76,25 +84,21 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 		});
 		if (activated.count !== 1)
 			throw new _PublicationConflict();
-		const published = await this.prisma.agentRevision.updateMany({ where: { id: publication.agentRevisionId, agentServiceId: publication.agentServiceId, state: AgentRevisionState.Draft }, data: { state: AgentRevisionState.Published, publishedAt } });
+		const published = await this.prisma.agentRevision.updateMany({ where: { id: publication.agentRevisionId, siloId: this.caller.siloId, agentServiceId: publication.agentServiceId, state: AgentRevisionState.Draft }, data: { state: AgentRevisionState.Published, publishedAt } });
 		if (published.count !== 1)
 			throw new _PublicationConflict();
 		const [activeRow, publishedRow] = await Promise.all([
-			this.prisma.agentService.findUniqueOrThrow({ where: { id: publication.agentServiceId } }),
-			this.prisma.agentRevision.findUniqueOrThrow({ where: { id: publication.agentRevisionId }, include: { skillAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } }),
+			this.prisma.agentService.findUniqueOrThrow({ where: { id_siloId: { id: publication.agentServiceId, siloId: this.caller.siloId } } }),
+			this.prisma.agentRevision.findUniqueOrThrow({ where: { id_siloId: { id: publication.agentRevisionId, siloId: this.caller.siloId } }, include: { skillAssignments: true, mcpToolAssignments: true, boundaryAttachments: true } }),
 		]);
 
-		// Append authenticated decision evidence before commit; audit failure rolls back publication.
-		const service = _mapService(serviceRow);
-		const revision = _mapRevision(revisionRow);
-		await __AppendAuditDecision(this.prisma, this.auditEvidence.build(publication, service, revision));
-		return { status: AtomicAgentRevisionPublicationStatuses.Published, service: _mapService(activeRow), revision: _mapRevision(publishedRow) } as const;
+		return { status: "published", service: _mapService(activeRow), revision: _mapRevision(publishedRow) } as const;
 	}
 
 	/** Reads the revision id that won a concurrent publication race. */
 	async getActiveRevisionId(agentServiceId: string): Promise<string | null>
 	{
-		const winner = await this.prisma.agentService.findUnique({ where: { id: agentServiceId }, select: { activeRevisionId: true } });
+		const winner = await this.prisma.agentService.findUnique({ where: { id_siloId: { id: agentServiceId, siloId: this.caller.siloId } }, select: { activeRevisionId: true } });
 		return winner?.activeRevisionId ?? null;
 	}
 }
@@ -111,14 +115,17 @@ export class PrismaAgentServicePublicationUnitOfWork implements AgentServicePubl
 {
 	/** OpenCrane product-authority database client. */
 	private readonly prisma: PrismaClient;
-	/** Exact audit evidence builder supplied by the authenticated driving use case. */
-	private readonly auditEvidence: AgentPublicationAuditEvidencePort;
+	/** Authenticated management Principal and silo. */
+	private readonly caller: { readonly principalId: string; readonly siloId: string };
+	/** Test seam that still returns one authority bound to the supplied transaction. */
+	private readonly createAuthorization: ((transaction: Prisma.TransactionClient) => Pick<AuthorizationAuthority, "admitPrincipal">) | null;
 
 	/** Creates the publication unit of work over canonical Postgres. */
-	constructor(prisma: PrismaClient, auditEvidence: AgentPublicationAuditEvidencePort)
+	constructor(prisma: PrismaClient, caller: { readonly principalId: string; readonly siloId: string }, createAuthorization: ((transaction: Prisma.TransactionClient) => Pick<AuthorizationAuthority, "admitPrincipal">) | null = null)
 	{
 		this.prisma = prisma;
-		this.auditEvidence = auditEvidence;
+		this.caller = caller;
+		this.createAuthorization = createAuthorization;
 	}
 
 	/** Loads one stable service identity scoped to the caller's silo. */
@@ -145,17 +152,19 @@ export class PrismaAgentServicePublicationUnitOfWork implements AgentServicePubl
 			if (!(error instanceof _PublicationConflict))
 				throw error;
 			const currentActiveRevisionId = await this._Run(function _LoadWinner(repository) { return repository.getActiveRevisionId(publication.agentServiceId); });
-			return { status: AtomicAgentRevisionPublicationStatuses.Conflict, currentActiveRevisionId };
+			return { status: "conflict", currentActiveRevisionId };
 		}
 	}
 
 	/** Runs one publication operation in a serializable transaction. */
 	private _Run<TResult>(operation: (repository: PrismaAgentServicePublicationRepository) => Promise<TResult>): Promise<TResult>
 	{
-		const auditEvidence = this.auditEvidence;
+		const caller = this.caller;
+		const createAuthorization = this.createAuthorization;
 		return this.prisma.$transaction(async function _Run(transaction: Prisma.TransactionClient)
 		{
-			const repository = new PrismaAgentServicePublicationRepository(transaction, auditEvidence);
+			const authorization = createAuthorization === null ? new PrismaAuthorizationAuthority(transaction) : createAuthorization(transaction);
+			const repository = new PrismaAgentServicePublicationRepository(transaction, authorization, caller);
 			return operation(repository);
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}

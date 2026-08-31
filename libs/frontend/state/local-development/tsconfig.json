@@ -9,7 +9,7 @@
 	"include": ["src/**/*.ts"],
 	"exclude": ["**/*.spec.ts"],
 	"references": [
-		{ "path": "../core" },
+		{ "path": "../session/main" },
 		{ "path": "../onboarding" },
 		{ "path": "../conversation/ag-ui" },
 		{ "path": "../conversation/stream" },

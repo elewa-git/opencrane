@@ -33,7 +33,6 @@ export function __DigestAgentRevisionContent(agentServiceId: string, revision: n
 		budget: {
 			maxTurns: content.budget.maxTurns,
 			maxTokens: content.budget.maxTokens,
-			maxCostUsdMicros: content.budget.maxCostUsdMicros,
 			maxDurationMs: content.budget.maxDurationMs,
 		},
 		skills: content.skills.map(function _MapSkill(skill)

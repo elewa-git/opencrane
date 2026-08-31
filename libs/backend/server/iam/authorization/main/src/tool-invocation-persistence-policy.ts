@@ -1,3 +1,5 @@
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
+
 import { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle";
 import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
 import { ToolResultDeliveryOutcomes, type ToolInvocationIntent, type ToolInvocationPreparationPolicy, type ToolResultDeliveryPayload } from "./tool-invocation.types";
@@ -67,6 +69,41 @@ export function _ToolInvocationRecoveryKeyIsValid(intent: ToolInvocationIntent):
 	if (intent.recoveryMode === ExternalActionRecoveryModes.Manual)
 		return intent.recoveryKey === null;
 	return typeof intent.recoveryKey === "string" && intent.recoveryKey.length > 0 && intent.recoveryKey.length <= 256;
+}
+
+/** Validates the complete central evidence binding before a run-owned invocation is inserted. */
+export function _ToolInvocationAuthorizationEvidenceIsValid(intent: ToolInvocationIntent): boolean
+{
+	const evidence = intent.authorizationEvidence;
+	if (intent.agentRevisionId === null || evidence.principalId.trim().length === 0 || evidence.membershipRevision < 1 || evidence.coordinates.length === 0 || evidence.decisionDigests.length === 0)
+		return false;
+	const coordinateKeys = evidence.coordinates.map(coordinate => `${coordinate.resource.kind}:${coordinate.resource.id}:${coordinate.action}`);
+	if (!_IsSorted(coordinateKeys) || !_IsSorted(evidence.decisionDigests))
+		return false;
+	if (!evidence.decisionDigests.every(digest => /^sha256:[0-9a-f]{64}$/u.test(digest)) || !/^sha256:[0-9a-f]{64}$/u.test(evidence.assignmentDigest))
+		return false;
+	const actualDigest = ___DigestCanonicalJson({
+		principalId: evidence.principalId,
+		actorKind: evidence.actorKind,
+		coordinates: evidence.coordinates,
+		decisionDigests: evidence.decisionDigests,
+		membershipRevision: evidence.membershipRevision,
+		agentRevisionId: intent.agentRevisionId,
+		runId: intent.runId,
+		attempt: intent.attempt,
+		argumentsDigest: intent.argumentsDigest,
+		assignmentDigest: evidence.assignmentDigest,
+	} as unknown as JsonValue);
+	return actualDigest === evidence.evidenceDigest;
+}
+
+/** Returns true when a canonical string list is already in ascending order. */
+function _IsSorted(values: readonly string[]): boolean
+{
+	return values.every(function _Ordered(value, index): boolean
+	{
+		return index === 0 || values[index - 1]!.localeCompare(value) <= 0;
+	});
 }
 
 /** Require every caller to use the one approved provider-free preparation policy. */
