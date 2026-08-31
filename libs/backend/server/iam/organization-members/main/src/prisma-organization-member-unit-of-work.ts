@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import { ___IsRolledBackConflict, ___RunInPrismaUnitOfWork, type PrismaUnitOfWorkIsolationLevel } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
 import type { OrganizationMembershipCaller } from "./authority.types";
 import type { OrganizationMember } from "./directory.types";
@@ -47,11 +48,11 @@ export class PrismaOrganizationMemberUnitOfWork implements OrganizationMemberRep
 	{
 		try
 		{
-			return await this._withRepository(function _Create(repository) { return repository.create(command); }, Prisma.TransactionIsolationLevel.Serializable);
+			return await this._withRepository(function _Create(repository) { return repository.create(command); }, "Serializable");
 		}
 		catch (error)
 		{
-			if (!(error instanceof Prisma.PrismaClientKnownRequestError) || (error.code !== "P2002" && error.code !== "P2034")) throw error;
+			if (!___IsRolledBackConflict(error)) throw error;
 			const recovered = await this._withRepository(function _Recover(repository) { return repository.recoverCreate(command); });
 			if (recovered !== null) return recovered;
 			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "invitation request conflicted with another command");
@@ -75,14 +76,19 @@ export class PrismaOrganizationMemberUnitOfWork implements OrganizationMemberRep
 		return this._withRepository(function _Accept(repository) { return repository.accept(command); });
 	}
 
-	/** Opens one transaction and binds the repository to its exact client. */
-	private async _withRepository<Result>(operation: (repository: OrganizationMemberTransactionRepository) => Promise<Result>, isolationLevel?: Prisma.TransactionIsolationLevel): Promise<Result>
+	/**
+	 * Opens one transaction and binds the repository to its exact client.
+	 *
+	 * The default is ReadCommitted — the PostgreSQL default the old wrapper inherited when no
+	 * isolation level was passed — so only `create` raises it to Serializable.
+	 */
+	private async _withRepository<Result>(operation: (repository: OrganizationMemberTransactionRepository) => Promise<Result>, isolationLevel: PrismaUnitOfWorkIsolationLevel = "ReadCommitted"): Promise<Result>
 	{
 		const createAuthorization = this.createAuthorization;
-		return this.prisma.$transaction(async function _Run(transaction)
+		return ___RunInPrismaUnitOfWork(this.prisma, async function _Run(transaction): Promise<Result>
 		{
 			const authorization = createAuthorization === undefined ? new PrismaAuthorizationAuthority(transaction) : createAuthorization(transaction);
 			return operation(new PrismaOrganizationMemberRepository(transaction, authorization));
-		}, { isolationLevel });
+		}, { isolationLevel, operation: "organization membership" });
 	}
 }

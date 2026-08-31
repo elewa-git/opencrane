@@ -2,15 +2,13 @@ import { AgentRunState, AgentRunTerminalReason, Prisma, WarmRuntimeReservationSt
 
 import type { AgentRunWarmRuntimeActivationCommand, AgentRunWarmRuntimeControllerAuthority, AgentRunWarmRuntimeDeletionCommand, AgentRunWarmRuntimeDeletionOutcome, AgentRunWarmRuntimeReadinessCommand, AgentRunWarmRuntimeReplacementOutcome, AgentRunWarmRuntimeReservationCommand, AgentRunWarmRuntimeUnreservedCancellationOutcome, AgentRunWorkflowControllerRecord, AgentRunWorkflowObservation, AgentRunTaskInput } from "@opencrane/backend/agents/execution/runs/workflows/contract";
 import { __CancelPendingRunApprovalAuthority } from "@opencrane/backend/server/iam/authorization";
+import { ___IsRolledBackConflict, ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { RunEventTypes } from "@opencrane/models/agents";
 
 import type { AgentRunWarmRuntimePersistenceRepository, AgentRunWorkflowControllerAuthorityOptions } from "./agent-run-workflow-controller-authority.types";
 import { PrismaChildRunCompletionRepository } from "./prisma-child-run-completion-repository";
 import { __AgentRunWorkflowBootstrapClaimDigest, __AgentRunWorkflowBootstrapReferenceForTask, __AgentRunWorkflowRuntimeIdentity, __CanCreateOrObserveAgentRunWorkflowTask, __CurrentAgentRunWorkflowTask, PrismaAgentRunWorkflowTaskReadRepository } from "./prisma-agent-run-workflow-task-read-repository";
-
-/** Retries expected unique and serializable conflicts during concurrent reservations. */
-const _SERIALIZABLE_ATTEMPTS = 3;
 
 /** Names a receipt-fenced task row from the shared controller reader. */
 type AgentRunWorkflowTaskRow = NonNullable<Awaited<ReturnType<PrismaAgentRunWorkflowTaskReadRepository["read"]>>>;
@@ -420,24 +418,19 @@ export class PrismaAgentRunWarmRuntimeUnitOfWork implements AgentRunWarmRuntimeC
 	/** Retries expected reservation conflicts under serializable isolation. */
 	private async _Run<TResult>(operation: (repository: PrismaAgentRunWarmRuntimeRepository, transaction: Prisma.TransactionClient) => Promise<TResult>): Promise<TResult>
 	{
-		let conflict: Prisma.PrismaClientKnownRequestError | null = null;
-		for (let attempt = 1; attempt <= _SERIALIZABLE_ATTEMPTS; attempt += 1)
+		const options = this.options;
+		try
 		{
-			try
+			return await ___RunInPrismaUnitOfWork(this.prisma, async function _Run(transaction): Promise<TResult>
 			{
-				const options = this.options;
-				return await this.prisma.$transaction(async function _Transaction(transaction): Promise<TResult> { return await operation(new PrismaAgentRunWarmRuntimeRepository(transaction, options), transaction); }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-			}
-			catch (error)
-			{
-				if (!(error instanceof Prisma.PrismaClientKnownRequestError) || (error.code !== "P2002" && error.code !== "P2034"))
-				{
-					throw error;
-				}
-				conflict = error;
-			}
+				return await operation(new PrismaAgentRunWarmRuntimeRepository(transaction, options), transaction);
+			}, { isolationLevel: "Serializable", operation: "warm runtime reservation", attemptLimit: 3 });
 		}
-		throw new Error("warm runtime reservation conflicted after three attempts", { cause: conflict ?? undefined });
+		catch (error)
+		{
+			if (!___IsRolledBackConflict(error)) throw error;
+			throw new Error("warm runtime reservation conflicted after three attempts", { cause: error });
+		}
 	}
 }
 
