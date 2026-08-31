@@ -56,10 +56,11 @@ export class PrismaWarmRuntimeBindingRepository implements WarmRuntimeBindingPer
 	 */
 	async bind(identity: WarmRuntimeBindingIdentity, submission: WarmRuntimeBindingSubmission): Promise<WarmRuntimeDatabaseBindingResult>
 	{
-		// 1. Find a Ready or Claimed reservation without changing it, so missing work is a clean conflict.
+		// 1. A generic warm Pod has no reservation until the controller selects it. That expected
+		// race remains retryable, unlike a found reservation that fails its authority fences.
 		const discovered = await this.transaction.warmRuntimeReservation.findUnique({ where: { namespace_podUid: { namespace: identity.namespace, podUid: identity.podUid } } });
 		if (discovered === null)
-			return { outcome: "conflict" };
+			return { outcome: "unreserved" };
 		if (discovered.state !== WarmRuntimeReservationState.Ready && discovered.state !== WarmRuntimeReservationState.Claimed)
 			return { outcome: "conflict" };
 		const replay = discovered.state === WarmRuntimeReservationState.Claimed;

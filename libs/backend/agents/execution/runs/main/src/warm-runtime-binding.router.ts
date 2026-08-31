@@ -26,6 +26,11 @@ export function __CreateWarmRuntimeBindingRouter(dependencies: WarmRuntimeBindin
 				return;
 			}
 			const result = await dependencies.authority.bind(identity, submission);
+			if (result.outcome === "unreserved")
+			{
+				response.status(409).json({ error: "warm_runtime_binding_unreserved" });
+				return;
+			}
 			if (result.outcome === "conflict")
 			{
 				response.status(409).json({ error: "warm_runtime_binding_conflict" });
