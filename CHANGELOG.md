@@ -13,6 +13,14 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ## [Unreleased]
 
+### Security
+
+- **Operators cannot begin a `testv5` installation with an insecure or ambiguous history and sandbox
+  foundation.** The installer rejects missing immutable KurrentDB credentials, unhashed workload
+  images, incomplete Agent Sandbox v1beta1 prerequisites, missing gVisor runtime support, and an
+  absent zero-capacity sandbox profile; the admitted ledger disables anonymous access and creates a
+  least-privilege history identity before installation can complete.
+
 ## [0.10.0] - 2026-08-31
 
 ### Added
