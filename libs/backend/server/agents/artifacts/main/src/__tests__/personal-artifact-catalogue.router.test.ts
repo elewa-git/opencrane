@@ -9,7 +9,7 @@ import type { PersonalArtifactCatalogueRouterDependencies } from "../personal-ar
 /** Builds owner-scoped catalogue dependencies for router tests. */
 function _dependencies(overrides: Partial<PersonalArtifactCatalogueRouterDependencies> = {}): PersonalArtifactCatalogueRouterDependencies
 {
-	return { resolveCaller: function _caller() { return { siloId: "silo-1", ownerPrincipalId: "user-1" }; }, catalogue: { listOwnedCatalogue: vi.fn().mockResolvedValue([]) }, logger: { error: vi.fn() } as unknown as Logger, ...overrides };
+	return { resolveCaller: function _caller() { return { siloId: "silo-1", ownerPrincipalId: "user-1" }; }, catalogue: { listCatalogue: vi.fn().mockResolvedValue([]) }, logger: { error: vi.fn() } as unknown as Logger, ...overrides };
 }
 
 /** Mounts the router below its public personal-assets prefix. */
@@ -24,12 +24,12 @@ describe("personal asset catalogue router", function _suite()
 {
 	it("lists only the session-derived owner in the host-derived silo", async function _lists()
 	{
-		const listOwnedCatalogue = vi.fn().mockResolvedValue([{ id: "asset-1" }]);
-		const response = await request(_app(_dependencies({ catalogue: { listOwnedCatalogue } }))).get("/api/v1/me/assets/");
+		const listCatalogue = vi.fn().mockResolvedValue([{ id: "asset-1" }]);
+		const response = await request(_app(_dependencies({ catalogue: { listCatalogue } }))).get("/api/v1/me/assets/");
 
 		expect(response.status).toBe(200);
 		expect(response.body.assets).toEqual([{ id: "asset-1" }]);
-		expect(listOwnedCatalogue).toHaveBeenCalledWith("silo-1", "user-1");
+		expect(listCatalogue).toHaveBeenCalledWith("silo-1", "user-1");
 	});
 
 	it("requires an authenticated owner before asset discovery", async function _requiresCaller()
@@ -42,7 +42,7 @@ describe("personal asset catalogue router", function _suite()
 	{
 		const error = new Error("database unavailable");
 		const logger = { error: vi.fn() } as unknown as Logger;
-		const response = await request(_app(_dependencies({ catalogue: { listOwnedCatalogue: vi.fn().mockRejectedValue(error) }, logger }))).get("/api/v1/me/assets/");
+		const response = await request(_app(_dependencies({ catalogue: { listCatalogue: vi.fn().mockRejectedValue(error) }, logger }))).get("/api/v1/me/assets/");
 
 		expect(response.status).toBe(503);
 		expect(response.body).toEqual({ error: "personal_artifact_catalogue_unavailable" });

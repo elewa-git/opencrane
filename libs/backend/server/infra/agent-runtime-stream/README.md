@@ -12,7 +12,8 @@ inbound requests, without becoming an authority over runs, commands, or agent ou
 
 The transport first asks an injected TokenReview adapter which Kubernetes Pod presented the
 credential. It then validates the stream opening frame, emits only commands supplied by an injected
-domain authority, and forwards runtime candidates back to that authority for acceptance or refusal.
+domain authority, forwards runtime candidates back to that authority for acceptance or refusal, and
+forwards bounded continuation saves to the encrypted checkpoint authority.
 After an accepted candidate it wakes local idle streams to re-check the durable authority. A bounded
 recovery wait re-checks even if that disposable wake-up signal is lost. Heartbeats keep the
 connection alive without inventing work.
@@ -44,7 +45,7 @@ The package does not repair identity, choose a run, mint a command, or persist a
 ## Public surface
 
 - `_RegisterInternalAgentRuntimeStream(options)` — builds the internal Express router for the
-  authenticated stream and candidate endpoints.
+  authenticated stream, candidate, and continuation endpoints.
 - `RuntimeCommandStreamAuthority` — port through which the agent run authority supplies commands,
   admits candidate output, and (optionally) is told when a stream was lost so it can release its
   runtime-instance binding.

@@ -1,246 +1,98 @@
-import { AgentRunState, ExternalActionRecoveryMode, RunOutboxEventKind, ToolInvocationState, WorkloadAssignmentState, WorkloadKind, type PrismaClient } from "@prisma/client";
+import { AgentRunState, ExternalActionRecoveryMode, Prisma, ToolInvocationState, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaRunCancellationRepository } from "../prisma-run-cancellation-repository";
+import { PrismaRunCancellationUnitOfWork } from "../prisma-run-cancellation-repository";
 
-/** Creates one active personal run row. */
-function _Run(overrides: Record<string, unknown> = {})
+/** Create one active run row. */
+function _Run(state: AgentRunState = AgentRunState.Queued)
 {
-	return { id: "run-1", attempt: 1, state: AgentRunState.Queued, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", inputSnapshotDigest: "sha256:snapshot", conversationId: "conversation-1", ...overrides };
+	return { id: "run-1", attempt: 1, state, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1" };
 }
 
-/** Creates the first attempt event, claimed recently enough that its Kubernetes Job may still be being created. */
-function _AttemptEvent(overrides: Record<string, unknown> = {})
+/** Create the durable task receipt that owns run cleanup and finalization. */
+function _Task()
 {
-	return { id: "attempt-1", runId: "run-1", attempt: 1, kind: RunOutboxEventKind.RunAttemptRequested, claimedAt: null, publishedAt: null, failedAt: null, deliveryCount: 0, ...overrides };
+	return { taskId: "task-1", runId: "run-1", attempt: 1, siloId: "silo-1" };
 }
 
-/** Creates an exact committed assignment. */
-function _Assignment()
+/** Create the transaction delegates used by cancellation admission. */
+function _Transaction(run: ReturnType<typeof _Run>, task: ReturnType<typeof _Task> | null)
 {
-	return { runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", siloId: "silo-1", namespace: "silo-runtime", workloadProfile: "personal-small", workloadUid: "job-uid-1", workloadKind: WorkloadKind.Job, state: WorkloadAssignmentState.Registered };
-}
-
-/** Returns SQL text from one Prisma tagged query. */
-function _SqlText(value: unknown): string
-{
-	return ((value as { strings?: readonly string[] }).strings ?? []).join(" ");
-}
-
-/** Creates a transaction mock for one cancellation request. */
-function _CancellationTransaction(run: ReturnType<typeof _Run>, event: ReturnType<typeof _AttemptEvent>, assignment: ReturnType<typeof _Assignment> | null, activeClaimCount = 0)
-{
-	const queryRaw = vi.fn(async function _Query(value: unknown)
-	{
-		return _SqlText(value).includes("clock_timestamp()::timestamp(3)") ? [{ now: new Date("2026-07-20T00:01:00.000Z") }] : [];
-	});
 	return {
-		$queryRaw: queryRaw,
-		agentService: { findUnique: vi.fn().mockResolvedValue({ id: "service-1", workloadProfile: "personal-small" }) },
 		agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-		workloadAssignment: { findUnique: vi.fn().mockResolvedValue(assignment), updateMany: vi.fn().mockResolvedValue({ count: assignment ? 1 : 0 }) },
-		workloadBootstrap: { findUnique: vi.fn().mockResolvedValue(assignment ? { id: "bootstrap-v1_exact" } : null) },
+		agentRunWorkflowTask: { findUnique: vi.fn().mockResolvedValue(task) },
+		workloadAssignment: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 		runProofKey: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-		elicitationRequest: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
-		approvalRequest: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
+		elicitationRequest: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+		approvalRequest: { findMany: vi.fn().mockResolvedValue([{ id: "approval-1", siloId: "silo-1" }]), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+		authorizationGrant: { findMany: vi.fn().mockResolvedValue([]) },
 		toolInvocation: {
-			findMany: vi.fn().mockResolvedValue([
-				{ id: "invocation-1", toolInvocationId: "tool-call-1", state: ToolInvocationState.Ready, recoveryMode: ExternalActionRecoveryMode.Manual, claimKind: null, preparationAttempt: 0, retryDeadlineAt: new Date("2026-07-20T00:05:00.000Z"), revision: 1 },
-				{ id: "invocation-2", toolInvocationId: "tool-call-2", state: ToolInvocationState.Ready, recoveryMode: ExternalActionRecoveryMode.Manual, claimKind: null, preparationAttempt: 0, retryDeadlineAt: new Date("2026-07-20T00:05:00.000Z"), revision: 1 },
-			]),
+			findMany: vi.fn().mockResolvedValue([{ id: "invocation-1", toolInvocationId: "tool-call-1", state: ToolInvocationState.Ready, recoveryMode: ExternalActionRecoveryMode.Manual, claimKind: null, preparationAttempt: 0, retryDeadlineAt: new Date("2099-01-01T00:00:00.000Z"), revision: 1 }]),
 			updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-			count: vi.fn().mockResolvedValue(activeClaimCount),
+			count: vi.fn().mockResolvedValue(0),
 		},
-		toolResultDelivery: { createMany: vi.fn().mockResolvedValue({ count: 2 }) },
-		outboxEvent: {
-			findUnique: vi.fn().mockResolvedValue(event),
-			updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-			aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 2 } }),
-			create: vi.fn().mockResolvedValue({}),
-		},
-		conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 3 } }), create: vi.fn().mockResolvedValue({}) },
+		toolResultDelivery: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
 	};
 }
 
-/** Creates the repository under the fixed test lease policy. */
-function _Repository(transaction: ReturnType<typeof _CancellationTransaction>): PrismaRunCancellationRepository
+/** Create the transaction-owning cancellation authority and expose its isolation options. */
+function _Authority(transaction: ReturnType<typeof _Transaction>)
 {
-	const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-	return new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+	const options: unknown[] = [];
+	const prisma = {
+		async $transaction(operation: (client: typeof transaction) => Promise<unknown>, transactionOptions: unknown)
+		{
+			options.push(transactionOptions);
+			return await operation(transaction);
+		},
+	} as unknown as PrismaClient;
+	return { authority: new PrismaRunCancellationUnitOfWork(prisma, function _Now() { return new Date("2026-07-20T00:01:00.000Z"); }), options, prisma };
 }
 
-describe("PrismaRunCancellationRepository", function _DescribeCancellationRepository()
+describe("PrismaRunCancellationUnitOfWork", function _Suite()
 {
-	it("finalises immediately when no assignment exists and no controller claim ever left Postgres", async function _CancelWithoutPhysicalWork()
+	it("fences the attempt so its workflow can finish cancellation", async function _Cancels()
 	{
-		const transaction = _CancellationTransaction(_Run(), _AttemptEvent(), null);
-		const repository = _Repository(transaction);
+		const transaction = _Transaction(_Run(AgentRunState.Running), _Task());
+		const { authority, options } = _Authority(transaction);
 
-		await expect(repository.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1, requestedBy: "user-1" })).resolves.toEqual({ status: "cancelled", runId: "run-1", attempt: 1, cleanupRequired: false });
-		expect(transaction.agentRun.updateMany).toHaveBeenNthCalledWith(1, { where: expect.objectContaining({ state: AgentRunState.Queued }), data: { state: AgentRunState.Cancelling } });
-		expect(transaction.agentRun.updateMany).toHaveBeenNthCalledWith(2, { where: { id: "run-1", attempt: 1, state: AgentRunState.Cancelling }, data: expect.objectContaining({ state: AgentRunState.Cancelled }) });
-		expect(transaction.approvalRequest.updateMany).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 1, state: "Pending" }, data: { state: "Cancelled", decidedAt: new Date("2026-07-20T00:01:00.000Z"), decidedBy: null } });
-		expect(transaction.elicitationRequest.updateMany).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 1, state: "Requested" }, data: { state: "Cancelled", resolvedAt: new Date("2026-07-20T00:01:00.000Z"), resolvedBy: null, safeReason: "run_cancelled" } });
-		expect(transaction.toolInvocation.updateMany).toHaveBeenCalledTimes(2);
-		expect(transaction.toolInvocation.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "invocation-1", runId: "run-1", attempt: 1, claimKind: null }), data: expect.objectContaining({ state: "Failed", failureCode: "run_cancelled", completedAt: new Date("2026-07-20T00:01:00.000Z") }) });
-		expect(transaction.toolResultDelivery.createMany).toHaveBeenCalledWith({ data: [
-			expect.objectContaining({ toolInvocationId: "invocation-1", state: "Pending", payload: { toolInvocationId: "tool-call-1", outcome: "failed", failureCode: "run_cancelled" } }),
-			expect.objectContaining({ toolInvocationId: "invocation-2", state: "Pending", payload: { toolInvocationId: "tool-call-2", outcome: "failed", failureCode: "run_cancelled" } }),
-		] });
-		expect(transaction.outboxEvent.create).toHaveBeenCalledTimes(1);
-		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", type: "run.cancelled" }) });
-	});
-
-	it("delays orphan observation beyond the claimed dispatch lease and request margin", async function _FenceInFlightCreate()
-	{
-		const event = _AttemptEvent({ claimedAt: new Date("2026-07-20T00:00:50.000Z"), deliveryCount: 1 });
-		const transaction = _CancellationTransaction(_Run(), event, null);
-		const repository = _Repository(transaction);
-
-		await expect(repository.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1, requestedBy: "user-1" })).resolves.toEqual({ status: "cancelling", runId: "run-1", attempt: 1, cleanupRequired: true });
-		expect(transaction.outboxEvent.create).toHaveBeenLastCalledWith({ data: expect.objectContaining({ kind: RunOutboxEventKind.RunWorkloadCleanupRequested, availableAt: new Date("2026-07-20T00:01:30.000Z"), payload: expect.objectContaining({ mode: "unassigned_orphan", workloadUid: null, bootstrapReference: expect.stringMatching(/^bootstrap-v1_[0-9a-f]{64}$/) }) }) });
-		expect(transaction.agentRun.updateMany).toHaveBeenCalledTimes(1);
-	});
-
-	it("revokes an assigned workload and issues cleanup with its immutable Kubernetes UID", async function _FenceAssignedWorkload()
-	{
-		const transaction = _CancellationTransaction(_Run({ state: AgentRunState.Running }), _AttemptEvent({ publishedAt: new Date("2026-07-20T00:00:30.000Z") }), _Assignment());
-		const repository = _Repository(transaction);
-
-		await expect(repository.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1, requestedBy: "user-1" })).resolves.toMatchObject({ status: "cancelling", cleanupRequired: true });
-		expect(transaction.workloadAssignment.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ state: { in: [WorkloadAssignmentState.PendingPod, WorkloadAssignmentState.Registered] } }), data: { state: WorkloadAssignmentState.Revoked, revokedAt: new Date("2026-07-20T00:01:00.000Z") } });
+		await expect(authority.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1 })).resolves.toEqual({ status: "cancelling", runId: "run-1", attempt: 1 });
+		expect(options).toEqual([{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }]);
+		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 1, state: AgentRunState.Running }, data: { state: AgentRunState.Cancelling } });
+		expect(transaction.workloadAssignment.updateMany).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 1, state: { in: [WorkloadAssignmentState.PendingPod, WorkloadAssignmentState.Registered] } }, data: { state: WorkloadAssignmentState.Revoked, revokedAt: new Date("2026-07-20T00:01:00.000Z") } });
 		expect(transaction.runProofKey.updateMany).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 1, revokedAt: null }, data: { revokedAt: new Date("2026-07-20T00:01:00.000Z") } });
-		expect(transaction.outboxEvent.create).toHaveBeenLastCalledWith({ data: expect.objectContaining({ payload: expect.objectContaining({ mode: "assigned", workloadUid: "job-uid-1" }), availableAt: new Date("2026-07-20T00:01:00.000Z") }) });
+		expect(transaction.approvalRequest.updateMany).toHaveBeenCalledOnce();
+		expect(transaction.elicitationRequest.updateMany).toHaveBeenCalledOnce();
 	});
 
-	it("leaves an active provider claim fenced without a synthetic cancellation result", async function _FenceActiveProviderClaim()
+	it("requires the exact bound workflow task before it changes run authority", async function _RequiresTask()
 	{
-		const transaction = _CancellationTransaction(_Run({ state: AgentRunState.Running }), _AttemptEvent({ publishedAt: new Date("2026-07-20T00:00:30.000Z") }), _Assignment(), 1);
-		transaction.toolInvocation.findMany.mockResolvedValue([]);
-		const repository = _Repository(transaction);
+		const transaction = _Transaction(_Run(), null);
+		const { authority } = _Authority(transaction);
 
-		await expect(repository.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1, requestedBy: "user-1" })).resolves.toEqual({ status: "cancelling", runId: "run-1", attempt: 1, cleanupRequired: true });
-		expect(transaction.toolInvocation.updateMany).not.toHaveBeenCalled();
-		expect(transaction.toolResultDelivery.createMany).not.toHaveBeenCalled();
-		expect(transaction.agentRun.updateMany).toHaveBeenCalledTimes(1);
-	});
-
-	it("lets cancellation fence an exact recovery-required run", async function _CancelRecoveryRequiredRun()
-	{
-		const transaction = _CancellationTransaction(_Run({ state: AgentRunState.RecoveryRequired }), _AttemptEvent(), null);
-		const repository = _Repository(transaction);
-
-		await expect(repository.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1, requestedBy: "user-1" })).resolves.toEqual({ status: "cancelled", runId: "run-1", attempt: 1, cleanupRequired: false });
-		expect(transaction.agentRun.updateMany).toHaveBeenNthCalledWith(1, { where: expect.objectContaining({ state: AgentRunState.RecoveryRequired }), data: { state: AgentRunState.Cancelling } });
-	});
-
-	it("claims exact cleanup and finalises Cancelling only after confirmation", async function _ClaimAndConfirm()
-	{
-		const workload = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: "silo-runtime", workloadProfile: "personal-small", bootstrapReference: "bootstrap-v1_exact", workloadUid: "job-uid-1", mode: "assigned", reason: "cancellation" };
-		const run = _Run({ state: AgentRunState.Cancelling });
-		const cleanupEvent = { id: "cleanup-1", runId: "run-1", attempt: 1, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, payload: workload, availableAt: new Date("2026-07-20T00:00:00.000Z"), claimedAt: null, publishedAt: null, failedAt: null, deliveryCount: 0 };
-		const claimQuery = vi.fn().mockResolvedValueOnce([{ eventId: "cleanup-1", runId: "run-1", agentServiceId: "service-1" }]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([{ now: new Date("2026-07-20T00:01:00.000Z") }]);
-		const claimTransaction = { $queryRaw: claimQuery, outboxEvent: { findUnique: vi.fn().mockResolvedValue(cleanupEvent), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, agentRun: { findUnique: vi.fn().mockResolvedValue(run) } };
-		const claimedEvent = { ...cleanupEvent, claimedAt: new Date("2026-07-20T00:01:00.000Z"), deliveryCount: 1 };
-		const confirmQuery = vi.fn(async function _Query(value: unknown) { return _SqlText(value).includes("clock_timestamp()::timestamp(3)") ? [{ now: new Date("2026-07-20T00:01:10.000Z") }] : []; });
-		const confirmTransaction = {
-			$queryRaw: confirmQuery,
-			outboxEvent: { findUnique: vi.fn().mockResolvedValue(claimedEvent), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-			agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-			elicitationRequest: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
-			approvalRequest: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
-			toolInvocation: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn(), count: vi.fn().mockResolvedValue(0) },
-			toolResultDelivery: { createMany: vi.fn() },
-			conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 5 } }), create: vi.fn().mockResolvedValue({}) },
-		};
-		const transactions = [claimTransaction, confirmTransaction];
-		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: never) => Promise<unknown>) { return callback(transactions.shift() as never); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
-
-		await expect(repository.claimNextWorkloadCleanupAtomically()).resolves.toMatchObject({ status: "claimed", claim: { lease: { eventId: "cleanup-1", deliveryCount: 1 }, workload } });
-		await expect(repository.confirmWorkloadCleanupAtomically("cleanup-1", { claimedAt: "2026-07-20T00:01:00.000Z", deliveryCount: 1, runId: "run-1", attempt: 1, workloadUid: "job-uid-1", outcome: "deleted" })).resolves.toEqual({ status: "confirmed", runId: "run-1", attempt: 1, runFinalized: true });
-		expect(confirmTransaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 1, state: AgentRunState.Cancelling }, data: expect.objectContaining({ state: AgentRunState.Cancelled }) });
-		expect(confirmTransaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", type: "run.cancelled" }) });
-	});
-
-	it("defers final cancellation while an acquired provider claim remains active", async function _DeferForActiveProviderClaim()
-	{
-		const workload = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: "silo-runtime", workloadProfile: "personal-small", bootstrapReference: "bootstrap-v1_exact", workloadUid: "job-uid-1", mode: "assigned", reason: "cancellation" };
-		const run = _Run({ state: AgentRunState.Cancelling });
-		const event = { id: "cleanup-1", runId: "run-1", attempt: 1, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, payload: workload, availableAt: new Date("2026-07-20T00:00:00.000Z"), claimedAt: new Date("2026-07-20T00:01:00.000Z"), publishedAt: null, failedAt: null, deliveryCount: 1 };
-		const transaction = {
-			$queryRaw: vi.fn(async function _Query(value: unknown) { return _SqlText(value).includes("clock_timestamp()::timestamp(3)") ? [{ now: new Date("2026-07-20T00:01:10.000Z") }] : []; }),
-			outboxEvent: { findUnique: vi.fn().mockResolvedValue(event), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-			agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn() },
-			elicitationRequest: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
-			approvalRequest: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
-			toolInvocation: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn(), count: vi.fn().mockResolvedValue(1) },
-			toolResultDelivery: { createMany: vi.fn() },
-			conversationRunEvent: { aggregate: vi.fn(), create: vi.fn() },
-		};
-		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
-
-		await expect(repository.confirmWorkloadCleanupAtomically("cleanup-1", { claimedAt: "2026-07-20T00:01:00.000Z", deliveryCount: 1, runId: "run-1", attempt: 1, workloadUid: "job-uid-1", outcome: "deleted" })).resolves.toEqual({ status: "confirmed", runId: "run-1", attempt: 1, runFinalized: false });
-		expect(transaction.outboxEvent.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "cleanup-1", deliveryCount: 1 }), data: { claimedAt: null, availableAt: new Date("2026-07-20T00:01:20.000Z") } });
+		await expect(authority.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1 })).resolves.toEqual({ status: "conflict", reason: "authority_conflict" });
 		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
-		expect(transaction.conversationRunEvent.create).not.toHaveBeenCalled();
-
-		const settledEvent = { ...event, claimedAt: new Date("2026-07-20T00:01:30.000Z"), deliveryCount: 2 };
-		const settledTransaction = {
-			...transaction,
-			$queryRaw: vi.fn(async function _Query(value: unknown) { return _SqlText(value).includes("clock_timestamp()::timestamp(3)") ? [{ now: new Date("2026-07-20T00:01:40.000Z") }] : []; }),
-			outboxEvent: { findUnique: vi.fn().mockResolvedValue(settledEvent), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-			agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-			toolInvocation: { ...transaction.toolInvocation, count: vi.fn().mockResolvedValue(0) },
-			conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 5 } }), create: vi.fn().mockResolvedValue({}) },
-		};
-		const settledPrisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof settledTransaction) => Promise<unknown>) { return callback(settledTransaction); }) } as unknown as PrismaClient;
-		const settledRepository = new PrismaRunCancellationRepository(settledPrisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
-
-		await expect(settledRepository.confirmWorkloadCleanupAtomically("cleanup-1", { claimedAt: "2026-07-20T00:01:30.000Z", deliveryCount: 2, runId: "run-1", attempt: 1, workloadUid: "job-uid-1", outcome: "absent" })).resolves.toEqual({ status: "confirmed", runId: "run-1", attempt: 1, runFinalized: true });
-		expect(settledTransaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 1, state: AgentRunState.Cancelling }, data: expect.objectContaining({ state: AgentRunState.Cancelled }) });
 	});
 
-	it("binds an expired-runtime failure event to the repaired run's exact conversation", async function _RepairsExpiredRuntime()
+	it.each([
+		[AgentRunState.Cancelling, "cancelling"],
+		[AgentRunState.Cancelled, "cancelled"],
+	] as const)("replays %s without another mutation", async function _Replays(state, expectedState)
 	{
-		const run = _Run({ state: AgentRunState.Running, parentRunId: null });
-		const assignment = { ..._Assignment(), expiresAt: new Date("2026-07-20T00:00:59.000Z") };
-		const queryRaw = vi.fn(async function _Query(value: unknown)
-		{
-			const sql = _SqlText(value);
-			if (sql.includes("LIMIT 1")) return [{ runId: "run-1", agentServiceId: "service-1" }];
-			if (sql.includes("clock_timestamp()::timestamp(3)")) return [{ now: new Date("2026-07-20T00:01:00.000Z") }];
-			return [];
-		});
-		const transaction = {
-			$queryRaw: queryRaw,
-			agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-			agentService: { findUnique: vi.fn().mockResolvedValue({ id: "service-1", workloadProfile: "personal-small" }) },
-			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(assignment), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-			workloadBootstrap: { findUnique: vi.fn().mockResolvedValue({ id: "bootstrap-v1_exact" }) },
-			runProofKey: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-			outboxEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 2 } }), create: vi.fn().mockResolvedValue({}) },
-			conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 3 } }), create: vi.fn().mockResolvedValue({}) },
-		};
-		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+		const transaction = _Transaction(_Run(state), _Task());
+		const { authority } = _Authority(transaction);
 
-		await expect(repository.repairNextExpiredRunAtomically()).resolves.toEqual({ status: "repaired", runId: "run-1", attempt: 1 });
-		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", type: "run.failed", payload: { terminalReason: "runtime_failure", failureCode: "RUN_RUNTIME_LEASE_EXPIRED" } }) });
+		await expect(authority.requestCancellationAtomically({ runId: "run-1", expectedAttempt: 1 })).resolves.toEqual({ status: "idempotent", runId: "run-1", attempt: 1, state: expectedState });
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
 	});
 
-	it("persists a first orphan absence and rejects a stale deferral lease", async function _DefersOrphanAbsence()
+	it("rejects malformed coordinates before opening a transaction", async function _RejectsMalformed()
 	{
-		const workload = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: "silo-runtime", workloadProfile: "personal-small", bootstrapReference: "bootstrap-v1_exact", workloadUid: null, mode: "unassigned_orphan" as const, reason: "cancellation" as const, orphanAbsenceObservedAt: null };
-		const event = { id: "cleanup-1", runId: "run-1", attempt: 1, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, payload: workload, availableAt: new Date("2026-07-20T00:00:00.000Z"), claimedAt: new Date("2026-07-20T00:01:00.000Z"), publishedAt: null, failedAt: null, deliveryCount: 1 };
-		const transaction = { $queryRaw: vi.fn(async function _Query(value: unknown) { return _SqlText(value).includes("clock_timestamp()::timestamp(3)") ? [{ now: new Date("2026-07-20T00:01:05.000Z") }] : []; }), outboxEvent: { findUnique: vi.fn().mockResolvedValue(event), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } };
-		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: never) => Promise<unknown>) { return callback(transaction as never); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
-		const claim = { lease: { eventId: "cleanup-1", claimedAt: "2026-07-20T00:01:00.000Z", deliveryCount: 1, expiresAt: "2026-07-20T00:01:30.000Z" }, workload };
+		const transaction = _Transaction(_Run(), _Task());
+		const { authority, prisma } = _Authority(transaction);
+		const start = vi.spyOn(prisma, "$transaction");
 
-		await expect(repository.deferUnassignedOrphanAbsenceAtomically("cleanup-1", claim)).resolves.toBe("deferred");
-		expect(transaction.outboxEvent.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "cleanup-1", deliveryCount: 1 }), data: expect.objectContaining({ availableAt: new Date("2026-07-20T00:01:15.000Z"), claimedAt: null, payload: expect.objectContaining({ orphanAbsenceObservedAt: "2026-07-20T00:01:05.000Z" }) }) });
-		await expect(repository.deferUnassignedOrphanAbsenceAtomically("cleanup-1", { ...claim, lease: { ...claim.lease, deliveryCount: 2 } })).resolves.toBe("conflict");
+		await expect(authority.requestCancellationAtomically({ runId: "", expectedAttempt: 0 })).resolves.toEqual({ status: "conflict", reason: "invalid_request" });
+		expect(start).not.toHaveBeenCalled();
 	});
 });

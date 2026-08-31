@@ -18,6 +18,8 @@ export interface SubmitSteeringRequestCommand
 	readonly runId: string;
 	/** Silo resolved from the authenticated request host. */
 	readonly siloId: string;
+	/** Durable local Principal resolved from the authenticated session. */
+	readonly principalId: string;
 	/** Stable authenticated subject that must own the run. */
 	readonly subjectId: string;
 	/** Bounded JSON instruction accepted from the owner. */

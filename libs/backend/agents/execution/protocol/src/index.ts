@@ -1,6 +1,6 @@
 export { ExternalActionWorker } from "./external-action-worker";
 export { ExternalActionProviderOutcomeKinds } from "./external-action-worker.types";
-export type { ExternalActionAdapterFactory, ExternalActionApprovalOpener, ExternalActionExecutionContext, ExternalActionExecutionContextLoader, ExternalActionExecutionContextRepository, ExternalActionExecutionContextUnitOfWork, ExternalActionProviderOutcome, ExternalActionRecoveryStrategy, ExternalActionWorkerClock, ExternalActionWorkerDependencies, ExternalActionWorkerEvent, ExternalActionWorkerEventSink, ExternalActionWorkerInvocation, ExternalActionWorkerPolicy, ExternalActionWorkerUnitOfWork, PreparedExternalActionAdapter, ToolInvocationWorkSource } from "./external-action-worker.types";
+export type { ExternalActionAdapterFactory, ExternalActionApprovalOpener, ExternalActionClassAdmission, ExternalActionExecutionContext, ExternalActionExecutionContextLoader, ExternalActionExecutionContextRepository, ExternalActionExecutionContextUnitOfWork, ExternalActionProviderOutcome, ExternalActionRecoveryStrategy, ExternalActionWorkerClock, ExternalActionWorkerDependencies, ExternalActionWorkerEvent, ExternalActionWorkerEventSink, ExternalActionWorkerInvocation, ExternalActionWorkerPolicy, ExternalActionWorkerUnitOfWork, PreparedExternalActionAdapter, ToolInvocationWorkSource } from "./external-action-worker.types";
 export * from "./openapi";
 export { PrismaExternalActionExecutionContextRepository, PrismaExternalActionExecutionContextUnitOfWork } from "./prisma-external-action-context-repository";
 export * from "./prisma-steering-ingest.router";
@@ -10,3 +10,7 @@ export { __CreateProductionExternalActionWorker } from "./production-external-ac
 export { __CreateProductionExternalActionApprovalOpener } from "./production-external-action-approval";
 export type { ProductionExternalActionInvocationAuthority, ProductionExternalActionWorkerDependencies } from "./production-external-action-worker.types";
 export * from "./production-runtime-dispatch";
+export { RuntimeExternalActionAuthorizationService } from "./prisma-runtime-external-action-authorization";
+export type { RuntimeExternalActionAuthorizationEvidence, RuntimeExternalActionEligibilityFactory, RuntimeExternalActionEligibilityPorts } from "./runtime-external-action-authorization.types";
+export { PrismaRuntimeContinuationAuthorityUnitOfWork } from "./prisma-runtime-continuation-authority";
+export type { RuntimeContinuationAuthority } from "./runtime-continuation.types";

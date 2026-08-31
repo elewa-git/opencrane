@@ -18,7 +18,7 @@ function _Claim(): ArtifactPreprocessorJobClaim
 function _Dependencies(scratchDirectory: string): ArtifactPreprocessorDependencies
 {
 	const remote: ArtifactPreprocessorRemote = {
-		claim: vi.fn(),
+		bootstrap: vi.fn(),
 		readSource: vi.fn(async function _read(_claim, path) { await writeFile(path, "pdf!"); }),
 		submitOutput: vi.fn(async function _submit(_command, path, byteLength)
 		{
@@ -28,7 +28,7 @@ function _Dependencies(scratchDirectory: string): ArtifactPreprocessorDependenci
 		reportFailure: vi.fn(),
 	};
 	const extractor: PdfTextExtractor = { extract: vi.fn(async function _extract(_source, output) { await writeFile(output, "extracted text"); }) };
-	return { remote, extractor, scratchDirectory, maximumSourceBytes: 100, maximumOutputBytes: 100, conversionTimeoutMilliseconds: 1_000, pollIntervalMilliseconds: 100, logger: { info: vi.fn(), warn: vi.fn() } as never };
+	return { remote, extractor, scratchDirectory, maximumSourceBytes: 100, maximumOutputBytes: 100, conversionTimeoutMilliseconds: 1_000, logger: { info: vi.fn(), warn: vi.fn() } as never };
 }
 
 /** Confirm the worker uses only OpenCrane brokers and always removes transient files. */

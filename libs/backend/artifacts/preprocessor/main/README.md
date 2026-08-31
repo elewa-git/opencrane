@@ -33,7 +33,6 @@ worker can therefore waste local conversion work, but it cannot read or publish 
 
 ## Public surface
 
-- `__RunArtifactPreprocessor` — runs the abortable, bounded polling loop.
 - `__ProcessArtifactPreprocessorJob` — performs one source → convert → output sequence.
 - `_CreateArtifactPreprocessorRemote` — creates the projected-token OpenCrane broker adapter.
 - `_CreatePdfTextExtractor` — creates the Poppler adapter with fixed arguments and no shell.

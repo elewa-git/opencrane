@@ -1,13 +1,13 @@
 import type { AgentRevisionId, AgentRun, AgentRunId, AgentServiceState, SiloId } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
-import { __StartNextRunAttempt, __ValidateRunWorkloadAssignment } from "../run-authority";
-import type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, RunWorkloadAssignment, RunWorkloadAssignmentExpectation } from "../run-authority.types";
+import { __StartNextRunAttempt } from "../run-authority";
+import type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand } from "../run-authority.types";
 
 /** Creates one participant-authorized retry command. */
 function _command(): AtomicStartNextRunAttemptCommand
 {
-	return { runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", idempotencyKey: "retry-1", acceptedAt: "2026-07-18T01:00:00.000Z", expectedAgentServiceId: "service-1", expectedAgentServiceSiloId: "silo-1", expectedAgentServiceState: "active", expectedActiveAgentRevisionId: "revision-1" };
+	return { runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", requestedByPrincipalId: "principal-1", acceptedAt: "2026-07-18T01:00:00.000Z", expectedAgentServiceId: "service-1", expectedAgentServiceSiloId: "silo-1", expectedAgentServiceState: "active", expectedActiveAgentRevisionId: "revision-1" };
 }
 
 /** Creates a failed first attempt for one logical run. */
@@ -125,32 +125,6 @@ class _RunRepository implements AgentRunAuthorityRepository
 	}
 }
 
-/** Creates a complete proof-bound assignment fixture. */
-function _assignment(): RunWorkloadAssignment
-{
-	return {
-		runId: "run-1",
-		agentServiceId: "service-1",
-		attempt: 2,
-		agentRevisionId: "revision-1",
-		siloId: "silo-1",
-		audience: "opencrane-agent-runtime",
-		subjectId: "user-1",
-		serviceAccountName: "agent-runtime-default",
-		namespace: "silo-1",
-		workloadKind: "job",
-		workloadUid: "job-uid-1",
-		podUid: "pod-uid-1",
-		expiresAtEpochMs: 2000,
-	};
-}
-
-/** Creates the exact authority expectation for the assignment fixture. */
-function _expectation(): RunWorkloadAssignmentExpectation
-{
-	return { ..._assignment(), nowEpochMs: 1000 };
-}
-
 describe("single AgentRun authority", function _suite()
 {
 	it("increments only one attempt when retry requests race", async function _concurrentRetry()
@@ -164,7 +138,7 @@ describe("single AgentRun authority", function _suite()
 		expect((await repository.getRunAuthority("run-1"))?.run.attempt).toBe(2);
 	});
 
-	it("returns the durable same-key attempt even when the service later retires", async function _IdempotentAfterRetirement()
+	it("returns the durable next attempt even when the service later retires", async function _IdempotentAfterRetirement()
 	{
 		const run = { ..._run(), attempt: 2, state: "accepted" as const, acceptedAt: "2026-07-18T01:00:00.000Z", startedAt: null, finishedAt: null, terminalReason: null };
 		const repository: AgentRunAuthorityRepository = {
@@ -221,18 +195,5 @@ describe("single AgentRun authority", function _suite()
 
 		await expect(__StartNextRunAttempt(repository, _command())).resolves.toEqual({ outcome: "denied", reason: "agent_service_silo_mismatch" });
 		expect((await repository.getRunAuthority("run-1"))?.run.attempt).toBe(1);
-	});
-
-	it("binds workload identity to the exact run and attempt", function _assignmentBinding()
-	{
-		expect(__ValidateRunWorkloadAssignment(_assignment(), _expectation())).toEqual({ outcome: "trusted" });
-		expect(__ValidateRunWorkloadAssignment({ ..._assignment(), audience: "opencrane-managed-agent-runtime", serviceAccountName: "managed-agent-runtime-default" }, { ..._expectation(), audience: "opencrane-managed-agent-runtime", serviceAccountName: "managed-agent-runtime-default" })).toEqual({ outcome: "trusted" });
-		expect(__ValidateRunWorkloadAssignment({ ..._assignment(), audience: "opencrane-managed-agent-runtime", serviceAccountName: "agent-runtime-default" }, { ..._expectation(), audience: "opencrane-managed-agent-runtime", serviceAccountName: "agent-runtime-default" })).toEqual({ outcome: "denied", reason: "projected_token_audience_mismatch" });
-		expect(__ValidateRunWorkloadAssignment({ ..._assignment(), runId: "run-other" }, _expectation())).toEqual({ outcome: "denied", reason: "run_mismatch" });
-		expect(__ValidateRunWorkloadAssignment({ ..._assignment(), agentServiceId: "service-other" }, _expectation())).toEqual({ outcome: "denied", reason: "agent_service_mismatch" });
-		expect(__ValidateRunWorkloadAssignment({ ..._assignment(), audience: "artifact-service" as RunWorkloadAssignment["audience"] }, _expectation())).toEqual({ outcome: "denied", reason: "projected_token_audience_mismatch" });
-		expect(__ValidateRunWorkloadAssignment({ ..._assignment(), audience: "artifact-service" as RunWorkloadAssignment["audience"] }, { ..._expectation(), audience: "artifact-service" as RunWorkloadAssignmentExpectation["audience"] })).toEqual({ outcome: "denied", reason: "projected_token_audience_mismatch" });
-		expect(__ValidateRunWorkloadAssignment({ ..._assignment(), workloadKind: "deployment" as RunWorkloadAssignment["workloadKind"] }, _expectation())).toEqual({ outcome: "denied", reason: "invalid_workload_kind" });
-		expect(__ValidateRunWorkloadAssignment({ ..._assignment(), attempt: 3 }, _expectation())).toEqual({ outcome: "denied", reason: "attempt_mismatch" });
 	});
 });

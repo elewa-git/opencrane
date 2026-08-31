@@ -4,9 +4,9 @@
 #
 # A thin profile over the shared install core (k8s-deploy.sh). It installs ONE
 # per-ClusterTenant silo — the dedicated stack a single ClusterTenant runs on shared
-# nodes: its own operator + channel proxy + Obot + LiteLLM + Cognee + opencrane-ui,
+# nodes: its own operator + channel proxy + LiteLLM + Cognee + opencrane-ui,
 # per-CT networking, and one app-owned PostgreSQL server with isolated logical databases
-# and credentials for OpenCrane, Obot, and LiteLLM.
+# and credentials for OpenCrane and LiteLLM.
 #
 # The CLUSTER-WIDE infrastructure (ingress controller, CloudNativePG, cert-manager) is an
 # external prerequisite. A silo never installs these shared controllers. It creates only
@@ -19,10 +19,7 @@
 #       --cluster-tenant acme \
 #       --acme-email operator@example.com \
 #       --first-user-email owner@example.com \
-#       --initial-model-provider openai \
-#       # OPENCRANE_INITIAL_MODEL_API_KEY is required in the environment \
 #       --postgres-credentials-secret opencrane-postgres-bootstrap \
-#       --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
 #       --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
 #       --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap \
 #       --opencrane-ui-digest sha256:REVIEWED_BROWSER_BUILD_DIGEST \
@@ -32,9 +29,7 @@
 #
 # --base-domain, --cluster-tenant, --acme-email, and --first-user-email are required. The first
 # user must sign in with this exact verified OIDC email to claim the standalone silo's first owner.
-# `--initial-model-provider` plus
-# OPENCRANE_INITIAL_MODEL_API_KEY seed the first routable model through LiteLLM. The silo is installed into namespace
-# `opencrane-<cluster-tenant>` unless --namespace overrides it.
+# The silo is installed into namespace `opencrane-<cluster-tenant>` unless --namespace overrides it.
 # Fresh silo deploys require `--opencrane-ui-digest` and `--cognee-digest`. An upgrade may omit
 # either only to retain the exact digest already recorded by the release. Tags are accepted only by
 # the disposable local k3d smoke.
@@ -70,7 +65,6 @@ while [[ $# -gt 0 ]]; do
     --first-user-email) FIRST_USER_EMAIL="$2"; PASSTHROUGH+=(--first-user-email "$2"); shift 2 ;;
     --oidc-issuer-url) OIDC_ISSUER_URL="$2"; PASSTHROUGH+=(--oidc-issuer-url "$2"); shift 2 ;;
     --oidc-client-id)  OIDC_CLIENT_ID="$2"; PASSTHROUGH+=(--oidc-client-id "$2"); shift 2 ;;
-    --initial-model-provider) PASSTHROUGH+=(--initial-model-provider "$2"); shift 2 ;;
     -h|--help)         grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)                 PASSTHROUGH+=("$1"); shift ;;
   esac
@@ -80,11 +74,6 @@ done
 [[ -n "$CLUSTER_TENANT" ]]  || { err "--cluster-tenant is required (the ClusterTenant this silo serves)."; exit 1; }
 [[ -n "$ACME_EMAIL" ]]      || { err "--acme-email is required to issue a browser-trusted certificate for this public silo host."; exit 1; }
 [[ -n "$FIRST_USER_EMAIL" ]] || { err "--first-user-email is required to claim this standalone silo's first owner from a verified OIDC login."; exit 1; }
-
-# The reviewed 0.9.3 IAM migration binds every legacy row to this exact silo instead of
-# inferring tenancy from database placement. The platform deploy engine consumes this only when
-# it executes that adjacent migration.
-PASSTHROUGH+=(--database-migration-silo-id "$CLUSTER_TENANT")
 
 # Fail fast if the external CloudNativePG prerequisite is absent.
 command -v kubectl >/dev/null 2>&1 || { err "kubectl not found."; exit 1; }
@@ -99,7 +88,7 @@ fi
 
 # The silo lives in its own namespace so its per-CT DB + planes are isolated from every other
 # silo and from the central release. One CNPG Cluster in that namespace hosts its isolated
-# OpenCrane, Obot, and LiteLLM logical databases. Default `opencrane-<cluster-tenant>`;
+# OpenCrane and LiteLLM logical databases. Default `opencrane-<cluster-tenant>`;
 # --namespace overrides.
 [[ -n "$NAMESPACE" ]] || NAMESPACE="opencrane-${CLUSTER_TENANT}"
 EXPECTED_RELEASE="opencrane-${CLUSTER_TENANT}"
@@ -115,6 +104,7 @@ EXPECTED_RELEASE="opencrane-${CLUSTER_TENANT}"
 # Silo value profile: a per-ClusterTenant install in its own namespace. Shared cluster
 # controllers remain external.
 PROFILE_SET=(
+  --cluster-tenant "$CLUSTER_TENANT"
   --namespace "$NAMESPACE"
   --release "$RELEASE"
   --set "multiInstance.enabled=false"

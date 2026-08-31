@@ -12,16 +12,16 @@ port by calling the backend.
 
 The adapter, `OpenCraneMcpGateway`, issues requests to `/api/v1/mcp/*` through the shared Control Plane
 API client and maps the responses onto UI read models. It covers the user flow (list entitled
-catalogue and install/uninstall) and the admin
-governance flow (list all servers, approve/publish/reject, enable/disable, read/update access policy,
-list the directory).
+catalogue and install/uninstall) and the admin governance flow (list all servers,
+approve/publish/reject, and enable/disable). Generic central grant administration owns sharing; the
+MCP adapter has no separate access-policy or subject-directory methods.
 
 ```
  features/tools (UI)
         │ injects MCP_GATEWAY (the port)
         ▼
  OpenCraneMcpGateway  ◄── HERE
-        │ HTTP: /api/v1/mcp/catalog · /mcp/installed · /mcp/servers · /mcp/.../access
+        │ HTTP: /api/v1/mcp/catalog · /mcp/installed · /mcp/servers
         ▼
  OpenCrane Control Plane API  ──►  (no store; results returned to the feature)
 ```

@@ -2,15 +2,10 @@ instances: 1
 image: ""
 
 # This is the physical-server budget, not an application default. The pooler below
-# reserves only 30 server connections across the logical databases, leaving 50
+# reserves only 20 server connections across the logical databases, leaving 60
 # for CNPG's management/replication work and controlled operator access.
 postgresql:
   maxConnections: 80
-
-# CNPG exposes its generated `postgres` credential only for the reviewed migration that creates
-# pg_cron. The deploy owner must restore this to false before the server can be released.
-superuserAccess:
-  enabled: false
 
 # One physical CNPG Cluster hosts these isolated logical databases. The first item is
 # bootstrapped by CNPG initdb; each later item becomes a CNPG Database CR and a managed
@@ -18,9 +13,6 @@ superuserAccess:
 databases:
   - name: opencrane
     owner: opencrane
-    credentialsSecret: ""
-  - name: obot
-    owner: obot
     credentialsSecret: ""
   - name: litellm
     owner: litellm
@@ -32,6 +24,12 @@ databases:
 databaseAdmin:
   name: opencrane_database_admin
   credentialsSecret: ""
+
+# CloudNativePG installs pg_cron without exposing its database superuser credential to an
+# application Job. Existing 0.9.2 databases first reconcile the extension alone, then enable
+# schema ownership in a second Database-resource generation before the app-owned migration runs.
+pgCron:
+  assignSchemaOwnership: true
 
 # A fresh Cluster receives exactly one app-owned target baseline during CNPG initdb.
 # The referenced ConfigMap is created before Helm installation and is content-addressed
@@ -59,8 +57,8 @@ resources:
     memory: 2Gi
 
 # Every application connection goes through this CNPG-managed PgBouncer Pooler.
-# `maxDbConnections` is per logical database; with the three deployed databases,
-# 3 × 10 = 30 server connections stay below `postgresql.maxConnections` (80).
+# `maxDbConnections` is per logical database; with the two deployed databases,
+# 2 × 10 = 20 server connections stay below `postgresql.maxConnections` (80).
 # `maxClientConnections` bounds queued
 # client connections at the pooler instead of consuming PostgreSQL connections.
 pooler:
@@ -83,8 +81,6 @@ pooler:
   clientPodSelectors:
     - matchLabels:
         app.kubernetes.io/component: opencrane-server
-    - matchLabels:
-        app.kubernetes.io/component: mcp-gateway
     - matchLabels:
         app.kubernetes.io/component: litellm
 
@@ -115,10 +111,6 @@ privileges:
   # Leave Kubernetes enough time to surface the shell's final PostgreSQL diagnostic
   # after its retry budget expires instead of terminating the Job first.
   jobDeadlineGraceSeconds: 30
-  # Optional scheduler constraints for the one-shot proof Job. Keep this empty for portable
-  # Kubernetes installs; the GKE Autopilot profile selects an owned ComputeClass that can scale
-  # when otherwise-idle node capacity is held by GKE system Pods.
-  nodeSelector: {}
   # The hook starts one small psql container per logical database. Explicit requests avoid a
   # provider default for every container during fresh provisioning and upgrades.
   resources:
@@ -129,27 +121,17 @@ privileges:
       cpu: 250m
       memory: 256Mi
 
-# Existing databases are mutated only by this bounded, app-owner Job. The SQL ConfigMap is
-# content-addressed and immutable; the deployer runs the Job directly.
+# Existing databases change through this Job. Pin its Prisma migration image by digest so the
+# migration files and entrypoint cannot change during a deployment.
 migration:
   enabled: false
-  sqlSha256: ""
-  sourceBaselineSha256: ""
-  # Reviewed identity coordinates used only by migrations that convert legacy globally named
-  # groups and OIDC subjects into silo-bound principals and memberships.
+  sourceVersion: ""
+  # The tagged 0.9.2 IAM prerequisite maps legacy subjects into one exact silo and issuer.
   siloId: ""
   oidcIssuer: ""
-  # This is deliberately not a generic extension-install switch. The only admitted value is the
-  # manifest-bound pg_cron prerequisite for the 0.9.3 workflow-engine integration.
-  privilegedExtension:
-    enabled: false
-    name: ""
   # Required when enabled. Use an exact OCI digest, for example
-  # ghcr.io/cloudnative-pg/postgresql@sha256:<64 lowercase hex characters>.
-  image: ghcr.io/cloudnative-pg/postgresql@sha256:b1deeed2aa998b2f381e39c5cadb9ec06127708c8bd62965743af19abf21628f
-  configMap:
-    name: ""
-    key: migration.sql
+  # ghcr.io/elewa-git/opencrane-prisma-migrator@sha256:<64 lowercase hex characters>.
+  image: ""
   timeoutSeconds: 900
   jobDeadlineGraceSeconds: 30
   ttlSecondsAfterFinished: 86400

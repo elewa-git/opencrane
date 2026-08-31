@@ -54,6 +54,7 @@ metadata:
     app.kubernetes.io/component: artifact-scanner
 spec:
   replicas: {{ .Values.artifactScanner.replicas }}
+  minReadySeconds: 10
   selector:
     matchLabels:
       {{- include "opencrane.selectorLabels" . | nindent 6 }}

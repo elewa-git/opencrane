@@ -65,5 +65,5 @@ export function _CreateModelHealthProbe(environment: NodeJS.ProcessEnv): PublicH
 {
 	const masterKey = environment.LITELLM_MASTER_KEY?.trim();
 	if (!masterKey) return new _UnavailableHealthProbe();
-	return _CreateHttpHealthProbe(environment.LITELLM_ENDPOINT?.trim(), "/model/info", { authorization: `Bearer ${masterKey}` });
+	return _CreateHttpHealthProbe(environment.LITELLM_ENDPOINT?.trim(), "/v1/models", { authorization: `Bearer ${masterKey}` });
 }

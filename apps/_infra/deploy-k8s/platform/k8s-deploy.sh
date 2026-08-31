@@ -14,7 +14,8 @@
 # WeOwnAI repo, elewa-git/opencrane#150) or apps/_infra/deploy-k8s/deploy.sh — which preset
 # the value flags and exec this core):
 #   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --release-version VERSION
-#     --from-release-version fresh|VERSION [--base-domain DOMAIN] [--namespace NS] [--release NAME]
+#     --from-release-version fresh|VERSION --cluster-tenant CLUSTER_TENANT
+#                            [--base-domain DOMAIN] [--namespace NS] [--release NAME]
 #                            [--image-tag TAG] [--storage-class SC]
 #                            [--opencrane-server-tag TAG] [--opencrane-ui-tag TAG]
 #                            [--opencrane-ui-digest sha256:DIGEST]
@@ -26,11 +27,9 @@
 #                            [--platform-operator-seed-email EMAIL]
 #                            [--platform-operator-groups CSV]
 #                            [--first-user-email EMAIL]
-#                            [--initial-model-provider PROVIDER]
 #                            [--preflight] [--multi-ct] [--verify] [--verify-insecure]
 #                            --postgres-credentials-secret NAME
 #                            [--postgres-owner OWNER]
-#                            --obot-postgres-credentials-secret NAME [--obot-postgres-owner OWNER]
 #                            --litellm-postgres-credentials-secret NAME [--litellm-postgres-owner OWNER]
 #                            --postgres-admin-credentials-secret NAME [--postgres-admin-name NAME]
 #                            [--postgres-values FILE]
@@ -67,11 +66,6 @@
 # nobody (fail-closed). Also accepted via the OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL
 # env var. Never commit a real owner email into the repo.
 #
-# `--initial-model-provider` pairs with the required environment-only
-# OPENCRANE_INITIAL_MODEL_API_KEY. The installer writes that raw key directly to the release-local
-# provider-custody Secret; the server then registers it with LiteLLM's encrypted credentials API
-# and seeds the provider model catalogue before it becomes ready. Never pass the API key as a flag.
-#
 # --image-tag pins the OpenCrane server image along with every other tag-built component, on a fresh
 # install and on an upgrade alike; --opencrane-server-tag moves the server on its own. An upgrade that
 # passes neither keeps the tag the prior release recorded. The SPA and Cognee require exact OCI digests
@@ -101,6 +95,7 @@ source "$SCRIPT_DIR/registry-pull-secret.sh"
 source "$SCRIPT_DIR/current-chart-sources.sh"
 source "$SCRIPT_DIR/control-plane-image-policy.sh"
 source "$SCRIPT_DIR/qualified-release-image-policy.sh"
+source "$SCRIPT_DIR/network-policy-cni.sh"
 source "$SCRIPT_DIR/cluster-tenant-crd-policy.sh"
 source "$SCRIPT_DIR/dns-authority.sh"
 COGNEE_IMAGE_POLICY="$SCRIPT_DIR/../../cognee/deploy/image-policy.sh"
@@ -109,12 +104,12 @@ if [[ ! -f "$COGNEE_IMAGE_POLICY" ]]; then
   exit 1
 fi
 source "$COGNEE_IMAGE_POLICY"
-source "$SCRIPT_DIR/initial-model-provider.sh"
+source "$SCRIPT_DIR/provider-key-secrets.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
-source "$SCRIPT_DIR/database-pg-cron-preflight.sh"
-source "$SCRIPT_DIR/database-superuser-access.sh"
+source "$SCRIPT_DIR/runtime-continuation-keyring-secret.sh"
 source "$SCRIPT_DIR/database-migration-orchestrator.sh"
 source "$SCRIPT_DIR/database-release-finalization.sh"
+source "$SCRIPT_DIR/retire-legacy-obot-mcp-server.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
@@ -134,16 +129,15 @@ if [[ ! -f "$POSTGRES_CONNECTION_PUBLISHER" ]]; then
   exit 1
 fi
 POSTGRES_BASELINE_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-initdb-baseline-config-map.sh"
-POSTGRES_MIGRATION_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-database-migration-config-map.sh"
 POSTGRES_BASELINE_FILE="$SCRIPT_DIR/../../../opencrane/prisma/bootstrap/target-baseline.sql"
 REPOSITORY_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-if [[ ! -f "$POSTGRES_BASELINE_PUBLISHER" || ! -f "$POSTGRES_MIGRATION_PUBLISHER" \
-  || ! -s "$POSTGRES_BASELINE_FILE" ]]; then
-  echo "[k8s-deploy] OpenCrane database baseline or migration deployment helpers are missing." >&2
+if [[ ! -f "$POSTGRES_BASELINE_PUBLISHER" || ! -s "$POSTGRES_BASELINE_FILE" ]]; then
+  echo "[k8s-deploy] OpenCrane database baseline helper is missing." >&2
   exit 1
 fi
 NAMESPACE="opencrane-system"
 RELEASE="opencrane"
+CLUSTER_TENANT=""
 IMAGE_TAG="latest"
 IMAGE_TAG_SUPPLIED=0    # 1 → this run stated a tag, so it moves the server past any prior pin
 CONTROL_PLANE_TAG=""    # empty → falls back to IMAGE_TAG
@@ -163,6 +157,7 @@ BASE_DOMAIN="${OPENCRANE_BASE_DOMAIN:-}"
 STORAGE_CLASS=""        # empty → cluster default StorageClass
 ARTIFACT_STORAGE_CLASS="" # resolved class for the durable, expandable ArtifactStore PVC
 INVITATION_SIGNING_SECRET="${OPENCRANE_INVITATION_SIGNING_SECRET:-opencrane-invitation-signing}"
+RUNTIME_CONTINUATION_KEYRING_SECRET="${OPENCRANE_RUNTIME_CONTINUATION_KEYRING_SECRET:-opencrane-runtime-continuation}"
 MEMBERSHIP_MODE="${OPENCRANE_MEMBERSHIP_MODE:-standalone}"
 [[ "$MEMBERSHIP_MODE" == "standalone" || "$MEMBERSHIP_MODE" == "fleet" ]] || { echo "OPENCRANE_MEMBERSHIP_MODE must be standalone or fleet." >&2; exit 2; }
 VALUES_FILE=""
@@ -198,22 +193,17 @@ FIRST_USER_EMAIL="${OPENCRANE_FIRST_USER_EMAIL:-}"
 # Platform-operator GROUP mapping (CSV of IdP groups). OR-ed with the seed email; the
 # durable bootstrap once an IdP group exists. Empty → unset (fail-closed).
 PLATFORM_OPERATOR_GROUPS="${OPENCRANE_PLATFORM_OPERATOR_GROUPS:-}"
-INITIAL_MODEL_PROVIDER="${OPENCRANE_INITIAL_MODEL_PROVIDER:-}"
-INITIAL_MODEL_API_KEY="${OPENCRANE_INITIAL_MODEL_API_KEY:-}"
 # CloudNativePG is an external cluster prerequisite. OpenCrane never installs or upgrades
 # the operator. The credentials Secret is also external: this deploy flow only validates and
 # references it, so database passwords never pass through shell generation or repair paths.
 POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_CREDENTIALS_SECRET:-}"
 POSTGRES_VALUES_FILE="${OPENCRANE_POSTGRES_VALUES:-}"
 POSTGRES_OWNER="${OPENCRANE_POSTGRES_OWNER:-opencrane}"
-OBOT_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_OBOT_POSTGRES_CREDENTIALS_SECRET:-}"
-OBOT_POSTGRES_OWNER="${OPENCRANE_OBOT_POSTGRES_OWNER:-obot}"
 LITELLM_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_LITELLM_POSTGRES_CREDENTIALS_SECRET:-}"
 LITELLM_POSTGRES_OWNER="${OPENCRANE_LITELLM_POSTGRES_OWNER:-litellm}"
 POSTGRES_ADMIN_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_ADMIN_CREDENTIALS_SECRET:-}"
 POSTGRES_ADMIN_NAME="${OPENCRANE_POSTGRES_ADMIN_NAME:-opencrane_database_admin}"
-POSTGRES_MIGRATION_IMAGE="${OPENCRANE_POSTGRES_MIGRATION_IMAGE:-ghcr.io/cloudnative-pg/postgresql@sha256:b1deeed2aa998b2f381e39c5cadb9ec06127708c8bd62965743af19abf21628f}"
-DATABASE_MIGRATION_SILO_ID="${OPENCRANE_DATABASE_MIGRATION_SILO_ID:-}"
+PRISMA_MIGRATOR_IMAGE="${OPENCRANE_PRISMA_MIGRATOR_IMAGE:-}"
 # --preflight runs a fail-FAST environment check BEFORE any cluster mutation and exits 0/1
 # without installing. It catches the failures that otherwise surface as a half-installed,
 # crash-looping cluster: no default StorageClass (every PVC pends), a CNI that silently
@@ -250,6 +240,7 @@ err()  { echo -e "\033[0;31m[k8s-deploy]\033[0m $1" >&2; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --base-domain)   BASE_DOMAIN="$2"; shift 2 ;;
+    --cluster-tenant) CLUSTER_TENANT="$2"; shift 2 ;;
     --namespace)     NAMESPACE="$2"; shift 2 ;;
     --release)       RELEASE="$2"; shift 2 ;;
     --image-tag)        IMAGE_TAG="$2"; IMAGE_TAG_SUPPLIED=1; shift 2 ;;
@@ -269,21 +260,17 @@ while [[ $# -gt 0 ]]; do
     --platform-operator-seed-email) PLATFORM_OPERATOR_SEED_EMAIL="$2"; shift 2 ;;
     --platform-operator-groups)     PLATFORM_OPERATOR_GROUPS="$2"; shift 2 ;;
     --first-user-email)             FIRST_USER_EMAIL="$2"; shift 2 ;;
-    --initial-model-provider)       INITIAL_MODEL_PROVIDER="$2"; shift 2 ;;
     --preflight)        PREFLIGHT="1"; shift ;;
     --multi-ct)         MULTI_CT="1"; shift ;;
     --verify)           VERIFY="1"; shift ;;
     --verify-insecure)  VERIFY_INSECURE="1"; shift ;;
     --postgres-credentials-secret) POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --postgres-owner) POSTGRES_OWNER="$2"; shift 2 ;;
-    --obot-postgres-credentials-secret) OBOT_POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
-    --obot-postgres-owner) OBOT_POSTGRES_OWNER="$2"; shift 2 ;;
     --litellm-postgres-credentials-secret) LITELLM_POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --litellm-postgres-owner) LITELLM_POSTGRES_OWNER="$2"; shift 2 ;;
     --postgres-admin-credentials-secret) POSTGRES_ADMIN_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --postgres-admin-name) POSTGRES_ADMIN_NAME="$2"; shift 2 ;;
-    --postgres-migration-image) POSTGRES_MIGRATION_IMAGE="$2"; shift 2 ;;
-    --database-migration-silo-id) DATABASE_MIGRATION_SILO_ID="$2"; shift 2 ;;
+    --prisma-migrator-image) PRISMA_MIGRATOR_IMAGE="$2"; shift 2 ;;
     --postgres-values) POSTGRES_VALUES_FILE="$2"; shift 2 ;;
     --release-version) RELEASE_VERSION="$2"; shift 2 ;;
     --from-release-version) FROM_RELEASE_VERSION="$2"; shift 2 ;;
@@ -300,6 +287,12 @@ done
 for c in kubectl helm jq; do command -v "$c" >/dev/null 2>&1 || { err "Missing required command: $c"; exit 1; }; done
 if [[ ! "$TIMEOUT" =~ ^[1-9][0-9]{0,3}$ ]] || (( TIMEOUT > 3600 )); then
   err "TIMEOUT_SECONDS must be an integer from 1 through 3600."
+  exit 1
+fi
+# The profile derives Kubernetes names from this tenant, and the migration writes the same value
+# into silo-scoped IAM rows. Validate it before PostgreSQL changes.
+if (( ${#CLUSTER_TENANT} > 63 )) || [[ ! "$CLUSTER_TENANT" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
+  err "--cluster-tenant must identify the target silo with a DNS label."
   exit 1
 fi
 if [[ -z "$RELEASE_VERSION" || -z "$FROM_RELEASE_VERSION" ]]; then
@@ -361,12 +354,11 @@ _resolve_release_images() {
   validate_cognee_helm_passthrough || exit 1
 }
 _resolve_release_images
+resolve_qualified_workflow_image_digests || exit $?
 preflight_qualified_release_tag_images || exit $?
 
-# --preflight: fail-FAST environment validation, run BEFORE any cluster mutation. Each
-# check appends to PF_FAILS; a non-empty list at the end exits 1 with every remediation,
-# so the operator fixes the cluster ONCE rather than chasing one half-broken install at a
-# time. Read-only against cloud + cluster (never mutates).
+# --preflight runs before any cluster mutation and accumulates every failure in PF_FAILS, so the
+# operator can repair the environment once. It reads cloud and cluster state but never mutates it.
 _run_preflight() {
   local PF_FAILS=()
   log "Preflight: validating the target environment (no cluster changes will be made)…"
@@ -412,7 +404,6 @@ _run_preflight() {
     fi
   }
   _preflight_postgres_bootstrap opencrane "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_OWNER"
-  _preflight_postgres_bootstrap obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER"
   _preflight_postgres_bootstrap litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER"
   _preflight_postgres_bootstrap database-admin "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_NAME"
 
@@ -422,11 +413,11 @@ _run_preflight() {
   #    --multi-ct (cross-tenant isolation is mandatory there, so a no-op CNI is a security
   #    hole, not a warning); advisory (warn-and-continue) for a single-CT install where a
   #    non-enforcing CNI only weakens defence-in-depth on a one-org box.
-  if ! kubectl get ds -n kube-system -o name 2>/dev/null | grep -qiE "calico|cilium|weave|antrea|kube-router"; then
+  if ! kubectl get ds -n kube-system -o name 2>/dev/null | _network_policy_enforcing_cni_detected; then
     if [[ "$MULTI_CT" == "1" ]]; then
-      PF_FAILS+=("No NetworkPolicy-enforcing CNI detected (looked for calico/cilium/weave/antrea/kube-router in kube-system). Under --multi-ct the platform's NetworkPolicy isolation is MANDATORY and would be a NO-OP on this CNI — cross-tenant traffic would not be denied. Install an enforcing CNI (GKE: enable Dataplane V2 / network-policy).")
+      PF_FAILS+=("No NetworkPolicy-enforcing CNI detected (looked for $(_network_policy_enforcing_cni_display_names) in kube-system). Under --multi-ct the platform's NetworkPolicy isolation is MANDATORY and would be a NO-OP on this CNI — cross-tenant traffic would not be denied. Install an enforcing CNI (GKE: enable Dataplane V2 / network-policy).")
     else
-      warn "Preflight: no NetworkPolicy-enforcing CNI detected (calico/cilium/weave/antrea/kube-router). NetworkPolicy isolation will be a no-op; acceptable for a single-tenant box but re-run with --multi-ct if this hosts multiple tenants."
+      warn "Preflight: no NetworkPolicy-enforcing CNI detected ($(_network_policy_enforcing_cni_display_names)). NetworkPolicy isolation will be a no-op; acceptable for a single-tenant box but re-run with --multi-ct if this hosts multiple tenants."
     fi
   fi
 
@@ -500,8 +491,6 @@ _require_expandable_artifact_storage() {
 }
 _require_expandable_artifact_storage
 
-validate_initial_model_provider "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_API_KEY" || exit 1
-
 _gen_secret() { openssl rand -hex 16 2>/dev/null || head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32; }
 _read_secret() { kubectl get secret "$1" -n "$NAMESPACE" -o jsonpath="{.data.$2}" 2>/dev/null | base64 -d || true; }
 if [[ -z "${LITELLM_MASTER_KEY:-}" ]]; then
@@ -568,7 +557,6 @@ _require_postgres_bootstrap() {
   fi
 }
 _require_postgres_bootstrap opencrane "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_OWNER"
-_require_postgres_bootstrap obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER"
 _require_postgres_bootstrap litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER"
 _require_postgres_bootstrap database-admin "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_NAME"
 
@@ -604,13 +592,6 @@ if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
 fi
 
 DATABASE_MIGRATION_ENABLED=false
-DATABASE_MIGRATION_ID=""
-DATABASE_MIGRATION_SQL_FILE=""
-DATABASE_MIGRATION_SQL_SHA256=""
-DATABASE_MIGRATION_SOURCE_BASELINE_SHA256=""
-DATABASE_PRIVILEGED_EXTENSION=""
-DATABASE_MIGRATION_CONFIG_MAP=""
-DATABASE_MIGRATION_ROOT=""
 if [[ "$FROM_RELEASE_VERSION" == "fresh" && "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
   err "--from-release-version fresh is only valid when PostgreSQL has not been created."
   exit 1
@@ -619,39 +600,30 @@ if [[ "$FROM_RELEASE_VERSION" != "fresh" && ! -f "$REPOSITORY_ROOT/releases/${FR
   err "Source release manifest 'releases/${FROM_RELEASE_VERSION}.json' does not exist."
   exit 1
 fi
-if [[ "$FROM_RELEASE_VERSION" != "fresh" ]]; then
-  DATABASE_SOURCE_SCHEMA_VERSION="$(jq -r '.database.schemaVersion // empty' "$REPOSITORY_ROOT/releases/${FROM_RELEASE_VERSION}.json")"
-  DATABASE_TARGET_SCHEMA_VERSION="$(jq -r '.database.schemaVersion // empty' "$RELEASE_MANIFEST")"
-  DATABASE_MIGRATION_ROOT="$REPOSITORY_ROOT/apps/opencrane/prisma/migrations/${DATABASE_SOURCE_SCHEMA_VERSION}-to-${DATABASE_TARGET_SCHEMA_VERSION}"
-fi
-if [[ -n "$DATABASE_MIGRATION_ROOT" && -f "$DATABASE_MIGRATION_ROOT/migration.sql" && -f "$DATABASE_MIGRATION_ROOT/manifest.json" ]]; then
-  DATABASE_MIGRATION_ENABLED=true
-  DATABASE_MIGRATION_ID="${DATABASE_SOURCE_SCHEMA_VERSION}-to-${DATABASE_TARGET_SCHEMA_VERSION}"
-  DATABASE_MIGRATION_SQL_FILE="$DATABASE_MIGRATION_ROOT/migration.sql"
-  DATABASE_MIGRATION_SQL_SHA256="$(jq -r '.sqlSha256 // empty' "$DATABASE_MIGRATION_ROOT/manifest.json")"
-  DATABASE_MIGRATION_SOURCE_BASELINE_SHA256="$(jq -r '.sourceTargetBaselineSha256 // empty' "$DATABASE_MIGRATION_ROOT/manifest.json")"
-  DATABASE_PRIVILEGED_EXTENSION="$(jq -r '.privilegedExtension // empty' "$DATABASE_MIGRATION_ROOT/manifest.json")"
-  if [[ ! "$POSTGRES_MIGRATION_IMAGE" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
-    err "Database migration requires --postgres-migration-image with an exact sha256 OCI digest."
-    exit 1
-  fi
-  if [[ ! "$DATABASE_MIGRATION_SQL_SHA256" =~ ^[0-9a-f]{64}$ || ! "$DATABASE_MIGRATION_SOURCE_BASELINE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
-    err "Database migration manifest must provide SQL and source-baseline digests."
-    exit 1
-  fi
-  if [[ -n "$DATABASE_PRIVILEGED_EXTENSION" && "$DATABASE_PRIVILEGED_EXTENSION" != "pg_cron" ]]; then
-    err "Database migration manifest declares an unsupported privileged extension."
-    exit 1
-  fi
-elif [[ "$FROM_RELEASE_VERSION" != "fresh" && "$DATABASE_SOURCE_SCHEMA_VERSION" != "$DATABASE_TARGET_SCHEMA_VERSION" ]]; then
-  err "No reviewed database migration exists from schema '$DATABASE_SOURCE_SCHEMA_VERSION' to '$DATABASE_TARGET_SCHEMA_VERSION'."
+EXPECTED_PREDECESSOR_RELEASE_VERSION="$(jq -r '.previousRepositoryVersion // empty' "$RELEASE_MANIFEST")"
+# The migration image contains one forward path, so upgrades must start from the release it expects.
+if [[ "$FROM_RELEASE_VERSION" != "fresh" && "$FROM_RELEASE_VERSION" != "$EXPECTED_PREDECESSOR_RELEASE_VERSION" ]]; then
+  err "Source release '$FROM_RELEASE_VERSION' is not the candidate's exact predecessor '$EXPECTED_PREDECESSOR_RELEASE_VERSION'."
   exit 1
+fi
+if [[ "$FROM_RELEASE_VERSION" != "fresh" ]]; then
+  DATABASE_MIGRATION_ENABLED=true
+  if [[ -z "$OIDC_ISSUER_URL" ]]; then
+    err "The 0.9.2-to-0.10.0 database prerequisite requires --oidc-issuer-url to bind legacy subjects to their exact issuer."
+    exit 1
+  fi
+  if [[ ! "$PRISMA_MIGRATOR_IMAGE" =~ ^ghcr\.io/elewa-git/opencrane-prisma-migrator@sha256:[0-9a-f]{64}$ ]]; then
+    err "Database migration requires --prisma-migrator-image with the exact OpenCrane Prisma migrator digest."
+    exit 1
+  fi
 fi
 
 _load_kubernetes_api_helm_args networkPolicy "PostgreSQL pooler"
 POSTGRES_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
 _load_kubernetes_api_helm_args memoryGateway "memory gateway"
 MEMORY_GATEWAY_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
+_load_kubernetes_api_helm_args agentController "agent controller"
+AGENT_CONTROLLER_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
 
 _copy_cnpg_uri_secret() {
   local source_secret="$1"
@@ -670,17 +642,18 @@ _copy_cnpg_uri_secret() {
 if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
   ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"
 fi
-run_database_release_transition
+ensure_runtime_continuation_keyring_secret "$NAMESPACE" "$RUNTIME_CONTINUATION_KEYRING_SECRET"
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
-OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
-# Five Prisma connections keep PgBouncer's thirty-connection logical-database budget authoritative.
+prepare_database_release_transition || exit $?
+# Publish the pooler URI before enabling the Job because the migrator reads this Secret as DATABASE_URL.
+# Five OpenCrane connections keep PgBouncer's thirty-connection logical-database budget authoritative.
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
-publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" obot
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
+finish_database_release_transition || exit $?
 
 _assert_distinct_cnpg_app_credentials() {
   local app_secrets=("$@")
@@ -703,12 +676,10 @@ _assert_distinct_cnpg_app_credentials() {
     done
   done
 }
-_assert_distinct_cnpg_app_credentials "$POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET"
+_assert_distinct_cnpg_app_credentials "$POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET"
 
 # Per-database app secrets are canonical. Adapt only the key/name required by third-party charts.
-OBOT_DSN_SECRET="${RELEASE}-obot"
 LITELLM_DATABASE_SECRET="${RELEASE}-litellm-db"
-_copy_cnpg_uri_secret "$OBOT_POSTGRES_APP_SECRET" "$OBOT_DSN_SECRET" dsn
 _copy_cnpg_uri_secret "$LITELLM_POSTGRES_APP_SECRET" "$LITELLM_DATABASE_SECRET" DATABASE_URL
 
 # ArtifactStore uses two distinct per-silo Ed25519 roles: the catalog signs bounded write leases
@@ -720,11 +691,29 @@ ARTIFACT_CATALOG_KEY_SECRET="${RELEASE}-artifact-catalog-keys"
 ARTIFACT_SERVICE_KEY_SECRET="${RELEASE}-artifact-service-keys"
 # Teardown reads this label before it deletes an auxiliary namespace after its Helm objects are gone.
 RETIREMENT_OWNER_LABEL="opencrane.ai/retirement-owner"
-# Candidate-skill and tenant-tool Jobs need the same release boundary as the
-# application and artifact planes. Static chart defaults would make every silo
+# Candidate-skill Jobs need the same release boundary as the application and
+# artifact planes. Static chart defaults would make every silo
 # compete for one cluster-wide namespace and let the first Helm release claim it.
 SKILL_AUTHORING_NAMESPACE="${RELEASE}-skill-authoring"
-TOOL_RUNNER_NAMESPACE="${RELEASE}-tools"
+MCP_EXECUTOR_NAMESPACE="${RELEASE}-mcp-executors"
+_adopt_legacy_artifact_namespace() {
+  local resource_name="${RELEASE}-artifact-service"
+  local resource
+  local managed_by
+  local helm_release_name
+  local helm_release_namespace
+  for resource in deployment persistentvolumeclaim service serviceaccount networkpolicy; do
+    managed_by="$(kubectl get "$resource/$resource_name" -n "$ARTIFACT_NAMESPACE" -o 'jsonpath={.metadata.labels.app\.kubernetes\.io/managed-by}' 2>/dev/null || true)"
+    helm_release_name="$(kubectl get "$resource/$resource_name" -n "$ARTIFACT_NAMESPACE" -o 'jsonpath={.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)"
+    helm_release_namespace="$(kubectl get "$resource/$resource_name" -n "$ARTIFACT_NAMESPACE" -o 'jsonpath={.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || true)"
+    if [[ "$managed_by" != "Helm" || "$helm_release_name" != "$RELEASE" \
+      || "$helm_release_namespace" != "$NAMESPACE" ]]; then
+      err "Cannot adopt legacy artifact namespace '$ARTIFACT_NAMESPACE'; '$resource/$resource_name' does not prove Helm release '$RELEASE' in '$NAMESPACE' owns it."
+      exit 1
+    fi
+  done
+  kubectl label namespace "$ARTIFACT_NAMESPACE" "$RETIREMENT_OWNER_LABEL=$RELEASE"
+}
 set +e
 ARTIFACT_NAMESPACE_RESOURCE="$(kubectl get namespace "$ARTIFACT_NAMESPACE" --ignore-not-found -o name)"
 ARTIFACT_NAMESPACE_STATUS=$?
@@ -735,7 +724,9 @@ if (( ARTIFACT_NAMESPACE_STATUS != 0 )); then
 fi
 if [[ -n "$ARTIFACT_NAMESPACE_RESOURCE" ]]; then
   ARTIFACT_NAMESPACE_OWNER="$(kubectl get namespace "$ARTIFACT_NAMESPACE" -o "jsonpath={.metadata.labels.${RETIREMENT_OWNER_LABEL//./\\.}}")"
-  if [[ "$ARTIFACT_NAMESPACE_OWNER" != "$RELEASE" ]]; then
+  if [[ -z "$ARTIFACT_NAMESPACE_OWNER" ]]; then
+    _adopt_legacy_artifact_namespace
+  elif [[ "$ARTIFACT_NAMESPACE_OWNER" != "$RELEASE" ]]; then
     err "Artifact namespace '$ARTIFACT_NAMESPACE' belongs to '${ARTIFACT_NAMESPACE_OWNER:-an unknown owner}', not '$RELEASE'."
     exit 1
   fi
@@ -784,7 +775,6 @@ kubectl create secret generic opencrane-litellm -n "$NAMESPACE" \
   --from-literal=LITELLM_SALT_KEY="$LITELLM_SALT_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
 ensure_provider_key_secrets "$NAMESPACE"
-publish_initial_model_provider_secret "$NAMESPACE" "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_API_KEY"
 # OIDC secret. The chart references clustertenantManager.oidc.existingSecret for the client + session
 # secrets; previously this installer set only the issuer/clientId/redirect and ASSUMED the
 # Secret already existed, so a fresh OIDC install rendered a UI that crash-looped on a missing
@@ -903,7 +893,7 @@ ensure_registry_pull_secret "$NAMESPACE" "$REGISTRY_PULL_SECRET" "$REGISTRY_PULL
 log "Using the app-owned chart sources packaged from this checkout…"
 
 log "Installing the OpenCrane Helm release '$RELEASE'…"
-# --force-conflicts: Helm 4 applies server-side, so any out-of-band actor that has
+# --server-side and --force-conflicts: Helm applies the chart through server-side apply, so any out-of-band actor that has
 # claimed field ownership of a chart-rendered field (e.g. a `kubectl patch`/`kubectl set
 # image` leaving a `kubectl-*` manager, or a now-removed operator drift-repairer whose
 # stale `node-fetch` ownership persists on the live object — see the warning above and
@@ -913,7 +903,9 @@ log "Installing the OpenCrane Helm release '$RELEASE'…"
 # and it only forces fields the chart actually applies (foreign managers of OTHER fields
 # are untouched). Without it a single stray imperative patch wedges every future upgrade.
 build_membership_helm_args
+build_runtime_continuation_keyring_helm_args
 helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --create-namespace
+  --server-side=true
   --force-conflicts
   --set-string "networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST"
   --set-string "clustertenantManager.database.existingSecret=$POSTGRES_APP_SECRET"
@@ -931,7 +923,9 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set-string "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET"
   --set "litellm.existingSecret=opencrane-litellm"
   "${MEMBERSHIP_HELM_ARGS[@]}"
-  "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}")
+  "${RUNTIME_CONTINUATION_KEYRING_HELM_ARGS[@]}"
+  "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}"
+  "${AGENT_CONTROLLER_KUBERNETES_API_ARGS[@]}")
 [[ -n "$REGISTRY_PULL_SECRET" ]] && helm_args+=(--set-string "global.imagePullSecret=$REGISTRY_PULL_SECRET")
 if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
   helm_args+=(--set-string "controlPlaneSpa.image.digest=" --set-string "controlPlaneSpa.image.tag=$CONTROL_PLANE_SPA_TAG")
@@ -962,7 +956,6 @@ fi
 if [[ -n "$FIRST_USER_EMAIL" ]]; then
   helm_args+=(--set-string "clustertenantManager.firstUser.email=$FIRST_USER_EMAIL")
 fi
-append_initial_model_provider_helm_args "$INITIAL_MODEL_PROVIDER"
 [[ -n "$VALUES_FILE" ]] && helm_args+=(--values "$VALUES_FILE")
 # macOS Bash 3.2 aborts under `set -u` when it expands an empty array here.
 # Check its length before expansion so a deploy without --set still reaches Helm.
@@ -980,7 +973,7 @@ CRDS_INSTALL="$(resolve_cluster_tenant_crd_install \
 helm_args+=(
   --set "crds.install=$CRDS_INSTALL"
   --set-string "opencrane-skill-authoring.skillAuthoring.namespace=$SKILL_AUTHORING_NAMESPACE"
-  --set-string "opencrane-tool-runner.toolRunner.namespace=$TOOL_RUNNER_NAMESPACE")
+  --set-string "opencrane-mcp-executor.mcpExecutor.namespace=$MCP_EXECUTOR_NAMESPACE")
 # Value-preservation mode. Helm's DEFAULT on upgrade drops any value a prior release set
 # via --set/-f that this invocation does not restate, silently reverting it to the chart
 # default — a footgun that broke a live silo once (a pure `--opencrane-server-tag` bump reverted
@@ -1018,11 +1011,11 @@ helm "${helm_args[@]}" || exit $?
 # mid-first-rollout forced a second boot of the heaviest workloads.
 if [[ "$RELEASE_PREEXISTED" == "1" ]]; then
   DATABASE_CONNECTION_CHECKSUM="$(compute_database_connection_checksum "$NAMESPACE" \
-    "$POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" \
+    "$POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" \
     "$POSTGRES_ADMIN_APP_SECRET")" || exit $?
   roll_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT" \
     "$DATABASE_CONNECTION_CHECKSUM" \
-    "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway" || exit $?
+    "${RELEASE}-opencrane-server" "${RELEASE}-agent-controller" "${RELEASE}-litellm" || exit $?
 fi
 
 # 4. Wait for the core workloads. The database schema was created by CNPG initdb or converged by
@@ -1031,9 +1024,14 @@ fi
 # the fleet-manager, the silo chart the clustertenant-manager. A fleet-only (or silo-only)
 # install has just one, so guard each wait on the deployment existing rather than waiting
 # unconditionally (which NotFound-errored on the absent component after the split).
+FINAL_RELEASE_VALUES="$(helm get values "$RELEASE" --namespace "$NAMESPACE" --all -o json)" || exit $?
+FINAL_SCANNER_NAMESPACE="$(jq -r '.artifactScanner.namespace // empty' <<<"$FINAL_RELEASE_VALUES")"
+FINAL_SCANNER_NAMESPACE="${FINAL_SCANNER_NAMESPACE:-${RELEASE}-artifact-scanning}"
 for _comp in fleet-manager clustertenant-manager; do
   wait_for_final_deployment_if_present "${RELEASE}-${_comp}" || exit $?
 done
+wait_for_final_deployment_if_present "${RELEASE}-agent-controller" || exit $?
+wait_for_final_deployment_if_present "${RELEASE}-artifact-scanner" "$FINAL_SCANNER_NAMESPACE" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-opencrane-ui-spa" || exit $?
 _verify_control_plane_spa_rollout || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-cognee" || exit $?
@@ -1043,6 +1041,28 @@ wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
 
 _wait_for_release_certificate || exit $?
+if [[ "$RELEASE_VERSION" == "0.10.0" && "$FROM_RELEASE_VERSION" == "0.9.2" && "$ALLOW_TAG_FLOAT" != "1" ]]; then
+  FINAL_SERVER_REPOSITORY="$(jq -r '.clustertenantManager.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
+  FINAL_CONTROLLER_REPOSITORY="$(jq -r '.agentController.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
+  FINAL_SCANNER_REPOSITORY="$(jq -r '.artifactScanner.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
+  FINAL_RUNTIME_REPOSITORY="$(jq -r '.agentController.runtimeProfile.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
+  if [[ -z "$FINAL_SERVER_REPOSITORY" || -z "$FINAL_CONTROLLER_REPOSITORY" || -z "$FINAL_SCANNER_REPOSITORY" || -z "$FINAL_RUNTIME_REPOSITORY" ]]; then
+    err "The final release values do not identify every replacement image repository, so the retired Obot server remains in place."
+    exit 1
+  fi
+  FINAL_PERSONAL_RUNTIME_NAMESPACE="$(jq -r '.agentController.runtimeNamespace // empty' <<<"$FINAL_RELEASE_VALUES")"
+  FINAL_MANAGED_RUNTIME_NAMESPACE="$(jq -r '.agentController.warmRuntime.managedNamespace // empty' <<<"$FINAL_RELEASE_VALUES")"
+  FINAL_PERSONAL_RUNTIME_NAMESPACE="${FINAL_PERSONAL_RUNTIME_NAMESPACE:-${RELEASE}-runtime}"
+  FINAL_MANAGED_RUNTIME_NAMESPACE="${FINAL_MANAGED_RUNTIME_NAMESPACE:-${RELEASE}-managed-runtime}"
+  verify_legacy_obot_replacement_ready "$NAMESPACE" "$RELEASE" "$TIMEOUT" \
+    "${FINAL_SERVER_REPOSITORY}:${CP_TAG}" \
+    "${FINAL_CONTROLLER_REPOSITORY}@${AGENT_CONTROLLER_IMAGE_DIGEST}" \
+    "${FINAL_SCANNER_REPOSITORY}@${ARTIFACT_SCANNER_IMAGE_DIGEST}" \
+    "${FINAL_RUNTIME_REPOSITORY}@${AGENT_RUNTIME_IMAGE_DIGEST}" \
+    "$FINAL_SCANNER_NAMESPACE" "$FINAL_PERSONAL_RUNTIME_NAMESPACE" "$FINAL_MANAGED_RUNTIME_NAMESPACE" || exit $?
+  retire_legacy_obot_mcp_server_resources "$NAMESPACE" "$TIMEOUT" || exit $?
+  retire_legacy_obot_database_custody "$NAMESPACE" "$RELEASE" "$TIMEOUT" || exit $?
+fi
 _post_deploy_verify || exit $?
 
 log "Done. OpenCrane is installed in namespace '$NAMESPACE'."

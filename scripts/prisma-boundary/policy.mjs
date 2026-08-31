@@ -1,5 +1,29 @@
 import { posix } from "node:path";
 
+/** Canonical adapter-source pins reviewed as the only production raw Prisma procedures. */
+const _RAW_PROCEDURE_SOURCE_PINS = new Map([
+	["libs/backend/server/infra/workflows/infra_absurd/src/workflow-task-admission.ts\u0000WorkflowTaskAdmission", "eaaec9a78dc51cae458385b93640e85888a3032da656632022f3e6e892833acf"],
+	["libs/backend/server/infra/workflows/infra_absurd/src/workflow-task-event-admission.ts\u0000WorkflowTaskEventAdmission", "fd789bf1efe78a9b0134f75e9ef1446cd6eebbc295bd328b7c3451ea88b01625"],
+]);
+
+/**
+ * Returns the enforcement-owned source pin for one reviewed raw procedure adapter.
+ *
+ * Keeping these pins in checker code means editing an adapter and its JSON policy cannot silently
+ * authorize a new raw database path. A source change must also alter this enforcement registry,
+ * making that authority change visible in the checker diff itself.
+ *
+ * @param path Exact repository-relative adapter source path.
+ * @param adapter Exact adapter class declared by the boundary policy.
+ * @returns The approved canonical-LF SHA-256 digest, or undefined for every other adapter.
+ * Called by: policy validation and raw-procedure source inspection.
+ * @see docs/agents/prisma.md
+ */
+export function rawProcedureSourcePin(path, adapter)
+{
+	return _RAW_PROCEDURE_SOURCE_PINS.get(`${path}\u0000${adapter}`);
+}
+
 /** Validates and resolves exact, temporary Prisma-boundary exemptions. */
 export function resolveExemptions(entries, today)
 {
@@ -63,8 +87,8 @@ export function validatePolicy(policy, allowLegacyRawProcedure = false)
 		throw new Error("invalid Prisma-boundary policy schema");
 	}
 	const entries = [
-		...policy.owners.repositories.map(function _Repository(entry) { return { ...entry, expectedAdapterSuffix: "Repository" }; }),
-		...policy.owners.unitsOfWork.map(function _UnitOfWork(entry) { return { ...entry, expectedAdapterSuffix: "UnitOfWork" }; }),
+		...policy.owners.repositories.map(function _Repository(entry) { return { ...entry, expectedAdapterPattern: /(?:Repository|Authority)$/u }; }),
+		...policy.owners.unitsOfWork.map(function _UnitOfWork(entry) { return { ...entry, expectedAdapterPattern: /UnitOfWork$/u }; }),
 	];
 	const keys = new Set();
 	for (const entry of entries)
@@ -72,7 +96,7 @@ export function validatePolicy(policy, allowLegacyRawProcedure = false)
 		const valid = _IsExactTypeScriptPath(entry?.path)
 			&& typeof entry?.adapter === "string"
 			&& /^[A-Za-z_$][\w$]*$/u.test(entry.adapter)
-			&& entry.adapter.endsWith(entry.expectedAdapterSuffix)
+			&& entry.expectedAdapterPattern.test(entry.adapter)
 			&& typeof entry?.contract === "string"
 			&& /^[A-Za-z_$][\w$]*$/u.test(entry.contract)
 			&& _IsExactImportPath(entry?.contractImportPath)
@@ -103,11 +127,11 @@ export function validatePolicy(policy, allowLegacyRawProcedure = false)
 	for (const procedure of policy.rawProcedureCalls)
 	{
 		const valid = _IsCurrentRawProcedure(procedure)
-			|| (allowLegacyRawProcedure && _IsLegacyRawProcedure(procedure));
+			|| (allowLegacyRawProcedure && _IsHistoricalRawProcedure(procedure));
 		const key = `${procedure?.path ?? ""}\u0000${procedure?.adapter ?? ""}\u0000${procedure?.method ?? ""}`;
 		if (!valid || rawProcedureKeys.has(key))
 		{
-			throw new Error("invalid raw procedure call; require the exact typed Absurd task admission and fixed SQL template");
+			throw new Error("invalid raw procedure call; require an exact source-pinned typed Absurd procedure and fixed SQL template");
 		}
 		rawProcedureKeys.add(key);
 	}
@@ -116,27 +140,47 @@ export function validatePolicy(policy, allowLegacyRawProcedure = false)
 /** Checks the current policy-owned task-admission exception. */
 function _IsCurrentRawProcedure(procedure)
 {
-	return _IsExactTypeScriptPath(procedure?.path)
+	return _IsCurrentTaskAdmissionProcedure(procedure) || _IsCurrentTaskEventProcedure(procedure);
+}
+
+/** Checks the exact transaction-bound task admission procedure. */
+function _IsCurrentTaskAdmissionProcedure(procedure)
+{
+	return procedure?.path === "libs/backend/server/infra/workflows/infra_absurd/src/workflow-task-admission.ts"
 		&& procedure.adapter === "WorkflowTaskAdmission"
 		&& procedure.contract === "IWorkflowTaskAdmission"
 		&& procedure.contractImportPath === "./workflow-task-admission.types"
 		&& procedure.method === "$queryRaw"
 		&& procedure.sqlTemplate === "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)"
+		&& procedure.sourceSha256 === rawProcedureSourcePin(procedure.path, procedure.adapter)
 		&& typeof procedure.reason === "string"
 		&& procedure.reason.trim().length >= 20;
 }
 
-/** Checks the previous exact declaration while a diff compares this rename with its base revision. */
-function _IsLegacyRawProcedure(procedure)
+/** Checks the exact transaction-bound task event procedure. */
+function _IsCurrentTaskEventProcedure(procedure)
 {
-	return _IsExactTypeScriptPath(procedure?.path)
-		&& procedure.adapter === "PrismaDbProcedureGateway"
-		&& procedure.contract === "AbsurdTaskAdmissionProcedure"
-		&& procedure.contractImportPath === "./absurd-transaction-spawner.types"
+	return procedure?.path === "libs/backend/server/infra/workflows/infra_absurd/src/workflow-task-event-admission.ts"
+		&& procedure.adapter === "WorkflowTaskEventAdmission"
+		&& procedure.contract === "IWorkflowTaskEventAdmission"
+		&& procedure.contractImportPath === "./workflow-task-event-admission.types"
 		&& procedure.method === "$queryRaw"
-		&& procedure.sqlTemplate === "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${options}::jsonb)"
+		&& procedure.sqlTemplate === "SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb)"
+		&& procedure.sourceSha256 === rawProcedureSourcePin(procedure.path, procedure.adapter)
 		&& typeof procedure.reason === "string"
 		&& procedure.reason.trim().length >= 20;
+}
+
+/** Checks earlier exact declarations while a diff compares the current policy with its base. */
+function _IsHistoricalRawProcedure(procedure)
+{
+	if (procedure?.sourceSha256 === undefined)
+	{
+		const sourceSha256 = rawProcedureSourcePin(procedure?.path, procedure?.adapter);
+		if (_IsCurrentTaskAdmissionProcedure({ ...procedure, sourceSha256 })) return true;
+		if (_IsCurrentTaskEventProcedure({ ...procedure, sourceSha256 })) return true;
+	}
+	return false;
 }
 
 /**
@@ -167,10 +211,10 @@ function _IsExactImportPath(path)
 	return typeof path === "string" && path.length > 0 && !/[?*\[\]{}]/u.test(path);
 }
 
-/** Returns whether one transaction-scoped repository construction is exact. */
+/** Returns whether one transaction-scoped repository or authority construction is exact. */
 function _IsExactConstruction(construction)
 {
 	return typeof construction?.adapter === "string"
-		&& /^[A-Za-z_$][\w$]*Repository$/u.test(construction.adapter)
+		&& /^[A-Za-z_$][\w$]*(?:Repository|Authority)$/u.test(construction.adapter)
 		&& _IsExactImportPath(construction?.importPath);
 }

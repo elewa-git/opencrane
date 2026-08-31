@@ -15,7 +15,7 @@ function _App(overrides: { readonly failAuthority?: boolean; readonly log?: Logg
 		hostSilo: { resolveExactHost: async function _ResolveExactHost() { return { siloId: "silo-1" }; } },
 		membership: { verifyCurrentMembership: async function _VerifyCurrentMembership() { return { outcome: "trusted", revision: 1, trustedUntilEpochMs: 2_000_000 }; } },
 		repository: {
-			getConversationAuthority: async function _GetConversationAuthority() { return { conversationId: "conversation-1", siloId: "silo-1", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: ["user-1"] }; },
+			getConversationAuthority: async function _GetConversationAuthority() { return { conversationId: "conversation-1", siloId: "silo-1", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: ["user-1"], participantPrincipalId: "principal-1" }; },
 			reconcileRuntimeRoutes: async function _ReconcileRuntimeRoutes() { return 0; },
 			issueInvocationContextAtomically: async function _IssueInvocationContext() { return { status: "issued", context: { id: "context-1", routeId: "route-1", receiverId: "conversation-replay-v1", endpoint: "http://agent-runtime.silo-a.svc.cluster.local:8080/v1/events" } }; },
 			consumeInvocationContextAtomically: async function _ConsumeInvocationContext() { return { status: "denied", reason: "not_found" }; },

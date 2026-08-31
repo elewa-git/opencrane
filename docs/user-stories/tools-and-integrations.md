@@ -67,8 +67,8 @@ Status: `API absent`; no OAuth route exists until the full redirect and callback
 
 ## TOL-05 — Govern catalogue publication
 
-**As an** organisation admin, **I want** to review, approve, publish, reject, or disable catalogue
-entries **so that** users discover only governed tools.
+**As a** caller with the current `Organization/Administer` grant, **I want** to review, approve,
+publish, reject, or disable catalogue entries **so that** users discover only governed tools.
 
 Acceptance criteria:
 
@@ -76,12 +76,12 @@ Acceptance criteria:
 - Actions explain user-install and active-agent consequences.
 - Concurrent and already-applied transitions do not silently overwrite newer governance.
 
-APIs: `/api/v1/mcp/servers/{id}/approve|publish|reject|enabled` and admin list/directory routes.
+APIs: `/api/v1/mcp/servers/{id}/approve|publish|reject|enabled` and the admin server list.
 
 ## TOL-06 — Configure tool access policy
 
-**As an** organisation admin, **I want** to make a published tool available to everyone or selected
-groups/users **so that** entitlement matches organisational policy.
+**As a** caller with the current `Organization/Administer` grant, **I want** to make a published tool
+available to everyone or selected groups/users **so that** entitlement matches organisational policy.
 
 Acceptance criteria:
 
@@ -89,24 +89,9 @@ Acceptance criteria:
 - Effective-access preview distinguishes direct, group-derived, and organisation-wide access.
 - Removing access explains effects on existing installs and future run admission.
 
-APIs: `GET/PUT /api/v1/mcp/servers/{id}/access`.
-
-## TOL-07 — Provision an integration into Obot custody
-
-**As an** organisation admin, **I want** to provision write-only integration credentials into Obot
-**so that** OpenCrane stores only an opaque custody reference.
-
-Acceptance criteria:
-
-- The server verifies same-silo active integration and exact catalogue binding before contacting
-  Obot.
-- Inputs support one to 64 named write-only credential values.
-- Results distinguish provisioned, failed, and compensation-failed without returning secret material.
-- Obot unavailable fails closed.
-
-API: `POST /api/v1/integrations/{integrationId}/custody`.
-
-Status: `API partial`; there is no public integration list/create/lifecycle API around this route.
+Status: `API blocked`; generic central grant administration replaces the deleted MCP-only access
+editor and directory. This story must use that shared authorization flow rather than add another MCP
+policy API.
 
 ## TOL-08 — Use an installed tool during a run
 
@@ -120,5 +105,5 @@ Acceptance criteria:
 - Unavailable transport is a visible failed/unavailable state, never fake success.
 - The UI shows saved, secret-safe success or failure details rather than credentials or proof material.
 
-Status: `API built`; the durable server worker executes through the configured Obot custody adapter,
-stores one terminal result, and enters visible recovery instead of blindly repeating an unknown outcome.
+Status: `API built`; execution uses the admitted immutable OCI MCP image and a durable,
+class-specific executor claim.

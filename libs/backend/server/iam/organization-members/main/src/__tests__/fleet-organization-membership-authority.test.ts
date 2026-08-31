@@ -6,7 +6,7 @@ import type { FleetOrganizationMembershipTransport } from "../fleet-organization
 import { OrganizationMembershipErrorKinds } from "../organization-members.errors";
 
 /** Verified caller fixture. */
-const _CALLER = { siloId: "acme", subjectId: "admin-1", verifiedEmail: "admin@acme.test", displayName: "Admin" };
+const _CALLER = { siloId: "acme", principalId: "principal-admin-1", subjectId: "admin-1", verifiedEmail: "admin@acme.test", displayName: "Admin" };
 
 /** Builds one authority over a focused transport seam. */
 function _Authority(status: number, body: unknown, siloId = "acme")

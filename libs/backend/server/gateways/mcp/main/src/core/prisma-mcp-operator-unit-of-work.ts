@@ -1,8 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { PrismaAuthorizationGrantRepository, PrismaCapabilityCatalogRepository, PrismaManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
+import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { McpOperatorTransaction, McpOperatorUnitOfWork } from "./mcp-operator-repository.types";
-import { PrismaMcpbValidationRepository } from "../mcpb-validation/prisma-mcpb-validation-repository";
+import { PrismaOciImageValidationRepository } from "../oci-image-validation/prisma-oci-image-validation-repository";
+import { PrismaMcpTaskRepository } from "../mcp-tasks/prisma-mcp-task-repository";
 import { PrismaMcpOperatorRepository } from "./prisma-mcp-operator-repository";
 
 /** Root Prisma transaction owner for every MCP operator operation. */
@@ -16,12 +17,12 @@ export class PrismaMcpOperatorUnitOfWork implements McpOperatorUnitOfWork
 	{
 		return this._prisma.$transaction(async function _Execute(transaction)
 		{
+			const authorization = new PrismaAuthorizationAuthority(transaction);
 			return await operation({
 				mcp: new PrismaMcpOperatorRepository(transaction),
-				mcpbValidations: new PrismaMcpbValidationRepository(transaction),
-				authorization: new PrismaAuthorizationGrantRepository(transaction),
-				capabilityCatalog: new PrismaCapabilityCatalogRepository(transaction),
-				managedGrants: new PrismaManagedAuthorizationGrantRepository(transaction),
+				ociImageValidations: new PrismaOciImageValidationRepository(transaction),
+				mcpTasks: new PrismaMcpTaskRepository(transaction, authorization),
+				authorization,
 				workflowTransaction: { client: transaction },
 			});
 		});

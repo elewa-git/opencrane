@@ -24,14 +24,14 @@ upgrade, while the digest keeps the selected bytes immutable.
 {{- fail "privileges.jobDeadlineGraceSeconds must be at least 10 so the Job can emit terminal diagnostics" -}}
 {{- end -}}
 {{- if .Values.migration.enabled -}}
-{{- if not (regexMatch "^[^[:space:]@]+@sha256:[0-9a-f]{64}$" .Values.migration.image) -}}
-{{- fail "migration.image must use an exact sha256 OCI digest when migration is enabled" -}}
+{{- if not (regexMatch "^ghcr\\.io/elewa-git/opencrane-prisma-migrator@sha256:[0-9a-f]{64}$" .Values.migration.image) -}}
+{{- fail "migration.image must use the OpenCrane Prisma migrator at an exact sha256 OCI digest" -}}
 {{- end -}}
-{{- if or (not (regexMatch "^[0-9a-f]{64}$" .Values.migration.sqlSha256)) (not (regexMatch "^[0-9a-f]{64}$" .Values.migration.sourceBaselineSha256)) -}}
-{{- fail "migration.sqlSha256 and migration.sourceBaselineSha256 must be full lowercase SHA-256 digests" -}}
+{{- if ne .Values.migration.sourceVersion "0.9.2" -}}
+{{- fail "migration.sourceVersion must name the tagged 0.9.2 starting point" -}}
 {{- end -}}
-{{- if or (not .Values.migration.configMap.name) (ne .Values.migration.configMap.key "migration.sql") -}}
-{{- fail "migration execution requires an immutable migration.sql ConfigMap and full SQL digest" -}}
+{{- if or (not .Values.migration.siloId) (not .Values.migration.oidcIssuer) -}}
+{{- fail "migration.siloId and migration.oidcIssuer must bind the tagged 0.9.2 IAM prerequisite" -}}
 {{- end -}}
 {{- if or (lt (int .Values.migration.timeoutSeconds) 1) (lt (int .Values.migration.jobDeadlineGraceSeconds) 10) (lt (int .Values.migration.ttlSecondsAfterFinished) 3600) -}}
 {{- fail "migration Job requires a positive timeout, at least 10 seconds diagnostic grace, and at least one hour log retention" -}}
@@ -113,12 +113,6 @@ upgrade, while the digest keeps the selected bytes immutable.
 {{- if lt (int .Values.postgresql.maxConnections) 1 -}}
 {{- fail "postgresql.maxConnections must be positive" -}}
 {{- end -}}
-{{- if not (kindIs "bool" .Values.superuserAccess.enabled) -}}
-{{- fail "superuserAccess.enabled must be a boolean" -}}
-{{- end -}}
-{{- if and .Values.migration.privilegedExtension.enabled (or (ne .Values.migration.privilegedExtension.name "pg_cron") (not .Values.superuserAccess.enabled)) -}}
-{{- fail "the privileged pg_cron migration requires temporary CNPG superuser access" -}}
-{{- end -}}
 {{- if lt (int .Values.pooler.instances) 1 -}}
 {{- fail "pooler.instances must be positive" -}}
 {{- end -}}
@@ -152,7 +146,7 @@ metadata:
 spec:
   instances: {{ .Values.instances }}
   imageName: {{ .Values.image | quote }}
-  enableSuperuserAccess: {{ .Values.superuserAccess.enabled }}
+  enableSuperuserAccess: false
   postgresql:
     shared_preload_libraries:
       - pg_cron

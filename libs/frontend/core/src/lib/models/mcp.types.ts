@@ -9,7 +9,7 @@
 /**
  * How a user connects their identity to an MCP server — drives the Connect UX.
  *
- * Mirrors the Obot server-type taxonomy in the OpenCrane spec.
+ * Mirrors the server-type values in the OpenCrane MCP API.
  */
 export enum McpServerType
 {
@@ -116,46 +116,4 @@ export interface McpInstalledServer
 	connectionStatus: McpConnectionStatus;
 	/** Relative last-used label, or null when never used. */
 	lastUsed: string | null;
-}
-
-/** A user that can be granted access to a server (entitlement target). */
-export interface McpEntitledUser
-{
-	/** Stable user id. */
-	id: string;
-	/** Display name. */
-	name: string;
-	/** Two-letter avatar initials. */
-	initials: string;
-}
-
-/** A stable local group that can receive an MCP authorization grant. */
-export interface McpEntitledGroup
-{
-	/** Stable local Group identifier used by authorization grants. */
-	id: string;
-	/** Human-readable group name shown in the access editor. */
-	name: string;
-}
-
-/**
- * Access policy for one server — which stable local groups and Principals may install it.
- */
-export interface McpAccessPolicy
-{
-	/** The server this policy governs. */
-	serverId: string;
-	/** Entitled stable local groups. */
-	groups: McpEntitledGroup[];
-	/** Entitled individual users. */
-	users: McpEntitledUser[];
-}
-
-/** Candidate users + groups an admin can add to a policy. */
-export interface McpDirectory
-{
-	/** All assignable users. */
-	users: McpEntitledUser[];
-	/** All assignable stable local groups. */
-	groups: McpEntitledGroup[];
 }

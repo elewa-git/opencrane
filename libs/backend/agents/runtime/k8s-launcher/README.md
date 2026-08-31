@@ -1,82 +1,62 @@
-# @opencrane/backend/agents/runtime/k8s-launcher — suspended runtime Jobs
+# @opencrane/backend/agents/runtime/k8s-launcher — warm pool definitions
 
 > [backend](../../../README.md) › [agents](../../README.md) › [runtime](../README.md) › k8s-launcher
 
 ## What it owns
 
-This infrastructure package translates one already-authorised agent run attempt into its exact
-suspended Kubernetes Job. Namespace-wide network isolation is installed once by the deployment;
-the builder does not create a new policy for every attempt.
+This package defines and checks one Helm-owned warm runtime pool. It contains no Kubernetes client.
 
-```
- authorised run attempt + immutable runtime profile
-                 │
-                 ▼
- ┌─────────────────────────────────────┐
- │  runtime/k8s-launcher  ◄── HERE      │  pure manifest construction
- └──────────────────┬──────────────────┘
-                    ▼
-suspended Job in the dedicated runtime namespace
-                    │  controller persists Job UID; durable release then unsuspends
-                    ▼
- agent-runtime process
+```text
+ fixed Helm values
+   │ namespace, Deployment, image digest, ServiceAccount, profiles, resources
+   ▼
+ ┌──────────────────────────────────┐
+ │ warm pool definitions ◄── HERE   │
+ │ check WarmRuntimePoolProfile     │
+ └──────────────────────────────────┘
+   │
+   ├── build selector for generic Pods
+   └── check candidate Pod identity and owner chain
 ```
 
-**In this flow:** [runtime controller](../controller/README.md) ·
-[agent-runtime process](../../../../../apps/agent-runtime/README.md)
+**In this flow:** [runtime controller](../controller/README.md) · [workflow handler](../../execution/runs/controller/README.md)
 
-Invariant: the returned Job is always suspended, has one completion and no retry, and cannot receive
-provider credentials or durable storage. The runtime namespace must differ from the OpenCrane server
-namespace. Invalid authority coordinates or an unpinned or externally routed profile fail before any
-Kubernetes adapter can perform input/output (I/O). The default ServiceAccount token is disabled. Its short-lived runtime token is mounted read-only, while
-the non-secret bootstrap reference is separately projected from an exact Pod annotation through the
-downward API (Kubernetes' read-only view of its own Pod metadata). Terminal cleanup and Pod
-termination grace are both zero, so the Job-owned Pod and its non-durable scratch are not retained
-after the deadline.
+A generic Pod has no run, user, model key, or uploaded image. The workflow can change only its fixed
+network profile after the database reserves its exact UID.
 
 ## Public surface
 
-- `__BuildSuspendedAgentRuntimeJob(assignment, profile)` — builds the suspended Job for one run
-  attempt.
-- `__AgentRuntimeAttemptResourceName(siloId, runId, attempt)` — derives the same deterministic Job
-  name when a server-owned cleanup authority must locate a fenced attempt without receiving a profile.
-- `__DeriveAgentRuntimeReleaseDeadlineSeconds(assignmentExpiresAt, now, profileMaximum)` — converts
-  absolute assignment authority into a conservative positive Kubernetes deadline.
-- `AgentRuntimeJobProfile` — the bounded ServiceAccount, immutable image, internal server namespace,
-  route, deadlines, resources, and scratch limits fixed by the controller profile.
-- `AgentRuntimeIdentityProfiles` — the documented personal and managed identity-profile keys used
-  by deployment composition instead of owned string literals.
-
-Profile policy, assignment/resource-name validation, release-deadline calculation, and manifest
-projection live in separate modules. Only the four capabilities above cross the package barrel;
-the assignment and Kubernetes protocol shapes remain implementation details.
+- `__AssertWarmRuntimePoolProfile(profile)` checks names, the pinned image digest, ports, lifetime,
+  scratch size, and CPU and memory settings.
+- `__WarmRuntimeGenericPodSelector(profile)` builds the selector for the generic pool.
+- `__WarmRuntimePodCandidate(pod, profile, deploymentUid, replicaSetUids)` checks a Pod before it can
+  be offered for database reservation.
+- `WarmRuntimePoolProfile`, `WarmRuntimePodCandidate`, and `WarmRuntimePodIdentity` describe the fixed
+  pool and exact Pod identity.
 
 ## Boundary
 
-The builder is pure. It does not call Kubernetes, read Prisma, own run state, provision
-ServiceAccounts, grant role-based access control (RBAC), or decide whether an attempt may execute.
-`apps/agent-controller` is the only process allowed to create or exact-adopt these Jobs, persist
-the Job UID, and later release that exact Job. This package only makes the authority's opaque
-bootstrap reference available as a `0440` file; the reference alone never authenticates a runtime.
+The package does not call Kubernetes, read the database, create a workload, or decide which run gets
+a Pod. Helm owns the pool. The runtime controller performs Kubernetes calls. The AgentRun workflow
+orders the durable claim, activation, readiness, work, and cleanup steps.
+
+This profile is for the standard agent runtime image. It cannot be changed into an uploaded OCI MCP
+or code-skill image. Those workload classes need their own executor profile.
 
 ## Dependency direction
 
-Tagged `scope:agent-runtime-launcher` and `layer:infra`; it may depend only on its own scope and shared
-contracts. It never imports an application entrypoint or an OpenCrane-server infrastructure package.
+Tagged `scope:agent-runtime-launcher` and `layer:infra`: it may depend only on Kubernetes types and
+shared contracts. It never imports Prisma, a Kubernetes client, or an application entrypoint.
 
-## Runtime & config
+## Runtime settings
 
-There are no environment variables or I/O. The caller supplies a digest-pinned image, a cross-namespace
-runtime-stream URL, bounded zero-RBAC ServiceAccount, a 600–3600
-second token lifetime, finite maximum deadline, immediate terminal cleanup, at most 1 GiB scratch,
-and explicit CPU/memory resources. The
-rendered Pod runs as UID/GID 65532 with `fsGroup: 65532`; projected token and bootstrap-reference
-mode `0440` therefore remain readable without becoming world-readable. The bootstrap reference is
-mounted at `/var/run/opencrane/bootstrap/reference`, never in environment variables or process arguments.
+The caller supplies a digest-pinned image, namespace, Deployment, ServiceAccount, generic and claimed
+profiles, binding port, generic idle time, scratch size, and CPU and memory settings. All of these are
+deployment-owned values; a run cannot replace them.
 
 ## See also
 
-- Parent group: [runtime](../README.md)
-- Assignment authority: [controller](../controller/README.md)
-- Server transport: [agent-runtime-stream](../../../server/infra/agent-runtime-stream/README.md)
-- Process owner: [agent-runtime](../../../../../apps/agent-runtime/README.md)
+- [Runtime package](../README.md)
+- [Warm Kubernetes controller](../controller/README.md)
+- [AgentRun workflow handler](../../execution/runs/controller/README.md)
+- [Agent-runtime process](../../../../../apps/agent-runtime/README.md)

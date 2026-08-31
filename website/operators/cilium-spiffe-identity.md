@@ -1,7 +1,8 @@
-# Identity and network isolation with Cilium and SPIFFE
+# Identity and network isolation with Cilium
 
-Cilium and SPIFFE add **workload-identity-aware enforcement** above the portable
-`NetworkPolicy` floor. This layer makes network decisions independent of Pod IP churn.
+Cilium can add **workload-identity-aware enforcement** above the portable `NetworkPolicy` floor.
+SPIFFE/SPIRE remains an optional future identity layer, not a requirement for OpenCrane's current
+projected-token and network-policy boundary.
 
 > See also: [Networking and isolation](/operators/networking) (portable floor),
 > [Identity and runtime authentication](/security/identity) (application proof), and
@@ -12,33 +13,43 @@ Cilium and SPIFFE add **workload-identity-aware enforcement** above the portable
 | Principal | Identity | Used for |
 |---|---|---|
 | Person | OIDC subject and session | Public UI and API authorisation |
-| Workload | Kubernetes ServiceAccount and SPIFFE SVID | Mutual authentication between services |
+| Workload | Kubernetes ServiceAccount and projected token | Receiver-verified application authentication |
+| Optional workload identity | SPIFFE SVID | Future mutual authentication where separately qualified |
 
-Never translate a workload SVID into a person's authority. OpenCrane derives user and
-organisation evidence from the admitted run, not from the runtime Pod.
+Never translate a workload token or future SVID into a person's authority. OpenCrane derives user
+and organisation evidence from the admitted run, not from the runtime Pod.
 
-## Silo identity
+## Policy capability
 
 ```text
-spiffe://opencrane/ct/acme/opencrane
-spiffe://opencrane/ct/acme/agent-controller
-spiffe://opencrane/ct/acme/agent-runtime
+standard NetworkPolicy
+  └── namespace + Pod labels + ports
+
+CiliumNetworkPolicy, when the exact API and controller exist
+  └── optional Cilium-specific identity, FQDN and L7 controls
 ```
 
-Policy admits only named same-silo identities and explicitly required infrastructure. No rule
-should admit a foreign organisation merely because it uses the same ports or labels.
+OpenCrane renders standard policy for the warm-runtime profiles because they need only namespace,
+Pod-label and port selection. A managed Cilium-based dataplane may enforce that floor without
+serving Cilium's namespaced custom policy kind. GKE Dataplane V2 is one such platform.
+
+::: warning
+Do not infer policy support from the presence of unrelated `cilium.io` resources. Before rendering
+a Cilium-specific policy, prove that the exact kind is served and that its controller enforces it.
+Installing a CRD without the controller creates no network boundary.
+:::
 
 ## Defence in depth
 
 | Layer | Role |
 |---|---|
 | Kubernetes `NetworkPolicy` | Namespace and port deny-by-default floor |
-| SPIFFE mutual TLS | Cryptographic workload identity |
-| Cilium policy | Identity-aware and optional FQDN/L7 restrictions |
+| Projected ServiceAccount token | Receiver-verified workload authentication |
+| Cilium policy, where qualified | Optional identity-aware FQDN/L7 restrictions |
 | OpenCrane proof | Exact run, attempt, Job, Pod and revision authority |
 
-The layers complement each other. A successful mTLS handshake does not authorise a run, and a
-valid runtime assignment does not widen network policy.
+The layers complement each other. A valid workload token does not authorise a run, and a valid
+runtime assignment does not widen network policy.
 
 ## Egress
 
@@ -51,8 +62,9 @@ Write negative tests first: foreign-silo, wrong-ServiceAccount and unlisted-host
 all fail without relying on application response codes.
 :::
 
-## Rotation
+## Optional SPIFFE/SPIRE
 
-SPIRE issues short-lived SVIDs from Kubernetes workload identity, so workloads do not carry a
-manually distributed shared certificate. Rotation must preserve the trust domain and selectors
-used by policy.
+SPIRE can issue short-lived SVIDs from Kubernetes workload identity when a measured mutual-
+authentication requirement justifies that extra control plane. Adoption requires separate
+compatibility, failure-mode, rotation and observability qualification. An SVID never replaces
+OpenCrane's product authorization or becomes a Cilium security identity automatically.

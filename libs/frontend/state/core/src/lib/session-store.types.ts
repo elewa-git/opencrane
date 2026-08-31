@@ -1,3 +1,15 @@
+/**
+ * Product authorization hints returned with the current session.
+ *
+ * The server reads these from `AuthorizationAuthority`; the browser uses them only to present
+ * controls, while every API operation repeats its own current authorization check.
+ */
+export interface SessionProductCapabilities
+{
+	/** Whether the current local Principal may administer this organisation. */
+	administerOrganization?: boolean;
+}
+
 /** Coarse capability flags the UI uses to show/hide management controls. */
 export interface Capabilities
 {
@@ -58,8 +70,8 @@ export interface SessionUser
 	 */
 	isPlatformOperator?: boolean;
 
-	/** Whether the session is a **customer/org admin** within its ClusterTenant (fail-closed-optional, as {@link isPlatformOperator}). */
-	isOrgAdmin?: boolean;
+	/** Product permissions read from the server's central authorization authority. */
+	productCapabilities?: SessionProductCapabilities;
 
 	/** The caller's ClusterTenant (account/org), or `null` when bound to none. */
 	clusterTenant?: string | null;

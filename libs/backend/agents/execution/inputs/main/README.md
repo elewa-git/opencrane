@@ -26,7 +26,7 @@ change — a retry, an audit, or a replay all see the exact same record, identif
  └─────────────────────────────────────────┘
           │  ready (authority + snapshot) / denied (one precise reason)
           ▼
- runs · RunAdmissionRepository  ── persists run + snapshot + outbox events in one commit
+ runs · RunAdmissionRepository  ── persists run + snapshot + workflow task in one commit
 ```
 
 **In this flow:** [execution/runs](../../runs/main/README.md) *(owns the admission transaction, the digest
@@ -42,11 +42,10 @@ after effective-grant intersection is an assigned, same-silo, still-published, n
 whole assembly with a single precise reason; a duplicate request (same idempotency key) returns the
 previously admitted snapshot without recompiling anything.
 
-Third-party tools enter the snapshot as revision-selected integration assignments, each containing
-an integration identifier and exact reviewed definitions (name, description, input schema, and
-schema digest). Missing, malformed, or digest-mismatched schemas fail admission. The assembler never receives a custody
-credential or an old MCP grant: the later action boundary resolves the live custody reference and
-checks the same revision assignment again.
+MCP tools enter the snapshot as revision-selected immutable tool revisions. Each entry contains the
+saved tool identifier, name, description, input schema, and schema digest. Missing, malformed, or
+digest-mismatched schemas fail admission. The assembler never receives registry or provider
+credentials; execution consumes only the admitted OCI-backed MCP revision.
 
 Invariant: a run either commits with its one complete, digest-sealed input snapshot, or it does not
 exist — there is no partially assembled state, and no snapshot field originates from unverified
@@ -69,8 +68,10 @@ caller input.
   query only through the approval-required `memory_recall` tool; safe content delivery is deferred to #601.
 - `PersonalExecutionIdentityEnvelopeSource` — selects the sole current personal-scope assertion
   from signed fleet membership, re-reads that exact verified revision after its high-watermark is
-  advanced, and digests the user's still-valid, unrevoked personal grants in the admission
-  transaction. Browser input never selects the organisation, assertion, or capabilities.
+  advanced, admits the current exact `AgentService/Invoke` grant through the central authorization
+  authority, and includes that decision evidence in the frozen capability ceiling. Browser input
+  never selects the organisation, assertion, or capabilities. The frozen digest limits the admitted
+  run; it is not a reusable grant, and later external effects recheck current authorization.
 - `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
   at admission and refuses an invented, foreign, revoked, or unpublished revision with
   `skill_unavailable`.
@@ -117,5 +118,5 @@ decides service publication, membership, grant, or boundary attachment policy.
 ## See also
 
 - Parent index: [agents](../../../README.md)
-- Siblings: [runs](../../runs/main/README.md) · [agent memory](../../../memory/main/README.md) ·
+- Siblings: [runs](../../runs/main/README.md) ·
   [personal-memory selection](../../../personal/memory/main/README.md) · [personas](../../../personal/personas/main/README.md)

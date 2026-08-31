@@ -6,25 +6,38 @@ import type { PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const _authorizationAuthority = vi.hoisted(function _Authority()
+{
+	return { admitPrincipal: vi.fn(), constructedWith: vi.fn(), listPrincipalEntitled: vi.fn() };
+});
+
 vi.mock("@opencrane/backend/server/iam/authorization", async function _mockAuthorization()
 {
   const actual = await vi.importActual("@opencrane/backend/server/iam/authorization");
-  return { ...actual, __ResolvePrincipalAuthorization: vi.fn().mockResolvedValue({ outcome: "allow", reason: "winning_allow", grantIds: ["grant-1"] }) };
+	return {
+		...actual,
+		PrismaAuthorizationAuthority: class _PrismaAuthorizationAuthority
+		{
+			constructor(transaction: unknown) { _authorizationAuthority.constructedWith(transaction); }
+			admitPrincipal(command: unknown) { return _authorizationAuthority.admitPrincipal(command); }
+			listPrincipalEntitled(command: ListPrincipalEntitledProductResourcesCommand) { return _authorizationAuthority.listPrincipalEntitled(command); }
+		},
+	};
 });
 
-import { __ResolvePrincipalAuthorization } from "@opencrane/backend/server/iam/authorization";
+import type { ListPrincipalEntitledProductResourcesCommand } from "@opencrane/backend/server/iam/authorization";
 import type { AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
-import { AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
+import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { mcpOperatorRouter } from "../routes/mcp-operator";
 import { PrismaMcpOperatorUnitOfWork } from "../core/prisma-mcp-operator-unit-of-work";
 import { McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeWorkflow } from "../era-probe/mcp-era-probe.types";
-import type { McpbBundleArtifactResolver } from "../mcpb-validation/mcpb-validation-submission.types";
-import type { McpbValidationWorkflow } from "../mcpb-validation/mcpb-validation.types";
+import type { OciImageLayoutArtifactResolver } from "../oci-image-validation/oci-image-validation-submission.types";
+import type { OciImageValidationWorkflow } from "../oci-image-validation/oci-image-validation.types";
 
 /**
- * Covers the MCP operator routes: the organization-admin gate, published entries filtered by
- * authorization, install states selected by server type, and install scoping to the local Principal.
+ * Covers the MCP operator routes: current Organization/Administer grants, published entries filtered
+ * by authorization, install states selected by server type, and install scoping to the local Principal.
  */
 
 /** OIDC environment isolated so authentication configuration cannot leak between tests. */
@@ -50,8 +63,6 @@ interface _SessionUser
   email?: string;
   /** IdP group claims. */
   groups?: string[];
-  /** Whether the IdP marked the caller an org admin. */
-  isOrgAdmin?: boolean;
 }
 
 /**
@@ -79,8 +90,6 @@ function _mockPrisma(overrides: Record<string, (...args: unknown[]) => unknown> 
               spies[key] = vi.fn(overrides[key]);
             else if (key === "principal.findUnique")
               spies[key] = vi.fn().mockResolvedValue({ id: "principal-1" });
-            else if (key === "capabilityCatalogRevision.findUnique")
-              spies[key] = vi.fn().mockResolvedValue({ digest: "sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6", capabilities: [{ id: "mcp-server:use", actions: ["use"] }] });
             else spies[key] = vi.fn().mockResolvedValue([]);
           }
           return spies[key];
@@ -100,14 +109,14 @@ function _buildApp(prisma: PrismaClient, user?: _SessionUser, eraProbeWorkflow: 
   {
     app.use(function _seedAuthenticatedPrincipal(req, _res, next)
     {
-      req.session = { authUser: { ...user, sub: user.sub ?? "subject-1", issuer: user.issuer ?? "https://issuer.example.test", groups: user.groups ?? [], isPlatformOperator: false, isOrgAdmin: user.isOrgAdmin ?? false, authenticatedAt: "2026-08-21T00:00:00.000Z" } } as typeof req.session;
+      req.session = { authUser: { ...user, sub: user.sub ?? "subject-1", issuer: user.issuer ?? "https://issuer.example.test", groups: user.groups ?? [], isPlatformOperator: false, authenticatedAt: "2026-08-21T00:00:00.000Z" } } as typeof req.session;
       req.authenticatedPrincipal = { principalId: "principal-1", siloId: "silo-1", issuer: "https://issuer.example.test", subject: user.sub ?? "subject-1" };
       req.headers["x-forwarded-host"] = "silo-1.opencrane.test";
       next();
     });
   }
   const directory: AuthenticatedPrincipalDirectory = { resolveAuthenticatedPrincipal: vi.fn().mockResolvedValue({ siloId: "silo-1", principalId: "principal-1" }) };
-  app.use("/api/v1/mcp", mcpOperatorRouter(new PrismaMcpOperatorUnitOfWork(prisma), directory, eraProbeWorkflow, _McpbWorkflow(), _McpbArtifacts()));
+  app.use("/api/v1/mcp", mcpOperatorRouter(new PrismaMcpOperatorUnitOfWork(prisma), directory, eraProbeWorkflow, _OciImageWorkflow(), _OciImageArtifacts()));
   return app;
 }
 
@@ -119,16 +128,26 @@ function _EraProbeWorkflow(): McpEraProbeWorkflow
   };
 }
 
-/** Return bundle task admission for router cases that do not exercise MCPB submission. */
-function _McpbWorkflow(): McpbValidationWorkflow
+/** Return OCI image task admission for router cases that do not exercise image submission. */
+function _OciImageWorkflow(): OciImageValidationWorkflow
 {
-	return { admit: vi.fn().mockResolvedValue({ taskKey: "workflows:mcpb-validation:test", receipt: { taskId: "task-2", taskName: "mcpb-validation.verify", idempotencyKey: "workflows:mcpb-validation:test" } }) };
+	return { admit: vi.fn().mockResolvedValue({ taskKey: "workflows:oci-image-validation:test", receipt: { taskId: "task-2", taskName: "oci-image-validation.verify", idempotencyKey: "workflows:oci-image-validation:test" } }) };
 }
 
-/** Return no artifact for router cases that do not exercise MCPB submission. */
-function _McpbArtifacts(): McpbBundleArtifactResolver
+/** Return no artifact for router cases that do not exercise OCI image submission. */
+function _OciImageArtifacts(): OciImageLayoutArtifactResolver
 {
 	return { resolve: vi.fn().mockResolvedValue(null) };
+}
+
+/** Build one Ready server revision with a stable discovered tool for catalogue responses. */
+function _ReadyRevision(serverRevisionId: string, toolRevisionId: string)
+{
+	return {
+		id: serverRevisionId,
+		state: "Ready",
+		tools: [{ id: toolRevisionId, name: "search", description: null, inputSchema: { type: "object", properties: { query: { type: "string" } } }, inputSchemaDigest: `sha256:${"d".repeat(64)}` }],
+	};
 }
 
 describe("mcp-operator router", function _suite()
@@ -138,7 +157,9 @@ describe("mcp-operator router", function _suite()
   /** Snapshots then clears the authentication environment so each case configures its own auth setup. */
   beforeEach(function _clearEnv()
   {
-    vi.mocked(__ResolvePrincipalAuthorization).mockReset().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, reason: "winning_allow", grantIds: ["grant-1"] });
+	_authorizationAuthority.admitPrincipal.mockReset().mockResolvedValue({ outcome: "allow", reason: "winning_allow", grantIds: ["grant-1"], evidence: { decisionDigest: `sha256:${"a".repeat(64)}`, policyRevisionHash: `sha256:${"b".repeat(64)}`, effectiveAuthorizationDigest: `sha256:${"c".repeat(64)}` } });
+	_authorizationAuthority.constructedWith.mockReset();
+	_authorizationAuthority.listPrincipalEntitled.mockReset().mockImplementation(async function _AllowAll(command: ListPrincipalEntitledProductResourcesCommand) { return command.resources; });
     for (const key of _AUTH_ENV) { _saved[key] = process.env[key]; delete process.env[key]; }
   });
 
@@ -149,66 +170,49 @@ describe("mcp-operator router", function _suite()
     { delete process.env[key]; } else { process.env[key] = _saved[key]; } }
   });
 
-  describe("org-admin gate on governance endpoints", function _gate()
+  describe("central authority on governance endpoints", function _gate()
   {
-    it("denies GET /servers for a non-admin session", async function _denyList()
+    it("denies GET /servers when the central authority has no administration grant", async function _denyList()
     {
       _enableOidc();
+	  _authorizationAuthority.listPrincipalEntitled.mockResolvedValue([]);
       const { prisma, spies } = _mockPrisma();
-      const res = await request(_buildApp(prisma, { sub: "u1", isOrgAdmin: false })).get("/api/v1/mcp/servers");
+      const res = await request(_buildApp(prisma, { sub: "u1" })).get("/api/v1/mcp/servers");
 
-      expect(res.status).toBe(403);
-      expect(res.body).toMatchObject({ code: "FORBIDDEN_NOT_ORG_ADMIN" });
+		expect(res.status).toBe(403);
+	  expect(res.body).toMatchObject({ code: "FORBIDDEN" });
       expect(spies["mcpServer.findMany"]).toBeUndefined();
     });
 
-    it("denies PUT /servers/:id/access for a non-admin session", async function _denyAccess()
+    it("uses the central grant instead of the session administrator flag", async function _allowList()
     {
       _enableOidc();
       const { prisma, spies } = _mockPrisma();
-      const res = await request(_buildApp(prisma, { sub: "u1", isOrgAdmin: false }))
-        .put("/api/v1/mcp/servers/srv-1/access").send({ everyoneInOrg: true, groups: [], users: [] });
-
-      expect(res.status).toBe(403);
-      expect(spies["mcpServerAccessPolicy.upsert"]).toBeUndefined();
-    });
-
-    it("denies GET /directory for a non-admin session", async function _denyDirectory()
-    {
-      _enableOidc();
-      const { prisma } = _mockPrisma();
-      const res = await request(_buildApp(prisma, { sub: "u1", isOrgAdmin: false })).get("/api/v1/mcp/directory");
-
-      expect(res.status).toBe(403);
-    });
-
-    it("rejects non-string access-policy identifiers before persistence", async function _RejectsMalformedAccessPolicy()
-    {
-      _enableOidc();
-      const { prisma } = _mockPrisma();
-      const res = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true }))
-        .put("/api/v1/mcp/servers/srv-1/access").send({ groupIds: [42], principalIds: [] });
-
-      expect(res.status).toBe(400);
-      expect(res.body).toMatchObject({ code: "VALIDATION_ERROR" });
-    });
-
-    it("lets an org-admin session through GET /servers to the handler", async function _allowList()
-    {
-      _enableOidc();
-      const { prisma, spies } = _mockPrisma();
-      const res = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true })).get("/api/v1/mcp/servers");
+      const res = await request(_buildApp(prisma, { sub: "admin" })).get("/api/v1/mcp/servers");
 
       expect(res.status).not.toBe(403);
       expect(spies["mcpServer.findMany"]).toHaveBeenCalled();
+	  expect(_authorizationAuthority.listPrincipalEntitled).toHaveBeenCalledWith(expect.objectContaining({ action: ProductAuthorizationActions.Read, resources: [{ kind: ProductAuthorizationResourceKinds.Organization, id: "silo-1" }] }));
     });
+
+	it("shows an administrator a Ready tool without presenting a disabled server as assignable", async function _ShowsBlockedTool()
+	{
+		_enableOidc();
+		const server = { id: "srv-disabled", name: "Disabled", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Disabled", status: "Active", revisions: [_ReadyRevision("revision-ready", "tool-ready")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted };
+		const { prisma } = _mockPrisma({ "mcpServer.findMany": function _FindMany() { return Promise.resolve([server]); } });
+
+		const response = await request(_buildApp(prisma, { sub: "admin" })).get("/api/v1/mcp/servers");
+
+		expect(response.status).toBe(200);
+		expect(response.body[0].tools).toEqual([expect.objectContaining({ toolRevisionId: "tool-ready", serverRevisionId: "revision-ready", eligibility: "governance-blocked", readiness: "ready" })]);
+	});
 
     it("refuses publication until an accepted server has been approved", async function _RequiresApprovalBeforePublish()
     {
       _enableOidc();
       const { prisma, spies } = _mockPrisma({ "mcpServer.updateMany": function _NoApprovedSource() { return Promise.resolve({ count: 0 }); } });
 
-      const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true })).post("/api/v1/mcp/servers/srv-1/publish");
+      const response = await request(_buildApp(prisma, { sub: "admin" })).post("/api/v1/mcp/servers/srv-1/publish");
 
       expect(response.status).toBe(404);
       expect(spies["mcpServer.updateMany"]).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ eraProbeStatus: { in: ["Accepted", "NotRequired"] }, approvalStatus: "Approved" }) }));
@@ -218,75 +222,79 @@ describe("mcp-operator router", function _suite()
     it("restores a disabled server when its saved protocol evidence remains accepted", async function _RestoresDisabledServer()
     {
       _enableOidc();
-      const server = { id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted };
+      const server = { id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", status: "Active", revisions: [_ReadyRevision("revision-1", "tool-1")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted };
       const { prisma, spies } = _mockPrisma({
         "mcpServer.updateMany": function _Update() { return Promise.resolve({ count: 1 }); },
         "mcpServer.findFirst": function _Find() { return Promise.resolve(server); },
         "auditEntry.create": function _Audit() { return Promise.resolve({}); },
       });
 
-      const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true })).post("/api/v1/mcp/servers/srv-1/enabled").send({ enabled: true });
+      const response = await request(_buildApp(prisma, { sub: "admin" })).post("/api/v1/mcp/servers/srv-1/enabled").send({ enabled: true });
 
       expect(response.status).toBe(200);
       expect(response.body).toMatchObject({ id: "srv-1", approvalStatus: "published" });
       expect(spies["mcpServer.updateMany"]).toHaveBeenCalledWith({ where: { id: "srv-1", siloId: "silo-1", eraProbeStatus: { in: ["Accepted", "NotRequired"] }, approvalStatus: "Disabled" }, data: { approvalStatus: "Published" } });
-	  expect(spies["auditEntry.create"]).toHaveBeenCalledWith({ data: expect.objectContaining({ metadata: { siloId: "silo-1", actorPrincipalId: "principal-1" } }) });
+	  expect(spies["auditEntry.create"]).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1", metadata: { actorPrincipalId: "principal-1" } }) });
     });
-
-	it("records the authenticated administrator with an access-policy change", async function _AuditsAccessPolicyActor()
-	{
-		_enableOidc();
-		const server = { id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted };
-		const { prisma, spies } = _mockPrisma({
-			"mcpServer.findFirst": function _Find() { return Promise.resolve(server); },
-			"authorizationGrant.findMany": function _FindGrants() { return Promise.resolve([]); },
-			"auditEntry.create": function _Audit() { return Promise.resolve({}); },
-		});
-
-		const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true })).put("/api/v1/mcp/servers/srv-1/access").send({ groupIds: [], principalIds: [] });
-
-		expect(response.status).toBe(200);
-		expect(spies["auditEntry.create"]).toHaveBeenCalledWith({ data: expect.objectContaining({ metadata: { siloId: "silo-1", actorPrincipalId: "principal-1" } }) });
-	});
 
     it("fails closed when no session is established", async function _denyUnauthenticated()
     {
       const { prisma } = _mockPrisma();
       const res = await request(_buildApp(prisma)).get("/api/v1/mcp/servers");
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(401);
     });
   });
 
   describe("GET /catalog — published + entitled filtering", function _catalog()
   {
-    /** Two published servers filtered by the generic authorization decision. */
+	/** Two published servers filtered by the central transaction-bound authority. */
     const _servers = [
-      { id: "srv-open", name: "Open", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired, createdAt: new Date() },
-      { id: "srv-closed", name: "Closed", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired, createdAt: new Date() },
+      { id: "srv-open", name: "Open", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Published", status: "Active", revisions: [_ReadyRevision("revision-open", "tool-open")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired, createdAt: new Date() },
+      { id: "srv-closed", name: "Closed", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", status: "Active", revisions: [_ReadyRevision("revision-closed", "tool-closed")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired, createdAt: new Date() },
     ];
 
     it("returns only the servers the caller is entitled to", async function _filters()
     {
       _enableOidc();
-      vi.mocked(__ResolvePrincipalAuthorization).mockImplementation(async function _decide(_repository, command) { return command.resource.id === "srv-open" ? { outcome: AuthorizationDecisionOutcomes.Allow, reason: "winning_allow", grantIds: ["grant-open"] } : { outcome: AuthorizationDecisionOutcomes.Deny, reason: "no_matching_grant", grantIds: [] }; });
+		_authorizationAuthority.listPrincipalEntitled.mockImplementation(async function _Entitled(command: ListPrincipalEntitledProductResourcesCommand) { return command.resources.filter(resource => resource.id === "srv-open"); });
       const { prisma } = _mockPrisma({ "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); } });
-      const res = await request(_buildApp(prisma, { sub: "user-1", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
+      const res = await request(_buildApp(prisma, { sub: "user-1", groups: [] })).get("/api/v1/mcp/catalog");
 
       expect(res.status).toBe(200);
       expect(res.body.map(function _id(s: { id: string }) { return s.id; })).toEqual(["srv-open"]);
       expect(res.body[0]).toMatchObject({ id: "srv-open", type: "multi-user", approvalStatus: "published" });
+		expect(res.body[0].tools).toEqual([{
+			toolRevisionId: "tool-open",
+			serverRevisionId: "revision-open",
+			name: "search",
+			description: null,
+			inputSchema: { type: "object", properties: { query: { type: "string" } } },
+			inputSchemaDigest: `sha256:${"d".repeat(64)}`,
+			eligibility: "assignable",
+			readiness: "ready",
+		}]);
+		expect(_authorizationAuthority.listPrincipalEntitled).toHaveBeenCalledTimes(1);
+		expect(_authorizationAuthority.listPrincipalEntitled).toHaveBeenCalledWith(expect.objectContaining({
+			siloId: "silo-1",
+			principalId: "principal-1",
+			action: ProductAuthorizationActions.Discover,
+			resources: [
+				{ kind: ProductAuthorizationResourceKinds.McpServer, id: "srv-open" },
+				{ kind: ProductAuthorizationResourceKinds.McpServer, id: "srv-closed" },
+			],
+		}));
     });
 
     it("does not pass raw OIDC group claims into authorization", async function _group()
     {
       _enableOidc();
       const { prisma } = _mockPrisma({ "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); } });
-      const res = await request(_buildApp(prisma, { sub: "user-2", groups: ["group:untrusted"], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
+      const res = await request(_buildApp(prisma, { sub: "user-2", groups: ["group:untrusted"] })).get("/api/v1/mcp/catalog");
 
       expect(res.status).toBe(200);
       expect(res.body.map(function _id(s: { id: string }) { return s.id; }).sort()).toEqual(["srv-closed", "srv-open"]);
-      expect(vi.mocked(__ResolvePrincipalAuthorization).mock.calls.every(function _noClaims(call) { return !("groups" in call[1]); })).toBe(true);
+		expect(_authorizationAuthority.listPrincipalEntitled.mock.calls.every(function _NoClaims(call) { return !("groups" in call[0]); })).toBe(true);
     });
   });
 
@@ -296,7 +304,7 @@ describe("mcp-operator router", function _suite()
     {
       _enableOidc();
       const workflow = _EraProbeWorkflow();
-      const server = { id: "srv-new", name: "Example MCP", description: "Public tools", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "PendingReview", credentialSchema: [], entitlementSummary: null, endpoint: "https://mcp.example.test/", registrationKeyDigest: `sha256:${"a".repeat(64)}`, registrationDigest: `sha256:${"b".repeat(64)}`, eraProbeStatus: "Pending", eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
+      const server = { id: "srv-new", name: "Example MCP", description: "Public tools", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "PendingReview", status: "Draft", revisions: [], credentialSchema: [], entitlementSummary: null, endpoint: "https://mcp.example.test/", registrationKeyDigest: `sha256:${"a".repeat(64)}`, registrationDigest: `sha256:${"b".repeat(64)}`, eraProbeStatus: "Pending", eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
       const { prisma, spies } = _mockPrisma({
         "mcpRegistrationClaim.upsert": function _Claim(input: unknown) { return Promise.resolve((input as { create: unknown }).create); },
         "mcpServer.findUnique": function _FindUnique() { return Promise.resolve(null); },
@@ -304,7 +312,7 @@ describe("mcp-operator router", function _suite()
         "auditEntry.create": function _Audit() { return Promise.resolve({}); },
       });
 
-      const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true }, workflow))
+      const response = await request(_buildApp(prisma, { sub: "admin" }, workflow))
         .post("/api/v1/mcp/servers")
         .send({ idempotencyKey: "registration-1", name: "Example MCP", description: "Public tools", endpoint: "https://mcp.example.test/" });
 
@@ -312,7 +320,7 @@ describe("mcp-operator router", function _suite()
       expect(response.body).toEqual({ id: "srv-new", name: "Example MCP", endpoint: "https://mcp.example.test/", eraProbeStatus: "Pending" });
       expect(spies["mcpRegistrationClaim.upsert"]).toHaveBeenCalledTimes(2);
       expect(spies["mcpServer.create"]).toHaveBeenCalledTimes(1);
-	  expect(spies["auditEntry.create"]).toHaveBeenCalledWith({ data: expect.objectContaining({ metadata: { siloId: "silo-1", actorPrincipalId: "principal-1" } }) });
+	  expect(spies["auditEntry.create"]).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1", metadata: { actorPrincipalId: "principal-1" } }) });
       const [transaction, task] = vi.mocked(workflow.admit).mock.calls[0] as Parameters<McpEraProbeWorkflow["admit"]>;
       expect(transaction.client).toBe(prisma);
       expect(task).toEqual(expect.objectContaining({ siloId: "silo-1", serverId: "srv-new" }));
@@ -323,13 +331,13 @@ describe("mcp-operator router", function _suite()
 			_enableOidc();
 			const workflow = _EraProbeWorkflow();
 			const registrationDigest = `sha256:${createHash("sha256").update(JSON.stringify(["Example MCP", "Public tools", "https://mcp.example.test/"])).digest("hex")}`;
-			const server = { id: "srv-new", name: "Example MCP", description: "Public tools", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "PendingReview", credentialSchema: [], entitlementSummary: null, endpoint: "https://mcp.example.test/", registrationKeyDigest: `sha256:${"a".repeat(64)}`, registrationDigest, eraProbeStatus: "Accepted", eraProtocolVersion: "2026-07-28", eraProbeEvidenceDigest: `sha256:${"c".repeat(64)}`, eraProbeFailureCode: null, eraProbeAttempts: 1 };
+			const server = { id: "srv-new", name: "Example MCP", description: "Public tools", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "PendingReview", status: "Active", revisions: [], credentialSchema: [], entitlementSummary: null, endpoint: "https://mcp.example.test/", registrationKeyDigest: `sha256:${"a".repeat(64)}`, registrationDigest, eraProbeStatus: "Accepted", eraProtocolVersion: "2026-07-28", eraProbeEvidenceDigest: `sha256:${"c".repeat(64)}`, eraProbeFailureCode: null, eraProbeAttempts: 1 };
 			const { prisma, spies } = _mockPrisma({
 				"mcpRegistrationClaim.upsert": function _Claim(input: unknown) { return Promise.resolve((input as { create: unknown }).create); },
 				"mcpServer.findUnique": function _FindUnique() { return Promise.resolve(server); },
 			});
 
-			const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true }, workflow))
+			const response = await request(_buildApp(prisma, { sub: "admin" }, workflow))
 				.post("/api/v1/mcp/servers")
 				.send({ idempotencyKey: "registration-1", name: "Example MCP", description: "Public tools", endpoint: "https://mcp.example.test/" });
 
@@ -349,7 +357,7 @@ describe("mcp-operator router", function _suite()
     {
       const store: { install: Record<string, unknown> | null } = { install: null };
       const overrides: Record<string, (...args: unknown[]) => unknown> = {
-        "mcpServer.findFirst": function _serverFind() { return Promise.resolve({ id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType, approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired }); },
+        "mcpServer.findFirst": function _serverFind() { return Promise.resolve({ id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType, approvalStatus: "Published", status: "Active", revisions: [_ReadyRevision("revision-1", "tool-1")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired }); },
         "mcpServerInstall.upsert": function _upsert(arg: unknown) {
           const create = (arg as { create: Record<string, unknown> }).create;
           store.install ??= { mcpServerId: create.mcpServerId, principalId: create.principalId, connectionStatus: create.connectionStatus ?? "NeedsCredential", lastUsedAt: null };
@@ -368,6 +376,14 @@ describe("mcp-operator router", function _suite()
 
       expect(res.status).toBe(201);
       expect(res.body).toMatchObject({ serverId: "srv-1", connectionStatus: "needs-credential" });
+		expect(_authorizationAuthority.constructedWith).toHaveBeenCalledTimes(1);
+		expect(_authorizationAuthority.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({
+			action: ProductAuthorizationActions.Install,
+			resource: { kind: ProductAuthorizationResourceKinds.McpServer, id: "srv-1" },
+			actorKind: "user",
+			actorId: "principal-1",
+			argumentsDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+		}));
     });
 
     it("installs a multi-user server as shared-key", async function _installShared()
@@ -378,6 +394,30 @@ describe("mcp-operator router", function _suite()
       expect(res.status).toBe(201);
       expect(res.body.connectionStatus).toBe("shared-key");
     });
+
+	it("refuses a stale server identifier after the server becomes inactive", async function _RejectsInactiveServer()
+	{
+		const { prisma, spies } = _mockPrisma({
+			"mcpServer.findFirst": function _FindServer() { return Promise.resolve({ id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Published", status: "Degraded", revisions: [_ReadyRevision("revision-1", "tool-1")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted }); },
+		});
+
+		const response = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
+
+		expect(response.status).toBe(404);
+		expect(spies["mcpServerInstall.upsert"]).toBeUndefined();
+		expect(_authorizationAuthority.admitPrincipal).not.toHaveBeenCalled();
+	});
+
+	it("refuses installation when the central authority removes current access", async function _RejectsDeniedInstall()
+	{
+		_authorizationAuthority.admitPrincipal.mockResolvedValue({ outcome: "deny", reason: "no_matching_grant", grantIds: [], evidence: null });
+		const { prisma, store } = _statefulPrisma("MultiUser");
+
+		const response = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
+
+		expect(response.status).toBe(404);
+		expect(store.install).toBeNull();
+	});
 
   });
 

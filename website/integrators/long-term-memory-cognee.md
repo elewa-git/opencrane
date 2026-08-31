@@ -291,7 +291,7 @@ result cannot reconstruct a contributor's personal facts.
  OpenCrane catalogue + outbox commit
 ```
 
-The dream Job should be as disposable as an agent-runtime Job. It receives an immutable manifest,
+The dream Job should be as disposable as a claimed agent-runtime Pod. It receives an immutable manifest,
 bounded source material, a model route, token/cost limits and a deadline. It receives no database
 credential and cannot call Cognee directly. Completion, failure and cancellation remain
 server-owned outcomes.
@@ -361,7 +361,7 @@ derived-fact lineage or dreaming.
 - [`Authorisation grant schema`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/prisma/schema/authorization.prisma)
 - [`Personal memory admission`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/personal/memory/main/src/prisma-personal-memory-admission-repository.ts)
 - [`Managed no-memory policy`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/execution/inputs/main/src/managed-no-personal-memory-scope-source.ts)
-- [`Shared boundary-grant resolver`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/agents/agent-services/main/src/db/prisma-boundary-grant-resolver.ts)
+- [`Central authorization authority`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/authorization/main/src/prisma-authorization-authority.ts)
 - [`Uncomposed server client factory`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/src/infra/memory/memory-gateway-client.factory.ts)
 - [`Memory gateway app`](https://github.com/elewa-git/opencrane/blob/main/apps/memory-gateway/README.md)
 - [`Cognee deployment`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/cognee/README.md)

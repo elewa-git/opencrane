@@ -89,8 +89,6 @@ the same vocabulary.
 
 ## Priority 1: repeated cross-package vocabulary
 
-- `SkillWorkloadKind`, shared by controller contracts, execution claims, the controller, and the
-  Kubernetes launcher; the Prisma `tool_runner` spelling needs an explicit adapter mapping.
 - `ChannelResolutionAction` and `ChannelAuthorizedAction`, duplicated between channel proxy and
   server channel-target resolution.
 - `ArtifactKind`, `PersonalArtifactState`, and `ArtifactIndexState`, duplicated between artifact
@@ -102,7 +100,7 @@ the same vocabulary.
 
 ## Priority 2: cohesive local policy vocabularies
 
-- `AgentServiceLifecycleAction`, `DeferredToolDecision`, `SteeringDisposition`, `ActionReplayMode`,
+- `AgentServiceLifecycleAction`, `DeferredToolDecision`, `SteeringDisposition`,
   `AuditDecisionActorKind`, and `AuditDecisionOutcome`.
 
 ## Deliberate exclusions

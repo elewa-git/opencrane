@@ -5,8 +5,6 @@ export interface OpenCraneKubernetesClients
 {
 	/** Authentication client used for workload TokenReview. */
 	readonly authApi: k8s.AuthenticationV1Api;
-	/** Batch client reserved for database-fenced runtime Job cleanup. */
-	readonly batchApi: k8s.BatchV1Api;
 	/** Core client used by public API capabilities. */
 	readonly coreApi: k8s.CoreV1Api;
 	/** Custom-resource client used by public API capabilities. */

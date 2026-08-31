@@ -1,7 +1,14 @@
-import { AgentRunState, AgentServiceState as PrismaAgentServiceState, OrgMemberStatus, RunOutboxEventKind, type Prisma } from "@prisma/client";
+import { AgentRunState, AgentServiceState as PrismaAgentServiceState, ChildRunCompletionDeliveryOutcome, type Prisma } from "@prisma/client";
 
+import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { AgentRun, AgentRunState as DomainAgentRunState, AgentRunTerminalReason, AgentRunTrigger, AgentServiceState as DomainAgentServiceState } from "@opencrane/models/agents";
+import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
+import { PrismaAgentRunWorkflowTaskAdmissionUnitOfWork } from "./prisma-agent-run-workflow-task-admission-unit-of-work";
+import { PrismaChildRunCompletionRepository } from "./prisma-child-run-completion-repository";
 import type { AgentRunAuthoritySnapshot, AgentRunRetryTransactionRepository, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
 
 /** Maps a Prisma AgentRun lifecycle identifier to the target contract value. */
@@ -25,16 +32,20 @@ function _runState(value: string): DomainAgentRunState
 /** Maps a Prisma run trigger identifier to the target contract value. */
 function _runTrigger(value: string): AgentRunTrigger
 {
-	if (value === "Interactive") return "interactive";
-	if (value === "Schedule") return "schedule";
-	if (value === "ManagedInvocation") return "managed_invocation";
+	if (value === "Interactive")
+		return "interactive";
+	if (value === "Schedule")
+		return "schedule";
+	if (value === "ManagedInvocation")
+		return "managed_invocation";
 	throw new Error(`unknown AgentRun trigger: ${value}`);
 }
 
 /** Maps a nullable Prisma terminal reason identifier to the target contract value. */
 function _terminalReason(value: string | null): AgentRunTerminalReason | null
 {
-	if (value === null) return null;
+	if (value === null)
+		return null;
 	switch (value)
 	{
 		case "Success": return "success";
@@ -50,7 +61,8 @@ function _terminalReason(value: string | null): AgentRunTerminalReason | null
 /** Maps a nullable Prisma AgentService state identifier to the target contract value. */
 function _serviceState(value: string | null): DomainAgentServiceState | null
 {
-	if (value === null) return null;
+	if (value === null)
+		return null;
 	switch (value)
 	{
 		case "Draft": return "draft";
@@ -105,11 +117,21 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 {
 	/** Transaction opened by the retry unit of work. */
 	private readonly _transaction: Prisma.TransactionClient;
+	/** Guarded engine that persists the controller-owned retry task. */
+	private readonly _workflow: Pick<IWorkflowEngine, "spawn">;
+	/** Central product authority bound to the retry transaction. */
+	private readonly _authorization: Pick<AuthorizationAuthority, "admitPrincipal">;
 
-	/** Creates the adapter around one transaction attempt. */
-	constructor(transaction: Prisma.TransactionClient)
+	/**
+	 * Creates the adapter around one transaction attempt.
+	 * @param transaction - Transaction that owns the retry and task records.
+	 * @param workflow - Guarded engine that saves the controller-owned task receipt.
+	 */
+	constructor(transaction: Prisma.TransactionClient, workflow: Pick<IWorkflowEngine, "spawn">, authorization: Pick<AuthorizationAuthority, "admitPrincipal">)
 	{
 		this._transaction = transaction;
+		this._workflow = workflow;
+		this._authorization = authorization;
 	}
 
 	/**
@@ -139,25 +161,21 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 	}
 
 	/**
-	 * Raises the attempt counter and writes the event that gets the new attempt dispatched, in one
-	 * transaction.
+	 * Raises the attempt counter and admits the new attempt's workflow task in one transaction.
 	 *
 	 * Authorisation is re-checked here rather than trusted from the HTTP layer, because a person can
 	 * lose their org membership or be removed from the conversation between pressing retry and this
 	 * write landing. "denies a retry before mutation when current participant authority is absent"
 	 * asserts that the update is not even attempted in that case.
 	 *
-	 * The attempt row and its outbox event are written together so a retry cannot be recorded without
-	 * anything picking it up, and cannot be dispatched twice: the event's idempotency key is
-	 * `${runId}:attempt:${attempt}`, one per attempt, and its payload also records who asked and with
-	 * which retry key. That stored payload is what lets a repeated request be recognised as the same
-	 * retry instead of a new one.
+	 * The attempt row and deterministic workflow task are written together, so a retry cannot be
+	 * recorded without durable work and the same request cannot start it twice.
 	 *
 	 * @param command - The retry, plus the run and service coordinates the domain observed.
 	 * @returns One {@link AtomicRunAttemptResult}. `started` is the only value that wrote anything;
 	 * `idempotent` means the attempt was already there and this call left the database alone.
 	 * @throws When a stored enum value is unknown, or the transaction fails or is rolled back — in
-	 * which case neither the attempt nor its event exists.
+	 * which case neither the attempt nor its workflow task exists.
 	 */
 	async startNextAttemptAtomically(command: AtomicStartNextRunAttemptCommand): Promise<AtomicRunAttemptResult>
 	{
@@ -166,27 +184,39 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 		// before reading or writing anything else. Both can be revoked after the request was sent, and
 		// `accessEndedPosition: null` is what distinguishes a current participant from a removed one.
 		const participant = await transaction.conversationParticipant.findFirst({ where: { conversationId: command.conversationId, userId: command.requestedBy, accessEndedPosition: null, conversation: { siloId: command.siloId } }, select: { conversationId: true } });
-		const membership = await transaction.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.requestedBy, status: OrgMemberStatus.Active }, select: { id: true } });
-		if (participant === null || membership === null) return { status: "unauthorized" } as const;
+		if (participant === null)
+			return { status: "unauthorized" } as const;
 
 		// 2. Read the run and service and answer the cases that need no write. A run already one
-		// attempt ahead is checked against the stored outbox payload first: if that attempt was started
-		// by this same person and retry key, this is a repeat and the answer is `idempotent` rather than
-		// a conflict. That order matters — checking the attempt first would report a caller's own retry
-		// as somebody else's change.
+		// attempt ahead is checked against the stored task receipt first. Its deterministic task key
+		// proves the next attempt was admitted atomically, so a replay returns `idempotent` instead of
+		// treating an already-committed workflow task as a conflicting mutable operation.
 		const service = await transaction.agentService.findUnique({ where: { id: command.expectedAgentServiceId }, select: { id: true, siloId: true, state: true, activeRevisionId: true } });
 		const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
-		if (run === null) return { status: "not_found" } as const;
-		if (run.siloId !== command.siloId || run.conversationId !== command.conversationId) return { status: "unauthorized" } as const;
+		if (run === null)
+			return { status: "not_found" } as const;
+		if (run.siloId !== command.siloId || run.conversationId !== command.conversationId)
+			return { status: "unauthorized" } as const;
 		if (run.attempt === command.expectedAttempt + 1)
 		{
-			const event = await transaction.outboxEvent.findUnique({ where: { idempotencyKey: `${run.id}:attempt:${run.attempt}` }, select: { payload: true } });
-			if (_RetryMatches(event?.payload, command)) return { status: "idempotent", run: _mapRun(run) } as const;
+			const task = await transaction.agentRunWorkflowTask.findUnique({ where: { runId_attempt: { runId: run.id, attempt: run.attempt } }, select: { taskKey: true } });
+			if (_RetryMatches(task, command))
+			{
+				return { status: "idempotent", run: _mapRun(run) } as const;
+			}
 		}
-		if (run.attempt !== command.expectedAttempt) return { status: "attempt_conflict", currentAttempt: run.attempt } as const;
+		if (run.attempt !== command.expectedAttempt)
+			return { status: "attempt_conflict", currentAttempt: run.attempt } as const;
 		if (run.agentServiceId !== command.expectedAgentServiceId || service?.state !== PrismaAgentServiceState.Active || service.siloId !== command.expectedAgentServiceSiloId || service.activeRevisionId !== command.expectedActiveAgentRevisionId)
 		{
 			return { status: "agent_service_authority_conflict", currentAgentServiceState: _serviceState(service?.state ?? null), currentAgentServiceSiloId: service?.siloId ?? null, currentActiveAgentRevisionId: service?.activeRevisionId ?? null } as const;
+		}
+
+		const argumentsValue = { runId: run.id, expectedAttempt: command.expectedAttempt };
+		const authorizationAdmission = await this._authorization.admitPrincipal({ siloId: command.siloId, principalId: command.requestedByPrincipalId, actorKind: "user", actorId: command.requestedByPrincipalId, resource: { kind: ProductAuthorizationResourceKinds.AgentRun, id: run.id }, action: ProductAuthorizationActions.Retry, argumentsDigest: ___DigestCanonicalJson(argumentsValue as JsonValue), nowEpochMs: Date.parse(command.acceptedAt) });
+		if (authorizationAdmission.outcome !== AuthorizationDecisionOutcomes.Allow)
+		{
+			return { status: "unauthorized" } as const;
 		}
 
 		// 3. Write the new attempt onto the same row, with every observed fact repeated as a condition
@@ -195,7 +225,7 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 		// timings, and terminal reason go back to null — while the id, conversation, service, and
 		// revision stay, so the run keeps its identity and history rather than becoming a new run.
 		// A count other than 1 means somebody else got there first, so the row is read again to say
-		// which of the three things happened: the same retry replayed, a different attempt now, or the
+		// which of the three things happened: the next attempt already exists, a different attempt now, or the
 		// service having changed underneath.
 		const nextAttempt = command.expectedAttempt + 1;
 		const changed = await transaction.agentRun.updateMany({
@@ -205,61 +235,73 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 		if (changed.count !== 1)
 		{
 			const current = await transaction.agentRun.findUnique({ where: { id: run.id } });
-			if (current === null) return { status: "not_found" } as const;
+			if (current === null)
+				return { status: "not_found" } as const;
 			if (current.attempt === nextAttempt)
 			{
-				const event = await transaction.outboxEvent.findUnique({ where: { idempotencyKey: `${run.id}:attempt:${nextAttempt}` }, select: { payload: true } });
-				if (_RetryMatches(event?.payload, command)) return { status: "idempotent", run: _mapRun(current) } as const;
+				const task = await transaction.agentRunWorkflowTask.findUnique({ where: { runId_attempt: { runId: run.id, attempt: nextAttempt } }, select: { taskKey: true } });
+				if (_RetryMatches(task, command))
+				{
+					return { status: "idempotent", run: _mapRun(current) } as const;
+				}
 			}
-			if (current.attempt !== command.expectedAttempt) return { status: "attempt_conflict", currentAttempt: current.attempt } as const;
+			if (current.attempt !== command.expectedAttempt)
+				return { status: "attempt_conflict", currentAttempt: current.attempt } as const;
 			const currentService = await transaction.agentService.findUnique({ where: { id: command.expectedAgentServiceId }, select: { siloId: true, state: true, activeRevisionId: true } });
 			return { status: "agent_service_authority_conflict", currentAgentServiceState: _serviceState(currentService?.state ?? null), currentAgentServiceSiloId: currentService?.siloId ?? null, currentActiveAgentRevisionId: currentService?.activeRevisionId ?? null } as const;
 		}
 		const updated = await transaction.agentRun.findUnique({ where: { id: run.id } });
-		if (updated === null) return { status: "not_found" } as const;
+		if (updated === null)
+			return { status: "not_found" } as const;
+		await this._redeliverSuppressedChildren(run.id, command.expectedAttempt);
 
-		// 4. Write the dispatch event in the same transaction as the attempt, so a retry can never be
-		// recorded with nothing coming to collect it. The sequence continues this run's own numbering,
-		// and the `${runId}:attempt:${n}` key gives one event per attempt — a second insert for the same
-		// attempt would violate the unique key rather than dispatch twice. The payload keeps who asked
-		// and their retry key, which is what step 2 reads to recognise a repeat.
-		const maximum = await transaction.outboxEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-		await transaction.outboxEvent.create({
-			data: {
-				runId: run.id,
-				attempt: nextAttempt,
-				sequence: (maximum._max.sequence ?? 0) + 1,
-				kind: RunOutboxEventKind.RunAttemptRequested,
-				idempotencyKey: `${run.id}:attempt:${nextAttempt}`,
-				payload: { runId: run.id, attempt: nextAttempt, requestedBy: command.requestedBy, retryIdempotencyKey: command.idempotencyKey },
-				availableAt: new Date(command.acceptedAt),
-			},
-		});
+		// 4. Admit the controller task in the same transaction as the advanced attempt. A task failure
+		// rolls the attempt back, so no run can exist without its durable controller task.
+		const admission = new PrismaAgentRunWorkflowTaskAdmissionUnitOfWork(this._transaction);
+		await admission.admit(this._workflow, { siloId: command.siloId, runId: run.id, attempt: nextAttempt });
 		return { status: "started", run: _mapRun(updated) } as const;
+	}
+
+	/** Reconsiders suppressed child results after advancing the parent; an unresolved delivery aborts the retry. */
+	private async _redeliverSuppressedChildren(parentRunId: string, previousParentAttempt: number): Promise<void>
+	{
+		const suppressed = await this._transaction.childRunCompletionDelivery.findMany({ where: { parentRunId, parentAttempt: { lte: previousParentAttempt }, outcome: ChildRunCompletionDeliveryOutcome.ParentStreamTerminal }, select: { childRunId: true } });
+		const childDelivery = new PrismaChildRunCompletionRepository(this._transaction);
+		for (const childRunId of new Set(suppressed.map(function _Child(delivery) { return delivery.childRunId; })))
+		{
+			const result = await childDelivery.deliver({ childRunId });
+			switch (result.outcome)
+			{
+				case "denied":
+				case "suppressed": throw new Error("parent retry could not reconcile a terminal child delivery");
+				default: break;
+			}
+		}
 	}
 
 	/** Reads the committed next attempt after the transaction that tried to create it rolled back. */
 	async readRetryWinner(command: StartNextRunAttemptCommand): Promise<StartNextRunAttemptResult | null>
 	{
 		const participant = await this._transaction.conversationParticipant.findFirst({ where: { conversationId: command.conversationId, userId: command.requestedBy, accessEndedPosition: null, conversation: { siloId: command.siloId } }, select: { conversationId: true } });
-		const membership = await this._transaction.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.requestedBy, status: OrgMemberStatus.Active }, select: { id: true } });
-		if (participant === null || membership === null) return { outcome: "denied", reason: "unauthorized" };
+		if (participant === null)
+			return { outcome: "denied", reason: "unauthorized" };
 		const run = await this._transaction.agentRun.findUnique({ where: { id: command.runId } });
-		if (run === null) return null;
-		if (run.siloId !== command.siloId || run.conversationId !== command.conversationId) return { outcome: "denied", reason: "unauthorized" };
+		if (run === null)
+			return null;
+		if (run.siloId !== command.siloId || run.conversationId !== command.conversationId)
+			return { outcome: "denied", reason: "unauthorized" };
 		const nextAttempt = command.expectedAttempt + 1;
-		if (run.attempt !== nextAttempt) return null;
-		const event = await this._transaction.outboxEvent.findUnique({ where: { idempotencyKey: `${run.id}:attempt:${nextAttempt}` }, select: { payload: true } });
-		return _RetryMatches(event?.payload, command)
+		if (run.attempt !== nextAttempt)
+			return null;
+		const task = await this._transaction.agentRunWorkflowTask.findUnique({ where: { runId_attempt: { runId: run.id, attempt: nextAttempt } }, select: { taskKey: true } });
+		return _RetryMatches(task, command)
 			? { outcome: "idempotent", run: _mapRun(run) }
 			: { outcome: "denied", reason: "attempt_conflict", currentAttempt: run.attempt };
 	}
 }
 
-/** Checks whether the already-started next attempt belongs to this exact browser retry request. */
-function _RetryMatches(payload: unknown, command: StartNextRunAttemptCommand): boolean
+/** Checks whether the next attempt owns the deterministic task admitted for these retry coordinates. */
+function _RetryMatches(task: { readonly taskKey: string } | null, command: StartNextRunAttemptCommand): boolean
 {
-	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return false;
-	const fields = payload as Readonly<Record<string, unknown>>;
-	return fields["runId"] === command.runId && fields["attempt"] === command.expectedAttempt + 1 && fields["requestedBy"] === command.requestedBy && fields["retryIdempotencyKey"] === command.idempotencyKey;
+	return task?.taskKey === `agent-run:${command.siloId}:${command.runId}:attempt:${command.expectedAttempt + 1}`;
 }

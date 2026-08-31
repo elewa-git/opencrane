@@ -1,16 +1,26 @@
 import { Router } from "express";
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
-import type { AuditEntry } from "./audit.types";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
+
+import { PrismaAuditCatalogueUnitOfWork } from "../prisma-audit-catalogue";
+import type { AuditAuthorizationAuthorityFactory, AuditRouteCaller, AuditRouteCallerResolver } from "./audit.types";
 
 /** Maximum entries per page. */
 const MAX_LIMIT = 1000;
+
+/** Resolves audit-log authority from the verified browser Principal. */
+function _ResolveAuditCaller(request: Parameters<AuditRouteCallerResolver>[0]): AuditRouteCaller | null
+{
+	const principal = _ResolveRequestPrincipal(request);
+	return principal === null ? null : { siloId: principal.siloId, principalId: principal.principalId };
+}
 
 /**
  * Serves the operator-facing audit log, newest entry first.
  *
  * These are the readable entries the group and tenant routes write, not the append-only
- * authorization decisions from __AppendAuditDecision. Paging is keyset-based: the cursor is the last
+ * authorization decisions from PrismaAuditDecisionWriterRepository. Paging is keyset-based: the cursor is the last
  * entry's timestamp, base64url-encoded, and the handler asks for one row more than the page size so
  * it can report `hasMore` without a second COUNT query. An unreadable cursor is ignored and the first
  * page is returned; `limit` is capped at 1000.
@@ -20,13 +30,20 @@ const MAX_LIMIT = 1000;
  * @returns Express router with the single GET / route.
  * @see AuditEntry
  */
-export function auditRouter(prisma: PrismaClient): Router
+export function auditRouter(prisma: PrismaClient, createAuthorization: AuditAuthorizationAuthorityFactory<Prisma.TransactionClient>, resolveCaller: AuditRouteCallerResolver = _ResolveAuditCaller): Router
 {
   const router = Router();
+  const audit = new PrismaAuditCatalogueUnitOfWork(prisma, createAuthorization);
 
   /** Query audit log entries with cursor pagination. */
   router.get("/", async function _listAuditEntries(req, res)
   {
+    const caller = resolveCaller(req);
+    if (caller === null)
+    {
+      res.status(403).json({ error: "Authenticated Principal is required", code: "FORBIDDEN" });
+      return;
+    }
     const rawLimit = Number(req.query.limit ?? "100");
     const limit = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : 100, MAX_LIMIT);
     const cursor = req.query.cursor as string | undefined;
@@ -43,36 +60,12 @@ export function auditRouter(prisma: PrismaClient): Router
       }
     }
 
-    const entries = await prisma.auditEntry.findMany({
-      where: {
-        ...(cursorDate ? { timestamp: { lt: cursorDate } } : {}),
-      },
-      orderBy: { timestamp: "desc" },
-      // Fetch one extra to determine hasMore without a separate COUNT query.
-      take: limit + 1,
-    });
-
-    const hasMore = entries.length > limit;
-    const page = entries.slice(0, limit);
-
-    const data: AuditEntry[] = page.map(function _mapEntry(e)
-    {
-      return {
-        timestamp: e.timestamp.toISOString(),
-        action: e.action,
-        resource: e.resource,
-        message: e.message,
-      };
-    });
-
-    const lastEntry = page.at(-1);
-    const nextCursor = hasMore && lastEntry
-      ? Buffer.from(lastEntry.timestamp.toISOString(), "utf8").toString("base64url")
-      : undefined;
+    const page = await audit.list(caller, { limit, before: cursorDate ?? null });
+    const nextCursor = page.nextCursorAt === null ? undefined : Buffer.from(page.nextCursorAt.toISOString(), "utf8").toString("base64url");
 
     res.json({
-      data,
-      pagination: { limit, hasMore, ...(nextCursor ? { nextCursor } : {}) },
+      data: page.data,
+      pagination: { limit, hasMore: page.hasMore, ...(nextCursor ? { nextCursor } : {}) },
     });
   });
 

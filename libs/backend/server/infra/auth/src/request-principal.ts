@@ -5,8 +5,7 @@ import type { RequestPrincipal } from "./request-principal.types";
 import { _ClusterTenantFromHost } from "./request-silo";
 
 /**
- * Read the logged-in caller out of an Express request: who they are, which silo they are
- * on, and whether the session says they are an org admin.
+ * Read the logged-in caller out of an Express request: who they are and which silo they are on.
  *
  * Both facts must be present. The durable Principal comes from the authenticated admission
  * context, while the silo is independently re-derived from the trusted request host. Either one
@@ -33,5 +32,5 @@ export function _ResolveRequestPrincipal(request: Request): RequestPrincipal | n
 	const authenticatedAt = new Date(authUser.authenticatedAt);
 	const verifiedAuthenticationAt = Number.isFinite(authenticatedAt.getTime()) ? authenticatedAt : null;
 
-  return { principalId: admittedPrincipal.principalId, externalSubject: admittedPrincipal.subject, externalIssuer: admittedPrincipal.issuer, siloId, isOrgAdmin: authUser.isOrgAdmin === true, verifiedAuthenticationAt };
+  return { principalId: admittedPrincipal.principalId, externalSubject: admittedPrincipal.subject, externalIssuer: admittedPrincipal.issuer, siloId, verifiedAuthenticationAt };
 }

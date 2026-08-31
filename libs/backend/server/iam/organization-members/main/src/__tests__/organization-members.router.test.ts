@@ -7,7 +7,7 @@ import { OrganizationMembershipError, OrganizationMembershipErrorKinds } from ".
 import { _CreateOrganizationMembersRouter } from "../organization-members.router";
 
 /** Verified caller supplied by the application composition boundary. */
-const _CALLER = { siloId: "acme", subjectId: "member-1", verifiedEmail: "member@acme.test", displayName: "Member" };
+const _CALLER = { siloId: "acme", principalId: "principal-member-1", subjectId: "member-1", verifiedEmail: "member@acme.test", displayName: "Member" };
 
 /** Creates an acceptance route whose authority refuses with one stable domain error. */
 function _app(kind: OrganizationMembershipErrorKinds)

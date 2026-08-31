@@ -3,6 +3,8 @@ import type { AgentRevision, AgentRevisionContent, AgentRevisionDiff, AgentRevis
 /** Command that creates one managed AgentService with its first draft revision. */
 export interface CreateManagedAgentServiceCommand
 {
+  /** Authenticated local Principal requesting the management change. */
+  readonly principalId: string;
   /** Silo that will own the service. */
   readonly siloId: SiloId;
   /** Human-readable service name. */
@@ -20,6 +22,8 @@ export interface CreateManagedAgentServiceCommand
 /** Request to add a new draft revision on top of the newest one. Carries the revision the author edited so a concurrent append is rejected rather than overwritten. */
 export interface ReviseAgentRevisionCommand
 {
+  /** Authenticated local Principal requesting the management change. */
+  readonly principalId: string;
   /** Silo the caller is operating within; a service in another silo must not resolve. */
   readonly siloId: SiloId;
   /** Service being revised. */
@@ -37,6 +41,8 @@ export interface ReviseAgentRevisionCommand
 /** Command that restores an older revision by cloning it into a new draft revision. */
 export interface RestoreAgentRevisionCommand
 {
+  /** Authenticated local Principal requesting the management change. */
+  readonly principalId: string;
   /** Silo the caller is operating within; a service in another silo must not resolve. */
   readonly siloId: SiloId;
   /** Service being restored. */
@@ -74,6 +80,8 @@ export type AgentServiceLifecycleAction = `${AgentServiceLifecycleActions}`;
 /** Command that changes a stable AgentService state with optimistic concurrency. */
 export interface ChangeAgentServiceStateCommand
 {
+  /** Authenticated local Principal requesting the management change. */
+  readonly principalId: string;
   /** Silo the caller is operating within; a service in another silo must not resolve. */
   readonly siloId: SiloId;
   /** Service whose state is changing. */
@@ -121,6 +129,8 @@ export enum ManagedRunAdmissionOutcomes
 /** Command that records one managed run admission request. */
 export interface ManagedRunNowCommand
 {
+  /** Human Principal for run-now, or null for a scheduler-owned trigger. */
+  readonly requestedByPrincipalId: string | null;
   /** Service to run. */
   readonly agentServiceId: AgentServiceId;
   /** Silo containing the service and durable run. */
@@ -197,6 +207,8 @@ export interface ManagedRunNowCommand
  */
 export enum AgentRevisionLifecycleDenials
 {
+  /** Rejects a management action without current central Organization administration authority. */
+  Unauthorized = "unauthorized",
   /** Rejects a command whose shape or values do not satisfy the lifecycle contract. */
   InvalidCommand = "invalid_command",
   /** Hides a missing or foreign-silo service behind the same absence outcome. */
@@ -229,6 +241,8 @@ export enum AgentRevisionLifecycleDenials
   ToolPolicyUnavailable = "tool_policy_unavailable",
   /** Rejects a revision whose selected skill is unavailable. */
   SkillUnavailable = "skill_unavailable",
+  /** Rejects a revision when the Principal lacks `Use` for one or more frozen execution resources. */
+  ProductAuthorizationUnavailable = "product_authorization_unavailable",
   /** Rejects a revision whose budget is unavailable. */
   BudgetUnavailable = "budget_unavailable",
   /** Defers a run until fresh membership evidence is available. */
@@ -278,7 +292,16 @@ export type ChangeAgentServiceStateResult =
 /** Outcome of comparing two revisions: both revisions plus their differences, or a refusal (both revisions must exist in the caller's silo and belong to the same service). */
 export type CompareAgentRevisionsResult =
   | { readonly outcome: "compared"; readonly base: AgentRevision; readonly target: AgentRevision; readonly diff: AgentRevisionDiff }
-  | { readonly outcome: "denied"; readonly reason: AgentRevisionLifecycleDenial };
+	| { readonly outcome: "denied"; readonly reason: AgentRevisionLifecycleDenial };
+
+/** Authenticated Principal coordinates used by filtered management reads. */
+export interface AgentServiceReadCaller
+{
+	/** Durable local Principal whose current grants filter the result. */
+	readonly principalId: string;
+	/** Silo from the authenticated request host. */
+	readonly siloId: SiloId;
+}
 
 /** Read-only run history for one service. */
 export interface AgentServiceHistory
@@ -300,18 +323,21 @@ export interface AgentServiceHistory
  * (`expectedParentRevisionId`); if someone else appended first, the call returns a conflict with the
  * current newest revision instead of silently overwriting the other author's work.
  *
- * Implemented by: `PrismaAgentRevisionLifecycleRepository` in `db/prisma-agent-revision-lifecycle.ts`.
+ * Implemented by: `PrismaAgentRevisionLifecycleUnitOfWork` in
+ * `db/prisma-agent-revision-lifecycle-unit-of-work.ts`.
  * Called by: the seven `__*` use cases in `agent-revision-lifecycle.ts`; wired in
  * `prisma-agent-services.router.ts`.
  */
 export interface AgentRevisionLifecycleRepository
 {
   /** Lists managed services in the caller's silo, most recently updated first, capped at 200 rows. */
-  listManagedServices(siloId: SiloId): Promise<readonly AgentService[]>;
+	listManagedServices(caller: AgentServiceReadCaller): Promise<readonly AgentService[]>;
   /** Loads one stable service identity scoped to the caller's silo, or null when absent. */
-  getService(agentServiceId: AgentServiceId, siloId: SiloId): Promise<AgentService | null>;
+	getService(agentServiceId: AgentServiceId, caller: AgentServiceReadCaller): Promise<AgentService | null>;
+	/** Loads service lifecycle eligibility for an internal run-admission path without exposing it to HTTP. */
+	getServiceForAdmission(agentServiceId: AgentServiceId, siloId: SiloId): Promise<AgentService | null>;
   /** Loads one immutable revision whose parent service is in the caller's silo, or null. */
-  getRevision(agentRevisionId: AgentRevisionId, siloId: SiloId): Promise<AgentRevision | null>;
+	getRevision(agentRevisionId: AgentRevisionId, caller: AgentServiceReadCaller): Promise<AgentRevision | null>;
   /** Creates the service and its first draft revision in one transaction, so a service can never exist with no revision. */
   createManagedService(command: CreateManagedAgentServiceCommand, createdAt: string): Promise<CreateManagedAgentServiceResult>;
   /** Adds a draft revision on top of the newest one, in one transaction; returns a conflict if another author appended first. */
@@ -321,7 +347,7 @@ export interface AgentRevisionLifecycleRepository
   /** Changes the service state only if it still matches `expectedState`; otherwise returns a conflict with the current state. */
   changeServiceState(command: ChangeAgentServiceStateCommand, changedAt: string): Promise<ChangeAgentServiceStateResult>;
   /** Reads the silo-scoped revision lineage and durable run history for one service. */
-  readHistory(agentServiceId: AgentServiceId, siloId: SiloId, runLimit: number): Promise<AgentServiceHistory>;
+	readHistory(agentServiceId: AgentServiceId, caller: AgentServiceReadCaller, runLimit: number): Promise<AgentServiceHistory>;
 }
 
 /**

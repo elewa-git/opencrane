@@ -194,7 +194,7 @@ export class ConversationRunStore
 		const run = this._run();
 		if (run === null || !this._CanRetry()) return;
 		this._busy.set(true);
-		try { this._run.set(await this._gateway.retry({ conversationId, runId: run.runId, expectedAttempt: run.attempt, idempotencyKey: globalThis.crypto.randomUUID() })); }
+		try { this._run.set(await this._gateway.retry({ conversationId, runId: run.runId, expectedAttempt: run.attempt })); }
 		catch (error) { this._error.set(_Message(error, "OpenCrane could not retry this run.")); }
 		finally { this._busy.set(false); }
 	}

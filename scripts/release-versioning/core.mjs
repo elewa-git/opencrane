@@ -18,13 +18,13 @@ import { compareSemver, isAdjacentMinor, parseSemver, readJson, sha256 } from ".
  * keeps that base's already-released changes out of the candidate's direct diff.
  * Called by: `release-versioning-check.mjs` before it validates the workspace.
  * @param {string} base The last successful workflow revision used for cumulative validation.
- * @param {string | null} versionBase The candidate manifest's declared predecessor.
- * @returns {string} The predecessor when present, otherwise the cumulative base for adoption.
+ * @param {string | null} predecessorRef The immutable predecessor tag or commit when one exists.
+ * @returns {string} The immutable predecessor reference, or the cumulative base for adoption.
  * @see validateWorkspace
  */
-export function __SelectDirectReleaseComparisonBase(base, versionBase)
+export function __SelectDirectReleaseComparisonBase(base, predecessorRef)
 {
-	return versionBase ?? base;
+	return predecessorRef ?? base;
 }
 
 const _IGNORED_TOUCH = [
@@ -198,6 +198,8 @@ function _ValidateProject(
  * immutable against this candidate's changes, so inherited history must not make it fail.
  * `suppliedRestoredHistoricalManifestFiles` admits only a file that the caller proved byte-equal to
  * its own immutable tag, allowing a branch to repair later drift without authorizing new history.
+ * `suppliedRemovedUntaggedHistoricalManifestFiles` admits only a deletion whose missing tag the
+ * caller proved, so an abandoned candidate can be removed without weakening tagged history.
  *
  * Called by: `scripts/release-versioning-check.mjs`.
  * @returns Every release-composition error the caller must resolve before accepting the candidate.
@@ -211,6 +213,7 @@ export async function validateWorkspace(
 	releasedVersionTag = null,
 	suppliedDirectChangedFiles = changedFiles,
 	suppliedRestoredHistoricalManifestFiles = [],
+	suppliedRemovedUntaggedHistoricalManifestFiles = [],
 )
 {
 	const rootVersion = readJson(join(repositoryRoot, "package.json")).version;
@@ -225,6 +228,7 @@ export async function validateWorkspace(
 	const newFiles = new Set(suppliedNewFiles);
 	const directChangedFiles = new Set(suppliedDirectChangedFiles);
 	const restoredHistoricalManifestFiles = new Set(suppliedRestoredHistoricalManifestFiles);
+	const removedUntaggedHistoricalManifestFiles = new Set(suppliedRemovedUntaggedHistoricalManifestFiles);
 	if (releasedVersionTag)
 	{
 		const compositionChanged = [...directChangedFiles].some((file) =>
@@ -240,6 +244,12 @@ export async function validateWorkspace(
 		const changedManifestVersion = /^releases\/(?<version>\d+\.\d+\.\d+)\.json$/u.exec(file)?.groups?.version;
 		if (!changedManifestVersion || changedManifestVersion === rootVersion) continue;
 		if (!directChangedFiles.has(file)) continue;
+		if (!existsSync(join(repositoryRoot, file)))
+		{
+			if (!removedUntaggedHistoricalManifestFiles.has(file))
+				errors.push(`release manifest '${changedManifestVersion}' is immutable; create '${rootVersion}' instead`);
+			continue;
+		}
 		if (restoredHistoricalManifestFiles.has(file)) continue;
 		if (!newFiles.has(file))
 		{
@@ -290,6 +300,6 @@ export async function validateWorkspace(
 		);
 	validateUmbrella(repositoryRoot, manifest, previousManifest, errors);
 	validateDatabaseOperand(manifest, errors);
-	validateDatabase(repositoryRoot, manifest, previousManifest, changedFiles, errors);
+	validateDatabase(repositoryRoot, manifest, errors);
 	return errors;
 }

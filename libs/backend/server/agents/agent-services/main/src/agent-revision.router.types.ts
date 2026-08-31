@@ -5,14 +5,13 @@ import type { Logger } from "@opencrane/backend/observability";
 import type { AgentServicePublicationRepository } from "./agent-publication.types";
 import type { AgentRevisionLifecycleRepository, ManagedRunAdmissionPort } from "./agent-revision-lifecycle.types";
 import type { AgentScheduleRepository } from "./agent-schedule.types";
-import type { BoundaryGrantResolver } from "./boundary-attachment-authority.types";
 
 /**
  * Who is making a management request, worked out by the app from the browser session and request
  * host — never from the request body.
  *
- * The router trusts this completely: `siloId` scopes every query, and `isOrgAdmin` is the only gate
- * on every mutation. Anything that builds one of these is deciding authorisation.
+ * The router trusts these as authenticated identity coordinates only. Each mutation rechecks the
+ * caller's current product grant through the transaction-bound AuthorizationAuthority.
  */
 export interface ManagementCaller
 {
@@ -22,8 +21,6 @@ export interface ManagementCaller
 	readonly externalSubject: string;
 	/** Silo the caller is operating within. */
 	readonly siloId: string;
-	/** Whether the caller holds the organisation-admin role required to mutate definitions. */
-	readonly isOrgAdmin: boolean;
 }
 
 /** Supplies the timestamps written to `createdAt`, `publishedAt`, and `updatedAt`. It is injected only so tests can fix time; a caller-supplied timestamp must never reach these fields. */
@@ -44,12 +41,7 @@ export interface AgentServicesRouterDependencies
 	readonly runAdmission: ManagedRunAdmissionPort;
 	/** Stores the recurring schedules behind the `/schedules` endpoints — see {@link AgentScheduleRepository}. */
 	readonly schedules: AgentScheduleRepository;
-	/**
-	 * Grant-compiler-backed resolver used to validate, at attach time, that a caller administers every
-	 * boundary they attach — a stored attachment then grants nothing beyond the caller's effective access.
-	 */
-	readonly boundaryGrantResolver: BoundaryGrantResolver;
-	/** Resolves the authenticated caller and role from the request, or null when unauthenticated. */
+	/** Resolves the authenticated caller from the request, or null when unauthenticated. */
 	resolveCaller(request: Request): ManagementCaller | null;
 	/** Server-owned management clock, replaceable only for deterministic tests. */
 	readonly clock: ManagementClock;

@@ -1,4 +1,4 @@
-import type { RunInputSnapshotIdentity, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
+import type { RunInputSnapshotIdentity, RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { PersonaRevisionId } from "@opencrane/models/agents";
 import type { MessageContentBlock, MessageId } from "@opencrane/models/conversations";
@@ -40,6 +40,8 @@ export interface ApprovedPersonaInput
 {
 	/** The PersonaRevision that is currently active and approved, or null for a managed run. */
 	personaRevisionId: PersonaRevisionId | null;
+	/** Stable Persona profile resource authorized for Use, or null for a managed run. */
+	personaId: string | null;
 }
 
 /** Holds the conversation's messages in order, as the conversation source read them inside the admission transaction. */
@@ -63,27 +65,30 @@ export interface MemoryScopeInput
 {
 	/** Limits what the runtime may recall from memory later in the run. */
 	memoryQueryPolicy: JsonValue;
+	/** Exact Dataset and MemoryScope resource id, or null when this run has no personal memory. */
+	datasetId: string | null;
 }
 
 /** Holds the model, tools, skills, and artifacts the published revision assigned to this run. */
 export interface ToolPolicyInput
 {
+	/** Exact model definition selected by the published revision. */
+	modelDefinitionId: string;
 	/** Server-selected model route without provider credentials. */
 	modelRoute: JsonValue;
-	/**
-	 * The third-party integration tools this revision allows at runtime.
-	 *
-	 * These are MCP tools: each carries a name, a description, and a JSON Schema for its arguments,
-	 * and all three reach the model.
-	 *
-	 * @see https://modelcontextprotocol.io/specification/2025-06-18 - MCP, revision 2025-06-18 as
-	 * pinned by `_MCP_PROTOCOL_VERSION` in server/infra/obot-custody.
-	 */
-	integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[];
+	/** MCP tool revisions in the Ready state that the AgentRevision selected. */
+	mcpTools: readonly RunInputSnapshotMcpTool[];
 	/** Immutable skill revisions eligible for this run. */
 	skillRevisionIds: readonly SkillRevisionId[];
 	/** Immutable artifact revisions explicitly made available to the run. */
 	artifactRevisionIds: readonly ArtifactRevisionId[];
+}
+
+/** Rechecks every exact product resource selected before the snapshot can commit. */
+export interface ProductResourceAuthorizationSource
+{
+	/** Batch-checks current Use grants through the transaction-bound central authority. */
+	load(command: SessionAssemblyCommand, identity: IdentityEnvelopeInput, persona: ApprovedPersonaInput, memory: MemoryScopeInput, tools: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
 }
 
 /** Effective run limits resolved from service, silo, and policy. */
@@ -289,12 +294,10 @@ export interface MemoryScopeSource
 }
 
 /**
- * Reads what the revision assigned — model, integration tools, skills, artifacts — keeping only
- * what the caller's grants also allow.
+ * Reads the model, MCP tools, skills, and artifacts assigned by the revision.
  *
- * It locks the policy rows before re-reading them, in the same order revocation locks them. That
- * ordering is what guarantees a revocation happening at the same moment either lands before this
- * read (and is seen) or after the snapshot commits, never half-way through.
+ * It updates the MCP admission claim before reading inside the Serializable admission transaction.
+ * A concurrent publication change then conflicts with snapshot persistence.
  *
  * Implemented by: {@link PrismaRevisionToolPolicySource}.
  */
@@ -305,15 +308,24 @@ export interface ToolPolicySource
 	 *
 	 * @param command - The admission command; its silo bounds every row that may be returned.
 	 * @param run - Facts from {@link RunAuthoritySource}.
-	 * @param transaction - The admission transaction. The row locks are taken on it, so they are held
-	 * until admission commits or rolls back.
+		 * @param transaction - The Serializable admission transaction that owns every recheck and write.
 	 * @returns `loaded` with the run's tool policy. `denied` with `tool_policy_unavailable` when the
-	 * revision is no longer published, an integration is inactive, its custody reference has expired,
-	 * a tool definition fails review, or an assigned skill or artifact is not a published revision in
-	 * this silo. An operator has to fix the revision; retrying will not help.
+	 * revision is no longer published, an MCP server revision is not Ready, its server is inactive or
+	 * unpublished, or an assigned skill or artifact is not published in this silo. An operator has to
+	 * fix the revision; retrying will not help.
 	 */
 	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ToolPolicyInput>>;
 }
+
+/** Serializes MCP policy reads for one agent revision inside run admission. */
+export interface McpToolAdmissionClaimRepository
+{
+	/** Updates the revision's claim row so another admission waits before reading its MCP policy. */
+	touch(agentRevisionId: string, siloId: string, admittedAt: Date): Promise<void>;
+}
+
+/** Builds an MCP admission-claim repository from the current run-admission transaction. */
+export type McpToolAdmissionClaimRepositoryFactory = (transaction: RunAdmissionTransaction) => McpToolAdmissionClaimRepository;
 
 /**
  * Re-checks every skill revision the tool policy named, just before the snapshot is saved.
@@ -322,8 +334,7 @@ export interface ToolPolicySource
  * skills and then revisions in the same order revocation does, so a skill revoked while admission
  * is running cannot slip into a snapshot. It returns no value — it exists only to refuse.
  *
- * Implemented by: {@link PrismaSkillRevisionEligibilitySource}. Injected by the caller (see
- * `__CreateManagedRunAdmissionPort` and `__CreatePersonalRunAdmissionPort`).
+ * Implemented by: {@link PrismaSkillRevisionEligibilitySource}.
  */
 export interface SkillRevisionEligibilitySource
 {
@@ -340,6 +351,38 @@ export interface SkillRevisionEligibilitySource
 	 * silo, or not published.
 	 */
 	load(command: SessionAssemblyCommand, run: InitialRunAuthority, toolPolicy: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
+}
+
+/** Reads skill assignment and publication facts inside the active run-admission transaction. */
+export interface SkillRevisionEligibilityRepository
+{
+	/** Loads every skill revision assigned to one immutable agent revision. */
+	load(agentRevisionId: string): Promise<SkillRevisionEligibilityRead>;
+}
+
+/** Assignment facts plus proof that every assigned revision still exists. */
+export interface SkillRevisionEligibilityRead
+{
+	/** Current facts for every assigned revision that still exists. */
+	readonly revisions: readonly AssignedSkillRevision[];
+	/** Whether every assignment resolved to an existing revision. */
+	readonly isComplete: boolean;
+}
+
+/** Builds the skill reader from the active run-admission transaction. */
+export type SkillRevisionEligibilityRepositoryFactory = (transaction: RunAdmissionTransaction) => SkillRevisionEligibilityRepository;
+
+/** Facts used to decide whether one assigned skill revision can enter a run snapshot. */
+export interface AssignedSkillRevision
+{
+	/** Immutable SkillRevision assigned to the published AgentRevision. */
+	readonly skillRevisionId: string;
+	/** Whether the revision is published. */
+	readonly isPublished: boolean;
+	/** Server-owned revocation instant, if the revision has been withdrawn. */
+	readonly revokedAt: Date | null;
+	/** Silo of the skill that owns this revision. */
+	readonly siloId: string;
 }
 
 /**
@@ -428,10 +471,12 @@ export interface SessionAssemblyAuthorities
 	preferenceFacts: PreferenceFactSource;
 	/** Decides which memory the run may use. Needs a verified identity and the frozen conversation first. */
 	memoryScope: MemoryScopeSource;
-	/** Reads the revision's model, integration tools, skills, and artifacts, under row locks. */
+	/** Reads the revision's model, MCP tools, skills, and artifacts in the admission transaction. */
 	toolPolicy: ToolPolicySource;
-	/** Re-checks the named skill revisions last, so its locks are still held when the snapshot commits. */
+	/** Re-checks the named skill revisions last before the snapshot commits. */
 	skillEligibility: SkillRevisionEligibilitySource;
+	/** Batch-checks current Use grants for every resource selected by the preceding sources. */
+	productAuthorization: ProductResourceAuthorizationSource;
 	/** Reads the run's token, turn, and deadline limits. */
 	budgetPolicy: BudgetPolicySource;
 	/** Decides who the run executes as. Must run before the two identity-scoped sources above. */

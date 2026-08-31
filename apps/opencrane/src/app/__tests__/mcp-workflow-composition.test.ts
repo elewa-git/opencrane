@@ -1,12 +1,36 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { AgentRunTaskDeclaration } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
 import { McpEraProbeFailureCodes } from "@opencrane/backend/server/gateways/mcp";
 import { McpEraProbeConfigurationError, McpEraProbeProtocolError, McpEraProbeTransportError } from "@opencrane/backend/server/infra/mcp-era-probe";
 
-import { _McpEraProbeFailure } from "../mcp-workflow-composition";
+import { __DeclareAgentRunTask, __DeclareArtifactPreprocessTask, __DeclareSkillAuthoringValidation, _McpEraProbeFailure } from "../mcp-workflow-composition";
 
 describe("MCP workflow application translation", function _McpWorkflowTranslationSuite()
 {
+	it("declares the remote skill validation task before a server transaction can admit it", function _DeclaresRemoteSkillValidation()
+	{
+		const declare = vi.fn();
+		__DeclareSkillAuthoringValidation({ declare });
+		expect(declare).toHaveBeenCalledWith(SkillAuthoringValidationTaskDeclaration);
+	});
+
+	it("declares the remote artifact task before a publication transaction can admit it", function _DeclaresRemoteArtifactPreprocessing()
+	{
+		const declare = vi.fn();
+		__DeclareArtifactPreprocessTask({ declare });
+		expect(declare).toHaveBeenCalledWith(ArtifactPreprocessTaskDeclaration);
+	});
+
+	it("declares the remote AgentRun task before run admission can save it", function _DeclaresRemoteAgentRun()
+	{
+		const declare = vi.fn();
+		__DeclareAgentRunTask({ declare });
+		expect(declare).toHaveBeenCalledWith(AgentRunTaskDeclaration);
+	});
+
 	it.each([
 		new McpEraProbeTransportError("network"),
 		new McpEraProbeTransportError("timeout"),
@@ -32,6 +56,6 @@ describe("MCP workflow application translation", function _McpWorkflowTranslatio
 		new McpEraProbeTransportError("http_404"),
 	])("maps %s to an invalid-response rejection", function _Invalid(error)
 	{
-		expect(_McpEraProbeFailure(error).code).toBe(McpEraProbeFailureCodes.InvalidResponse);
+		expect(_McpEraProbeFailure(error).code).toBe(McpEraProbeFailureCodes.NotMcpServer);
 	});
 });

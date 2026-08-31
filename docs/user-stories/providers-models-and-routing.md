@@ -23,35 +23,21 @@ Acceptance criteria:
 
 APIs: `GET /api/v1/providers/byok`, `PUT/DELETE /api/v1/providers/byok/{provider}`.
 
-## MOD-02 — Manage scoped provider references
-
-**As a** platform operator or authorised ClusterTenant member, **I want** to manage references to
-custodied provider credentials **so that** model definitions bind to metadata rather than raw keys.
-
-Acceptance criteria:
-
-- Scope is `global` or `clusterTenant` with matching authority.
-- Fields include provider, `secretRef`, and optional LiteLLM credential name.
-- Requests containing raw key fields are rejected.
-- Ordinary users do not see sensitive secret-reference detail.
-
-APIs: CRUD under `/api/v1/providers/credentials`.
-
 ## MOD-03 — Manage model definitions
 
-**As an** authorised operator, **I want** to create, edit, default, and remove scoped model
-definitions **so that** product-facing aliases resolve to approved upstream models.
+**As an** authorised operator, **I want** to register a scoped model definition **so that** a
+product-facing alias resolves to an approved upstream model through a durable provider command.
 
 Acceptance criteria:
 
-- Fields include scope, public model name, upstream model, optional API base, default flag, and
-  provider credential.
+- Fields include scope, public model name, upstream model, optional API base, and the admitted
+  provider connection.
 - Tenant models can bind only global or same-tenant credentials.
-- Defined, registering, registered, placeholder/unverified, failed, default, and in-use states are
-  visible.
-- A persisted row is not automatically labelled runnable.
+- Registration stays pending until LiteLLM confirms the deployment.
+- Direct update and delete routes cannot bypass external-state reconciliation; provider retirement
+  removes only unused model rows after their deployments are gone.
 
-APIs: CRUD under `/api/v1/models`.
+APIs: `GET /api/v1/models` and `POST /api/v1/models`.
 
 ## MOD-04 — Choose explicit routing defaults
 

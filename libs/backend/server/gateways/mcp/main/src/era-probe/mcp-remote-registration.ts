@@ -3,6 +3,7 @@ import { isIP } from "node:net";
 
 import type { McpOperatorCaller } from "../core/mcp-operator.logic.types";
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
+import { __RequireMcpOrganizationAdministration } from "../core/mcp-operator-authorization";
 import { McpRemoteServerRegistrationOutcomes } from "./mcp-era-probe.types";
 import type { McpEraProbeWorkflow, McpRemoteServerRegistrationCommand, McpRemoteServerRegistrationResult } from "./mcp-era-probe.types";
 import { ___McpRemoteServerRegistrationSchema } from "./mcp-remote-registration.validator";
@@ -83,6 +84,7 @@ export function registerRemoteServer(unitOfWork: McpOperatorUnitOfWork, workflow
 
 	return unitOfWork.execute(async function _Register(transaction): Promise<McpRemoteServerRegistrationResult>
 	{
+		await __RequireMcpOrganizationAdministration(transaction.authorization, caller, { operation: "mcp-server-register", name, description, endpoint, registrationKeyDigest, registrationDigest });
 		const stored = await transaction.mcp.createOrFindRemoteServer({ siloId: caller.siloId, name, description, endpoint, registrationKeyDigest, registrationDigest });
 		if (!stored || stored.server.registrationDigest !== registrationDigest)
 		{
@@ -92,7 +94,7 @@ export function registerRemoteServer(unitOfWork: McpOperatorUnitOfWork, workflow
 		const server = stored.server;
 		if (stored.created)
 		{
-			await transaction.mcp.appendAudit("Created", `McpServer/${server.id}`, `Remote MCP server ${server.id} registered for protocol check`, { siloId: caller.siloId, actorPrincipalId: caller.principalId });
+			await transaction.mcp.appendAudit(caller.siloId, "Created", `McpServer/${server.id}`, `Remote MCP server ${server.id} registered for protocol check`, caller.principalId);
 		}
 		await workflow.admit(transaction.workflowTransaction, { siloId: caller.siloId, serverId: server.id, registrationDigest });
 		return { outcome: McpRemoteServerRegistrationOutcomes.Registered, server: { id: server.id, name: server.name, endpoint: server.endpoint, eraProbeStatus: server.eraProbeStatus } };

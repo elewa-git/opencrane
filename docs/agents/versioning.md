@@ -37,10 +37,10 @@ manifest contract; do not introduce parallel version files.
 
 ## Transition policy
 
-- The deployer reads the database schema labels from the requested release manifests and uses a
-  reviewed `<from>-to-<to>` directory when it exists. It does not inspect the live database to admit
-  the migration.
-- A release without a matching migration directory continues with the ordinary PostgreSQL rollout.
+- For an upgrade, the deployer accepts only the release manifest's immediate predecessor and runs
+  the dedicated Prisma migration Job. Prisma's `_prisma_migrations` table decides which saved
+  changes still need to run; the deployer does not select version-pair SQL.
+- A fresh installation uses the target baseline and skips the migration Job.
 - A directly changed application is stamped to the current full root version. This is a
   compatibility stamp, not a claim that every application releases in lockstep.
 - Shared library, root dependency, and lockfile changes stamp nothing on their own: the affected
@@ -69,20 +69,30 @@ version tracks the OpenCrane wrapper; its `appVersion` remains the pinned Postgr
 
 ## Database migrations
 
-The clean target baseline remains the fresh-install authority. A schema change also adds an adjacent,
-reviewed SQL transition under `apps/opencrane/prisma/migrations/<from>-to-<to>/`, where `from` is the
-database schema version in the previous repository manifest, not merely the previous repository
-version. Its manifest binds source version, target version, SQL digest, owner, and rollback mode. The
-migration must:
+The clean target baseline remains the fresh-install authority. Prisma Migrate is the only upgrade
+ledger. A schema change adds the next reviewed directory under
+`apps/opencrane/prisma/prisma-migrations/`; do not add a second version-pair SQL manifest. The
+directory name starts with a sortable UTC timestamp and ends with a short description. Prisma stores
+the applied name and checksum in `_prisma_migrations`.
 
-1. acquire the migration advisory lock;
-2. run transactionally; and
-3. update schema history only after success.
+The server never migrates on startup. `apps/opencrane-prisma-migrator` packages the schema and Prisma
+ledger, and `apps/postgres` owns the bounded Job that runs `prisma migrate deploy` from that immutable
+image. A failed migration is repaired forward. It does not require a backup, separate schema version
+check, write pause, or automatic recovery. Issue #699 tracks those deferred hardening controls.
 
-The server never migrates on startup. `apps/postgres` owns the bounded migration Job; the deployment
-owner runs it as a direct migration Job. A failed migration is repaired forward; it does not require
-a backup, schema check, write pause, or automatic recovery. Issue #699 tracks the deferred hardening
-work.
+Released migration history stays where it was published. Because `0.9.3` was never tagged, the
+0.10.0 cutover starts from the tagged 0.9.2 release and carries its 0.9.0 database schema through the
+reviewed IAM prerequisite before Prisma applies the 0.10.0 cutover. The deployment must first let
+CloudNativePG reconcile `pg_cron`, then observe a second `Database` generation that assigns the
+existing `cron` schema to the application owner. The migration Job must never receive the
+CloudNativePG superuser credential.
+
+OpenCrane is not yet a production-compatible 1.0 database contract. The 0.10.0 cutover therefore
+deletes pre-central runtime history and drops every superseded authorization, outbox, workload, and
+memory table instead of carrying compatibility state into the target architecture. Development and
+test databases must accept that destructive cutover or be reset. Starting with 1.0.0, a released
+database is durable product data: migrations must preserve it by default, and any destructive data
+operation requires a separately reviewed operator action with explicit scope and recovery evidence.
 
 ## Required gate
 
@@ -95,3 +105,9 @@ npm run test:release-versioning
 
 The checker rejects missing app stamps, package/chart mirror drift, an incomplete release manifest,
 untracked baseline bytes, and future chart/database changes without their version-to-version path.
+
+An unreleased candidate records `previousRepositoryCommit`: the exact commit of its declared
+predecessor train. PR validation uses that commit until the predecessor tag exists. Release
+qualification requires the predecessor's immutable Git tag before the new release tag can publish
+an artifact or represent a deployable upgrade path. That tag must point to the recorded commit, so
+it cannot silently change the upgrade path that PR validation checked.

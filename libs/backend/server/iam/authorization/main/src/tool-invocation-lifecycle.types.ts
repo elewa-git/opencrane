@@ -105,6 +105,8 @@ export enum ToolInvocationLifecycleEvents
 	Approved = "approved",
 	/** Authenticated reviewer denied or the approval expired. */
 	ApprovalRejected = "approval_rejected",
+	/** The owning workflow ended before any provider dispatch began. */
+	UnusedBeforeDispatch = "unused_before_dispatch",
 	/** Worker acquired a monotonic dispatch claim. */
 	DispatchClaimed = "dispatch_claimed",
 	/** Provider returned a definite successful result. */

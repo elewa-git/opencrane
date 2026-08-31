@@ -6,4 +6,5 @@ export interface RateLimitOptions
 
   /** Maximum requests per window per client IP (default 1,000). */
   max?: number;
+
 }

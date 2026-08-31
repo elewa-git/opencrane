@@ -9,20 +9,12 @@ the environment itself.
 # Wire identity echoed on every stream open and candidate.
 # Changing this value is a protocol migration, not a cosmetic application-version change: the
 # control plane uses it to decide which request and candidate shapes it can interpret.
-PROTOCOL_VERSION = "opencrane.agent-runtime/v1"
+PROTOCOL_VERSION = "opencrane.agent-runtime/v2"
 
-# Paths fixed by the Kubernetes Job projection contract. The supported path settings may override
+# Paths fixed by the Kubernetes runtime contract. The supported path settings may override
 # these defaults, but the container never falls back to an unprojected credential source.
 DEFAULT_TOKEN_PATH = "/var/run/opencrane/tokens/runtime.token"
-DEFAULT_BOOTSTRAP_PATH = "/var/run/opencrane/bootstrap/reference"
-DEFAULT_LITELLM_KEY_PATH = "/var/run/opencrane/litellm/key"
-DEFAULT_CHECKPOINT_DIR = "/tmp/opencrane/checkpoints"
-
-# The checkpoint version guards the local optimisation format; it is unrelated to the wire protocol.
-# Keep these versions separate so a replaceable local serialization can evolve without claiming a
-# new server contract, and a wire migration cannot accidentally bless an incompatible checkpoint.
-CHECKPOINT_VERSION = 1
-CHECKPOINT_FILENAME = "checkpoint.enc"
+DEFAULT_PROOF_EVIDENCE_PATH = "/tmp/opencrane/proof-evidence.json"
 
 # Resource and retry ceilings. These caps prevent an untrusted peer or unavailable control plane from
 # causing unbounded buffering or reconnect loops.

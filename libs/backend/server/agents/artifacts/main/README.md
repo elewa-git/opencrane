@@ -44,8 +44,17 @@ relations before minting a short-lived lease from catalogue-owned facts:
                          five-minute-maximum signed read lease
 ```
 
-Published PDFs also create one durable preprocessing job in the same transaction. A dedicated
-worker receives only a fenced attempt and the source length. OpenCrane brokers the PDF to it,
+The signed-in artifact catalogue is entitlement-based rather than owner-filtered. It lets the
+central authority evaluate the caller's current Principal and direct stored Group memberships over
+the same candidate set, so a live Group Discover grant exposes an artifact exactly as a direct
+Principal Discover grant would. Ownership remains durable artifact metadata and never becomes a
+parallel visibility decision. The catalogue scans stable bounded candidate pages until it collects
+fifty authorized artifacts or reaches the end, so newer unrelated artifacts cannot hide an older
+entitlement.
+
+Published PDFs also create one durable preprocessing job and admit its workflow task in the same
+transaction. The workflow controller claims that exact task, binds one Kubernetes Job and its
+first Pod, and gives the dedicated worker only the fenced delivery and source length. OpenCrane brokers the PDF to it,
 accepts the bounded text response, and keeps every storage lease and promotion receipt inside the
 trusted server process:
 
@@ -68,14 +77,18 @@ result instead of creating a duplicate. A stale, replayed, or already-consumed r
 Read leases contain only facts reloaded from the catalogue; caller-provided digests, byte counts,
 media types, storage paths, and URLs never become read authority.
 
-Preprocessing uses the same rule. The database owns claim expiry, retry ceilings, output identity,
-and source lineage. A typed read-only Prisma view performs the database-owned `SKIP LOCKED`
-selection, and a second view supplies the database clock used by serializable delegate updates.
-Source issuance revalidates the exact fenced job and caps signed authority to the earlier of the
-claim deadline or the 30-second retry quiet period. An expired or early-failed attempt therefore
-cannot overlap a reclaimed one. Incomplete generated artifacts have no current revision and remain
-absent from the user catalogue. The isolated worker never receives a content address, ArtifactStore
-endpoint, signed lease, or promotion receipt.
+Preprocessing uses the same rule. The database owns the admitted task receipt, claim expiry,
+delivery count, output identity, and source lineage. The controller authority issues one
+`RuntimeWorkloadClaim`, saves an immutable Job UID and first Pod UID under its fence, and stores only
+a hash of the bootstrap reference. A database-clock view supplies the time used by serializable
+delegate updates. Source issuance revalidates the exact fenced delivery and caps signed authority
+to the earlier of the claim deadline or the 30-second retry quiet period. The worker's verified
+output publishes the derived revision and writes a completion inbox digest; only the workflow
+controller consumes that digest and marks the job complete. If an exact bound Job becomes terminal
+or disappears without a worker report, the authenticated controller records the recovery failure
+through the same bounded retry policy. The controller reloads that saved outcome on its one-second recovery heartbeat. Incomplete generated artifacts have no
+current revision and remain absent from the user catalogue. The isolated worker never receives a
+content address, ArtifactStore endpoint, signed lease, or promotion receipt.
 
 Only an in-flight preprocessing job holds its source and output metadata in place. A completed or
 terminally failed job remains immutable audit evidence, but it does not indefinitely prevent an
@@ -90,8 +103,12 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
 - `_CreateArtifactUploadAuthority` — app-only composition for the two short publication
   transactions on either side of byte-store promotion.
 - `_CreateArtifactPreprocessAuthority` and `__CreateArtifactPreprocessorRouter` — durable job
-  fencing and the TokenReview-protected broker-only worker protocol. Each lifecycle transition has
-  its own private transaction; no transaction crosses TokenReview, byte brokering, or promotion.
+  fencing and the TokenReview-protected broker-only worker protocol. The worker does not select
+  work; it serves a task-bound controller delivery. Each lifecycle transition has its own private
+  transaction; no transaction crosses TokenReview, byte brokering, or promotion.
+- `__CreateArtifactPreprocessControllerRouter` — validates the separate agent-controller identity,
+  task receipt, Job binding, first-Pod binding, and exact recovery failure before delegating to the
+  task-bound authority.
 - `PrismaArtifactScanUnitOfWork` and `__CreateArtifactScannerRouter` — quarantine publication,
   bounded retries, and the TokenReview-protected scanner protocol. App composition supplies a
   conversation-lifecycle repository factory; the unit of work binds it and the scan repository to
@@ -100,9 +117,9 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
   lease issuance; it never acquires publication or preprocessing locks.
 - `ArtifactPreprocessSourceLeaseIssuer` — the narrow durable port that lets app composition issue
   source-read facts without depending on the Prisma adapter.
-- `__ClaimArtifactPreprocessJob`, `__IssueArtifactPreprocessOutputLease`,
-  `__CompleteArtifactPreprocessJob`, and `__FailArtifactPreprocessJob` — server-owned preprocessing
-  lifecycle operations; output leases remain internal projections rather than worker DTOs.
+- `__IssueArtifactPreprocessOutputLease`, `__CompleteArtifactPreprocessJob`, and
+  `__FailArtifactPreprocessJob` — server-owned worker transitions; output leases and completion
+  evidence remain internal projections rather than worker DTOs.
 - `__CreatePersonalArtifactCatalogueRouter` — serves `GET /api/v1/me/assets`, a bounded list of
   non-deleted asset metadata owned by the signed-in caller in the trusted host silo.
 - `_CreatePersonalArtifactCatalogueRouter` — the ready-to-mount Prisma composition that maps the
@@ -139,6 +156,10 @@ size, indexing state, and timestamps. It never returns bytes, a content address,
 leases, promotion receipts, or outbox records, and it cannot upload, download, mutate, or delete an
 asset.
 
+The catalogue first selects owner-eligible rows, then filters those candidates through the central
+`Artifact/Discover` authority inside the same repeatable-read transaction. Ownership remains a
+durable projection source and lifecycle bound; it is not an alternate permission decision engine.
+
 The preprocessor router is mounted only on the internal listener when the worker is enabled.
 NetworkPolicy admits the exact dedicated namespace, and TokenReview binds the fixed ServiceAccount
 and audience. App composition alone may exchange brokered bytes with artifact-service.
@@ -159,8 +180,8 @@ Owns `Artifact`, `ArtifactRevision`, `ArtifactRevisionParent`, `ArtifactUploadLe
 `ArtifactPreprocessJob`, `ArtifactScanJob`, and `ArtifactOutboxEvent` in
 `apps/opencrane/prisma/schema/artifacts.prisma`. A companion SQL authority test in
 `tests/artifact-authority.sql` proves job fencing, exact output binding, lease finalization, and
-immutable source lineage. Production TypeScript uses only typed Prisma delegates; PostgreSQL-specific
-clock and nonblocking claim semantics remain in the reviewed clean target baseline.
+immutable source lineage. Production TypeScript uses only typed Prisma delegates; the
+PostgreSQL-specific database clock remains in the reviewed clean target baseline.
 
 ## See also
 

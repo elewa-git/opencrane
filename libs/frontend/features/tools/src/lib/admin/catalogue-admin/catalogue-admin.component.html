@@ -3,7 +3,7 @@
 		@if (canAdminister()) {
 			<wo-section-heading
 				title="MCP Catalogue"
-				[subtitle]="servers().length + ' servers · ' + pendingCount() + ' awaiting review. Approve and publish servers to make them installable by entitled users.'"
+				[subtitle]="servers().length + ' servers · ' + pendingCount() + ' awaiting review. Approve and publish servers after grants are managed through central authorization.'"
 			/>
 
 			<table class="wo-table">
@@ -36,10 +36,8 @@
 									}
 									@case (status.Approved) {
 										<button type="button" class="wo-tools__act" (click)="publish(server)">Publish</button>
-										<button type="button" class="wo-tools__act wo-tools__act--muted" (click)="assignAccess(server)">Assign access →</button>
 									}
 									@case (status.Published) {
-										<button type="button" class="wo-tools__act" (click)="assignAccess(server)">Assign access →</button>
 										<button type="button" class="wo-tools__act wo-tools__act--muted" (click)="setEnabled(server, false)">Disable</button>
 									}
 									@case (status.Disabled) {

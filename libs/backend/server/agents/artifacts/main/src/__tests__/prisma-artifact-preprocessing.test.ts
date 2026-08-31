@@ -1,52 +1,85 @@
+import { ArtifactPreprocessJobState, ArtifactUploadLeaseState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaArtifactPreprocessRepository } from "../prisma-artifact-preprocessing";
 
-/** Stable database-owned time used by preprocessing delegate tests. */
-const _DATABASE_NOW = new Date("2026-08-05T08:00:00.000Z");
+/** Stable database time used by preprocessing delegate tests. */
+const _DATABASE_NOW = new Date("2026-08-27T10:00:00.000Z");
 
-/** Exact row exposed by the database-owned SKIP LOCKED candidate view. */
-const _CANDIDATE = {
-	jobId: "job-1",
-	attempt: 0,
-	derivedArtifactId: null,
-	sourceRevisionId: "revision-1",
-	sourceArtifactId: "artifact-1",
-	siloId: "silo-1",
-	ownerPrincipalId: "user-1",
-	sourceByteLength: 12n,
-};
+/** Returns one verified promotion bound to the current output lease. */
+function _CompletionRequest()
+{
+	return {
+		jobId: "job-1",
+		attempt: 1,
+		claimFence: "claim-1",
+		derivedRevisionId: "artifact-preprocess:lease-1",
+		promotion: { leaseId: "lease-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 12, mediaType: "text/plain", issuedAtEpochSeconds: 1_787_824_000 },
+		receiptDigest: `sha256:${"b".repeat(64)}`,
+	};
+}
+
+/** Returns one claimed preprocessing row that may report a worker failure. */
+function _FailureJob(deliveryCount: number)
+{
+	return { id: "job-1", state: ArtifactPreprocessJobState.Claimed, deliveryCount, claimFence: `claim-${deliveryCount}`, claimExpiresAt: new Date(_DATABASE_NOW.getTime() + 60_000), taskId: "task-1", taskName: "artifacts.preprocess.pdf-to-text/v1", taskKey: "preprocess-task-1" };
+}
 
 describe("Prisma artifact preprocessing", function _Suite()
 {
-	it("recovers expired claims and claims the typed SKIP LOCKED candidate projection", async function _ClaimsCandidate()
+	it("publishes worker output into the controller inbox without writing terminal state", async function _SavesCompletionInbox()
 	{
+		const request = _CompletionRequest();
 		const transaction = {
 			artifactAuthorityClock: { findUnique: vi.fn().mockResolvedValue({ now: _DATABASE_NOW }) },
-			artifactPreprocessClaimCandidate: { findFirst: vi.fn().mockResolvedValue(_CANDIDATE) },
-			artifactPreprocessJob: { updateMany: vi.fn().mockResolvedValue({ count: 0 }), update: vi.fn().mockResolvedValue({}) },
-			artifact: { create: vi.fn().mockResolvedValue({}) },
+			artifactPreprocessJob: {
+				findUnique: vi.fn().mockResolvedValue({
+					id: request.jobId,
+					sourceRevisionId: "source-revision-1",
+					state: ArtifactPreprocessJobState.Claimed,
+					deliveryCount: request.attempt,
+					claimFence: request.claimFence,
+					claimExpiresAt: new Date(_DATABASE_NOW.getTime() + 60_000),
+					taskId: "task-1",
+					taskName: "artifacts.preprocess.pdf-to-text/v1",
+					taskKey: "preprocess-task-1",
+					completionDigest: null,
+					outputLease: { id: "lease-1", state: ArtifactUploadLeaseState.Active, siloId: "silo-1", expectedContentAddress: request.promotion.contentAddress, expectedByteLength: 12n, mediaType: "text/plain" },
+					derivedArtifact: { id: "derived-artifact-1", siloId: "silo-1" },
+				}),
+				update: vi.fn().mockResolvedValue({}),
+			},
+			artifactUploadLease: { update: vi.fn().mockResolvedValue({}) },
+			artifactRevision: { create: vi.fn().mockResolvedValue({}) },
+			artifact: { update: vi.fn().mockResolvedValue({}) },
+			artifactRevisionParent: { create: vi.fn().mockResolvedValue({}) },
+			artifactOutboxEvent: { create: vi.fn().mockResolvedValue({}) },
 		};
 
-		const result = await new PrismaArtifactPreprocessRepository(transaction as never).claimNextAtomically();
-
-		expect(result).toEqual({ status: "claimed", claim: expect.objectContaining({ jobId: "job-1", attempt: 1, sourceRevisionId: "revision-1", sourceArtifactId: "artifact-1", siloId: "silo-1", sourceByteLength: 12, claimExpiresAt: new Date(_DATABASE_NOW.getTime() + 5 * 60_000) }) });
-		expect(transaction.artifactPreprocessJob.updateMany).toHaveBeenCalledWith({ where: { state: "Claimed", claimExpiresAt: { lte: _DATABASE_NOW } }, data: { state: "RetryableFailed", outputLeaseId: null, failureCode: "claim_expired", nextAttemptAt: _DATABASE_NOW } });
-		expect(transaction.artifactPreprocessClaimCandidate.findFirst).toHaveBeenCalledWith({ select: { jobId: true, attempt: true, derivedArtifactId: true, sourceRevisionId: true, sourceArtifactId: true, siloId: true, ownerPrincipalId: true, sourceByteLength: true } });
-		expect(transaction.artifact.create).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1", ownerPrincipalId: "user-1", kind: "Generated" }) });
-		expect(transaction.artifactAuthorityClock.findUnique).toHaveBeenCalledTimes(2);
-		expect(transaction.artifactAuthorityClock.findUnique).toHaveBeenCalledWith({ where: { singleton: 1 }, select: { now: true } });
+		await expect(new PrismaArtifactPreprocessRepository(transaction as never).completeAtomically(request)).resolves.toEqual({ status: "completed" });
+		expect(transaction.artifactPreprocessJob.update).toHaveBeenCalledWith({ where: { id: "job-1" }, data: { derivedRevisionId: "artifact-preprocess:lease-1", completionDigest: request.receiptDigest } });
+		expect(transaction.artifactPreprocessJob.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: expect.anything(), completedAt: expect.anything() }) }));
 	});
 
-	it("returns no work when the typed candidate view has no unlocked eligible row", async function _NoCandidate()
+	it("commits a retryable failure and its next-attempt time through the same transaction", async function _SavesRetryableFailure()
 	{
-		const transaction = {
-			artifactAuthorityClock: { findUnique: vi.fn().mockResolvedValue({ now: _DATABASE_NOW }) },
-			artifactPreprocessClaimCandidate: { findFirst: vi.fn().mockResolvedValue(null) },
-			artifactPreprocessJob: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
-		};
+		const job = _FailureJob(1);
+		const transaction = { artifactAuthorityClock: { findUnique: vi.fn().mockResolvedValue({ now: _DATABASE_NOW }) }, artifactPreprocessJob: { findUnique: vi.fn().mockResolvedValue(job), update: vi.fn().mockResolvedValue({}) } };
+		const repository = new PrismaArtifactPreprocessRepository(transaction as never);
 
-		await expect(new PrismaArtifactPreprocessRepository(transaction as never).claimNextAtomically()).resolves.toEqual({ status: "none" });
-		expect(transaction.artifactPreprocessClaimCandidate.findFirst).toHaveBeenCalledOnce();
+		await expect(repository.failAtomically({ jobId: "job-1", attempt: 1, claimFence: "claim-1", failureCode: "conversion_failed" })).resolves.toEqual({ status: "retryable" });
+
+		expect(transaction.artifactPreprocessJob.update).toHaveBeenCalledWith({ where: { id: "job-1" }, data: { state: ArtifactPreprocessJobState.RetryableFailed, outputLeaseId: null, failureCode: "conversion_failed", nextAttemptAt: new Date(_DATABASE_NOW.getTime() + 30_000) } });
+	});
+
+	it("commits terminal failure without scheduling another delivery", async function _SavesTerminalFailure()
+	{
+		const job = _FailureJob(3);
+		const transaction = { artifactAuthorityClock: { findUnique: vi.fn().mockResolvedValue({ now: _DATABASE_NOW }) }, artifactPreprocessJob: { findUnique: vi.fn().mockResolvedValue(job), update: vi.fn().mockResolvedValue({}) } };
+		const repository = new PrismaArtifactPreprocessRepository(transaction as never);
+
+		await expect(repository.failAtomically({ jobId: "job-1", attempt: 3, claimFence: "claim-3", failureCode: "conversion_failed" })).resolves.toEqual({ status: "terminal" });
+
+		expect(transaction.artifactPreprocessJob.update).toHaveBeenCalledWith({ where: { id: "job-1" }, data: { state: ArtifactPreprocessJobState.TerminalFailed, outputLeaseId: null, failureCode: "conversion_failed", nextAttemptAt: null } });
 	});
 });

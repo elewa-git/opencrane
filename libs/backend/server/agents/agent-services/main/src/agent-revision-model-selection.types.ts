@@ -44,13 +44,16 @@ export enum AgentRevisionModelSelectionMaterializationCodes
 	ModelUnavailable = "model_unavailable",
 	/** The service moved off the approved revision, its persona changed, or a newer revision was added since the owner accepted. Nothing was written; re-read and propose again. */
 	StaleSource = "stale_source",
+	/** The owner subject, Persona, or central product decision could not be established. */
+	Unauthorized = "unauthorized",
 }
 
 /** Result of the agent-service-owned model-selection strategy. */
 export type MaterializeAgentRevisionModelSelectionResult =
 	| { readonly status: AgentRevisionModelSelectionMaterializationCodes.Materialized; readonly agentRevisionId: string }
 	| { readonly status: AgentRevisionModelSelectionMaterializationCodes.ModelUnavailable }
-	| { readonly status: AgentRevisionModelSelectionMaterializationCodes.StaleSource };
+	| { readonly status: AgentRevisionModelSelectionMaterializationCodes.StaleSource }
+	| { readonly status: AgentRevisionModelSelectionMaterializationCodes.Unauthorized };
 
 /**
  * Swaps the model on a personal agent's active revision, inside a transaction someone else owns.
@@ -81,8 +84,8 @@ export interface AgentRevisionModelSelectionRepository
 	 * @param command - Service, the revision and persona the owner approved, the chosen model alias, and
 	 *   the author and time to record.
 	 * @returns `Materialized` with the new revision id, `StaleSource` if any of the first three checks
-	 *   failed (nothing written — re-read and re-propose), or `ModelUnavailable` if no model in this silo
-	 *   answers to that alias.
+	 *   failed (nothing written — re-read and re-propose), `ModelUnavailable` if no model in this silo
+	 *   answers to that alias, or `Unauthorized` if the owner or Persona relation cannot be proven.
 	 * @throws Whatever Prisma throws inside the caller's transaction, including a serialization failure.
 	 *   The caller's transaction is then rolled back and nothing is activated.
 	 */

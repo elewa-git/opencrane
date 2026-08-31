@@ -1,14 +1,14 @@
 BEGIN;
 
-INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
-VALUES ('execution-snapshot-model', 'global', 'execution-snapshot-model', 'litellm-execution-snapshot-model', 'execution-snapshot-model', clock_timestamp());
+INSERT INTO "model_definitions" ("id", "silo_id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
+VALUES ('execution-snapshot-model', 'silo-snapshot', 'global', 'execution-snapshot-model', 'litellm-execution-snapshot-model', 'execution-snapshot-model', clock_timestamp());
 
 INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
 VALUES ('snapshot-service-principal', 'silo-snapshot', 'urn:opencrane:agent-service', 'snapshot-service', 'internal', clock_timestamp());
 INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
 VALUES ('snapshot-service', 'silo-snapshot', 'managed', 'Snapshot test', 'managed-agent', 'snapshot-service-principal', clock_timestamp());
-INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
-VALUES ('snapshot-revision', 'snapshot-service', 1, 'draft', 'sha256:' || repeat('a', 64), 'prompt-v1', 'execution-snapshot-model', '{}', 'user-snapshot');
+INSERT INTO "agent_revisions" ("id", "silo_id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
+VALUES ('snapshot-revision', 'silo-snapshot', 'snapshot-service', 1, 'draft', 'sha256:' || repeat('a', 64), 'prompt-v1', 'execution-snapshot-model', '{}', 'user-snapshot');
 UPDATE "agent_revisions" SET "state" = 'published', "published_at" = clock_timestamp() WHERE "id" = 'snapshot-revision';
 UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'snapshot-revision' WHERE "id" = 'snapshot-service';
 INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at")
@@ -20,12 +20,12 @@ VALUES ('snapshot-missing-conversation', 'silo-snapshot', 'snapshot-service', 'a
 
 INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest")
 VALUES ('snapshot-run', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-conversation', 'interactive', 'snapshot-request', 'snapshot-run', 'sha256:' || repeat('b', 64), 'sha256:' || repeat('c', 64));
-INSERT INTO "run_input_snapshots" ("id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest", "conversation_id", "identity_snapshot", "model_route", "integration_assignments", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest")
-VALUES ('snapshot-run-input', 'snapshot-run', 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'sha256:' || repeat('b', 64), 'snapshot-conversation', '{}', '{}', '{}', '{}', '{}', 'sha256:' || repeat('d', 64), 'prompt-v1', 'sha256:' || repeat('c', 64));
+INSERT INTO "run_input_snapshots" ("id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest", "conversation_id", "identity_snapshot", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest")
+VALUES ('snapshot-run-input', 'snapshot-run', 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'sha256:' || repeat('b', 64), 'snapshot-conversation', '{}', '{}', '[]', '{}', '{}', 'sha256:' || repeat('d', 64), 'prompt-v1', 'sha256:' || repeat('c', 64));
 INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest")
 VALUES ('snapshot-scheduled-run', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', NULL, 'schedule', 'snapshot-scheduled-request', 'snapshot-scheduled-run', 'sha256:' || repeat('e', 64), 'sha256:' || repeat('f', 64));
-INSERT INTO "run_input_snapshots" ("id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest", "conversation_id", "identity_snapshot", "model_route", "integration_assignments", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest")
-VALUES ('snapshot-scheduled-run-input', 'snapshot-scheduled-run', 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'sha256:' || repeat('e', 64), NULL, '{}', '{}', '{}', '{}', '{}', 'sha256:' || repeat('1', 64), 'prompt-v1', 'sha256:' || repeat('f', 64));
+INSERT INTO "run_input_snapshots" ("id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest", "conversation_id", "identity_snapshot", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest")
+VALUES ('snapshot-scheduled-run-input', 'snapshot-scheduled-run', 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'sha256:' || repeat('e', 64), NULL, '{}', '{}', '[]', '{}', '{}', 'sha256:' || repeat('1', 64), 'prompt-v1', 'sha256:' || repeat('f', 64));
 SET CONSTRAINTS ALL IMMEDIATE;
 DO $$
 BEGIN
@@ -62,8 +62,8 @@ BEGIN
     BEGIN
         INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest")
         VALUES ('snapshot-mismatch', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-other-conversation', 'interactive', 'snapshot-mismatch-request', 'snapshot-mismatch', 'sha256:' || repeat('1', 64), 'sha256:' || repeat('2', 64));
-        INSERT INTO "run_input_snapshots" ("id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest", "conversation_id", "identity_snapshot", "model_route", "integration_assignments", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest")
-        VALUES ('snapshot-mismatch-input', 'snapshot-mismatch', 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'sha256:' || repeat('1', 64), 'snapshot-conversation', '{}', '{}', '{}', '{}', '{}', 'sha256:' || repeat('3', 64), 'prompt-v1', 'sha256:' || repeat('2', 64));
+        INSERT INTO "run_input_snapshots" ("id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest", "conversation_id", "identity_snapshot", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest")
+        VALUES ('snapshot-mismatch-input', 'snapshot-mismatch', 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'sha256:' || repeat('1', 64), 'snapshot-conversation', '{}', '{}', '[]', '{}', '{}', 'sha256:' || repeat('3', 64), 'prompt-v1', 'sha256:' || repeat('2', 64));
         SET CONSTRAINTS run_input_snapshots_run_binding IMMEDIATE;
     EXCEPTION WHEN foreign_key_violation THEN
         GET STACKED DIAGNOSTICS actual_message = MESSAGE_TEXT;
@@ -83,8 +83,8 @@ BEGIN
     BEGIN
         INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest")
         VALUES ('snapshot-null-mismatch', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', NULL, 'schedule', 'snapshot-null-mismatch-request', 'snapshot-null-mismatch', 'sha256:' || repeat('e', 64), 'sha256:' || repeat('7', 64));
-        INSERT INTO "run_input_snapshots" ("id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest", "conversation_id", "identity_snapshot", "model_route", "integration_assignments", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest")
-        VALUES ('snapshot-null-mismatch-input', 'snapshot-null-mismatch', 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'sha256:' || repeat('e', 64), 'snapshot-conversation', '{}', '{}', '{}', '{}', '{}', 'sha256:' || repeat('8', 64), 'prompt-v1', 'sha256:' || repeat('7', 64));
+        INSERT INTO "run_input_snapshots" ("id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest", "conversation_id", "identity_snapshot", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest")
+        VALUES ('snapshot-null-mismatch-input', 'snapshot-null-mismatch', 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'sha256:' || repeat('e', 64), 'snapshot-conversation', '{}', '{}', '[]', '{}', '{}', 'sha256:' || repeat('8', 64), 'prompt-v1', 'sha256:' || repeat('7', 64));
         SET CONSTRAINTS run_input_snapshots_run_binding IMMEDIATE;
     EXCEPTION WHEN foreign_key_violation THEN
         GET STACKED DIAGNOSTICS actual_message = MESSAGE_TEXT;

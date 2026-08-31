@@ -26,7 +26,6 @@ export class PrismaArtifactPreprocessUnitOfWork implements ArtifactPreprocessUni
 {
 	/** The product database client. Held privately so router and broker code cannot reach it and open its own transaction. */
 	private readonly prisma: PrismaClient;
-
 	/** Creates the preprocessing transaction boundary. */
 	constructor(prisma: PrismaClient)
 	{
@@ -57,7 +56,10 @@ export class PrismaArtifactPreprocessUnitOfWork implements ArtifactPreprocessUni
 			}
 			catch (error)
 			{
-				if (_IsRetryablePreprocessConflict(error) && attempt < _PREPROCESS_ATTEMPT_LIMIT) continue;
+				if (_IsRetryablePreprocessConflict(error) && attempt < _PREPROCESS_ATTEMPT_LIMIT)
+				{
+					continue;
+				}
 				throw error;
 			}
 		}

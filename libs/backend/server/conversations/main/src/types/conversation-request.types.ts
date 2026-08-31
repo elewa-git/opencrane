@@ -44,6 +44,4 @@ export interface RetryConversationRunRequest
 {
 	/** Terminal attempt number the participant observed. */
 	readonly expectedAttempt: number;
-	/** Fresh retry key. Repeating the same key is idempotent; a different key cannot claim its attempt. */
-	readonly idempotencyKey: string;
 }

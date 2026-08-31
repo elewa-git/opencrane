@@ -16,7 +16,7 @@ describe("persona authority", function ()
 	{
 		const approveAndActivateAtomically = vi.fn().mockResolvedValue({ status: PersonaApprovalPersistenceStatuses.Approved });
 		const getApprovalSnapshot = vi.fn().mockResolvedValue(_Snapshot());
-		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
+		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
 		expect(result).toEqual({ outcome: "approved" });
 		expect(approveAndActivateAtomically).toHaveBeenCalledWith(expect.objectContaining({ expectedInsightCount: 3 }));
 	});
@@ -31,7 +31,7 @@ describe("persona authority", function ()
 			return { status: PersonaApprovalPersistenceStatuses.Approved };
 		});
 		const getApprovalSnapshot = vi.fn().mockResolvedValue(_Snapshot());
-		const command = { personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" };
+		const command = { siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" };
 
 		const outcomes = await Promise.all([__ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, command), __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, command)]);
 
@@ -44,7 +44,7 @@ describe("persona authority", function ()
 		const approveAndActivateAtomically = vi.fn();
 		const getApprovalSnapshot = vi.fn().mockResolvedValue(_Snapshot({ revisionState: PersonaApprovalRevisionStates.Approved, activeRevisionId: "revision-1" }));
 
-		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
+		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
 
 		expect(result).toEqual({ outcome: "approved" });
 		expect(approveAndActivateAtomically).not.toHaveBeenCalled();
@@ -55,7 +55,7 @@ describe("persona authority", function ()
 		const approveAndActivateAtomically = vi.fn();
 		const getApprovalSnapshot = vi.fn().mockResolvedValue(_Snapshot({ revisionState: PersonaApprovalRevisionStates.Approved, activeRevisionId: "revision-other" }));
 
-		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
+		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
 
 		expect(result).toEqual({ outcome: "denied", reason: PersonaApprovalDenialReasons.NotDraft });
 		expect(approveAndActivateAtomically).not.toHaveBeenCalled();
@@ -66,7 +66,7 @@ describe("persona authority", function ()
 		const approveAndActivateAtomically = vi.fn().mockResolvedValue({ status: PersonaApprovalPersistenceStatuses.Conflict });
 		const getApprovalSnapshot = vi.fn().mockResolvedValueOnce(_Snapshot()).mockResolvedValueOnce(_Snapshot({ revisionState: PersonaApprovalRevisionStates.Approved, activeRevisionId: "revision-1" }));
 
-		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
+		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
 
 		expect(result).toEqual({ outcome: "approved" });
 		expect(getApprovalSnapshot).toHaveBeenCalledTimes(2);
@@ -77,7 +77,7 @@ describe("persona authority", function ()
 		const approveAndActivateAtomically = vi.fn().mockResolvedValue({ status: PersonaApprovalPersistenceStatuses.Conflict });
 		const getApprovalSnapshot = vi.fn().mockResolvedValueOnce(_Snapshot()).mockResolvedValueOnce(_Snapshot({ revisionState: PersonaApprovalRevisionStates.Approved, activeRevisionId: "revision-later" }));
 
-		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
+		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
 
 		expect(result).toEqual({ outcome: "denied", reason: PersonaApprovalDenialReasons.Conflict });
 	});
@@ -86,7 +86,7 @@ describe("persona authority", function ()
 	{
 		const approveAndActivateAtomically = vi.fn();
 		const getApprovalSnapshot = vi.fn().mockResolvedValue(_Snapshot({ insightCount: 2 }));
-		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
+		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
 		expect(result).toEqual({ outcome: "denied", reason: "invalid_insights" });
 		expect(approveAndActivateAtomically).not.toHaveBeenCalled();
 	});
@@ -95,7 +95,7 @@ describe("persona authority", function ()
 	{
 		const approveAndActivateAtomically = vi.fn();
 		const getApprovalSnapshot = vi.fn().mockResolvedValue(_Snapshot({ templateSelectionMatches: false }));
-		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
+		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
 		expect(result).toEqual({ outcome: "denied", reason: "template_selection_mismatch" });
 		expect(approveAndActivateAtomically).not.toHaveBeenCalled();
 	});

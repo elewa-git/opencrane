@@ -14,13 +14,13 @@ This one wraps [LiteLLM](https://github.com/BerriAI/litellm), a proxy that gives
 **Why we run it.** All model traffic in a **silo** (one customer's isolated slice) flows through LiteLLM
 so keys stay in-cluster, spend is metered in one place, and the assistants never talk to a provider
 directly. Customers bring their own keys (BYOK) at the ClusterTenant level. This app owns the
-release-local LiteLLM `Deployment`, `Service`, and a generated `Secret` as named Helm templates,
+release-local LiteLLM `Deployment`, `Service`, generated `Secret`, and app-owned `NetworkPolicy` as named Helm templates,
 composed by the silo umbrella chart ([`deploy-k8s`](../deploy-k8s/README.md)).
 
 ## Public surface
 
-`Entrypoint:` the Helm named-template library under `helm/` (deployment/service/secret templates),
-included by the umbrella chart. No importable code.
+`Entrypoint:` the Helm named-template library under `helm/`. The umbrella chart includes the
+deployment, service, Secret, and `opencrane.litellm.networkPolicy` templates. No importable code.
 
 ## Boundary
 
@@ -45,10 +45,17 @@ An app entrypoint (`type:app`, `scope:litellm`); composed by the silo chart, imp
   DB profile turns it on. When on, `LITELLM_SALT_KEY` (from `litellm.existingSaltSecret`) encrypts stored
   provider keys and must never be rotated, or those keys become unreadable.
 - `litellm.image.*`, `.podAnnotations`, `.service.port` — image, restart, and port controls.
+- The app-owned policy admits only same-release OpenCrane and Cognee on the service port. The agent
+  controller adds exact claimed warm-runtime peers separately. Egress is limited to PostgreSQL,
+  DNS when enabled, and TLS provider APIs; coarse platform policies exclude LiteLLM so they cannot
+  widen this boundary.
+- `litellm.redis.enabled=true` is rejected while this network boundary is active. Redis needs a
+  separately designed exact workload and egress identity; a hostname and port alone are not enough
+  to widen model-router egress.
 
 ## See also
 
 - Parent index: [_infra](../README.md)
 - Silo chart that composes it: [deploy-k8s](../deploy-k8s/README.md)
 - Database it uses: [apps/postgres](../../postgres/README.md)
-- Sibling infra: [cognee](../cognee/README.md) · [obot](../obot/README.md)
+- Sibling infra: [cognee](../cognee/README.md)

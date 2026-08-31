@@ -10,20 +10,21 @@ evidence supports that decision. Each child package owns one bounded part of tha
 | [`identity`](identity/main/README.md) | Turns OpenID Connect sign-in into verified server identity facts. |
 | [`membership`](membership/main/README.md) | Verifies signed Fleet execution-membership revisions. |
 | [`organization-members`](organization-members/main/README.md) | Owns the settings member directory and standalone invitation lifecycle, or delegates the entire capability to Fleet billing. |
-| [`authorization`](authorization/main/README.md) | Evaluates capability proofs and effective access. |
+| [`authorization`](authorization/main/README.md) | Owns the central, transaction-bound product authorization decision and evidence flow. |
 | [`grants`](grants/main/README.md) | Owns shares and resource-share derivation. |
 | [`groups`](groups/main/README.md) | Owns group membership and group-scoped access inputs. |
 | [`audit`](audit/main/README.md) | Records immutable decision evidence. |
+| [`audit-writer`](audit-writer/main/README.md) | Appends decision evidence inside the protected product transaction. |
 
 ```
  identity ──verified caller──► organization-members
      │                              │
-     └──identity + proof──► authorization ──decision──► product capability
+     └──identity + action──► authorization ──decision──► product capability
                                   │
                          grants · groups · membership
                                   │
                                   ▼
-                                audit
+                         audit writer ──► audit reader
 ```
 
 Packages in this group may consume another IAM package's public identity or decision contract. They

@@ -141,11 +141,14 @@ flowchart TD
   the old server build looks healthy and behaves like the old release.
 - Cluster-wide prerequisites (ingress-nginx, cert-manager, CloudNativePG) are installed once per
   cluster by `bootstrap-prerequisites.sh` and are never part of a silo release.
-- A reviewed PostgreSQL migration runs as a bounded Helm hook Job. A failure is returned directly;
+- The tagged 0.9.2 upgrade runs its reviewed IAM prerequisite and then Prisma from one immutable
+  image in a bounded Helm hook Job. CloudNativePG first reconciles `pg_cron`, then reconciles the
+  `cron` schema owner in a second observed `Database` generation, so the migration image receives
+  only the OpenCrane application credential. A failure is returned directly;
   the deployer does not require a migration backup, inspect the source schema, pause writes, or roll
   back the application.
 - After the umbrella upgrade, the engine stamps a checksum of the published database connection
-  Secrets onto the consumer Deployments (`opencrane-server`, `litellm`, `mcp-gateway`). An
+  Secrets onto the consumer Deployments (`opencrane-server`, `litellm`). An
   unchanged checksum is a no-op; a changed one triggers exactly one rollout; and a fresh install
   skips the roll entirely because its pods were born after the Secrets were published. (This
   replaced an unconditional `rollout restart` that double-started the heaviest workloads on
@@ -196,8 +199,8 @@ summary.
 - A **changed chart** bumps its chart version to the root version and adds exactly one
   `helm/migrations/<from>-to-<to>.json` transition. The umbrella needs no edit: it declares its
   in-repo dependencies with open constraints and packages them fresh at render time.
-- A **database schema change** updates the clean target baseline and adds one adjacent, reviewed
-  SQL transition under `apps/opencrane/prisma/migrations/<from>-to-<to>/`, bound by digest.
+- A **database schema change** updates the clean target baseline and adds one ordered Prisma change
+  under `apps/opencrane/prisma/prisma-migrations/`. Released SQL transitions stay as history.
 - Adjacent minor trains (`0.8.x → 0.9.0`) are the only automatic transition. Patch, skipped-minor,
   and major transitions require an approved `manualTransition` with a reason in the manifest.
 - Once a version tag exists, that train's composition is frozen: any further change must advance
@@ -216,20 +219,17 @@ The one thing an agent must never see in plain text is credentials. The conventi
 
 - **`keys/` at the repository root is gitignored** (`/keys/*` in `.gitignore`). Put one secret
   per file, named for what it is:
-  - `keys/initial-model-api-key` — the provider API key that seeds the first routable model.
-    The deploy reads it as an environment variable, never as a flag:
-    `OPENCRANE_INITIAL_MODEL_API_KEY="$(cat keys/initial-model-api-key)"` alongside
-    `--initial-model-provider <openai|anthropic|gemini|mistral|deepseek|glm>`.
   - `keys/zitadel-pat` — the Zitadel service-user PAT for organisation management once the
     mode-scoped credential lands (tracked in the silo org-role issues); standalone silos get a
     full-org credential, fleet-mode silos a claims-only one.
 - The agent reads a key file straight into the environment of the one command that needs it and
-  never echoes it, logs it, or passes it as a command argument — the same custody rule the
-  scripts themselves follow (the API key is environment-only precisely to keep it out of command
-  history and Helm values).
+  never echoes it, logs it, or passes it as a command argument.
+- Provider keys do not enter the deployment command. An authenticated operator admits them after
+  the server is ready; one durable provider command binds authorization, external delivery, and
+  final projection before the provider becomes selectable.
 - Everything else an agent needs is already non-secret: cluster context, base domain, tenant
   name, image digests from the release manifest, and the deploy ledger for cross-run memory.
 
-With `keys/` populated, a fresh silo is one command the agent can compose, run, and verify —
-and the post-deploy verification plus the run report tell it (and you) whether the cluster is
-actually healthy.
+A fresh silo is one command the agent can compose, run, and verify. The post-deploy verification
+and run report prove the model-unconfigured control plane is healthy; provider readiness is a
+separate authenticated product workflow.

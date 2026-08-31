@@ -12,7 +12,7 @@ import type { SteeringIngestCaller } from "./steering-ingest.router.types";
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SteeringIngestCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal ? { subjectId: principal.externalSubject, siloId: principal.siloId } : null;
+	return principal ? { principalId: principal.principalId, subjectId: principal.externalSubject, siloId: principal.siloId } : null;
 }
 
 /**

@@ -124,7 +124,7 @@ LiteLLM is the gateway and gives you both halves of the loop:
 
 **Write (push the new policy):** `POST /model/update`, `router_settings`, and per-key/per-team `models[]` (which resolve **Keys > Teams > Global**, [docs](https://docs.litellm.ai/docs/proxy/keys_teams_router_settings)). With `STORE_MODEL_IN_DB=true` (the same switch the BYOK work needs), changes **persist across restarts and propagate across replicas with no restart** ([db_info](https://docs.litellm.ai/docs/proxy/db_info)).
 
-**Governance (your IAM-first rule):** the nightly optimizer is just another API client. Policy changes flow through the **control plane**, are **IAM-gated and audited** (you already audit key revocation in `ai-budget.logic.ts`), and surface as a **human-approvable diff** before promotion — satisfying EDDOps Step E *and* your "API is the enforcement point" rule. The optimizer never writes to LiteLLM directly.
+**Governance (your IAM-first rule):** the nightly optimizer is just another API client. Policy changes flow through the **control plane**, are admitted by the central authorization authority and recorded as durable audit evidence, and surface as a **human-approvable diff** before promotion — satisfying EDDOps Step E *and* your "API is the enforcement point" rule. The optimizer never writes to LiteLLM directly.
 
 ```
   LiteLLM (serve + log: skill id, model, propensity, cost, latency)

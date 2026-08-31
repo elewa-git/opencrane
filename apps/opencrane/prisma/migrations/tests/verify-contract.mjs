@@ -17,15 +17,18 @@ const conversationUpdatedAtField = conversationSchema.split("\n").find(line => l
 const conversationActivitySequenceField = conversationSchema.split("\n").find(line => line.trimStart().startsWith("activitySequence ")) ?? "";
 const runtimeSchema = readFileSync(join(migrationRoot, "../schema/runtime.prisma"), "utf8");
 const digest = createHash("sha256").update(sql).digest("hex");
-const targetDigest = createHash("sha256").update(targetBaseline).digest("hex");
+const tagged092 = JSON.parse(readFileSync(join(migrationRoot, "../../../../releases/0.9.2.json"), "utf8"));
+const iamPrerequisiteTargetBaselineSha256 = "4a2da895e60744aa2fe85cdaf3729a7439cd29e57a3ca6ec463898593c6b00f5";
 const organizationTransitionRoot = join(migrationRoot, "0.8.0-to-0.9.0");
 const organizationSql = readFileSync(join(organizationTransitionRoot, "migration.sql"), "utf8");
 const organizationManifest = JSON.parse(readFileSync(join(organizationTransitionRoot, "manifest.json"), "utf8"));
 const organizationSqlDigest = createHash("sha256").update(organizationSql).digest("hex");
-const groupHierarchyTransitionRoot = join(migrationRoot, "0.9.0-to-0.9.3");
+const groupHierarchyTransitionRoot = join(migrationRoot, "0.9.0-to-0.10.0-prerequisite");
 const groupHierarchySql = readFileSync(join(groupHierarchyTransitionRoot, "migration.sql"), "utf8");
 const groupHierarchyManifest = JSON.parse(readFileSync(join(groupHierarchyTransitionRoot, "manifest.json"), "utf8"));
 const groupHierarchySqlDigest = createHash("sha256").update(groupHierarchySql).digest("hex");
+const candidateForwardRepairSql = readFileSync(join(migrationRoot, "untagged-0.9.3-candidate-forward-repair/migration.sql"), "utf8");
+const centralAuthorizationSql = readFileSync(join(migrationRoot, "../prisma-migrations/20260829000000_central_authorization_authority/migration.sql"), "utf8");
 
 function requireContract(condition, message)
 {
@@ -115,10 +118,15 @@ for (const source of [targetBaseline, sql])
 }
 requireContract(sql.includes('DROP TABLE "runtime_external_action_retries"'), "migration must drop the superseded retry authority");
 requireContract(sql.includes('DELETE FROM "tool_invocations"'), "migration must explicitly discard the unfinished pre-release invocation format");
-requireContract(sql.includes('DROP TYPE "ActionExecutionState"') === false, "migration must retain ActionExecutionState for proof-bound action receipts");
+requireContract(!targetBaseline.includes('CREATE TABLE "action_execution_receipts"'), "target baseline must not retain the replaced proof-bound action receipt table");
+requireContract(!authorizationSchema.includes("enum ActionExecutionState"), "target schema must not retain the replaced action receipt state type");
+requireContract(!authorizationSchema.includes("enum ActionReplayMode"), "target schema must not retain the replaced action receipt replay type");
 for (const source of [targetBaseline, sql])
 {
-	requireContract(source.includes('channel_runtime_routes_route_id_receiver_id_silo_id_agent_service_fkey') || source.includes('channel_invocation_contexts_route_id_receiver_id_silo_id_agent_service_fkey'), "invocation contexts must use a receiver-bound route foreign key");
+	requireContract(
+		source.includes('FOREIGN KEY ("route_id", "receiver_id", "silo_id", "agent_service_id", "action") REFERENCES "channel_runtime_routes"("id", "receiver_id", "silo_id", "agent_service_id", "action")'),
+		"invocation contexts must use a receiver-bound route foreign key",
+	);
 	requireContract(source.includes("legacy-route-v0:"), "legacy receiver namespace must remain explicit");
 	requireContract(source.includes('CREATE TRIGGER "channel_runtime_routes_evidence_guard"'), "route evidence mutations must remain trigger-guarded");
 }
@@ -179,7 +187,6 @@ requireContract(sql.trimEnd().endsWith("\\endif"), "migration retry branch must 
 const authorityFunctions = [
 	"enforce_channel_runtime_route_evidence",
 	"enforce_conversation_lifecycle",
-	"enforce_conversation_timeline_entry",
 	"enforce_persona_question_set_lifecycle",
 	"enforce_persona_question_mutation",
 	"enforce_persona_interview_lifecycle",
@@ -204,9 +211,49 @@ for (const name of authorityFunctions)
 	requireContract(sql.includes(migratedFunction), `migration must carry exact target function ${name}`);
 }
 
+const centralAuthorizationFunctions = [
+	"enforce_conversation_run_event_append",
+	"enforce_conversation_timeline_entry",
+	"enforce_child_run_completion_delivery",
+	"enforce_child_run_completion_delivery_event",
+	"enforce_terminal_agent_run_event",
+	"enforce_referenced_model_definition_immutability",
+];
+for (const name of centralAuthorizationFunctions)
+{
+	const baselineStart = targetBaseline.indexOf(`CREATE FUNCTION "${name}"`);
+	const baselineEnd = targetBaseline.indexOf("$$;", baselineStart) + 3;
+	requireContract(baselineStart >= 0 && baselineEnd > 2, `target function ${name} must exist`);
+	const targetFunction = targetBaseline.slice(baselineStart, baselineEnd);
+	const migratedFunction = targetFunction.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION");
+	requireContract(centralAuthorizationSql.includes(migratedFunction), `central authorization migration must carry exact target function ${name}`);
+}
+const providerIdentityTriggerDrop = 'DROP TRIGGER IF EXISTS "referenced_model_definitions_immutable" ON "model_definitions";';
+const providerIdentityModelRewrite = 'UPDATE "model_definitions" definition\n   SET "provider_credential_id" = identity."new_id"';
+const providerIdentityCredentialRewrite = 'UPDATE "provider_credentials" credential\n   SET "id" = identity."new_id"';
+const referencedModelTriggerStart = targetBaseline.indexOf('CREATE TRIGGER "referenced_model_definitions_immutable"');
+const referencedModelTriggerEnd = targetBaseline.indexOf(";", referencedModelTriggerStart) + 1;
+requireContract(referencedModelTriggerStart >= 0 && referencedModelTriggerEnd > 0, "target referenced-model trigger must exist");
+const referencedModelTargetTrigger = targetBaseline.slice(referencedModelTriggerStart, referencedModelTriggerEnd);
+const providerIdentityTriggerDropIndex = centralAuthorizationSql.indexOf(providerIdentityTriggerDrop);
+const providerIdentityModelRewriteIndex = centralAuthorizationSql.indexOf(providerIdentityModelRewrite);
+const referencedModelTriggerRestoreIndex = centralAuthorizationSql.indexOf(referencedModelTargetTrigger);
+const providerIdentityCredentialRewriteIndex = centralAuthorizationSql.indexOf(providerIdentityCredentialRewrite);
+requireContract(
+	providerIdentityTriggerDropIndex >= 0
+		&& providerIdentityTriggerDropIndex < providerIdentityModelRewriteIndex
+		&& providerIdentityModelRewriteIndex < referencedModelTriggerRestoreIndex
+		&& referencedModelTriggerRestoreIndex < providerIdentityCredentialRewriteIndex,
+	"central authorization migration must suspend referenced-model immutability only for the provider id rewrite",
+);
+requireContract(
+	centralAuthorizationSql.match(/DROP TRIGGER IF EXISTS "referenced_model_definitions_immutable" ON "model_definitions";/gu)?.length === 1,
+	"central authorization migration must have one scoped referenced-model trigger suspension",
+);
+
 const seedStart = targetBaseline.indexOf('INSERT INTO "persona_question_sets"');
 requireContract(seedStart >= 0, "target governed persona seeds must exist");
-const seedEnd = targetBaseline.indexOf('\n-- CreateTable\nCREATE TABLE "artifact_scan_jobs"', seedStart);
+const seedEnd = targetBaseline.indexOf('\n-- CreateTable\n-- One immutable ordinary group-message mention', seedStart);
 requireContract(seedEnd > seedStart, "target governed persona seeds must have an exact boundary");
 requireContract(sql.includes(targetBaseline.slice(seedStart, seedEnd)), "migration must carry the exact governed target seeds");
 
@@ -246,7 +293,10 @@ for (const source of [targetBaseline, organizationSql])
 	requireContract(source.includes('CREATE TABLE "organization_invitations"'), "organization invitation authority must exist in fresh and migrated schemas");
 	requireContract(source.includes('CREATE TABLE "organization_invitation_requests"'), "invitation idempotency authority must exist in fresh and migrated schemas");
 	requireContract(source.includes('organization_invitations_silo_id_active_email_key'), "one pending invitation must own each silo email");
-	requireContract(source.includes('organization_invitation_requests_silo_id_actor_subject_idempotency_key_key'), "create retry coordinates must be unique per silo and actor");
+	requireContract(
+		source.includes('ON "organization_invitation_requests"("silo_id", "actor_subject", "idempotency_key")'),
+		"create retry coordinates must be unique per silo and actor",
+	);
 	requireContract(source.includes('CREATE FUNCTION "protect_org_membership_last_owner"'), "last active owner mutations must be guarded by the database");
 	requireContract(source.includes('CREATE TRIGGER "org_memberships_last_owner_guard"'), "last-owner guard must run on membership changes");
 }
@@ -255,19 +305,24 @@ requireContract(organizationSql.trimEnd().endsWith("\\endif"), "organization-mem
 console.log("0.8.0-to-0.9.0 migration contract: PASS");
 
 requireContract(groupHierarchyManifest.fromSchemaVersion === "0.9.0", "group-hierarchy migration source version must be exact");
-requireContract(groupHierarchyManifest.toSchemaVersion === "0.9.3", "group-hierarchy migration target version must be exact");
+requireContract(groupHierarchyManifest.toSchemaVersion === "0.10.0-prerequisite", "IAM prerequisite target version must be exact");
 requireContract(groupHierarchyManifest.sqlSha256 === groupHierarchySqlDigest, "group-hierarchy migration SQL digest must match its manifest");
-requireContract(groupHierarchyManifest.sourceTargetBaselineSha256 === organizationManifest.targetBaselineSha256, "0.9.3 migration must name the immutable 0.9.0 source baseline");
-requireContract(groupHierarchyManifest.targetBaselineSha256 === targetDigest, "group-hierarchy migration target digest must match the clean baseline");
-requireContract(groupHierarchyManifest.privilegedExtension === "pg_cron", "0.9.3 migration must bind its reviewed privileged pg_cron prerequisite");
+requireContract(groupHierarchyManifest.sourceTargetBaselineSha256 === organizationManifest.targetBaselineSha256, "IAM prerequisite must name the immutable 0.9.0 source baseline");
+requireContract(groupHierarchyManifest.sourceTargetBaselineSha256 === tagged092.database.baselineSha256, "IAM prerequisite must start from the database schema recorded by tagged 0.9.2");
+requireContract(groupHierarchyManifest.targetBaselineSha256 === iamPrerequisiteTargetBaselineSha256, "IAM prerequisite target digest must remain exact without inventing a release boundary");
+requireContract(groupHierarchyManifest.privilegedExtension === "pg_cron", "IAM prerequisite must bind its reviewed privileged pg_cron requirement");
 requireContract(groupHierarchySql.includes("pg_advisory_lock"), "group-hierarchy migration must acquire the session migration lock");
 requireContract(groupHierarchySql.includes("pg_advisory_xact_lock"), "group-hierarchy migration must serialize hierarchy mutation");
 requireContract(groupHierarchySql.includes("BEGIN;"), "group-hierarchy migration must run transactionally");
 requireContract(groupHierarchySql.includes("migration_already_applied"), "group-hierarchy migration must support exact idempotent retry");
-requireContract(groupHierarchySql.includes("pg_cron extension is missing after the privileged migration prerequisite"), "0.9.3 migration must require pg_cron before mutating application authority");
-requireContract(groupHierarchySql.includes("application owner lacks pg_cron schema access after the privileged migration prerequisite"), "0.9.3 migration must require application-owner cron access");
-requireContract(groupHierarchySql.includes("create schema if not exists absurd"), "0.9.3 migration must install the reviewed Absurd schema");
-requireContract(groupHierarchySql.includes('ADD COLUMN "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT \'not-required\''), "0.9.3 migration must keep existing MCP rows outside remote registration checks");
+requireContract(groupHierarchySql.includes("without its reviewed forward repair"), "IAM prerequisite must reject an untagged candidate unless the exact forward repair is present");
+requireContract(groupHierarchySql.includes("opencrane_migrations.forward_repairs"), "IAM prerequisite must admit only a durably recorded candidate repair");
+requireContract(candidateForwardRepairSql.includes("untagged-0.9.3-candidate-to-0.10.0"), "candidate repair must retain its distinct non-release identity");
+requireContract(candidateForwardRepairSql.includes("legacy audit rows cannot all be attributed"), "candidate repair must fail closed when audit ownership is ambiguous");
+requireContract(groupHierarchySql.includes("pg_cron extension is missing after the privileged migration prerequisite"), "IAM prerequisite must require pg_cron before mutating application authority");
+requireContract(groupHierarchySql.includes("application owner lacks pg_cron schema access after the privileged migration prerequisite"), "IAM prerequisite must require application-owner cron access");
+requireContract(groupHierarchySql.includes("create schema if not exists absurd"), "IAM prerequisite must install the reviewed Absurd schema");
+requireContract(groupHierarchySql.includes('ADD COLUMN "era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT \'not-required\''), "IAM prerequisite must keep existing MCP rows outside remote registration checks");
 requireContract(targetBaseline.includes('"era_probe_status" "McpEraProbeStatus" NOT NULL DEFAULT \'not-required\''), "clean schema must require remote registration to opt into protocol checks");
 for (const source of [targetBaseline, groupHierarchySql])
 {
@@ -284,7 +339,7 @@ for (const [pattern, expected, description] of [
 	[/^COMMIT;$/gmu, 1, "one transaction commit"],
 ])
 {
-	requireContract((groupHierarchySql.match(pattern) ?? []).length === expected, `0.9.3 migration must contain ${description}`);
+	requireContract((groupHierarchySql.match(pattern) ?? []).length === expected, `IAM prerequisite must contain ${description}`);
 }
 for (const input of ["migration_silo_id", "migration_oidc_issuer"])
 {
@@ -311,6 +366,7 @@ for (const source of [targetBaseline, groupHierarchySql])
 }
 const exactIamDefinitions = [
 	'ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check" CHECK ( btrim("silo_id") <> \'\' AND (("subject_kind" = \'group\' AND "subject_group_id" IS NOT NULL AND "subject_principal_id" IS NULL) OR ("subject_kind" = \'principal\' AND "subject_group_id" IS NULL AND "subject_principal_id" IS NOT NULL)) AND (("boundary_kind" = \'group\' AND "boundary_group_id" IS NOT NULL AND "boundary_principal_id" IS NULL) OR ("boundary_kind" = \'personal\' AND "boundary_group_id" IS NULL AND "boundary_principal_id" IS NOT NULL AND "boundary_coverage" = \'exact\')) AND btrim("catalog_id") <> \'\' AND "catalog_revision" > 0 AND btrim("catalog_digest") <> \'\' AND "catalog_digest" ~ \'^sha256:[0-9a-f]{64}$\' AND btrim("capability_id") <> \'\' AND btrim("resource_kind") NOT IN (\'\', \'*\') AND btrim("resource_id") NOT IN (\'\', \'*\') AND "priority" >= 0 AND btrim("created_by") <> \'\' );',
+	'CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"( "silo_id", "subject_kind", COALESCE("subject_group_id", \'\'), COALESCE("subject_principal_id", \'\'), "boundary_kind", COALESCE("boundary_group_id", \'\'), COALESCE("boundary_principal_id", \'\'), "boundary_coverage", "catalog_id", "catalog_revision", "capability_id", "resource_kind", COALESCE("resource_id", \'\'), "effect", "priority", COALESCE("manager_id", \'\') ) WHERE "revoked_at" IS NULL;',
 	'ALTER TABLE "verified_fleet_membership_assertions" ADD CONSTRAINT "verified_fleet_membership_assertions_exact_check" CHECK ( btrim("assertion_id") <> \'\' AND btrim("silo_id") <> \'\' AND btrim("subject_id") <> \'\' );',
 	'CREATE UNIQUE INDEX "memory_datasets_exact_boundary_key" ON "memory_datasets"("silo_id", "boundary_kind", COALESCE("boundary_group_id", \'\'), COALESCE("boundary_principal_id", \'\'));',
 ];
@@ -371,4 +427,4 @@ for (const retired of ["AuthorizationScopeKind", "GrantScope", "GrantSubjectType
 	requireContract(groupHierarchySql.includes(`DROP TYPE "${retired}"`), `IAM cutover must drop retired ${retired}`);
 }
 
-console.log("0.9.0-to-0.9.3 migration contract: PASS");
+console.log("0.9.0-to-0.10.0 prerequisite migration contract: PASS");

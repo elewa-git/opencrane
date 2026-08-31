@@ -1,11 +1,10 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 
-import { ByokProvider } from "@opencrane/contracts";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneObotConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
+import type { ChannelTargetRuntimeConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -84,30 +83,6 @@ function _readArtifactPreprocessorBodyLimit(): number
 	return value;
 }
 
-/**
- * Read the optional initial provider credential injected only by the silo deployment contract.
- * The pair is all-or-nothing so an operator cannot accidentally start with a provider name but no
- * key (or expose a key without a declared LiteLLM provider).
- */
-function _readInitialModelBootstrap(): InitialModelBootstrapConfig | null
-{
-	const provider = process.env.OPENCRANE_INITIAL_MODEL_PROVIDER?.trim().toLowerCase() ?? "";
-	const apiKey = process.env.OPENCRANE_INITIAL_MODEL_API_KEY?.trim() ?? "";
-	if (!provider && !apiKey)
-	{
-		return null;
-	}
-	if (!provider || !apiKey)
-	{
-		throw new Error("OPENCRANE_INITIAL_MODEL_PROVIDER and OPENCRANE_INITIAL_MODEL_API_KEY must be configured together");
-	}
-	if (!Object.values(ByokProvider).includes(provider as ByokProvider))
-	{
-		throw new Error(`OPENCRANE_INITIAL_MODEL_PROVIDER '${provider}' is unsupported`);
-	}
-	return { provider, apiKey };
-}
-
 /** Read the email and ClusterTenant that let one verified OIDC user claim this standalone silo's owner slot; both must be set or neither. */
 function _readStandaloneFirstUserAdmission(): StandaloneFirstUserAdmissionConfig | null
 {
@@ -183,38 +158,21 @@ function _readChannelTargetConfig(): ChannelTargetRuntimeConfig | null
 	return { ...values, invocationContextTtlMilliseconds: _readBoundedSeconds("CHANNEL_INVOCATION_CONTEXT_TTL_SECONDS", 60, 1, 300) };
 }
 
-/**
- * Read the optional Obot management-transport block from the startup environment.
- *
- * With both values set the authenticated transport is composed; with both absent the feature stays off
- * (fail-closed unavailable adapters). A partial block is a deployment mistake, so startup refuses it
- * rather than half-composing an authority that would fail on first use.
- */
-function _readObotConfig(): OpenCraneObotConfig | null
-{
-	const gatewayUrl = process.env.OBOT_GATEWAY_URL?.trim();
-	const serviceTokenPath = process.env.OBOT_SERVICE_TOKEN_PATH?.trim();
-	if (!gatewayUrl && !serviceTokenPath)
-		return null;
-	if (!gatewayUrl || !serviceTokenPath)
-	{
-		throw new Error("OBOT_GATEWAY_URL and OBOT_SERVICE_TOKEN_PATH must be configured together or not at all");
-	}
-	if (!isAbsolute(serviceTokenPath))
-	{
-		throw new Error("OBOT_SERVICE_TOKEN_PATH must be an absolute mounted file path");
-	}
-	return { gatewayUrl, serviceTokenPath, requestTimeoutMilliseconds: _readBoundedSeconds("OBOT_TIMEOUT_SECONDS", 30, 1, 300) };
-}
-
 /** Read the one bounded Absurd worker and remote MCP protocol-check configuration. */
 function _readWorkflowConfig(): OpenCraneWorkflowConfig
 {
+	const ociRegistryAuthorizationFilePath = process.env.OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE?.trim() || undefined;
+	if (ociRegistryAuthorizationFilePath !== undefined && !isAbsolute(ociRegistryAuthorizationFilePath))
+		throw new Error("OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE must be an absolute mounted file path");
 	return {
 		databasePoolSize: _readBoundedInteger("OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE", 2, 1, 20),
 		databaseUrl: _readRequired("DATABASE_URL"),
 		mcpEraProbeMaximumResponseBytes: _readBoundedInteger("OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES", 65_536, 1_024, 1_048_576),
 		mcpEraProbeTimeoutMilliseconds: _readBoundedInteger("OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS", 5_000, 1_000, 60_000),
+		ociRegistryAuthorizationFilePath,
+		ociRegistryBaseUrl: _readRequired("OPENCRANE_OCI_REGISTRY_BASE_URL"),
+		ociRegistryRepository: _readRequired("OPENCRANE_OCI_REGISTRY_REPOSITORY"),
+		ociRegistryTimeoutMilliseconds: _readBoundedInteger("OPENCRANE_OCI_REGISTRY_TIMEOUT_MS", 30_000, 1_000, 120_000),
 		pollIntervalMilliseconds: _readBoundedInteger("OPENCRANE_WORKFLOW_POLL_INTERVAL_MS", 100, 10, 60_000),
 		siloId: _readRequired("OPENCRANE_SILO_ID"),
 		workerConcurrency: _readBoundedInteger("OPENCRANE_WORKFLOW_WORKER_CONCURRENCY", 2, 1, 20),
@@ -224,18 +182,16 @@ function _readWorkflowConfig(): OpenCraneWorkflowConfig
 /**
  * Read process settings once so listeners and workers share one startup snapshot.
  *
- * The workers, not this parser, still check that runtime namespaces are present and distinct, because those values grant
- * Kubernetes cleanup authority; parsing configuration alone must not make that trust decision.
+ * Runtime authorities, not this parser, still check that runtime namespaces are present and
+ * distinct before using those namespaces in trusted workload routes.
  */
 export function _ReadProcessConfig(): OpenCraneProcessConfig
 {
 	return {
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
-		initialModelBootstrap: _readInitialModelBootstrap(),
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
-		obot: _readObotConfig(),
 		publicPort: Number(process.env.PORT ?? "8080"),
-		runtime: {
+			runtime: {
 			artifactScannerEnabled: process.env.ARTIFACT_SCANNER_ENABLED === "true",
 			artifactScannerClaimLeaseMilliseconds: _readBoundedSeconds("ARTIFACT_SCANNER_CLAIM_LEASE_SECONDS", 300, 60, 300),
 			artifactScannerNamespace: process.env.ARTIFACT_SCANNER_NAMESPACE?.trim(),
@@ -244,17 +200,20 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			artifactPreprocessorNamespace: process.env.ARTIFACT_PREPROCESSOR_NAMESPACE?.trim(),
 			assignmentTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS", 3_600, 60, 86_400),
 			channelTargets: _readChannelTargetConfig(),
-			claimLeaseMilliseconds: _readBoundedSeconds("AGENT_CONTROLLER_CLAIM_LEASE_SECONDS", 30, 1, 300),
 			commandRecoveryMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS", 5, 5, 300),
 			commandTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300),
-			managedRuntimeNamespace: process.env.AGENT_RUNTIME_MANAGED_NAMESPACE?.trim(),
+			continuationKeyringPath: _readRequiredAbsolutePath("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH"),
+				managedRuntimeNamespace: process.env.AGENT_RUNTIME_MANAGED_NAMESPACE?.trim(),
+				mcpCompanionClaimLeaseMilliseconds: _readBoundedSeconds("MCP_COMPANION_CLAIM_LEASE_SECONDS", 150, 1, 300),
+				mcpControllerClaimLeaseMilliseconds: _readBoundedSeconds("MCP_CONTROLLER_CLAIM_LEASE_SECONDS", 30, 1, 300),
+				mcpExecutorNamespace: process.env.MCP_EXECUTOR_NAMESPACE?.trim(),
 			memoryGatewayTimeoutMilliseconds: _readBoundedSeconds("MEMORY_GATEWAY_TIMEOUT_SECONDS", 30, 1, 300),
 			memoryGatewayTokenPath: _readRequiredAbsolutePath("MEMORY_GATEWAY_TOKEN_PATH"),
 			memoryGatewayUrl: _readRequired("MEMORY_GATEWAY_URL"),
-			outboxPruneBatchSize: _readBoundedInteger("AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE", 100, 1, 1_000),
 			personalRuntimeNamespace: process.env.AGENT_RUNTIME_PERSONAL_NAMESPACE?.trim(),
-			publishedOutboxRetentionMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS", 604_800, 3_600, 7_776_000),
-			serverNamespace: process.env.POD_NAMESPACE?.trim() || "default",
+			skillAuthoringNamespace: _readRequired("SKILL_AUTHORING_NAMESPACE"),
+				serverNamespace: process.env.POD_NAMESPACE?.trim() || "default",
+				siloId: _readRequired("OPENCRANE_SILO_ID"),
 		},
 		schedulerEnabled: process.env.OPENCRANE_SCHEDULER_ENABLED === "true",
 		schedulerIntervalMilliseconds: _readBoundedInteger("OPENCRANE_SCHEDULER_INTERVAL_MS", 60_000, 1_000, 3_600_000),

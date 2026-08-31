@@ -35,7 +35,7 @@ export function _CreateConversationSocketAuthenticator(sessionMiddleware: readon
 			const expressRequest = _AsExpressRequest(request);
 			if (!await _RunAuthentication(authMiddleware, expressRequest)) return null;
 			const principal = _ResolveRequestPrincipal(expressRequest);
-			return principal === null ? null : { siloId: principal.siloId, issuer: principal.externalIssuer, subjectId: principal.externalSubject };
+			return principal === null ? null : { siloId: principal.siloId, principalId: principal.principalId, issuer: principal.externalIssuer, subjectId: principal.externalSubject };
 		}
 	};
 }

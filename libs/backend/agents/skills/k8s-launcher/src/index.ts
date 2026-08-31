@@ -1,3 +1,2 @@
-export { __BuildGovernedSkillWorkloadJob } from "./skill-workload-job";
-export { SkillWorkloadKinds } from "./skill-workload-job.types";
-export type { SkillWorkloadImagePullPolicy, SkillWorkloadJobAssignment, SkillWorkloadJobProfile, SkillWorkloadKind } from "./skill-workload-job.types";
+export { __BuildSkillAuthoringValidationJob } from "./skill-authoring-validation-job";
+export type { SkillAuthoringValidationJobAssignment, SkillAuthoringValidationJobProfile } from "./skill-authoring-validation-job.types";

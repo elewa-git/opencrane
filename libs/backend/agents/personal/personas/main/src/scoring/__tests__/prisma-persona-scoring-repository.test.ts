@@ -37,7 +37,7 @@ describe("persona scoring repository", function _describePersonaScoringRepositor
 		};
 		const repository = new PrismaPersonaInterviewRepository(transaction as unknown as Prisma.TransactionClient);
 
-		const result = await __ResolvePersonaInterviewTie(repository, { userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", kind: PersonaTieKinds.Primary, selectedValue: PersonaColourValues.Blue, resolvedAt: "2026-08-08T10:00:00.000Z" });
+		const result = await __ResolvePersonaInterviewTie(repository, { siloId: "silo-1", principalId: "principal-1", userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", kind: PersonaTieKinds.Primary, selectedValue: PersonaColourValues.Blue, resolvedAt: "2026-08-08T10:00:00.000Z" });
 
 		expect(createScore).toHaveBeenCalledWith({ data: expect.objectContaining({ primaryCandidates: [PersonaColour.Red, PersonaColour.Blue], secondaryCandidates: [], modifierCandidates: [] }) });
 		expect(createResolution).toHaveBeenCalledWith({ data: expect.objectContaining({ kind: PersonaTieKind.Primary, candidates: [PersonaColourValues.Red, PersonaColourValues.Blue], selectedValue: PersonaColourValues.Blue, resolvedBy: "user-1" }) });

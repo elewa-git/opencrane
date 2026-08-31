@@ -94,16 +94,15 @@ The runtime:
 - executes no external action directly; and
 - keeps framework types, identifiers, and checkpoints behind the language-neutral protocol.
 
-The controller creates a fresh, suspended Job for an attempt, projects the workload identity, and
-releases the Job only after assignment admission. A one-use bootstrap exchange binds the Pod,
-assignment, proof key, and credential material. Network policy limits the workload to the required
-control-plane and model-proxy paths.
+The controller claims one ready Pod from the fixed personal or managed warm pool. The database claim
+binds that Pod to one run attempt, and the controller activates only that exact Pod. A claimed Pod is
+discarded after use, while its Deployment restores the generic spare. Network policy limits every
+warm Pod to the required control-plane and model-proxy paths.
 
 Source implementations:
 
 - [`apps/agent-controller`](../../apps/agent-controller)
 - [`apps/agent-runtime`](../../apps/agent-runtime)
-- [`apps/managed-agent-runtime`](../../apps/managed-agent-runtime)
 - [`libs/backend/agents/execution/protocol`](../../libs/backend/agents/execution/protocol)
 - [`libs/backend/server/infra/agent-runtime-stream`](../../libs/backend/server/infra/agent-runtime-stream)
 

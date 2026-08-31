@@ -38,7 +38,7 @@ describe("conversation socket authentication", function _Authentication()
 			req.authenticatedPrincipal = { principalId: "principal-1", siloId: "silo-1", issuer: "https://issuer.example", subject: "subject-1" };
 			next();
 		});
-		expect(await authenticator.authenticate(request)).toEqual({ siloId: "silo-1", issuer: "https://issuer.example", subjectId: "subject-1" });
+		expect(await authenticator.authenticate(request)).toEqual({ siloId: "silo-1", principalId: "principal-1", issuer: "https://issuer.example", subjectId: "subject-1" });
 	});
 
 	it("fails closed when product principal admission rejects the restored session", async function _Reject()

@@ -5,6 +5,8 @@ export interface MaterializeAgentRevisionPersonaSelectionCommand
 	readonly siloId: string;
 	/** Subject who owns the personal service through the source and target persona profile. */
 	readonly subjectId: string;
+	/** Stable local Principal used by the central product authority. */
+	readonly principalId: string;
 	/** Stable personal service whose revision lineage is extended. */
 	readonly agentServiceId: string;
 	/** Published active revision that must still be the service's latest revision. */

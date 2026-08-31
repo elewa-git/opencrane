@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import { PrincipalProvenance, type PrismaClient } from "@prisma/client";
 import { AuthorizationBoundaryKinds, AuthorizationSubjectKinds } from "@opencrane/models/authorization";
 import { describe, expect, it, vi } from "vitest";
 
@@ -23,13 +23,23 @@ describe("Prisma authorization grant reader", function _suite()
 
 	it("resolves only direct group memberships for a local principal", async function _directMembership()
 	{
-		const principal = { findUnique: vi.fn().mockResolvedValue({ id: "principal-1" }) };
+		const principal = { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "agent-service-1", provenance: PrincipalProvenance.Internal }) };
 		const groupMembership = { findMany: vi.fn().mockResolvedValue([{ groupId: "team-1" }]) };
 		const repository = new PrismaAuthorizationGrantRepository({ principal, groupMembership } as unknown as PrismaClient);
 		expect(await repository.resolvePrincipalSubjects("silo-1", "principal-1")).toEqual([
 			{ kind: AuthorizationSubjectKinds.Principal, principalId: "principal-1" },
 			{ kind: AuthorizationSubjectKinds.Group, groupId: "team-1" },
 		]);
+	});
+
+	it("denies an external Principal whose durable organisation membership is not active", async function _InactiveMembership()
+	{
+		const principal = { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "subject-1", provenance: PrincipalProvenance.External }) };
+		const orgMembership = { findFirst: vi.fn().mockResolvedValue(null) };
+		const groupMembership = { findMany: vi.fn() };
+		const repository = new PrismaAuthorizationGrantRepository({ principal, orgMembership, groupMembership } as unknown as PrismaClient);
+		expect(await repository.resolvePrincipalSubjects("silo-1", "principal-1")).toEqual([]);
+		expect(groupMembership.findMany).not.toHaveBeenCalled();
 	});
 
 	it("loads persisted parent ancestry and detects cycles", async function _ancestry()

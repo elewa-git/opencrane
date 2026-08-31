@@ -1,10 +1,13 @@
-import { RuntimeCommandKind, type Prisma } from "@prisma/client";
+import { ElicitationPurpose, RuntimeCommandKind, ToolInvocationState, type Prisma } from "@prisma/client";
 
 import type { RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
+import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 
 import { PrismaRuntimeResumeInputRepository } from "./prisma-runtime-resume-input-repository";
+import { PrismaRuntimeWaitReasonRepository } from "./prisma-runtime-wait-reason-repository";
 import type { RuntimeApprovalExpiry, RuntimeCommandDecisionUnitOfWork } from "./prisma-runtime-dispatch-authority.types";
 import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types";
+import { RuntimeWaitReasons } from "./runtime-wait-reasons.types";
 
 /**
  * Decides the next runtime command, and closes overdue approvals, on the caller's transaction.
@@ -26,6 +29,20 @@ export class PrismaRuntimeCommandDecisionUnitOfWork implements RuntimeCommandDec
 	constructor(transaction: Prisma.TransactionClient)
 	{
 		this._transaction = transaction;
+	}
+
+	/** Read the closed reason set from current server-owned invocation and request rows. */
+	async readWaitReasons(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }): Promise<readonly RuntimeWaitReasons[]>
+	{
+		if (context.runState !== "waiting_for_input")
+			return [];
+		const repository = new PrismaRuntimeWaitReasonRepository(this._transaction);
+		const invocations = await repository.readInvocations(context.runId, context.attempt);
+		const purposes = await repository.readElicitationPurposes(context.runId, context.attempt);
+		const reasons = new Set<RuntimeWaitReasons>();
+		for (const invocation of invocations) reasons.add(_InvocationWaitReason(invocation));
+		for (const purpose of purposes) reasons.add(_ElicitationWaitReason(purpose));
+		return _WAIT_REASON_ORDER.filter(function _Present(reason) { return reasons.has(reason); });
 	}
 
 	/**
@@ -74,4 +91,29 @@ export class PrismaRuntimeCommandDecisionUnitOfWork implements RuntimeCommandDec
 		const hasResume = commands.some(function _IsResume(row) { return row.kind === RuntimeCommandKind.ResumeAttempt; });
 		return hasResume && loaded.toolResultDeliveryIds.length === 0 && loaded.elicitationResultDeliveryIds.length === 0 ? null : RuntimeCommandKind.ResumeAttempt;
 	}
+}
+
+/** Stable evidence order keeps logs and tests independent from database row order. */
+const _WAIT_REASON_ORDER: readonly RuntimeWaitReasons[] = [RuntimeWaitReasons.ExternalAction, RuntimeWaitReasons.RuntimeInput, RuntimeWaitReasons.A2uiAction, RuntimeWaitReasons.ToolApproval, RuntimeWaitReasons.PersonalMemoryPermission, RuntimeWaitReasons.RecoveryRequired];
+
+/** Classify a saved invocation without trusting the runtime's tool description. */
+function _InvocationWaitReason(invocation: { readonly state: string; readonly toolRevisionId: string }): RuntimeWaitReasons
+{
+	if (invocation.state === ToolInvocationState.RecoveryRequired)
+		return RuntimeWaitReasons.RecoveryRequired;
+	if (invocation.state !== ToolInvocationState.AwaitingApproval)
+		return RuntimeWaitReasons.ExternalAction;
+	return invocation.toolRevisionId === PERSONAL_MEMORY_RECALL_TOOL_REVISION ? RuntimeWaitReasons.PersonalMemoryPermission : RuntimeWaitReasons.ToolApproval;
+}
+
+/** Map a server-owned elicitation purpose to its exact wait reason. */
+function _ElicitationWaitReason(purpose: string): RuntimeWaitReasons
+{
+	if (purpose === ElicitationPurpose.RuntimeInput)
+		return RuntimeWaitReasons.RuntimeInput;
+	if (purpose === ElicitationPurpose.A2uiAction)
+		return RuntimeWaitReasons.A2uiAction;
+	if (purpose === ElicitationPurpose.PersonalMemoryPermission)
+		return RuntimeWaitReasons.PersonalMemoryPermission;
+	return RuntimeWaitReasons.ToolApproval;
 }

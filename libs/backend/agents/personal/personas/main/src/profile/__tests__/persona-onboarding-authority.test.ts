@@ -6,7 +6,7 @@ import type { EnsurePersonaOnboardingCommand, PersonaOnboardingRepository } from
 /** Builds a complete authenticated owner request for the onboarding provisioner. */
 function _command(): EnsurePersonaOnboardingCommand
 {
-	return { siloId: "silo-1", userId: "user-1", provisionedAt: "2026-07-26T12:00:00.000Z" };
+	return { siloId: "silo-1", principalId: "principal-1", userId: "user-1", provisionedAt: "2026-07-26T12:00:00.000Z" };
 }
 
 /** Builds a repository whose call surface is observable without a database. */

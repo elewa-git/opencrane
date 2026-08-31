@@ -25,7 +25,12 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("DATABASE_URL", "postgresql://opencrane:test@localhost:5432/opencrane");
 		vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.default.svc.cluster.local:8080");
 		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
+		vi.stubEnv("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH", "/var/run/opencrane/runtime-continuation/keyring.json");
+		vi.stubEnv("OPENCRANE_OCI_REGISTRY_BASE_URL", "https://registry.example.test");
+		vi.stubEnv("OPENCRANE_OCI_REGISTRY_REPOSITORY", "opencrane/mcp-images");
 		vi.stubEnv("OPENCRANE_SILO_ID", "silo-test");
+		vi.stubEnv("MCP_EXECUTOR_NAMESPACE", "mcp-executors");
+		vi.stubEnv("SKILL_AUTHORING_NAMESPACE", "skill-authoring");
 	});
 
 	afterEach(function _restoreEnvironment()
@@ -44,6 +49,8 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("ARTIFACT_SCANNER_ENABLED", "true");
 		vi.stubEnv("ARTIFACT_SCANNER_CLAIM_LEASE_SECONDS", "240");
 		vi.stubEnv("ARTIFACT_SCANNER_NAMESPACE", "artifact-scanner");
+		vi.stubEnv("MCP_CONTROLLER_CLAIM_LEASE_SECONDS", "20");
+		vi.stubEnv("MCP_COMPANION_CLAIM_LEASE_SECONDS", "25");
 		vi.stubEnv("OPENCRANE_SCHEDULER_ENABLED", "true");
 		vi.stubEnv("OPENCRANE_SCHEDULER_INTERVAL_MS", "2500");
 
@@ -56,10 +63,16 @@ describe("opencrane process config", function _ProcessConfigSuite()
 				artifactScannerClaimLeaseMilliseconds: 240_000,
 				artifactScannerNamespace: "artifact-scanner",
 				managedRuntimeNamespace: "managed-runs",
+				continuationKeyringPath: "/var/run/opencrane/runtime-continuation/keyring.json",
+				mcpCompanionClaimLeaseMilliseconds: 25_000,
+				mcpControllerClaimLeaseMilliseconds: 20_000,
+				mcpExecutorNamespace: "mcp-executors",
 				memoryGatewayTimeoutMilliseconds: 30_000,
 				memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
 				memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
 				personalRuntimeNamespace: "personal-runs",
+				skillAuthoringNamespace: "skill-authoring",
+				siloId: "silo-test",
 			},
 			schedulerEnabled: true,
 			schedulerIntervalMilliseconds: 2500,
@@ -68,6 +81,9 @@ describe("opencrane process config", function _ProcessConfigSuite()
 				databaseUrl: "postgresql://opencrane:test@localhost:5432/opencrane",
 				mcpEraProbeMaximumResponseBytes: 65_536,
 				mcpEraProbeTimeoutMilliseconds: 5_000,
+				ociRegistryBaseUrl: "https://registry.example.test",
+				ociRegistryRepository: "opencrane/mcp-images",
+				ociRegistryTimeoutMilliseconds: 30_000,
 				pollIntervalMilliseconds: 100,
 				siloId: "silo-test",
 				workerConcurrency: 2,
@@ -87,24 +103,10 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("OPENCRANE_WORKFLOW_WORKER_CONCURRENCY", "2");
 		vi.stubEnv("OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS", "999");
 		expect(function _readShortProbeTimeout() { _ReadProcessConfig(); }).toThrow(/integer from 1000 through 60000/);
-	});
 
-	it("composes the obot block only when both coordinates are present", function _ReadObotBlock()
-	{
-		expect(_ReadProcessConfig().obot).toBeNull();
-
-		vi.stubEnv("OBOT_GATEWAY_URL", "http://oc-mcp-gateway.silo.svc.cluster.local:8080");
-		vi.stubEnv("OBOT_SERVICE_TOKEN_PATH", "/var/run/opencrane/obot/token");
-		expect(_ReadProcessConfig().obot).toEqual({ gatewayUrl: "http://oc-mcp-gateway.silo.svc.cluster.local:8080", serviceTokenPath: "/var/run/opencrane/obot/token", requestTimeoutMilliseconds: 30_000 });
-	});
-
-	it("reads the initial model credential only when its provider and key are both present", function _ReadInitialModelBootstrap()
-	{
-		expect(_ReadProcessConfig().initialModelBootstrap).toBeNull();
-
-		vi.stubEnv("OPENCRANE_INITIAL_MODEL_PROVIDER", "OPENAI");
-		vi.stubEnv("OPENCRANE_INITIAL_MODEL_API_KEY", "sk-test");
-		expect(_ReadProcessConfig().initialModelBootstrap).toEqual({ provider: "openai", apiKey: "sk-test" });
+		vi.stubEnv("OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS", "5000");
+		vi.stubEnv("OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE", "relative/authorization");
+		expect(function _readRelativeRegistryCredential() { _ReadProcessConfig(); }).toThrow(/absolute mounted file path/);
 	});
 
 	it("reads the all-or-nothing standalone first-owner admission contract", function _ReadStandaloneFirstUserAdmission()
@@ -160,25 +162,6 @@ describe("opencrane process config", function _ProcessConfigSuite()
 
 		vi.stubEnv("OPENCRANE_PUBLIC_BASE_URL", "https://opencrane.example/settings");
 		expect(function _ReadPublicOriginWithPath() { _ReadOrganizationMembershipConfig(); }).toThrow(/credential-free HTTPS origin/);
-	});
-
-	it("rejects a partial or unsupported initial model credential", function _RejectInvalidInitialModelBootstrap()
-	{
-		vi.stubEnv("OPENCRANE_INITIAL_MODEL_PROVIDER", "openai");
-		expect(function _readPartialInitialModel() { _ReadProcessConfig(); }).toThrow(/configured together/);
-
-		vi.stubEnv("OPENCRANE_INITIAL_MODEL_API_KEY", "sk-test");
-		vi.stubEnv("OPENCRANE_INITIAL_MODEL_PROVIDER", "unknown");
-		expect(function _readUnsupportedInitialModel() { _ReadProcessConfig(); }).toThrow(/unsupported/);
-	});
-
-	it("refuses a partial obot block or a relative token path at startup", function _RejectPartialObotBlock()
-	{
-		vi.stubEnv("OBOT_GATEWAY_URL", "http://oc-mcp-gateway.silo.svc.cluster.local:8080");
-		expect(function _readPartialObot() { _ReadProcessConfig(); }).toThrow(/configured together/);
-
-		vi.stubEnv("OBOT_SERVICE_TOKEN_PATH", "relative/token");
-		expect(function _readRelativeTokenPath() { _ReadProcessConfig(); }).toThrow(/absolute/);
 	});
 
 	it("rejects an artifact output ceiling outside the broker boundary", function _RejectInvalidBodyLimit()

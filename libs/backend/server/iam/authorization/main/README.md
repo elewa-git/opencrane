@@ -1,213 +1,113 @@
-# @opencrane/backend/server/iam/authorization — the allow-or-deny decision point
+# @opencrane/backend/server/iam/authorization — the central product permission authority
 
 > [backend](../../../../README.md) › [server](../../../README.md) › [iam](../../README.md) › authorization
 
 ## What it owns
 
-This package is part of **IAM** — *identity and access management*, the side of OpenCrane that
-answers two questions: **who is making this request, and are they allowed to do this?** IAM tracks
-the people, the automated agents working on their behalf, and the rules for what each may touch.
+This package is the server-side **authorization authority**: the one application port through which
+OpenCrane product domains ask whether a Principal may perform a typed action on a resource. A
+Principal is the durable identity of a person or managed agent. The authority combines current
+membership, direct and inherited Group grants, exact resource boundaries, and the shared product
+capability catalogue.
 
-Authorization is the final yes-or-no step. Whenever an agent tries to do something that changes real
-data — save a file, call an outside tool, read from memory — the request stops here first, and this
-package decides whether to allow it. By this point IAM has already worked out *who* the agent is:
-another package has confirmed the person is still a signed member of the fleet (the set of customer
-workspaces managed together), and the agent arrives
-carrying two things — a signed statement of what it was granted, and a short-lived proof that it
-really is the workload it claims to be. This package checks both are genuine and still valid, then
-answers allow or deny with a plain reason.
+The domain that owns a protected change also owns the database transaction. It creates a
+`PrismaAuthorizationAuthority` over that same Prisma transaction, asks for a decision, applies its
+domain lifecycle rules, and writes the change plus required evidence before commit.
 
 ```
- an agent wants to act   (write a file · call a tool · read memory)
-        │  presents: what it was granted + the proof it is that workload
+ product domain UnitOfWork
+        │ opens one database transaction
         ▼
-  membership ............. is this person still a signed member of the fleet?
-        │  trusted / denied
+ membership + grants + boundary facts
+        │
         ▼
- ┌───────────────────────────────┐
- │   authorization   ◄── HERE     │  grants line up? proof genuine? not replayed?
- └───────────────────────────────┘
-        │  allow (run once) / deny (+ plain reason)  →  audit
-        ▼
-  the action runs, or is refused
+ ┌──────────────────────────────────────┐
+ │ authorization authority  ◄── HERE    │  typed allow / deny + evidence class
+ └──────────────────────────────────────┘
+        │
+        ├── database change + decision evidence ──► commit together
+        └── one-use admitted external effect ─────► worker executes later
 ```
 
-**In this flow:** [membership](../../membership/main/README.md) · [audit](../../audit/main/README.md) · the runtime action path *(the caller that carries out the effect)*
+**In this flow:** [membership](../../membership/main/README.md) establishes current organisation
+membership, [audit](../../audit/main/README.md) retains decision evidence, and the owning product
+domain supplies lifecycle facts and performs the protected change.
 
-To decide, it lines up three things: the effective access the agent was granted, the proof the agent
-presents that it is that exact workload, and what the system can independently see about the agent
-right now. Effective access is the **intersection** of two sets of grants — what the person is
-allowed *and* what the agent's assigned role is allowed — so an agent can never do more than its
-human. Current signed membership is a mandatory first gate and is never inferred from grants. Every
-proof it accepts is remembered by its unique id, so the same proof can never be replayed to run an
-action twice. When the run owner begins cancellation, it calls this package inside the same database
-transaction to cancel every still-pending approval and close provider-free invocation work. It is deliberately
-strict: anything missing, altered, or out of date is a "no". A mistake here can only ever refuse a
-legitimate request — never hand out access it should not.
+Transaction binding prevents a check-then-write gap: authorization reads and the protected write
+share one Serializable commit boundary. The shared Prisma transaction runner repeats the complete
+operation at most three times, and only after a P2034 proves PostgreSQL rolled back every write in
+the losing attempt; each retry constructs a fresh transaction-scoped authority. The authority is
+deliberately an in-process port, not a separate network service. External work cannot run inside
+that open transaction, so effectful actions first create a one-use durable command bound to the
+Principal, resource revision, arguments digest, and workload profile.
 
-Tool approval is an interrupt in that same authority, not a second execution path. Its identifier is
-the interrupt identifier. The opener freezes the exact candidate arguments and reviewed compiled
-tool schema before the actor sees the request. Actor reads select only a pre-redacted argument
-projection plus a decision schema derived from that frozen tool schema; schema-marked secret values,
-policy evidence, and resume material never cross the API. Approval requires one complete argument
-value, validates it server-side against the frozen schema, then atomically records the normalized
-value and digest. Denial records no arguments, but it does create one single-use refusal marker so
-the runtime receives the decision instead of silently losing the pending tool call.
-Before accepting a decision, the authority recomputes the frozen schema digest and the actor-safe
-projection. A schema that contains a secret is denial-only: a forged approval body cannot turn that
-request into provider dispatch, while an authenticated denial still closes it normally.
-Managed-service execution cannot silently substitute its `agent-service:*` execution identity for a
-human approver. An approval-required managed action fails closed at opening until the admitted run
-carries a concrete, currently authorized human approval subject.
+Personal agents act through their human Principal, limited by their admitted agent revision and run
+ceiling. Managed agents act through their own `AgentService` Principal. A human's permission to
+invoke or administer a managed agent is separate from the grants that let the agent perform work.
+
+Attaching a Group subtree is stricter than acting on the Group itself. A command that requests
+`Descendants` coverage fails closed unless a winning grant also carries `Descendants`; an exact-only
+grant cannot silently become authority over child Groups. Commands that request exact coverage keep
+the ordinary exact boundary-matching rules.
 
 ## Public surface
 
-- `__ResolveEffectiveAccess` — computes the capabilities allowed to *both* the person and the agent,
-  gated on current signed membership; returns only the intersection.
-- `__VerifyCapabilityProof`, `__ComputeEs256JwkThumbprint`, `__NormalizeDpopTargetUri` — verify the
-  cryptographic proof an agent presents that it is that workload and is calling this exact endpoint.
-- `__ConsumeRuntimeBootstrap` — validates and atomically spends a one-time startup token that binds a
-  run to its pod and attempt, and accepts only the `opencrane-agent-runtime` projected-token audience,
-  so it cannot be reused or confused with a service-specific action token.
-- `__ExecuteCapabilityAction` — verifies the proof, reserves its unique id durably, then runs the
-  effect exactly once (or returns the earlier result on an allowed idempotent retry).
-- `__CancelPendingRunApprovalAuthority` — closes pending approvals and only provider-free or
-  unclaimed invocations for an exact run attempt on a caller-owned database transaction. Active
-  provider claims remain fenced until their definite result or recovery decision becomes durable.
-- `ApprovalRequest` remains internal tool audit evidence. Browser reads, live overlays, and decisions
-  use the conversation-scoped elicitation authority; reviewed arguments, proof data, policy digests,
-  and resume material remain internal here.
-- `__OpenDeferredToolApproval` — atomically links an awaiting ToolInvocation to its approval, then
-  recovers an ambiguous commit or terminalises the invocation so it cannot be replayed.
-- `__ProjectDeferredToolApproval`, `__ValidateDeferredToolArguments` — derive the secret-safe actor
-  projection and validate a complete approved replacement against the frozen reviewed tool schema.
-- Deferred-approval contracts are split by authority: `DeferredToolApprovalLifecycle*` owns the
-  exhaustive run-state table; `DeferredToolDecision*` owns decision and expiry commands;
-  `DeferredToolApprovalOpen*` owns invocation-linked opening and ambiguous-commit recovery; and the
-  schema helper owns the pre-redacted internal projection stored with audit evidence.
-- `__DigestCanonicalJson` — an authorization-domain wrapper over the shared environment-neutral
-  canonical JSON hash, preserving one SHA-256 implementation across server and browser consumers.
-- `PrismaRuntimeAuthorityRepository`, `PrismaAuthorizationGrantRepository` — the database-backed
-  stores for accepted proofs/receipts and for candidate grants.
-- `PrismaCapabilityCatalogRepository` — resolves an exact immutable capability only when the
-  requested identifier exists in the stored catalog revision.
-- `PrismaManagedAuthorizationGrantRepository` — reconciles only one product editor's live grants,
-  soft-revokes omissions, and keeps every other manager's grants untouched. The MCP operator unit
-  of work composes it transaction-locally after pure policy validation.
-- `PrismaToolInvocationUnitOfWork`, the narrow
-  `__AdmitPreparingToolInvocationInTransaction` helper, and
-  `__PlanToolInvocationLifecycle` — atomically turn an admitted runtime candidate into durable work,
-  then apply one exhaustive State × Event policy to every preparation, approval, fenced provider
-  claim, reconciliation, terminal result, cancellation, and recovery-required transition without
-  changing the separate proof/JTI receipt lifecycle. Every public UnitOfWork completion includes its
-  canonical lifecycle event in the same transaction; its transaction repository remains
-  package-private. Runs owns the injected run-state recovery port; authorization never writes
-  `AgentRun.state` directly.
-- `ToolInvocationAdmissionOutcomes`, `ToolInvocationClaimOutcomes`, `ToolResultDeliveryOutcomes`,
-  and `DeferredToolDecisionOutcomes` are stable transaction result vocabularies shared by the
-  authorization owner and its protocol consumers.
-- `PrismaToolInvocationElicitationRepository` — binds the narrow ToolInvocation read,
-  approve/reject, safe failure-delivery, and active dispatch-claim checks to an existing elicitation
-  transaction without exporting the full persistence repository.
-- `TOOL_INVOCATION_PREPARATION_POLICY` — the one frozen provider-free retry policy consumed by
-  admission, scheduling, lifecycle decisions, cancellation, and durable recovery events.
-- Contract types: `ResolveEffectiveAccessCommand`/`Result`, `AuthorizationGrantRepository`,
-  `AuthorizationMembershipAuthority`, `CapabilityActionExecutor`, and their siblings.
+- `AuthorizationAuthority` decides one typed action or batch-filters a lifecycle-eligible catalogue.
+- `PrismaAuthorizationAuthority` binds that port to the caller's existing Prisma transaction.
+- `___RunSerializableAuthorizationTransaction` gives database-only product UnitOfWorks one bounded
+  P2034-only retry policy for authorization reads, protected writes, and audit evidence. Its
+  callback must not contain Kubernetes, provider, filesystem, or other effects that can survive a
+  database rollback.
+- The transaction-internal authorization grant repository loads the Principal, verifies current
+  external membership, expands direct Group subjects, loads matching grants, and resolves stored
+  boundary context.
+- The managed-grant repository narrowly reconciles one manager's live grants against immutable
+  catalogue references.
+- Exact resource retirement rechecks organisation administration and soft-revokes every active
+  grant on the retiring coordinates inside the owning product transaction.
+- `PrismaManagedShareRevocationRepository` soft-revokes the exact manager-owned grant linked from
+  an explicit resource-share relation; it cannot create, list, or revoke arbitrary grants.
+- `__DecideDeferredToolRequest`, `__OpenDeferredToolApproval`,
+  `PrismaToolInvocationUnitOfWork`, and their lifecycle contracts own durable human approval and
+  provider-effect recovery for tool calls.
+- `__CancelPendingRunApprovalAuthority` lets the runs domain close pending approval and unclaimed
+  tool work inside the runs domain's cancellation transaction.
 
 ## Boundary
 
-Consumed by the runtime action path that carries out an agent's effects. It only decides and records;
-it never performs the outside effect itself — the caller supplies the executor. Fail-closed
-throughout: an invalid command, denied or stale membership, a proof that does not verify, or a
-replayed id all return a denial, never an allow. The personal-runs domain owns run cancellation but
-must delegate approval-row cancellation through this package's transaction-level port; it never
-writes authorization tables directly.
+The authority decides product permission; it does not authenticate a browser or Pod, own another
+domain's lifecycle, execute a provider call, or grant Kubernetes access. The caller derives the silo
+and Principal from verified identity, loads the target from trusted domain data, and treats the
+frozen run snapshot only as a ceiling. Current membership, grants, cancellation, and resource
+eligibility are rechecked before each new external effect.
 
-For a deferred tool action, the API is deliberately narrower than the database record: the browser
-cannot name a run, choose an executor result, or provide resume material. It may only deny or approve
-with one complete argument value for the pending action attached to its own subject in its own silo.
-An expired request is terminalised
-before any decision is recorded; a decision whose run, workload, or proof is stale becomes a typed
-conflict rather than a silently cancelled approval; and a successful approval wakes the existing
-runtime command path exactly once.
+Catalogue reads may be batch-filtered without one receipt per visible row. A mutation must record
+decision evidence in the same transaction. An external effect must use the durable `ToolInvocation`
+or another typed one-use command; workers cannot list grants or choose a different target.
 
 ## Dependency direction
 
-Tagged `scope:authorization`: it may depend only on `scope:audit` (to record decisions) and
-`scope:auth` (to resolve backend-type-free request identity), `scope:authorization`, and
-`scope:shared` — never on apps or other sibling domains.
+Tagged `scope:authorization`: it may depend only on `scope:audit`, `scope:auth`,
+`scope:authorization`, and `scope:shared` packages — never on apps or sibling product domains.
 
 ## Data & persistence
 
-`PrismaResourceShareUnitOfWork` composes `PrismaShareAuthorizationRepository`, the generic grant
-reader, capability catalogue and resource-share repository in one transaction. The authorization
-repository owns the narrow catalogue-seeding and exact recipient-grant persistence seam used by the
-sharing API. Every lookup, list, and revocation is bound to one `siloId`, so a principal can never
-discover or revoke a delegation held by another ClusterTenant. The stored catalogue digest binds
-later evaluation to the canonical capability list. Share reads map Principal-or-Group subjects and
-Group-or-Personal boundaries explicitly; unsupported combinations fail closed.
+The package owns `AuthorizationGrant`, `CapabilityCatalogRevision`, `ApprovalRequest`,
+`ToolInvocation`, and `ToolResultDelivery` in the authorization schema. Product-domain tables remain
+owned by their domains. Every authorization lookup is silo-bound, and grant replacement is scoped to
+one manager and resource so it cannot revoke another manager's evidence.
 
-Managed grant replacement never deletes evidence and never broadens its ownership boundary:
-`managerId + siloId + resource` selects the only live rows it may revoke. Its transaction records
-the created/revoked counts without copying subject identifiers into the audit message.
-
-Owns `AuthorizationGrant`, `CapabilityCatalogRevision`, `ApprovalRequest`, and
-`ActionExecutionReceipt` in `apps/opencrane/prisma/schema/authorization.prisma`. It also owns
-`ToolInvocation` and the one-to-one `ToolResultDelivery` outbox. `ToolInvocation` is the durable work
-authority for runtime tool calls; `ActionExecutionReceipt` remains the separate proof/JTI-bound
-capability-action receipt. A tool-backed
-`ApprovalRequest` retains the frozen reviewed candidate and schema as server-only authority,
-precomputes a separate actor-safe projection, and stores the exact normalized final arguments and
-digest only when approved. The target still retains the old nullable resume-hash column until its
-separate destructive removal is explicitly approved, but this lifecycle neither mints nor consumes it.
-
-### External-action recovery lifecycle
-
-Candidate acceptance and a `Preparing` invocation commit together. Preparation may retry at most
-three times and only during the first five minutes; it cannot contact a provider. Once the trusted
-adapter's dispatch method begins, a missing acknowledgement is ambiguous rather than retryable.
-
-| Durable state | Accepted event | Next state or result |
-|---|---|---|
-| `Preparing` | prepared | `AwaitingApproval` or `Ready` |
-| `Preparing` | provider-free preparation failed | retry within the three-in-five-minute budget, otherwise `Failed` |
-| `AwaitingApproval` | approved | `Ready` |
-| `AwaitingApproval` | denied, expired, or cancelled | `Failed` plus one result delivery |
-| `Ready` | fenced dispatch claim | `Claimed` |
-| `Claimed` | definite success or rejection | terminal state plus one result delivery |
-| `Claimed` | ambiguous result | keyed redispatch, `Reconciling`, or `RecoveryRequired` from the frozen adapter mode |
-| `Reconciling` | confirmed outcome | terminal state plus one result delivery |
-| `Reconciling` | absent or inconclusive | `Ready` or `RecoveryRequired` |
-| `RecoveryRequired` | cancellation | `Failed`; no implicit retry or result exists before resolution |
-
-The current Obot integration declares manual recovery: it provides neither provider idempotency nor
-trusted readback. An ambiguous Obot result therefore pauses the run visibly and remains cancellable;
-it is never dispatched again automatically. Terminal invocation state and its delivery intent share
-one transaction. Runtime command persistence consumes that intent, and reconnect replays the stored
-command body byte for byte.
-
-### Deferred approval lifecycle
-
-The approval unit of work owns the run pause and approval rows in one transaction. Decision kind is
-a separate result strategy: approval carries complete validated replacement arguments, while denial
-and expiry carry an explicit refusal and never execute the awaiting invocation.
-
-| Run state | Event | Pending after event | Action | Atomic owner |
-|---|---|---:|---|---|
-| `Running` | open | 0 before create | move to `WaitingForInput`, then create | approval-open unit of work |
-| `WaitingForInput` | open | one or more | add to the current batch | approval-open unit of work |
-| `WaitingForInput` | decision or expiry | one or more | remain waiting | approval-decision or expiry unit of work |
-| `WaitingForInput` | decision or expiry | 0 | move to `Running`; make the batch resumable | approval-decision or expiry unit of work |
-| `Running` or `WaitingForInput` | cancellation | any | cancel pending rows without resume authority | caller-owned cancellation transaction |
-| any other state | open, decision, or expiry | any | reject | exhaustive lifecycle state registry |
-
-Multiple requests may share one pause. The dispatcher consumes all resolved rows in deterministic
-order, and a later pause creates a later `resume_attempt`; an earlier resume never strands a later
-approval batch. Inbox, detail, conversation overlays, and the decision transaction all recheck the
-current active local organisation membership, so a surviving browser session grants no authority
-after the Fleet projection suspends the member.
+`ToolInvocation` is the durable authority for an external tool call. Preparation and approval may
+retry only within their declared budgets; an ambiguous provider result follows the adapter's frozen
+idempotency or reconciliation mode and never becomes an unrecorded automatic retry.
+Every run-owned invocation stores the complete structured admission evidence alongside the existing
+`approvalRequired` and approval relation. A caller-owned MCP task stores the Principal, actor class,
+tool/action coordinate, decision digest, and a digest that binds that evidence to the task, tool
+revision, and arguments; it does not invent AgentRun membership or workload-assignment fields.
+Database constraints reject either owner's partial evidence and changes to evidence after insertion.
 
 ## See also
 
 - Parent index: [iam](../../README.md)
+- Policy model: [models/authorization](../../../../../models/authorization/main/README.md)
 - Siblings: [membership](../../membership/main/README.md) · [identity](../../identity/main/README.md) · [grants](../../grants/main/README.md) · [audit](../../audit/main/README.md)

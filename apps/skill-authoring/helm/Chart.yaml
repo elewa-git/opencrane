@@ -2,5 +2,5 @@ apiVersion: v2
 name: opencrane-skill-authoring
 description: Deployment-only chart for isolated, capability-bound skill authoring Jobs.
 type: application
-version: 0.8.0
-appVersion: "0.8.0"
+version: 0.10.0
+appVersion: "0.10.0"

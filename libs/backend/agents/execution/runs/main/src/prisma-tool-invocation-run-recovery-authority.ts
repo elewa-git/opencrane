@@ -12,8 +12,8 @@ import type { ToolInvocationRunRecoveryRepository, ToolInvocationRunRecoveryUnit
  * move a run out of a cancelling or finished state, so recovery can never resurrect a run that
  * has already stopped.
  *
- * Called by: `apps/opencrane/src/app/external-action-composition.ts`, which injects it into the
- * authorization package's tool-invocation recovery path.
+ * Called by: the external-action, MCP-runtime, and production-runtime-dispatch composition
+ * factories, which inject it into their shared tool-invocation recovery path.
  *
  * @implements ToolInvocationRunRecoveryAuthority
  */

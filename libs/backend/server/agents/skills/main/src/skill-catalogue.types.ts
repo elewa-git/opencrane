@@ -67,27 +67,26 @@ export interface SkillCatalogueEntry
 }
 
 /**
- * Reads the skill list for one silo.
+ * Reads the skill list allowed for one Principal in one silo.
  *
  * Read-only by design, and it returns names and lifecycle states only — never skill bundles,
- * artifact addresses, manifests, review evidence, signatures, or workload details. The `siloId` is
- * already trusted when it arrives: the router derives it from the authenticated session, never from
- * the request.
+ * artifact addresses, manifests, review evidence, signatures, or workload details. The trusted
+ * caller coordinates come from the authenticated session and request host, never request data.
  *
- * Implemented by: `PrismaSkillCatalogueRepository` in `prisma-skill-catalogue-repository.ts`.
+ * Implemented by: `PrismaSkillCatalogueUnitOfWork` in `prisma-skill-catalogue-unit-of-work.ts`.
  * Called by: {@link __CreateSkillCatalogueRouter} in `skill-catalogue.router.ts`; wired in
  * `prisma-skill-catalogue.router.ts`.
  */
 export interface SkillCatalogueRepository
 {
 /**
- * Lists the skills in one silo, most recently updated first, tie-broken by id so the order is
- * repeatable. At most 200 rows; there is no paging, so a silo with more is silently truncated.
+ * Lists discoverable skills, most recently updated first and tie-broken by id. The domain loads at
+ * most 200 lifecycle candidates and filters them through one central authorization batch.
  *
  * @param siloId - Silo already derived from the authenticated session.
- * @returns Catalogue summaries. An empty array means the silo has no skills — a silo that does not
- *   exist is indistinguishable from an empty one.
+ * @param principalId - Local Principal derived from the verified session.
+ * @returns Allowed catalogue summaries. An empty array does not disclose whether other skills exist.
  * @throws Whatever the database layer throws; the router logs it and answers 503.
  */
-	listCatalogue(siloId: string): Promise<readonly SkillCatalogueEntry[]>;
+	listCatalogue(siloId: string, principalId: string): Promise<readonly SkillCatalogueEntry[]>;
 }

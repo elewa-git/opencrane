@@ -45,11 +45,12 @@ platform/k8s-deploy.sh
   (immutable digests, never tags).
 - Cluster-wide prerequisites (ingress-nginx, cert-manager, CloudNativePG) are installed once per
   cluster by `bootstrap-prerequisites.sh` and are never part of a silo release.
-- A reviewed PostgreSQL migration runs as a bounded Helm hook Job. A failure is returned directly;
+- The tagged 0.9.2 upgrade runs its reviewed IAM prerequisite and then Prisma in one bounded Helm
+  hook Job. A failure is returned directly;
   the deployer does not require a migration backup, inspect the source schema, pause writes, or roll
   back the application.
 - After the umbrella upgrade, the engine stamps a checksum of the published database connection
-  Secrets onto the consumer Deployments (`opencrane-server`, `litellm`, `mcp-gateway`). An
+  Secrets onto the consumer Deployments (`opencrane-server`, `litellm`). An
   unchanged checksum is a no-op; a changed one triggers exactly one rollout. This replaced an
   unconditional `rollout restart` that double-started the heaviest workloads on every deploy.
 

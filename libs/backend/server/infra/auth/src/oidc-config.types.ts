@@ -109,15 +109,6 @@ export interface OidcAuthConfig
   platformOperatorGroups: string[];
 
   /**
-   * Lowercased group names that mark a caller as an organisation admin — the role
-   * that may curate the MCP catalogue / manage an organisation they own. A caller
-   * is an org admin iff their groups intersect this set (platform operators are
-   * always org admins, being a superset). Empty by default, so nobody is an org
-   * admin until configured (fail-closed). Sourced from `OPENCRANE_ORG_ADMIN_GROUPS`.
-   */
-  orgAdminGroups: string[];
-
-  /**
    * Lowercased, trimmed per-cluster seed email that bootstraps the FIRST platform
    * operator before any IdP group/role mapping exists. A caller is a platform operator
    * if their **verified** email equals this value (compared case-insensitively + trimmed),

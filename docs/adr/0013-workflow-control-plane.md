@@ -66,7 +66,7 @@ maintains its own storage and requires the `pg_cron` extension.
   making Absurd identifiers part of a domain or API contract.
 - Every new task spawn that accompanies a product write must use the transaction-bound adapter and
   a stable domain key. Calling the SDK after commit is not an allowed shortcut.
-- The Phase 0 live latency gate decides whether warm-pool claims can use the engine. A failure
+- The live task-pickup latency test decides whether warm-pool claims can use the engine. A failure
   leaves the latency-critical claim path on its existing CAS design while other suitable workflows
   may proceed.
 - Existing raw SQL, outbox workers, scheduler ticker, runtime repair, and cleanup stay unchanged

@@ -11,12 +11,12 @@ function _artifactRow()
 
 describe("Prisma personal asset catalogue", function _suite()
 {
-	it("reads non-deleted assets only from the exact owner and silo in bounded order", async function _listsOwnedAssets()
+	it("reads non-deleted silo candidates in bounded order before central filtering", async function _listsCandidates()
 	{
 		const findMany = vi.fn().mockResolvedValue([_artifactRow()]);
 		const prisma = { artifact: { findMany } } as unknown as PrismaClient;
 
-		await expect(new PrismaArtifactCatalogueRepository(prisma).listOwnedCatalogue("silo-1", "user-1")).resolves.toEqual([{ id: "asset-1", kind: "document", state: "active", currentRevisionId: "revision-1", mediaType: "text/plain", byteLength: "12", indexState: "indexed", createdAt: "2026-07-26T12:00:00.000Z", updatedAt: "2026-07-26T13:00:00.000Z" }]);
-		expect(findMany).toHaveBeenCalledWith({ where: { siloId: "silo-1", ownerPrincipalId: "user-1", state: { not: ArtifactState.Deleted }, currentRevisionId: { not: null } }, select: { id: true, kind: true, state: true, currentRevisionId: true, currentRevision: { select: { mediaType: true, byteLength: true, indexState: true } }, createdAt: true, updatedAt: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 50 });
+		await expect(new PrismaArtifactCatalogueRepository(prisma).listCatalogueCandidates("silo-1")).resolves.toEqual({ entries: [{ id: "asset-1", kind: "document", state: "active", currentRevisionId: "revision-1", mediaType: "text/plain", byteLength: "12", indexState: "indexed", createdAt: "2026-07-26T12:00:00.000Z", updatedAt: "2026-07-26T13:00:00.000Z" }], nextCursor: null });
+		expect(findMany).toHaveBeenCalledWith({ where: { siloId: "silo-1", state: { not: ArtifactState.Deleted }, currentRevisionId: { not: null } }, select: { id: true, kind: true, state: true, currentRevisionId: true, currentRevision: { select: { mediaType: true, byteLength: true, indexState: true } }, createdAt: true, updatedAt: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 50 });
 	});
 });

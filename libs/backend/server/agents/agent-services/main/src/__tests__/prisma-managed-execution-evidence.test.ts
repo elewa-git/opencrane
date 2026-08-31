@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import { MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER } from "../managed-agent-service-principal";
 import { PrismaManagedExecutionEvidenceAuthority } from "../db/prisma-managed-execution-evidence";
 
+/** Supplies the transaction-bound central authority; these identity-denial tests never consult it. */
+const _AUTHORIZATION = { admit: vi.fn(), admitPrincipal: vi.fn() } as never;
+
 /** Returns an active revision projection with an overridable persisted service Principal. */
 function _Revision(principal: { readonly issuer: string; readonly subject: string; readonly provenance: PrincipalProvenance })
 {
@@ -15,7 +18,7 @@ function _Revision(principal: { readonly issuer: string; readonly subject: strin
 		budget: {},
 		boundaryAttachments: [],
 		skillAssignments: [],
-		integrationAssignments: [],
+		mcpToolAssignments: [],
 	};
 }
 
@@ -29,7 +32,7 @@ describe("PrismaManagedExecutionEvidenceAuthority", function _Suite()
 			verifiedFleetMembershipRevision: { findFirst: assertionLookup },
 		};
 		const authority = new PrismaManagedExecutionEvidenceAuthority({ trustedIssuerId: "fleet", maximumStalenessMs: 60_000, verifier: { verify: vi.fn() } as never });
-		await expect(authority.load({ siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1" }, { prisma: transaction as never, admittedAtEpochMs: 1_000 })).resolves.toEqual({ outcome: "denied", reason: "identity_unavailable" });
+		await expect(authority.load({ siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1" }, { prisma: transaction as never, authorization: _AUTHORIZATION, admittedAtEpochMs: 1_000 })).resolves.toEqual({ outcome: "denied", reason: "identity_unavailable" });
 		expect(assertionLookup).not.toHaveBeenCalled();
 		expect(transaction.agentRevision.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: AgentRevisionState.Published, agentService: { is: expect.objectContaining({ kind: AgentServiceKind.Managed, state: AgentServiceState.Active }) } }) }));
 	});
@@ -43,7 +46,7 @@ describe("PrismaManagedExecutionEvidenceAuthority", function _Suite()
 		])
 		{
 			const prisma = { agentRevision: { findFirst: vi.fn().mockResolvedValue(_Revision(principal)) } };
-			await expect(authority.load({ siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1" }, { prisma: prisma as never, admittedAtEpochMs: 1_000 })).resolves.toEqual({ outcome: "denied", reason: "identity_unavailable" });
+			await expect(authority.load({ siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1" }, { prisma: prisma as never, authorization: _AUTHORIZATION, admittedAtEpochMs: 1_000 })).resolves.toEqual({ outcome: "denied", reason: "identity_unavailable" });
 		}
 	});
 });

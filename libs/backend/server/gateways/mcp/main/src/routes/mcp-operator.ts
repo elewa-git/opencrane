@@ -1,20 +1,21 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 
 import type { AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
-import { _RequireOrgAdmin, _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
-import { approveServer, getAccessPolicy, getDirectory, installServer, listAllServers, listEntitledCatalog, listInstalled, publishServer, rejectServer, setAccessPolicy, setServerEnabled, uninstallServer } from "../core/mcp-operator.logic";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
+import { McpOperatorAuthorizationError } from "../core/mcp-operator-authorization";
+import { approveServer, installServer, listAllServers, listEntitledCatalog, listInstalled, publishServer, rejectServer, setServerEnabled, uninstallServer } from "../core/mcp-operator.logic";
 import type { McpOperatorCaller } from "../core/mcp-operator.logic.types";
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
 import { McpRemoteServerRegistrationValidationError, registerRemoteServer } from "../era-probe/mcp-remote-registration";
 import { ___McpRemoteServerRegistrationSchema } from "../era-probe/mcp-remote-registration.validator";
 import { McpRemoteServerRegistrationOutcomes } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeWorkflow } from "../era-probe/mcp-era-probe.types";
-import { getMcpbValidation, submitMcpbValidation } from "../mcpb-validation/mcpb-validation-submission";
-import { McpbValidationSubmissionOutcomes } from "../mcpb-validation/mcpb-validation-submission.types";
-import type { McpbBundleArtifactResolver } from "../mcpb-validation/mcpb-validation-submission.types";
-import type { McpbValidationWorkflow } from "../mcpb-validation/mcpb-validation.types";
-import { ___McpbValidationIdSchema, ___McpbValidationSubmissionSchema } from "../mcpb-validation/mcpb-validation-submission.validator";
-import { ___McpAccessPolicySchema, ___McpEnabledSchema, ___McpInstallSchema } from "./mcp-operator.validator";
+import { getOciImageValidation, submitOciImageValidation } from "../oci-image-validation/oci-image-validation-submission";
+import { OciImageValidationSubmissionOutcomes } from "../oci-image-validation/oci-image-validation-submission.types";
+import type { OciImageLayoutArtifactResolver } from "../oci-image-validation/oci-image-validation-submission.types";
+import type { OciImageValidationWorkflow } from "../oci-image-validation/oci-image-validation.types";
+import { ___OciImageValidationIdSchema, ___OciImageValidationSubmissionSchema } from "../oci-image-validation/oci-image-validation-submission.validator";
+import { ___McpEnabledSchema, ___McpInstallSchema } from "./mcp-operator.validator";
 
 /**
  * Operator-API router for the MCP endpoints under `/api/v1/mcp/*` — using servers, and governing them.
@@ -24,17 +25,17 @@ import { ___McpAccessPolicySchema, ___McpEnabledSchema, ___McpInstallSchema } fr
  *
  * - **User-facing** (`/catalog`, `/installed/*`) — {@link _ResolveCaller} binds the request to a
  *   local Principal before entitlement filtering or install work begins.
- * - **Admin** (`/servers/*`, `/directory`) — gated by `_RequireOrgAdmin` and bound to the
- *   authenticated silo and local Principal projection.
+ * - **Governance** (`/servers/*`) — asks the transaction-bound central authority for the current
+ *   `Organization/Administer` grant and binds the decision to the local Principal projection.
  *
 	 * @param unitOfWork - Runs each MCP operation with transaction-scoped repositories.
 	 * @param principalDirectory - Resolves the authenticated identity to a local Principal in its silo.
 	 * @param eraProbeWorkflow - Runs the saved protocol check admitted with a server registration.
- * @param mcpbValidationWorkflow - Saves the background job that verifies an uploaded MCP bundle.
- * @param mcpbArtifacts - Resolves exact artifact facts inside the authenticated silo.
+ * @param ociImageValidationWorkflow - Saves the background job that verifies an uploaded OCI image.
+ * @param ociImageArtifacts - Resolves exact artifact facts inside the authenticated silo.
  * @returns Configured Express router.
  */
-export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDirectory: AuthenticatedPrincipalDirectory, eraProbeWorkflow: McpEraProbeWorkflow, mcpbValidationWorkflow: McpbValidationWorkflow, mcpbArtifacts: McpbBundleArtifactResolver): Router
+export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDirectory: AuthenticatedPrincipalDirectory, eraProbeWorkflow: McpEraProbeWorkflow, ociImageValidationWorkflow: OciImageValidationWorkflow, ociImageArtifacts: OciImageLayoutArtifactResolver): Router
 {
   const router = Router();
 
@@ -89,7 +90,7 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     const caller = await _ResolveCaller(principalDirectory, req);
     if (!_SendUnauthorizedWhenMissing(res, caller))
       return;
-    const removed = await uninstallServer(unitOfWork, caller.principalId, req.params.serverId);
+    const removed = await uninstallServer(unitOfWork, caller, req.params.serverId);
     if (removed === "not_found")
     {
       res.status(404).json({ error: "MCP install not found", code: "MCP_INSTALL_NOT_FOUND" });
@@ -100,11 +101,11 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
   });
 
   // -------------------------------------------------------------------------
-  // Admin — governance + access policy (org-admin gated)
+  // Governance
   // -------------------------------------------------------------------------
 
-  /** List every catalogue server regardless of status (governance view). Org-admin only. */
-  router.get("/servers", _RequireOrgAdmin(), async function _listServers(req, res)
+  /** List every catalogue server after a current Organization/Administer grant check. */
+  router.get("/servers", async function _listServers(req, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
     if (!_SendUnauthorizedWhenMissing(res, caller))
@@ -112,8 +113,8 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     res.json(await listAllServers(unitOfWork, caller));
   });
 
-	 /** Register a remote server and its era-probe task in one transaction. Org-admin only. */
-  router.post("/servers", _RequireOrgAdmin(), async function _registerServer(req, res)
+	 /** Register a remote server and its era-probe task after a current Organization/Administer grant check. */
+  router.post("/servers", async function _registerServer(req, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
     if (!_SendUnauthorizedWhenMissing(res, caller))
@@ -143,54 +144,54 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     }
   });
 
-	/** Submit one published `.mcpb` artifact and its saved verification job. Org-admin only. */
-	router.post("/bundle-validations", _RequireOrgAdmin(), async function _SubmitMcpBundle(req, res)
+	/** Submit one published OCI image-layout artifact after a current Organization/Administer grant check. */
+	router.post("/oci-image-validations", async function _SubmitOciImageValidation(req, res)
 	{
 		const caller = await _ResolveCaller(principalDirectory, req);
 		if (!_SendUnauthorizedWhenMissing(res, caller))
 			return;
-		const parsed = ___McpbValidationSubmissionSchema.safeParse(req.body);
+		const parsed = ___OciImageValidationSubmissionSchema.safeParse(req.body);
 		if (!parsed.success)
 		{
-			res.status(400).json({ error: "MCP bundle validation fields are invalid.", code: "VALIDATION_ERROR" });
+			res.status(400).json({ error: "OCI image validation fields are invalid.", code: "VALIDATION_ERROR" });
 			return;
 		}
-		const result = await submitMcpbValidation(unitOfWork, mcpbValidationWorkflow, mcpbArtifacts, caller, parsed.data);
-		if (result.outcome !== McpbValidationSubmissionOutcomes.Submitted)
+		const result = await submitOciImageValidation(unitOfWork, ociImageValidationWorkflow, ociImageArtifacts, caller, parsed.data);
+		if (result.outcome !== OciImageValidationSubmissionOutcomes.Submitted)
 		{
-			if (result.outcome === McpbValidationSubmissionOutcomes.ArtifactNotFound)
+			if (result.outcome === OciImageValidationSubmissionOutcomes.ArtifactNotFound)
 			{
-				res.status(404).json({ error: "MCP bundle artifact revision not found.", code: "MCPB_ARTIFACT_NOT_FOUND" });
+				res.status(404).json({ error: "OCI image artifact revision not found.", code: "OCI_IMAGE_ARTIFACT_NOT_FOUND" });
 				return;
 			}
-			res.status(409).json({ error: "The submission key is already used by different input.", code: "MCPB_VALIDATION_CONFLICT" });
+			res.status(409).json({ error: "The submission key is already used by different input.", code: "OCI_IMAGE_VALIDATION_CONFLICT" });
 			return;
 		}
 		res.status(201).json(result.validation);
 	});
 
-	/** Return one saved MCP bundle validation inside the authenticated silo. Org-admin only. */
-	router.get("/bundle-validations/:id", _RequireOrgAdmin(), async function _GetMcpBundleValidation(req: Request<{ id: string }>, res)
+	/** Return one saved OCI image admission result after a current Organization/Administer grant check. */
+	router.get("/oci-image-validations/:id", async function _GetOciImageValidation(req: Request<{ id: string }>, res)
 	{
 		const caller = await _ResolveCaller(principalDirectory, req);
 		if (!_SendUnauthorizedWhenMissing(res, caller))
 			return;
-		if (!___McpbValidationIdSchema.safeParse(req.params.id).success)
+		if (!___OciImageValidationIdSchema.safeParse(req.params.id).success)
 		{
-			res.status(400).json({ error: "MCP bundle validation id is invalid.", code: "VALIDATION_ERROR" });
+			res.status(400).json({ error: "OCI image validation id is invalid.", code: "VALIDATION_ERROR" });
 			return;
 		}
-		const validation = await getMcpbValidation(unitOfWork, caller, req.params.id);
+		const validation = await getOciImageValidation(unitOfWork, caller, req.params.id);
 		if (validation === null)
 		{
-			res.status(404).json({ error: "MCP bundle validation not found.", code: "MCPB_VALIDATION_NOT_FOUND" });
+			res.status(404).json({ error: "OCI image validation not found.", code: "OCI_IMAGE_VALIDATION_NOT_FOUND" });
 			return;
 		}
 		res.json(validation);
 	});
 
-	 /** Approve a server after its saved protocol check succeeds. Org-admin only. */
-  router.post("/servers/:id/approve", _RequireOrgAdmin(), async function _approve(req: Request<{ id: string }>, res)
+	 /** Approve a server after its saved protocol check and current Organization/Administer grant checks succeed. */
+  router.post("/servers/:id/approve", async function _approve(req: Request<{ id: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
     if (!_SendUnauthorizedWhenMissing(res, caller))
@@ -198,8 +199,8 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     _sendServerOrNotFound(res, await approveServer(unitOfWork, caller, req.params.id));
   });
 
-  /** Publish an approved server after its saved protocol check succeeds. Org-admin only. */
-  router.post("/servers/:id/publish", _RequireOrgAdmin(), async function _publish(req: Request<{ id: string }>, res)
+  /** Publish a server after its saved protocol check and current Organization/Administer grant checks succeed. */
+  router.post("/servers/:id/publish", async function _publish(req: Request<{ id: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
     if (!_SendUnauthorizedWhenMissing(res, caller))
@@ -207,8 +208,8 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     _sendServerOrNotFound(res, await publishServer(unitOfWork, caller, req.params.id));
   });
 
-  /** Sets a server's status to disabled. This endpoint does not require a prior status. Org-admin only. */
-  router.post("/servers/:id/reject", _RequireOrgAdmin(), async function _reject(req: Request<{ id: string }>, res)
+  /** Disable a server after a current Organization/Administer grant check; no prior status is required. */
+  router.post("/servers/:id/reject", async function _reject(req: Request<{ id: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
     if (!_SendUnauthorizedWhenMissing(res, caller))
@@ -216,8 +217,8 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     _sendServerOrNotFound(res, await rejectServer(unitOfWork, caller, req.params.id));
   });
 
-  /** Disable a server or restore a disabled server to published. Org-admin only. */
-  router.post("/servers/:id/enabled", _RequireOrgAdmin(), async function _setEnabled(req: Request<{ id: string }>, res)
+  /** Disable or restore a server after a current Organization/Administer grant check. */
+  router.post("/servers/:id/enabled", async function _setEnabled(req: Request<{ id: string }>, res)
   {
     const parsed = ___McpEnabledSchema.safeParse(req.body);
     if (!parsed.success)
@@ -232,52 +233,14 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     _sendServerOrNotFound(res, await setServerEnabled(unitOfWork, caller, req.params.id, parsed.data.enabled));
   });
 
-  /** Read a server's access policy. Org-admin only. */
-  router.get("/servers/:id/access", _RequireOrgAdmin(), async function _getAccess(req: Request<{ id: string }>, res)
+  router.use(function _SendMcpAuthorizationError(error: unknown, _req: Request, res: Response, next: NextFunction): void
   {
-    const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller))
-      return;
-    const policy = await getAccessPolicy(unitOfWork, caller, req.params.id);
-    if (!policy)
+    if (!(error instanceof McpOperatorAuthorizationError) && (!(error instanceof Error) || error.name !== "McpOperatorAuthorizationError"))
     {
-      res.status(404).json({ error: "MCP server not found", code: "MCP_SERVER_NOT_FOUND" });
+      next(error);
       return;
     }
-
-    res.json(policy);
-  });
-
-  /** Replace a server's access policy wholesale. Org-admin only. */
-  router.put("/servers/:id/access", _RequireOrgAdmin(), async function _setAccess(req: Request<{ id: string }>, res)
-  {
-    const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller))
-      return;
-    const parsed = ___McpAccessPolicySchema.safeParse(req.body);
-    if (!parsed.success)
-    {
-      res.status(400).json({ error: "groupIds (array) and principalIds (array) are required", code: "VALIDATION_ERROR" });
-      return;
-    }
-
-    const policy = await setAccessPolicy(unitOfWork, caller, req.params.id, parsed.data);
-    if (!policy)
-    {
-      res.status(404).json({ error: "MCP server not found", code: "MCP_SERVER_NOT_FOUND" });
-      return;
-    }
-
-    res.json(policy);
-  });
-
-  /** List the selectable users and groups for the access editor. Org-admin only. */
-  router.get("/directory", _RequireOrgAdmin(), async function _directory(req, res)
-  {
-    const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller))
-      return;
-    res.json(await getDirectory(unitOfWork, caller));
+    res.status(403).json({ error: error.message, code: "FORBIDDEN" });
   });
 
   return router;

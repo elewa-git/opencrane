@@ -57,7 +57,7 @@ export function __TestWorkflowEngineContract(name: string, createHarness: IWorkf
 			}));
 
 			const task = await harness.execution.spawn(harness.transaction, { taskName: "contract-context", idempotencyKey: "context-1", input: undefined });
-			await harness.execution.emitEvent(task, { eventName: "approved", payload: { value: "accepted" } });
+			await harness.execution.emitEventInTransaction(harness.transaction, task, { eventName: "approved", payload: { value: "accepted" } });
 			const worker = await harness.execution.startWorkers({ workerName: "contract-worker" });
 
 			expect(worker.workerName).toBe("contract-worker");

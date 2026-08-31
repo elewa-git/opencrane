@@ -21,7 +21,6 @@ file, named for what it is:
 
 | File | Contents | Consumed as |
 | --- | --- | --- |
-| `keys/initial-model-api-key` | The provider API key that seeds the first routable model | `OPENCRANE_INITIAL_MODEL_API_KEY="$(cat keys/initial-model-api-key)"`, alongside `--initial-model-provider <openai\|anthropic\|gemini\|mistral\|deepseek\|glm>` |
 | `keys/zitadel-pat` | The Zitadel service-user PAT for organisation management, once the mode-scoped credential lands 🔶 | Standalone silos get a full-org credential; fleet-mode silos get a claims-only one |
 
 ::: warning
@@ -33,9 +32,9 @@ currently wired flag.
 ## The custody rule
 
 The agent reads a key file straight into the environment of the one command that needs it, and
-never echoes it, logs it, or passes it as a command argument — the same rule the deploy scripts
-themselves follow. `OPENCRANE_INITIAL_MODEL_API_KEY` is environment-only precisely to keep the
-key out of command history and Helm values.
+never echoes it, logs it, or passes it as a command argument. Provider keys are deliberately outside
+this convention: an authenticated operator admits them after deployment through the durable
+provider workflow, never through the deploy command.
 
 Everything else an agent needs is already non-secret: cluster context, base domain, tenant name,
 image digests from the release manifest, and the deploy ledger for cross-run memory.
@@ -49,9 +48,9 @@ image digests from the release manifest, and the deploy ledger for cross-run mem
   and database transition first, spawns one `deploy` agent, then triages every finding in the
   report into a chart/script fix, a codebase issue, a data issue, or an infra/design question.
 
-With `keys/` populated, a fresh silo is one command an agent can compose, run and verify — and
-the post-deploy verification plus the run report tell it, and you, whether the cluster is
-actually healthy.
+A fresh silo is one command an agent can compose, run and verify. The post-deploy report proves the
+model-unconfigured control plane is healthy; configuring a provider is a separate authenticated
+product action.
 
 Source: [`.claude/agents/deploy.md`](https://github.com/elewa-git/opencrane/blob/main/.claude/agents/deploy.md)
 and [`.claude/commands/deploy-loop.md`](https://github.com/elewa-git/opencrane/blob/main/.claude/commands/deploy-loop.md).

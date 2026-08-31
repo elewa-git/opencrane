@@ -12,7 +12,7 @@ export function __CreateSelfRunStatusRouter(dependencies: SelfRunStatusRouterDep
 		if (caller === null) { response.status(401).json({ error: "run_authentication_required" }); return; }
 		try
 		{
-			const runs = await dependencies.repository.listOwned(caller.siloId, caller.subjectId);
+			const runs = await dependencies.repository.listOwned(caller);
 			response.status(200).json({ runs });
 		}
 		catch (err)
@@ -29,7 +29,7 @@ export function __CreateSelfRunStatusRouter(dependencies: SelfRunStatusRouterDep
 		if (typeof runId !== "string" || !runId.trim()) { response.status(400).json({ error: "invalid_run_identifier" }); return; }
 		try
 		{
-			const run = await dependencies.repository.readOwned(runId, caller.siloId, caller.subjectId);
+			const run = await dependencies.repository.readOwned(caller, runId);
 			if (run === null) { response.status(404).json({ error: "run_not_found" }); return; }
 			response.status(200).json(run);
 		}

@@ -64,22 +64,23 @@ export class SessionStore
 		{
 			return undefined;
 		}
-		// `/auth/me` carries the IAM role claims (`groups`, `isPlatformOperator`,
-		// `isOrgAdmin`, `clusterTenant`) declared by the pinned contract; read them
-		// straight off the typed response and pass them through verbatim for
-		// `capabilities` to resolve.
+		// `/auth/me` carries verified identity plus the central product-capability projection.
 		const u = this.me.value()?.user;
 		if (!u || !u.sub)
 		{
 			return undefined;
 		}
+		const productCapabilities = "productCapabilities" in u ? u.productCapabilities : undefined;
+		const administerOrganization = typeof productCapabilities === "object" && productCapabilities !== null && "administerOrganization" in productCapabilities
+			? productCapabilities.administerOrganization === true
+			: undefined;
 		return {
 			sub: u.sub,
 			email: u.email,
 			name: u.name,
 			groups: u.groups,
 			isPlatformOperator: u.isPlatformOperator,
-			isOrgAdmin: u.isOrgAdmin,
+			productCapabilities: { administerOrganization },
 			// `clusterTenant` is a silo (Control Plane) claim only — the fleet
 			// `/auth/me` carries none (the platform plane is cluster-wide), so the
 			// union narrows it away; read it defensively off the opencrane-ui arm.
@@ -95,24 +96,17 @@ export class SessionStore
 	});
 
 	/**
-	 * Capability flags driving UI gating. Interim model: any authenticated
-	 * session is treated as an operator until the opencrane-ui emits roles
-	 * (see `docs/architecture.md` §5.2). The API remains the enforcement point —
-	 * these flags only hide/disable controls.
+	 * Capability flags driving UI gating. Organisation management comes from the central
+	 * authorization projection; the API remains the enforcement point for every operation.
 	 */
 	public readonly capabilities: Signal<Capabilities> = computed(() =>
 	{
 		const authenticated = this.authenticated();
 		const u = this.user();
-		// Fail-closed: an operator/admin power requires an EXPLICIT claim from the
-		// control plane. `/auth/me` marks these role fields required, so a live
-		// authenticated session always carries them; a missing claim (mis-issued
-		// token, older backend) therefore grants NOTHING rather than silently
-		// elevating an ordinary session to operator. The API remains the enforcement
-		// point — these flags only gate UI.
+		// Fail closed when either the platform-control claim or product capability is absent.
 		const isPlatformOperator = u?.isPlatformOperator ?? false;
-		const isOrgAdmin = u?.isOrgAdmin ?? false;
-		return _DeriveCapabilities(authenticated, isPlatformOperator, isOrgAdmin, this._surface);
+		const administerOrganization = u?.productCapabilities?.administerOrganization ?? false;
+		return _DeriveCapabilities(authenticated, isPlatformOperator, administerOrganization, this._surface);
 	});
 
 	/** Re-fetch identity state, for example after login. */

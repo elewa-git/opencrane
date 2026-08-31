@@ -18,7 +18,7 @@ describe("PrismaToolRecoveryEventReporter", function _suite()
 	{
 		const { transaction, create } = _transaction({ id: "run-1", attempt: 2, state: AgentRunState.RecoveryRequired, conversationId: "conversation-1" });
 		await expect(new PrismaToolRecoveryEventReporter().appendInTransaction(transaction, { runId: "run-1", expectedAttempt: 2, toolInvocationId: "tool-1", preparationRetryCount: 1, preparationRetryLimit: 3, providerOutcome: "unknown_after_dispatch" })).resolves.toBe(true);
-		expect(create).toHaveBeenCalledWith({ data: { conversationId: "conversation-1", runId: "run-1", sequence: 5, type: RunEventTypes.ToolRecoveryRequired, payload: { toolInvocationId: "tool-1", toolCallId: "tool-1", expectedAttempt: 2, preparationRetryCount: 1, preparationRetryLimit: 3, providerOutcome: "unknown_after_dispatch" }, occurredAt: expect.any(Date) } });
+		expect(create).toHaveBeenCalledWith({ data: { conversationId: "conversation-1", runId: "run-1", attempt: 2, sequence: 5, type: RunEventTypes.ToolRecoveryRequired, payload: { toolInvocationId: "tool-1", toolCallId: "tool-1", expectedAttempt: 2, preparationRetryCount: 1, preparationRetryLimit: 3, providerOutcome: "unknown_after_dispatch" }, occurredAt: expect.any(Date) } });
 	});
 
 	it("rejects stale attempts and wrong run states", async function _rejects()

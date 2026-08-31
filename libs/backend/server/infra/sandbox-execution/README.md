@@ -33,14 +33,15 @@ It owns: the `SandboxJobExecutor` interface (`runJob`); the request/result types
 and the result carries only executor-originated output — the exit code, output, and completion time
 the Job actually reported; and a **fail-closed** default implementation,
 `__UnavailableSandboxJobExecutor`, which throws `SandboxExecutionUnavailableError` for every call.
-That default ships until a real sandbox Job transport is wired, so no code path can fabricate a tool
-result in the meantime. Invariant: a Job result is only ever real if the executor produced it — the
-platform never synthesises one, and absent a working transport the answer is a hard failure, not a
-placeholder.
+Fail-closed means the tool call is denied: until a concrete sandbox Job transport has been
+implemented, reviewed, and wired, the platform neither starts a Job nor returns a synthetic,
+placeholder, or server-process result. Invariant: a Job result is only ever real if the executor
+produced it — absent a working transport the answer is a hard failure.
 
 This is a **port plus fail-closed stub only**. It adopts no external sandbox runtime (no OpenSandbox
 adoption), ships no `apps/tool-runner`, and carries no real transport. The concrete executor is
-wired in the `apps/opencrane` composition root once a Job transport is confirmed.
+wired in the `apps/opencrane` composition root once a concrete Job transport has been implemented
+and reviewed.
 
 ## Public surface
 
@@ -52,8 +53,8 @@ wired in the `apps/opencrane` composition root once a Job transport is confirmed
 
 Consumed by the run executor. It defines the execution contract and a safe default; it does not run
 a Job itself yet — a concrete executor is wired in the `apps/opencrane` composition root when the
-sandbox Job transport is confirmed. It stores nothing and holds no arguments beyond the single
-in-flight call.
+sandbox Job transport has been implemented and reviewed. It stores nothing and holds no arguments
+beyond the single in-flight call.
 
 ## Dependency direction
 
@@ -63,4 +64,4 @@ and `scope:shared` packages — never on backend domains, the frontend, or app e
 ## See also
 
 - Parent index: [infra](../README.md) · [backend libraries](../../../README.md)
-- Siblings: [api](../api/README.md) · [auth](../auth/README.md) · [http](../http/README.md) · [obot-custody](../obot-custody/README.md)
+- Siblings: [api](../api/README.md) · [auth](../auth/README.md) · [http](../http/README.md)

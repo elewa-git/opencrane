@@ -1,11 +1,13 @@
-import { Prisma, RunOutboxEventKind, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnapshot } from "@prisma/client";
+import { Prisma, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnapshot } from "@prisma/client";
 
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { ___CloneCanonicalJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
-import { __AdmissionLockKey } from "./admission-lock-key";
+import { PrismaAgentRunWorkflowTaskAdmissionUnitOfWork } from "./prisma-agent-run-workflow-task-admission-unit-of-work";
 import { RunAdmissionDenialReasons } from "./run-admission.types";
 import type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionCommit, RunAdmissionPrepare, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types";
 
@@ -45,28 +47,24 @@ class _PreparedAdmissionDenied<TDenial> extends Error
  * Writes the first durable moment of a run to Postgres.
  *
  * One `$transaction` at `Serializable` covers everything: the duplicate check, the caller's optional
- * preparation writes, the snapshot compilation the caller supplies, the run row, its snapshot row and
- * its two outbox events. Either all of it commits or none of it does, so no reader can ever see a run
- * without its snapshot, or a snapshot without the dispatch command that starts it.
+ * preparation writes, the snapshot compilation the caller supplies, the run row, its snapshot row,
+ * and its Absurd workflow task. Either all of it commits or none of it does,
+ * so no reader can ever see a run without its snapshot or the workflow task that starts it.
  *
- * Two locks make that safe under concurrent callers: an advisory lock on silo + idempotency key holds a
- * second delivery of the same request back until the first finishes, then a `FOR UPDATE` on the
- * AgentService row is taken before any input is re-read, in the lock order the rest of the run code
- * follows.
+ * Serializable isolation and the unique silo + idempotency key make that safe under concurrent
+ * callers. A losing duplicate recovers the winner's immutable snapshot after its transaction ends.
  *
  * This class owns the transaction, and that ownership is the contract. Callers hand in callbacks and
  * receive a `Prisma.TransactionClient`, never the `PrismaClient` held here; they must write only on the
  * client they are given and must not open a transaction of their own, which would commit separately and
  * break the all-or-nothing guarantee above. The single read outside the transaction is the duplicate
  * recovery in the catch block, which uses the root client because the transaction is already gone.
- * The advisory-lock query casts its result because Prisma cannot deserialize PostgreSQL's void return
- * type from a raw query.
  *
  * Called by: `__AssembleRunInputSnapshot` (execution/inputs/main/src/session-assembly.ts), wired in by
  * `prisma-session-assembly-authorities.ts`.
  * @implements RunAdmissionRepository
  */
-export class PrismaRunAdmissionRepository implements RunAdmissionRepository
+export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 {
 	/** Canonical OpenCrane product-authority database client. */
 	private readonly prisma: PrismaClient;
@@ -74,16 +72,20 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 	private readonly clock: RunAdmissionClock;
 	/** Structured persistence-failure signal with process-wide secret redaction. */
 	private readonly log: Logger;
+	/** Guarded engine that saves the controller-owned task in the run admission transaction. */
+	private readonly workflow: Pick<IWorkflowEngine, "spawn">;
 
 	/**
 	 * Creates an initial-admission repository over canonical Postgres.
 	 * @param prisma - Canonical product-authority database client.
+	 * @param workflow - Guarded engine that saves the controller-owned task in the same transaction.
 	 * @param clock - Server-owned admission clock, replaceable only for deterministic tests.
 	 * @param log - Structured redacting logger for otherwise fail-closed persistence failures.
 	 */
-	constructor(prisma: PrismaClient, clock: RunAdmissionClock = { now: function _now(): Date { return new Date(); } }, log: Logger = ___CreateLogger("run-admission"))
+	constructor(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">, clock: RunAdmissionClock = { now: function _now(): Date { return new Date(); } }, log: Logger = ___CreateLogger("run-admission"))
 	{
 		this.prisma = prisma;
+		this.workflow = workflow;
 		this.clock = clock;
 		this.log = log;
 	}
@@ -114,12 +116,13 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 	async admit<TDenial>(command: RunAdmissionCommand, build: (transaction: RunAdmissionTransaction) => Promise<RunAdmissionBuildResult<TDenial>>, commit?: RunAdmissionCommit, prepare?: RunAdmissionPrepare): Promise<RunAdmissionResult<TDenial>>
 	{
 		const clock = this.clock;
+		const workflow = this.workflow;
 		try
 		{
 			return await this.prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RunAdmissionResult<TDenial>>
 			{
-				// 1. Serialize the user-visible key before loading inputs so a duplicate never recompiles at a later instant.
-				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${__AdmissionLockKey(command.siloId, command.requestIdempotencyKey)}, 0))::text AS "lock"`);
+				const authorization = new PrismaAuthorizationAuthority(transaction);
+					// 1. Check the unique user-visible key before loading inputs so a committed duplicate is never recompiled.
 				const existing = await transaction.agentRun.findUnique({ where: { siloId_requestIdempotencyKey: { siloId: command.siloId, requestIdempotencyKey: command.requestIdempotencyKey } } });
 				if (existing !== null)
 				{
@@ -132,15 +135,15 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 					}
 				}
 
-				// 2. Lock the service before every source revalidates its inputs, preserving the established run lock order.
-				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${command.agentServiceId} AND "silo_id" = ${command.siloId} FOR UPDATE`);
+					// 2. Revalidate every input against the same Serializable transaction snapshot.
 				const admittedAtDate = clock.now();
 				const admittedAt = admittedAtDate.toISOString();
 				// 3. Let the caller create the rows its own inputs need, so a child conversation exists
 				// before the conversation source reads it. It runs here, past the duplicate check, so a
 				// retried request cannot create a second child.
-				if (prepare) await prepare({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
-				const compiled = await build({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
+					if (prepare)
+						await prepare({ prisma: transaction, authorization, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
+				const compiled = await build({ prisma: transaction, authorization, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
 
 				// 4. Refuse by throwing whenever preparation already wrote rows, because returning would
 				// commit them without a run; see _PreparedAdmissionDenied.
@@ -155,8 +158,10 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 					return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
 				}
 
-				// 5. Insert both sides of the deferred snapshot relation plus ordered acceptance and dispatch events in one commit.
+				// 5. Insert both sides of the deferred snapshot relation and admit the controller task.
 				await _persistInitialAdmission(transaction, command, compiled.value, admittedAtDate);
+				const admission = new PrismaAgentRunWorkflowTaskAdmissionUnitOfWork(transaction);
+				await admission.admit(workflow, { siloId: command.siloId, runId: command.runId, attempt: 1 });
 				if (commit) await commit({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() }, compiled.value);
 				return { outcome: "accepted", snapshot: compiled.value.snapshot };
 			}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -237,7 +242,7 @@ function _matchesCommand(value: RunAdmissionBuild, command: RunAdmissionCommand)
 		&& value.authority.trigger === command.trigger;
 }
 
-/** Inserts the run, its only snapshot, and the ordered initial run-domain events. */
+/** Inserts the run and its only snapshot. */
 async function _persistInitialAdmission(transaction: Prisma.TransactionClient, command: RunAdmissionCommand, value: RunAdmissionBuild, admittedAt: Date): Promise<void>
 {
 	await transaction.agentRun.create({ data: {
@@ -256,7 +261,6 @@ async function _persistInitialAdmission(transaction: Prisma.TransactionClient, c
 		acceptedAt: admittedAt,
 	} });
 	await transaction.runInputSnapshot.create({ data: _RunInputSnapshotData(value.snapshot) });
-	await transaction.outboxEvent.createMany({ data: _InitialRunOutboxData(command.runId, value.snapshot.digest, admittedAt) });
 }
 
 /** Maps a dependency-light trigger to the owned database enum representation. */
@@ -265,45 +269,6 @@ function _trigger(value: InitialRunAuthority["trigger"]): "Interactive" | "Sched
 	if (value === "interactive") return "Interactive";
 	if (value === "schedule") return "Schedule";
 	return "ManagedInvocation";
-}
-
-/**
- * Builds the two outbox rows every admitted run starts with.
- *
- * Admission does not dispatch anything itself; it records what should happen and lets a worker pick it
- * up, so the run and the intent to start it commit together. `RunAccepted` at sequence 1 is the record
- * that the run exists, and `RunAttemptRequested` at sequence 2 is the command that gets attempt 1
- * running — the sequence numbers are what keep a reader from seeing the attempt before the acceptance.
- * Each `idempotencyKey` is derived from the run id and the attempt, so a worker that redelivers cannot
- * start attempt 1 twice.
- *
- * @param runId - The run both events belong to.
- * @param inputSnapshotDigest - Carried in both payloads so a worker can confirm it loaded the snapshot
- * the run was admitted with.
- * @param availableAt - When a worker may claim the rows; the admission time, so they are claimable at
- * once.
- */
-export function _InitialRunOutboxData(runId: string, inputSnapshotDigest: string, availableAt: Date): Prisma.OutboxEventCreateManyInput[]
-{
-	const accepted: Prisma.OutboxEventCreateManyInput = {
-		runId,
-		attempt: 1,
-		sequence: 1,
-		kind: RunOutboxEventKind.RunAccepted,
-		idempotencyKey: `${runId}:accepted`,
-		payload: { runId, inputSnapshotDigest },
-		availableAt,
-	};
-	const attemptRequested: Prisma.OutboxEventCreateManyInput = {
-		runId,
-		attempt: 1,
-		sequence: 2,
-		kind: RunOutboxEventKind.RunAttemptRequested,
-		idempotencyKey: `${runId}:attempt:1`,
-		payload: { runId, attempt: 1, inputSnapshotDigest },
-		availableAt,
-	};
-	return [accepted, attemptRequested];
 }
 
 /**
@@ -333,7 +298,7 @@ export function _RunInputSnapshotData(snapshot: RunInputSnapshot): Prisma.RunInp
 		artifactRevisionIds: [...snapshot.artifactRevisionIds],
 		identitySnapshot: _json(snapshot.identitySnapshot),
 		modelRoute: _json(snapshot.modelRoute),
-		integrationAssignments: _json(snapshot.integrationAssignments),
+		mcpTools: _json(snapshot.mcpTools),
 		skillRevisionIds: [...snapshot.skillRevisionIds],
 		memoryQueryPolicy: _json(snapshot.memoryQueryPolicy),
 		budgetPolicy: _json(snapshot.budgetPolicy),
@@ -368,7 +333,7 @@ export function _RunInputSnapshot(row: PrismaRunInputSnapshot): RunInputSnapshot
 		artifactRevisionIds: row.artifactRevisionIds,
 		skillRevisionIds: row.skillRevisionIds,
 		memoryQueryPolicy: row.memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"],
-		integrationAssignments: row.integrationAssignments as unknown as RunInputSnapshot["integrationAssignments"],
+		mcpTools: row.mcpTools as unknown as RunInputSnapshot["mcpTools"],
 		modelRoute: row.modelRoute as RunInputSnapshot["modelRoute"],
 		budgetPolicy: row.budgetPolicy as RunInputSnapshot["budgetPolicy"],
 		identitySnapshot: row.identitySnapshot as unknown as RunInputSnapshot["identitySnapshot"],

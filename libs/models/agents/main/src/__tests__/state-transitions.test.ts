@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __CanAppendRunEvent, __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed } from "../index";
-import type { RunEvent } from "../index";
-
-/** Creates a minimal immutable event for append-order tests. */
-function _Event(runId: string, sequence: number): RunEvent
-{
-	return { runId, sequence, type: "run.started", payload: {}, occurredAt: "2026-07-18T08:00:00.000Z" };
-}
+import { __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed } from "../index";
 
 describe("agent model state transitions", function _stateTransitionSuite()
 {
@@ -62,14 +55,4 @@ describe("agent model state transitions", function _stateTransitionSuite()
 		expect(__IsAgentRunTransitionAllowed("cancelled", "running")).toBe(false);
 	});
 
-	it("requires one-based contiguous same-run event sequences", function _runEventOrdering()
-	{
-		expect(__CanAppendRunEvent(null, _Event("run-1", 1))).toBe(true);
-		expect(__CanAppendRunEvent(null, _Event("run-1", 0))).toBe(false);
-		expect(__CanAppendRunEvent(null, _Event("run-1", 2))).toBe(false);
-		expect(__CanAppendRunEvent(_Event("run-1", 1), _Event("run-1", 2))).toBe(true);
-		expect(__CanAppendRunEvent(_Event("run-1", 1), _Event("run-1", 3))).toBe(false);
-		expect(__CanAppendRunEvent(_Event("run-1", 1), _Event("run-2", 2))).toBe(false);
-		expect(__CanAppendRunEvent(_Event("run-1", 1), _Event("run-1", 1.5))).toBe(false);
-	});
 });

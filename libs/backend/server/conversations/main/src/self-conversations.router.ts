@@ -22,16 +22,14 @@ const _ArchiveSchema = z.object({ archived: z.boolean() }).strict();
 const _AgentThreadReadSchema = z.object({ observedPosition: z.string().regex(/^(0|[1-9][0-9]*)$/u).max(19).refine(function _DatabaseBigInt(value) { return BigInt(value) <= 9_223_372_036_854_775_807n; }) }).strict();
 
 /**
- * Body for retrying a run: the attempt the participant was looking at, plus their retry key.
+ * Body for retrying a run: the attempt the participant was looking at.
  *
  * `expectedAttempt` is what makes the retry safe rather than optional — `__StartNextRunAttempt` uses
  * it as a compare-and-swap guard, so a stale number is a conflict instead of a second attempt.
  * Rejecting a non-integer or a value below 1 here means the run authority is never asked at all;
- * `_RejectsMalformedRetry` in self-conversations.router.test.ts asserts that. The key bound matches
- * {@link _MessageSchema}; the run authority stores it on the attempt's outbox event and compares it
- * there, which is how a repeated request is recognised as the same retry.
+ * `_RejectsMalformedRetry` in self-conversations.router.test.ts asserts that.
  */
-const _RunRetrySchema = z.object({ expectedAttempt: z.number().int().min(1), idempotencyKey: z.string().trim().min(1).max(128) }).strict();
+const _RunRetrySchema = z.object({ expectedAttempt: z.number().int().min(1) }).strict();
 
 /**
  * Build the HTTP routes a signed-in user uses for their own conversations: read the creation
@@ -201,7 +199,7 @@ export function __CreateSelfConversationsRouter(dependencies: SelfConversationsR
 	// that the caller is still an active member and still a participant, and that the run belongs to
 	// the conversation in the path. This route only proves there is a session, that both path
 	// parameters and the body parse, and then maps the outcome — 201 for a new attempt, 200 for a
-	// replay of the same retry key, and `_runRetryDenialStatus` for a denial. `currentAttempt` is
+	// replay of the same next attempt, and `_runRetryDenialStatus` for a denial. `currentAttempt` is
 	// echoed because an attempt conflict is recoverable: the client can re-read the run and retry the
 	// attempt that is actually current.
 	router.post("/:conversationId/runs/:runId/retry", async function _RetryRun(request: Request, response: Response)

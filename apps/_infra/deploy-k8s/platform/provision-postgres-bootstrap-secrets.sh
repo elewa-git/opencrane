@@ -40,7 +40,6 @@ _ensure_secret() {
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 _ensure_secret opencrane opencrane
-_ensure_secret obot obot
 _ensure_secret litellm litellm
 _ensure_secret admin opencrane_database_admin
 echo "[postgres-bootstrap] Bootstrap Secret authorities are ready in $NAMESPACE."

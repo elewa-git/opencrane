@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -9,12 +9,19 @@ import {
 	__SelectDirectReleaseComparisonBase,
 	validateWorkspace,
 } from "../release-versioning/core.mjs";
-import { resolveDatabaseTransition, resolveSchemaLineage, validateDatabaseOperand } from "../release-versioning/database-validation.mjs";
+import { validateDatabaseOperand } from "../release-versioning/database-validation.mjs";
 import { isAdjacentMinor, isAdjacentPatch, parseSemver, sha256 } from "../release-versioning/version-utils.mjs";
 
 function _WriteJson(path, value)
 {
 	writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function _Git(root, args)
+{
+	const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+	assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+	return result.stdout.trim();
 }
 
 function _Fixture({
@@ -23,7 +30,6 @@ function _Fixture({
 	actualChartVersion = adaptedVersion,
 	repositoryVersion = "0.7.0",
 	previousRepositoryVersion = null,
-	previousSchemaVersion = previousRepositoryVersion,
 	schemaVersion = repositoryVersion,
 	previousChartVersion = adaptedVersion,
 	adoptionBaseline = previousRepositoryVersion === null,
@@ -65,7 +71,7 @@ function _Fixture({
 			repositoryVersion: previousRepositoryVersion,
 			previousRepositoryVersion: null,
 			adoptionBaseline: true,
-			database: { ...manifest.database, schemaVersion: previousSchemaVersion },
+			database: { ...manifest.database },
 			projects: {
 				example: {
 					...manifest.projects.example,
@@ -87,57 +93,6 @@ function _Fixture({
 		},
 	};
 	return { graph, root };
-}
-
-function _WriteDatabaseMigration(root, from, to)
-{
-	const migrationRoot = join(root, `apps/opencrane/prisma/migrations/${from}-to-${to}`);
-	mkdirSync(migrationRoot, { recursive: true });
-	const sqlPath = join(migrationRoot, "migration.sql");
-	writeFileSync(sqlPath, "BEGIN;\nSELECT 1;\nCOMMIT;\n");
-	const sourceBaselineSha256 = sha256(join(root, "apps/opencrane/prisma/bootstrap/target-baseline.sql"));
-	_WriteJson(join(migrationRoot, "manifest.json"), {
-		fromSchemaVersion: from,
-		toSchemaVersion: to,
-		sqlSha256: sha256(sqlPath),
-		owner: "apps/opencrane",
-		rollback: "backup-restore-or-forward-repair",
-		executionMode: "automatic",
-		sourceTargetBaselineSha256: sourceBaselineSha256,
-		targetBaselineSha256: sourceBaselineSha256,
-		sourceProtectedBaselineSha256: "a".repeat(64),
-	});
-}
-
-function _CarryForwardFixture()
-{
-	const fixture = _Fixture({
-		repositoryVersion: "0.9.1",
-		previousRepositoryVersion: "0.9.0",
-		previousSchemaVersion: "0.9.0",
-		schemaVersion: "0.9.0",
-		adaptedVersion: "0.9.1",
-		previousChartVersion: "0.9.0",
-		manualTransition: { approved: true, reason: "Carry the failed predecessor migration through its repair patch" },
-	});
-	const targetPath = join(fixture.root, "releases/0.9.1.json");
-	const target = JSON.parse(readFileSync(targetPath, "utf8"));
-	target.database.carriedForwardFromRepositoryVersion = "0.8.1";
-	_WriteJson(targetPath, target);
-	const ownerPath = join(fixture.root, "releases/0.9.0.json");
-	const owner = JSON.parse(readFileSync(ownerPath, "utf8"));
-	owner.previousRepositoryVersion = "0.8.1";
-	owner.adoptionBaseline = false;
-	_WriteJson(ownerPath, owner);
-	_WriteJson(join(fixture.root, "releases/0.8.1.json"), {
-		...owner,
-		repositoryVersion: "0.8.1",
-		previousRepositoryVersion: null,
-		adoptionBaseline: true,
-		database: { ...owner.database, schemaVersion: "0.8.0" },
-	});
-	_WriteDatabaseMigration(fixture.root, "0.8.0", "0.9.0");
-	return fixture;
 }
 
 test("accepts only strict semantic versions", () =>
@@ -171,16 +126,94 @@ test("rejects an invalid Git base instead of suppressing changed files", () =>
 	assert.match(`${result.stdout}${result.stderr}`, /definitely-not-a-ref/u);
 });
 
-test("scopes current release ownership to its declared predecessor", () =>
+test("uses the resolved predecessor reference and the CI base fallback", () =>
 {
-	assert.equal(__SelectDirectReleaseComparisonBase("0.9.0", "0.9.1"), "0.9.1");
-	assert.equal(__SelectDirectReleaseComparisonBase("0.9.1", null), "0.9.1");
+	assert.equal(__SelectDirectReleaseComparisonBase("guard-base", "0.9.3"), "0.9.3");
+	assert.equal(__SelectDirectReleaseComparisonBase("guard-base", null), "guard-base");
 });
 
-test("keeps the CLI's direct release diff scoped to the declared predecessor", () =>
+test("keeps the CLI's direct release diff scoped to the resolved predecessor revision", () =>
 {
 	const source = readFileSync(join(import.meta.dirname, "../release-versioning-check.mjs"), "utf8");
-	assert.match(source, /_ChangedFiles\(\[__SelectDirectReleaseComparisonBase\(base, versionBase\)\]\)/u);
+	assert.match(source, /previousRepositoryCommit/u);
+	assert.match(source, /__SelectDirectReleaseComparisonBase\(base, previousReleaseTag \?\? previousRepositoryCommit\)/u);
+	assert.match(source, /require-published-predecessor/u);
+});
+
+test("fetches release tags before requiring a published predecessor", () =>
+{
+	const workflow = readFileSync(join(import.meta.dirname, "../../.github/workflows/release.yml"), "utf8");
+	assert.match(workflow, /fetch-depth: 0/u);
+	assert.match(workflow, /--require-published-predecessor/u);
+});
+
+test("permits an untagged predecessor commit in PR validation but requires its tag for release qualification", () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.8.0",
+		previousRepositoryVersion: "0.7.0",
+		previousSchemaVersion: "0.7.0",
+		schemaVersion: "0.7.0",
+		adaptedVersion: "0.8.0",
+		previousChartVersion: "0.7.0",
+	});
+	try
+	{
+		_WriteJson(join(fixture.root, "nx.json"), { plugins: [] });
+		_WriteJson(join(fixture.root, "apps/example/project.json"), {
+			name: "example",
+			projectType: "application",
+			root: "apps/example",
+			metadata: { release: { adaptedVersion: "0.8.0" } },
+		});
+		mkdirSync(join(fixture.root, "apps/example/helm/migrations"), { recursive: true });
+		_WriteJson(join(fixture.root, "apps/example/helm/migrations/0.7.0-to-0.8.0.json"), {
+			fromChartVersion: "0.7.0",
+			toChartVersion: "0.8.0",
+			kind: "noop",
+		});
+		mkdirSync(join(fixture.root, "scripts"));
+		cpSync(join(import.meta.dirname, "../release-versioning-check.mjs"), join(fixture.root, "scripts/release-versioning-check.mjs"));
+		cpSync(join(import.meta.dirname, "../release-versioning"), join(fixture.root, "scripts/release-versioning"), { recursive: true });
+		symlinkSync(join(import.meta.dirname, "../../node_modules"), join(fixture.root, "node_modules"));
+		_Git(fixture.root, ["init"]);
+		_Git(fixture.root, ["config", "user.email", "release-versioning@example.test"]);
+		_Git(fixture.root, ["config", "user.name", "Release versioning test"]);
+		_Git(fixture.root, ["config", "commit.gpgSign", "false"]);
+		_Git(fixture.root, ["add", "."]);
+		_Git(fixture.root, ["commit", "-m", "Create the untagged predecessor"]);
+		const predecessor = _Git(fixture.root, ["rev-parse", "HEAD"]);
+		const manifestPath = join(fixture.root, "releases/0.8.0.json");
+		const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+		manifest.previousRepositoryCommit = predecessor;
+		_WriteJson(manifestPath, manifest);
+		writeFileSync(join(fixture.root, "apps/example/.release-marker"), "candidate\n");
+		_Git(fixture.root, ["add", "."]);
+		_Git(fixture.root, ["commit", "-m", "Compose the candidate release"]);
+		const candidate = _Git(fixture.root, ["rev-parse", "HEAD"]);
+		const command = [join(fixture.root, "scripts/release-versioning-check.mjs"), "--base", predecessor];
+		const prResult = spawnSync(process.execPath, command, { cwd: fixture.root, encoding: "utf8" });
+		assert.equal(prResult.status, 0, `${prResult.stdout}${prResult.stderr}`);
+		const qualificationResult = spawnSync(process.execPath, [...command, "--require-published-predecessor"], { cwd: fixture.root, encoding: "utf8" });
+		assert.notEqual(qualificationResult.status, 0);
+		assert.match(`${qualificationResult.stdout}${qualificationResult.stderr}`, /requires an immutable Git tag/u);
+		_Git(fixture.root, ["tag", "0.7.0", predecessor]);
+		const taggedQualificationResult = spawnSync(process.execPath, [...command, "--require-published-predecessor"], { cwd: fixture.root, encoding: "utf8" });
+		assert.equal(taggedQualificationResult.status, 0, `${taggedQualificationResult.stdout}${taggedQualificationResult.stderr}`);
+		_Git(fixture.root, ["tag", "-f", "0.7.0", candidate]);
+		const mismatchedTagResult = spawnSync(process.execPath, [...command, "--require-published-predecessor"], { cwd: fixture.root, encoding: "utf8" });
+		assert.notEqual(mismatchedTagResult.status, 0);
+		assert.match(`${mismatchedTagResult.stdout}${mismatchedTagResult.stderr}`, /does not match previousRepositoryCommit/u);
+		_Git(fixture.root, ["tag", "-f", "0.7.0", predecessor]);
+		_Git(fixture.root, ["tag", "0.8.0", candidate]);
+		const taggedCandidateResult = spawnSync(process.execPath, [...command, "--require-published-predecessor"], { cwd: fixture.root, encoding: "utf8" });
+		assert.equal(taggedCandidateResult.status, 0, `${taggedCandidateResult.stdout}${taggedCandidateResult.stderr}`);
+		assert.equal(_Git(fixture.root, ["rev-parse", "HEAD"]), candidate);
+	}
+	finally
+	{
+		rmSync(fixture.root, { recursive: true, force: true });
+	}
 });
 
 test("accepts a complete mirrored release fixture", async () =>
@@ -295,7 +328,6 @@ test("rejects advancing an unaffected application's last-adapted version", async
 	previous.projects.untouched = { root: "apps/untouched", adaptedVersion: "0.7.0" };
 	_WriteJson(currentPath, current);
 	_WriteJson(previousPath, previous);
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
 	const errors = await validateWorkspace(fixture.root, ["apps/example/src/index.ts"], fixture.graph);
 	assert.ok(errors.some((error) => error.includes("untouched was not adapted")));
 });
@@ -500,86 +532,7 @@ test("accepts an explicitly approved manual transition", async () =>
 		adaptedVersion: "0.7.1",
 		manualTransition: { approved: true, reason: "Operator-reviewed patch transition" },
 	});
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.7.1");
 	assert.deepEqual(await validateWorkspace(fixture.root, [], fixture.graph), []);
-});
-
-test("requires the version-specific procedure before resolving a patch schema migration", () =>
-{
-	const fixture = _Fixture({
-		repositoryVersion: "0.7.1",
-		previousRepositoryVersion: "0.7.0",
-		adaptedVersion: "0.7.1",
-		manualTransition: { approved: true, reason: "Operator-reviewed patch transition" },
-	});
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.7.1");
-
-	assert.throws(
-		() => resolveDatabaseTransition(fixture.root, "0.7.1", "0.7.0"),
-		/adjacent minor transition/u,
-	);
-	assert.throws(
-		() => resolveDatabaseTransition(fixture.root, "0.7.1", "0.7.0", { manualTransitionId: "0.7.0-to-0.7.2" }),
-		/adjacent minor transition/u,
-	);
-	assert.equal(
-		resolveDatabaseTransition(fixture.root, "0.7.1", "0.7.0", { manualTransitionId: "0.7.0-to-0.7.1" }).kind,
-		"migration",
-	);
-});
-
-test("resolves an approved patch release with unchanged database state as current", () =>
-{
-	const fixture = _Fixture({
-		repositoryVersion: "0.7.1",
-		previousRepositoryVersion: "0.7.0",
-		previousSchemaVersion: "0.7.0",
-		schemaVersion: "0.7.0",
-		adaptedVersion: "0.7.1",
-		manualTransition: { approved: true, reason: "Operator-reviewed patch transition" },
-	});
-	const manifestPath = join(fixture.root, "releases/0.7.1.json");
-	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-	manifest.database.operandImage = "ghcr.io/elewa-git/opencrane-postgres:17.5-sha-qualified@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-	_WriteJson(manifestPath, manifest);
-	const transition = resolveDatabaseTransition(fixture.root, "0.7.1", "0.7.0");
-	assert.equal(transition.kind, "current");
-	assert.equal(transition.operandImage, manifest.database.operandImage);
-	assert.equal(transition.targetSchemaVersion, "0.7.0");
-	assert.equal(transition.migration, null);
-});
-
-test("carries one failed predecessor migration through its immediate repair patch", () =>
-{
-	const fixture = _CarryForwardFixture();
-	const transition = resolveDatabaseTransition(fixture.root, "0.9.1", "0.8.1");
-	assert.equal(transition.kind, "migration");
-	assert.equal(transition.targetSchemaVersion, "0.9.0");
-	assert.equal(transition.migration.id, "0.8.0-to-0.9.0");
-	assert.equal(resolveDatabaseTransition(fixture.root, "0.9.1", "0.9.0").kind, "current");
-	assert.equal(resolveDatabaseTransition(fixture.root, "0.9.1", "0.9.1").kind, "current");
-});
-
-test("recovers the migration that produced the schema for a same-schema release", () =>
-{
-	const fixture = _CarryForwardFixture();
-	// 0.9.1 changes no schema of its own, but a live database that reached 0.9.0 through the real
-	// 0.8.0-to-0.9.0 migration still records it, and privilege reconciliation compares against it.
-	assert.equal(resolveDatabaseTransition(fixture.root, "0.9.1", "0.9.0").migration, null);
-	const lineage = resolveSchemaLineage(fixture.root, "0.9.1");
-	assert.equal(lineage.id, "0.8.0-to-0.9.0");
-	assert.equal(lineage.fromSchemaVersion, "0.8.0");
-	assert.equal(lineage.toSchemaVersion, "0.9.0");
-	assert.equal(lineage.ownedByReleaseVersion, "0.9.0");
-	assert.ok(lineage.sqlSha256);
-	assert.ok(Array.isArray(lineage.sourceProtectedBaselineSha256s));
-	assert.ok(lineage.sourceProtectedBaselineSha256s.length > 0);
-});
-
-test("reports no lineage for a schema that was never migrated into", () =>
-{
-	const fixture = _Fixture();
-	assert.equal(resolveSchemaLineage(fixture.root, "0.7.0"), null);
 });
 
 test("rejects a manual transition without a non-empty review reason", async () =>
@@ -590,7 +543,6 @@ test("rejects a manual transition without a non-empty review reason", async () =
 		adaptedVersion: "0.7.1",
 		manualTransition: { approved: true, reason: "" },
 	});
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.7.1");
 	const errors = await validateWorkspace(fixture.root, [], fixture.graph);
 	assert.ok(errors.some((error) => error.includes("non-empty reason")));
 });
@@ -613,7 +565,6 @@ test("accepts restoring a historical manifest to its exact tagged bytes", async 
 		previousRepositoryVersion: "0.7.0",
 		adaptedVersion: "0.8.0",
 	});
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
 	const file = "releases/0.7.0.json";
 	assert.deepEqual(await validateWorkspace(
 		fixture.root,
@@ -627,6 +578,37 @@ test("accepts restoring a historical manifest to its exact tagged bytes", async 
 	), []);
 });
 
+test("accepts removing an untagged historical candidate manifest", async () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.8.0",
+		previousRepositoryVersion: "0.7.0",
+		adaptedVersion: "0.8.0",
+	});
+	assert.deepEqual(await validateWorkspace(
+		fixture.root,
+		["releases/0.7.1.json"],
+		fixture.graph,
+		[],
+		[],
+		null,
+		["releases/0.7.1.json"],
+		[],
+		["releases/0.7.1.json"],
+	), []);
+});
+
+test("rejects removing a historical manifest without proof that it is untagged", async () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.8.0",
+		previousRepositoryVersion: "0.7.0",
+		adaptedVersion: "0.8.0",
+	});
+	const errors = await validateWorkspace(fixture.root, ["releases/0.7.1.json"], fixture.graph);
+	assert.ok(errors.some((error) => error.includes("is immutable")));
+});
+
 test("allows a newly introduced historical adoption manifest", async () =>
 {
 	const fixture = _Fixture({
@@ -634,7 +616,6 @@ test("allows a newly introduced historical adoption manifest", async () =>
 		previousRepositoryVersion: "0.7.0",
 		adaptedVersion: "0.8.0",
 	});
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
 	const file = "releases/0.7.0.json";
 	assert.deepEqual(await validateWorkspace(fixture.root, [file], fixture.graph, [], [file]), []);
 });
@@ -646,7 +627,6 @@ test("accepts an unchanged adoption manifest from the cumulative release-train d
 		previousRepositoryVersion: "0.7.0",
 		adaptedVersion: "0.8.0",
 	});
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
 	assert.deepEqual(await validateWorkspace(
 		fixture.root,
 		["releases/0.7.0.json"],
@@ -665,7 +645,6 @@ test("rejects an unrelated newly introduced historical manifest", async () =>
 		previousRepositoryVersion: "0.7.0",
 		adaptedVersion: "0.8.0",
 	});
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
 	const file = "releases/0.6.0.json";
 	_WriteJson(join(fixture.root, file), {
 		repositoryVersion: "0.6.0",
@@ -734,7 +713,6 @@ test("accepts an exact no-op Helm transition", async () =>
 		toChartVersion: "0.8.0",
 		kind: "noop",
 	});
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
 	assert.deepEqual(await validateWorkspace(
 		fixture.root,
 		["apps/example/helm/templates/deployment.yaml"],
@@ -758,17 +736,15 @@ test("rejects Helm value patches until deployment has an executable consumer", a
 		kind: "json-patch",
 		patch: [{ op: "remove", path: "/retiredValue" }],
 	});
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
 	const errors = await validateWorkspace(fixture.root, [], fixture.graph);
 	assert.ok(errors.some((error) => error.includes("executable value migrations require an implemented deploy consumer")));
 });
 
-test("rejects app, chart, and database version regressions", async () =>
+test("rejects app and chart version regressions", async () =>
 {
 	const fixture = _Fixture({
 		repositoryVersion: "0.8.0",
 		previousRepositoryVersion: "0.7.0",
-		previousSchemaVersion: "0.9.0",
 		previousChartVersion: "0.9.0",
 		adaptedVersion: "0.8.0",
 	});
@@ -777,107 +753,16 @@ test("rejects app, chart, and database version regressions", async () =>
 	assert.ok(errors.some((error) => error.includes("chart version regresses")));
 });
 
-test("accepts a digest-bound migration from the previous schema version", async () =>
+test("accepts a changed baseline when the release manifest binds its digest", async () =>
 {
 	const fixture = _Fixture({
 		repositoryVersion: "0.8.0",
 		previousRepositoryVersion: "0.7.0",
-		previousSchemaVersion: "0.5.8",
 		adaptedVersion: "0.8.0",
 	});
-	_WriteDatabaseMigration(fixture.root, "0.5.8", "0.8.0");
 	assert.deepEqual(await validateWorkspace(
 		fixture.root,
 		["apps/opencrane/prisma/bootstrap/target-baseline.sql"],
 		fixture.graph,
 	), []);
-});
-
-test("normalizes a historical singular protected source digest for deployment", () =>
-{
-	const fixture = _Fixture({
-		repositoryVersion: "0.8.0",
-		previousRepositoryVersion: "0.7.0",
-		previousSchemaVersion: "0.7.0",
-		adaptedVersion: "0.8.0",
-	});
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
-	const transition = resolveDatabaseTransition(fixture.root, "0.8.0", "0.7.0");
-	assert.notEqual(transition.migration.freshSourceProtectedBaselineSha256, transition.migration.sourceTargetBaselineSha256);
-	assert.deepEqual(transition.migration.sourceProtectedBaselineSha256s, ["a".repeat(64)]);
-	assert.equal(transition.migration.freshSourceProtectedBaselineSha256, "a".repeat(64));
-});
-
-test("accepts several unique protected source origins and preserves their order", async () =>
-{
-	const fixture = _Fixture({
-		repositoryVersion: "0.8.0",
-		previousRepositoryVersion: "0.7.0",
-		previousSchemaVersion: "0.7.0",
-		adaptedVersion: "0.8.0",
-	});
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
-	const manifestPath = join(fixture.root, "apps/opencrane/prisma/migrations/0.7.0-to-0.8.0/manifest.json");
-	const migrationManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-	const inheritedOrigin = "b".repeat(64);
-	const freshOrigin = "c".repeat(64);
-	delete migrationManifest.sourceProtectedBaselineSha256;
-	migrationManifest.sourceProtectedBaselineSha256s = [inheritedOrigin, freshOrigin];
-	migrationManifest.freshSourceProtectedBaselineSha256 = freshOrigin;
-	_WriteJson(manifestPath, migrationManifest);
-	assert.deepEqual(await validateWorkspace(fixture.root, [], fixture.graph), []);
-	const transition = resolveDatabaseTransition(fixture.root, "0.8.0", "0.7.0");
-	assert.deepEqual(transition.migration.sourceProtectedBaselineSha256s, [inheritedOrigin, freshOrigin]);
-	assert.equal(transition.migration.freshSourceProtectedBaselineSha256, freshOrigin);
-});
-
-test("derives the exact admitted history prefix for an inherited protected origin", () =>
-{
-	const fixture = _Fixture({
-		repositoryVersion: "0.9.0",
-		previousRepositoryVersion: "0.8.0",
-		previousSchemaVersion: "0.8.0",
-		adaptedVersion: "0.9.0",
-	});
-	const sourceReleasePath = join(fixture.root, "releases/0.8.0.json");
-	const sourceRelease = JSON.parse(readFileSync(sourceReleasePath, "utf8"));
-	sourceRelease.previousRepositoryVersion = "0.7.0";
-	sourceRelease.adoptionBaseline = false;
-	_WriteJson(sourceReleasePath, sourceRelease);
-	_WriteJson(join(fixture.root, "releases/0.7.0.json"), {
-		...sourceRelease,
-		repositoryVersion: "0.7.0",
-		previousRepositoryVersion: null,
-		adoptionBaseline: true,
-		database: { ...sourceRelease.database, schemaVersion: "0.7.0" },
-	});
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
-	const inheritedOrigin = "b".repeat(64);
-	const olderManifestPath = join(fixture.root, "apps/opencrane/prisma/migrations/0.7.0-to-0.8.0/manifest.json");
-	const olderManifest = JSON.parse(readFileSync(olderManifestPath, "utf8"));
-	olderManifest.sourceProtectedBaselineSha256 = inheritedOrigin;
-	_WriteJson(olderManifestPath, olderManifest);
-	_WriteDatabaseMigration(fixture.root, "0.8.0", "0.9.0");
-	const currentManifestPath = join(fixture.root, "apps/opencrane/prisma/migrations/0.8.0-to-0.9.0/manifest.json");
-	const currentManifest = JSON.parse(readFileSync(currentManifestPath, "utf8"));
-	const freshOrigin = "c".repeat(64);
-	delete currentManifest.sourceProtectedBaselineSha256;
-	currentManifest.sourceProtectedBaselineSha256s = [freshOrigin, inheritedOrigin];
-	currentManifest.freshSourceProtectedBaselineSha256 = freshOrigin;
-	_WriteJson(currentManifestPath, currentManifest);
-	const transition = resolveDatabaseTransition(fixture.root, "0.9.0", "0.8.0");
-	assert.deepEqual(transition.migration.sourceHistoryLineages, [
-		{ sourceProtectedBaselineSha256: freshOrigin, history: [] },
-		{
-			sourceProtectedBaselineSha256: inheritedOrigin,
-			history: [{
-				schemaVersion: "0.8.0",
-				sourceSchemaVersion: "0.7.0",
-				sourceProtectedBaselineSha256: inheritedOrigin,
-				targetBaselineSha256: sourceRelease.database.baselineSha256,
-				migrationId: "0.7.0-to-0.8.0",
-				sqlSha256: olderManifest.sqlSha256,
-			}],
-		},
-	]);
 });

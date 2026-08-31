@@ -1,6 +1,7 @@
 export { __FinalizeArtifactRevision } from "./artifact-finalization";
-export { __ClaimArtifactPreprocessJob, __CompleteArtifactPreprocessJob, __FailArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease } from "./artifact-preprocessing";
+export { __CompleteArtifactPreprocessJob, __FailArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease } from "./artifact-preprocessing";
 export { __CreateArtifactPreprocessorRouter } from "./artifact-preprocessing.router";
+export { __CreateArtifactPreprocessControllerRouter } from "./artifact-preprocess-controller.router";
 export { __CreateArtifactScannerRouter } from "./artifact-scanning.router";
 export { ConversationAssetScanLifecycleStates } from "./artifact-scanning.types";
 export { PrismaArtifactScanUnitOfWork } from "./prisma-artifact-scan-unit-of-work";
@@ -10,9 +11,11 @@ export { _CreateArtifactCatalogueRepository, _CreateArtifactPreprocessAuthority,
 export { __UploadArtifact } from "./artifact-upload";
 export { __CreatePersonalArtifactCatalogueRouter } from "./personal-artifact-catalogue.router";
 export { _CreatePersonalArtifactCatalogueRouter } from "./prisma-personal-artifact-catalogue.router";
+export { PrismaPersonalArtifactCatalogueUnitOfWork } from "./prisma-personal-artifact-catalogue-unit-of-work";
 export { _PersonalArtifactsOpenapiPaths } from "./openapi";
 export type { ArtifactAuthorityRepository, ArtifactStorePromotionReceipt, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand, FinalizeArtifactRevisionResult, PersonalArtifactCatalogueRepository, PersonalArtifactEntry } from "./artifact-finalization.types";
 export type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputBroker, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ArtifactPreprocessSourceBroker, ArtifactPreprocessSourceLeaseIssuer, ArtifactPreprocessSourceRead, ArtifactPreprocessorRouterDependencies, ArtifactPreprocessorTokenReviewer, ReviewedArtifactPreprocessorIdentity } from "./artifact-preprocessing.types";
+export type { ArtifactPreprocessControllerIdentity, ArtifactPreprocessControllerRouterDependencies, ArtifactPreprocessControllerRouterLogger, ArtifactPreprocessControllerTokenReviewer } from "./artifact-preprocess-controller.router.types";
 export type { ArtifactScanRepository, ArtifactScannerRouterDependencies, ArtifactScannerTokenReviewer, ArtifactScanSourceBroker, ArtifactScanSourceRead, ConversationAssetScanLifecycleRepository, ReviewedArtifactScannerIdentity } from "./artifact-scanning.types";
 export type { ArtifactReadLeaseRepository, ArtifactReadLeaseSigner, IssueArtifactReadLeaseCommand, IssueArtifactReadLeaseResult, PublishedArtifactReadTarget } from "./artifact-read-lease.types";
 export type { PersonalArtifactCaller, PersonalArtifactCatalogueRouterDependencies } from "./personal-artifact-catalogue.router.types";

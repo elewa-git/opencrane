@@ -1,7 +1,7 @@
 BEGIN;
 
-INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
-VALUES ('phase-d-model', 'global', 'phase-d-model', 'litellm-phase-d-model', 'phase-d-model', clock_timestamp());
+INSERT INTO "model_definitions" ("id", "silo_id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
+VALUES ('phase-d-model', 'silo-1', 'global', 'phase-d-model', 'litellm-phase-d-model', 'phase-d-model', clock_timestamp());
 
 INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at")
 VALUES
@@ -66,12 +66,12 @@ SELECT pg_temp.expect_failure(
 );
 
 INSERT INTO "agent_revisions" (
-    "id", "agent_service_id", "revision", "state", "digest",
+    "id", "silo_id", "agent_service_id", "revision", "state", "digest",
     "prompt_policy_version", "model_definition_id", "budget", "authored_by"
 ) VALUES
-    ('rev-published', 'svc-main', 1, 'draft', 'sha256:' || repeat('a', 64),
+    ('rev-published', 'silo-1', 'svc-main', 1, 'draft', 'sha256:' || repeat('a', 64),
      'prompt-v1', 'phase-d-model', '{}', 'user-1'),
-    ('rev-draft', 'svc-main', 2, 'draft', 'sha256:' || repeat('b', 64),
+    ('rev-draft', 'silo-1', 'svc-main', 2, 'draft', 'sha256:' || repeat('b', 64),
      'prompt-v1', 'phase-d-model', '{}', 'user-1');
 
 SELECT pg_temp.expect_failure(
@@ -84,16 +84,16 @@ SELECT pg_temp.expect_failure(
     'A ModelDefinition referenced by an AgentRevision is immutable'
 );
 
-INSERT INTO "model_definitions" ("id", "scope", "cluster_tenant", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
-VALUES ('foreign-phase-d-model', 'clusterTenant', 'silo-other', 'foreign-phase-d-model', 'litellm-foreign-phase-d-model', 'foreign-phase-d-model', clock_timestamp());
+INSERT INTO "model_definitions" ("id", "silo_id", "scope", "cluster_tenant", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
+VALUES ('foreign-phase-d-model', 'silo-1', 'clusterTenant', 'silo-other', 'foreign-phase-d-model', 'litellm-foreign-phase-d-model', 'foreign-phase-d-model', clock_timestamp());
 SELECT pg_temp.expect_failure(
     'foreign tenant model definition is unavailable',
     $statement$
         INSERT INTO "agent_revisions" (
-            "id", "agent_service_id", "revision", "state", "digest",
+            "id", "silo_id", "agent_service_id", "revision", "state", "digest",
             "prompt_policy_version", "model_definition_id", "budget", "authored_by"
         ) VALUES (
-            'foreign-model-revision', 'svc-main', 3, 'draft', 'sha256:' || repeat('c', 64),
+            'foreign-model-revision', 'silo-1', 'svc-main', 3, 'draft', 'sha256:' || repeat('c', 64),
             'prompt-v1', 'foreign-phase-d-model', '{}', 'user-1'
         )
     $statement$,
@@ -189,13 +189,13 @@ INSERT INTO "agent_services" (
 );
 
 INSERT INTO "agent_revisions" (
-    "id", "agent_service_id", "revision", "state", "digest",
+    "id", "silo_id", "agent_service_id", "revision", "state", "digest",
     "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at"
 ) VALUES
-    ('rev-never-published', 'svc-lifecycle', 1, 'draft', 'sha256:' || repeat('e', 64),
+    ('rev-never-published', 'silo-1', 'svc-lifecycle', 1, 'draft', 'sha256:' || repeat('e', 64),
      'prompt-v1', 'phase-d-model', '{}', 'user-1', NULL),
-    ('rev-retirable', 'svc-lifecycle', 2, 'published', 'sha256:' || repeat('f', 64),
-     'prompt-v1', 'phase-d-model', '{}', 'user-1', '2026-01-01T00:00:00Z');
+    ('rev-retirable', 'silo-1', 'svc-lifecycle', 2, 'published', 'sha256:' || repeat('f', 64),
+     'prompt-v1', 'phase-d-model', '{}', 'user-1', TIMESTAMP '2026-01-01 00:00:00');
 
 SELECT pg_temp.expect_failure(
     'Draft revision cannot retire without publication evidence',
@@ -210,7 +210,7 @@ SELECT pg_temp.expect_failure(
 UPDATE "agent_revisions" SET "state" = 'retired' WHERE "id" = 'rev-retirable';
 SELECT pg_temp.assert_true(
     'Published revision keeps published_at after retirement',
-    (SELECT "published_at" = '2026-01-01T00:00:00Z'::timestamptz
+    (SELECT "published_at" = TIMESTAMP '2026-01-01 00:00:00'
      FROM "agent_revisions" WHERE "id" = 'rev-retirable')
 );
 
@@ -231,10 +231,10 @@ INSERT INTO "agent_services" (
     'draft', 'standard', 'svc-run-retirement-principal', clock_timestamp(), clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
-    "id", "agent_service_id", "revision", "state", "digest",
+    "id", "silo_id", "agent_service_id", "revision", "state", "digest",
     "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at"
 ) VALUES (
-    'rev-run-retirement', 'svc-run-retirement', 1, 'published', 'sha256:' || repeat('7', 64),
+    'rev-run-retirement', 'silo-1', 'svc-run-retirement', 1, 'published', 'sha256:' || repeat('7', 64),
     'prompt-v1', 'phase-d-model', '{}', 'user-1', clock_timestamp()
 );
 UPDATE "agent_services"
@@ -294,12 +294,12 @@ INSERT INTO "agent_services" (
     'draft', 'standard', 'svc-run-rollover-principal', clock_timestamp(), clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
-    "id", "agent_service_id", "revision", "state", "digest",
+    "id", "silo_id", "agent_service_id", "revision", "state", "digest",
     "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at"
 ) VALUES
-    ('rev-run-rollover-1', 'svc-run-rollover', 1, 'published', 'sha256:' || repeat('8', 64),
+    ('rev-run-rollover-1', 'silo-1', 'svc-run-rollover', 1, 'published', 'sha256:' || repeat('8', 64),
      'prompt-v1', 'phase-d-model', '{}', 'user-1', clock_timestamp()),
-    ('rev-run-rollover-2', 'svc-run-rollover', 2, 'published', 'sha256:' || repeat('9', 64),
+    ('rev-run-rollover-2', 'silo-1', 'svc-run-rollover', 2, 'published', 'sha256:' || repeat('9', 64),
      'prompt-v1', 'phase-d-model', '{}', 'user-1', clock_timestamp());
 UPDATE "agent_services"
 SET "active_revision_id" = 'rev-run-rollover-1', "state" = 'active'
@@ -368,9 +368,20 @@ UPDATE "agent_runs" SET "state" = 'assigned' WHERE "id" = 'run-state';
 UPDATE "agent_runs"
 SET "state" = 'running', "started_at" = clock_timestamp()
 WHERE "id" = 'run-state';
+INSERT INTO "conversation_run_events" (
+    "conversation_id", "run_id", "attempt", "sequence", "type", "message_id", "payload", "occurred_at"
+) VALUES (
+    'conversation-run-state', 'run-state', 1, 1, 'message.started', 'retry-message',
+    '{"messageId":"retry-message","role":"assistant"}', clock_timestamp()
+);
 UPDATE "agent_runs"
 SET "state" = 'failed', "finished_at" = clock_timestamp(), "terminal_reason" = 'runtime_failure'
 WHERE "id" = 'run-state';
+INSERT INTO "conversation_run_events" (
+    "conversation_id", "run_id", "attempt", "sequence", "type", "payload", "occurred_at"
+) VALUES (
+    'conversation-run-state', 'run-state', 1, 2, 'run.failed', '{}', clock_timestamp()
+);
 
 SELECT pg_temp.expect_failure(
     'terminal attempt cannot resurrect in place',
@@ -388,14 +399,66 @@ SET "attempt" = 2, "state" = 'accepted', "accepted_at" = "accepted_at" + interva
     "cost_amount" = NULL, "cost_currency" = NULL
 WHERE "id" = 'run-state';
 
+SELECT pg_temp.expect_failure(
+    'RunEvent cannot append to a stale attempt after retry',
+    $statement$
+        INSERT INTO "conversation_run_events" (
+            "conversation_id", "run_id", "attempt", "sequence", "type", "payload", "occurred_at"
+        ) VALUES (
+            'conversation-run-state', 'run-state', 1, 3, 'run.started', '{}', clock_timestamp()
+        )
+    $statement$,
+    'RunEvent must bind the current AgentRun attempt'
+);
+
 UPDATE "agent_runs" SET "state" = 'queued' WHERE "id" = 'run-state';
 UPDATE "agent_runs" SET "state" = 'assigned' WHERE "id" = 'run-state';
 UPDATE "agent_runs"
 SET "state" = 'running', "started_at" = clock_timestamp()
 WHERE "id" = 'run-state';
+INSERT INTO "conversation_run_events" (
+    "conversation_id", "run_id", "attempt", "sequence", "type", "payload", "occurred_at"
+) VALUES (
+    'conversation-run-state', 'run-state', 2, 3, 'run.started', '{}', clock_timestamp()
+);
+INSERT INTO "conversation_run_events" (
+    "conversation_id", "run_id", "attempt", "sequence", "type", "message_id", "payload", "occurred_at"
+) VALUES (
+    'conversation-run-state', 'run-state', 2, 4, 'message.started', 'retry-message',
+    '{"messageId":"retry-message","role":"assistant"}', clock_timestamp()
+);
 UPDATE "agent_runs"
 SET "state" = 'completed', "finished_at" = clock_timestamp(), "terminal_reason" = 'success'
 WHERE "id" = 'run-state';
+INSERT INTO "conversation_run_events" (
+    "conversation_id", "run_id", "attempt", "sequence", "type", "payload", "occurred_at"
+) VALUES (
+    'conversation-run-state', 'run-state', 2, 5, 'run.completed', '{}', clock_timestamp()
+);
+
+SELECT pg_temp.expect_failure(
+    'RunEvent cannot append after the same attempt is terminal',
+    $statement$
+        INSERT INTO "conversation_run_events" (
+            "conversation_id", "run_id", "attempt", "sequence", "type", "payload", "occurred_at"
+        ) VALUES (
+            'conversation-run-state', 'run-state', 2, 6, 'run.completed', '{}', clock_timestamp()
+        )
+    $statement$,
+    'RunEvent attempt stream is terminal'
+);
+
+SELECT pg_temp.assert_true(
+    'retry RunEvents keep a run-global sequence and bind each attempt',
+    (
+        SELECT string_agg(
+            "attempt"::text || ':' || "sequence"::text || ':' || "type",
+            ',' ORDER BY "sequence"
+        ) = '1:1:message.started,1:2:run.failed,2:3:run.started,2:4:message.started,2:5:run.completed'
+        FROM "conversation_run_events"
+        WHERE "run_id" = 'run-state'
+    )
+);
 
 SELECT pg_temp.expect_failure(
     'completed run cannot create another attempt',
@@ -475,23 +538,6 @@ SELECT pg_temp.expect_failure(
     'invalid AgentRun state transition'
 );
 
-SELECT pg_temp.expect_failure(
-    'Cancelled requires its RunCancellationRequested event',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-accepted'
-    $statement$,
-    'requires its RunCancellationRequested event'
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-cancel-accepted-cancellation', 'run-cancel-accepted', 1, 1, 'run.cancellation_requested',
-    'run-cancel-accepted:cancellation:1', '{"runId":"run-cancel-accepted","attempt":1}'
-);
-
 UPDATE "agent_runs"
 SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
 WHERE "id" = 'run-cancel-accepted';
@@ -500,19 +546,6 @@ SELECT pg_temp.assert_true(
     'Cancelled finalises without physical work when nothing was ever assigned or claimed',
     (SELECT "state" = 'cancelled' AND "finished_at" IS NOT NULL AND "terminal_reason" = 'user_cancelled'
      FROM "agent_runs" WHERE "id" = 'run-cancel-accepted')
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-cancel-cleanup', 'run-cancel-running', 1, 1, 'run.workload_cleanup_requested',
-    'run-cancel-running:cleanup:1', '{"runId":"run-cancel-running","attempt":1}'
-);
-
-SELECT pg_temp.assert_true(
-    'cancellation cleanup has a dedicated outbox event kind',
-    (SELECT "kind" = 'run.workload_cleanup_requested'::"RunOutboxEventKind"
-     FROM "run_outbox_events" WHERE "id" = 'outbox-cancel-cleanup')
 );
 
 INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at")
@@ -529,24 +562,17 @@ UPDATE "agent_runs" SET "state" = 'cancelling' WHERE "id" = 'run-cancel-event';
 SELECT pg_temp.expect_failure(
     'Cancelling cannot publish the terminal cancellation event',
     $statement$
-        INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload", "occurred_at")
-        VALUES ('conversation-cancel-event', 'run-cancel-event', 1, 'run.cancelled', '{}', clock_timestamp())
+        INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "attempt", "sequence", "type", "payload", "occurred_at")
+        VALUES ('conversation-cancel-event', 'run-cancel-event', 1, 1, 'run.cancelled', '{}', clock_timestamp())
     $statement$,
     'requires Cancelled AgentRun authority'
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-cancel-event-cancellation', 'run-cancel-event', 1, 1, 'run.cancellation_requested',
-    'run-cancel-event:cancellation:1', '{"runId":"run-cancel-event","attempt":1}'
 );
 
 UPDATE "agent_runs"
 SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
 WHERE "id" = 'run-cancel-event';
-INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload", "occurred_at")
-VALUES ('conversation-cancel-event', 'run-cancel-event', 1, 'run.cancelled', '{}', clock_timestamp());
+INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "attempt", "sequence", "type", "payload", "occurred_at")
+VALUES ('conversation-cancel-event', 'run-cancel-event', 1, 1, 'run.cancelled', '{}', clock_timestamp());
 
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "trigger",
@@ -567,6 +593,18 @@ INSERT INTO "workload_assignments" (
     ('run-cancel-proof', 1, 'svc-main', 'rev-published', 'silo-1', 'user-1',
      'opencrane-agent-runtime', 'runtime', 'tenant-silo-1', 'job', 'job-uid-cancel-proof', 'personal-small', clock_timestamp() + interval '1 hour');
 UPDATE "agent_runs" SET "state" = 'assigned' WHERE "id" IN ('run-cancel-bootstrap', 'run-cancel-proof');
+
+INSERT INTO "warm_runtime_reservations" (
+    "run_id", "attempt", "generation", "silo_id", "namespace", "deployment_name", "deployment_uid",
+    "pod_name", "pod_uid", "pod_resource_version", "generic_profile", "claimed_profile",
+    "service_account_name", "state", "idle_deadline"
+) VALUES
+    ('run-cancel-bootstrap', 1, 1, 'silo-1', 'tenant-silo-1', 'phase-d-personal-warm',
+     'deployment-uid-cancel-bootstrap', 'pod-cancel-bootstrap', 'pod-uid-cancel-bootstrap', '1',
+     'generic', 'personal-small', 'runtime', 'reserved', clock_timestamp() + interval '30 minutes'),
+    ('run-cancel-proof', 1, 1, 'silo-1', 'tenant-silo-1', 'phase-d-personal-warm',
+     'deployment-uid-cancel-proof', 'pod-cancel-proof', 'pod-uid-cancel-proof', '1',
+     'generic', 'personal-small', 'runtime', 'reserved', clock_timestamp() + interval '30 minutes');
 
 INSERT INTO "workload_bootstraps" (
     "id", "run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id",
@@ -618,9 +656,47 @@ SELECT pg_temp.expect_failure(
     'requires the current Assigned attempt'
 );
 
--- Cancelling -> Cancelled: a current Registered WorkloadAssignment blocks finalisation (D1),
--- then a missing published RunWorkloadCleanupRequested blocks it once the assignment exists (D5),
--- until the confirmed cleanup event lets the fenced run finalise (S2, assigned variant).
+UPDATE "workload_bootstraps"
+SET "revoked_at" = clock_timestamp()
+WHERE "id" = 'bootstrap-cancel-proof';
+
+SELECT pg_temp.assert_true(
+    'a consumed WorkloadBootstrap accepts one revocation',
+    (SELECT "consumed_at" IS NOT NULL AND "revoked_at" IS NOT NULL
+     FROM "workload_bootstraps" WHERE "id" = 'bootstrap-cancel-proof')
+);
+
+SELECT pg_temp.expect_failure(
+    'a consumed WorkloadBootstrap cannot clear its revocation',
+    $statement$
+        UPDATE "workload_bootstraps"
+        SET "revoked_at" = NULL
+        WHERE "id" = 'bootstrap-cancel-proof'
+    $statement$,
+    'WorkloadBootstrap revocation is irreversible'
+);
+
+SELECT pg_temp.expect_failure(
+    'a consumed WorkloadBootstrap cannot replace its revocation timestamp',
+    $statement$
+        UPDATE "workload_bootstraps"
+        SET "revoked_at" = "revoked_at" + interval '1 second'
+        WHERE "id" = 'bootstrap-cancel-proof'
+    $statement$,
+    'WorkloadBootstrap revocation is irreversible'
+);
+
+SELECT pg_temp.expect_failure(
+    'a consumed WorkloadBootstrap cannot record a second revocation',
+    $statement$
+        UPDATE "workload_bootstraps"
+        SET "revoked_at" = "revoked_at"
+        WHERE "id" = 'bootstrap-cancel-proof'
+    $statement$,
+    'WorkloadBootstrap is already revoked'
+);
+
+-- A current Registered WorkloadAssignment blocks cancellation finalisation.
 SELECT pg_temp.expect_failure(
     'Cancelled requires no current Registered WorkloadAssignment',
     $statement$
@@ -634,67 +710,72 @@ SELECT pg_temp.expect_failure(
 UPDATE "workload_assignments"
 SET "state" = 'revoked', "revoked_at" = clock_timestamp()
 WHERE "run_id" = 'run-cancel-bootstrap';
-
-SELECT pg_temp.expect_failure(
-    'Cancelled still requires its RunCancellationRequested event once the assignment is revoked',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-bootstrap'
-    $statement$,
-    'requires its RunCancellationRequested event'
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-cancel-bootstrap-cancellation', 'run-cancel-bootstrap', 1, 1, 'run.cancellation_requested',
-    'run-cancel-bootstrap:cancellation:1', '{"runId":"run-cancel-bootstrap","attempt":1}'
-);
-
-SELECT pg_temp.expect_failure(
-    'Cancelled requires a confirmed WorkloadCleanup once a WorkloadAssignment ever existed',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-bootstrap'
-    $statement$,
-    'requires a confirmed WorkloadCleanup'
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-cancel-bootstrap-cleanup', 'run-cancel-bootstrap', 1, 2, 'run.workload_cleanup_requested',
-    'run-cancel-bootstrap:cleanup:1', '{"runId":"run-cancel-bootstrap","attempt":1}'
-);
-
-SELECT pg_temp.expect_failure(
-    'Cancelled requires the WorkloadCleanup to be published, not merely requested',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-bootstrap'
-    $statement$,
-    'requires a confirmed WorkloadCleanup'
-);
-
-UPDATE "run_outbox_events"
-SET "claimed_at" = clock_timestamp(), "delivery_count" = 1, "published_at" = clock_timestamp()
-WHERE "id" = 'outbox-cancel-bootstrap-cleanup';
+UPDATE "warm_runtime_reservations"
+SET "state" = 'deleted', "delete_requested_at" = clock_timestamp(), "deleted_at" = clock_timestamp()
+WHERE "run_id" = 'run-cancel-bootstrap' AND "attempt" = 1 AND "generation" = 1;
+UPDATE "workload_bootstraps"
+SET "revoked_at" = clock_timestamp()
+WHERE "id" = 'bootstrap-cancel-bootstrap';
 
 UPDATE "agent_runs"
 SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
 WHERE "id" = 'run-cancel-bootstrap';
 
 SELECT pg_temp.assert_true(
-    'Cancelled finalises once its assignment is revoked and its WorkloadCleanup is confirmed',
+    'Cancelled finalises once its assignment is revoked and its reservation is deleted',
     (SELECT "state" = 'cancelled' AND "finished_at" IS NOT NULL AND "terminal_reason" = 'user_cancelled'
      FROM "agent_runs" WHERE "id" = 'run-cancel-bootstrap')
 );
 
+SELECT pg_temp.assert_true(
+    'an unconsumed WorkloadBootstrap accepts one revocation',
+    (SELECT "consumed_at" IS NULL AND "revoked_at" IS NOT NULL
+     FROM "workload_bootstraps" WHERE "id" = 'bootstrap-cancel-bootstrap')
+);
+
+SELECT pg_temp.expect_failure(
+    'an unconsumed WorkloadBootstrap cannot clear its revocation',
+    $statement$
+        UPDATE "workload_bootstraps"
+        SET "revoked_at" = NULL
+        WHERE "id" = 'bootstrap-cancel-bootstrap'
+    $statement$,
+    'WorkloadBootstrap revocation is irreversible'
+);
+
+SELECT pg_temp.expect_failure(
+    'an unconsumed WorkloadBootstrap cannot replace its revocation timestamp',
+    $statement$
+        UPDATE "workload_bootstraps"
+        SET "revoked_at" = "revoked_at" + interval '1 second'
+        WHERE "id" = 'bootstrap-cancel-bootstrap'
+    $statement$,
+    'WorkloadBootstrap revocation is irreversible'
+);
+
+SELECT pg_temp.expect_failure(
+    'an unconsumed WorkloadBootstrap cannot record a second revocation',
+    $statement$
+        UPDATE "workload_bootstraps"
+        SET "revoked_at" = "revoked_at"
+        WHERE "id" = 'bootstrap-cancel-bootstrap'
+    $statement$,
+    'WorkloadBootstrap is already revoked'
+);
+
+SELECT pg_temp.expect_failure(
+    'a revoked WorkloadBootstrap cannot be consumed',
+    $statement$
+        UPDATE "workload_bootstraps"
+        SET "consumed_at" = clock_timestamp(), "consumed_by_pod_uid" = 'pod-uid-cancel-bootstrap',
+            "receipt_id" = 'receipt-revoked-bootstrap'
+        WHERE "id" = 'bootstrap-cancel-bootstrap'
+    $statement$,
+    'a revoked WorkloadBootstrap cannot be consumed'
+);
+
 -- Cancelling -> Cancelled: an unrevoked RunProofKey blocks finalisation even after its
--- WorkloadAssignment is revoked (D2), independent of the outbox-event invariants above.
+-- WorkloadAssignment is revoked.
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "trigger",
     "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
@@ -714,6 +795,17 @@ INSERT INTO "workload_assignments" (
     clock_timestamp() + interval '1 hour'
 );
 UPDATE "agent_runs" SET "state" = 'assigned' WHERE "id" = 'run-cancel-invariant-proofkey';
+
+INSERT INTO "warm_runtime_reservations" (
+    "run_id", "attempt", "generation", "silo_id", "namespace", "deployment_name", "deployment_uid",
+    "pod_name", "pod_uid", "pod_resource_version", "generic_profile", "claimed_profile",
+    "service_account_name", "state", "idle_deadline"
+) VALUES (
+    'run-cancel-invariant-proofkey', 1, 1, 'silo-1', 'tenant-silo-1', 'phase-d-personal-warm',
+    'deployment-uid-cancel-invariant-proofkey', 'pod-cancel-invariant-proofkey',
+    'pod-uid-cancel-invariant-proofkey', '1', 'generic', 'personal-small', 'runtime', 'reserved',
+    clock_timestamp() + interval '30 minutes'
+);
 
 INSERT INTO "workload_bootstraps" (
     "id", "run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id",
@@ -745,6 +837,9 @@ UPDATE "agent_runs" SET "state" = 'cancelling' WHERE "id" = 'run-cancel-invarian
 UPDATE "workload_assignments"
 SET "state" = 'revoked', "revoked_at" = clock_timestamp()
 WHERE "run_id" = 'run-cancel-invariant-proofkey';
+UPDATE "warm_runtime_reservations"
+SET "state" = 'deleted', "delete_requested_at" = clock_timestamp(), "deleted_at" = clock_timestamp()
+WHERE "run_id" = 'run-cancel-invariant-proofkey' AND "attempt" = 1 AND "generation" = 1;
 
 SELECT pg_temp.expect_failure(
     'Cancelled requires every RunProofKey revoked',
@@ -758,171 +853,116 @@ SELECT pg_temp.expect_failure(
 
 UPDATE "run_proof_keys" SET "revoked_at" = clock_timestamp() WHERE "run_id" = 'run-cancel-invariant-proofkey';
 
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-cancel-invariant-proofkey-cancellation', 'run-cancel-invariant-proofkey', 1, 1, 'run.cancellation_requested',
-    'run-cancel-invariant-proofkey:cancellation:1', '{"runId":"run-cancel-invariant-proofkey","attempt":1}'
-);
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload",
-    "claimed_at", "published_at", "delivery_count"
-) VALUES (
-    'outbox-cancel-invariant-proofkey-cleanup', 'run-cancel-invariant-proofkey', 1, 2, 'run.workload_cleanup_requested',
-    'run-cancel-invariant-proofkey:cleanup:1', '{"runId":"run-cancel-invariant-proofkey","attempt":1}',
-    clock_timestamp(), clock_timestamp(), 1
-);
-
 UPDATE "agent_runs"
 SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
 WHERE "id" = 'run-cancel-invariant-proofkey';
 
 SELECT pg_temp.assert_true(
-    'Cancelled finalises once every RunProofKey is revoked alongside a confirmed WorkloadCleanup',
+    'Cancelled finalises once every RunProofKey is revoked and its reservation is deleted',
     (SELECT "state" = 'cancelled' AND "finished_at" IS NOT NULL AND "terminal_reason" = 'user_cancelled'
      FROM "agent_runs" WHERE "id" = 'run-cancel-invariant-proofkey')
 );
 
--- Cancelling -> Cancelled: no WorkloadAssignment ever existed, but the attempt-dispatch event was
--- claimed (a Kubernetes create may be in flight); an unresolved RunAttemptRequested blocks
--- finalisation (D4), and once resolved, cleanup is still required and must be published (D5,
--- unassigned orphan variant) before the run finalises (S2, orphan variant).
+-- A bound workflow task must record exact warm runtime deletion before cancellation finalises.
 INSERT INTO "agent_runs" (
     "id", "silo_id", "agent_service_id", "agent_revision_id", "trigger",
     "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
 ) VALUES (
-    'run-cancel-invariant-outbox', 'silo-1', 'svc-main', 'rev-published', 'interactive',
-    'request-cancel-invariant-outbox', 'run-cancel-invariant-outbox',
+    'run-cancel-workflow-task', 'silo-1', 'svc-main', 'rev-published', 'interactive',
+    'request-cancel-workflow-task', 'run-cancel-workflow-task',
     'sha256:' || repeat('d2', 32), 'sha256:' || repeat('d2', 32)
 );
 
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
+UPDATE "agent_runs" SET "state" = 'queued' WHERE "id" = 'run-cancel-workflow-task';
+
+INSERT INTO "workload_assignments" (
+    "run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id",
+    "audience", "service_account_name", "namespace", "workload_kind", "workload_uid", "workload_profile",
+    "pod_uid", "expires_at"
 ) VALUES (
-    'outbox-invariant-attempt', 'run-cancel-invariant-outbox', 1, 1, 'run.attempt_requested',
-    'run-cancel-invariant-outbox:attempt:1', '{"runId":"run-cancel-invariant-outbox","attempt":1}'
+    'run-cancel-workflow-task', 1, 'svc-main', 'rev-published', 'silo-1', 'user-1',
+    'opencrane-agent-runtime', 'runtime', 'tenant-silo-1', 'deployment', 'pod-uid-cancel-workflow', 'personal-small',
+    'pod-uid-cancel-workflow', clock_timestamp() + interval '1 hour'
 );
 
-UPDATE "agent_runs" SET "state" = 'cancelling' WHERE "id" = 'run-cancel-invariant-outbox';
-
-SELECT pg_temp.expect_failure(
-    'Cancelled requires its RunCancellationRequested event before any outbox-resolution check',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-invariant-outbox'
-    $statement$,
-    'requires its RunCancellationRequested event'
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
+INSERT INTO "warm_runtime_reservations" (
+    "run_id", "attempt", "generation", "silo_id", "namespace", "deployment_name", "deployment_uid",
+    "pod_name", "pod_uid", "pod_resource_version", "generic_profile", "claimed_profile",
+    "service_account_name", "state", "idle_deadline"
 ) VALUES (
-    'outbox-invariant-cancellation', 'run-cancel-invariant-outbox', 1, 2, 'run.cancellation_requested',
-    'run-cancel-invariant-outbox:cancellation:1', '{"runId":"run-cancel-invariant-outbox","attempt":1}'
+    'run-cancel-workflow-task', 1, 1, 'silo-1', 'tenant-silo-1', 'personal-warm', 'deployment-uid-cancel-workflow',
+    'pod-cancel-workflow', 'pod-uid-cancel-workflow', '1', 'generic', 'personal-small',
+    'runtime', 'reserved', clock_timestamp() + interval '30 minutes'
 );
 
-SELECT pg_temp.expect_failure(
-    'Cancelled requires its attempt command resolved before it can finalise',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-invariant-outbox'
-    $statement$,
-    'requires its attempt and release commands resolved'
-);
-
-UPDATE "run_outbox_events"
-SET "claimed_at" = clock_timestamp(), "delivery_count" = 1,
-    "failed_at" = clock_timestamp(), "failure_code" = 'RUN_CANCELLED'
-WHERE "id" = 'outbox-invariant-attempt';
-
-SELECT pg_temp.expect_failure(
-    'Cancelled requires a confirmed WorkloadCleanup once its attempt event had been claimed',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-invariant-outbox'
-    $statement$,
-    'requires a confirmed WorkloadCleanup'
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
+INSERT INTO "agent_run_workflow_tasks" (
+    "run_id", "attempt", "silo_id", "task_key", "task_name", "task_id", "receipt_bound_at"
 ) VALUES (
-    'outbox-invariant-cleanup', 'run-cancel-invariant-outbox', 1, 3, 'run.workload_cleanup_requested',
-    'run-cancel-invariant-outbox:cleanup:1', '{"runId":"run-cancel-invariant-outbox","attempt":1}'
+    'run-cancel-workflow-task', 1, 'silo-1', 'agent-run:silo-1:run-cancel-workflow-task:attempt:1',
+    'agent-runs.execute/v1', 'workflow-task-cancel', clock_timestamp()
 );
 
+UPDATE "workload_assignments"
+SET "state" = 'revoked', "revoked_at" = clock_timestamp()
+WHERE "run_id" = 'run-cancel-workflow-task';
+UPDATE "agent_runs" SET "state" = 'cancelling' WHERE "id" = 'run-cancel-workflow-task';
+
 SELECT pg_temp.expect_failure(
-    'Cancelled requires the orphan WorkloadCleanup to be published, not merely requested',
+    'Cancelled requires a reserved warm runtime deleted',
     $statement$
         UPDATE "agent_runs"
         SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-invariant-outbox'
+        WHERE "id" = 'run-cancel-workflow-task'
     $statement$,
-    'requires a confirmed WorkloadCleanup'
+    'requires every warm runtime reservation deleted'
 );
 
-UPDATE "run_outbox_events"
-SET "claimed_at" = clock_timestamp(), "delivery_count" = 1, "published_at" = clock_timestamp()
-WHERE "id" = 'outbox-invariant-cleanup';
+UPDATE "warm_runtime_reservations" SET "state" = 'ready' WHERE "run_id" = 'run-cancel-workflow-task';
+SELECT pg_temp.expect_failure(
+    'Cancelled requires a ready warm runtime deleted',
+    $statement$
+        UPDATE "agent_runs"
+        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
+        WHERE "id" = 'run-cancel-workflow-task'
+    $statement$,
+    'requires every warm runtime reservation deleted'
+);
 
+UPDATE "warm_runtime_reservations" SET "state" = 'claimed' WHERE "run_id" = 'run-cancel-workflow-task';
+SELECT pg_temp.expect_failure(
+    'Cancelled requires a claimed warm runtime deleted',
+    $statement$
+        UPDATE "agent_runs"
+        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
+        WHERE "id" = 'run-cancel-workflow-task'
+    $statement$,
+    'requires every warm runtime reservation deleted'
+);
+
+UPDATE "warm_runtime_reservations"
+SET "state" = 'delete_requested', "delete_requested_at" = clock_timestamp()
+WHERE "run_id" = 'run-cancel-workflow-task';
+SELECT pg_temp.expect_failure(
+    'Cancelled requires a deletion-requested warm runtime deleted',
+    $statement$
+        UPDATE "agent_runs"
+        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
+        WHERE "id" = 'run-cancel-workflow-task'
+    $statement$,
+    'requires every warm runtime reservation deleted'
+);
+
+UPDATE "warm_runtime_reservations"
+SET "state" = 'deleted', "deleted_at" = clock_timestamp()
+WHERE "run_id" = 'run-cancel-workflow-task';
 UPDATE "agent_runs"
 SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-WHERE "id" = 'run-cancel-invariant-outbox';
+WHERE "id" = 'run-cancel-workflow-task';
 
 SELECT pg_temp.assert_true(
-    'Cancelled finalises once a claimed-but-unassigned attempt has its orphan WorkloadCleanup confirmed',
+    'Cancelled finalises after the bound workflow records warm runtime deletion',
     (SELECT "state" = 'cancelled' AND "finished_at" IS NOT NULL AND "terminal_reason" = 'user_cancelled'
-     FROM "agent_runs" WHERE "id" = 'run-cancel-invariant-outbox')
-);
-
--- Cancelling -> Cancelled: an unresolved RunWorkloadReleaseRequested also blocks finalisation (D4),
--- independent of the RunAttemptRequested variant above; with no WorkloadAssignment ever created and
--- no claimed RunAttemptRequested, resolving it alone is sufficient (no WorkloadCleanup required).
-INSERT INTO "agent_runs" (
-    "id", "silo_id", "agent_service_id", "agent_revision_id", "trigger",
-    "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
-) VALUES (
-    'run-cancel-invariant-release', 'silo-1', 'svc-main', 'rev-published', 'interactive',
-    'request-cancel-invariant-release', 'run-cancel-invariant-release',
-    'sha256:' || repeat('d5', 32), 'sha256:' || repeat('d5', 32)
-);
-
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES
-    ('outbox-invariant-release-cancellation', 'run-cancel-invariant-release', 1, 1, 'run.cancellation_requested',
-     'run-cancel-invariant-release:cancellation:1', '{"runId":"run-cancel-invariant-release","attempt":1}'),
-    ('outbox-invariant-release', 'run-cancel-invariant-release', 1, 2, 'run.workload_release_requested',
-     'run-cancel-invariant-release:release:1', '{"runId":"run-cancel-invariant-release","attempt":1}');
-
-UPDATE "agent_runs" SET "state" = 'cancelling' WHERE "id" = 'run-cancel-invariant-release';
-
-SELECT pg_temp.expect_failure(
-    'Cancelled requires its release command resolved before it can finalise',
-    $statement$
-        UPDATE "agent_runs"
-        SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-        WHERE "id" = 'run-cancel-invariant-release'
-    $statement$,
-    'requires its attempt and release commands resolved'
-);
-
-UPDATE "run_outbox_events"
-SET "claimed_at" = clock_timestamp(), "delivery_count" = 1,
-    "failed_at" = clock_timestamp(), "failure_code" = 'RUN_CANCELLED'
-WHERE "id" = 'outbox-invariant-release';
-
-UPDATE "agent_runs"
-SET "state" = 'cancelled', "finished_at" = clock_timestamp(), "terminal_reason" = 'user_cancelled'
-WHERE "id" = 'run-cancel-invariant-release';
-
-SELECT pg_temp.assert_true(
-    'Cancelled finalises once its release command resolves with no assignment or claimed attempt outstanding',
-    (SELECT "state" = 'cancelled' AND "finished_at" IS NOT NULL AND "terminal_reason" = 'user_cancelled'
-     FROM "agent_runs" WHERE "id" = 'run-cancel-invariant-release')
+     FROM "agent_runs" WHERE "id" = 'run-cancel-workflow-task')
 );
 
 INSERT INTO "agent_runs" (
@@ -988,6 +1028,16 @@ SELECT pg_temp.expect_failure(
 );
 
 UPDATE "agent_runs" SET "state" = 'assigned' WHERE "id" = 'run-action';
+
+INSERT INTO "warm_runtime_reservations" (
+    "run_id", "attempt", "generation", "silo_id", "namespace", "deployment_name", "deployment_uid",
+    "pod_name", "pod_uid", "pod_resource_version", "generic_profile", "claimed_profile",
+    "service_account_name", "state", "idle_deadline"
+) VALUES (
+    'run-action', 1, 1, 'silo-1', 'tenant-silo-1', 'phase-d-personal-warm',
+    'deployment-uid-action', 'pod-action', 'pod-uid-1', '1', 'generic', 'personal-small',
+    'runtime', 'reserved', clock_timestamp() + interval '30 minutes'
+);
 
 SELECT pg_temp.expect_failure(
     'new WorkloadBootstrap cannot begin consumed',
@@ -1064,6 +1114,93 @@ INSERT INTO "run_proof_keys" (
     '{}', repeat('k', 43), clock_timestamp() + interval '20 minutes'
 );
 
+-- A managed runtime uses the same generation-bound chain with its distinct projected-token audience.
+INSERT INTO "agent_runs" (
+    "id", "silo_id", "agent_service_id", "agent_revision_id", "trigger",
+    "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
+) VALUES (
+    'run-managed-bootstrap', 'silo-1', 'svc-main', 'rev-published', 'interactive',
+    'request-managed-bootstrap', 'run-managed-bootstrap', 'sha256:' || repeat('e', 64),
+    'sha256:' || repeat('f', 64)
+);
+UPDATE "agent_runs" SET "state" = 'queued' WHERE "id" = 'run-managed-bootstrap';
+
+INSERT INTO "workload_assignments" (
+    "run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id",
+    "audience", "service_account_name", "namespace", "workload_kind", "workload_uid", "workload_profile",
+    "pod_uid", "expires_at"
+) VALUES (
+    'run-managed-bootstrap', 1, 'svc-main', 'rev-published', 'silo-1', 'agent-service:svc-main',
+    'opencrane-managed-agent-runtime', 'runtime', 'managed-runtime', 'deployment',
+    'pod-uid-managed-bootstrap', 'standard', 'pod-uid-managed-bootstrap', clock_timestamp() + interval '1 hour'
+);
+UPDATE "agent_runs" SET "state" = 'assigned' WHERE "id" = 'run-managed-bootstrap';
+
+INSERT INTO "warm_runtime_reservations" (
+    "run_id", "attempt", "generation", "silo_id", "namespace", "deployment_name", "deployment_uid",
+    "pod_name", "pod_uid", "pod_resource_version", "generic_profile", "claimed_profile",
+    "service_account_name", "state", "idle_deadline"
+) VALUES (
+    'run-managed-bootstrap', 1, 1, 'silo-1', 'managed-runtime', 'phase-d-managed-warm',
+    'deployment-uid-managed-bootstrap', 'pod-managed-bootstrap', 'pod-uid-managed-bootstrap', '1',
+    'generic', 'standard', 'runtime', 'reserved', clock_timestamp() + interval '30 minutes'
+);
+
+INSERT INTO "workload_bootstraps" (
+    "id", "run_id", "attempt", "generation", "agent_service_id", "agent_revision_id", "silo_id", "subject_id",
+    "audience", "service_account_name", "namespace", "workload_kind", "workload_uid", "claim_digest", "expires_at"
+) VALUES (
+    'bootstrap-managed', 'run-managed-bootstrap', 1, 1, 'svc-main', 'rev-published', 'silo-1',
+    'agent-service:svc-main', 'opencrane-managed-agent-runtime', 'runtime', 'managed-runtime', 'deployment',
+    'pod-uid-managed-bootstrap', 'sha256:' || repeat('e', 64), clock_timestamp() + interval '30 minutes'
+);
+
+UPDATE "warm_runtime_reservations"
+SET "state" = 'ready', "profile_activated_at" = clock_timestamp(), "readiness_observed_at" = clock_timestamp()
+WHERE "run_id" = 'run-managed-bootstrap' AND "attempt" = 1 AND "generation" = 1;
+UPDATE "workload_assignments"
+SET "state" = 'registered', "registered_at" = clock_timestamp()
+WHERE "run_id" = 'run-managed-bootstrap' AND "attempt" = 1;
+UPDATE "workload_bootstraps"
+SET "consumed_at" = clock_timestamp(), "consumed_by_pod_uid" = 'pod-uid-managed-bootstrap',
+    "receipt_id" = 'receipt-managed-bootstrap'
+WHERE "id" = 'bootstrap-managed';
+INSERT INTO "run_proof_keys" (
+    "id", "bootstrap_id", "run_id", "attempt", "generation", "workload_kind", "workload_uid", "pod_uid",
+    "public_key_jwk", "key_thumbprint", "expires_at"
+) VALUES (
+    'proof-key-managed', 'bootstrap-managed', 'run-managed-bootstrap', 1, 1, 'deployment',
+    'pod-uid-managed-bootstrap', 'pod-uid-managed-bootstrap', '{}', repeat('w', 43),
+    clock_timestamp() + interval '20 minutes'
+);
+UPDATE "warm_runtime_reservations"
+SET "state" = 'claimed', "proof_key_thumbprint" = repeat('w', 43), "bound_at" = clock_timestamp()
+WHERE "run_id" = 'run-managed-bootstrap' AND "attempt" = 1 AND "generation" = 1;
+
+SELECT pg_temp.assert_true(
+    'managed runtime audience binds assignment, reservation, bootstrap, and proof in one transaction',
+    EXISTS (
+        SELECT 1
+        FROM "workload_assignments" assignment
+        JOIN "warm_runtime_reservations" reservation
+          ON reservation."run_id" = assignment."run_id" AND reservation."attempt" = assignment."attempt"
+         AND reservation."generation" = assignment."binding_generation"
+        JOIN "workload_bootstraps" bootstrap
+          ON bootstrap."run_id" = reservation."run_id" AND bootstrap."attempt" = reservation."attempt"
+         AND bootstrap."generation" = reservation."generation"
+        JOIN "run_proof_keys" proof_key
+          ON proof_key."bootstrap_id" = bootstrap."id" AND proof_key."run_id" = bootstrap."run_id"
+         AND proof_key."attempt" = bootstrap."attempt" AND proof_key."generation" = bootstrap."generation"
+        WHERE assignment."run_id" = 'run-managed-bootstrap'
+          AND assignment."audience" = 'opencrane-managed-agent-runtime'
+          AND bootstrap."audience" = assignment."audience"
+          AND reservation."state" = 'claimed'
+          AND assignment."state" = 'registered'
+          AND bootstrap."consumed_by_pod_uid" = reservation."pod_uid"
+          AND proof_key."pod_uid" = reservation."pod_uid"
+    )
+);
+
 INSERT INTO "capability_catalog_revisions" (
     "id", "catalog_id", "revision", "digest", "capabilities", "created_by"
 ) VALUES (
@@ -1075,411 +1212,39 @@ SET "state" = 'running', "started_at" = clock_timestamp()
 WHERE "id" = 'run-action';
 UPDATE "agent_runs" SET "state" = 'waiting_for_input' WHERE "id" = 'run-action';
 
-SELECT pg_temp.expect_failure(
-    'new ApprovalRequest cannot begin Approved',
-    $statement$
-        INSERT INTO "approval_requests" (
-            "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-            "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-            "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-            "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-            "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-            "approver_policy_revision", "effective_policy_digest", "state", "expires_at",
-            "decided_at", "decided_by", "resume_token_hash"
-        ) VALUES (
-            'approval-invalid-initial', 'run-action', 1, 'rev-published', 'svc-main', 'silo-1',
-            'proof-key-1', repeat('k', 43), 'user-1', 'opencrane-agent-runtime',
-            'runtime', 'tenant-silo-1', 'job', 'job-uid-1', 'pod-uid-1',
-            'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send',
-            'message', 'message-1', 'send', 'sha256:' || repeat('8', 64), 'sha256:' || repeat('a', 64),
-            'approver-v1', 'sha256:' || repeat('7', 64), 'approved', clock_timestamp() + interval '1 hour',
-            clock_timestamp(), 'approver-1', 'resume-invalid'
-        )
-    $statement$,
-    'must begin pending'
-);
-
-SELECT pg_temp.expect_failure(
-    'new ApprovalRequest cannot carry a pre-created decided_at while otherwise Pending',
-    $statement$
-        INSERT INTO "approval_requests" (
-            "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-            "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-            "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-            "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-            "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-            "approver_policy_revision", "effective_policy_digest", "expires_at", "decided_at"
-        ) VALUES (
-            'approval-pre-decided', 'run-action', 1, 'rev-published', 'svc-main', 'silo-1',
-            'proof-key-1', repeat('k', 43), 'user-1', 'opencrane-agent-runtime',
-            'runtime', 'tenant-silo-1', 'job', 'job-uid-1', 'pod-uid-1',
-            'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send',
-            'message', 'message-pre-decided', 'send', 'sha256:' || repeat('8', 64), 'sha256:' || repeat('9', 64),
-            'approver-v1', 'sha256:' || repeat('7', 64), clock_timestamp() + interval '1 hour', clock_timestamp()
-        )
-    $statement$,
-    'must begin pending'
-);
-
-SELECT pg_temp.expect_failure(
-    'new ApprovalRequest cannot already be expired',
-    $statement$
-        INSERT INTO "approval_requests" (
-            "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-            "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-            "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-            "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-            "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-            "approver_policy_revision", "effective_policy_digest", "expires_at", "created_at"
-        ) VALUES (
-            'approval-expired-initial', 'run-action', 1, 'rev-published', 'svc-main', 'silo-1',
-            'proof-key-1', repeat('k', 43), 'user-1', 'opencrane-agent-runtime',
-            'runtime', 'tenant-silo-1', 'job', 'job-uid-1', 'pod-uid-1',
-            'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send',
-            'message', 'message-expired', 'send', 'sha256:' || repeat('8', 64), 'sha256:' || repeat('b', 64),
-            'approver-v1', 'sha256:' || repeat('7', 64),
-            clock_timestamp() - interval '1 second', clock_timestamp() - interval '2 seconds'
-        )
-    $statement$,
-    'must have a current, future expiry'
-);
-
-INSERT INTO "approval_requests" (
-    "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-    "approver_policy_revision", "effective_policy_digest", "expires_at"
-) VALUES (
-    'approval-1', 'run-action', 1, 'rev-published', 'svc-main', 'silo-1',
-    'proof-key-1', repeat('k', 43), 'user-1', 'opencrane-agent-runtime',
-    'runtime', 'tenant-silo-1', 'job', 'job-uid-1', 'pod-uid-1',
-    'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send',
-    'message', 'message-approval', 'send', 'sha256:' || repeat('8', 64), 'sha256:' || repeat('c', 64),
-    'approver-v1', 'sha256:' || repeat('7', 64), clock_timestamp() + interval '1 hour'
-);
-
-SELECT pg_temp.expect_failure(
-    'ApprovalRequest subject must match the exact workload assignment',
-    $statement$
-        INSERT INTO "approval_requests" (
-            "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-            "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-            "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-            "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-            "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-            "approver_policy_revision", "effective_policy_digest", "expires_at"
-        ) SELECT
-            'approval-forged-subject', "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-            "proof_key_id", "proof_key_thumbprint", 'user-other', "workload_audience",
-            "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-            "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-            "resource_kind", 'message-forged', "action", "arguments_digest", 'sha256:' || repeat('e', 64),
-            "approver_policy_revision", "effective_policy_digest", clock_timestamp() + interval '1 hour'
-        FROM "approval_requests" WHERE "id" = 'approval-1'
-    $statement$,
-    'requires current WaitingForInput run, assignment, and proof authority'
-);
-
-SELECT pg_temp.expect_failure(
-    'ApprovalRequest cannot expire before its deadline',
-    $statement$
-        UPDATE "approval_requests"
-        SET "state" = 'expired', "decided_at" = clock_timestamp()
-        WHERE "id" = 'approval-1'
-    $statement$,
-    'may expire only after its deadline'
-);
-
-UPDATE "approval_requests"
-SET "state" = 'approved', "decided_at" = '2099-01-01T00:00:00Z',
-    "decided_by" = 'approver-1', "resume_token_hash" = 'resume-approval-1'
-WHERE "id" = 'approval-1';
 SELECT pg_temp.assert_true(
-    'ApprovalRequest decision time is database-owned and before expiry',
-    (SELECT "decided_at" <= clock_timestamp() AND "decided_at" < "expires_at"
-     FROM "approval_requests" WHERE "id" = 'approval-1')
-);
-UPDATE "approval_requests"
-SET "resume_token_hash" = NULL
-WHERE "id" = 'approval-1';
-SELECT pg_temp.assert_true(
-    'approved ApprovalRequest consumes its resume token exactly once',
-    (SELECT "state" = 'approved' AND "resume_token_hash" IS NULL
-     FROM "approval_requests" WHERE "id" = 'approval-1')
-);
-SELECT pg_temp.expect_failure(
-    'approved ApprovalRequest cannot mutate after its resume token is consumed',
-    $statement$
-        UPDATE "approval_requests"
-        SET "decided_by" = 'replacement-approver'
-        WHERE "id" = 'approval-1'
-    $statement$,
-    'may only consume its resume token once'
-);
-
-INSERT INTO "approval_requests" (
-    "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-    "approver_policy_revision", "effective_policy_digest", "expires_at"
-) SELECT
-    'approval-denied', "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", 'message-denied', "action", "arguments_digest", 'sha256:' || repeat('1', 64),
-    "approver_policy_revision", "effective_policy_digest", clock_timestamp() + interval '1 hour'
-FROM "approval_requests" WHERE "id" = 'approval-1';
-UPDATE "approval_requests"
-SET "state" = 'denied', "decided_by" = 'approver-1', "resume_token_hash" = 'resume-denied'
-WHERE "id" = 'approval-denied';
-UPDATE "approval_requests" SET "resume_token_hash" = NULL WHERE "id" = 'approval-denied';
-SELECT pg_temp.assert_true(
-    'denied ApprovalRequest retains a durable marker until one-time consumption',
-    (SELECT "state" = 'denied' AND "decided_by" = 'approver-1' AND "resume_token_hash" IS NULL
-     FROM "approval_requests" WHERE "id" = 'approval-denied')
-);
-
-INSERT INTO "approval_requests" (
-    "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-    "approver_policy_revision", "effective_policy_digest", "expires_at"
-) VALUES (
-    'approval-expiring', 'run-action', 1, 'rev-published', 'svc-main', 'silo-1',
-    'proof-key-1', repeat('k', 43), 'user-1', 'opencrane-agent-runtime',
-    'runtime', 'tenant-silo-1', 'job', 'job-uid-1', 'pod-uid-1',
-    'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send',
-    'message', 'message-expiring', 'send', 'sha256:' || repeat('8', 64), 'sha256:' || repeat('d', 64),
-    'approver-v1', 'sha256:' || repeat('7', 64), clock_timestamp() + interval '300 milliseconds'
-);
-SELECT pg_sleep(0.4);
-SELECT pg_temp.expect_failure(
-    'ApprovalRequest cannot be approved after its deadline',
-    $statement$
-        UPDATE "approval_requests"
-        SET "state" = 'approved', "decided_at" = clock_timestamp(),
-            "decided_by" = 'approver-1', "resume_token_hash" = 'resume-too-late'
-        WHERE "id" = 'approval-expiring'
-    $statement$,
-    'decisions must be recorded before expiry'
-);
-UPDATE "approval_requests"
-SET "state" = 'expired', "decided_at" = clock_timestamp(), "resume_token_hash" = 'resume-expired'
-WHERE "id" = 'approval-expiring';
-SELECT pg_temp.assert_true(
-    'ApprovalRequest expires only after its deadline',
-    (SELECT "state" = 'expired' AND "decided_at" >= "expires_at"
-     FROM "approval_requests" WHERE "id" = 'approval-expiring')
-);
-UPDATE "approval_requests" SET "resume_token_hash" = NULL WHERE "id" = 'approval-expiring';
-SELECT pg_temp.assert_true(
-    'expired ApprovalRequest consumes its durable result marker exactly once',
-    (SELECT "state" = 'expired' AND "decided_by" IS NULL AND "resume_token_hash" IS NULL
-     FROM "approval_requests" WHERE "id" = 'approval-expiring')
-);
-
-INSERT INTO "approval_requests" (
-    "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-    "approver_policy_revision", "effective_policy_digest", "expires_at"
-) SELECT
-    'approval-stale-cancellation', "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", 'message-stale-cancellation', "action", "arguments_digest", 'sha256:' || repeat('e', 64),
-    "approver_policy_revision", "effective_policy_digest", clock_timestamp() + interval '300 milliseconds'
-FROM "approval_requests" WHERE "id" = 'approval-1';
-SELECT pg_sleep(0.4);
-CREATE TEMP TABLE cancellation_test_clock (
-    cancelled_at TIMESTAMP(3) NOT NULL
-) ON COMMIT DROP;
-INSERT INTO cancellation_test_clock VALUES (clock_timestamp()::timestamp(3));
-SELECT pg_temp.expect_failure(
-    'ApprovalRequest cancellation requires the shared caller-owned instant',
-    $statement$
-        UPDATE "approval_requests"
-        SET "state" = 'cancelled'
-        WHERE "id" = 'approval-stale-cancellation'
-    $statement$,
-    'requires a caller-supplied decision time between creation and now'
-);
-SELECT pg_temp.expect_failure(
-    'ApprovalRequest cancellation cannot predate its own creation',
-    $statement$
-        UPDATE "approval_requests"
-        SET "state" = 'cancelled', "decided_at" = '2000-01-01T00:00:00Z'
-        WHERE "id" = 'approval-stale-cancellation'
-    $statement$,
-    'requires a caller-supplied decision time between creation and now'
-);
-UPDATE "approval_requests"
-SET "state" = 'cancelled', "decided_at" = cancellation_test_clock.cancelled_at,
-    "decided_by" = 'must-be-cleared', "resume_token_hash" = 'must-be-cleared'
-FROM cancellation_test_clock
-WHERE "id" = 'approval-stale-cancellation';
-SELECT pg_temp.assert_true(
-    'cancellation preserves one caller-owned instant while closing a stale Pending ApprovalRequest',
-    (SELECT "state" = 'cancelled' AND "decided_at" >= "expires_at"
-        AND "decided_at" = cancellation_test_clock.cancelled_at
-        AND "decided_by" IS NULL AND "resume_token_hash" IS NULL
-     FROM "approval_requests" CROSS JOIN cancellation_test_clock
-     WHERE "id" = 'approval-stale-cancellation')
-);
-
-INSERT INTO "approval_requests" (
-    "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
-    "approver_policy_revision", "effective_policy_digest", "expires_at"
-) SELECT
-    'approval-stale-state', "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
-    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
-    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
-    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
-    "resource_kind", 'message-stale', "action", "arguments_digest", 'sha256:' || repeat('f', 64),
-    "approver_policy_revision", "effective_policy_digest", clock_timestamp() + interval '1 hour'
-FROM "approval_requests" WHERE "id" = 'approval-1';
-
-UPDATE "agent_runs" SET "state" = 'running' WHERE "id" = 'run-action';
-SELECT pg_temp.expect_failure(
-    'approval decision fails when the run is no longer WaitingForInput',
-    $statement$
-        UPDATE "approval_requests"
-        SET "state" = 'approved', "decided_by" = 'approver-1', "resume_token_hash" = 'resume-stale-state'
-        WHERE "id" = 'approval-stale-state'
-    $statement$,
-    'decision authority is no longer current'
-);
-SELECT pg_temp.assert_true(
-    'stale approval remains pending for the caller to resolve as a conflict',
-    (SELECT "state" = 'pending' AND "resume_token_hash" IS NULL
-     FROM "approval_requests" WHERE "id" = 'approval-stale-state')
-);
-
-UPDATE "agent_runs" SET "state" = 'waiting_for_input' WHERE "id" = 'run-action';
-SELECT pg_temp.expect_failure(
-    'ActionExecutionReceipt cannot reserve while its current run is waiting',
-    $statement$
-        INSERT INTO "action_execution_receipts" (
-            "id", "silo_id", "subject_id", "audience", "service_account_name", "namespace",
-            "workload_kind", "workload_uid", "pod_uid", "run_id", "attempt", "agent_service_id",
-            "agent_revision_id", "proof_key_id", "proof_key_thumbprint", "catalog_id", "catalog_revision",
-            "catalog_digest", "capability_id", "effective_policy_digest", "resource_kind", "resource_id",
-            "action", "arguments_digest", "jti", "replay_mode", "request_fingerprint"
-        ) VALUES (
-            'receipt-waiting', 'silo-1', 'user-1', 'service:email-send', 'runtime', 'tenant-silo-1',
-            'job', 'job-uid-1', 'pod-uid-1', 'run-action', 1, 'svc-main',
-            'rev-published', 'proof-key-1', repeat('k', 43), 'catalog-1', 1,
-            'sha256:' || repeat('6', 64), 'email.send', 'sha256:' || repeat('7', 64), 'message', 'message-waiting',
-            'send', 'sha256:' || repeat('8', 64), 'jti-waiting', 'one_shot', 'sha256:' || repeat('0', 64)
-        )
-    $statement$,
-    'requires the current Running AgentRun attempt'
-);
-UPDATE "agent_runs" SET "state" = 'running' WHERE "id" = 'run-action';
-
-INSERT INTO "action_execution_receipts" (
-    "id", "silo_id", "subject_id", "audience", "service_account_name", "namespace",
-    "workload_kind", "workload_uid", "pod_uid", "run_id", "attempt", "agent_service_id",
-    "agent_revision_id", "proof_key_id", "proof_key_thumbprint", "catalog_id", "catalog_revision",
-    "catalog_digest", "capability_id", "effective_policy_digest", "resource_kind", "resource_id",
-    "action", "arguments_digest", "jti", "replay_mode", "request_fingerprint", "reserved_at"
-) VALUES (
-    'receipt-1', 'silo-1', 'user-1', 'service:email-send', 'runtime', 'tenant-silo-1',
-    'job', 'job-uid-1', 'pod-uid-1', 'run-action', 1, 'svc-main',
-    'rev-published', 'proof-key-1', repeat('k', 43), 'catalog-1', 1,
-    'sha256:' || repeat('6', 64), 'email.send', 'sha256:' || repeat('7', 64), 'message', 'message-1',
-    'send', 'sha256:' || repeat('8', 64), 'jti-1', 'one_shot', 'sha256:' || repeat('9', 64),
-    '2099-01-01T00:00:00Z'
+    'ApprovalRequest requires exact live tool and elicitation coordinates',
+    (SELECT count(*) = 7 AND bool_and("is_nullable" = 'NO')
+       FROM information_schema.columns
+      WHERE "table_schema" = current_schema()
+        AND "table_name" = 'approval_requests'
+        AND "column_name" IN (
+            'elicitation_request_id', 'tool_invocation_row_id', 'reviewed_tool_arguments',
+            'reviewed_tool_schema', 'reviewed_tool_schema_digest', 'safe_proposed_arguments',
+            'response_schema'
+        ))
 );
 
 SELECT pg_temp.assert_true(
-    'action receipt accepts a service-specific PEP audience independent of bootstrap audience',
-    (SELECT "audience" = 'service:email-send' FROM "action_execution_receipts" WHERE "id" = 'receipt-1')
+    'ApprovalRequest no longer duplicates capability-catalog coordinates',
+    NOT EXISTS (
+        SELECT 1
+          FROM information_schema.columns
+         WHERE "table_schema" = current_schema()
+           AND "table_name" = 'approval_requests'
+           AND "column_name" IN ('catalog_id', 'catalog_revision', 'catalog_digest', 'capability_id')
+    )
 );
+
 SELECT pg_temp.assert_true(
-    'action receipt reservation time is database-owned',
-    (SELECT "reserved_at" <= clock_timestamp() FROM "action_execution_receipts" WHERE "id" = 'receipt-1')
-);
-
-SELECT pg_temp.expect_failure(
-    'new ActionExecutionReceipt cannot be inserted directly as succeeded',
-    $statement$
-        INSERT INTO "action_execution_receipts" (
-            "id", "silo_id", "subject_id", "audience", "service_account_name", "namespace",
-            "workload_kind", "workload_uid", "pod_uid", "run_id", "attempt", "agent_service_id",
-            "agent_revision_id", "proof_key_id", "proof_key_thumbprint", "catalog_id", "catalog_revision",
-            "catalog_digest", "capability_id", "effective_policy_digest", "resource_kind", "resource_id",
-            "action", "arguments_digest", "jti", "replay_mode", "request_fingerprint",
-            "state", "result", "completed_at"
-        )
-        SELECT
-            'receipt-direct-success', "silo_id", "subject_id", "audience", "service_account_name", "namespace",
-            "workload_kind", "workload_uid", "pod_uid", "run_id", "attempt", "agent_service_id",
-            "agent_revision_id", "proof_key_id", "proof_key_thumbprint", "catalog_id", "catalog_revision",
-            "catalog_digest", "capability_id", "effective_policy_digest", "resource_kind", "resource_id",
-            "action", "arguments_digest", 'jti-direct-success', "replay_mode", 'sha256:' || repeat('a', 64),
-            'succeeded', '{}', clock_timestamp()
-        FROM "action_execution_receipts" WHERE "id" = 'receipt-1'
-    $statement$,
-    'must begin reserved without a result, failure, or completion'
-);
-
-SELECT pg_temp.expect_failure(
-    'new ActionExecutionReceipt cannot be inserted directly as failed',
-    $statement$
-        INSERT INTO "action_execution_receipts" (
-            "id", "silo_id", "subject_id", "audience", "service_account_name", "namespace",
-            "workload_kind", "workload_uid", "pod_uid", "run_id", "attempt", "agent_service_id",
-            "agent_revision_id", "proof_key_id", "proof_key_thumbprint", "catalog_id", "catalog_revision",
-            "catalog_digest", "capability_id", "effective_policy_digest", "resource_kind", "resource_id",
-            "action", "arguments_digest", "jti", "replay_mode", "request_fingerprint",
-            "state", "failure_code", "completed_at"
-        )
-        SELECT
-            'receipt-direct-failure', "silo_id", "subject_id", "audience", "service_account_name", "namespace",
-            "workload_kind", "workload_uid", "pod_uid", "run_id", "attempt", "agent_service_id",
-            "agent_revision_id", "proof_key_id", "proof_key_thumbprint", "catalog_id", "catalog_revision",
-            "catalog_digest", "capability_id", "effective_policy_digest", "resource_kind", "resource_id",
-            "action", "arguments_digest", 'jti-direct-failure', "replay_mode", 'sha256:' || repeat('b', 64),
-            'failed', 'external_failure', clock_timestamp()
-        FROM "action_execution_receipts" WHERE "id" = 'receipt-1'
-    $statement$,
-    'must begin reserved without a result, failure, or completion'
-);
-
-UPDATE "run_proof_keys" SET "revoked_at" = clock_timestamp() WHERE "id" = 'proof-key-1';
-SELECT pg_temp.expect_failure(
-    'ActionExecutionReceipt cannot reserve with a revoked proof key',
-    $statement$
-        INSERT INTO "action_execution_receipts" (
-            "id", "silo_id", "subject_id", "audience", "service_account_name", "namespace",
-            "workload_kind", "workload_uid", "pod_uid", "run_id", "attempt", "agent_service_id",
-            "agent_revision_id", "proof_key_id", "proof_key_thumbprint", "catalog_id", "catalog_revision",
-            "catalog_digest", "capability_id", "effective_policy_digest", "resource_kind", "resource_id",
-            "action", "arguments_digest", "jti", "replay_mode", "request_fingerprint"
-        ) SELECT
-            'receipt-revoked-proof', "silo_id", "subject_id", "audience", "service_account_name", "namespace",
-            "workload_kind", "workload_uid", "pod_uid", "run_id", "attempt", "agent_service_id",
-            "agent_revision_id", "proof_key_id", "proof_key_thumbprint", "catalog_id", "catalog_revision",
-            "catalog_digest", "capability_id", "effective_policy_digest", "resource_kind", "resource_id",
-            "action", "arguments_digest", 'jti-revoked-proof', "replay_mode", 'sha256:' || repeat('1', 64)
-        FROM "action_execution_receipts" WHERE "id" = 'receipt-1'
-    $statement$,
-    'requires a current unrevoked RunProofKey'
+    'central authorization rows do not retain callerless approval flags or resume tokens',
+    NOT EXISTS (
+        SELECT 1
+          FROM information_schema.columns
+         WHERE "table_schema" = current_schema()
+           AND (("table_name" = 'authorization_grants' AND "column_name" = 'require_approval')
+             OR ("table_name" = 'approval_requests' AND "column_name" = 'resume_token_hash'))
+    )
 );
 
 INSERT INTO "authorization_grants" (
@@ -1495,7 +1260,7 @@ INSERT INTO "authorization_grants" (
 );
 
 SELECT pg_temp.expect_failure(
-    'duplicate personal-boundary grant is rejected',
+    'duplicate active personal-boundary grant is rejected',
     $statement$
         INSERT INTO "authorization_grants" (
             "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
@@ -1504,6 +1269,40 @@ SELECT pg_temp.expect_failure(
             "resource_id", "effect", "priority", "created_by"
         ) VALUES (
             'grant-personal-2', 'silo-1', 'principal', NULL, 'user-1',
+            'personal', NULL, 'user-1', 'exact',
+            'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send', 'message',
+            'message-1', 'allow', 100, 'user-1'
+        )
+    $statement$,
+    'authorization_grant_exact_authority_key'
+);
+
+UPDATE "authorization_grants"
+   SET "revoked_at" = clock_timestamp()
+ WHERE "id" = 'grant-personal-1';
+
+INSERT INTO "authorization_grants" (
+    "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
+    "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
+    "catalog_id", "catalog_revision", "catalog_digest", "capability_id", "resource_kind",
+    "resource_id", "effect", "priority", "created_by"
+) VALUES (
+    'grant-personal-2', 'silo-1', 'principal', NULL, 'user-1',
+    'personal', NULL, 'user-1', 'exact',
+    'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send', 'message',
+    'message-1', 'allow', 100, 'user-1'
+);
+
+SELECT pg_temp.expect_failure(
+    'a new active duplicate is rejected after revoke and recreate',
+    $statement$
+        INSERT INTO "authorization_grants" (
+            "id", "silo_id", "subject_kind", "subject_group_id", "subject_principal_id",
+            "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage",
+            "catalog_id", "catalog_revision", "catalog_digest", "capability_id", "resource_kind",
+            "resource_id", "effect", "priority", "created_by"
+        ) VALUES (
+            'grant-personal-3', 'silo-1', 'principal', NULL, 'user-1',
             'personal', NULL, 'user-1', 'exact',
             'catalog-1', 1, 'sha256:' || repeat('6', 64), 'email.send', 'message',
             'message-1', 'allow', 100, 'user-1'
@@ -1595,85 +1394,26 @@ SELECT pg_temp.expect_failure(
     'strictly newer verified revision'
 );
 
-INSERT INTO "run_outbox_events" (
-    "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
-) VALUES (
-    'outbox-1', 'run-action', 1, 1, 'run.accepted', 'outbox-key-1', '{"run":"run-action"}'
-);
-
-SELECT pg_temp.expect_failure(
-    'outbox payload is immutable',
-    $statement$UPDATE "run_outbox_events" SET "payload" = '{}' WHERE "id" = 'outbox-1'$statement$,
-    'identity, order, and payload are immutable'
-);
-SELECT pg_temp.expect_failure(
-    'outbox kind is immutable',
-    $statement$UPDATE "run_outbox_events" SET "kind" = 'run.resume_requested' WHERE "id" = 'outbox-1'$statement$,
-    'identity, order, and payload are immutable'
-);
-SELECT pg_temp.expect_failure(
-    'outbox order is immutable',
-    $statement$UPDATE "run_outbox_events" SET "sequence" = 2 WHERE "id" = 'outbox-1'$statement$,
-    'identity, order, and payload are immutable'
-);
-
-UPDATE "run_outbox_events"
-SET "claimed_at" = clock_timestamp(), "delivery_count" = 1
-WHERE "id" = 'outbox-1';
-UPDATE "run_outbox_events"
-SET "published_at" = clock_timestamp()
-WHERE "id" = 'outbox-1';
-
-SELECT pg_temp.expect_failure(
-    'delivered outbox status cannot reopen',
-    $statement$
-        UPDATE "run_outbox_events"
-        SET "claimed_at" = "claimed_at" + interval '1 second', "delivery_count" = 2
-        WHERE "id" = 'outbox-1'
-    $statement$,
-    'delivered OutboxEvent status is terminal'
-);
-
-SELECT pg_temp.expect_failure(
-    'delivered outbox cannot be deleted without the retention transaction guard',
-    $statement$
-        DELETE FROM "run_outbox_events" WHERE "id" = 'outbox-1'
-    $statement$,
-    'outside successful-delivery retention'
-);
-
--- The guarded retention transaction commits the authority fixture accumulated above, so
--- conversation terminal evidence and exact snapshots must exist before that commit boundary.
-INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload", "occurred_at") VALUES
-    ('conversation-retry-retirement', 'run-retry-retirement', 1, 'run.failed', '{}', clock_timestamp()),
-    ('conversation-retry-rollover', 'run-retry-rollover', 1, 'run.failed', '{}', clock_timestamp()),
-    ('conversation-run-state', 'run-state', 1, 'run.completed', '{}', clock_timestamp());
+INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "attempt", "sequence", "type", "payload", "occurred_at") VALUES
+    ('conversation-retry-retirement', 'run-retry-retirement', 1, 1, 'run.failed', '{}', clock_timestamp()),
+    ('conversation-retry-rollover', 'run-retry-rollover', 1, 1, 'run.failed', '{}', clock_timestamp());
 
 INSERT INTO "run_input_snapshots" (
     "id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
     "effective_contract_digest", "conversation_id", "memory_facts", "identity_snapshot", "model_route",
-    "integration_assignments", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
+    "mcp_tools", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
 )
 SELECT
     'snapshot-' || "id", "id", 1, "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest",
-    "conversation_id", '[]', '{}', '{}', '{}', '{}', '{}', 'sha256:' || repeat('0', 64), 'prompt-v1', "input_snapshot_digest"
+    "conversation_id", '[]', '{}', '{}', '[]', '{}', '{}', 'sha256:' || repeat('0', 64), 'prompt-v1', "input_snapshot_digest"
 FROM "agent_runs"
 WHERE "id" IN (
-    'run-retry-retirement', 'run-retry-rollover', 'run-state', 'run-action',
+    'run-retry-retirement', 'run-retry-rollover', 'run-state', 'run-action', 'run-managed-bootstrap',
     'run-cancel-accepted', 'run-cancel-queued', 'run-cancel-assigned', 'run-cancel-running', 'run-cancel-waiting',
     'run-cancel-event', 'run-cancel-bootstrap', 'run-cancel-proof',
-    'run-cancel-invariant-proofkey', 'run-cancel-invariant-outbox', 'run-cancel-invariant-release'
+    'run-cancel-invariant-proofkey', 'run-cancel-workflow-task'
 );
 SET CONSTRAINTS ALL IMMEDIATE;
-
-BEGIN;
-SELECT set_config('opencrane.run_outbox_prune', 'true', true);
-DELETE FROM "run_outbox_events" WHERE "id" = 'outbox-1';
-COMMIT;
-SELECT pg_temp.assert_true(
-    'guarded retention transaction can remove a successful delivered outbox record',
-    NOT EXISTS (SELECT 1 FROM "run_outbox_events" WHERE "id" = 'outbox-1')
-);
 
 INSERT INTO "audit_decisions" (
     "id", "decision_digest", "silo_id", "actor_kind", "actor_id", "audience", "namespace",

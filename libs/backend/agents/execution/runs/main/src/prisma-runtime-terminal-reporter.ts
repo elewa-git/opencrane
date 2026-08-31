@@ -1,22 +1,18 @@
 import { AgentRunState, AgentRunTerminalReason, Prisma, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
 
-import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository";
+import type { ChildRunCompletionCommand, ChildRunCompletionRepository, ChildRunCompletionResult } from "./child-run-completion.types";
+import { PrismaChildRunCompletionRepository } from "./prisma-child-run-completion-repository";
 import { RuntimeRunFailureReasons } from "./runtime-event-reporter.types";
 import type { RuntimeTerminalEventType, RuntimeTerminalPendingToolRepository, RuntimeTerminalPendingToolUnitOfWork, RuntimeTerminalReportCommand, RuntimeTerminalReporter, RuntimeTerminalReportResult } from "./runtime-terminal-reporter.types";
 
 /**
  * Turns a fenced runtime result into the sole terminal run outcome in Postgres.
- * Its advisory-lock query casts the result because Prisma cannot deserialize PostgreSQL's void return
- * type from a raw query.
  */
 export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
 {
 	/** Persist one terminal report with its own stream event and child-to-parent hand-off. */
 	async reportInTransaction(transaction: Prisma.TransactionClient, command: RuntimeTerminalReportCommand): Promise<RuntimeTerminalReportResult>
 	{
-		// Serialise all terminal writers for this run before choosing the next stream sequence.
-		await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${command.runId}, 0))::text AS "lock"`);
-		await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${command.runId} FOR UPDATE`);
 		const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
 		const sourceState = run === null || run.attempt !== command.attempt ? null : _TerminalSourceState(run.state, command);
 		if (run === null || sourceState === null) return { outcome: "denied", reason: "run_not_running" };
@@ -34,13 +30,37 @@ export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
 		if (run.conversationId !== null)
 		{
 			const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-			await transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: command.eventType, payload: { terminalReason: terminal.payloadReason }, occurredAt: now } });
+			await transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, attempt: run.attempt, sequence: (maximum._max.sequence ?? 0) + 1, type: command.eventType, payload: { terminalReason: terminal.payloadReason }, occurredAt: now } });
 		}
 
 		// A terminal child must notify its parent in this same transaction; the delivery helper records a
 		// durable suppression instead when the parent stream is intentionally unavailable.
-		if (run.parentRunId !== null) await __DeliverChildRunCompletionInTransaction(transaction, { childRunId: run.id });
+		if (run.parentRunId !== null)
+		{
+			const childDelivery = new PrismaRuntimeTerminalChildDeliveryUnitOfWork(transaction);
+			await childDelivery.deliver({ childRunId: run.id });
+		}
 		return { outcome: "reported" };
+	}
+}
+
+/** Owns the transaction-scoped child-delivery repository used by terminal reporting. */
+class PrismaRuntimeTerminalChildDeliveryUnitOfWork implements ChildRunCompletionRepository
+{
+	/** Keeps child delivery in the transaction that contains the child's terminal state change. */
+	private readonly transaction: Prisma.TransactionClient;
+
+	/** Binds child delivery to the terminal report transaction. */
+	constructor(transaction: Prisma.TransactionClient)
+	{
+		this.transaction = transaction;
+	}
+
+	/** Delegates delivery without opening or committing a second transaction. */
+	deliver(command: ChildRunCompletionCommand): Promise<ChildRunCompletionResult>
+	{
+		const repository = new PrismaChildRunCompletionRepository(this.transaction);
+		return repository.deliver(command);
 	}
 }
 

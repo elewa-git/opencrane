@@ -1,5 +1,4 @@
-import { AgentServiceKinds, RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentBudget, type AgentRevision, type AgentRevisionState, type AgentRun, type AgentRunState, type AgentRunTerminalReason, type AgentRunTrigger, type AgentService, type AgentServiceKind, type AgentServiceState, type RevisionBoundaryAttachment, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
-import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
+import { AgentServiceKinds, RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentBudget, type AgentRevision, type AgentRevisionState, type AgentRun, type AgentRunState, type AgentRunTerminalReason, type AgentRunTrigger, type AgentService, type AgentServiceKind, type AgentServiceState, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
 
 import type { AgentRevisionRow, AgentRunRow, AgentServiceRow } from "./prisma-agent-mappers.types";
 
@@ -103,7 +102,7 @@ export function _runTerminalReason(value: string | null): AgentRunTerminalReason
 	}
 }
 
-/** Maps one locked Prisma service row to the dependency-light target contract. */
+/** Maps one Prisma service row to the dependency-light target contract. */
 export function _mapService(row: AgentServiceRow): AgentService
 {
 	return {
@@ -119,7 +118,7 @@ export function _mapService(row: AgentServiceRow): AgentService
 	};
 }
 
-/** Maps one locked Prisma revision row and its immutable assignments to the target contract. */
+/** Maps one Prisma revision row and its immutable assignments to the target contract. */
 export function _mapRevision(row: AgentRevisionRow): AgentRevision
 {
 	return {
@@ -135,7 +134,7 @@ export function _mapRevision(row: AgentRevisionRow): AgentRevision
 		personaRevisionId: row.personaRevisionId,
 		modelDefinitionId: row.modelDefinitionId,
 		skills: row.skillAssignments.map(assignment => ({ skillId: assignment.skillId, revisionId: assignment.skillRevisionId })),
-		integrationAssignments: row.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as unknown as readonly ReviewedIntegrationToolDefinition[] })),
+		mcpToolRevisionIds: row.mcpToolAssignments.map(assignment => assignment.toolRevisionId).sort(),
 		boundaryAttachments: row.boundaryAttachments.map(_boundaryAttachment),
 		budget: row.budget as unknown as AgentBudget,
 		authoredBy: row.authoredBy,

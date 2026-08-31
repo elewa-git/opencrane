@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes, RunEventTypes } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_RUN_WAIT_STATE_EVENT, AgUiA2uiSurfaceStates, AgUiRunWaitReasons, AgUiToolRecoveryProviderOutcomes, RunEventTypes } from "@opencrane/contracts";
 
 import { __StreamConversationProjection } from "../conversation-projection-stream";
 import { ConversationProjectionOutcomes } from "../conversation-projection-stream.types";
@@ -32,7 +32,8 @@ async function _ProjectRow(row: ConversationProjectionEventRow): Promise<string>
 	await __StreamConversationProjection({ reader: { readAuthorized: async function _Read()
 	{
 		reads += 1;
-		if (reads === 1) return { status: ConversationProjectionReadStatuses.Authorized, rows: [row] };
+		if (reads === 1)
+			return { status: ConversationProjectionReadStatuses.Authorized, rows: [row] };
 		abort.abort();
 		return { status: ConversationProjectionReadStatuses.Authorized, rows: [] };
 	} }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: function _Write(value): boolean { output.push(value); return true; }, drain: vi.fn() }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: abort.signal });
@@ -67,6 +68,9 @@ describe("live conversation projection", function _Suite()
 
 		const body = output.join("");
 		expect(body.match(/approval-1/gu)).toHaveLength(1);
+		expect(body).toMatch(/interrupt:[a-f0-9]{64}/u);
+		expect(body).toContain(AG_UI_RUN_WAIT_STATE_EVENT);
+		expect(body).toContain(AgUiRunWaitReasons.Approval);
 		expect(body).not.toContain("id:");
 	});
 
@@ -81,6 +85,7 @@ describe("live conversation projection", function _Suite()
 		const body = output.join("");
 		expect(body.match(/approval-1/gu)).toHaveLength(1);
 		expect(body.match(/approval-2/gu)).toHaveLength(1);
+		expect(body.match(/interrupt:[a-f0-9]{64}/gu)).toHaveLength(2);
 		expect(body).toContain("opencrane.interrupts_cleared");
 	});
 
@@ -155,10 +160,10 @@ describe("live conversation projection", function _Suite()
 	it("projects governed A2UI only after coordinate validation and redaction", async function _ProjectsGovernedA2ui()
 	{
 		const a2ui = { version: AG_UI_A2UI_ENVELOPE_VERSION, conversationId: "conversation-1", runId: "run-1", messageId: "message-1", surfaceId: "surface-1", sequence: 0, state: AgUiA2uiSurfaceStates.Streaming, operations: [{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }] };
-		const body = await _ProjectRow({ ..._Row(), runId: "run-1", type: RunEventTypes.A2uiRenderingBegun, payload: { a2ui, capabilityProof: "secret" } });
+		const body = await _ProjectRow({ ..._Row(), runId: "run-1", type: RunEventTypes.A2uiRenderingBegun, payload: { a2ui, unknownSecret: "secret" } });
 		expect(body).toContain(`"name":"${AG_UI_A2UI_ENVELOPE_VERSION}"`);
 		expect(body).toContain('"surfaceId":"surface-1"');
-		expect(body).not.toContain("capabilityProof");
+		expect(body).not.toContain("unknownSecret");
 		expect(body).not.toContain("secret");
 	});
 });

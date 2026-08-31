@@ -1,6 +1,6 @@
 import { AgentRunState, type Prisma } from "@prisma/client";
 
-import { __FindToolInvocationInTransaction, __MarkToolInvocationApprovalRejectedInTransaction, __MarkToolInvocationApprovedInTransaction } from "./prisma-tool-invocation-repository";
+import { __FindToolInvocationInTransaction, __MarkToolInvocationApprovalRejectedInTransaction, __MarkToolInvocationApprovedInTransaction } from "./tool-invocation-transaction";
 import type { ApproveElicitedToolInvocationCommand, RejectElicitedToolInvocationCommand, ToolInvocationElicitationRepository } from "./tool-invocation-elicitation-authority.types";
 import { ExternalActionClaimKinds, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
 import type { ToolInvocationClaim, ToolInvocationRecord } from "./tool-invocation.types";
@@ -38,6 +38,8 @@ export class PrismaToolInvocationElicitationRepository implements ToolInvocation
 	/** Re-read the single persisted claim row and match every dispatch fence. */
 	async verifyActiveDispatchClaim(invocation: ToolInvocationRecord, claim: ToolInvocationClaim, now: Date): Promise<boolean>
 	{
+		if (invocation.runId === null || invocation.attempt === null)
+			return false;
 		const current = await this.findById(claim.invocationId);
 		if (current === null) return false;
 		const run = await this._transaction.agentRun.findUnique({ where: { id: invocation.runId }, select: { attempt: true, state: true } });

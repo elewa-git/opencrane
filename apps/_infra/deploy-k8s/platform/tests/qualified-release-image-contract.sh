@@ -12,9 +12,18 @@ ensure_umbrella_chart_dependencies
 
 IMAGE_TAG="sha-f7d6771a4a5a075d424c7678d6165dd71c06b522"
 CP_TAG="sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+AGENT_CONTROLLER_IMAGE_DIGEST="sha256:1111111111111111111111111111111111111111111111111111111111111111"
+AGENT_RUNTIME_IMAGE_DIGEST="sha256:2222222222222222222222222222222222222222222222222222222222222222"
+MCP_EXECUTOR_IMAGE_DIGEST="sha256:3333333333333333333333333333333333333333333333333333333333333333"
+SKILL_AUTHORING_IMAGE_DIGEST="sha256:4444444444444444444444444444444444444444444444444444444444444444"
+ARTIFACT_PREPROCESSOR_IMAGE_DIGEST="sha256:5555555555555555555555555555555555555555555555555555555555555555"
+ARTIFACT_SCANNER_IMAGE_DIGEST="sha256:6666666666666666666666666666666666666666666666666666666666666666"
 helm_args=(
+  --set-string 'clustertenantManager.database.existingSecret=opencrane-app-db'
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32'
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32'
+  --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32'
+  --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32'
   --set-string 'artifactService.namespace=opencrane-testv4-artifacts'
   --set-literal 'channelProxy.image.tag=latest'
   --set-literal 'memoryGateway.image.tag=0.1.0'
@@ -34,6 +43,12 @@ _deployment()
 grep -Fq "image: \"ghcr.io/elewa-git/opencrane-server:${CP_TAG}\"" <<<"$(_deployment opencrane-testv4-opencrane-server)"
 grep -Fq "image: \"ghcr.io/elewa-git/opencrane-channel-proxy:${IMAGE_TAG}\"" <<<"$(_deployment opencrane-testv4-channel-proxy)"
 grep -Fq "image: \"ghcr.io/elewa-git/opencrane-memory-gateway:${IMAGE_TAG}\"" <<<"$(_deployment opencrane-testv4-memory-gateway)"
+controller_deployment="$(_deployment agent-controller)"
+grep -Fq "image: \"ghcr.io/elewa-git/opencrane-agent-controller@${AGENT_CONTROLLER_IMAGE_DIGEST}\"" <<<"$controller_deployment"
+grep -Fq '  minReadySeconds: 10' <<<"$controller_deployment"
+scanner_deployment="$(_deployment opencrane-testv4-artifact-scanner)"
+grep -Fq "image: \"ghcr.io/elewa-git/opencrane-artifact-scanner@${ARTIFACT_SCANNER_IMAGE_DIGEST}\"" <<<"$scanner_deployment"
+grep -Fq '  minReadySeconds: 10' <<<"$scanner_deployment"
 artifact_deployment="$(_deployment opencrane-testv4-artifact-service)"
 grep -Fq 'namespace: opencrane-testv4-artifacts' <<<"$artifact_deployment"
 grep -Fq "image: \"ghcr.io/elewa-git/opencrane-artifact-service:${IMAGE_TAG}\"" <<<"$artifact_deployment"
@@ -55,8 +70,15 @@ err()
 }
 skopeo()
 {
+  if [[ "$1" == "inspect" && "$2" == "--format" ]]; then
+    printf '%s\n' 'sha256:7777777777777777777777777777777777777777777777777777777777777777'
+    return 0
+  fi
   printf '%s\n' "$*" >>"$preflight_calls_file"
 }
+resolve_qualified_workflow_image_digests
+[[ "$AGENT_CONTROLLER_IMAGE_DIGEST" == 'sha256:7777777777777777777777777777777777777777777777777777777777777777' ]]
+[[ "$ARTIFACT_SCANNER_IMAGE_DIGEST" == 'sha256:7777777777777777777777777777777777777777777777777777777777777777' ]]
 preflight_qualified_release_tag_images
 grep -Fq "inspect docker://ghcr.io/elewa-git/opencrane-channel-proxy:${IMAGE_TAG}" "$preflight_calls_file"
 grep -Fq "inspect docker://ghcr.io/elewa-git/opencrane-memory-gateway:${IMAGE_TAG}" "$preflight_calls_file"
@@ -97,6 +119,11 @@ fi
 grep -Fq 'wait_for_final_deployment_if_present "${RELEASE}-channel-proxy"' "$DEPLOY_CORE"
 grep -Fq 'wait_for_final_deployment_if_present "${RELEASE}-memory-gateway"' "$DEPLOY_CORE"
 grep -Fq 'wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE"' "$DEPLOY_CORE"
+grep -Fq 'FINAL_RELEASE_VALUES="$(helm get values "$RELEASE" --namespace "$NAMESPACE" --all -o json)" || exit $?' "$DEPLOY_CORE"
+grep -Fq 'FINAL_SCANNER_NAMESPACE="$(jq -r '\''.artifactScanner.namespace // empty'\'' <<<"$FINAL_RELEASE_VALUES")"' "$DEPLOY_CORE"
+grep -Fq 'FINAL_SCANNER_NAMESPACE="${FINAL_SCANNER_NAMESPACE:-${RELEASE}-artifact-scanning}"' "$DEPLOY_CORE"
+grep -Fq 'wait_for_final_deployment_if_present "${RELEASE}-agent-controller"' "$DEPLOY_CORE"
+grep -Fq 'wait_for_final_deployment_if_present "${RELEASE}-artifact-scanner" "$FINAL_SCANNER_NAMESPACE"' "$DEPLOY_CORE"
 grep -Fq 'local namespace="${2:-$NAMESPACE}"' "$FINALIZATION"
 grep -Fq 'status.phase!=Running,status.phase!=Succeeded' "$ROOT_DIR/apps/_infra/deploy-k8s/platform/post-deploy-verify.sh"
 
@@ -108,11 +135,19 @@ trap 'rm -f "$preflight_calls_file" "$rollout_calls_file"' EXIT
 kubectl()
 {
   printf '%s\n' "$*" >>"$rollout_calls_file"
-  if [[ "$1 $2" == 'get deployment/opencrane-testv4-artifact-service' ]]; then
-    printf '%s\n' 'deployment.apps/opencrane-testv4-artifact-service'
-  fi
+  case "$1 $2" in
+    'get deployment/opencrane-testv4-agent-controller') printf '%s\n' 'deployment.apps/opencrane-testv4-agent-controller' ;;
+    'get deployment/opencrane-testv4-artifact-scanner') printf '%s\n' 'deployment.apps/opencrane-testv4-artifact-scanner' ;;
+    'get deployment/opencrane-testv4-artifact-service') printf '%s\n' 'deployment.apps/opencrane-testv4-artifact-service' ;;
+  esac
 }
+wait_for_final_deployment_if_present opencrane-testv4-agent-controller
+wait_for_final_deployment_if_present opencrane-testv4-artifact-scanner opencrane-testv4-scanning-custom
 wait_for_final_deployment_if_present opencrane-testv4-artifact-service opencrane-testv4-artifacts
+grep -Fq 'get deployment/opencrane-testv4-agent-controller -n opencrane-testv4 --ignore-not-found -o name' "$rollout_calls_file"
+grep -Fq 'rollout status deployment/opencrane-testv4-agent-controller -n opencrane-testv4 --timeout=37s' "$rollout_calls_file"
+grep -Fq 'get deployment/opencrane-testv4-artifact-scanner -n opencrane-testv4-scanning-custom --ignore-not-found -o name' "$rollout_calls_file"
+grep -Fq 'rollout status deployment/opencrane-testv4-artifact-scanner -n opencrane-testv4-scanning-custom --timeout=37s' "$rollout_calls_file"
 grep -Fq 'get deployment/opencrane-testv4-artifact-service -n opencrane-testv4-artifacts --ignore-not-found -o name' "$rollout_calls_file"
 grep -Fq 'rollout status deployment/opencrane-testv4-artifact-service -n opencrane-testv4-artifacts --timeout=37s' "$rollout_calls_file"
 
