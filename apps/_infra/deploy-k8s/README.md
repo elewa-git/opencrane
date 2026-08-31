@@ -89,8 +89,8 @@ change. The caller must also name the currently protected tenant explicitly; env
 tenant policy is never hard-coded in the reusable teardown engine. The retry-safe cleanup uninstalls only the tenant and PostgreSQL releases, then removes the
 exact keep-marked database resources, their doubly-labelled data volumes, release-derived auxiliary
 namespaces, and exact tenant-suffixed cluster role bindings. Shared controllers, custom resource
-definitions, ingress, certificate management, ComputeClass, and the protected active tenant remain
-outside its deletion surface.
+definitions, ingress, certificate management, and the protected active tenant remain outside its
+deletion surface.
 
 ## Boundary
 

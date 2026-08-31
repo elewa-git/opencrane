@@ -28,6 +28,23 @@ if grep -q 'schema convergence\|CURRENT_SCHEMA_VERSION\|SELECTED_SOURCE_PROTECTE
   exit 1
 fi
 
+# The PostgreSQL deployer reuses saved release values during upgrades. Render a saved legacy
+# selector to prove it no longer adds a node selector while both database checks keep their normal
+# resource requests.
+helm template opencrane-postgres "$CHART" "${BASE_VALUES[@]}" \
+  --set-json 'privileges.nodeSelector={"cloud.google.com/compute-class":"opencrane-database-proof"}' \
+  --show-only templates/database-privileges-job.yaml >"$OUTPUT"
+if grep -q 'nodeSelector:\|compute-class' "$OUTPUT"; then
+  echo "privilege job still renders the legacy scheduler selector" >&2
+  exit 1
+fi
+[[ "$(grep -c '^        - name: opencrane-privileges$' "$OUTPUT")" == "1" ]]
+[[ "$(grep -c '^        - name: litellm-privileges$' "$OUTPUT")" == "1" ]]
+[[ "$(grep -c '^        - name:' "$OUTPUT")" == "2" ]]
+[[ "$(grep -c '^        - name: .*privileges$' "$OUTPUT")" == "2" ]]
+[[ "$(grep -c '^              cpu: 50m$' "$OUTPUT")" == "2" ]]
+[[ "$(grep -c '^              memory: 64Mi$' "$OUTPUT")" == "2" ]]
+
 helm template opencrane-postgres "$CHART" "${BASE_VALUES[@]}" --set pgCron.assignSchemaOwnership=false --show-only templates/databases.yaml >"$OUTPUT"
 grep -q 'name: pg_cron' "$OUTPUT"
 if grep -q 'name: cron' "$OUTPUT"; then

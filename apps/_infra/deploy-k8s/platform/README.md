@@ -122,14 +122,12 @@ external-dns or DNS credentials and it does not create a cluster-wide certificat
 owns its namespaced HTTP-01 `Issuer`; the operator creates the serving DNS record only after the
 ingress Service reports the reserved address.
 
-The bootstrap also owns `opencrane-database-proof`, a GKE Autopilot ComputeClass used only by the
-short-lived PostgreSQL privilege-proof Job through `values/postgres-gke-autopilot.yaml`. Its explicit
-`ScaleUpAnyway` policy allows the proof to receive capacity when GKE system balloon Pods reserve all
-otherwise idle capacity. Its `general-purpose` pod family uses GKE's Autopilot container-optimized
-compute platform and pod-based billing; GKE manages the node shape and boot disk because explicit
-storage cannot be combined with this pod family. The Job retains its three one-GiB
-ephemeral-storage requests. The class does not change the Job's database grants, credentials,
-network path, or completion requirement.
+The short-lived PostgreSQL privilege proof uses ordinary GKE Autopilot scheduling. Its single Job
+runs one PostgreSQL client container for each logical database, which means two containers in the
+current profile. Each container requests 50 millicores of processor time and 64 mebibytes (MiB) of
+memory. The chart does not render a node selector, even when an older Helm release still has the
+former selector saved in its values. Scheduling does not change the Job's database grants,
+credentials, network path, or completion requirement.
 
 The pinned ingress-nginx release is accepted only for this single-silo development qualification.
 The upstream project is archived, so a supported ingress controller must replace it before a

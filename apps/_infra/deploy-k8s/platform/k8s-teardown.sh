@@ -334,4 +334,4 @@ if [[ "$NAMESPACE_EXISTS" == "1" ]]; then
   kubectl --context "$CONTEXT" delete namespace "$NAMESPACE" --ignore-not-found=true --wait=true
 fi
 
-log "Retired ClusterTenant '$CLUSTER_TENANT'. Shared controllers, CRDs, ingress, cert-manager, CloudNativePG, and ComputeClass were not targeted."
+log "Retired ClusterTenant '$CLUSTER_TENANT'. Shared controllers, CRDs, ingress, cert-manager, and CloudNativePG were not targeted."

@@ -219,8 +219,10 @@ approved clients. The server is Ready with a healthy Prisma query, public `/heal
 `{"status":"ok","db":true}`, and its liveness no longer restarts an otherwise recoverable database
 path. `testv2.dev.opencrane.ai` now has a browser-trusted Let's Encrypt HTTP-01 certificate and the
 login endpoint redirects to the configured Zitadel confidential client. The privileges proof remains
-intact: Autopilot provisions its isolated ComputeClass node and the three-container Job completes;
-this cold-node/image-pull delay is operational friction, not an application memory leak. The final
+intact: the historical three-container Job completed after Autopilot provisioned its isolated
+ComputeClass node; that cold-node and image-pull delay was operational friction, not an application
+memory leak. The current chart runs two PostgreSQL client containers through ordinary Autopilot
+scheduling, each with 50 millicores of processor time and 64 mebibytes of memory. The final
 monthly cost, CMEK durable-storage gate, browser completion of the Zitadel callback, runtime-job
 execution/isolation, local standalone membership issuer for runnable personal/managed agents, and
 the wider Phase E live-LiteLLM/OCI-MCP/recovery qualification remain open live gates.

@@ -307,3 +307,13 @@ Full run reports belong in the corresponding pull request or issue.
 - friction: the authorized identity rewrite crossed a target immutability guard that the migration
   left active, while migrator recovery covered only the earlier workflow-cutover migration.
 - lesson: fixed by PR #752.
+
+## 2026-08-31 · dev · testv4 central-authorization retry · 031449ef74beb411565f28593198421860d037c8 · FAILED
+
+- findings: config: the central authorization migration completed and retired its obsolete tables,
+  but PostgreSQL revisions 67 and 70 failed because the database-privileges hook still selected the
+  obsolete `opencrane-database-proof` ComputeClass. No node matched, scale-up hit capacity and quota
+  failures, and both Jobs exhausted their 930-second deadlines before application rollout.
+- friction: preflight accepted a selector that required unavailable dedicated capacity, costing two
+  full hook deadlines after the database migration had already succeeded.
+- lesson: fixed by PR #752.
