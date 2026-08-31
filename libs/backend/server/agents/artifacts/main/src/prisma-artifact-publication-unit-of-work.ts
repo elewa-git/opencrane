@@ -60,7 +60,10 @@ export class PrismaArtifactPublicationUnitOfWork implements ArtifactPublicationU
 		catch (error)
 		{
 			// The envelope rethrows the last proven-rollback conflict unchanged; translate it here so callers never see a Prisma error.
-			if (___IsRolledBackConflict(error)) throw new _ArtifactPublicationConflictError();
+			if (___IsRolledBackConflict(error))
+			{
+				throw new _ArtifactPublicationConflictError();
+			}
 			throw error;
 		}
 	}

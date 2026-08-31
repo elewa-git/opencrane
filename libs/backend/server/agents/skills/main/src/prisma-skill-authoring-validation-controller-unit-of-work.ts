@@ -91,7 +91,10 @@ export class PrismaSkillAuthoringValidationControllerUnitOfWork implements Skill
 		}
 		catch (error)
 		{
-			if (!___IsRolledBackConflict(error)) throw error;
+			if (!___IsRolledBackConflict(error))
+			{
+				throw error;
+			}
 			throw new Error("skill authoring validation controller transaction conflicted after bounded retries", { cause: error });
 		}
 	}

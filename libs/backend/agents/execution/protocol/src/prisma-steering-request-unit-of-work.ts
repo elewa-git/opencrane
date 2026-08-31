@@ -47,9 +47,15 @@ export class PrismaSteeringRequestUnitOfWork implements SteeringRequestRepositor
 		}
 		catch (error)
 		{
-			if (!___IsRolledBackConflict(error)) throw error;
+			if (!___IsRolledBackConflict(error))
+			{
+				throw error;
+			}
 			const winner = await this._Run(1, function _Read(repository) { return repository.readWinner(command, steeringRequestId); });
-			if (winner !== null) return winner;
+			if (winner !== null)
+			{
+				return winner;
+			}
 			throw error;
 		}
 	}

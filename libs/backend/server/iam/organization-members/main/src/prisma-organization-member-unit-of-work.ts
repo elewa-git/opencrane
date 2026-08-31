@@ -52,9 +52,15 @@ export class PrismaOrganizationMemberUnitOfWork implements OrganizationMemberRep
 		}
 		catch (error)
 		{
-			if (!___IsRolledBackConflict(error)) throw error;
+			if (!___IsRolledBackConflict(error))
+			{
+				throw error;
+			}
 			const recovered = await this._withRepository(function _Recover(repository) { return repository.recoverCreate(command); });
-			if (recovered !== null) return recovered;
+			if (recovered !== null)
+			{
+				return recovered;
+			}
 			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "invitation request conflicted with another command");
 		}
 	}

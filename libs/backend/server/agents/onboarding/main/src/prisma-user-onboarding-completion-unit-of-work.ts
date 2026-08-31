@@ -55,7 +55,10 @@ export class PrismaUserOnboardingCompletionUnitOfWork implements UserOnboardingC
 		}
 		catch (error)
 		{
-			if (error instanceof UserOnboardingCompletionConflict) return { status: UserOnboardingReadinessStatuses.AuthorityUnavailable, agentServiceId: null };
+			if (error instanceof UserOnboardingCompletionConflict)
+			{
+				return { status: UserOnboardingReadinessStatuses.AuthorityUnavailable, agentServiceId: null };
+			}
 			throw error;
 		}
 	}

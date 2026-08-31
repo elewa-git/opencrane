@@ -53,9 +53,15 @@ export class PrismaAgentRunRetryUnitOfWork implements RunRetryAuthority
 		}
 		catch (error)
 		{
-			if (!___IsRolledBackConflict(error)) throw error;
+			if (!___IsRolledBackConflict(error))
+			{
+				throw error;
+			}
 			const winner = await this._ReadWinner(command);
-			if (winner !== null) return winner;
+			if (winner !== null)
+			{
+				return winner;
+			}
 			throw error;
 		}
 	}
@@ -71,7 +77,10 @@ export class PrismaAgentRunRetryUnitOfWork implements RunRetryAuthority
 			}
 			catch (error)
 			{
-				if (!___IsRolledBackConflict(error) || attempt === _RUN_RETRY_ATTEMPT_LIMIT) throw error;
+				if (!___IsRolledBackConflict(error) || attempt === _RUN_RETRY_ATTEMPT_LIMIT)
+				{
+					throw error;
+				}
 			}
 		}
 	}

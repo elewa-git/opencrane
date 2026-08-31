@@ -32,3 +32,16 @@ call site, exactly as it does for the central authorization transaction helper.
 Invariant: a caller never places an effect that can survive database rollback inside `work`, and a
 retry only ever repeats a complete idempotent operation whose previous attempt provably wrote
 nothing.
+
+## Public surface
+
+- `___RunInPrismaUnitOfWork` runs one idempotent operation in a fresh transaction under an explicit policy.
+- `___IsRolledBackConflict` tells a domain adapter whether a failure was a proven full rollback.
+- `___ROLLED_BACK_CONFLICT_CODES` is the default proven-rollback code set (P2002, P2034).
+- `PrismaUnitOfWorkPolicy`, `PrismaUnitOfWorkRunner`, and `PrismaUnitOfWorkWork` type the policy,
+  the declared runner contract, and the work callback.
+
+## See also
+
+- Parent: [server infra](../README.md)
+- Related: [Prisma ownership policy](../../../../../docs/agents/prisma.md) · [workflow contract](../workflows/contract/README.md)

@@ -49,4 +49,4 @@ export * from "./run-input-snapshot-digest";
 export type { RunRetryAuthority, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
 export { PrismaAgentRunRetryUnitOfWork } from "./prisma-run-retry-unit-of-work";
 export { __ValidateWarmRuntimeLease } from "./warm-runtime-lease";
-export type { WarmRuntimeLeaseAssignmentRow, WarmRuntimeLeaseIdentity, WarmRuntimeLeaseReservationRow } from "./warm-runtime-lease";
+export type { WarmRuntimeLeaseAssignmentRow, WarmRuntimeLeaseIdentity, WarmRuntimeLeaseReservationRow } from "./warm-runtime-lease.types";

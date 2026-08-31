@@ -428,7 +428,10 @@ export class PrismaAgentRunWarmRuntimeUnitOfWork implements AgentRunWarmRuntimeC
 		}
 		catch (error)
 		{
-			if (!___IsRolledBackConflict(error)) throw error;
+			if (!___IsRolledBackConflict(error))
+			{
+				throw error;
+			}
 			throw new Error("warm runtime reservation conflicted after three attempts", { cause: error });
 		}
 	}

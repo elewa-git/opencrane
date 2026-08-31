@@ -30,3 +30,16 @@ Invariant: a controller request either reaches the exact configured
 `<service>.<namespace>.svc.cluster.local` origin with a freshly read projected token, or it does
 not leave the process. A 409 always maps to the caller's conflict sentinel so a stale delivery
 cannot continue as if it were current.
+
+## Public surface
+
+- `__CreateControllerExchange` builds one authenticated exchange over the pinned in-cluster origin.
+- `__RequireControllerRouteId` bounds a caller-supplied identity before it enters a route path.
+- `ControllerExchange`, `ControllerExchangeRequest`, and `ControllerExchangeOptions` describe the
+  exchange, one request with its conflict sentinel and parser, and the deployment options.
+- `ControllerExchangeFetch` and `ControllerTokenReader` are the test seams.
+
+## See also
+
+- Parent: [runtime workloads](../README.md)
+- Related: [workload contract](../contract/README.md) · [governed Job controller](../k8s-controller/README.md)

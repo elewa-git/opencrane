@@ -78,7 +78,11 @@ export function __CreateHttpArtifactPreprocessControllerAuthority(options: Contr
 			return await ___DoWithTrace("agent_controller.artifact_preprocess.completion_complete", { preprocessJobId: acceptedPreprocessJobId }, async function _Complete(): Promise<"completed" | "idempotent" | "conflict">
 			{
 				const outcome = await transport.exchange({ path: _Route(acceptedPreprocessJobId, "completion/complete"), method: "POST", body: { task, completion }, conflict: "conflict" as const, failure: "artifact preprocessing completion write", parse: function _Validate(value: unknown): "bound" | "idempotent" { return _ParseArtifactPreprocessBindOutcome(value, acceptedPreprocessJobId); } });
-				return outcome === "conflict" ? "conflict" : outcome === "bound" ? "completed" : "idempotent";
+				if (outcome === "conflict")
+				{
+					return "conflict";
+				}
+				return outcome === "bound" ? "completed" : "idempotent";
 			});
 		},
 	};
