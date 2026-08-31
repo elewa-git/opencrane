@@ -15,7 +15,7 @@ around organisation silos, immutable agent revisions and governed run attempts.
                     │ agent controller                 │
                     │ exact Kubernetes projection      │
                     └───────────────┬──────────────────┘
-                                    │ fresh Job per attempt
+                                    │ claim one warm Pod per attempt
                     ┌───────────────▼──────────────────┐
                     │ agent runtime                    │
                     │ bounded loop, no durable state   │
@@ -26,8 +26,8 @@ around organisation silos, immutable agent revisions and governed run attempts.
                     └──────────────────────────────────┘
 ```
 
-The server admits a run and freezes its accepted inputs before Kubernetes work exists.
-The controller can project only the assigned workload shape. The runtime can emit candidates,
+The server admits a run and freezes its accepted inputs before a warm Pod receives attempt authority
+or execution material. The controller can project only the assigned workload shape. The runtime can emit candidates,
 but it cannot approve or execute external actions by itself.
 
 ## Durable run model
@@ -75,7 +75,7 @@ other's authority.
 
 ## Shared services
 
-Model routing (via LiteLLM), MCP tool custody (via Obot), skill publication, content-addressed
+Model routing (via LiteLLM), OCI MCP execution, skill publication, content-addressed
 artifacts and organisation memory (via the memory gateway, backed by Cognee) are control-plane
 services. They expose narrow, authenticated boundaries and do not become alternate run or policy
 authorities — a personal or managed run only ever reaches them through the frozen, admitted

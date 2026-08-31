@@ -2,7 +2,7 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { _log } from "../log";
-import type { AttemptLiteLlmKey, AttemptLiteLlmKeyRequest } from "./attempt-litellm-key.types";
+import type { AttemptLiteLlmKey, AttemptLiteLlmKeyRequest, AttemptLiteLlmKeyRevocation } from "./attempt-litellm-key.types";
 
 /**
  * Per-request timeout for the LiteLLM `/key/generate` call. Bounds the mint so an unreachable
@@ -32,20 +32,54 @@ const _MAX_EXPIRY_SECONDS = 86_400;
 export async function _IssueAttemptLiteLlmKey(input: AttemptLiteLlmKeyRequest): Promise<AttemptLiteLlmKey>
 {
   // 1. Reject an alias, budget, or expiry that would widen the key beyond one bounded attempt.
-  if (!_ATTEMPT_KEY_ALIAS.test(input.keyAlias)) throw new Error("attempt LiteLLM key requires an attempt-scoped alias");
+  if (!_ATTEMPT_KEY_ALIAS.test(input.keyAlias))
+    throw new Error("attempt LiteLLM key requires an attempt-scoped alias");
   if (typeof input.modelAlias !== "string" || input.modelAlias.trim().length === 0) throw new Error("attempt LiteLLM key requires a single model alias");
   if (!Number.isFinite(input.maxBudgetUsd) || input.maxBudgetUsd <= 0) throw new Error("attempt LiteLLM key requires a positive budget");
   if (!Number.isSafeInteger(input.expirySeconds) || input.expirySeconds <= 0 || input.expirySeconds > _MAX_EXPIRY_SECONDS) throw new Error("attempt LiteLLM key requires a bounded positive expiry");
 
-  const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
-  const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";
-  if (!endpoint || !masterKey) throw new Error("attempt LiteLLM key issuance requires LITELLM_ENDPOINT and LITELLM_MASTER_KEY");
+	const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
+	const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";
+	if (!endpoint || !masterKey)
+		throw new Error("attempt LiteLLM key issuance requires LITELLM_ENDPOINT and LITELLM_MASTER_KEY");
 
   return ___DoWithTrace(
     "litellm.key.generate",
     { keyAlias: input.keyAlias, modelAlias: input.modelAlias },
-    function _mint(): Promise<AttemptLiteLlmKey> { return _mintLive(endpoint, masterKey, input); },
-  );
+		function _mint(): Promise<AttemptLiteLlmKey> { return _mintLive(endpoint, masterKey, input); },
+	);
+}
+
+/** Revoke one unused attempt key after Kubernetes reports the exact Job-owned Secret already exists. */
+export async function _RevokeAttemptLiteLlmKey(input: AttemptLiteLlmKeyRevocation): Promise<void>
+{
+	if (!_ATTEMPT_KEY_ALIAS.test(input.keyAlias))
+		throw new Error("attempt LiteLLM key revocation requires an attempt-scoped alias");
+	if (typeof input.key !== "string" || input.key.length === 0)
+		throw new Error("attempt LiteLLM key revocation requires one virtual key");
+	const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
+	const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";
+	if (!endpoint || !masterKey)
+		throw new Error("attempt LiteLLM key revocation requires LITELLM_ENDPOINT and LITELLM_MASTER_KEY");
+
+	await ___DoWithTrace("litellm.key.revoke", { keyAlias: input.keyAlias }, async function _revoke(): Promise<void>
+	{
+		const response = await fetch(`${endpoint}/key/delete`, {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				Authorization: `Bearer ${masterKey}`,
+			},
+			body: JSON.stringify({ keys: [input.key] }),
+			signal: AbortSignal.timeout(_LITELLM_HTTP_TIMEOUT_MS),
+		});
+		if (!response.ok)
+		{
+			_log.warn({ keyAlias: input.keyAlias, status: response.status }, "litellm attempt key revocation failed");
+			throw new Error(`litellm attempt key revocation returned status ${response.status}`);
+		}
+		_log.info({ keyAlias: input.keyAlias }, "litellm attempt key revoked");
+	});
 }
 
 /** Perform the live `/key/generate` mint, binding the single model, budget, and expiry to the key. */
@@ -57,8 +91,8 @@ async function _mintLive(endpoint: string, masterKey: string, input: AttemptLite
       "content-type": "application/json",
       Authorization: `Bearer ${masterKey}`,
     },
-    body: JSON.stringify({
-      models: [input.modelAlias],
+	body: JSON.stringify({
+		models: [input.modelAlias],
       key_alias: input.keyAlias,
       max_budget: input.maxBudgetUsd,
       budget_duration: `${input.expirySeconds}s`,
@@ -74,7 +108,7 @@ async function _mintLive(endpoint: string, masterKey: string, input: AttemptLite
     throw new Error(`litellm attempt key mint returned status ${response.status}`);
   }
 
-  const key = ___ParseAndValidateJson(await response.text(), "LiteLLM attempt key response", _MintedKey);
+	const key = ___ParseAndValidateJson(await response.text(), "LiteLLM attempt key response", _MintedKey);
 
   _log.info({ keyAlias: input.keyAlias, modelAlias: input.modelAlias }, "litellm attempt key minted");
   return { key, keyAlias: input.keyAlias, modelAlias: input.modelAlias, expirySeconds: input.expirySeconds };
@@ -83,6 +117,7 @@ async function _mintLive(endpoint: string, masterKey: string, input: AttemptLite
 /** Validate the non-empty virtual key returned by LiteLLM. */
 function _MintedKey(value: unknown): string
 {
-  if (typeof value !== "object" || value === null || Array.isArray(value) || !("key" in value) || typeof value.key !== "string" || value.key.length === 0) throw new Error("litellm attempt key mint returned no key");
-  return value.key;
+	if (typeof value !== "object" || value === null || Array.isArray(value) || !("key" in value) || typeof value.key !== "string" || value.key.length === 0)
+		throw new Error("litellm attempt key mint returned no key");
+	return value.key;
 }

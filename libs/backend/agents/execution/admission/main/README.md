@@ -19,7 +19,7 @@ assembly, the durable run repository, and one app-owned process-local capacity b
  └────────────────────────────────────────┘
                  │  admitted run id / stable denial
                  ▼
- execution/runs ........ durable run + snapshot + outbox
+ execution/runs ........ durable run + snapshot + workflow task
 ```
 
 **In this flow:** [agent services](../../../../server/agents/agent-services/main/README.md) supplies
@@ -35,8 +35,8 @@ Personal admission has two bounded stages. A synthetic per-silo preflight lane f
 duplicate-key and participant-conversation reads before interactive traffic can touch PostgreSQL. Once
 that lane has derived the real personal AgentService, the normal process/silo/service gate limits
 the final transaction that rechecks all mutable authority. A caller-supplied transaction callback
-then persists the canonical input message beside the run, immutable snapshot, and first dispatch
-intent in that same commit. The first lane does not grant product authority; it is overload
+then persists the canonical input message beside the run, immutable snapshot, and Absurd workflow
+task in that same commit. The first lane does not grant product authority; it is overload
 protection for the read path.
 
 Message idempotency keys are public conversation-local coordinates. Before personal admission reads
@@ -73,7 +73,7 @@ Consumed by the OpenCrane server composition root, which creates one shared gate
 the conversation authority, managed run-now path, and scheduler. This package has no public browser
 router or OpenAPI path: interactive execution begins only at
 `POST /api/v1/me/conversations/:conversationId/messages`. It does not authenticate HTTP requests,
-authorise agent service publication, schedule work, dispatch Kubernetes Jobs, or execute a run. It
+authorise agent service publication, schedule work, activate Kubernetes Pods, or execute a run. It
 accepts server-owned identity evidence and delegates durable snapshot and run rules to their owning
 packages.
 
@@ -85,7 +85,7 @@ restart may clear waiting work but cannot admit an unauthorized run or rewrite a
 
 Tagged `scope:execution-admission`: it may depend only on `scope:execution-admission`,
 `scope:execution-inputs`, `scope:execution-runs`, `scope:agent-services`, and `scope:shared` — never
-on apps, transport adapters, runtime Jobs, or unrelated backend domains.
+on apps, transport adapters, runtime infrastructure, or unrelated backend domains.
 
 ## Runtime & config
 

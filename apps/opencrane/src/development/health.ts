@@ -20,7 +20,6 @@ export function _CreateDevelopmentHealth(prisma: DevelopmentPrismaClient, profil
 		memory: null,
 		files: null,
 		channels: null,
-		integrations: null,
 		logger: _log,
 		clock: { nowEpochMilliseconds: function _Now() { return Date.now(); } },
 		cacheMilliseconds: 5_000,

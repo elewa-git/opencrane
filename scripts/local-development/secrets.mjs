@@ -163,15 +163,23 @@ export function createDisposableDevelopmentCredentials(includeAgentCredentials =
 
 	const controllerTokenPath = path.join(directory, "controller.token");
 	const runtimeLaunchSecretPath = path.join(directory, "runtime-launch.secret");
+	const continuationKeyringPath = path.join(directory, "runtime-continuation-keyring.json");
 	fs.writeFileSync(controllerTokenPath, `local-controller-${randomBytes(32).toString("hex")}\n`, { mode: 0o600, flag: "wx" });
 	fs.writeFileSync(runtimeLaunchSecretPath, `${randomBytes(32).toString("base64url")}\n`, { mode: 0o600, flag: "wx" });
+	fs.writeFileSync(continuationKeyringPath, `${JSON.stringify({
+		activeKeyId: "tier2-session",
+		keys: {
+			"tier2-session": randomBytes(32).toString("base64")
+		}
+	})}\n`, { mode: 0o600, flag: "wx" });
 
 	return {
 		directory,
 		privateKeyPath,
 		publicKeyPath,
 		controllerTokenPath,
-		runtimeLaunchSecretPath
+		runtimeLaunchSecretPath,
+		continuationKeyringPath
 	};
 }
 

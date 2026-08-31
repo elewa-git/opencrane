@@ -114,15 +114,15 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	 * @param conversationId - Conversation the run must belong to; a mismatch denies with
 	 *   `unauthorized`.
 	 * @param runId - The run to retry, not a new identifier.
-	 * @param request - The attempt the caller observed plus their retry key.
-	 * @returns `started` for a new attempt, `idempotent` when the same retry key already started it,
+	 * @param request - The attempt the caller observed.
+	 * @returns `started` for a new attempt, `idempotent` when an earlier request already started it,
 	 *   or `denied` with a reason; `_runRetryDenialStatus` in self-conversations.router.ts turns each
 	 *   reason into a status.
 	 * @see RunRetryAuthority in `@opencrane/backend/agents/execution/runs`.
 	 */
 	async retryRun(caller: ConversationCaller, conversationId: string, runId: string, request: RetryConversationRunRequest): Promise<RetryConversationRunResult>
 	{
-		return ___DoWithTrace("conversation.run.retry", { siloId: caller.siloId, conversationId, runId, expectedAttempt: request.expectedAttempt }, async () => this.runRetry.retry({ runId, expectedAttempt: request.expectedAttempt, siloId: caller.siloId, conversationId, requestedBy: caller.subjectId, idempotencyKey: request.idempotencyKey, acceptedAt: new Date().toISOString() }));
+		return ___DoWithTrace("conversation.run.retry", { siloId: caller.siloId, conversationId, runId, expectedAttempt: request.expectedAttempt }, async () => this.runRetry.retry({ runId, expectedAttempt: request.expectedAttempt, siloId: caller.siloId, conversationId, requestedBy: caller.subjectId, acceptedAt: new Date().toISOString() }));
 	}
 
 	/** Writes the conversation and participant rows atomically; the selected mode can never change. */

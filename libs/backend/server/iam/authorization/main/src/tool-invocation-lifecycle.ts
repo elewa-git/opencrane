@@ -27,7 +27,8 @@ function _awaitingApproval(input: ToolInvocationLifecycleInput): ToolInvocationL
 function _ready(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleActions
 {
 	if (input.event === ToolInvocationLifecycleEvents.DispatchClaimed) return ToolInvocationLifecycleActions.ClaimDispatch;
-	if (input.event === ToolInvocationLifecycleEvents.Cancelled) return ToolInvocationLifecycleActions.Fail;
+	if (input.event === ToolInvocationLifecycleEvents.Cancelled || input.event === ToolInvocationLifecycleEvents.UnusedBeforeDispatch)
+		return ToolInvocationLifecycleActions.Fail;
 	return ToolInvocationLifecycleActions.Reject;
 }
 

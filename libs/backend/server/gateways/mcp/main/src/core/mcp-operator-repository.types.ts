@@ -1,8 +1,35 @@
 import type { AuthorizationContextRepository, CapabilityCatalogRepository, ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
 import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 import type { OciImageValidationRepository } from "../oci-image-validation/oci-image-validation-repository.types";
+import type { McpTaskRepository } from "../mcp-tasks/mcp-task-repository.types";
 
 import type { McpEraProbeStates, McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
+
+/** Carries one tool schema stored under a Ready MCP server revision. */
+export interface McpOperatorToolRevisionRecord
+{
+	/** Identifies the immutable tool revision saved during discovery. */
+	readonly id: string;
+	/** Gives the name the MCP server reported for this tool. */
+	readonly name: string;
+	/** Gives the server-supplied description, or null when it supplied none. */
+	readonly description: string | null;
+	/** Carries the JSON Schema saved for invocation validation. */
+	readonly inputSchema: unknown;
+	/** Binds the saved schema to run admission and runtime execution. */
+	readonly inputSchemaDigest: string;
+}
+
+/** Carries the newest Ready server revision and its stable tool ordering. */
+export interface McpOperatorReadyRevisionRecord
+{
+	/** Identifies the immutable server revision selected for catalogue authoring. */
+	readonly id: string;
+	/** Carries the persisted Ready state so mapping fails closed if selection drifts. */
+	readonly state: string;
+	/** Lists the revision's tool schemas in stable name and identifier order. */
+	readonly tools: readonly McpOperatorToolRevisionRecord[];
+}
 
 /**
  * Carries the MCP catalog fields that operator flows return to API clients.
@@ -26,6 +53,10 @@ export interface McpOperatorServerRecord
 	readonly serverType: string;
 	/** Carries the persisted approval state that controls catalog visibility. */
 	readonly approvalStatus: string;
+	/** Carries the persisted server state that controls whether assignments may select its tools. */
+	readonly status: string;
+	/** Holds the newest Ready OCI server revision, or null when discovery has not produced one. */
+	readonly latestReadyRevision: McpOperatorReadyRevisionRecord | null;
 	/** Holds credential data that the core validates before returning it to a client. */
 	readonly credentialSchema: unknown;
 	/** Gives the optional entitlement summary exposed in catalog responses. */
@@ -328,6 +359,8 @@ export interface McpOperatorTransaction
 	readonly mcp: IMcpOperatorRepository;
 	/** Reads and changes OCI image-layout validation records. */
 	readonly ociImageValidations: OciImageValidationRepository;
+	/** Saves caller-owned MCP tasks and their mutually exclusive ToolInvocation owner. */
+	readonly mcpTasks: McpTaskRepository;
 	/** Resolves the caller's principal and group subjects for entitlement decisions. */
 	readonly authorization: AuthorizationContextRepository;
 	/** Finds the MCP-use capability required to evaluate entitlement grants. */

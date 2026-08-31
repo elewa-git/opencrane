@@ -1,6 +1,6 @@
 import { EventSchemas, EventType } from "@ag-ui/core";
 
-import { AG_UI_A2UI_ENVELOPE_VERSION, ___ParseAgUiA2uiEnvelope, type AgUiProjectionEvent } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_RUN_WAIT_STATE_EVENT, ___ParseAgUiA2uiEnvelope, ___ParseAgUiRunWaitState, type AgUiProjectionEvent } from "@opencrane/contracts";
 import type { AgUiStreamRecord } from "./ag-ui-stream.types";
 
 /**
@@ -19,11 +19,14 @@ import type { AgUiStreamRecord } from "./ag-ui-stream.types";
  */
 export function __DecodeAgUiSocketRecord(value: unknown): AgUiStreamRecord | null
 {
-	if (typeof value !== "object" || value === null) return null;
+	if (typeof value !== "object" || value === null)
+		return null;
 	const frame = value as Record<string, unknown>;
-	if (frame["type"] !== "conversation.event" || frame["event"] !== "ag-ui") return null;
+	if (frame["type"] !== "conversation.event" || frame["event"] !== "ag-ui")
+		return null;
 	const id = frame["id"];
-	if (id !== undefined && (typeof id !== "string" || id.length === 0 || /[\r\n]/u.test(id))) return null;
+	if (id !== undefined && (typeof id !== "string" || id.length === 0 || /[\r\n]/u.test(id)))
+		return null;
 	try { return { ...(id === undefined ? {} : { id }), event: "ag-ui", data: _ProjectionEvent(frame["data"]) }; }
 	catch { return null; }
 }
@@ -32,8 +35,12 @@ export function __DecodeAgUiSocketRecord(value: unknown): AgUiStreamRecord | nul
 function _ProjectionEvent(value: unknown): AgUiProjectionEvent
 {
 	const parsed = EventSchemas.safeParse(value);
-	if (!parsed.success || !_IsProjectionEvent(parsed.data)) throw new Error("AG-UI socket data must contain a supported projection event");
-	if (parsed.data.type === EventType.CUSTOM && parsed.data.name === AG_UI_A2UI_ENVELOPE_VERSION) ___ParseAgUiA2uiEnvelope(parsed.data.value);
+	if (!parsed.success || !_IsProjectionEvent(parsed.data))
+		throw new Error("AG-UI socket data must contain a supported projection event");
+	if (parsed.data.type === EventType.CUSTOM && parsed.data.name === AG_UI_A2UI_ENVELOPE_VERSION)
+		___ParseAgUiA2uiEnvelope(parsed.data.value);
+	if (parsed.data.type === EventType.CUSTOM && parsed.data.name === AG_UI_RUN_WAIT_STATE_EVENT && ___ParseAgUiRunWaitState(parsed.data.value) === null)
+		throw new Error("AG-UI run wait state is invalid");
 	return parsed.data;
 }
 

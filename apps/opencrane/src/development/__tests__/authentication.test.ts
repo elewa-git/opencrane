@@ -13,7 +13,7 @@ function _App()
 	const authentication = _CreateDevelopmentAuthentication(LOCAL_DEVELOPMENT_IDENTITY);
 	app.use(...authentication.sessionMiddleware);
 	app.use("/api/v1/auth", authentication.router);
-	app.use(authentication.productAuthentication);
+	app.use(authentication.authMiddleware);
 	app.get("/api/v1/protected", function _Protected(request, response): void
 	{
 		response.json({

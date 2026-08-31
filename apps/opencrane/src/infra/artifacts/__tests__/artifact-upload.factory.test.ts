@@ -27,7 +27,7 @@ describe("artifact upload app composition", function _suite()
 
 	it("rejects a non-cluster endpoint before it can read mounted credentials or make I/O", function _clusterOnly()
 	{
-		expect(function _create() { _CreateArtifactUploadGateway({} as never, { ARTIFACT_SERVICE_URL: "https://artifact.example.test" }); }).toThrow(/credential-free cluster-local HTTP URL/);
+		expect(function _create() { _CreateArtifactUploadGateway({} as never, { spawn: vi.fn() }, { ARTIFACT_SERVICE_URL: "https://artifact.example.test" }); }).toThrow(/credential-free cluster-local HTTP URL/);
 	});
 
 	it("streams bytes to the private promotion endpoint with the signed lease header", async function _promotionRequest()

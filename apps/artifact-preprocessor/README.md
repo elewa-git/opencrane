@@ -8,9 +8,10 @@ database, ArtifactStore address, persistent volume, signing key, lease, or recei
 
 ## What it owns
 
-The app validates its resource ceilings, creates the OpenCrane-only remote adapter and shell-free
-Poppler converter, and runs an abortable polling loop. OpenCrane chooses the source revision, brokers
-both byte directions, and decides whether the derived text may be published.
+The app validates its resource ceilings, exchanges one controller-created bootstrap reference,
+creates the OpenCrane-only remote adapter and shell-free Poppler converter, and handles that one
+assignment. OpenCrane chooses the source revision, brokers both byte directions, and decides whether
+the derived text may be published.
 
 ```
  OpenCrane server ........ claim + PDF stream
@@ -32,9 +33,10 @@ removed after success, failure, or cancellation.
 
 ## Public surface
 
-`src/index.ts` is the sole entrypoint. It starts telemetry first, validates configuration, composes
-the worker library, and drains the poll loop on `SIGTERM` or `SIGINT` before flushing telemetry.
-The app exposes no HTTP listener, Service, Ingress, or Kubernetes API permission.
+`src/index.ts` is the sole entrypoint. It starts telemetry first, validates configuration, reads the
+opaque reference mounted by its Kubernetes Job, processes exactly one assignment, and flushes
+telemetry. The app exposes no HTTP listener, Deployment, Service, Ingress, or Kubernetes API
+permission. The agent controller creates a new suspended Job for every durable workflow task.
 
 ## Boundary
 
@@ -55,8 +57,8 @@ remain server-owned.
 | --- | --- | --- |
 | `OPENCRANE_INTERNAL_URL` | Same-silo OpenCrane broker origin | Helm-derived |
 | `OPENCRANE_PREPROCESSOR_TOKEN_PATH` | Rotating projected token file | required |
+| `OPENCRANE_PREPROCESSOR_BOOTSTRAP_REFERENCE_PATH` | Opaque Job assignment reference file | required |
 | `ARTIFACT_PREPROCESSOR_SCRATCH_DIRECTORY` | Absolute bounded scratch path | required |
-| `ARTIFACT_PREPROCESSOR_POLL_INTERVAL_MS` | Idle or handled-error delay | `1000` |
 | `ARTIFACT_PREPROCESSOR_REQUEST_TIMEOUT_MS` | Per-request deadline | `10000` |
 | `ARTIFACT_PREPROCESSOR_MAX_SOURCE_BYTES` | Maximum source PDF bytes | `33554432` |
 | `ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES` | Maximum extracted text bytes | `16777216` |

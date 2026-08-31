@@ -74,7 +74,7 @@ describe("Agent thread parent delivery router", function _Suite()
 	{
 		let saved: Record<string, unknown> = {};
 		const deliveryTransaction = {
-			workloadAssignment: { findFirst: vi.fn().mockResolvedValue({ siloId: "silo-1", agentServiceId: "service-1", attempt: 1, run: { attempt: 1 } }) },
+			workloadAssignment: { findFirst: vi.fn().mockResolvedValue({ siloId: "silo-1", agentServiceId: "service-1", attempt: 1, bindingGeneration: 2, run: { attempt: 1 }, warmRuntimeReservations: [{ generation: 2 }] }) },
 			conversationAgentThread: { findFirst: vi.fn().mockResolvedValue({ parentConversationId: "parent-1" }) },
 			agentThreadParentDelivery: {
 				findUnique: vi.fn().mockResolvedValue(null),

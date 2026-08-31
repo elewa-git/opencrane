@@ -2,10 +2,11 @@ import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 
 import type { PrismaClient } from "@prisma/client";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
 import { _CreateArtifactCatalogueRepository, _CreateArtifactPreprocessAuthority, _CreateArtifactUploadAuthority, __CompleteArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease, __IssueArtifactReadLease, __UploadArtifact, IssueArtifactReadLeaseOutcomes, type ArtifactPreprocessOutputBroker, type ArtifactUploadResult, type PublishedArtifactReadTarget, type VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
-import type { SkillAuthoringArtifactReader } from "@opencrane/backend/agents/skills/execution";
+import type { SkillAuthoringValidationArtifactReader } from "@opencrane/backend/server/agents/skills";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { PrismaConversationAssetOutputUnitOfWork, PrismaConversationAssetUnitOfWork, type ConversationAssetContentBroker, type ConversationAssetReadTarget } from "@opencrane/backend/server/conversation-assets";
 import { ___ParseAndValidateJson } from "@opencrane/util";
@@ -14,13 +15,26 @@ import { _ReadArtifactMountedPem } from "./artifact-mounted-key.loader";
 import { _CreateArtifactReadLeaseSigner } from "./artifact-read-lease-signer.factory";
 import { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./artifact-service-read-port.factory";
 
-/** Build the path this app uses to take a proof-authorized command through to the private artifact service. */
-export function _CreateArtifactUploadGateway(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): { upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult> }
+/**
+ * Builds the upload gateway that signs storage leases and publishes verified artifact revisions.
+ *
+ * The workflow engine reaches the publication repository through this factory. For a PDF, the
+ * revision, preprocessing record, and saved task receipt therefore use the same database
+ * transaction; a task-admission failure also rejects the publication.
+ *
+ * Called by: `apps/opencrane/src/index.ts`, which installs the gateway on the public application.
+ * @param prisma - Product database client used by the artifact repositories.
+ * @param workflow - Guarded engine that saves PDF preprocessing tasks in the publication transaction.
+ * @param environment - Deployment paths and the private artifact-service address.
+ * @returns The application upload port.
+ * @throws Error when the service address or mounted signing keys are missing or invalid.
+ */
+export function _CreateArtifactUploadGateway(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">, environment: NodeJS.ProcessEnv = process.env): { upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult> }
 {
 	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
 	const leasePrivateKey = _ReadArtifactMountedPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH");
 	const receiptPublicKey = _ReadArtifactMountedPem(environment.ARTIFACT_RECEIPT_PUBLIC_KEY_PATH, "ARTIFACT_RECEIPT_PUBLIC_KEY_PATH");
-	const repository = _CreateArtifactUploadAuthority(prisma);
+	const repository = _CreateArtifactUploadAuthority(prisma, workflow);
 	return {
 		upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult>
 		{
@@ -154,15 +168,18 @@ export function _CreatePublishedArtifactReader(prisma: PrismaClient, environment
 }
 
 /** Keep the skill worker's named port while reusing the single published-artifact reader. */
-export function _CreateSkillAuthoringArtifactReader(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): SkillAuthoringArtifactReader
+export function _CreateSkillAuthoringArtifactReader(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): SkillAuthoringValidationArtifactReader
 {
 	return _CreatePublishedArtifactReader(prisma, environment);
 }
 
-/** Build the server-side output broker that owns hashing, promotion, receipt verification, and completion. */
+/** Builds the server-side output broker that owns hashing, promotion, receipt verification, and completion. */
 export function _CreateArtifactPreprocessOutputBroker(prisma: PrismaClient, maximumOutputBytes: number, environment: NodeJS.ProcessEnv = process.env): ArtifactPreprocessOutputBroker
 {
-	if (!Number.isSafeInteger(maximumOutputBytes) || maximumOutputBytes <= 0) throw new Error("maximumOutputBytes must be a positive safe integer");
+	if (!Number.isSafeInteger(maximumOutputBytes) || maximumOutputBytes <= 0)
+	{
+		throw new Error("maximumOutputBytes must be a positive safe integer");
+	}
 	const jobs = _CreateArtifactPreprocessAuthority(prisma);
 	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
 	const promotionPort = _CreateArtifactServicePromotionPort(serviceUrl);

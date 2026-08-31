@@ -4,11 +4,11 @@ import type { Router } from "express";
 export interface DevelopmentInternalRuntimeComposition
 {
 	/** Lets the local controller claim, assign, and release admitted run attempts. */
-	readonly agentControllerRunDispatch: Router;
-	/** Exchanges a runtime's bootstrap reference for its compiled run input. */
-	readonly runtimeBootstrap: Router;
+	readonly agentRunWorkflowController: Router;
+	/** Binds an authenticated warm runtime to one ready assignment. */
+	readonly warmRuntimeBinding: Router;
 	/** Carries commands and validated runtime candidates over the normal runtime protocol. */
-	readonly runtimeStream: Router;
+	readonly warmRuntimeStream: Router;
 	/** Delivers a child Agent thread result to its parent conversation when that flow is used. */
 	readonly agentThreadParentDeliveries: Router;
 }

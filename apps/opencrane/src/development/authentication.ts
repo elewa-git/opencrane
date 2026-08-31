@@ -170,7 +170,6 @@ export function _CreateDevelopmentAuthentication(identity: LocalDevelopmentIdent
 
 	return {
 		authMiddleware,
-		productAuthentication: authMiddleware,
 		router: _CreateDevelopmentAuthRouter(identity),
 		sessionMiddleware: [_CreateDevelopmentSessionMiddleware(identity)],
 	};

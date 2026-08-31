@@ -4,16 +4,23 @@ import express, { Router, type Express } from "express";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, PublicHealthServiceNames, PublicHealthServiceStatuses, PublicHealthStatuses, RuntimeCandidateKinds, type RuntimeCandidate } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_VERSION, PublicHealthServiceNames, PublicHealthServiceStatuses, PublicHealthStatuses, RuntimeCandidateKinds, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME, type RuntimeCandidate } from "@opencrane/contracts";
 import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _RateLimit } from "@opencrane/backend/server/infra/http";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import { _ReadProcessConfig } from "../app/config";
 import type { McpRuntimeComposition } from "../app/mcp-runtime-composition.types";
 
 /** Supply inert MCP adapters because these tests own the older runtime identity routes. */
 function _McpRuntime(): McpRuntimeComposition
 {
-	return { authority: {} as McpRuntimeComposition["authority"], promotion: Router(), controller: Router(), companion: Router() };
+	return { authority: {} as McpRuntimeComposition["authority"], promotion: Router(), controller: Router(), companion: Router(), taskWorkflow: {} as McpRuntimeComposition["taskWorkflow"] };
+}
+
+/** Supply an inert guarded task admission port because these tests never admit a workflow. */
+function _WorkflowExecution(): Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction">
+{
+	return { spawn: vi.fn(), emitEventInTransaction: vi.fn() } as unknown as Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction">;
 }
 
 /** Keep identity-route tests independent from mounted ArtifactStore credentials. */
@@ -50,7 +57,6 @@ function _buildAuthApp(): Express
         [PublicHealthServiceNames.Memory]: PublicHealthServiceStatuses.Available,
         [PublicHealthServiceNames.Files]: PublicHealthServiceStatuses.Available,
 		[PublicHealthServiceNames.Channels]: PublicHealthServiceStatuses.Available,
-        [PublicHealthServiceNames.Integrations]: PublicHealthServiceStatuses.Disabled,
       },
     });
   });
@@ -64,7 +70,7 @@ function _buildAuthApp(): Express
 }
 
 /** Build the internal runtime candidate route around one mocked TokenReview identity. */
-async function _BuildRuntimeCandidateApp(username: string, audiences: string[] = [AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE]): Promise<Express>
+async function _BuildRuntimeCandidateApp(username: string, audiences: string[] = [WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE]): Promise<Express>
 {
   const { _RegisterInternalRoutes } = await import("../app/routes");
   // The real Prisma dispatch authority runs inside a transaction and loads the live assignment for
@@ -75,6 +81,7 @@ async function _BuildRuntimeCandidateApp(username: string, audiences: string[] =
     {
       return run({
         $queryRaw: vi.fn().mockResolvedValue([]),
+        warmRuntimeReservation: { findUnique: vi.fn().mockResolvedValue(null) },
         workloadAssignment: { findUnique: vi.fn().mockResolvedValue(null) },
       });
     }),
@@ -93,7 +100,7 @@ async function _BuildRuntimeCandidateApp(username: string, audiences: string[] =
   } as unknown as AuthenticationV1Api;
   const app = express();
   app.use(express.json());
-  _RegisterInternalRoutes(app, prisma, authApi, _ReadProcessConfig().runtime, _McpRuntime());
+  _RegisterInternalRoutes(app, prisma, authApi, _ReadProcessConfig().runtime, _McpRuntime(), _WorkflowExecution());
   return app;
 }
 
@@ -101,7 +108,7 @@ async function _BuildRuntimeCandidateApp(username: string, audiences: string[] =
 function _RuntimeCandidate(): RuntimeCandidate
 {
   return {
-    protocolVersion: AGENT_RUNTIME_PROTOCOL_V1,
+    protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION,
     runtimeInstanceId: "runtime-1",
     commandId: "command-1",
     candidateId: "candidate-1",
@@ -123,12 +130,14 @@ describe("Control Plane", () =>
     vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo-runtime");
     vi.stubEnv("AGENT_RUNTIME_MANAGED_NAMESPACE", "opencrane-silo-managed-runtime");
     vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.opencrane-silo.svc.cluster.local:8080");
-    vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
+		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
+		vi.stubEnv("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH", "/var/run/opencrane/runtime-continuation/keyring.json");
 		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_BASE_URL", "https://registry.example.test");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_REPOSITORY", "opencrane/mcp-images");
 		vi.stubEnv("OPENCRANE_SILO_ID", "opencrane-silo");
 		vi.stubEnv("OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS", "86400000");
+		vi.stubEnv("SKILL_AUTHORING_NAMESPACE", "opencrane-skill-authoring");
   });
 
   afterEach(function _RestoreEnvironment()
@@ -156,54 +165,70 @@ describe("Control Plane", () =>
         status: PublicHealthStatuses.Ok,
         ready: true,
       }));
-      expect(Object.keys(res.body.services).sort()).toEqual(["api", "channels", "database", "files", "integrations", "memory", "models"]);
+      expect(Object.keys(res.body.services).sort()).toEqual(["api", "channels", "database", "files", "memory", "models"]);
     });
 
-    it("accepts only the bounded runtime-profile ServiceAccount naming contract", async function _RuntimeServiceAccountIdentity()
+    it("accepts only the fixed warm-runtime ServiceAccount in the personal runtime namespace", async function _RuntimeServiceAccountIdentity()
     {
-      const acceptedApp = await _BuildRuntimeCandidateApp("system:serviceaccount:opencrane-silo-runtime:agent-runtime-personal");
-      const rejectedApp = await _BuildRuntimeCandidateApp("system:serviceaccount:opencrane-silo:agent-runtime-personal");
+      const acceptedApp = await _BuildRuntimeCandidateApp(`system:serviceaccount:opencrane-silo-runtime:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`);
+      const rejectedApp = await _BuildRuntimeCandidateApp(`system:serviceaccount:opencrane-silo:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`);
 
-      const accepted = await request(acceptedApp).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
-      const rejected = await request(rejectedApp).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+      const accepted = await request(acceptedApp).post("/api/internal/warm-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+      const rejected = await request(rejectedApp).post("/api/internal/warm-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+      const retired = await request(acceptedApp).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
 
       // A reviewed runtime SA reaches the real dispatch authority, which fails closed with a
       // contract reason (no live assignment for this Pod) rather than a stubbed placeholder string.
       expect(accepted.status).toBe(409);
       expect(accepted.body).toEqual({ accepted: false, reason: "unknown_workload" });
-      // A subject outside the bounded runtime namespace/SA grammar never reaches the authority.
+      // A subject outside the bounded runtime namespace never reaches the authority.
       expect(rejected.status).toBe(401);
+	  expect(retired.status).toBe(404);
     });
 
-    it("accepts the managed audience only in the dedicated managed runtime plane", async function _ManagedRuntimeServiceAccountIdentity()
+    it("accepts the same warm-runtime identity in the managed runtime namespace", async function _ManagedRuntimeServiceAccountIdentity()
     {
-      const acceptedApp = await _BuildRuntimeCandidateApp("system:serviceaccount:opencrane-silo-managed-runtime:managed-agent-runtime-default", [MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE]);
-      const crossedApp = await _BuildRuntimeCandidateApp("system:serviceaccount:opencrane-silo-runtime:managed-agent-runtime-default", [MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE]);
+      const acceptedApp = await _BuildRuntimeCandidateApp(`system:serviceaccount:opencrane-silo-managed-runtime:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`);
+      const crossedApp = await _BuildRuntimeCandidateApp(`system:serviceaccount:opencrane-silo:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`);
 
-      const accepted = await request(acceptedApp).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
-      const crossed = await request(crossedApp).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+      const accepted = await request(acceptedApp).post("/api/internal/warm-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+      const crossed = await request(crossedApp).post("/api/internal/warm-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
 
       expect(accepted.status).toBe(409);
       expect(accepted.body).toEqual({ accepted: false, reason: "unknown_workload" });
       expect(crossed.status).toBe(401);
     });
 
+	it("moves generated assets and parent deliveries to the warm-runtime boundary", async function _WarmRuntimeOutputRoutes()
+	{
+		const app = await _BuildRuntimeCandidateApp(`system:serviceaccount:opencrane-silo-runtime:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`);
+		const warmAsset = await request(app).post("/api/internal/warm-runtime/conversation-assets/outputs:reserve").set("authorization", "Bearer projected-token").send({});
+		const warmParent = await request(app).post("/api/internal/warm-runtime/agent-threads/parent-deliveries").set("authorization", "Bearer projected-token").send({});
+		const retiredAsset = await request(app).post("/api/internal/agent-runtime/conversation-assets/outputs:reserve").set("authorization", "Bearer projected-token").send({});
+		const retiredParent = await request(app).post("/api/internal/agent-runtime/agent-threads/parent-deliveries").set("authorization", "Bearer projected-token").send({});
+
+		expect(warmAsset.status).toBe(400);
+		expect(warmParent.status).toBe(400);
+		expect(retiredAsset.status).toBe(404);
+		expect(retiredParent.status).toBe(404);
+	});
+
     it("requires one explicit runtime namespace separate from the server", async function _RuntimeNamespaceSeparation()
     {
       const { _RegisterInternalRoutes } = await import("../app/routes");
       const app = express();
       vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "");
-      expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime()); }).toThrow(/different from POD_NAMESPACE/);
+		expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime(), _WorkflowExecution()); }).toThrow(/different from POD_NAMESPACE/);
 
       vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo");
-      expect(function _SameRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime()); }).toThrow(/different from POD_NAMESPACE/);
+		expect(function _SameRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime(), _WorkflowExecution()); }).toThrow(/different from POD_NAMESPACE/);
     });
 
     it("rejects a reviewed token when Kubernetes omits the runtime audience", async function _RuntimeAudienceMismatch()
     {
-      const app = await _BuildRuntimeCandidateApp("system:serviceaccount:opencrane-silo-runtime:agent-runtime-personal", ["opencrane"]);
+      const app = await _BuildRuntimeCandidateApp(`system:serviceaccount:opencrane-silo-runtime:${WARM_RUNTIME_SERVICE_ACCOUNT_NAME}`, ["opencrane"]);
 
-      const response = await request(app).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+      const response = await request(app).post("/api/internal/warm-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
 
       expect(response.status).toBe(401);
     });
@@ -218,7 +243,7 @@ describe("Control Plane", () =>
 			vi.stubEnv("CHANNEL_REPLAY_ENDPOINT", "http://opencrane-server.opencrane-silo.svc.cluster.local:8081/api/internal/conversation-replay");
 			const app = express();
 			app.use(express.json());
-			_RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime());
+			_RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, _McpRuntime(), _WorkflowExecution());
 
 			const response = await request(app).post("/api/internal/channel-targets:resolve").set("authorization", "Bearer projected-token").send({ action: "events.read", trustedHost: "acme.example.com", conversationId: "conversation-1" });
 

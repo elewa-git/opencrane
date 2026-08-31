@@ -9,12 +9,12 @@ and the one-off migration Job. CNPG owns the database process itself.
 ## What it owns
 
 A **silo** is one customer's isolated OpenCrane installation. This chart creates one PostgreSQL
-Cluster for that silo, with separate logical databases and credentials for the OpenCrane server,
-LiteLLM, and Obot. It also creates a PgBouncer connection pool and database privilege Jobs.
+Cluster for that silo, with separate logical databases and credentials for the OpenCrane server
+and LiteLLM. It also creates a PgBouncer connection pool and database privilege Jobs.
 
 ```
   application release
-          │ reviewed migration SQL, when present
+          │ immutable Prisma migration image, for an upgrade
           ▼
   ┌───────────────────────────────┐
   │ postgres chart  ◄── HERE       │
@@ -22,28 +22,31 @@ LiteLLM, and Obot. It also creates a PgBouncer connection pool and database priv
   └───────────────────────────────┘
           │ connection Secrets
           ▼
-  server · LiteLLM · Obot
+  server · LiteLLM
 ```
 
 **In this flow:** [OpenCrane server](../opencrane/README.md) ·
-[LiteLLM](../_infra/litellm/README.md) · [Obot](../_infra/obot/README.md)
+[LiteLLM](../_infra/litellm/README.md)
 
-For a migration, the deployer publishes the reviewed SQL as an immutable ConfigMap, prepares
-`pg_cron` when required, and runs the bounded migration Job. The Job checks the SQL bytes before
-executing them. A failure is returned directly. Deployment does not require a migration backup,
-inspect the existing schema, pause application writes, or restore an earlier application release.
-Issue #699 tracks that deferred hardening work.
+For the 0.9.2-to-0.10.0 upgrade, the deployer publishes the pooled OpenCrane database connection and
+runs the bounded migration Job. The Job applies the reviewed IAM prerequisite to tagged 0.9.2's
+0.9.0 schema, then starts the Prisma ledger used from 0.10.0 onward. Before that Job starts,
+CloudNativePG first installs `pg_cron` through the OpenCrane `Database` resource and then assigns
+the existing `cron` schema to the application owner in a second observed generation. The migration
+Job never receives a database superuser credential. A failure is returned directly.
+Deployment does not require a migration backup, inspect the existing
+schema, pause application writes, or restore an earlier application release. Issue #699 tracks that
+deferred hardening work.
 
-The migration Job is not a general database shell. It has no Kubernetes API permission, cannot retry,
-runs with a read-only root filesystem, and can reach only the database and DNS. The temporary CNPG
-superuser credential is used only to create `pg_cron` and is removed immediately afterwards.
+The migration Job is not a general database shell. It has no Kubernetes API permission, runs with a
+read-only root filesystem, and can reach only the release-local connection pool and Domain Name
+System (DNS). A migration failure is returned directly for a forward repair.
 
 ## Public surface
 
 Entrypoint: `apps/postgres/helm` is the PostgreSQL Helm chart.
 
 - `scripts/publish-initdb-baseline-config-map.sh` publishes the SQL for a new database.
-- `scripts/publish-database-migration-config-map.sh` publishes reviewed migration SQL.
 - `scripts/publish-app-connection-secret.sh` publishes each application's own connection Secret.
 
 ## Boundary
@@ -74,4 +77,4 @@ upgrade.
 
 - Parent index: [apps](../README.md)
 - Deployment tools: [deploy-k8s platform](../_infra/deploy-k8s/platform/README.md)
-- Migration source: [OpenCrane Prisma migrations](../opencrane/prisma/migrations/README.md)
+- Migration source: [OpenCrane Prisma ledger](../opencrane/prisma/prisma-migrations/README.md)

@@ -1,11 +1,12 @@
 import { EventType } from "@ag-ui/core";
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, ___ParseAgUiA2uiEnvelope, type AgUiProjectionEvent } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_RUN_WAIT_STATE_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, ___ParseAgUiA2uiEnvelope, type AgUiProjectionEvent } from "@opencrane/contracts";
 
 import { _A2uiSurface } from "./a2ui-surface/a2ui-surface-reducer";
 import { _AgentThreadParentDelivery } from "./agent-thread-delivery/agent-thread-delivery-reducer";
 import type { AgUiStreamRecord, AgUiStreamState } from "./ag-ui-stream.types";
 import { _AppendMessage, _CompleteMessage, _MessageTerminal, _StartMessage } from "./message/message-reducer";
 import { _FailRun, _FinishRun, _StartRun } from "./run/run-reducer";
+import { _ClearParticipantWaits, _RunWaitState } from "./run/run-wait-reducer";
 import { AgUiRunStatuses } from "./run/run.types";
 import { _AppendToolArguments, _CompleteTool, _ResultTool, _StartTool, _ToolFailure, _ToolRecoveryRequired } from "./tool/tool-reducer";
 
@@ -23,7 +24,7 @@ import { _AppendToolArguments, _CompleteTool, _ResultTool, _StartTool, _ToolFail
  */
 export function __CreateAgUiStreamState(): AgUiStreamState
 {
-	return { cursor: null, seenCursors: new Map(), runId: null, runStatus: AgUiRunStatuses.Idle, runFailure: null, runRecovery: null, interrupts: [], messages: {}, tools: {}, surfaces: new Map(), surfaceFingerprints: new Map(), customEvents: [], agentThreadParentDeliveries: {}, accessRevoked: false };
+	return { cursor: null, seenCursors: new Map(), runId: null, runStatus: AgUiRunStatuses.Idle, runFailure: null, runRecovery: null, runWaits: new Map(), runWaitReasons: [], interrupts: [], messages: {}, tools: {}, surfaces: new Map(), surfaceFingerprints: new Map(), customEvents: [], agentThreadParentDeliveries: {}, accessRevoked: false };
 }
 
 /**
@@ -132,7 +133,10 @@ function _ReduceEvent(state: AgUiStreamState, event: AgUiProjectionEvent): AgUiS
 function _Custom(state: AgUiStreamState, name: string, value: unknown): AgUiStreamState
 {
 	if (name === "opencrane.access_revoked") return __RevokeAgUiStreamAccess();
-	if (name === AG_UI_INTERRUPTS_CLEARED_EVENT) return { ...state, interrupts: [], customEvents: [...state.customEvents, name] };
+	if (name === AG_UI_INTERRUPTS_CLEARED_EVENT)
+		return { ..._ClearParticipantWaits(state), interrupts: [], customEvents: [...state.customEvents, name] };
+	if (name === AG_UI_RUN_WAIT_STATE_EVENT)
+		return _RunWaitState(state, value, name);
 	if (name === "opencrane.message_terminal") return _MessageTerminal(state, value, name);
 	if (name === AG_UI_TOOL_FAILURE_EVENT) return _ToolFailure(state, value, name);
 	if (name === AG_UI_TOOL_RECOVERY_REQUIRED_EVENT) return _ToolRecoveryRequired(state, value, name);

@@ -1,5 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+
 import { PrismaAgentRunAuthorityRepository } from "./prisma-run-authority";
 import { __StartNextRunAttempt } from "./run-authority";
 import type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AgentRunRetryTransactionRepository, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, RunRetryAuthority, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
@@ -16,7 +18,7 @@ const _RETRYABLE_RUN_RETRY_CODES = new Set(["P2002", "P2034"]);
  * The domain authority performs an advisory read and then a separately guarded write. This class
  * supplies a fresh transaction-bound repository for each part and may repeat the full decision only
  * after Prisma confirms P2002 or P2034 rolled it back. After three conflicts it reads the committed
- * next-attempt event and accepts it only when the stored owner and retry key match this request.
+ * next-attempt workflow task and accepts it only when it matches the requested run coordinates.
  *
  * Called by: `PrismaConversationUnitOfWork.retryRun` through its injected `RunRetryAuthority` port.
  * @implements RunRetryAuthority
@@ -25,16 +27,19 @@ export class PrismaAgentRunRetryUnitOfWork implements RunRetryAuthority
 {
 	/** Product database client used only to open transaction attempts. */
 	private readonly _prisma: PrismaClient;
+	/** Workflow task admission capability shared with each fresh transaction repository. */
+	private readonly _workflow: Pick<IWorkflowEngine, "spawn">;
 
 	/** Creates the retry transaction boundary over the app-owned Prisma client. */
-	constructor(prisma: PrismaClient)
+	constructor(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">)
 	{
 		this._prisma = prisma;
+		this._workflow = workflow;
 	}
 
 	/**
 	 * Starts or replays a participant-authorized next attempt.
-	 * @param command - Owner, route, observed attempt, retry key, and server acceptance time.
+	 * @param command - Owner, route, observed attempt, and server acceptance time.
 	 * @returns The user-facing started, idempotent, or denied result.
 	 * @throws The last P2002/P2034 when no matching winner exists after three attempts, or any other
 	 * database error immediately.
@@ -82,7 +87,7 @@ export class PrismaAgentRunRetryUnitOfWork implements RunRetryAuthority
 		return this._Run(function _Read(repository) { return repository.getRunAuthority(runId); }, Prisma.TransactionIsolationLevel.RepeatableRead);
 	}
 
-	/** Applies the guarded attempt and outbox writes together at Serializable isolation. */
+	/** Applies the guarded attempt and workflow-task writes together at Serializable isolation. */
 	private async _StartAttempt(command: AtomicStartNextRunAttemptCommand): Promise<AtomicRunAttemptResult>
 	{
 		return this._Run(function _Start(repository) { return repository.startNextAttemptAtomically(command); }, Prisma.TransactionIsolationLevel.Serializable);
@@ -100,9 +105,10 @@ export class PrismaAgentRunRetryUnitOfWork implements RunRetryAuthority
 	/** Runs one operation with a repository bound to a fresh transaction at the requested isolation. */
 	private async _Run<Result>(work: (repository: AgentRunRetryTransactionRepository) => Promise<Result>, isolationLevel: Prisma.TransactionIsolationLevel): Promise<Result>
 	{
+		const workflow = this._workflow;
 		return this._prisma.$transaction(async function _Run(transaction): Promise<Result>
 		{
-			return work(new PrismaAgentRunAuthorityRepository(transaction));
+			return work(new PrismaAgentRunAuthorityRepository(transaction, workflow));
 		}, { isolationLevel });
 	}
 }

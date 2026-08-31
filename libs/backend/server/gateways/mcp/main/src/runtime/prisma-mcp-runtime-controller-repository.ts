@@ -1,9 +1,12 @@
-import { McpExecutorWorkloadState, type Prisma } from "@prisma/client";
+import { McpExecutorCommandState, McpExecutorWorkloadState, type Prisma } from "@prisma/client";
 
 import { RuntimeWorkloadClaimClasses, type RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 
 import { _McpRuntimeLeaseExpiryProposal, _McpRuntimeTimestampProposal } from "./mcp-runtime-timestamps";
-import type { McpRuntimeAuthorityOptions, McpRuntimeControllerClaim, McpRuntimeControllerReleaseClaim, McpRuntimeControllerRepository, McpRuntimeControllerWriteOutcome, McpRuntimePodRegistrationCommand, McpRuntimeReleaseCommand } from "./mcp-runtime.types";
+import type { McpRuntimeAuthorityOptions, McpRuntimeCleanupCommand, McpRuntimeControllerClaim, McpRuntimeControllerCleanupClaim, McpRuntimeControllerReleaseClaim, McpRuntimeControllerRepository, McpRuntimeControllerWriteOutcome, McpRuntimePodRegistrationCommand, McpRuntimeReleaseCommand } from "./mcp-runtime.types";
+
+/** Command states that prove an execution can no longer start or resume provider work. */
+const _TERMINAL_COMMAND_STATES = [McpExecutorCommandState.Succeeded, McpExecutorCommandState.Failed, McpExecutorCommandState.RecoveryRequired] as const;
 
 /** Claims MCP executions and records their Kubernetes Job identity inside one transaction. */
 export class PrismaMcpRuntimeControllerRepository implements McpRuntimeControllerRepository
@@ -72,7 +75,8 @@ export class PrismaMcpRuntimeControllerRepository implements McpRuntimeControlle
 		const now = await this._databaseNow();
 		if (!_SameControllerFence(execution, binding) || execution.claimExpiresAt === null || now >= execution.claimExpiresAt)
 			return "conflict";
-		const updated = await this._transaction.mcpRuntimeExecution.updateMany({ where: { id: execution.id, siloId: this._options.siloId, workloadState: McpExecutorWorkloadState.Pending, claimedAt: execution.claimedAt, claimExpiresAt: execution.claimExpiresAt, deliveryCount: execution.deliveryCount, workloadUid: null }, data: { workloadState: McpExecutorWorkloadState.Assigned, workloadUid: binding.workloadUid, assignedAt: _McpRuntimeTimestampProposal } });
+		const workloadState = _TERMINAL_COMMAND_STATES.includes(execution.commandState as typeof _TERMINAL_COMMAND_STATES[number]) ? McpExecutorWorkloadState.Closed : McpExecutorWorkloadState.Assigned;
+		const updated = await this._transaction.mcpRuntimeExecution.updateMany({ where: { id: execution.id, siloId: this._options.siloId, workloadState: McpExecutorWorkloadState.Pending, commandState: execution.commandState, claimedAt: execution.claimedAt, claimExpiresAt: execution.claimExpiresAt, deliveryCount: execution.deliveryCount, workloadUid: null }, data: { workloadState, workloadUid: binding.workloadUid, assignedAt: _McpRuntimeTimestampProposal } });
 		return updated.count === 1 ? "assigned" : "conflict";
 	}
 
@@ -114,6 +118,54 @@ export class PrismaMcpRuntimeControllerRepository implements McpRuntimeControlle
 		};
 	}
 
+	/** Return one cleanup delivery for a terminal execution whose saved Kubernetes Job UID has no completed cleanup. */
+	async claimNextCleanup(): Promise<McpRuntimeControllerCleanupClaim | null>
+	{
+		const now = await this._databaseNow();
+		const execution = await this._transaction.mcpRuntimeExecution.findFirst({
+			where: {
+				siloId: this._options.siloId,
+				profileName: this._options.profileName,
+				workloadState: McpExecutorWorkloadState.Closed,
+				commandState: { in: [..._TERMINAL_COMMAND_STATES] },
+				workloadUid: { not: null },
+				cleanupCompletedAt: null,
+				OR: [{ cleanupExpiresAt: null }, { cleanupExpiresAt: { lt: now } }],
+			},
+			include: { serverRevision: { select: { registryReference: true } } },
+			orderBy: { createdAt: "asc" },
+		});
+		if (execution === null || execution.workloadUid === null || execution.claimedAt === null || execution.claimExpiresAt === null)
+			return null;
+		const cleanupDeliveryCount = execution.cleanupDeliveryCount + 1;
+		const cleanupExpiresAt = new Date(now.getTime() + this._options.controllerClaimLeaseMilliseconds);
+		const claimed = await this._transaction.mcpRuntimeExecution.updateManyAndReturn({
+			where: { id: execution.id, siloId: this._options.siloId, workloadState: McpExecutorWorkloadState.Closed, commandState: execution.commandState, workloadUid: execution.workloadUid, cleanupCompletedAt: null, cleanupClaimedAt: execution.cleanupClaimedAt, cleanupExpiresAt: execution.cleanupExpiresAt, cleanupDeliveryCount: execution.cleanupDeliveryCount },
+			data: { cleanupClaimedAt: now, cleanupExpiresAt, cleanupDeliveryCount },
+			select: { cleanupClaimedAt: true, cleanupExpiresAt: true },
+		});
+		const lease = claimed[0];
+		if (lease === undefined || lease.cleanupClaimedAt === null || lease.cleanupExpiresAt === null)
+			return null;
+		return {
+			claim: {
+				claimId: execution.id,
+				siloId: execution.siloId,
+				workloadClass: RuntimeWorkloadClaimClasses.McpExecutor,
+				profileName: execution.profileName,
+				idempotencyKey: execution.idempotencyKey,
+				claimedAt: execution.claimedAt.toISOString(),
+				deliveryCount: execution.deliveryCount,
+				expiresAt: execution.claimExpiresAt.toISOString(),
+				executionReference: execution.executionReference,
+			},
+			registryReference: execution.serverRevision.registryReference,
+			workloadUid: execution.workloadUid,
+			cleanupClaimedAt: lease.cleanupClaimedAt.toISOString(),
+			cleanupDeliveryCount,
+		};
+	}
+
 	/** Record the exact successful unsuspend operation under its current release fence. */
 	async commitRelease(claimId: string, command: McpRuntimeReleaseCommand): Promise<McpRuntimeControllerWriteOutcome>
 	{
@@ -129,6 +181,26 @@ export class PrismaMcpRuntimeControllerRepository implements McpRuntimeControlle
 			return "conflict";
 		const updated = await this._transaction.mcpRuntimeExecution.updateMany({ where: { id: execution.id, siloId: this._options.siloId, workloadState: McpExecutorWorkloadState.Assigned, workloadUid: command.workloadUid, releaseClaimedAt: execution.releaseClaimedAt, releaseExpiresAt: execution.releaseExpiresAt, releaseDeliveryCount: execution.releaseDeliveryCount }, data: { workloadState: McpExecutorWorkloadState.Released, releasedAt: _McpRuntimeTimestampProposal } });
 		return updated.count === 1 ? "released" : "conflict";
+	}
+
+	/** Return `cleaned`, `idempotent`, or `conflict` after checking the terminal row and cleanup delivery. */
+	async commitCleanup(claimId: string, command: McpRuntimeCleanupCommand): Promise<McpRuntimeControllerWriteOutcome>
+	{
+		if (!_CleanupIsValid(claimId, command))
+			return "conflict";
+		const execution = await this._transaction.mcpRuntimeExecution.findFirst({ where: { id: claimId, siloId: this._options.siloId } });
+		if (execution === null || execution.workloadUid !== command.workloadUid)
+			return "conflict";
+		if (execution.cleanupCompletedAt !== null)
+			return "idempotent";
+		const now = await this._databaseNow();
+		if (execution.workloadState !== McpExecutorWorkloadState.Closed || !_TERMINAL_COMMAND_STATES.includes(execution.commandState as typeof _TERMINAL_COMMAND_STATES[number]) || !_SameCleanupFence(execution, command) || execution.cleanupExpiresAt === null || now >= execution.cleanupExpiresAt)
+			return "conflict";
+		const updated = await this._transaction.mcpRuntimeExecution.updateMany({
+			where: { id: execution.id, siloId: this._options.siloId, workloadState: McpExecutorWorkloadState.Closed, commandState: execution.commandState, workloadUid: command.workloadUid, cleanupCompletedAt: null, cleanupClaimedAt: execution.cleanupClaimedAt, cleanupExpiresAt: execution.cleanupExpiresAt, cleanupDeliveryCount: execution.cleanupDeliveryCount },
+			data: { cleanupCompletedAt: now },
+		});
+		return updated.count === 1 ? "cleaned" : "conflict";
 	}
 
 	/** Record the first Pod only after the matching Job was released under the same fence. */
@@ -180,4 +252,16 @@ function _ReleaseIsValid(claimId: string, command: McpRuntimeReleaseCommand): bo
 function _SameReleaseFence(execution: { readonly workloadUid: string | null; readonly releaseClaimedAt: Date | null; readonly releaseDeliveryCount: number }, command: McpRuntimeReleaseCommand): boolean
 {
 	return execution.workloadUid === command.workloadUid && execution.releaseClaimedAt?.getTime() === Date.parse(command.releaseClaimedAt) && execution.releaseDeliveryCount === command.releaseDeliveryCount;
+}
+
+/** Validate cleanup coordinates before loading the terminal execution. */
+function _CleanupIsValid(claimId: string, command: McpRuntimeCleanupCommand): boolean
+{
+	return claimId.length > 0 && command.workloadUid.length > 0 && Number.isSafeInteger(command.cleanupDeliveryCount) && command.cleanupDeliveryCount >= 1 && Number.isFinite(Date.parse(command.cleanupClaimedAt));
+}
+
+/** Compare one cleanup command with the saved Job UID and reused delivery fence. */
+function _SameCleanupFence(execution: { readonly workloadUid: string | null; readonly cleanupClaimedAt: Date | null; readonly cleanupDeliveryCount: number }, command: McpRuntimeCleanupCommand): boolean
+{
+	return execution.workloadUid === command.workloadUid && execution.cleanupClaimedAt?.getTime() === Date.parse(command.cleanupClaimedAt) && execution.cleanupDeliveryCount === command.cleanupDeliveryCount;
 }

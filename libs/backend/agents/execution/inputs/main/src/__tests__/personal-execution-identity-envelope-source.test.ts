@@ -30,14 +30,13 @@ function _Transaction(row = _Revision()): RunAdmissionTransaction
 {
 	return {
 		prisma: {
-			$queryRaw: vi.fn().mockResolvedValue([]),
 			principal: {
 				findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]),
 				findUnique: vi.fn().mockResolvedValue({ id: "principal-1" }),
 			},
 			groupMembership: { findMany: vi.fn().mockResolvedValue([]) },
 			verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(row) },
-			highestAcceptedFleetMembership: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({ revision: 7 }) },
+				highestAcceptedFleetMembership: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ revision: 7 }) },
 			auditDecision: { create: vi.fn().mockResolvedValue({ id: "audit-1" }) },
 			authorizationGrant: { findMany: vi.fn().mockResolvedValue([{ id: "grant-1", siloId: "silo-1", subjectKind: "Principal", subjectGroupId: null, subjectPrincipalId: "principal-1", boundaryKind: "Personal", boundaryGroupId: null, boundaryPrincipalId: "principal-1", boundaryCoverage: "Exact", catalogId: "catalog-1", catalogRevision: 3, catalogDigest: `sha256:${"c".repeat(64)}`, capabilityId: "conversation:run", resourceKind: "conversation", resourceId: "conversation-1", effect: "Allow", priority: 10, validFrom: new Date(8000), expiresAt: null, revokedAt: null }]) },
 		} as never,

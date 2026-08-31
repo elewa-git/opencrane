@@ -2,13 +2,12 @@ import type { Server } from "node:http";
 
 import type { Express } from "express";
 
-import type { RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { SelfConversationSocketServer } from "@opencrane/backend/server/conversations";
+import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 import { ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
 import { _log } from "../app/log";
 import { _BeginProcessShutdown } from "../app/process-shutdown";
-import { _StartRuntimeRepair } from "../app/runtime-repair";
 
 /** Prisma client shape returned by the app-owned database composition. */
 type DevelopmentPrismaClient = ReturnType<typeof import("../infra/db/db").___CreatePrismaClient>;
@@ -37,12 +36,12 @@ function _CloseServer(server: Server): Promise<void>
  * @param internalApp - Agent protocol composition, or null for core.
  * @param conversationSockets - Live conversation socket server attached to the public listener.
  * @param prisma - Database client disconnected during shutdown.
- * @param runtimeRepairRepository - Repository used by the development runtime repair loop.
+ * @param workflowRuntime - Durable task engine closed before the shared database client.
  * @param publicPort - Loopback port for UI HTTP and WebSocket traffic.
  * @param internalPort - Loopback port for Agent controller and runtime traffic.
  * @param unbindConsole - Restores console bindings after telemetry shutdown.
  */
-export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Express | null, conversationSockets: SelfConversationSocketServer, prisma: DevelopmentPrismaClient, runtimeRepairRepository: RunCancellationRepository, publicPort: number, internalPort: number, unbindConsole: () => void): void
+export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Express | null, conversationSockets: SelfConversationSocketServer, prisma: DevelopmentPrismaClient, workflowRuntime: IWorkflowWorkerRuntime, publicPort: number, internalPort: number, unbindConsole: () => void): void
 {
 	const publicServer = publicApp.listen(publicPort, "127.0.0.1", function _Listening(): void
 	{
@@ -53,7 +52,6 @@ export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Expr
 	{
 		_log.info({ port: internalPort }, "Tier 2 OpenCrane Agent API listening on loopback");
 	}) ?? null;
-	const runtimeRepair = _StartRuntimeRepair(runtimeRepairRepository, true);
 	let shutdownStarted = false;
 
 	async function _Shutdown(signal: string): Promise<void>
@@ -75,7 +73,6 @@ export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Expr
 		{
 			// 1. Fence long-lived request work before the listener and durable store are drained.
 			_BeginProcessShutdown();
-			runtimeRepair.stop();
 			conversationSockets.close();
 			await _CloseServer(publicServer);
 
@@ -84,7 +81,8 @@ export function _StartDevelopmentLifecycle(publicApp: Express, internalApp: Expr
 				await _CloseServer(internalServer);
 			}
 
-			// 2. Release the local database pool before telemetry flushes its final spans.
+			// 2. Release the workflow pool before the product database and final telemetry spans.
+			await workflowRuntime.close();
 			await prisma.$disconnect();
 			await ___ShutdownTelemetry();
 		}

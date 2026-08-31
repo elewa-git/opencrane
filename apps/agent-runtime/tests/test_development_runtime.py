@@ -50,10 +50,10 @@ class DevelopmentRuntimeCompositionTests(unittest.TestCase):
         open_stream_mock.return_value = 0
 
         with mock.patch.dict(os.environ, {"OPENCRANE_RUNTIME_MODEL_STRATEGY": "litellm"}, clear=False):
-            result = development_open_stream("http://server", "runtime-token", "instance", "pod")
+            result = development_open_stream("http://server", "runtime-token", "instance", "pod", attempt_model_key="attempt-key")
 
         self.assertEqual(result, 0)
-        open_stream_mock.assert_called_once_with("http://server", "runtime-token", "instance", "pod")
+        open_stream_mock.assert_called_once_with("http://server", "runtime-token", "instance", "pod", attempt_model_key="attempt-key")
 
     @mock.patch("src.development_runtime.open_stream")
     def test_simulated_strategy_injects_handlers_without_provider_access(self, open_stream_mock: mock.Mock) -> None:
@@ -61,11 +61,12 @@ class DevelopmentRuntimeCompositionTests(unittest.TestCase):
         open_stream_mock.return_value = 0
 
         with mock.patch.dict(os.environ, {"OPENCRANE_RUNTIME_MODEL_STRATEGY": "simulated"}, clear=False):
-            result = development_open_stream("http://server", "runtime-token", "instance", "pod")
+            result = development_open_stream("http://server", "runtime-token", "instance", "pod", attempt_model_key="attempt-key")
 
         self.assertEqual(result, 0)
         call = open_stream_mock.call_args
         self.assertEqual(call.args, ("http://server", "runtime-token", "instance", "pod"))
+        self.assertEqual(call.kwargs["attempt_model_key"], "attempt-key")
         self.assertEqual(call.kwargs["handle_start"].__name__, "_simulated_start")
         self.assertEqual(call.kwargs["handle_resume"].__name__, "_simulated_resume")
 

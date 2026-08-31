@@ -74,7 +74,7 @@ export function inspectPrismaBoundary(path, source, modelDelegates, owners, exem
 	return findings;
 }
 
-/** Returns whether the raw call is the sole fixed, typed durable-admission procedure. */
+/** Returns whether the raw call is one fixed, typed workflow persistence procedure. */
 function _IsApprovedRawProcedureCall(path, source, classOwners, imports, match, rawProcedureCalls)
 {
 	const owner = enclosingClass(classOwners, match.index ?? 0);
@@ -125,7 +125,7 @@ export function validateOwnerDeclarations(path, source, owners)
 	return findings;
 }
 
-/** Validates that the sole policy-owned raw procedure still has its exact contract and SQL. */
+/** Validates that each policy-owned raw procedure still has its exact contract and SQL. */
 export function validateRawProcedureDeclarations(path, source, rawProcedureCalls)
 {
 	const findings = [];
@@ -136,7 +136,7 @@ export function validateRawProcedureDeclarations(path, source, rawProcedureCalls
 		const owner = classOwners.find(function _Adapter(candidate) { return candidate.name === declaration.adapter; });
 		if (authorizedOwner(owner, imports, [declaration], path) === undefined)
 		{
-			findings.push(_Finding(path, source, 0, "PRISMA-POLICY-RAW-PROCEDURE", `raw task-admission owner ${declaration.adapter} no longer implements its exact declared contract import`, `class:${declaration.adapter}`));
+			findings.push(_Finding(path, source, 0, "PRISMA-POLICY-RAW-PROCEDURE", `raw workflow owner ${declaration.adapter} no longer implements its exact declared contract import`, `class:${declaration.adapter}`));
 			continue;
 		}
 		const approved = rawPrismaMethodMatches(source).filter(function _Approved(match)
@@ -145,7 +145,7 @@ export function validateRawProcedureDeclarations(path, source, rawProcedureCalls
 		});
 		if (approved.length !== 1)
 		{
-			findings.push(_Finding(path, source, owner.start, "PRISMA-POLICY-RAW-PROCEDURE", `raw task-admission owner ${declaration.adapter} must contain exactly one fixed ${declaration.method} call`, `class:${declaration.adapter}`));
+			findings.push(_Finding(path, source, owner.start, "PRISMA-POLICY-RAW-PROCEDURE", `raw workflow owner ${declaration.adapter} must contain exactly one fixed ${declaration.method} call`, `class:${declaration.adapter}`));
 		}
 	}
 	return findings;

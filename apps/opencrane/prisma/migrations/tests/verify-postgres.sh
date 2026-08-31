@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-MIGRATION_ROOT="$ROOT/apps/opencrane/prisma/migrations/0.9.0-to-0.9.3"
+MIGRATION_ROOT="$ROOT/apps/opencrane/prisma/migrations/0.9.0-to-0.10.0-prerequisite"
 MANIFEST="$MIGRATION_ROOT/manifest.json"
 SQL="$MIGRATION_ROOT/migration.sql"
 
@@ -15,4 +15,4 @@ if rg -n 'admitted 0\.9\.0 baseline lineage|exact 0\.9\.0 source shape|protected
   exit 1
 fi
 
-echo "0.9.0-to-0.9.3 direct PostgreSQL migration contract: PASS"
+echo "0.9.0-to-0.10.0 prerequisite PostgreSQL migration contract: PASS"

@@ -10,6 +10,7 @@ from pydantic_ai.models.openai import OpenAIResponsesModel, _map_image_generatio
 from pydantic_ai.native_tools import CodeExecutionTool, ImageGenerationTool
 
 from src.attempts.execution import execute_start_attempt
+from src.constants import PROTOCOL_VERSION
 from src.model_loop.driver import build_zero_retry_agent
 from src.model_loop.openai_generated_outputs import OpenAIGeneratedOutputCollector
 from src.transport.output import publish_output_asset
@@ -75,7 +76,10 @@ class PinnedGeneratedOutputQualificationTests(unittest.TestCase):
 
         command = {
             "kind": "start_attempt",
+            "protocolVersion": PROTOCOL_VERSION,
+            "runtimeInstanceId": "runtime-pinned",
             "commandId": "command-pinned",
+            "sequence": 1,
             "fence": 1,
             "assignment": {"runId": "run-pinned", "attempt": 1},
             "payload": {

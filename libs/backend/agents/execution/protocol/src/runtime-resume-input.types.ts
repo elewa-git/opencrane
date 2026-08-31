@@ -1,10 +1,13 @@
 import type { ResumeAttemptCommand } from "@opencrane/contracts";
 
+/** Resume fields stored before the encrypted continuation is loaded for delivery. */
+export type StoredRuntimeResumeInput = Omit<ResumeAttemptCommand, "continuation">;
+
 /** The resume command body, plus the ids of the rows to mark consumed once that command is saved. */
 export interface RuntimeResumeInputLoad
 {
 	/** The resume body built from finished tool results and queued steering. */
-	readonly resume: ResumeAttemptCommand;
+	readonly resume: StoredRuntimeResumeInput;
 	/** Result-delivery rows to mark consumed, but only after this body is saved. */
 	readonly toolResultDeliveryIds: string[];
 	/** Elicitation-result rows consumed only after this exact body is persisted. */

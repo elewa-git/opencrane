@@ -12,32 +12,43 @@ const DEVELOP_SMOKE_IMAGES = [
  *
  * A project is publishable only when its app-owned target declares both the image repository suffix
  * and Dockerfile. This keeps the workflow selector independent from an incomplete root registry.
+ * An optional Docker target is preserved because a shared multi-stage Dockerfile may publish a
+ * different app from its default stage.
  */
 function _ReleaseDescriptor(project)
 {
 	const release = project.targets?.container?.metadata?.release;
-	if (typeof project.name !== "string" || project.name.length === 0 || typeof release?.image !== "string" || release.image.length === 0 || typeof release.dockerfile !== "string" || release.dockerfile.length === 0)
+	if (typeof project.name !== "string" || project.name.length === 0 || typeof release?.image !== "string" || release.image.length === 0 || typeof release.dockerfile !== "string" || release.dockerfile.length === 0 || (release.target !== undefined && (typeof release.target !== "string" || release.target.length === 0)))
 	{
-		throw new Error(`Affected container project '${project.name ?? "<unnamed>"}' must declare targets.container.metadata.release.image and dockerfile.`);
+		throw new Error(`Affected container project '${project.name ?? "<unnamed>"}' must declare targets.container.metadata.release.image and dockerfile, plus a non-empty target when provided.`);
 	}
 
 	return {
 		project: project.name,
 		image: release.image,
 		dockerfile: release.dockerfile,
+		...(release.target === undefined ? {} : { target: release.target }),
 	};
 }
 
 /**
- * Resolves the intentionally narrow manual publication set.
+ * Resolves a manual publication set.
  *
  * `null` delegates to the normal affected-project calculation (push and pull-request validation),
- * while `none` produces no matrix entry so workflow dispatch is validation-only by default.
+ * while `none` produces no matrix entry so workflow dispatch is validation-only by default. An
+ * explicit `all` selection publishes every app-owned container for one exact release candidate.
+ *
+ * Called by: `scripts/affected-deployables.mjs` when it builds the GitHub Actions matrix.
+ * @param {string | undefined} force Manual publication selector from `FORCE_DEPLOYABLES`.
+ * @param {string[]} allProjects Every app-owned container project, supplied for `all`.
+ * @returns {string[] | null} Sorted selected projects, or `null` to use affected projects.
+ * @throws {Error} When the selector is not supported.
  */
-export function selectForcedContainerProjects(force)
+export function selectForcedContainerProjects(force, allProjects = [])
 {
 	if (!force) return null;
 	if (force === "none") return [];
+	if (force === "all") return [...new Set(allProjects)].sort(function _ByName(left, right) { return left.localeCompare(right); });
 	if (force === "bootstrap") return ["channel-proxy", "memory-gateway"];
 	if (force === "artifact") return ["artifact-service"];
 	if (force === "qualification") return [...DEVELOP_SMOKE_IMAGES, "postgres"];
@@ -46,7 +57,16 @@ export function selectForcedContainerProjects(force)
 	throw new Error(`unsupported FORCE_DEPLOYABLES value: ${force}`);
 }
 
-/** Selects deterministic publish entries from affected app-owned container targets. */
+/**
+ * Selects sorted publication entries from app-owned container metadata.
+ *
+ * Optional Docker targets remain attached so the workflow publishes the selected stage rather than
+ * the Dockerfile's default stage.
+ *
+ * @param {object[]} containerProjects Container projects selected for publication.
+ * @returns {{ project: string, image: string, dockerfile: string, target?: string }[]} GitHub Actions matrix entries.
+ * @throws {Error} When a project lacks required release metadata or declares an empty target.
+ */
 export function selectAffectedDeployables(containerProjects)
 {
 	return [...containerProjects]

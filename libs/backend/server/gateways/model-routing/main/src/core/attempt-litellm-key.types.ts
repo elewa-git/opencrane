@@ -23,6 +23,15 @@ export interface AttemptLiteLlmKeyRequest
   expirySeconds: number;
 }
 
+/** Requests revocation of one newly minted, unused LiteLLM virtual key. */
+export interface AttemptLiteLlmKeyRevocation
+{
+	/** Names the task-scoped key without exposing its raw credential in traces or logs. */
+	keyAlias: string;
+	/** Carries the raw unused virtual key only to LiteLLM's revocation request. */
+	key: string;
+}
+
 /**
  * A freshly minted attempt key, plus the bindings it was issued under.
  *

@@ -2,7 +2,7 @@ import { type Prisma, type PrismaClient } from "@prisma/client";
 
 import { __AppendCompiledTool } from "@opencrane/backend/agents/execution/inputs";
 import { PrismaRuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
-import { PrismaRuntimeEventReporter } from "@opencrane/backend/agents/execution/runs";
+import { PrismaRuntimeEventReporter, PrismaToolInvocationRunRecoveryAuthority } from "@opencrane/backend/agents/execution/runs";
 import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "@opencrane/backend/agents/personal/configuration";
 import { __ExpireDeferredToolApprovalBatch } from "@opencrane/backend/server/iam/authorization";
 import { RunInputSnapshotIdentityKinds, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
@@ -10,8 +10,9 @@ import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION 
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __CreatePrismaRunInputCompiler } from "./prisma-run-input-compiler";
-import { PrismaRuntimeDispatchAuthority } from "./prisma-runtime-dispatch-authority";
+import { PrismaRuntimeDispatchAuthorityUnitOfWork } from "./prisma-runtime-dispatch-authority";
 import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchAuthorityConfig, RuntimeElicitationUnitOfWorkFactory } from "./prisma-runtime-dispatch-authority.types";
+import type { RuntimeContinuationAuthority } from "./runtime-continuation.types";
 
 /** Reviewed arguments for one model-proposed personal-memory recall. */
 const _PERSONAL_MEMORY_RECALL_PARAMETERS_SCHEMA = {
@@ -75,7 +76,7 @@ function _CreateProductionRuntimeElicitationUnitOfWorkFactory(): RuntimeElicitat
  * @param config - Deployment-fixed namespaces, command lifetime, and retry bounds.
  * @returns One production dispatch authority ready for the runtime stream transport.
  */
-export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig): PrismaRuntimeDispatchAuthority
+export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, continuationAuthority: RuntimeContinuationAuthority): PrismaRuntimeDispatchAuthorityUnitOfWork
 {
-	return new PrismaRuntimeDispatchAuthority(prisma, config, __CreateProductionRunInputCompiler(), new PrismaRuntimeEventReporter(), undefined, _CreateProductionApprovalExpiry(), _CreateProductionRuntimeElicitationUnitOfWorkFactory());
+	return new PrismaRuntimeDispatchAuthorityUnitOfWork(prisma, config, __CreateProductionRunInputCompiler(), new PrismaRuntimeEventReporter(), undefined, _CreateProductionApprovalExpiry(), _CreateProductionRuntimeElicitationUnitOfWorkFactory(), continuationAuthority, new PrismaToolInvocationRunRecoveryAuthority());
 }

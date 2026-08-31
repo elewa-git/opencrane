@@ -291,7 +291,7 @@ result cannot reconstruct a contributor's personal facts.
  OpenCrane catalogue + outbox commit
 ```
 
-The dream Job should be as disposable as an agent-runtime Job. It receives an immutable manifest,
+The dream Job should be as disposable as a claimed agent-runtime Pod. It receives an immutable manifest,
 bounded source material, a model route, token/cost limits and a deadline. It receives no database
 credential and cannot call Cognee directly. Completion, failure and cancellation remain
 server-owned outcomes.

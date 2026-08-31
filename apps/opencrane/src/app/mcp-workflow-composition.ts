@@ -3,12 +3,16 @@ import { readFile } from "node:fs/promises";
 import type { PrismaClient } from "@prisma/client";
 
 import { _CreateArtifactCatalogueRepository } from "@opencrane/backend/server/agents/artifacts";
-import { __CreateOciImageLayoutImporter, __CreateOciImageLayoutVerifier, __CreateOciImageValidationWorkflow, __CreateMcpEraProbeWorkflow, MCP_ERA_PROTOCOL_VERSION, McpEraProbeFailure, McpEraProbeFailureCodes, McpEraProbeTaskNames, OciImageValidationTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
+import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import { AgentRunTaskDeclaration } from "@opencrane/backend/agents/execution/runs/workflows/contract";
+import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
+import { __CreateOciImageLayoutImporter, __CreateOciImageLayoutVerifier, __CreateOciImageValidationWorkflow, __CreateMcpEraProbeWorkflow, MCP_ERA_PROTOCOL_VERSION, McpEraProbeFailure, McpEraProbeFailureCodes, McpEraProbeTaskNames, McpTaskTaskNames, OciImageValidationTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
 import type { McpEraProbeClient, OciImageLayoutArtifactResolver } from "@opencrane/backend/server/gateways/mcp";
 import { __CreateHttpsMcpEraProbeClient, McpEraProbeConfigurationError, McpEraProbeProtocolError, McpEraProbeTransportError } from "@opencrane/backend/server/infra/mcp-era-probe";
 import { __CreateOciRegistryClient } from "@opencrane/backend/server/infra/oci-registry";
 import { _CreateAbsurdWorkflowEngine } from "@opencrane/backend/server/infra/workflows/infra_absurd";
 import { __CreateWorkflowGuard, __CreateWorkflowTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/guard";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _CreatePublishedArtifactReader } from "../infra/artifacts/artifact-upload.factory";
 import type { OpenCraneWorkflowConfig } from "./config.types";
@@ -33,18 +37,66 @@ export function _McpEraProbeFailure(error: unknown): McpEraProbeFailure
 }
 
 /**
- * Composes one saved-work engine for remote MCP checks and OCI image admission.
- * Both jobs use the product's database transaction boundary, while the registry adapter receives
- * credentials from its mounted file for each external request.
+ * Declares the remote skill task before an application transaction may save its receipt.
+ *
+ * Declaration permits transaction-bound admission but installs no server handler. Called by:
+ * {@link _CreateMcpWorkflowComposition}; a later product adapter supplies the validation schema,
+ * repository, and route that invoke admission.
+ *
+ * @param execution - Supplies the guarded engine that owns declared task names.
+ */
+export function __DeclareSkillAuthoringValidation(execution: Pick<IWorkflowEngine, "declare">): void
+{
+	execution.declare(SkillAuthoringValidationTaskDeclaration);
+}
+
+/**
+ * Declares the remote PDF conversion task before a publication transaction may save it.
+ *
+ * The declaration makes the task name available before a publication transaction saves its
+ * receipt. The server installs no handler; the controller owns the remote handler that creates
+ * and releases the isolated Job.
+ *
+ * Called by: `_CreateMcpWorkflowComposition`.
+ * @param execution - Supplies the guarded engine that owns declared task names.
+ * @returns Nothing after registering the shared task declaration.
+ * @see ArtifactPreprocessTaskDeclaration — fixes the task name and retry policy shared with the controller.
+ */
+export function __DeclareArtifactPreprocessTask(execution: Pick<IWorkflowEngine, "declare">): void
+{
+	execution.declare(ArtifactPreprocessTaskDeclaration);
+}
+
+/** Declares the remote AgentRun task before a run admission may save its receipt. */
+export function __DeclareAgentRunTask(execution: Pick<IWorkflowEngine, "declare">): void
+{
+	execution.declare(AgentRunTaskDeclaration);
+}
+
+/**
+ * Create the guarded Absurd engine shared by remote MCP, OCI admission, skill validation, and artifact preprocessing.
+ *
+ * The server declares remote controller tasks without adding local handlers. Artifact publication
+ * transactions save PDF-task receipts here, while the controller remains responsible for running
+ * the Kubernetes-mutating definitions.
+ *
+ * @see SkillAuthoringValidationTaskDeclaration — defines the declaration the controller shares.
  */
 export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: OpenCraneWorkflowConfig): McpWorkflowComposition
 {
 	const queueAuthority = __CreateWorkflowTaskQueueAuthority([
 		{ taskName: McpEraProbeTaskNames.Probe, queue: "control-plane" },
 		{ taskName: OciImageValidationTaskNames.Import, queue: "control-plane" },
+		{ taskName: McpTaskTaskNames.Call, queue: "control-plane" },
+		{ taskName: SkillAuthoringValidationTaskDeclaration.taskName, queue: "skill-authoring" },
+		{ taskName: ArtifactPreprocessTaskDeclaration.taskName, queue: "artifact-preprocessing" },
+		{ taskName: AgentRunTaskDeclaration.taskName, queue: "agent-runs" },
 	]);
 	const runtime = _CreateAbsurdWorkflowEngine({ databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
+	__DeclareSkillAuthoringValidation(execution);
+	__DeclareArtifactPreprocessTask(execution);
+	__DeclareAgentRunTask(execution);
 	const transport = __CreateHttpsMcpEraProbeClient({ protocolVersion: MCP_ERA_PROTOCOL_VERSION, maximumResponseBytes: config.mcpEraProbeMaximumResponseBytes, requestTimeoutMilliseconds: config.mcpEraProbeTimeoutMilliseconds });
 	const probe: McpEraProbeClient = {
 		async probe(request)
@@ -71,5 +123,5 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 			return await artifactCatalogue.loadPublishedReadTarget({ siloId, artifactId, artifactRevisionId });
 		},
 	};
-	return { runtime, unitOfWork, eraProbeWorkflow, ociImageValidationWorkflow, ociImageArtifacts };
+	return { execution, runtime, unitOfWork, eraProbeWorkflow, ociImageValidationWorkflow, ociImageArtifacts };
 }

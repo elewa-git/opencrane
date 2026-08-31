@@ -1,5 +1,5 @@
 {{- if and .Values.multiCt.enabled (not .Values.networkPolicy.mainNetworkDefaultDeny.enabled) }}
-{{- fail "multiCt.enabled=true requires networkPolicy.mainNetworkDefaultDeny.enabled=true: the platform-namespace default-deny (OpenCrane, channel-proxy, LiteLLM, Cognee, and Obot) is mandatory under a multi-ClusterTenant install — a shared platform namespace serving many ClusterTenants must never stay open by default. Set networkPolicy.mainNetworkDefaultDeny.enabled=true (after validating plane-to-plane connectivity per the values.yaml note), or drop the --multi-ct profile for a single-tenant box." }}
+{{- fail "multiCt.enabled=true requires networkPolicy.mainNetworkDefaultDeny.enabled=true: the platform-namespace default-deny (OpenCrane, channel-proxy, LiteLLM, and Cognee) is mandatory under a multi-ClusterTenant install — a shared platform namespace serving many ClusterTenants must never stay open by default. Set networkPolicy.mainNetworkDefaultDeny.enabled=true (after validating plane-to-plane connectivity per the values.yaml note), or drop the --multi-ct profile for a single-tenant box." }}
 {{- end }}
 {{- if and .Values.networkPolicy.enabled (or .Values.networkPolicy.mainNetworkDefaultDeny.enabled .Values.multiCt.enabled) }}
 {{- /*
@@ -8,7 +8,7 @@
 
   CONTEXT: the operator emits a per-silo default-deny into each ClusterTenant's own namespace
   at runtime (_BuildSiloBaselineNetworkPolicy). This template is the missing counterpart for
-  the PLATFORM namespace itself — where OpenCrane, channel-proxy, LiteLLM, Cognee, and Obot
+  the PLATFORM namespace itself — where OpenCrane, channel-proxy, LiteLLM, and Cognee
   run — which had no default-deny before this change.
 
   RELATION TO OTHER POLICIES: networkpolicy-planes.yaml + the app-owned OpenCrane ingress template
@@ -68,10 +68,6 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: mcp-gateway
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
               app.kubernetes.io/component: channel-proxy
         - podSelector:
             matchLabels:
@@ -115,10 +111,6 @@ spec:
             matchLabels:
               {{- include "opencrane.selectorLabels" . | nindent 14 }}
               app.kubernetes.io/component: cognee
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: mcp-gateway
         - podSelector:
             matchLabels:
               {{- include "opencrane.selectorLabels" . | nindent 14 }}

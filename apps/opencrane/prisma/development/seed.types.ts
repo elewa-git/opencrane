@@ -33,11 +33,17 @@ interface LocalDevelopmentSeedAssertionDelegate
 /** Groups the transaction-scoped delegates that own each local identity and model seed write. */
 interface LocalDevelopmentSeedTransaction
 {
+	/** Reconciles the fixed browser principal selected by the Tier 2 entrypoint. */
 	readonly principal: LocalDevelopmentSeedUpsertDelegate;
+	/** Reconciles the owner's active membership in the disposable local silo. */
 	readonly orgMembership: LocalDevelopmentSeedUpsertDelegate;
+	/** Reads and appends signed membership revisions without updating earlier evidence. */
 	readonly verifiedFleetMembershipRevision: LocalDevelopmentSeedRevisionDelegate;
+	/** Appends the personal assertion attached to the new membership revision. */
 	readonly verifiedFleetMembershipAssertion: LocalDevelopmentSeedAssertionDelegate;
+	/** Reconciles the public model alias used by personal-agent onboarding. */
 	readonly modelDefinition: LocalDevelopmentSeedUpsertDelegate;
+	/** Reconciles the global route that selects the onboarding model alias. */
 	readonly modelRoutingDefault: LocalDevelopmentSeedUpsertDelegate;
 }
 

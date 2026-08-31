@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { V1Container, V1Job, V1ResourceRequirements, V1Volume } from "@kubernetes/client-node";
 
-import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
+import { RuntimeWorkloadClaimClasses, __IsImmutableRegistryReference } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 
 import type { McpExecutorJobAssignment, McpExecutorJobProfile } from "./mcp-executor-job.types";
@@ -23,12 +23,6 @@ const _MAX_CPU_MILLICORES = 4_000;
 function _IsCoordinate(value: string): boolean
 {
 	return value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
-}
-
-/** Accepts only immutable registry references addressed by a SHA-256 manifest digest. */
-function _IsDigestImage(value: string): boolean
-{
-	return /^[a-z0-9][a-z0-9._:-]*(?:\/[a-z0-9][a-z0-9._/-]*)+@sha256:[a-f0-9]{64}$/.test(value);
 }
 
 /** Accepts a binary Kubernetes size and returns its byte count. */
@@ -88,7 +82,7 @@ function _AssertProfile(profile: McpExecutorJobProfile): void
 {
 	const scratchBytes = _BinaryBytes(profile.scratchSize);
 	const namespacePattern = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
-	if (!_IsDigestImage(profile.companionImage) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== MCP_EXECUTOR_SERVICE_ACCOUNT_NAME || profile.namespace === profile.serverNamespace || profile.namespace.length > 63 || !namespacePattern.test(profile.namespace) || !namespacePattern.test(profile.serverNamespace) || !_IsInternalUrl(profile.opencraneInternalUrl, profile.serverNamespace) || !Number.isSafeInteger(profile.projectedTokenTtlSeconds) || profile.projectedTokenTtlSeconds < 600 || profile.projectedTokenTtlSeconds > 3_600 || scratchBytes === null || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_DEADLINE_SECONDS || !_HasBoundedResources(profile.serverResources) || !_HasBoundedResources(profile.companionResources))
+	if (!__IsImmutableRegistryReference(profile.companionImage) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== MCP_EXECUTOR_SERVICE_ACCOUNT_NAME || profile.namespace === profile.serverNamespace || profile.namespace.length > 63 || !namespacePattern.test(profile.namespace) || !namespacePattern.test(profile.serverNamespace) || !_IsInternalUrl(profile.opencraneInternalUrl, profile.serverNamespace) || !Number.isSafeInteger(profile.projectedTokenTtlSeconds) || profile.projectedTokenTtlSeconds < 600 || profile.projectedTokenTtlSeconds > 3_600 || scratchBytes === null || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_DEADLINE_SECONDS || !_HasBoundedResources(profile.serverResources) || !_HasBoundedResources(profile.companionResources))
 	{
 		throw new Error("MCP executor profile requires a fixed identity and endpoint, immutable companion image, isolated namespace, bounded resources, scratch, token, and lifetime");
 	}
@@ -100,7 +94,7 @@ function _AssertAssignment(assignment: McpExecutorJobAssignment, profile: McpExe
 	const claim = assignment.claim;
 	const claimedAt = Date.parse(claim.claimedAt);
 	const expiresAt = Date.parse(claim.expiresAt);
-	if (Number.isNaN(now.getTime()) || claim.workloadClass !== RuntimeWorkloadClaimClasses.McpExecutor || assignment.namespace !== profile.namespace || claim.profileName.length === 0 || claim.deliveryCount < 1 || !Number.isSafeInteger(claim.deliveryCount) || !Number.isFinite(claimedAt) || !Number.isFinite(expiresAt) || claimedAt >= expiresAt || now.getTime() >= expiresAt || ![claim.claimId, claim.siloId, claim.profileName, claim.idempotencyKey, claim.executionReference].every(_IsCoordinate) || !_IsDigestImage(assignment.registryReference))
+	if (Number.isNaN(now.getTime()) || claim.workloadClass !== RuntimeWorkloadClaimClasses.McpExecutor || assignment.namespace !== profile.namespace || claim.profileName.length === 0 || claim.deliveryCount < 1 || !Number.isSafeInteger(claim.deliveryCount) || !Number.isFinite(claimedAt) || !Number.isFinite(expiresAt) || claimedAt >= expiresAt || now.getTime() >= expiresAt || ![claim.claimId, claim.siloId, claim.profileName, claim.idempotencyKey, claim.executionReference].every(_IsCoordinate) || !__IsImmutableRegistryReference(assignment.registryReference))
 	{
 		throw new Error("MCP executor assignment requires a current MCP claim, immutable imported image, bounded coordinates, and the deployment-owned namespace");
 	}
@@ -110,14 +104,14 @@ function _AssertAssignment(assignment: McpExecutorJobAssignment, profile: McpExe
 function _McpExecutorJobName(assignment: McpExecutorJobAssignment): string
 {
 	const claim = assignment.claim;
-	const digest = createHash("sha256").update(`${claim.siloId}\u0000${claim.claimId}\u0000${claim.deliveryCount}`).digest("hex").slice(0, 24);
+	const digest = createHash("sha256").update(`${claim.siloId}\u0000${claim.claimId}`).digest("hex").slice(0, 24);
 	return `mcp-exec-${digest}`;
 }
 
 /** Builds metadata that the controller can compare without placing the imported image in annotations. */
 function _Annotations(assignment: McpExecutorJobAssignment): Record<string, string>
 {
-	return { "opencrane.ai/mcp-claim-id": assignment.claim.claimId, "opencrane.ai/silo-id": assignment.claim.siloId, "opencrane.ai/mcp-delivery-count": String(assignment.claim.deliveryCount), "opencrane.ai/mcp-profile": assignment.claim.profileName, "opencrane.ai/mcp-execution-reference": assignment.claim.executionReference };
+	return { "opencrane.ai/mcp-claim-id": assignment.claim.claimId, "opencrane.ai/silo-id": assignment.claim.siloId, "opencrane.ai/mcp-profile": assignment.claim.profileName, "opencrane.ai/mcp-execution-reference": assignment.claim.executionReference };
 }
 
 /** Builds the uploaded MCP server as a restartable init container without authority mounts. */
@@ -143,7 +137,8 @@ function _Volumes(profile: McpExecutorJobProfile): V1Volume[]
  *
  * The uploaded server runs as a restartable init container, so the companion controls the Job's
  * lifetime. Only the companion receives the projected token and claim reference. The controller
- * must record this Job's UID before release, and Kubernetes deletes it after completion.
+ * must record this Job's UID before release. The controller deletes that UID after the database
+ * records a terminal execution.
  *
  * @param assignment - Database claim, imported image digest, and selected namespace.
  * @param profile - Fixed companion, identity, endpoint, and limits from deployment configuration.
@@ -162,6 +157,6 @@ export function __BuildSuspendedMcpExecutorJob(assignment: McpExecutorJobAssignm
 	const labels = { "app.kubernetes.io/name": "opencrane-mcp-executor", "app.kubernetes.io/component": "mcp-executor", "opencrane.ai/mcp-workload": name };
 	const annotations = _Annotations(assignment);
 
-	// 3. Keep the Job suspended until the controller records its UID, with no retries or retained files.
-	return { apiVersion: "batch/v1", kind: "Job", metadata: { name, namespace: assignment.namespace, labels, annotations }, spec: { suspend: true, backoffLimit: 0, completions: 1, parallelism: 1, activeDeadlineSeconds: profile.activeDeadlineSeconds, ttlSecondsAfterFinished: 0, template: { metadata: { labels: { ...labels }, annotations: { ...annotations } }, spec: { serviceAccountName: profile.serviceAccountName, automountServiceAccountToken: false, enableServiceLinks: false, restartPolicy: "Never", terminationGracePeriodSeconds: 0, securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: "RuntimeDefault" } }, initContainers: [_ServerContainer(assignment, profile)], containers: [_CompanionContainer(profile)], volumes: _Volumes(profile) } } } };
+	// 3. Keep the Job suspended until the controller records its UID, with no Kubernetes retries.
+	return { apiVersion: "batch/v1", kind: "Job", metadata: { name, namespace: assignment.namespace, labels, annotations }, spec: { suspend: true, backoffLimit: 0, completions: 1, parallelism: 1, activeDeadlineSeconds: profile.activeDeadlineSeconds, template: { metadata: { labels: { ...labels }, annotations: { ...annotations } }, spec: { serviceAccountName: profile.serviceAccountName, automountServiceAccountToken: false, enableServiceLinks: false, restartPolicy: "Never", terminationGracePeriodSeconds: 0, securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: "RuntimeDefault" } }, initContainers: [_ServerContainer(assignment, profile)], containers: [_CompanionContainer(profile)], volumes: _Volumes(profile) } } } };
 }

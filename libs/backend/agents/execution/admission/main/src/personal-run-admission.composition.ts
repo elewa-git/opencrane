@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 
 import type { PrismaClient } from "@prisma/client";
 
-import { __AssembleRunInputSnapshot, __CreatePrismaPersonalSessionAssemblyAuthorities, PersonalExecutionIdentityEnvelopeSource, PrismaSkillRevisionEligibilitySource } from "@opencrane/backend/agents/execution/inputs";
+import { __AssembleRunInputSnapshot, __CreatePrismaPersonalSessionAssemblyAuthorities, PersonalExecutionIdentityEnvelopeSource } from "@opencrane/backend/agents/execution/inputs";
 import { ___CreateLogger } from "@opencrane/backend/observability";
 import { PrismaRunAdmissionRepository } from "@opencrane/backend/agents/execution/runs";
 import type { FleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { __CreatePersonalRunAdmissionPortWithGate } from "./personal-run-admission";
 import { PrismaPersonalRunAdmissionUnitOfWork } from "./prisma-personal-run-admission-unit-of-work";
@@ -25,6 +26,7 @@ import type { RunAdmissionCapacityGate } from "./managed-run-admission.types";
  * (libs/backend/server/conversations/main/src/db/prisma-conversation-message-admission-unit-of-work.ts).
  *
  * @param prisma - The product database client.
+ * @param workflow - Guarded workflow engine that saves the AgentRun task in the admission transaction.
  * @param capacityGate - The shared capacity gate. Pass the same instance
  * {@link __CreateManagedRunAdmissionPort} was given, or the process admits at double its ceiling.
  * @param identityEvidence - Trusted issuer, verifier, and staleness bound for signed fleet
@@ -35,17 +37,17 @@ import type { RunAdmissionCapacityGate } from "./managed-run-admission.types";
  * @throws When `identityEvidence` is incomplete — surfaced from the
  * {@link PersonalExecutionIdentityEnvelopeSource} constructor at startup, not per request.
  */
-export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, capacityGate: RunAdmissionCapacityGate, identityEvidence: FleetMembershipEvidenceConfig): PersonalRunAdmissionPort
+export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">, capacityGate: RunAdmissionCapacityGate, identityEvidence: FleetMembershipEvidenceConfig): PersonalRunAdmissionPort
 {
-	// 1. The repository that owns the admission transaction and writes the AgentRun row with its input
-	// snapshot. It also takes the advisory lock on silo plus idempotency key, which is what makes two
-	// racing calls with the same key resolve to one run instead of two.
-	const admission = new PrismaRunAdmissionRepository(prisma);
+	// 1. The repository writes the AgentRun, its input snapshot, and its workflow
+	// task in one database transaction. Serializable isolation and the unique idempotency key make two
+	// racing calls resolve to one run instead of two.
+	const admission = new PrismaRunAdmissionRepository(prisma, workflow);
 
 	// 2. The input sources session assembly reads inside that transaction. Identity and skill
 	// eligibility are passed in because signed membership and grant policy are owned elsewhere; the
 	// factory fills in the rest, including the personal-memory readers a managed run does not get.
-	const authorities = __CreatePrismaPersonalSessionAssemblyAuthorities(admission, new PersonalExecutionIdentityEnvelopeSource(identityEvidence), new PrismaSkillRevisionEligibilitySource());
+	const authorities = __CreatePrismaPersonalSessionAssemblyAuthorities(admission, new PersonalExecutionIdentityEnvelopeSource(identityEvidence));
 
 	// 3. The preflight reads run before the assembly transaction exists, so they need a repository
 	// that opens its own short transaction per call. That is what the Unit of Work adds over

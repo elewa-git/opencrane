@@ -23,8 +23,7 @@ identity for the next transport or backend authority.
 ```
 
 **In this flow:** [agent-runtime-stream](../agent-runtime-stream/README.md) ·
-[execution runs](../../../agents/execution/runs/main/README.md) ·
-[skill execution](../../../agents/skills/execution/main/README.md)
+[execution runs](../../../agents/execution/runs/main/README.md)
 
 It owns the fixed agent-controller, OCI MCP executor, artifact-preprocessor, artifact-scanner,
 memory-gateway server, and channel-proxy adapters; the skill-worker adapter whose exact coordinates
@@ -39,11 +38,11 @@ audience returns no identity. The raw token and full Kubernetes response never l
   ServiceAccount.
 - `_CreateMcpExecutorTokenReviewer` — returns an OCI MCP companion identity only when Kubernetes
   confirms its namespace, zero-RBAC ServiceAccount, audience, and bound Pod UID.
+- `_CreateSkillAuthoringValidationTokenReviewer` — binds the Python validation Job to its fixed
+  audience, namespace, ServiceAccount, and saved Pod UID.
 - `_CreateArtifactPreprocessorTokenReviewer` — binds preprocessing to its isolated worker namespace.
 - `_CreateChannelProxyTokenReviewer` — binds channel resolution to one deployment-selected audience,
   namespace, and ServiceAccount without duplicating Kubernetes TokenReview in the application root.
-- `_CreateSkillWorkloadTokenReviewer` — verifies a server-selected audience and returns the bound
-  worker coordinates for later bootstrap checks.
 - `_CreateRuntimeTokenReviewer` — separates personal and managed runtime audience, namespace, and
   ServiceAccount grammars.
 - `_ValidateRuntimeIdentityNamespaces`, `_ValidateIsolatedWorkloadNamespace` — fail startup when

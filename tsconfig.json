@@ -52,6 +52,15 @@
       "@opencrane/backend/artifacts/preprocessor": [
         "./libs/backend/artifacts/preprocessor/main/src/index.ts"
       ],
+      "@opencrane/backend/artifacts/preprocessor/controller": [
+        "./libs/backend/artifacts/preprocessor/controller/src/index.ts"
+      ],
+      "@opencrane/backend/artifacts/preprocessor/k8s-launcher": [
+        "./libs/backend/artifacts/preprocessor/k8s-launcher/src/index.ts"
+      ],
+      "@opencrane/backend/artifacts/preprocessor/workflows/contract": [
+        "./libs/backend/artifacts/preprocessor/workflows/contract/src/index.ts"
+      ],
       "@opencrane/backend/server/api-spec": [
         "./libs/backend/server/api-spec/main/src/index.ts"
       ],
@@ -78,9 +87,6 @@
       ],
       "@opencrane/backend/server/iam/identity": [
         "./libs/backend/server/iam/identity/main/src/index.ts"
-      ],
-      "@opencrane/backend/server/gateways/integrations": [
-        "./libs/backend/server/gateways/integrations/main/src/index.ts"
       ],
       "@opencrane/backend/server/iam/membership": [
         "./libs/backend/server/iam/membership/main/src/index.ts"
@@ -111,6 +117,15 @@
       ],
       "@opencrane/backend/agents/execution/runs": [
         "./libs/backend/agents/execution/runs/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/execution/runs/controller": [
+        "./libs/backend/agents/execution/runs/controller/src/index.ts"
+      ],
+      "@opencrane/backend/agents/execution/runs/workflows/contract": [
+        "./libs/backend/agents/execution/runs/workflows/contract/src/index.ts"
+      ],
+      "@opencrane/backend/agents/execution/runs/workflows": [
+        "./libs/backend/agents/execution/runs/workflows/main/src/index.ts"
       ],
       "@opencrane/backend/agents/execution/elicitation": [
         "./libs/backend/agents/execution/elicitation/main/src/index.ts"
@@ -175,6 +190,9 @@
       "@opencrane/backend/server/infra/agent-runtime-stream": [
         "./libs/backend/server/infra/agent-runtime-stream/src/index.ts"
       ],
+      "@opencrane/backend/server/infra/agent-runtime-continuation": [
+        "./libs/backend/server/infra/agent-runtime-continuation/src/index.ts"
+      ],
       "@opencrane/backend/server/infra/workload-identity": [
         "./libs/backend/server/infra/workload-identity/src/index.ts"
       ],
@@ -199,26 +217,23 @@
       "@opencrane/backend/agents/runtime/mcp-executor/companion": [
         "./libs/backend/agents/runtime/mcp-executor/companion/src/index.ts"
       ],
-      "@opencrane/backend/agents/runtime/cleanup": [
-        "./libs/backend/agents/runtime/cleanup/main/src/index.ts"
-      ],
       "@opencrane/backend/agents/skills/k8s-launcher": [
         "./libs/backend/agents/skills/k8s-launcher/src/index.ts"
       ],
-      "@opencrane/backend/agents/skills/execution": [
-        "./libs/backend/agents/skills/execution/main/src/index.ts"
-      ],
       "@opencrane/backend/agents/skills/controller": [
         "./libs/backend/agents/skills/controller/src/index.ts"
+      ],
+      "@opencrane/backend/agents/skills/workflows": [
+        "./libs/backend/agents/skills/workflows/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/skills/workflows/contract": [
+        "./libs/backend/agents/skills/workflows/contract/src/index.ts"
       ],
       "@opencrane/backend/agents/runtime/controller": [
         "./libs/backend/agents/runtime/controller/src/index.ts"
       ],
       "@opencrane/backend/server/infra/http": [
         "./libs/backend/server/infra/http/src/index.ts"
-      ],
-      "@opencrane/backend/server/infra/obot-custody": [
-        "./libs/backend/server/infra/obot-custody/src/index.ts"
       ],
       "@opencrane/backend/server/infra/sandbox-execution": [
         "./libs/backend/server/infra/sandbox-execution/src/index.ts"

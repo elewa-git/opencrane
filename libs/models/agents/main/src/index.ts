@@ -1,9 +1,8 @@
 export { __DiffAgentRevisions } from "./agent-revision-diff";
 export { __DigestAgentRevisionContent } from "./agent-revision-content";
-export { __AreReviewedIntegrationToolDefinitionsValid, __IsReviewedIntegrationToolDefinitionValid } from "./agent-tool-definition.validator";
 export type { AgentRevisionDiff, RevisionLineDiff, RevisionScalarChange, RevisionSetChange, RevisionWidening, RevisionWideningKind } from "./agent-revision-diff.types";
 export { AgentRevisionStates } from "./agent-revision.types";
-export type { AgentBudget, AgentRevision, AgentRevisionContent, AgentRevisionState, IntegrationAssignmentReference, ReviewedIntegrationToolDefinition, SkillRevisionReference } from "./agent-revision.types";
+export type { AgentBudget, AgentRevision, AgentRevisionContent, AgentRevisionState, SkillRevisionReference } from "./agent-revision.types";
 export { AgentRunStates } from "./agent-run.types";
 export type { AgentRun, AgentRunLineage, AgentRunState, AgentRunTerminalReason, AgentRunTrigger } from "./agent-run.types";
 export { AgentServiceKinds, AgentServiceStates } from "./agent-service.types";

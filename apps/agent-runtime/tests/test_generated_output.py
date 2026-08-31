@@ -8,6 +8,7 @@ import unittest.mock
 from urllib.error import URLError
 
 from src.attempts.execution import execute_start_attempt as _execute_start_attempt
+from src.constants import PROTOCOL_VERSION
 from src.model_loop import generated_output_policy as _generated_output_policy
 from src.model_loop.driver import translate_framework_event as _translate_framework_event
 from src.model_loop.generated_output_policy import (
@@ -41,7 +42,10 @@ def _start_command() -> dict:
     """Build one valid command whose coordinates must bind the output reservation."""
     return {
         "kind": "start_attempt",
+        "protocolVersion": PROTOCOL_VERSION,
+        "runtimeInstanceId": "runtime-output",
         "commandId": "command-output",
+        "sequence": 1,
         "fence": 7,
         "assignment": {"runId": "run-output", "attempt": 2},
         "payload": {
@@ -151,7 +155,6 @@ class GeneratedOutputJourneyTests(unittest.TestCase):
                 {"runId": "run-output", "attempt": 2, "commandId": command_id, "fence": 7},
                 _compiled_input(),
                 lambda _candidate: None,
-                lambda *_call: None,
                 lambda _coordinates, _message_id, output: published.append(output),
             )
             projector.emit({**_output_asset(), "content": content, "outputOrdinal": 0})

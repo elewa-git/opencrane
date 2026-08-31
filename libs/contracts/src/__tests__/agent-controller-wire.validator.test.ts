@@ -12,16 +12,16 @@ describe("agent-controller wire grammar", function _DescribeWireGrammar()
 		expect(___IsAgentControllerIdentifier("run\n1")).toBe(false);
 	});
 
+	it("accepts only an empty server-selected controller claim", function _ChecksEmptyClaim()
+	{
+		expect(___IsEmptyAgentControllerCommand({})).toBe(true);
+		expect(___IsEmptyAgentControllerCommand({ workloadId: "caller-selected" })).toBe(false);
+	});
+
 	it("requires canonical millisecond instants", function _RequiresCanonicalInstants()
 	{
 		expect(_AgentControllerMillisecondInstantSchema.safeParse("2026-07-20T00:00:00.000Z").success).toBe(true);
 		expect(_AgentControllerMillisecondInstantSchema.safeParse("2026-07-20T00:00:00Z").success).toBe(false);
-	});
-
-	it("accepts only a strict empty server-owned command", function _RequiresEmptyCommand()
-	{
-		expect(___IsEmptyAgentControllerCommand({})).toBe(true);
-		expect(___IsEmptyAgentControllerCommand({ policy: "caller-selected" })).toBe(false);
 	});
 
 	it("keeps null command rejection and stable diagnostic paths", function _KeepsParsingSemantics()

@@ -53,8 +53,6 @@ export interface PublicHealthReaderDependencies
 	readonly files: PublicHealthProbe | null;
 	/** Optional live-channel service probe; null means intentionally disabled. */
 	readonly channels: PublicHealthProbe | null;
-	/** Optional integration gateway probe; null means intentionally disabled. */
-	readonly integrations: PublicHealthProbe | null;
 	/** Structured private logger for collapsed dependency failures. */
 	readonly logger: PublicHealthLogger;
 	/** Clock used to expire one shared report. */

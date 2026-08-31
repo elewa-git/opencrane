@@ -21,30 +21,30 @@ const _MAXIMUM_CLAIM_RESPONSE_BYTES = 16_384;
  *
  * Called by: `apps/artifact-preprocessor/src/index.ts`.
  * @param config - OpenCrane origin, token path, and per-call timeout.
- * @returns An adapter implementing claim, source read, output submit, and failure report.
+	 * @returns An adapter implementing bootstrap, source read, output submit, and failure report.
  * @see {@link ArtifactPreprocessorRemote}
  */
 export function _CreateArtifactPreprocessorRemote(config: ArtifactPreprocessorRemoteConfig): ArtifactPreprocessorRemote
 {
 	return {
-		claim(signal) { return _Claim(config, signal); },
+		bootstrap(reference, signal) { return _Bootstrap(config, reference, signal); },
 		readSource(claim, destinationPath, maximumBytes, signal) { return _ReadSource(config, claim, destinationPath, maximumBytes, signal); },
 		submitOutput(command, sourcePath, byteLength, signal) { return _SubmitOutput(config, command, sourcePath, byteLength, signal); },
 		reportFailure(command, signal) { return _ReportFailure(config, command, signal); },
 	};
 }
 
-/** Ask OpenCrane for the next job, returning null when there is none. OpenCrane authenticates the worker by TokenReview on its projected token. */
-async function _Claim(config: ArtifactPreprocessorRemoteConfig, signal: AbortSignal): Promise<ArtifactPreprocessorJobClaim | null>
+/** Exchange the mounted reference for the controller-assigned job. OpenCrane also checks the projected Kubernetes identity. */
+async function _Bootstrap(config: ArtifactPreprocessorRemoteConfig, reference: string, signal: AbortSignal): Promise<ArtifactPreprocessorJobClaim>
 {
-	return ___DoWithTrace("artifact_preprocessor.job.claim", {}, async function _claim()
+	return ___DoWithTrace("artifact_preprocessor.job.bootstrap", {}, async function _bootstrap()
 	{
 		const [requestSignal, dispose] = _TimeoutAbort(config.requestTimeoutMilliseconds, signal);
 		try
 		{
-			const response = await fetch(`${config.openCraneInternalUrl}/api/internal/artifact-preprocessor/jobs:claim`, { method: "POST", headers: { authorization: await _Authorization(config), "content-type": "application/json" }, body: "{}", signal: requestSignal });
-			if (response.status === 204) return null;
-			if (!response.ok) return _RejectResponse(response, `artifact preprocess claim failed with HTTP ${response.status}`);
+			const response = await fetch(`${config.openCraneInternalUrl}/api/internal/artifact-preprocessor/jobs:bootstrap`, { method: "POST", headers: { authorization: await _Authorization(config), "content-type": "application/json" }, body: JSON.stringify({ reference }), signal: requestSignal });
+			if (!response.ok)
+				return _RejectResponse(response, `artifact preprocess bootstrap failed with HTTP ${response.status}`);
 			return _ReadBoundedAndValidateJson(response, _MAXIMUM_CLAIM_RESPONSE_BYTES, _ClaimFromUnknown);
 		}
 		finally

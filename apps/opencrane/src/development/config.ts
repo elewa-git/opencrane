@@ -99,8 +99,10 @@ export function _ReadDevelopmentConfig()
 	return Object.freeze({
 		profile,
 		identity: LOCAL_DEVELOPMENT_IDENTITY,
+		databaseUrl: process.env.DATABASE_URL as string,
 		membershipPublicKeyPath,
 		controllerTokenPath: _ReadAgentSecretPath("OPENCRANE_CONTROLLER_TOKEN_PATH", profile),
+		continuationKeyringPath: _ReadAgentSecretPath("AGENT_RUNTIME_CONTINUATION_KEYRING_PATH", profile),
 		runtimeLaunchSecretPath: _ReadAgentSecretPath("OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH", profile),
 		publicPort: _ReadPort("PORT", 8_080),
 		internalPort: _ReadPort("INTERNAL_PORT", 8_081),

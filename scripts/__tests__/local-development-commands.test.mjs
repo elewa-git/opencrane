@@ -7,6 +7,7 @@ import { createDevelopmentSeedCommand } from "../local-development/development-s
 import { parseLocalDevelopmentArguments } from "../local-development/profiles.mjs";
 
 const _MEMBERSHIP_KEYS = {
+	continuationKeyringPath: "/tmp/local/runtime-continuation-keyring.json",
 	controllerTokenPath: "/tmp/local/controller.token",
 	privateKeyPath: "/tmp/local/private.pem",
 	publicKeyPath: "/tmp/local/public.pem",
@@ -85,30 +86,34 @@ test("agent adds its local controller and defaults to Alternative A", function _
 	assert.equal(environment.OPENCRANE_INTERNAL_URL, "http://127.0.0.1:8081");
 	assert.equal(environment.OPENCRANE_CONTROLLER_TOKEN_PATH, "/tmp/local/controller.token");
 	assert.equal(environment.OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH, "/tmp/local/runtime-launch.secret");
+	assert.equal(environment.AGENT_RUNTIME_CONTINUATION_KEYRING_PATH, "/tmp/local/runtime-continuation-keyring.json");
 	assert.equal(environment.OPENCRANE_LOCAL_RUNTIME_PYTHON, "/repo/apps/agent-runtime/.venv/bin/python");
-	const runtimeProfiles = JSON.parse(environment.AGENT_CONTROLLER_PROFILES_JSON);
-	assert.equal(runtimeProfiles["personal-default"].litellmBaseUrl, "http://litellm.local-development-server.svc.cluster.local:4000");
+	const runtimeProfiles = JSON.parse(environment.AGENT_CONTROLLER_WARM_PROFILES_JSON);
+	assert.equal(runtimeProfiles["personal-default"].bindingPort, 18_081);
 	assert.deepEqual({
-		serverNamespace: runtimeProfiles["personal-default"].serverNamespace,
+		serverNamespace: environment.OPENCRANE_SERVER_NAMESPACE,
 		personal: {
 			namespace: runtimeProfiles["personal-default"].namespace,
-			identityProfile: runtimeProfiles["personal-default"].identityProfile,
+			identityProfile: runtimeProfiles["personal-default"].claimedProfile,
 			serviceAccountName: runtimeProfiles["personal-default"].serviceAccountName
 		},
 		managed: {
 			namespace: runtimeProfiles["managed-default"].namespace,
-			identityProfile: runtimeProfiles["managed-default"].identityProfile,
+			identityProfile: runtimeProfiles["managed-default"].claimedProfile,
 			serviceAccountName: runtimeProfiles["managed-default"].serviceAccountName
 		}
 	}, _PROFILE_CONTRACT.runtimeIdentities);
 	assert.equal(commands[1].environment.LITELLM_ENDPOINT, "http://127.0.0.1:4000");
 	assert.equal(commands[1].environment.NX_NATIVE_COMMAND_RUNNER, "false");
 	assert.equal(commands[1].environment.NX_TUI, "false");
-	assert.equal(runtimeProfiles["managed-default"].serverNamespace, _PROFILE_CONTRACT.runtimeIdentities.serverNamespace);
+	assert.equal(environment.OPENCRANE_SERVER_NAMESPACE, _PROFILE_CONTRACT.runtimeIdentities.serverNamespace);
+	assert.equal(environment.OPENCRANE_SERVER_SERVICE_NAME, "opencrane");
+	assert.equal(environment.OPENCRANE_SILO_ID, "local-development");
 	assert.equal(commands[1].environment.LITELLM_MASTER_KEY, undefined);
 	assert.equal(commands[1].environment.OPENCRANE_INITIAL_MODEL_API_KEY, undefined);
 	assert.deepEqual(Object.keys(commands[0].environment).sort(), [
 		"DATABASE_URL",
+		"AGENT_RUNTIME_CONTINUATION_KEYRING_PATH",
 		"INTERNAL_PORT",
 		"LITELLM_ENDPOINT",
 		"LITELLM_MASTER_KEY",
@@ -122,8 +127,9 @@ test("agent adds its local controller and defaults to Alternative A", function _
 	assert.equal(commands[0].environment.OPENCRANE_DEVELOPMENT_MEMBERSHIP_PRIVATE_KEY_PATH, undefined);
 	assert.equal(commands[0].environment.OPENCRANE_INTERNAL_URL, undefined);
 	assert.equal(commands[0].environment.OPENCRANE_REPOSITORY_ROOT, undefined);
-	assert.equal(commands[0].environment.AGENT_CONTROLLER_PROFILES_JSON, undefined);
-	assert.equal(commands[1].environment.DATABASE_URL, undefined);
+	assert.equal(commands[0].environment.AGENT_CONTROLLER_WARM_PROFILES_JSON, undefined);
+	assert.equal(commands[1].environment.DATABASE_URL.includes("postgres-secret"), true);
+	assert.equal(commands[1].environment.AGENT_RUNTIME_CONTINUATION_KEYRING_PATH, undefined);
 	assert.equal(commands[1].environment.OPENCRANE_DEVELOPMENT_MEMBERSHIP_PRIVATE_KEY_PATH, undefined);
 	const seed = createDevelopmentSeedCommand(environment);
 	assert.deepEqual(Object.keys(seed.environment).sort(), [

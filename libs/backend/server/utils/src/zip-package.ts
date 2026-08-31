@@ -1,7 +1,5 @@
 import { inflateRawSync } from "node:zlib";
 
-import type { ZipPackage, ZipPackageEntry } from "./zip-package.types";
-
 /** ZIP end-of-directory marker. */
 const _END = 0x06054b50;
 /** ZIP central-directory entry marker. */
@@ -31,13 +29,78 @@ const _UNIX_HOST = 3;
 /** DOS directory attribute stored in the low byte of external attributes. */
 const _DOS_DIRECTORY_ATTRIBUTE = 0x10;
 
+/** One bounded regular file described by the accepted ZIP central directory. */
+interface _ZipPackageEntry
+{
+	/** Normalized relative path inside the archive. */
+	readonly path: string;
+	/** ZIP compression method. */
+	readonly compressionMethod: number;
+	/** Compressed byte count. */
+	readonly compressedSize: number;
+	/** Decompressed byte count. */
+	readonly uncompressedSize: number;
+	/** Offset of the corresponding local header. */
+	readonly localHeaderOffset: number;
+}
+
+/** A validated ZIP package whose entries can be read under explicit byte limits. */
+interface _ZipPackage
+{
+	/** Immutable entry catalogue; duplicate and unsafe names are rejected during parsing. */
+	readonly entries: readonly _ZipPackageEntry[];
+	/** Read one declared entry without extracting any other archive content. */
+	read(entry: _ZipPackageEntry, maximumBytes: number): Buffer | null;
+}
+
+/** Safe coordinates of the one central directory in a non-split ZIP package. */
+interface _CentralDirectory
+{
+	/** Number of regular-file entries described by the directory. */
+	readonly entryCount: number;
+	/** First byte of the central directory. */
+	readonly offset: number;
+	/** Declared central-directory byte length. */
+	readonly size: number;
+}
+
+/** One central-directory record together with the next record offset and local-byte range. */
+interface _CentralDirectoryEntry
+{
+	/** Safe file metadata that callers may later read. */
+	readonly entry: _ZipPackageEntry;
+	/** First byte after this central-directory record. */
+	readonly nextOffset: number;
+	/** Inclusive-to-exclusive byte range occupied by the matching local file record. */
+	readonly localRange: readonly [number, number];
+}
+
 /**
  * Parse a bounded ZIP package without extracting it to disk.
  *
  * Called by: OCI image-layout admission before it reads a named layout object.
  * @returns The safe central-directory catalogue, or `null` for an unsafe or malformed archive.
  */
-export function ___ParseZipPackage(bytes: Buffer): ZipPackage | null
+export function ___ParseZipPackage(bytes: Buffer): _ZipPackage | null
+{
+	const directory = _ReadCentralDirectory(bytes);
+	if (directory === null)
+		return null;
+	const entries = _ReadCentralDirectoryEntries(bytes, directory);
+	if (entries === null)
+		return null;
+	const catalogue = Object.freeze(entries);
+	return {
+		entries: catalogue,
+		read(entry, maximumBytes)
+		{
+			return catalogue.includes(entry) ? _ReadEntry(bytes, entry, maximumBytes, directory.offset) : null;
+		},
+	};
+}
+
+/** Read and validate the single, bounded central directory declared by the ZIP end record. */
+function _ReadCentralDirectory(bytes: Buffer): _CentralDirectory | null
 {
 	const end = _FindEnd(bytes);
 	if (end < 0 || end + 22 > bytes.byteLength)
@@ -45,59 +108,68 @@ export function ___ParseZipPackage(bytes: Buffer): ZipPackage | null
 	const disk = bytes.readUInt16LE(end + 4);
 	const directoryDisk = bytes.readUInt16LE(end + 6);
 	const diskCount = bytes.readUInt16LE(end + 8);
-	const count = bytes.readUInt16LE(end + 10);
+	const entryCount = bytes.readUInt16LE(end + 10);
 	const size = bytes.readUInt32LE(end + 12);
 	const offset = bytes.readUInt32LE(end + 16);
-	if (disk !== 0 || directoryDisk !== 0 || diskCount !== count || count > _MAX_ENTRY_COUNT || count === 0xffff || size === 0xffffffff || offset === 0xffffffff || offset > end || size !== end - offset)
+	if (disk !== 0 || directoryDisk !== 0 || diskCount !== entryCount || entryCount > _MAX_ENTRY_COUNT || entryCount === 0xffff || size === 0xffffffff || offset === 0xffffffff || offset > end || size !== end - offset)
 		return null;
-	const entries: ZipPackageEntry[] = [];
+	return { entryCount, offset, size };
+}
+
+/** Read every central-directory record while keeping duplicate names and overlapping local bytes out. */
+function _ReadCentralDirectoryEntries(bytes: Buffer, directory: _CentralDirectory): _ZipPackageEntry[] | null
+{
+	const entries: _ZipPackageEntry[] = [];
 	const names = new Set<string>();
 	const localRanges: Array<readonly [number, number]> = [];
 	let expandedBytes = 0;
-	let cursor = offset;
-	for (let index = 0; index < count; index += 1)
+	let cursor = directory.offset;
+	for (let index = 0; index < directory.entryCount; index += 1)
 	{
-		if (cursor > end - 46 || bytes.readUInt32LE(cursor) !== _CENTRAL)
+		const parsed = _ReadCentralDirectoryEntry(bytes, cursor, directory.offset);
+		if (parsed === null || names.has(parsed.entry.path))
 			return null;
-		const versionMadeBy = bytes.readUInt16LE(cursor + 4);
-		const flags = bytes.readUInt16LE(cursor + 8);
-		const compressionMethod = bytes.readUInt16LE(cursor + 10);
-		const compressedSize = bytes.readUInt32LE(cursor + 20);
-		const uncompressedSize = bytes.readUInt32LE(cursor + 24);
-		const nameLength = bytes.readUInt16LE(cursor + 28);
-		const extraLength = bytes.readUInt16LE(cursor + 30);
-		const commentLength = bytes.readUInt16LE(cursor + 32);
-		const externalAttributes = bytes.readUInt32LE(cursor + 38);
-		const localHeaderOffset = bytes.readUInt32LE(cursor + 42);
-		const next = cursor + 46 + nameLength + extraLength + commentLength;
-		if ((flags & _ENCRYPTED_FLAG) !== 0 || !_IsSupportedCompression(compressionMethod) || compressedSize === 0xffffffff || uncompressedSize === 0xffffffff || localHeaderOffset === 0xffffffff || next > end || !_IsRegularFile(versionMadeBy, externalAttributes))
-			return null;
-		const nameBytes = bytes.subarray(cursor + 46, cursor + 46 + nameLength);
-		const path = _DecodePath(nameBytes);
-		if (!_IsSafePath(path) || names.has(path))
-			return null;
-		expandedBytes += uncompressedSize;
+		expandedBytes += parsed.entry.uncompressedSize;
 		if (!Number.isSafeInteger(expandedBytes) || expandedBytes > _MAX_EXPANDED_BYTES)
 			return null;
-		const entry = { path, compressionMethod, compressedSize, uncompressedSize, localHeaderOffset };
-		const localEnd = _ValidateLocalEntry(bytes, entry, flags, offset);
-		if (localEnd < 0 || localRanges.some(function _Overlaps(range): boolean { return localHeaderOffset < range[1] && localEnd > range[0]; }))
+		if (localRanges.some(function _Overlaps(range): boolean { return parsed.localRange[0] < range[1] && parsed.localRange[1] > range[0]; }))
 			return null;
-		names.add(path);
-		entries.push(Object.freeze(entry));
-		localRanges.push([localHeaderOffset, localEnd]);
-		cursor = next;
+		names.add(parsed.entry.path);
+		entries.push(parsed.entry);
+		localRanges.push(parsed.localRange);
+		cursor = parsed.nextOffset;
 	}
-	if (cursor !== offset + size)
+	if (cursor !== directory.offset + directory.size)
 		return null;
-	const catalogue = Object.freeze(entries);
-	return {
-		entries: catalogue,
-		read(entry, maximumBytes)
-		{
-			return catalogue.includes(entry) ? _ReadEntry(bytes, entry, maximumBytes, offset) : null;
-		},
-	};
+	return entries;
+}
+
+/** Read one central-directory record and prove that its local record has the same safe identity. */
+function _ReadCentralDirectoryEntry(bytes: Buffer, cursor: number, directoryOffset: number): _CentralDirectoryEntry | null
+{
+	if (cursor > bytes.byteLength - 46 || bytes.readUInt32LE(cursor) !== _CENTRAL)
+		return null;
+	const versionMadeBy = bytes.readUInt16LE(cursor + 4);
+	const flags = bytes.readUInt16LE(cursor + 8);
+	const compressionMethod = bytes.readUInt16LE(cursor + 10);
+	const compressedSize = bytes.readUInt32LE(cursor + 20);
+	const uncompressedSize = bytes.readUInt32LE(cursor + 24);
+	const nameLength = bytes.readUInt16LE(cursor + 28);
+	const extraLength = bytes.readUInt16LE(cursor + 30);
+	const commentLength = bytes.readUInt16LE(cursor + 32);
+	const externalAttributes = bytes.readUInt32LE(cursor + 38);
+	const localHeaderOffset = bytes.readUInt32LE(cursor + 42);
+	const nextOffset = cursor + 46 + nameLength + extraLength + commentLength;
+	if ((flags & _ENCRYPTED_FLAG) !== 0 || !_IsSupportedCompression(compressionMethod) || compressedSize === 0xffffffff || uncompressedSize === 0xffffffff || localHeaderOffset === 0xffffffff || nextOffset > bytes.byteLength || !_IsRegularFile(versionMadeBy, externalAttributes))
+		return null;
+	const path = _DecodePath(bytes.subarray(cursor + 46, cursor + 46 + nameLength));
+	if (!_IsSafePath(path))
+		return null;
+	const entry = Object.freeze({ path, compressionMethod, compressedSize, uncompressedSize, localHeaderOffset });
+	const localEnd = _ValidateLocalEntry(bytes, entry, flags, directoryOffset);
+	if (localEnd < 0)
+		return null;
+	return { entry, nextOffset, localRange: [localHeaderOffset, localEnd] };
 }
 
 /** Find the final valid central-directory marker. */
@@ -150,7 +222,7 @@ function _IsRegularFile(versionMadeBy: number, externalAttributes: number): bool
 }
 
 /** Validate the matching local header and return the exclusive end of its compressed data. */
-function _ValidateLocalEntry(bytes: Buffer, entry: ZipPackageEntry, centralFlags: number, directoryOffset: number): number
+function _ValidateLocalEntry(bytes: Buffer, entry: _ZipPackageEntry, centralFlags: number, directoryOffset: number): number
 {
 	if (entry.localHeaderOffset > directoryOffset - 30 || bytes.readUInt32LE(entry.localHeaderOffset) !== _LOCAL)
 		return -1;
@@ -173,7 +245,7 @@ function _ValidateLocalEntry(bytes: Buffer, entry: ZipPackageEntry, centralFlags
 }
 
 /** Read exactly one entry under the caller's decompression ceiling. */
-function _ReadEntry(bytes: Buffer, entry: ZipPackageEntry, maximumBytes: number, directoryOffset: number): Buffer | null
+function _ReadEntry(bytes: Buffer, entry: _ZipPackageEntry, maximumBytes: number, directoryOffset: number): Buffer | null
 {
 	if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 0 || entry.uncompressedSize > maximumBytes || entry.localHeaderOffset > directoryOffset - 30 || bytes.readUInt32LE(entry.localHeaderOffset) !== _LOCAL)
 		return null;

@@ -14,7 +14,7 @@ the target:
    approvals, transcript, compaction, retries, budgets, identity, memory, artifacts, and tool policy.
    AgentRun is a conditional child of `agent_session`, never the backing record for direct or ordinary
    group messages ([ADR 0012](docs/adr/0012-conversation-modes-and-agent-thread-authority.md)). The runtime is a replaceable
-   workload behind a **language-neutral** `AgentRuntimeProtocol v1` ([ADR 0010](docs/adr/0010-language-neutral-agent-runtime.md));
+workload behind a **language-neutral** `AgentRuntimeProtocol v2` ([ADR 0010](docs/adr/0010-language-neutral-agent-runtime.md));
    `pydantic-ai-slim` (Python) is the first qualification candidate for the bounded model/tool loop,
    adopted only after it passes the live-LiteLLM conformance gate. Language is not a product contract.
 2. **Delivery:** refactor the repository directly to the target state. Delete OpenClaw and every
@@ -128,21 +128,18 @@ tests fail closed; backup/restore reconstructs target-owned stores; no legacy co
 
 ### Phase E — personal runtime and AgentService plane (core runtime built; phase incomplete)
 
-**Core runtime built and CI-qualified:** the dependent PR stack now defines immutable run input, the fenced runtime protocol,
-the outbound-only runtime process, the suspended one-Job-per-attempt resource contract, and a
-crash-safe controller boundary that exactly creates/adopts suspended Jobs before persisting their
-Kubernetes UID as the pending assignment. This dependent slice adds a durable release claim,
-conditionally unsuspends only that assigned Job, and records its unique first Pod before bootstrap
-exchange can begin. A further dependent slice adds cancellation-owned cleanup of abandoned
-suspended Jobs: a nonterminal `Cancelling` run state fences the current assignment, proof key, and
-pending approvals before any Job is touched; `PrismaRunCancellationRepository` then issues an
-assigned or delayed-orphan cleanup claim, and only its confirmed deletion or authoritative absence
-moves the run to `Cancelled`. The runtime protocol and channel-target admission fences close on
-`cancelling` the same way they close on a terminal state. Bootstrap exchange and the full runtime
-command lifecycle now land: the dispatch authority mints `start_attempt`, `resume_attempt`, and a
-positive `cancel_attempt` stop signal (with exactly-once terminal reporting under a race); the runtime
-surfaces model tool calls as external-action candidates that the server validates against the
-immutable snapshot and admits into the durable ToolInvocation lifecycle before any provider request.
+**Core runtime built and CI-qualified:** the dependent PR stack now defines immutable run input, the
+fenced runtime protocol, the outbound-only runtime process, and fixed warm Pod pools. The saved
+AgentRun workflow reserves one Pod, binds the exact database assignment, drives readiness and work,
+and removes that same Pod during cancellation or terminal cleanup. A nonterminal `Cancelling` run
+state fences the current assignment, proof key, and pending approvals before the workflow removes
+physical work; only workflow completion moves the run to `Cancelled`. The runtime protocol and
+channel-target admission fences close on `cancelling` the same way they close on a terminal state.
+Bootstrap exchange and the full runtime command lifecycle now land: the dispatch authority mints
+`start_attempt`, `resume_attempt`, and a positive `cancel_attempt` stop signal with exactly-once
+terminal reporting under a race. The runtime surfaces model tool calls as external-action candidates
+that the server validates against the immutable snapshot and admits into the durable ToolInvocation
+lifecycle before any provider request.
 A tool grant flagged `requiresApproval` enters `AwaitingApproval` and opens a pending
 `ApprovalRequest`, so the pause is reachable end to end. The owner-bound approval-DECISION and
 steering-INGEST APIs are built:
@@ -151,9 +148,11 @@ run. The approval authority persists approved effective arguments or a terminal 
 server-owned worker records one durable result delivery before a fenced resume command can carry it
 back to the runtime. Later results and steering requests remain independently consumable, so
 concurrent input cannot supersede an active executor loop. The runtime absorbs queued steering only
-at safe pre-model boundaries. The
-runtime also writes encrypted, version-tagged, replaceable LOCAL checkpoints subordinate to canonical
-state (no server-side checkpoint model). The MCP and sandbox execution ports remain fail-closed in
+at safe pre-model boundaries. At a tool or participant wait, the runtime sends its bounded model
+messages and pending result links to the server. The server encrypts that continuation and saves it
+in the database. A replacement warm runtime receives the exact saved state through a fenced resume
+command; a Pod lost during an active model call instead moves the run to `RecoveryRequired` because
+replaying that call could duplicate cost or output. The MCP and sandbox execution ports remain fail-closed in
 the production composition root. The authenticated memory transport IS composed: the server mounts
 its audience-bound projected token and shares one gateway client between admission and dispatch.
 Admission-time recall freezes gateway-selected fact references (id + content digest, never text)
@@ -543,16 +542,18 @@ finishes the move from SQL pollers and locks to Absurd workflows in this order:
 | [#320](https://github.com/elewa-git/opencrane/issues/320) | Keep governed runtime child runs separate from F1 child Conversations; project them only after the explicit #319 decision |
 | [#351](https://github.com/elewa-git/opencrane/issues/351) | Deliver and qualify the authenticated conversation workspace through Track F1 |
 | [#513](https://github.com/elewa-git/opencrane/issues/513) | Low priority: evaluate LiteLLM-native OTLP GenAI spans through an operator-supplied collector, with message content disabled by default |
-| [#592](https://github.com/elewa-git/opencrane/issues/592) | Replace retired #128/Obot framing with the MCP 2026-07-28-only plane and warm-path runtime contract |
+| [#592](https://github.com/elewa-git/opencrane/issues/592) | OCI admission, immutable import, MCP executor claims, and Obot retirement are complete in the 0.10 review stack. Keep the issue open for the pre-started generic runtime pool, reconciliation, and live latency qualification. |
+| **0.10.0 workflow execution order** | **1.** Let product database transactions declare work that remote workflow workers execute. **2.** Run MCP tools from imported immutable OCI images through an MCP-specific executor and `RuntimeWorkloadClaim`; never put an uploaded image in the fixed generic agent Pod. **3.** Move skill validation, artifact preprocessing, and AgentRun lifecycle onto durable tasks. **4.** Remove each replaced polling, locking, lease, dispatch, MCPB, and Obot path after its durable owner exists. **5.** Finish with the forward database migration and dedicated migration Job. **6.** Run live pickup-latency and deployment qualification on the frozen candidate. The separate legacy integration API remains an explicit retirement decision. |
+| **0.10.0 forward workflow cutover** | Move from the released 0.9.3 schema to 0.10.0 with Prisma Migrate as the only record of database changes and one dedicated migration Job. OCI Image Layout ZIP admission accepts MCP `2026-07-28` only. Keep the remote v2 era-probe workflow and remove the MCPB routes, schema, and workers. This is a new version-to-version migration; it does not rewrite released 0.9.3 history. |
 | [#600](https://github.com/elewa-git/opencrane/issues/600) | Build immutable conversation modes, strategy ownership, ordinary messaging, and the mixed canonical timeline |
 | [#601](https://github.com/elewa-git/opencrane/issues/601) | Build group `@agent` child sessions, immediate-parent delivery, compact summaries, and breadcrumb navigation |
 | [#602](https://github.com/elewa-git/opencrane/issues/602) | Retain completed onboarding as closed/read-only workspace history |
 | [#603](https://github.com/elewa-git/opencrane/issues/603) | Build governed conversation attachments and durable agent-created outputs |
 | [#604](https://github.com/elewa-git/opencrane/issues/604) | Build reusable approvals, choices, free-text elicitation, recovery, and safe disclosure |
-| [#695](https://github.com/elewa-git/opencrane/issues/695) | The Absurd foundation, OAuth refresh workflow, and saved MCP protocol check are complete. OCI Image Layout admission, Skills MCP tasks, the warm path, existing-workflow pilots, and the later agent-run migration remain open. |
-| [#736](https://github.com/elewa-git/opencrane/issues/736) | Replace the AgentRun pending-input boolean while its lifecycle moves to durable tasks |
-| [#740](https://github.com/elewa-git/opencrane/issues/740) | Delete unreachable AgentRun cancellation and model-key aliases during the 0.10.0 reaper |
-| [#741](https://github.com/elewa-git/opencrane/issues/741) | Run real MCP tools from admitted OCI digests before Obot retirement |
+| [#695](https://github.com/elewa-git/opencrane/issues/695) | The Absurd foundation, OAuth refresh, saved MCP checks, OCI execution, skill and artifact workflows, AgentRun execution, and retirement are complete in the 0.10 review stack. Keep the worktrack open until #592 finishes, the remaining hand-written SQL lock and polling paths have durable owners or the one approved transaction-admission exception, the final Prisma migration is composed as the last implementation step, and live qualification passes. |
+| [#736](https://github.com/elewa-git/opencrane/issues/736) | Complete in the 0.10 review stack: explicit wait reasons, encrypted database continuations, exact tool/question links, warm-runtime replacement, and active-call recovery fencing are implemented and tested. Close with the 0.10.0 release after final migration and live qualification. |
+| [#740](https://github.com/elewa-git/opencrane/issues/740) | Complete in the 0.10 review stack: unreachable AgentRun cancellation and model-key residue are removed. Close with the 0.10.0 release after live qualification. |
+| [#741](https://github.com/elewa-git/opencrane/issues/741) | Functionally complete in the 0.10 review stack: the public task API submits exact installed MCP `2026-07-28` tools, resumes saved input, exposes durable results and failures, and closes controller assignment and readiness races. Close with the 0.10.0 release after final migration and live qualification. |
 
 Closed issues are intentionally absent from the active list: [#128](https://github.com/elewa-git/opencrane/issues/128),
 [#129](https://github.com/elewa-git/opencrane/issues/129),

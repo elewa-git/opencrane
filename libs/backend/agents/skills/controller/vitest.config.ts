@@ -3,7 +3,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 import { _PackageCacheDir } from "../../../../../vitest.cache";
 
-/** Vitest configuration for governed skill workload reconciliation. */
+/** Vitest configuration for skill-authoring validation reconciliation. */
 export default defineConfig({
 	cacheDir: _PackageCacheDir(import.meta.url),
 	plugins: [tsconfigPaths({ projects: ["../../../../../tsconfig.vitest.json"] })],

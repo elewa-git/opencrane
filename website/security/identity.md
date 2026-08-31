@@ -25,13 +25,13 @@ published or triggered it. See
 admitted run attempt
        │
        ▼
-exact Job + ServiceAccount + namespace
+exact claimed Pod + ServiceAccount + namespace
        │  projected token
        ▼
 Kubernetes TokenReview
        │  one-use bootstrap
        ▼
-proof key bound to Job UID + Pod UID + run + attempt
+proof key bound to Pod UID + run + attempt
 ```
 
 The runtime initiates the connection. OpenCrane checks the exact projected-token audience and
@@ -44,8 +44,8 @@ token from another workload does not inherit the assignment.
 |---|---|---|
 | OIDC session cookie | Browser | Public UI and API calls |
 | Controller projected token | Agent controller | Claim and report authorised workload assignments |
-| Runtime projected token | One runtime Job | Bootstrap and open its outbound stream |
-| Runtime proof key | One run attempt | Bind candidates to the registered Job and Pod |
+| Runtime projected token | One claimed runtime Pod | Bootstrap and open its outbound stream |
+| Runtime proof key | One run attempt | Bind candidates to the reserved Pod |
 | Attempt-scoped model key | One run attempt | Reach the allowed model alias within its budget |
 
 Provider master keys, tool credentials and durable artifact credentials never enter the runtime.
@@ -59,7 +59,7 @@ the database assignment proves which exact work that identity may perform.
 
 Session revocation stops new human requests. Run cancellation is a durable state transition:
 OpenCrane fences the exact attempt, sends a positive cancel command when possible and authorises
-cleanup of only the assigned Job. Late candidates are rejected.
+cleanup of only the claimed Pod. Late candidates are rejected.
 
 Source: [`libs/backend/server/iam/authorization/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/authorization/main/README.md)
 and [`apps/opencrane/prisma/schema/runs.prisma`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/prisma/schema/runs.prisma).

@@ -153,7 +153,7 @@ The complete documentation is at [opencrane.ai](https://opencrane.ai), including
 - [getting started](https://opencrane.ai/guide/getting-started);
 - the [architecture overview](https://opencrane.ai/advanced/architecture);
 - the [deployment guide](https://opencrane.ai/guide/deploy-cluster);
-- the [MCP integration guide](https://opencrane.ai/integrators/mcp-gateway); and
+- the [OCI MCP runtime guide](https://opencrane.ai/integrators/oci-mcp-runtime); and
 - the [API overview](https://opencrane.ai/reference/api-overview).
 
 ## Quick start
@@ -194,8 +194,8 @@ apps/_infra/deploy-k8s/deploy.sh \
   --base-domain opencrane.example \
   --cluster-tenant acme \
   --postgres-credentials-secret opencrane-postgres-bootstrap \
-  --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
-  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
+  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
+  --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap
 ```
 
 This installs the isolated `acme` organisation boundary and serves its UI and REST API at

@@ -30,13 +30,13 @@ agent principles rather than becoming personal-only by proximity.
 | [`execution/admission`](./execution/admission/main/README.md) | Shared: trusted personal and managed entrypoints into immutable run admission. |
 | [`execution/runs`](./execution/runs/main/README.md) | Shared: run and attempt authority. |
 | [`execution/protocol`](./execution/protocol/README.md) | Shared: language-neutral command and candidate authority. |
-| [`runtime`](./runtime/README.md) | Shared: Kubernetes Job projection and controller. |
+| [`runtime`](./runtime/README.md) | Shared: warm runtime Pod claims plus class-specific worker Job controllers. |
 | [`runtime/workloads/contract`](./runtime/workloads/contract/README.md) | Shared claim lease and binding fields for class-specific workloads. |
 | [`runtime/workloads/k8s-controller`](./runtime/workloads/k8s-controller/README.md) | Exact Job adoption, release, and Pod checks shared by workload classes. |
 
 ```
  personal specialization                shared agent execution
- configuration · personal memory · personas ──► inputs ──► runs ──► protocol ──► runtime Job
+ configuration · personal memory · personas ──► inputs ──► runs ──► protocol ──► claimed warm Pod
                                                      ▲
                                              admission (trusted entry)
                    │                           frozen input  attempt   bounded executor boundary

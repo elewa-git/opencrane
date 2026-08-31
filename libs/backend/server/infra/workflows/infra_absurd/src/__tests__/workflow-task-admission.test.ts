@@ -7,10 +7,11 @@ import { WorkflowError } from "@opencrane/backend/server/infra/workflows/contrac
 import { AbsurdWorkflowEngine } from "../absurd-workflow-engine";
 import { AbsurdWorkflowError } from "../absurd-workflow-error";
 import { WorkflowTaskAdmission } from "../workflow-task-admission";
+import { WorkflowTaskEventAdmission } from "../workflow-task-event-admission";
 
 const _RETRY = { maximumAttempts: 5, retryStrategy: { kind: "exponential", baseSeconds: 30, factor: 2, maxSeconds: 300 } } as const;
 
-/** Build the one caller-owned transaction shape the gateway is permitted to use. */
+/** Builds the one caller-owned transaction shape the gateway is permitted to use. */
 function _Transaction(rows: unknown): Prisma.TransactionClient
 {
 	return { $queryRaw: vi.fn().mockResolvedValue(rows) } as unknown as Prisma.TransactionClient;
@@ -79,6 +80,33 @@ describe("WorkflowTaskAdmission", function _WorkflowTaskAdmissionSuite()
 		const transaction = { $queryRaw: vi.fn().mockRejectedValue(new Error("database unavailable")) } as unknown as Prisma.TransactionClient;
 
 		await expect(new WorkflowTaskAdmission("control-plane").admit(transaction, { taskName: "refresh-token", idempotencyKey: "refresh:1", input: {}, ..._RETRY })).rejects.toBeInstanceOf(AbsurdWorkflowError);
+	});
+});
+
+describe("WorkflowTaskEventAdmission", function _WorkflowTaskEventAdmissionSuite()
+{
+	it("emits through the fixed parameterized Absurd procedure on the caller transaction", async function _CallsAbsurdEventProcedure()
+	{
+		const transaction = _Transaction([{ emit_event: null }]);
+		const admission = new WorkflowTaskEventAdmission("control-plane");
+
+		await admission.emit(transaction, "opencrane-task:task-1:event:completed:1", { preprocessJobId: "preprocess-1", deliveryCount: 1 });
+
+		expect(transaction.$queryRaw).toHaveBeenCalledTimes(1);
+		const query = vi.mocked(transaction.$queryRaw).mock.calls[0]?.[0] as Prisma.Sql;
+		expect(query.strings.join(" ")).toContain("absurd.emit_event");
+		expect(query.values).toEqual(["control-plane", "opencrane-task:task-1:event:completed:1", '{"preprocessJobId":"preprocess-1","deliveryCount":1}']);
+	});
+
+	it("rejects a root client and normalizes database failures", async function _RejectsInvalidPersistence()
+	{
+		const admission = new WorkflowTaskEventAdmission("control-plane");
+		const rootClient = { $queryRaw: vi.fn(), $transaction: vi.fn() };
+		await expect(admission.emit(rootClient, "completed", {})).rejects.toThrow("caller-owned Prisma TransactionClient");
+		expect(rootClient.$queryRaw).not.toHaveBeenCalled();
+
+		const transaction = { $queryRaw: vi.fn().mockRejectedValue(new Error("database unavailable")) } as unknown as Prisma.TransactionClient;
+		await expect(admission.emit(transaction, "completed", {})).rejects.toBeInstanceOf(AbsurdWorkflowError);
 	});
 });
 

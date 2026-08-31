@@ -25,7 +25,37 @@ export interface McpExecutorControllerReleaseClaim extends McpExecutorController
 	readonly releaseExpiresAt: string;
 }
 
-/** The server operations the MCP controller may perform. */
+/**
+ * Identifies a terminal MCP execution whose Kubernetes Job may still exist.
+ *
+ * The workload UID is the deletion precondition. The cleanup time and delivery count fence the
+ * later database write, so a retried controller cannot confirm a different cleanup delivery.
+ * Cleanup has no client-side expiry because deleting that UID is safe to repeat. The server checks
+ * expiry when cleanup commits; a late commit conflicts and a later claim confirms the absent Job.
+ *
+ * Called by: {@link __ReconcileNextMcpExecutorCleanup}.
+ */
+export interface McpExecutorControllerCleanupClaim extends McpExecutorControllerClaim
+{
+	/** Immutable UID Kubernetes assigned to the Job being deleted. */
+	readonly workloadUid: string;
+	/** Database time that identifies this cleanup delivery. */
+	readonly cleanupClaimedAt: string;
+	/** Delivery generation that fences this cleanup. */
+	readonly cleanupDeliveryCount: number;
+}
+
+/**
+ * Moves MCP Jobs through assignment, release, Pod registration, and terminal cleanup.
+ *
+ * The controller receives server-selected work and reports Kubernetes evidence back through this
+ * port. Claim methods return `null` when no work is ready. Commit methods return the named outcome
+ * for a new write, `idempotent` when the same transition already committed, or `conflict` when the
+ * UID or delivery fence changed; callers must not treat a conflict as completed work.
+ *
+ * Called by: {@link __ReconcileNextMcpExecutorWorkload},
+ * {@link __ReconcileNextMcpExecutorRelease}, and {@link __ReconcileNextMcpExecutorCleanup}.
+ */
 export interface McpExecutorControllerAuthority
 {
 	/** Claims one pending MCP workload, or returns null when none is ready. */
@@ -34,10 +64,30 @@ export interface McpExecutorControllerAuthority
 	__CommitAssignment(binding: RuntimeWorkloadBinding, signal: AbortSignal): Promise<"assigned" | "idempotent" | "conflict">;
 	/** Claims one assigned Job that needs release or first-Pod registration. */
 	__ClaimRelease(signal: AbortSignal): Promise<McpExecutorControllerReleaseClaim | null>;
+	/** Return the next terminal execution with cleanup owed, or `null` when no cleanup claim is ready. */
+	__ClaimCleanup(signal: AbortSignal): Promise<McpExecutorControllerCleanupClaim | null>;
 	/** Records that Kubernetes released the saved Job UID. */
 	__CommitRelease(claimId: string, command: McpExecutorReleaseCommand, signal: AbortSignal): Promise<"released" | "idempotent" | "conflict">;
+	/** Return `cleaned`, `idempotent`, or `conflict` after checking the cleanup delivery and saved Job UID. */
+	__CommitCleanup(claimId: string, command: McpExecutorCleanupCommand, signal: AbortSignal): Promise<"cleaned" | "idempotent" | "conflict">;
 	/** Records the first Pod UID owned by the released Job. */
 	__RegisterFirstPod(claimId: string, command: McpExecutorPodRegistrationCommand, signal: AbortSignal): Promise<"registered" | "idempotent" | "conflict">;
+}
+
+/**
+ * Carries the cleanup delivery and Kubernetes Job UID used for one deletion.
+ *
+ * The server accepts it only while all three values still match the saved cleanup claim. Unlike a
+ * release command, it needs no expiry because it cannot make a suspended Job runnable.
+ */
+export interface McpExecutorCleanupCommand
+{
+	/** Database time of the claimed cleanup delivery. */
+	readonly cleanupClaimedAt: string;
+	/** Generation of the claimed cleanup delivery. */
+	readonly cleanupDeliveryCount: number;
+	/** Immutable Job UID that Kubernetes deleted. */
+	readonly workloadUid: string;
 }
 
 /** Fences a release write to the delivery that performed the Kubernetes update. */
@@ -95,7 +145,7 @@ export interface McpExecutorControllerOptions
 }
 
 /**
- * Tells the controller loop whether an assignment or release pass made progress.
+ * Tells the controller loop whether an assignment, release, or cleanup pass made progress.
  *
  * These values are not persisted or sent over the wire. The loop waits after `Idle` and
  * `PendingPod`; the other outcomes let it immediately poll for more work.
@@ -112,6 +162,8 @@ export enum McpExecutorControllerOutcomes
 	PendingPod = "pending-pod",
 	/** The first owned Pod UID was committed, so the companion may now claim its command. */
 	Registered = "registered",
+	/** The exact saved Job UID was deleted and that cleanup was committed. */
+	Cleaned = "cleaned",
 }
 
 /** Result of one MCP assignment pass. */
@@ -119,3 +171,11 @@ export type McpExecutorControllerReconcileResult = { readonly outcome: McpExecut
 
 /** Result of one MCP release and Pod-registration pass. */
 export type McpExecutorControllerReleaseResult = { readonly outcome: McpExecutorControllerOutcomes.Idle } | { readonly outcome: McpExecutorControllerOutcomes.PendingPod; readonly claimId: string; readonly workloadUid: string } | { readonly outcome: McpExecutorControllerOutcomes.Registered | McpExecutorControllerOutcomes.Idempotent; readonly claimId: string; readonly workloadUid: string; readonly podUid: string };
+
+/**
+ * Reports whether one cleanup pass found work and whether its database write was new.
+ *
+ * `Idle` carries no coordinates because no claim was issued. `Cleaned` means this pass recorded the
+ * deletion, while `Idempotent` means a previous delivery already recorded the same deletion.
+ */
+export type McpExecutorControllerCleanupResult = { readonly outcome: McpExecutorControllerOutcomes.Idle } | { readonly outcome: McpExecutorControllerOutcomes.Cleaned | McpExecutorControllerOutcomes.Idempotent; readonly claimId: string; readonly workloadUid: string };

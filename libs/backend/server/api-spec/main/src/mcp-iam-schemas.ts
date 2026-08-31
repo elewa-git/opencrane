@@ -2,8 +2,8 @@
 export const _McpIamOpenapiSchemas = {
 	McpCatalogServer: {
 		type: "object",
-		description: "An MCP server exposed by the operator API. Fields other than id are optional because this shape serves both the entitled catalogue and the organisation-admin governance view.",
-		required: ["id"],
+		description: "An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no Ready OCI revision exists.",
+		required: ["id", "tools"],
 		properties: {
 			id: { type: "string", description: "Stable server identifier." },
 			name: { type: "string", description: "Display name shown in the catalogue." },
@@ -14,6 +14,22 @@ export const _McpIamOpenapiSchemas = {
 			approvalStatus: { type: "string", enum: ["pending-review", "approved", "published", "disabled"], description: "Organisation-admin review state. Only published servers appear in the user-facing catalogue; approved servers remain hidden until publication." },
 			credentialSchema: { type: "array", description: "Input fields required by an external custody flow for a single-user connection. This API describes requested values but neither receives nor returns credential material.", items: { $ref: "#/components/schemas/CredentialField" } },
 			entitlementSummary: { type: "string", description: "Human-readable summary of access grants, returned for the governance view." },
+			tools: { type: "array", description: "Tools from the newest Ready OCI server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission.", items: { $ref: "#/components/schemas/McpAssignableToolRevision" } },
+		},
+	},
+	McpAssignableToolRevision: {
+		type: "object",
+		description: "An immutable OCI-backed MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization.",
+		required: ["toolRevisionId", "serverRevisionId", "name", "description", "inputSchema", "inputSchemaDigest", "eligibility", "readiness"],
+		properties: {
+			toolRevisionId: { type: "string", description: "Immutable tool revision identifier saved during discovery." },
+			serverRevisionId: { type: "string", description: "Newest Ready server revision selected for this response." },
+			name: { type: "string", description: "Tool name reported by the MCP server." },
+			description: { type: ["string", "null"], description: "Tool description reported by the MCP server, or null when it supplied none." },
+			inputSchema: { description: "Input JSON Schema frozen during discovery." },
+			inputSchemaDigest: { type: "string", description: "Digest that binds assignment and run admission to this input schema." },
+			eligibility: { type: "string", enum: ["assignable", "governance-blocked"], description: "Whether Published and Active server governance permits assignment. It does not grant caller authority." },
+			readiness: { type: "string", enum: ["ready"], description: "Discovery state that made the immutable schema available." },
 		},
 	},
 	CredentialField: {
@@ -106,6 +122,57 @@ export const _McpIamOpenapiSchemas = {
 			configDigest: { type: ["string", "null"], description: "Digest of the selected OCI image configuration, or null until verification succeeds." },
 			registryReference: { type: ["string", "null"], description: "Digest-pinned image reference in the configured registry, or null until import succeeds." },
 			failureCode: { type: ["string", "null"], enum: ["artifact_mismatch", "bundle_too_large", "malformed_zip_package", "not_oci_image_layout", "invalid_layout", "invalid_index", "invalid_image_manifest", "validation_failed", "registry_import_failed", null], description: "Bounded rejection reason, or null while pending or imported." },
+		},
+	},
+	McpTaskInputRequest: {
+		type: "object",
+		description: "One saved question that must be answered before the MCP tool may run.",
+		required: ["requestId", "message", "argumentName"],
+		additionalProperties: false,
+		properties: {
+			requestId: { type: "string", description: "Stable request identifier repeated by the response." },
+			message: { type: "string", description: "Plain-language question shown to the caller." },
+			argumentName: { type: "string", description: "Top-level tool argument filled by the accepted response." },
+		},
+	},
+	McpTaskInputResponse: {
+		type: "object",
+		description: "One caller response bound to the exact saved input request.",
+		required: ["requestId", "value"],
+		additionalProperties: false,
+		properties: {
+			requestId: { type: "string", description: "Identifier of the saved request being answered." },
+			value: { description: "JSON value inserted into the exact top-level tool argument." },
+		},
+	},
+	McpTaskSubmission: {
+		type: "object",
+		description: "One idempotent asynchronous call of a discovered tool on an installed OCI-backed MCP server.",
+		required: ["idempotencyKey", "serverRevisionId", "toolRevisionId", "arguments"],
+		additionalProperties: false,
+		properties: {
+			idempotencyKey: { type: "string", minLength: 1, maxLength: 128, description: "Caller key that makes retries select the same durable task." },
+			serverRevisionId: { type: "string", minLength: 1, maxLength: 256, description: "Exact Ready MCP server revision selected from the installed catalogue." },
+			toolRevisionId: { type: "string", minLength: 1, maxLength: 256, description: "Exact discovered tool revision on the selected server revision." },
+			arguments: { description: "Tool arguments checked against the discovered immutable JSON Schema before execution." },
+			inputRequest: { $ref: "#/components/schemas/McpTaskInputRequest" },
+		},
+	},
+	McpTask: {
+		type: "object",
+		description: "Caller-visible durable state for one OCI-backed MCP tool call. Arguments, workflow receipts, and executor identifiers are never returned.",
+		required: ["id", "serverRevisionId", "toolRevisionId", "toolName", "protocolVersion", "state", "inputRequest", "inputResponse", "result", "failureCode"],
+		properties: {
+			id: { type: "string", description: "Stable task identifier." },
+			serverRevisionId: { type: "string", description: "Immutable OCI-backed MCP server revision." },
+			toolRevisionId: { type: "string", description: "Immutable discovered tool revision." },
+			toolName: { type: "string", description: "Tool name frozen during MCP discovery." },
+			protocolVersion: { type: "string", enum: ["2026-07-28"], description: "Only MCP protocol version accepted by the runtime." },
+			state: { type: "string", enum: ["working", "input_required", "queued", "running", "completed", "cancelled", "failed", "recovery_required"], description: "Durable task state visible across process restarts." },
+			inputRequest: { anyOf: [{ $ref: "#/components/schemas/McpTaskInputRequest" }, { type: "null" }], description: "Saved question still associated with the task, or null." },
+			inputResponse: { anyOf: [{ $ref: "#/components/schemas/McpTaskInputResponse" }, { type: "null" }], description: "Accepted response, or null before the caller answers." },
+			result: { description: "Checked MCP result after success, otherwise null." },
+			failureCode: { type: ["string", "null"], description: "Bounded machine-readable failure or recovery code." },
 		},
 	},
 	ResourceShare: {

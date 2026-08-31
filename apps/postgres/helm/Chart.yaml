@@ -2,5 +2,5 @@ apiVersion: v2
 name: postgres
 description: OpenCrane-owned durable PostgreSQL deployment through CloudNativePG.
 type: application
-version: 0.9.3
+version: 0.10.0
 appVersion: "17"

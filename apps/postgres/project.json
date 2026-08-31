@@ -2,12 +2,12 @@
   "name": "postgres",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "metadata": { "release": { "adaptedVersion": "0.9.3" } },
+  "metadata": { "release": { "adaptedVersion": "0.10.0" } },
   "tags": ["type:app", "layer:entrypoint", "scope:postgres"],
   "targets": {
     "helm-lint": {
       "executor": "nx:run-commands",
-      "options": { "command": "helm lint apps/postgres/helm --set-string image=ghcr.io/elewa-git/opencrane-postgres:17.5-sha-qualified@sha256:0000000000000000000000000000000000000000000000000000000000000000 --set-json 'databases=[{\"name\":\"opencrane\",\"owner\":\"opencrane\",\"credentialsSecret\":\"lint-opencrane\"},{\"name\":\"obot\",\"owner\":\"obot\",\"credentialsSecret\":\"lint-obot\"},{\"name\":\"litellm\",\"owner\":\"litellm\",\"credentialsSecret\":\"lint-litellm\"}]' --set-string databaseAdmin.name=lint-admin --set-string databaseAdmin.credentialsSecret=lint-admin-secret --set-string bootstrap.targetBaseline.sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=lint-baseline --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql --set-string networkPolicy.kubernetesApiServerCidrs[0]=10.43.0.1/32 --set-string networkPolicy.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32 --set networkPolicy.kubernetesApiServerEndpointPort=6443" }
+      "options": { "command": "helm lint apps/postgres/helm --set-string image=ghcr.io/elewa-git/opencrane-postgres:17.5-sha-qualified@sha256:0000000000000000000000000000000000000000000000000000000000000000 --set-json 'databases=[{\"name\":\"opencrane\",\"owner\":\"opencrane\",\"credentialsSecret\":\"lint-opencrane\"},{\"name\":\"litellm\",\"owner\":\"litellm\",\"credentialsSecret\":\"lint-litellm\"}]' --set-string databaseAdmin.name=lint-admin --set-string databaseAdmin.credentialsSecret=lint-admin-secret --set-string bootstrap.targetBaseline.sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=lint-baseline --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql --set-string networkPolicy.kubernetesApiServerCidrs[0]=10.43.0.1/32 --set-string networkPolicy.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32 --set networkPolicy.kubernetesApiServerEndpointPort=6443" }
     },
     "container": {
       "executor": "nx:run-commands",
@@ -29,7 +29,6 @@
         "commands": [
           "bash apps/postgres/tests/helm-contract.sh",
           "bash apps/postgres/tests/baseline-publisher-contract.sh",
-          "bash apps/postgres/tests/migration-publisher-contract.sh",
           "bash apps/_infra/deploy-k8s/platform/tests/database-migration-deploy-contract.sh"
         ],
         "parallel": false

@@ -1,0 +1,2 @@
+-- The 0.9.2 IAM prerequisite has prepared the schema when the 0.10.0 Prisma ledger starts.
+-- This no-op bridge prevents Prisma from replaying pre-0.10 schema history.

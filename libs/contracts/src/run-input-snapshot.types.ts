@@ -76,26 +76,19 @@ export interface ServiceRunInputSnapshotIdentity extends RunInputSnapshotFleetMe
 /** The run's identity — person or service — decided before the runtime receives the snapshot. */
 export type RunInputSnapshotIdentity = UserRunInputSnapshotIdentity | ServiceRunInputSnapshotIdentity;
 
-/** One reviewed integration tool, frozen when the run was admitted. */
-export interface RunInputSnapshotToolDefinition
+/** One exact MCP tool revision frozen when a run is admitted. */
+export interface RunInputSnapshotMcpTool
 {
-  /** Stable MCP tool name selected by the immutable revision. */
+  /** Immutable McpToolRevision primary key selected by the AgentRevision. */
+  toolRevisionId: string;
+  /** Stable MCP tool name discovered with the selected server revision. */
   name: string;
-  /** Human-readable model guidance reviewed with the schema. */
-  description: string;
+  /** Human-readable model guidance discovered with the selected server revision. */
+  description: string | null;
   /** Exact JSON Schema used for model input and approval validation. */
-  parametersSchema: JsonValue;
-  /** Digest of the schema, so it cannot change after the snapshot was admitted. */
-  parametersSchemaDigest: string;
-}
-
-/** The tools one integration is allowed to expose, as chosen by the AgentRevision being executed. */
-export interface RunInputSnapshotIntegrationAssignment
-{
-  /** Integration selected by the revision. */
-  integrationId: string;
-  /** Exact reviewed tool definitions the revision permits through that integration. */
-  toolDefinitions: readonly RunInputSnapshotToolDefinition[];
+  inputSchema: JsonValue;
+  /** Digest of the input schema, so it cannot change after admission. */
+  inputSchemaDigest: string;
 }
 
 /** Everything a run needs, compiled and frozen before the runtime is assigned. */
@@ -125,8 +118,8 @@ export interface RunInputSnapshot
   skillRevisionIds: readonly SkillRevisionId[];
   /** Authorised memory retrieval policy selected for this run. */
   memoryQueryPolicy: JsonValue;
-  /** Immutable third-party integration tool allowances selected by the revision. */
-  integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[];
+  /** Exact immutable MCP tool revisions selected by the AgentRevision. */
+  mcpTools: readonly RunInputSnapshotMcpTool[];
   /** Server-selected model route without provider credentials. */
   modelRoute: JsonValue;
   /** Immutable token, cost, time, and tool limits. */

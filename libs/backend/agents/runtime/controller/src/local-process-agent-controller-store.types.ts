@@ -1,23 +1,14 @@
 import type { ChildProcess } from "node:child_process";
-import type { V1Job, V1Pod } from "@kubernetes/client-node";
+
+import type { WarmRuntimePodCandidate, WarmRuntimePoolProfile } from "@opencrane/backend/agents/runtime/k8s-launcher";
 import type { LocalAgentRuntimeModelStrategies } from "@opencrane/models/local-development";
 
-/**
- * Process-spawning seam used by the local workload host.
- *
- * Tests replace this port so they can prove credential-file and lifecycle policy without starting
- * Python. The development controller supplies Node's `spawn`; production never constructs this
- * adapter.
- */
+import type { WarmRuntimePoolProfiles } from "./warm-runtime-controller.types";
+
+/** Process-spawning seam used by the local warm-runtime host. */
 export interface LocalAgentRuntimeProcessSpawner
 {
-	/**
-	 * Starts the existing agent-runtime development entrypoint with an allowlisted environment.
-	 * @param executable - Python executable resolved by the developer's shell.
-	 * @param arguments_ - Module arguments that select the development entrypoint.
-	 * @param options - Working directory and allowlisted credential paths for the child.
-	 * @returns The process handle used for shutdown and deadline enforcement.
-	 */
+	/** Starts one existing Python runtime with an allowlisted environment. */
 	(executable: string, arguments_: readonly string[], options: LocalAgentRuntimeSpawnOptions): ChildProcess;
 }
 
@@ -32,57 +23,61 @@ export interface LocalAgentRuntimeSpawnOptions
 	readonly stdio: "inherit";
 }
 
-/** Configuration for the development-only local process workload host. */
-export interface LocalProcessAgentControllerStoreOptions
+/** Configuration for the development-only local warm-runtime store. */
+export interface LocalProcessWarmRuntimeStoreOptions
 {
-	/** Absolute path to the Python application directory that contains the `src` package. */
+	/** Absolute path to the Python agent-runtime application. */
 	readonly runtimeApplicationDirectory: string;
-	/** Python executable used to launch the existing agent-runtime process. */
+	/** Python executable used to launch one claimed local runtime. */
 	readonly pythonExecutable: string;
-	/** Local OpenCrane runtime-stream endpoint used by bootstrap, stream, and candidate requests. */
+	/** Loopback OpenCrane warm-runtime endpoint used by binding and command streaming. */
 	readonly runtimeStreamUrl: string;
-	/** LiteLLM endpoint used by Alternatives A and B; simulated mode must omit it. */
+	/** Local or remote LiteLLM endpoint; simulated mode omits it. */
 	readonly litellmBaseUrl?: string;
-	/** File containing the local launch secret used to sign per-attempt runtime bearers. */
+	/** File containing the local-session secret used to sign runtime bearers. */
 	readonly runtimeLaunchSecretPath: string;
-	/** Model strategy selected by the owning Tier 2 development profile. */
+	/** Model strategy selected by the owning Tier 2 profile. */
 	readonly modelStrategy: LocalAgentRuntimeModelStrategies;
-	/** Stops every spawned attempt when the local controller exits. */
+	/** Fixed local warm pools keyed by the workload profile selected by the server. */
+	readonly profiles: WarmRuntimePoolProfiles;
+	/** Stops every spawned runtime when the local controller exits. */
 	readonly shutdownSignal: AbortSignal;
-	/** Parent directory for private per-attempt temporary directories. */
+	/** Parent directory for private runtime directories. */
 	readonly temporaryDirectoryRoot?: string;
 	/** Injected process seam used by focused tests. */
 	readonly spawnProcess?: LocalAgentRuntimeProcessSpawner;
+	/** Injected readiness transport used by focused tests. */
+	readonly fetch?: typeof fetch;
 }
 
-/** Private projected-file paths owned by one local runtime attempt. */
-export interface LocalAgentRuntimeAttemptFiles
+/** Private files owned by one synthetic warm Pod. */
+export interface LocalAgentRuntimeFiles
 {
-	/** Private per-attempt temporary directory. */
+	/** Private per-Pod temporary directory. */
 	readonly directory: string;
-	/** Copied runtime bearer token path. */
+	/** Signed runtime bearer path. */
 	readonly tokenPath: string;
-	/** Projected bootstrap reference path. */
-	readonly bootstrapPath: string;
-	/** Attempt-scoped LiteLLM key path. */
-	readonly keyPath: string;
+	/** Public proof-evidence path isolated from every other local runtime. */
+	readonly proofEvidencePath: string;
 }
 
-/** Mutable process projection retained while the development controller is alive. */
-export interface LocalAgentRuntimeAttempt
+/** Mutable local projection of one synthetic warm Pod. */
+export interface LocalWarmRuntime
 {
-	/** Exact Job-shaped projection built by the existing controller flow. */
-	job: V1Job;
-	/** Synthetic workload UID committed through the normal assignment contract. */
-	readonly workloadUid: string;
-	/** Private projected files for this attempt. */
-	readonly files: LocalAgentRuntimeAttemptFiles;
-	/** Synthetic Pod evidence registered through the normal workload contract. */
-	pod?: V1Pod;
-	/** Spawned existing agent-runtime process after release. */
+	/** Profile name saved in the server's workflow record. */
+	readonly profileName: string;
+	/** Fixed pool configuration selected for this runtime. */
+	readonly pool: WarmRuntimePoolProfile;
+	/** Synthetic immutable Pod identity exposed to the warm workflow. */
+	readonly candidate: WarmRuntimePodCandidate;
+	/** Resource version returned after profile activation. */
+	activationResourceVersion?: string;
+	/** Private files created only after database reservation wins. */
+	files?: LocalAgentRuntimeFiles;
+	/** Spawned existing runtime process. */
 	process?: ChildProcess;
-	/** Timer that enforces the admitted assignment deadline. */
-	deadline?: NodeJS.Timeout;
+	/** Records that the child exited before workflow-owned deletion. */
+	terminal?: boolean;
 }
 
 /** Fixed identity coordinates the development server binds to signed local runtime tokens. */
@@ -92,30 +87,26 @@ export interface LocalAgentRuntimeTokenReviewerOptions
 	readonly launchSecretPath: string;
 	/** Runtime namespace configured in the server and controller profile. */
 	readonly namespace: string;
-	/** Runtime ServiceAccount name configured for the selected personal or managed profile. */
+	/** Runtime ServiceAccount configured for the selected profile. */
 	readonly serviceAccountName: string;
 }
 
-/** Authenticated attempt identity returned after a local runtime token signature matches. */
+/** Authenticated runtime identity returned after a local token signature matches. */
 interface LocalAgentRuntimeIdentity
 {
-	/** Kubernetes-shaped subject retained by the existing assignment authority. */
+	/** Kubernetes-shaped subject retained by the warm-runtime authority. */
 	readonly subject: string;
-	/** Fixed local runtime namespace for the selected personal or managed profile. */
+	/** Fixed local runtime namespace. */
 	readonly namespace: string;
-	/** Fixed local ServiceAccount for the selected personal or managed profile. */
+	/** Fixed local runtime ServiceAccount. */
 	readonly serviceAccountName: string;
-	/** Attempt process identity authenticated inside the signed bearer. */
+	/** Synthetic Pod identity authenticated inside the signed bearer. */
 	readonly podUid: string;
 }
 
-/** Development token-review port structurally compatible with the runtime stream's reviewer. */
+/** Development token-review port structurally compatible with warm-runtime identity review. */
 export interface LocalAgentRuntimeTokenReviewer
 {
-	/**
-	 * Verifies one signed local runtime bearer and returns its bound process identity.
-	 * @param token - Bearer presented to bootstrap, stream, or candidate routes.
-	 * @returns Fixed namespace/ServiceAccount plus authenticated Pod UID, or null for any mismatch.
-	 */
+	/** Verifies one signed local runtime bearer. */
 	__Review(token: string): Promise<LocalAgentRuntimeIdentity | null>;
 }

@@ -29,7 +29,7 @@ describe("PrismaAgentRevisionLifecycleUnitOfWork", function _Suite()
 				createdAt: input.data.createdAt,
 				publishedAt: null,
 				skillAssignments: [],
-				integrationAssignments: [],
+				mcpToolAssignments: [],
 				boundaryAttachments: [],
 			};
 		});
@@ -48,7 +48,7 @@ describe("PrismaAgentRevisionLifecycleUnitOfWork", function _Suite()
 			workloadProfile: "managed",
 			authoredBy: "principal-human",
 			changeMessage: "Initial revision",
-			content: { promptPolicyVersion: "prompt-v1", personaRevisionId: null, modelDefinitionId: "model-1", budget: { maxTurns: 5, maxTokens: 1_000, maxCostUsdMicros: 500_000, maxDurationMs: 30_000 }, skills: [], integrationAssignments: [], boundaryAttachments: [] },
+			content: { promptPolicyVersion: "prompt-v1", personaRevisionId: null, modelDefinitionId: "model-1", budget: { maxTurns: 5, maxTokens: 1_000, maxCostUsdMicros: 500_000, maxDurationMs: 30_000 }, skills: [], mcpToolRevisionIds: [], boundaryAttachments: [] },
 		}, "2026-08-21T12:00:00.000Z");
 
 		expect(result.outcome).toBe("created");
@@ -58,5 +58,6 @@ describe("PrismaAgentRevisionLifecycleUnitOfWork", function _Suite()
 		expect(principalCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ id: expectedPrincipalId, siloId: "silo-1", issuer: MANAGED_AGENT_SERVICE_PRINCIPAL_ISSUER, subject: result.service.id, provenance: PrincipalProvenance.Internal }) });
 		expect(serviceCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ id: result.service.id, principalId: expectedPrincipalId, kind: AgentServiceKind.Managed, state: AgentServiceState.Draft }) });
 		expect(principalCreate.mock.invocationCallOrder[0]).toBeLessThan(serviceCreate.mock.invocationCallOrder[0]);
+		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
 	});
 });

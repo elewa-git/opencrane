@@ -30,28 +30,24 @@ function _revision(row: { revision: number; issuerId: string; issuerKeyId: strin
 }
 
 /**
- * Reads stored membership revisions from Postgres and moves the newest-accepted-revision number.
+ * Reads stored membership revisions inside an existing database transaction.
  *
- * Hand it a full PrismaClient and it opens its own transaction to record an acceptance. Hand it a
- * transaction client instead and it works inside that transaction on purpose: the accepted-revision
- * row and its audit row then commit together with whatever run admission the caller is doing, so a
- * run can never exist while the membership it relied on was rolled back.
+ * The accepted-revision row and its audit row commit together with the caller's work, so a run can
+ * never exist while the membership it relied on was rolled back.
  *
  * Called by: libs/backend/agents/execution/inputs/main/src/personal-execution-identity-envelope-source.ts
- * and libs/backend/server/agents/agent-services/main/src/db/prisma-managed-execution-evidence.ts, which
- * both pass their admission transaction, and apps/opencrane/src/app/channel-target-composition.ts.
+ * and libs/backend/server/agents/agent-services/main/src/db/prisma-managed-execution-evidence.ts.
  * @implements FleetMembershipAuthorityRepository
  */
 export class PrismaFleetMembershipAuthorityRepository implements FleetMembershipAuthorityRepository
 {
 	/** OpenCrane product-authority database client. */
-	private readonly prisma: PrismaClient | Prisma.TransactionClient;
+	private readonly prisma: Prisma.TransactionClient;
 
 	/**
-	 * @param prisma - A full client, and this adapter opens its own acceptance transaction; or an
-	 *                 existing transaction client, and it joins that transaction instead.
+	 * @param prisma - The transaction that owns the membership check and its surrounding work.
 	 */
-	constructor(prisma: PrismaClient | Prisma.TransactionClient)
+	constructor(prisma: Prisma.TransactionClient)
 	{
 		this.prisma = prisma;
 	}
@@ -79,68 +75,109 @@ export class PrismaFleetMembershipAuthorityRepository implements FleetMembership
 	 */
 	async acceptRevisionAtomically(acceptance: FleetMembershipAcceptance): Promise<FleetMembershipAcceptanceResult>
 	{
-		if (_ownsTransaction(this.prisma))
+		// 1. Read the current high-watermark in the caller's transaction. The exact conditional write below
+		// decides which concurrent acceptance owns the update without a handwritten advisory lock.
+		const current = await this.prisma.highestAcceptedFleetMembership.findUnique({ where: { issuerId_siloId: { issuerId: acceptance.issuerId, siloId: acceptance.siloId } }, include: { verified: true } });
+		if (current !== null && (current.revision > acceptance.revision || (current.revision === acceptance.revision && current.verified.payloadDigest !== acceptance.payloadDigest)))
 		{
-			return this.prisma.$transaction(async function _accept(transaction: Prisma.TransactionClient)
-			{
-				return _acceptRevision(transaction, acceptance);
-			});
+			return { status: "conflict", highestAcceptedRevision: current.revision } as const;
 		}
-		return _acceptRevision(this.prisma, acceptance);
+		if (current?.revision === acceptance.revision)
+			return { status: "already_accepted", highestAcceptedRevision: current.revision } as const;
+
+		// 2. Only move the number when this exact revision and digest is really stored here.
+		const revision = await this.prisma.verifiedFleetMembershipRevision.findFirst({ where: { issuerId: acceptance.issuerId, siloId: acceptance.siloId, revision: acceptance.revision, payloadDigest: acceptance.payloadDigest } });
+		if (revision === null)
+			return { status: "conflict", highestAcceptedRevision: current?.revision ?? 0 } as const;
+		if (current === null)
+		{
+			await this.prisma.highestAcceptedFleetMembership.create({ data: { issuerId: acceptance.issuerId, siloId: acceptance.siloId, revisionId: revision.id, revision: acceptance.revision } });
+		}
+		else
+		{
+			const advanced = await this.prisma.highestAcceptedFleetMembership.updateMany({
+				where: { issuerId: acceptance.issuerId, siloId: acceptance.siloId, revisionId: current.revisionId, revision: current.revision },
+				data: { revisionId: revision.id, revision: acceptance.revision, acceptedAt: new Date() },
+			});
+			if (advanced.count !== 1)
+			{
+				const winner = await this.prisma.highestAcceptedFleetMembership.findUnique({ where: { issuerId_siloId: { issuerId: acceptance.issuerId, siloId: acceptance.siloId } }, include: { verified: true } });
+				if (winner?.revision === acceptance.revision && winner.verified.payloadDigest === acceptance.payloadDigest)
+					return { status: "already_accepted", highestAcceptedRevision: winner.revision } as const;
+				return { status: "conflict", highestAcceptedRevision: winner?.revision ?? current.revision } as const;
+			}
+		}
+
+		// 3. Write the audit row in the same transaction so the stored state and the audit log agree.
+		const decisionDigest = __DigestCanonicalJson({ issuerId: acceptance.issuerId, siloId: acceptance.siloId, revision: acceptance.revision, payloadDigest: acceptance.payloadDigest } as JsonValue);
+		await __AppendAuditDecision(this.prisma, {
+			decisionDigest,
+			siloId: acceptance.siloId,
+			actorKind: "system",
+			actorId: acceptance.issuerId,
+			resourceKind: "fleet-membership",
+			resourceId: `${acceptance.issuerId}:${acceptance.siloId}`,
+			action: "accept-revision",
+			catalogId: "fleet-membership",
+			catalogRevision: acceptance.revision,
+			catalogDigest: acceptance.payloadDigest,
+			argumentsDigest: acceptance.payloadDigest,
+			policyRevisionHash: acceptance.payloadDigest,
+			effectiveAuthorizationDigest: acceptance.payloadDigest,
+			membershipRevision: acceptance.revision,
+			outcome: "allow",
+			reasonCode: "verified_revision_accepted",
+		});
+		return { status: "accepted", highestAcceptedRevision: acceptance.revision } as const;
 	}
 }
 
-/** Returns true for a full client (it has `$transaction`), false for a transaction client. */
-function _ownsTransaction(prisma: PrismaClient | Prisma.TransactionClient): prisma is PrismaClient
+/** Opens the serializable transaction used by standalone membership verification. */
+export class PrismaFleetMembershipAuthorityUnitOfWork implements FleetMembershipAuthorityRepository
 {
-	return "$transaction" in prisma;
-}
+	/** OpenCrane product-authority database client. */
+	private readonly prisma: PrismaClient;
 
-/** Advances the membership high-watermark and audit inside the caller's already selected transaction. */
-async function _acceptRevision(transaction: Prisma.TransactionClient, acceptance: FleetMembershipAcceptance): Promise<FleetMembershipAcceptanceResult>
-{
-	// 1. Serialize even the first acceptance for an issuer/silo pair, where no row exists to lock. The
-	// length prefix keeps pairs distinct without a NUL byte, which PostgreSQL text rejects. Cast the
-	// lock result because Prisma cannot deserialize PostgreSQL's void return type from a raw query.
-	const lockKey = `${acceptance.issuerId.length}:${acceptance.issuerId}${acceptance.siloId}`;
-	await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS "lock"`);
-	const current = await transaction.highestAcceptedFleetMembership.findUnique({ where: { issuerId_siloId: { issuerId: acceptance.issuerId, siloId: acceptance.siloId } }, include: { verified: true } });
-	if (current !== null && (current.revision > acceptance.revision || (current.revision === acceptance.revision && current.verified.payloadDigest !== acceptance.payloadDigest)))
+	/** Creates the standalone membership authority. */
+	constructor(prisma: PrismaClient)
 	{
-		return { status: "conflict", highestAcceptedRevision: current.revision } as const;
+		this.prisma = prisma;
 	}
-	if (current?.revision === acceptance.revision)
-		return { status: "already_accepted", highestAcceptedRevision: current.revision } as const;
 
-	// 2. Only move the number when this exact revision and digest is really stored here.
-	const revision = await transaction.verifiedFleetMembershipRevision.findFirst({ where: { issuerId: acceptance.issuerId, siloId: acceptance.siloId, revision: acceptance.revision, payloadDigest: acceptance.payloadDigest } });
-	if (revision === null)
-		return { status: "conflict", highestAcceptedRevision: current?.revision ?? 0 } as const;
-	await transaction.highestAcceptedFleetMembership.upsert({
-		where: { issuerId_siloId: { issuerId: acceptance.issuerId, siloId: acceptance.siloId } },
-		create: { issuerId: acceptance.issuerId, siloId: acceptance.siloId, revisionId: revision.id, revision: acceptance.revision },
-		update: { revisionId: revision.id, revision: acceptance.revision, acceptedAt: new Date() },
-	});
+	/** Loads the latest signed membership revision in a short serializable transaction. */
+	async getLatestSignedRevision(trustedIssuerId: string, siloId: string): Promise<SignedFleetMembershipRevision | null>
+	{
+		return this._Run(async function _Load(repository)
+		{
+			return repository.getLatestSignedRevision(trustedIssuerId, siloId);
+		});
+	}
 
-	// 3. Write the audit row in the same transaction so the stored state and the audit log agree.
-	const decisionDigest = __DigestCanonicalJson({ issuerId: acceptance.issuerId, siloId: acceptance.siloId, revision: acceptance.revision, payloadDigest: acceptance.payloadDigest } as JsonValue);
-	await __AppendAuditDecision(transaction, {
-		decisionDigest,
-		siloId: acceptance.siloId,
-		actorKind: "system",
-		actorId: acceptance.issuerId,
-		resourceKind: "fleet-membership",
-		resourceId: `${acceptance.issuerId}:${acceptance.siloId}`,
-		action: "accept-revision",
-		catalogId: "fleet-membership",
-		catalogRevision: acceptance.revision,
-		catalogDigest: acceptance.payloadDigest,
-		argumentsDigest: acceptance.payloadDigest,
-		policyRevisionHash: acceptance.payloadDigest,
-		effectiveAuthorizationDigest: acceptance.payloadDigest,
-		membershipRevision: acceptance.revision,
-		outcome: "allow",
-		reasonCode: "verified_revision_accepted",
-	});
-	return { status: "accepted", highestAcceptedRevision: acceptance.revision } as const;
+	/** Loads the accepted membership high-watermark in a short serializable transaction. */
+	async getHighestAcceptedRevision(trustedIssuerId: string, siloId: string): Promise<number>
+	{
+		return this._Run(async function _Load(repository)
+		{
+			return repository.getHighestAcceptedRevision(trustedIssuerId, siloId);
+		});
+	}
+
+	/** Advances the membership high-watermark and its audit row atomically. */
+	async acceptRevisionAtomically(acceptance: FleetMembershipAcceptance): Promise<FleetMembershipAcceptanceResult>
+	{
+		return this._Run(async function _Accept(repository)
+		{
+			return repository.acceptRevisionAtomically(acceptance);
+		});
+	}
+
+	/** Runs one standalone membership operation in a serializable transaction. */
+	private _Run<TResult>(operation: (repository: PrismaFleetMembershipAuthorityRepository) => Promise<TResult>): Promise<TResult>
+	{
+		return this.prisma.$transaction(async function _Run(transaction: Prisma.TransactionClient)
+		{
+			const repository = new PrismaFleetMembershipAuthorityRepository(transaction);
+			return operation(repository);
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+	}
 }

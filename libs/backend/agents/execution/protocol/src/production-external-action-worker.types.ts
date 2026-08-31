@@ -19,7 +19,7 @@ export interface ProductionExternalActionWorkerDependencies
 	readonly contexts: ExternalActionExecutionContextLoader;
 	/** Saves tool lifecycle events. */
 	readonly events: ExternalActionWorkerEventSink;
-	/** Existing server-owned integration, sandbox, and memory transports. */
+	/** Existing server-owned sandbox and memory transports. */
 	readonly transports: ProductionExternalActionTransports;
 	/** Opens approval requests. Wired separately from the provider adapter. */
 	readonly approvals: ExternalActionApprovalOpener;

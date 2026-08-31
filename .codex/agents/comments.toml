@@ -130,7 +130,7 @@ surrounding package already uses:
   `{@link}`.
 - **Python** — module and definition docstrings with Google-style `Args:`, `Returns:`, and
   `Raises:` sections, as established in `apps/agent-runtime/src/config.py` and
-  `model_loop/checkpoints.py`. Do not import JSDoc tags into Python. Numbered inline `#`
+  `attempts/continuation.py`. Do not import JSDoc tags into Python. Numbered inline `#`
   comments for a function with three or more sequential steps.
 - **Shell and Helm** — `#` comments, with the same demand for a why.
 
