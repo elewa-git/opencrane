@@ -21,6 +21,8 @@ grep -Fq -- 'testv5 requires the Agent Sandbox controller to use an immutable im
 grep -Fq -- 'testv5 requires the Agent Sandbox extensions reconciler' "$DEPLOY_SCRIPT"
 grep -Fq -- 'testv5 requires a Ready Agent Sandbox controller' "$DEPLOY_SCRIPT"
 grep -Fq -- 'testv5 requires the approved gvisor RuntimeClass' "$DEPLOY_SCRIPT"
+grep -Fq -- "requires key '\$required_tls_key'" "$DEPLOY_SCRIPT"
+grep -Fq -- "requires key 'password'" "$DEPLOY_SCRIPT"
 grep -Fq -- 'historyStore.kurrentdb.enabled=true' "$DEPLOY_SCRIPT"
 grep -Fq -- 'Fresh silo deploys require `--opencrane-ui-digest` and `--cognee-digest`' "$DEPLOY_SCRIPT"
 grep -Fq -- 'ensure_provider_key_secrets' "$PROVIDER_SECRET_HELPER"
@@ -222,6 +224,40 @@ if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
   echo "silo wrapper accepted a release name outside its ClusterTenant boundary" >&2
   exit 1
 fi
+
+cat >"$wrapper_test_dir/bin/kubectl" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1 $2 $3" == "get deployment agent-sandbox-controller" ]]; then
+  if [[ "$*" == *args* ]]; then
+    printf '%s\n' '--extensions'
+  else
+    printf '%s\n' 'registry.invalid/agent-sandbox-controller@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  fi
+fi
+if [[ "$*" == *'go-template='* && "$*" != *"$MISSING_KURRENTDB_SECRET_KEY"* ]]; then
+  printf '%s' 'present'
+fi
+EOF
+chmod +x "$wrapper_test_dir/bin/kubectl"
+
+for missing_kurrentdb_secret_key in tls.crt tls.key ca.crt password; do
+  testv5_error_file="$wrapper_test_dir/testv5-$missing_kurrentdb_secret_key.error"
+  if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" MISSING_KURRENTDB_SECRET_KEY="$missing_kurrentdb_secret_key" \
+    bash "$wrapper_test_dir/deploy.sh" \
+      --base-domain dev.opencrane.ai \
+      --cluster-tenant testv5 \
+      --acme-email operator@example.com \
+      --first-user-email owner@example.com \
+      --oidc-issuer-url https://issuer.example.com/ \
+      --oidc-client-id test-client \
+      --kurrentdb-image-digest sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+      --kurrentdb-tls-secret kurrentdb-tls \
+      --kurrentdb-bootstrap-admin-secret kurrentdb-bootstrap > /dev/null 2>"$testv5_error_file"; then
+    echo "testv5 accepted KurrentDB Secret without '$missing_kurrentdb_secret_key'" >&2
+    exit 1
+  fi
+  grep -Fq "requires key '$missing_kurrentdb_secret_key'" "$testv5_error_file"
+done
 
 provider_secret_calls=()
 kubectl()

@@ -38,7 +38,9 @@
 # the disposable local k3d smoke.
 #
 # Prereqs: kubectl, helm, the cluster-wide controllers, and the PostgreSQL credentials
-# Secrets already present in the target namespace.
+# Secrets already present in the target namespace. testv5 also requires a ready Agent Sandbox
+# controller with its extensions and the gvisor RuntimeClass, plus KurrentDB TLS keys
+# (tls.crt, tls.key, ca.crt) and an administrator password key in the named Secrets.
 # =============================================================================
 set -euo pipefail
 
@@ -120,6 +122,10 @@ if [[ "$CLUSTER_TENANT" == "testv5" ]]; then
   kubectl get runtimeclass gvisor >/dev/null 2>&1 || { err "testv5 requires the approved gvisor RuntimeClass."; exit 1; }
   kubectl get secret "$KURRENTDB_TLS_SECRET" --namespace "$NAMESPACE" >/dev/null 2>&1 || { err "testv5 KurrentDB TLS Secret '$KURRENTDB_TLS_SECRET' does not exist in namespace '$NAMESPACE'."; exit 1; }
   kubectl get secret "$KURRENTDB_BOOTSTRAP_ADMIN_SECRET" --namespace "$NAMESPACE" >/dev/null 2>&1 || { err "testv5 KurrentDB bootstrap Secret '$KURRENTDB_BOOTSTRAP_ADMIN_SECRET' does not exist in namespace '$NAMESPACE'."; exit 1; }
+  for required_tls_key in tls.crt tls.key ca.crt; do
+    [[ -n "$(kubectl get secret "$KURRENTDB_TLS_SECRET" --namespace "$NAMESPACE" -o "go-template={{ index .data \"$required_tls_key\" }}")" ]] || { err "testv5 KurrentDB TLS Secret '$KURRENTDB_TLS_SECRET' requires key '$required_tls_key'."; exit 1; }
+  done
+  [[ -n "$(kubectl get secret "$KURRENTDB_BOOTSTRAP_ADMIN_SECRET" --namespace "$NAMESPACE" -o 'go-template={{ index .data "password" }}')" ]] || { err "testv5 KurrentDB bootstrap Secret '$KURRENTDB_BOOTSTRAP_ADMIN_SECRET' requires key 'password'."; exit 1; }
   PASSTHROUGH+=(--set "historyStore.kurrentdb.enabled=true" --set-string "historyStore.kurrentdb.image.digest=$KURRENTDB_IMAGE_DIGEST" --set-string "historyStore.kurrentdb.tls.existingSecret=$KURRENTDB_TLS_SECRET" --set-string "historyStore.kurrentdb.bootstrapAdmin.existingSecret=$KURRENTDB_BOOTSTRAP_ADMIN_SECRET")
 fi
 

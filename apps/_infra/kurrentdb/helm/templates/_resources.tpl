@@ -56,10 +56,21 @@ spec:
     spec:
       serviceAccountName: {{ include "opencrane.fullname" . }}-kurrentdb
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: kurrentdb
           image: "{{ $history.image.repository }}@{{ $history.image.digest }}"
           imagePullPolicy: {{ $history.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - name: grpc
               containerPort: {{ $history.service.port }}
@@ -80,7 +91,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ $history.bootstrapAdmin.existingSecret }}
-                  key: {{ $history.bootstrapAdmin.passwordKey }}
+                  key: password
           readinessProbe:
             tcpSocket:
               port: grpc
@@ -103,7 +114,7 @@ spec:
         - name: kurrentdb-tls
           secret:
             secretName: {{ $history.tls.existingSecret }}
-            defaultMode: 0400
+            defaultMode: 0440
   volumeClaimTemplates:
     - metadata:
         name: data

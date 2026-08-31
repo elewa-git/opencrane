@@ -119,7 +119,6 @@ historyStore:
       existingSecret: ""
     bootstrapAdmin:
       existingSecret: ""
-      passwordKey: password
     persistence:
       storageClassName: ""
       size: 20Gi
