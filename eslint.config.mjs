@@ -143,7 +143,7 @@ export default [
             { sourceTag: "scope:cluster-tenants", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:k8s-api", "scope:shared"] },
 			{ sourceTag: "scope:conversation-projection", onlyDependOnLibsWithTags: ["scope:conversation-agent-threads", "scope:conversation-projection", "scope:shared"] },
 			{ sourceTag: "scope:conversation-agent-threads", onlyDependOnLibsWithTags: ["scope:conversation-agent-threads", "scope:shared"] },
-			{ sourceTag: "scope:conversations", onlyDependOnLibsWithTags: ["scope:agents", "scope:auth", "scope:authorization", "scope:channel-targets", "scope:conversation-agent-threads", "scope:conversation-projection", "scope:conversations", "scope:execution-admission", "scope:execution-runs", "scope:shared", "scope:workflows"] },
+			{ sourceTag: "scope:conversations", onlyDependOnLibsWithTags: ["scope:agents", "scope:auth", "scope:authorization", "scope:channel-targets", "scope:conversation-agent-threads", "scope:conversation-projection", "scope:conversations", "scope:execution-admission", "scope:execution-runs", "scope:history-store", "scope:shared", "scope:workflows"] },
 			{ sourceTag: "scope:conversation-assets", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:auth", "scope:authorization", "scope:conversations", "scope:conversation-assets", "scope:execution-runs", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:personal-configuration", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:auth", "scope:personal-configuration", "scope:shared"] },
 			{ sourceTag: "scope:user-onboarding", onlyDependOnLibsWithTags: ["scope:user-onboarding", "scope:shared"] },

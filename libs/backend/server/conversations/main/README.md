@@ -41,6 +41,16 @@ Participant run retry is injected through the runs package's `RunRetryAuthority`
 composition supplies route and session facts but neither constructs a run repository nor owns its
 transaction retries.
 
+`BoundConversationWriter` is the KurrentDB-facing computer boundary. A caller mints one binding for
+one silo, conversation, computer lease generation, agent identity, run, and expected stream
+revision; the writer then stamps its agent author, stream position, timestamp, and Kurrent event
+metadata before one append. It accepts only opaque participant-entry references, checks the
+requested audience through a current visibility policy, rejects an attestation from the computer,
+enforces a byte and rate budget, rechecks the active lease before each physical append, and cannot
+read history, select a different stream, or append a second distinct entry. A response-lost retry
+reuses the originally stamped source command and entry bytes. It remains uncomposed until the direct KurrentDB
+conversation-authority replacement can delete the relational writer in the same slice.
+
 Before creation, the directory returns active organisation members as opaque membership references.
 It never returns login subjects, email addresses, roles, or personal-memory identity. It also
 projects the caller's active personal Agent only when exactly one service matches their approved
@@ -105,6 +115,9 @@ transport for workloads; it is not a browser fallback.
   same message authority and replay repository as the REST conversation metadata API.
 - `_SelfConversationsOpenapiPaths` contributes the remaining REST metadata and lifecycle APIs to the
   server-owned OpenAPI document.
+- `BoundConversationWriter` is a one-use, stream-bound KurrentDB append boundary for a currently
+  leased computer. Its supporting binding, clock, rate-limit, visibility-policy, and lease-fence
+  contracts keep the computer unable to select a target stream or stamp a trusted entry coordinate.
 
 ## Boundary
 
@@ -125,9 +138,9 @@ returned as `capacity_limited` rather than being misreported as a persistence ou
 ## Dependency direction
 
 Tagged `scope:conversations` at the backend layer, it may use its own scope, the narrow
-`scope:conversation-projection` engine, its listed backend authorities, and shared contracts. The
-auth edge resolves request identity only. It cannot import an app, frontend state, or deployment
-package.
+`scope:conversation-projection` engine, the narrow `scope:history-store` append port, its listed
+backend authorities, and shared contracts. The auth edge resolves request identity only. It cannot
+import an app, frontend state, or deployment package.
 
 ## Data & persistence
 
