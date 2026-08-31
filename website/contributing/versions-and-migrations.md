@@ -1,89 +1,63 @@
 # Versions and migrations
 
-OpenCrane ships one **repository train** made of many independently versioned applications,
-Helm charts and a shared database schema. This page covers how a change stamps its version,
-how chart and database migrations are recorded, and how CI enforces all of it.
+OpenCrane is **pre-1.0**. There is no version-to-version upgrade path: one current release
+manifest binds the fresh-install database baseline, and a schema change is made by editing that
+baseline directly, not by writing a migration. Upgrade contracts return once OpenCrane reaches
+MVP.
 
 > See also: [The CI pipeline](/contributing/ci-pipeline) (where `check:release-versioning` runs),
-> [Deploying](/contributing/deploying) (how the umbrella derives its subchart packaging), and the
-> full policy in
-> [`docs/agents/versioning.md`](https://github.com/elewa-git/opencrane/blob/main/docs/agents/versioning.md).
+> [Deploying](/contributing/deploying) (how a fresh install applies the baseline through CNPG),
+> and [Letting an AI agent manage your deployment](/contributing/ai-managed-deployment) (why an
+> agent must rebuild a dev silo rather than attempt an in-place schema upgrade).
 
-## The repository train and the release manifest
+## What the release manifest binds
 
-The root `package.json` version names the current train (for example `0.9.2`). Each train has an
-immutable manifest, [`releases/<version>.json`](https://github.com/elewa-git/opencrane/blob/main/releases),
-recording every application's `adaptedVersion`, chart version and the database schema version
-that work together. Once a version tag exists, that train's composition is frozen: any further
-change must advance the train and create the next manifest.
+The root `package.json` version (for example `0.9.3`) names the one manifest CI checks,
+[`releases/<version>.json`](https://github.com/elewa-git/opencrane/blob/main/releases). Pre-1.0 it
+is not immutable and no new manifest is required per change — a schema change updates the same
+file in place.
 
-## The stamp rule
+| Field | What it is |
+| --- | --- |
+| `repositoryVersion` | Must equal the root `package.json` version. |
+| `database.baselinePath` | The fresh-install authority, [`apps/opencrane/prisma/bootstrap/target-baseline.sql`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/prisma/bootstrap/target-baseline.sql). |
+| `database.baselineSha256` | SHA-256 of that file. `check:release-versioning` recomputes the digest and fails the build if it drifts. |
+| `database.operandImage` | The tagged, digest-pinned CloudNativePG PostgreSQL operand. Its tag's major version must agree with `projects.postgres.externalAppVersion`. |
+| `projects` | One entry per Nx application; only `root` is required. Older fields (`adaptedVersion`, `chartVersion`, `manualTransition`, `previousRepositoryVersion`) stay in the schema so historical manifests keep validating, but no current rule reads them. |
 
-Only applications whose own files changed stamp to the root version:
+There are no version-to-version SQL migration directories, no Helm chart `migrations/*.json`
+transitions, and no per-change version-bump ceremony — all removed as part of the pre-1.0
+baseline-only decision recorded in the deploy ledger's
+[2026-08-31 entry](https://github.com/elewa-git/opencrane/blob/main/docs/agents/deploy-ledger.md).
 
-```text
-did this application's own project-root files change?
-        │
-   yes ─┴─ no
-    │        │
-    ▼        ▼
- stamp to   keep its latest
- the root   released version
- version         │
-    │        (a shared library, the root
-    ▼        dependency set, or the lockfile
-update, together:      moving underneath it does
-  · manifest entry     not trigger a stamp — the
-  · package.json       published image is pinned
-    version mirror     by commit SHA, so the
-  · project.json       shared change reaches the
-    adaptedVersion     app regardless)
-  · chart appVersion
-    (if a chart exists)
-```
+## Making a schema change
 
-Before this rule, every shared change failed CI until every manifest entry was bumped by hand.
-Version-only mirror edits are "stamp-only" and do not count as changes themselves.
-
-## Chart migrations
-
-A changed chart bumps its chart version to the root version and adds exactly one
-`helm/migrations/<from>-to-<to>.json` transition. The umbrella needs no edit: it declares its
-in-repo dependencies with open constraints and packages them fresh at render time (see
-[Deploying](/contributing/deploying)). A newly introduced chart has no predecessor and therefore
-no transition, but it must be declared as an umbrella dependency — the release gate fails when a
-chart-bearing application is missing there.
-
-## Database migrations
-
-A database schema change updates the clean target baseline and adds one reviewed Prisma migration
-under
-[`apps/opencrane/prisma/prisma-migrations/`](https://github.com/elewa-git/opencrane/tree/main/apps/opencrane/prisma/prisma-migrations).
-Tagged 0.9.2 is the direct predecessor of 0.10.0 and still records schema 0.9.0, so its bounded
-migration Job first runs the digest-bound IAM prerequisite and then starts the Prisma ledger.
-CloudNativePG prepares the required `pg_cron` extension before that Job runs: one observed
-`Database` generation installs the extension and the next assigns the existing `cron` schema to the
-OpenCrane owner. The migration container receives only the application credential.
-
-- The release manifest names the exact tagged predecessor and commit.
-- Fresh databases use the target baseline and skip the migration Job.
-- Development databases that ran the untagged 0.9.3 candidate need a reset or reviewed forward
-  repair; the release tooling never treats that candidate as published history.
+1. Edit `target-baseline.sql` directly — it is the only fresh-install authority.
+2. Recompute its SHA-256 and update `database.baselineSha256` in the current
+   `releases/<version>.json`.
+3. Rebuild affected dev silos instead of upgrading them: teardown, then a fresh install applies
+   the new baseline through CNPG `initdb`.
 
 ::: warning
-OpenCrane has not reached its production-compatible 1.0 database contract. The 0.10.0 migration is
-a clean cutover: it deletes pre-central runtime history and drops superseded authorization, outbox,
-workload, and memory tables. Development and test databases must accept that destructive change or
-be reset. From 1.0.0 onward, released database content is preserved by default; destructive data
-operations require a separately reviewed operator action with explicit scope and recovery evidence.
+Do not attempt an in-place schema upgrade on a dev silo while this policy stands. An existing
+cluster keeps the schema it already has — CNPG only applies the baseline to a fresh cluster. If a
+silo needs the new schema, rebuild it and accept the data loss.
 :::
 
-## CI enforces the whole scheme
+## CI enforces the one manifest
 
 ::: tip
-`check:release-versioning` runs inside the `test` job of [`docker.yml`](/contributing/ci-pipeline),
-diffed against the last validated base. A violation fails the pull request — not the deploy.
+`check:release-versioning` (`node scripts/release-versioning-check.mjs`) validates only the
+current manifest: it binds the root version, checks the baseline file exists and matches its
+digest, and checks the PostgreSQL operand tag against the chart's declared major version. It does
+not diff against a base ref or walk a version history.
 :::
 
-Source: [`docs/agents/versioning.md`](https://github.com/elewa-git/opencrane/blob/main/docs/agents/versioning.md)
-and [`scripts/release-versioning-check.mjs`](https://github.com/elewa-git/opencrane/blob/main/scripts/release-versioning-check.mjs).
+## What returns at MVP
+
+Reviewed schema transitions and an in-place upgrade path return once OpenCrane reaches MVP, most
+likely as a Prisma-ledger migrator Job (see the deploy ledger's 2026-08-31 entry).
+
+Source: [`scripts/release-versioning-check.mjs`](https://github.com/elewa-git/opencrane/blob/main/scripts/release-versioning-check.mjs),
+[`releases/README.md`](https://github.com/elewa-git/opencrane/blob/main/releases/README.md), and
+[`docs/agents/deploy-ledger.md`](https://github.com/elewa-git/opencrane/blob/main/docs/agents/deploy-ledger.md).

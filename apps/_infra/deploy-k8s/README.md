@@ -173,8 +173,7 @@ package imports it.
 
 - **[platform/README.md](platform/README.md)** — the cluster and release substrate: the `k8s-platform`
   Helm library (labels, names, RBAC, endpoint/database/identity/observability helpers), the
-  `k8s-deploy.sh` install engine, including the dedicated Prisma migration Job for database changes,
-  explicit shared-controller bootstrap, OIDC configuration, cluster
+  `k8s-deploy.sh` install engine, explicit shared-controller bootstrap, OIDC configuration, cluster
   provisioning, Terraform, values profiles, and the k3d conformance tests.
 ## See also
 

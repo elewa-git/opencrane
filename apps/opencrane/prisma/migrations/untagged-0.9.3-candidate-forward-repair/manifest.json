@@ -1,9 +1,0 @@
-{
-  "fromSchemaVersion": "untagged-0.9.3-candidate",
-  "toSchemaVersion": "0.10.0-forward-repair",
-  "sqlSha256": "cfdd1aeebe2ab03169ba35c3bbc951c23f1b8d1ac25dfc02caff1caa8c5704ca",
-  "owner": "apps/opencrane",
-  "sourceSchemaSqlSha256": "eb429e29c15495608c5e3d50c6d7904ea6e015ea5fc6eff631a310bc6f2ae5fa",
-  "sourcePrismaBaselineChecksum": "d7229f9995c5c881dd1b4da3dae6d972cb6827e00fca4b7d21fb1c8a48b13f84",
-  "sourcePrismaCutoverChecksum": "6a4256041ba5a78c6e849531c4d9fffea2cad5afef509344c088e566bcfa0004"
-}

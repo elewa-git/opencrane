@@ -1,6 +1,7 @@
 import { AgentRunState, RuntimeCommandKind, WarmRuntimeReservationState, WorkloadAssignmentState, WorkloadKind, type Prisma } from "@prisma/client";
 
 import type { RuntimeAttemptContinuation, RuntimeContinuationSaveRequest } from "@opencrane/contracts";
+import { __ValidateWarmRuntimeLease } from "@opencrane/backend/agents/execution/runs";
 
 import type { RuntimeDispatchAuthorityConfig, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types";
 import type { RuntimeContinuationCheckpointRow, RuntimeContinuationCheckpointWrite, RuntimeContinuationPersistenceRepository, RuntimeContinuationSaveAuthority } from "./runtime-continuation.types";
@@ -25,12 +26,10 @@ export class PrismaRuntimeContinuationRepository implements RuntimeContinuationP
 	async loadSaveAuthority(config: RuntimeDispatchAuthorityConfig, identity: RuntimeStreamWorkloadIdentity, request: RuntimeContinuationSaveRequest): Promise<RuntimeContinuationSaveAuthority | null>
 	{
 		const assignment = await this.transaction.workloadAssignment.findUnique({ where: { runId_attempt: { runId: request.runId, attempt: request.attempt } } });
-		if (assignment === null || assignment.namespace !== identity.namespace || assignment.serviceAccountName !== identity.serviceAccountName || assignment.state !== WorkloadAssignmentState.Registered || assignment.revokedAt !== null || assignment.expiresAt.getTime() <= Date.now() || assignment.workloadKind !== WorkloadKind.Deployment)
-			return null;
-		if (identity.namespace !== config.personalRuntimeNamespace && identity.namespace !== config.managedRuntimeNamespace)
+		if (assignment === null)
 			return null;
 		const reservation = await this.transaction.warmRuntimeReservation.findUnique({ where: { runId_attempt_generation: { runId: request.runId, attempt: request.attempt, generation: assignment.bindingGeneration } } });
-		if (reservation === null || reservation.state !== WarmRuntimeReservationState.Claimed || reservation.podUid !== identity.podUid || reservation.namespace !== identity.namespace || reservation.serviceAccountName !== identity.serviceAccountName || reservation.idleDeadline.getTime() <= Date.now())
+		if (!__ValidateWarmRuntimeLease(identity, assignment, reservation, new Date(), [config.personalRuntimeNamespace, config.managedRuntimeNamespace]))
 			return null;
 		const stream = await this.transaction.runtimeCommandStream.findUnique({ where: { runId_attempt: { runId: request.runId, attempt: request.attempt } } });
 		if (stream === null || stream.runtimeInstanceId === null)

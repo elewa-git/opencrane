@@ -23,15 +23,12 @@ clean target baseline remain, and every model/enum has exactly one owning domain
    domain is a design smell.
 2. **Never edit a model from a non-owning domain.** If domain B needs a field on domain
    A's model, that is an API conversation with A's contract, not a schema edit from B.
-3. **Schema changes update both fresh and upgrade paths in the same slice.** Regenerate and review
-   `apps/opencrane/prisma/bootstrap/target-baseline.sql`, then prove it against a new empty database.
-   Prisma's generated diff does not contain the hand-written triggers, partial/NULL-safe indexes,
-   and authority constraints in the reviewed baseline. Regeneration must preserve and revalidate
-   those blocks explicitly. Run `npm run db:regenerate-target-baseline -w @opencrane/server`; its
-   checked script restores the reviewed non-Prisma objects and fails if an expected insertion point
-   has changed. Add the next reviewed Prisma migration under
-   `apps/opencrane/prisma/prisma-migrations/`; the deployment-owned Prisma Migrate Job runs the
-   ledger, never server startup. Prove the migrated schema matches the clean target. Run
+3. **Schema changes edit the target baseline; there is no upgrade path pre-1.0.** Regenerate and
+   review `apps/opencrane/prisma/bootstrap/target-baseline.sql`, then prove it against a new empty
+   database. Prisma's generated diff does not contain the hand-written triggers, partial/NULL-safe
+   indexes, and authority constraints in the reviewed baseline. Regeneration must preserve and
+   revalidate those blocks explicitly. Update `database.baselineSha256` in the current
+   `releases/<version>.json` and rebuild any live dev silo that needs the new schema. Run
    `npm run test:authority-baseline -w @opencrane/server` as well: it fails closed when a
    Prisma-only rewrite has discarded the reviewed functions, triggers, constraints, or seeds.
 4. **CNPG `initdb` is the only application-schema setup boundary.** The deployment publisher
@@ -39,8 +36,9 @@ clean target baseline remain, and every model/enum has exactly one owning domain
    one immutable, content-addressed ConfigMap. Its superuser envelope records the full baseline
    digest in a protected database schema. Physical recovery restores that marker with the existing
    schema, never attaches fresh setup SQL, and must pass the digest-checking Postgres hook.
-   Existing databases advance only through the versioned Prisma Migrate Job described in
-   [`versioning.md`](./versioning.md); the protected baseline digest remains immutable origin proof.
+   Existing databases do not advance in place pre-1.0 — a silo that needs a newer schema is
+   rebuilt (see [`versioning.md`](./versioning.md)); the protected baseline digest remains
+   immutable origin proof.
 
 ## Runtime ORM ownership
 
@@ -59,7 +57,12 @@ Production TypeScript reaches Prisma through reviewed capability boundaries, enf
 	SHA-256 registered in the checker and mirrored in the checked policy. Recompute and update the
 	enforcement-owned source pin only after reviewing the complete adapter; any import, helper, or
 	statement change deliberately invalidates the raw-procedure exception.
-3. Only an exact declared UnitOfWork adapter may call `$transaction`.
+3. Only an exact declared UnitOfWork adapter may call `$transaction`. New unit-of-work adapters do
+	not call `$transaction` themselves: they pass their work callback to the reviewed
+	`___RunInPrismaUnitOfWork` helper (`@opencrane/backend/server/infra/prisma-unit-of-work`), which
+	owns transaction opening, the explicit isolation level, and bounded retry of proven rollbacks.
+	The checker grants that callback's first parameter transaction-client authority, exactly as it
+	does for `___RunSerializableAuthorizationTransaction`.
 4. Passing a transaction client into another repository is also policy-owned. Every declared
 	repository constructor accepts `Prisma.TransactionClient`, and each declared construction must
 	receive the exact `$transaction` callback binding (or an owning repository's typed transaction

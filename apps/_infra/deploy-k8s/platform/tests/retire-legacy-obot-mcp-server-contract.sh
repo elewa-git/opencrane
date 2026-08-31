@@ -394,7 +394,7 @@ _assert_prefix_count 1 'delete --raw '
 _assert_file_contains "$CALLS" '/api/v1/namespaces/opencrane-testv4/secrets/sms1obot-mcp-server-mcp-files'
 _assert_file_excludes "$CALLS" 'delete-options secret/sms1obot-mcp-server-mcp-config '
 
-_assert_file_contains "$DEPLOY" '[[ "$RELEASE_VERSION" == "0.10.0" && "$FROM_RELEASE_VERSION" == "0.9.2" && "$ALLOW_TAG_FLOAT" != "1" ]]'
+_assert_file_contains "$DEPLOY" '[[ "$POSTGRES_CLUSTER_EXISTS" == "1" && "$ALLOW_TAG_FLOAT" != "1" ]]'
 _assert_file_contains "$DEPLOY" '[[ -z "$FINAL_SERVER_REPOSITORY" || -z "$FINAL_CONTROLLER_REPOSITORY" || -z "$FINAL_SCANNER_REPOSITORY" || -z "$FINAL_RUNTIME_REPOSITORY" ]]'
 _assert_deploy_order
 

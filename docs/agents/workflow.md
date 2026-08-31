@@ -13,10 +13,9 @@ Three files track work, each with a distinct role — keep them from drifting:
 ## Planning Discipline
 
 - Keep `plan.md` updated as implementation progresses.
-- Start every implementation wave by reading [`versioning.md`](./versioning.md), identifying the
-  directly changed projects and applications adapted through their Nx dependency graph, and
-  recording whether the wave needs an app stamp, Helm transition, or database migration. Do not
-  postpone version/migration evidence until release day.
+- Read [`versioning.md`](./versioning.md) before a wave that touches the database schema or the
+  release manifest: pre-1.0 the only version evidence is the current manifest's baseline digest —
+  update it in the same wave as the schema change.
 - When a roadmap item changes state due to code, validation, or a discovered blocker, update `plan.md` in the same work cycle.
 - Do not leave completed or partially implemented backlog items stale in `plan.md` after landing the corresponding code.
 - When a track or phase is **fully complete**, move it out of `plan.md` into `plan-done.md` (the historical record) and leave a one-line `✅ COMPLETE (see plan-done.md)` pointer in its place.
@@ -179,7 +178,7 @@ review gate treats a stale or missing package README as a finding. See
 [`package-docs.md`](./package-docs.md) for the standard.
 
 Run `scripts/agent-style-check.sh`, `npm run check:prisma-boundaries -- --diff <base-ref>`,
-`npm run check:module-growth`, `npm run check:release-versioning -- --base <base-ref>`, and
+`npm run check:module-growth`, `npm run check:release-versioning`, and
 `npm run check:pr-stack-integrity -- --current-branch <branch>`
 before delegating. The first checks TypeScript mechanics and invokes
 the same diff-scoped Prisma ownership floor; the explicit Prisma command is useful when reporting
@@ -212,9 +211,11 @@ or dependency boundary, run its current boundary guard before review:
 - In Claude Code, a **Haiku agent hook** reads that context plus `.claude/review-policy.md` in
   parallel with the pre-filter. It judges whether the change carries real risk (auth, secrets,
   network, IAM, money, or non-trivial production control flow) and blocks only when warranted.
-- In Codex, `.codex/hooks/require-review.sh` runs the same pre-filter and translates `JUDGE` into a
-  blocking `Stop` continuation that requires the independent review agent. Only a fresh, explicit
-  `SKIP` lets the turn end; a checker crash, missing context, or unknown verdict blocks closed.
+- In Codex, `.codex/hooks/require-review.sh` runs the same pre-filter. Codex has no separate judge
+  model, so `JUDGE` becomes a `Stop` continuation that makes the model judge its own change against
+  the same judgment guidance, and run the independent review agent when that guidance says the
+  change carries real risk. An explicit `SKIP` lets the turn end; a checker crash, missing context,
+  or unknown verdict blocks closed and requires the full review.
 
 **`.claude/review-policy.md` is the single tunable surface.** If review fires too often
 and burns tokens — or misses something — edit that file (threshold, `always-review`

@@ -121,10 +121,8 @@ jobs:
           npm run --if-present test:agent-context
           npm run --if-present check:module-growth -- --diff "${{ steps.fresh.outputs.base }}"
           npm run --if-present test:module-growth
-          npm run --if-present check:release-versioning -- --base "${{ steps.fresh.outputs.base }}"
+          npm run --if-present check:release-versioning
           npm run --if-present test:release-versioning
-          npm run --if-present check:database-migrations
-          npm run --if-present test:database-migrations
           npm run --if-present check:prisma-boundaries -- --diff "${{ steps.fresh.outputs.base }}"
           npm run --if-present test:prisma-boundaries
           npm run --if-present check:authorization-enforcement

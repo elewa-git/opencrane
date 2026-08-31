@@ -161,10 +161,10 @@ preserves the old implementation, so no compatibility or operational-retention g
   matrix must derive from affected `container` targets, build/push only those images, and fail if an
   affected container project lacks its publish descriptor. Do not make a moving `latest` tag a
   deployment input or retrofit release machinery into an app already classified for deletion.
-- Require each surviving Nx application in the slice to carry the root version at which it was
-  directly adapted. Every changed chart/database schema carries its one-way transition from the
-  previous immutable release manifest. Read `docs/agents/versioning.md`; the fresh baseline,
-  upgrade migration, and cross-app compatibility manifest are distinct authorities.
+- Read `docs/agents/versioning.md`. Pre-1.0 there are no per-app version stamps or
+  version-to-version transitions: require a database-schema or PostgreSQL-operand change to keep the
+  single current `releases/<version>.json` coherent (baseline digest and operand image), with
+  `target-baseline.sql` as the only fresh-install authority.
 - Require the initial foundation slice to add a manifest-rendering workload-ownership check; once
   it exists, every structural wave runs it and includes its output in the gate evidence.
 - Require the deployable inventory to include reuse evidence and a communication matrix; render/check

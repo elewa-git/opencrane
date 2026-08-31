@@ -26,7 +26,7 @@ local runtime in the current task.
 
 - Keep focused validation that does not require a container runtime local.
 - Push the exact scoped commit and use the affected workflow for Docker image smokes, PostgreSQL
-  migration convergence, Storybook browser contracts, and k3d qualification.
+  baseline and authority suites, Storybook browser contracts, and k3d qualification.
 - Use the workflow's `heavy_qualification` dispatch input when an image smoke, k3d smoke, or both must
   run even though the affected graph would not select them.
 - Bind reported evidence to the tested commit SHA and Actions run URL. A local Docker result is not a
@@ -35,9 +35,9 @@ local runtime in the current task.
 If a required container-backed target has no Actions owner, wire it into the affected workflow before
 treating the target as a completion gate. Do not fill that CI gap by starting a local VM.
 
-Read [`versioning.md`](./versioning.md) before changing a chart or deploy path. A chart change must
-carry its new app/chart stamp, immutable release-manifest entry, and one-way transition record; an
-explicit no-op is required when upgrade impact was reviewed and no transformation is needed.
+Read [`versioning.md`](./versioning.md) before changing a chart or deploy path. Pre-1.0 a chart
+change needs no version stamp or transition record; only a database baseline change must update the
+digest in the current release manifest.
 
 ## Infrastructure layout
 
@@ -79,7 +79,7 @@ For infrastructure changes:
 2. run its Helm contract tests;
 3. run `helm lint` for the owning chart;
 4. run `git diff --check`;
-5. run `npm run check:release-versioning -- --base <base-ref>`;
+5. run `npm run check:release-versioning`;
 6. use the repository deploy or teardown script for live mutations; and
 7. record live deployment evidence in [`deploy-ledger.md`](./deploy-ledger.md).
 

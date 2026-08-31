@@ -121,31 +121,6 @@ privileges:
       cpu: 250m
       memory: 256Mi
 
-# Existing databases change through this Job. Pin its Prisma migration image by digest so the
-# migration files and entrypoint cannot change during a deployment.
-migration:
-  enabled: false
-  sourceVersion: ""
-  # The tagged 0.9.2 IAM prerequisite maps legacy subjects into one exact silo and issuer.
-  siloId: ""
-  oidcIssuer: ""
-  # Required when enabled. Use an exact OCI digest, for example
-  # ghcr.io/elewa-git/opencrane-prisma-migrator@sha256:<64 lowercase hex characters>.
-  image: ""
-  timeoutSeconds: 900
-  jobDeadlineGraceSeconds: 30
-  ttlSecondsAfterFinished: 86400
-  nodeSelector: {}
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-      ephemeral-storage: 32Mi
-    limits:
-      cpu: 250m
-      memory: 256Mi
-      ephemeral-storage: 128Mi
-
 backup:
   enabled: false
   schedule: "0 0 2 * * *"

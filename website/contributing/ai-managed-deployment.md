@@ -45,8 +45,9 @@ image digests from the release manifest, and the deploy ledger for cross-run mem
   needs for diagnosis (read-only `kubectl`, `helm status`, read-only SQL), and returns a
   structured run report.
 - The **`/deploy-loop` skill** orchestrates a full run: it resolves the exact release manifest
-  and database transition first, spawns one `deploy` agent, then triages every finding in the
-  report into a chart/script fix, a codebase issue, a data issue, or an infra/design question.
+  first — pre-1.0 that means the current database baseline and digest, not a migration path —
+  spawns one `deploy` agent, then triages every finding in the report into a chart/script fix, a
+  codebase issue, a data issue, or an infra/design question.
 
 A fresh silo is one command an agent can compose, run and verify. The post-deploy report proves the
 model-unconfigured control plane is healthy; configuring a provider is a separate authenticated

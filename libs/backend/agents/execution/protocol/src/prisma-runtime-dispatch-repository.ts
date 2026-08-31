@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState as PrismaAgentRunState, Prisma, RuntimeSteeringRequestState, WarmRuntimeReservationState, WorkloadAssignmentState, WorkloadKind } from "@prisma/client";
 
+import { __ValidateWarmRuntimeLease } from "@opencrane/backend/agents/execution/runs";
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, WARM_RUNTIME_SERVICE_ACCOUNT_NAME, type RuntimeAssignmentIdentity } from "@opencrane/contracts";
 
 import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector";
@@ -92,13 +93,13 @@ export class PrismaRuntimeDispatchRepository implements RuntimeStreamBindingRepo
 	}
 
 	/** Loads and validates the assignment, run, and snapshot for one reviewed Pod identity. */
-	async loadContext(config: RuntimeDispatchAuthorityConfig, identity: RuntimeStreamWorkloadIdentity): Promise<RuntimeDispatchContext | null>
+	async loadContext(config: RuntimeDispatchAuthorityConfig, identity: RuntimeStreamWorkloadIdentity, now: Date): Promise<RuntimeDispatchContext | null>
 	{
 		const reservation = await this.prisma.warmRuntimeReservation.findUnique({ where: { namespace_podUid: { namespace: identity.namespace, podUid: identity.podUid } } });
-		if (reservation === null || reservation.state !== WarmRuntimeReservationState.Claimed || reservation.serviceAccountName !== identity.serviceAccountName)
+		if (reservation === null)
 			return null;
 		const assignment = await this.prisma.workloadAssignment.findUnique({ where: { runId_attempt: { runId: reservation.runId, attempt: reservation.attempt } } });
-		if (assignment === null || assignment.bindingGeneration !== reservation.generation || assignment.state !== WorkloadAssignmentState.Registered || assignment.serviceAccountName !== reservation.serviceAccountName)
+		if (assignment === null || !__ValidateWarmRuntimeLease(identity, assignment, reservation, now, [config.personalRuntimeNamespace, config.managedRuntimeNamespace]))
 			return null;
 		const run = await this.prisma.agentRun.findUnique({ where: { id: assignment.runId } });
 		if (run === null || run.attempt !== assignment.attempt || run.agentServiceId !== assignment.agentServiceId || run.agentRevisionId !== assignment.agentRevisionId || run.siloId !== assignment.siloId)

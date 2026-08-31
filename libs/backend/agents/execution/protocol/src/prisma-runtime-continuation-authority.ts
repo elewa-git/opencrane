@@ -1,7 +1,8 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { AGENT_RUNTIME_CONTINUATION_MAX_BYTES, RuntimeCommandKinds, type RuntimeAttemptContinuation, type RuntimeCommandEnvelope, type RuntimeContinuationSaveRequest, type RuntimeStreamOpen } from "@opencrane/contracts";
 import type { RuntimeContinuationCipher } from "@opencrane/backend/server/infra/agent-runtime-continuation";
+import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import type { Logger } from "@opencrane/backend/observability";
 
 import { PrismaRuntimeContinuationRepository } from "./prisma-runtime-continuation-repository";
@@ -116,10 +117,10 @@ export class PrismaRuntimeContinuationAuthorityUnitOfWork implements RuntimeCont
 	/** Run one continuation operation with a single transaction-bound repository. */
 	private _Run<TResult>(operation: (repository: PrismaRuntimeContinuationRepository) => Promise<TResult>): Promise<TResult>
 	{
-		return this.prisma.$transaction(async function _Run(transaction): Promise<TResult>
+		return ___RunInPrismaUnitOfWork(this.prisma, async function _Run(transaction): Promise<TResult>
 		{
 			return operation(new PrismaRuntimeContinuationRepository(transaction));
-		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+		}, { isolationLevel: "Serializable", operation: "runtime continuation" });
 	}
 
 	/** Decrypt and revalidate one stored plaintext document. */
