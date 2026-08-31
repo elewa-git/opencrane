@@ -19,7 +19,7 @@ import unittest
 from unittest import mock
 from urllib.error import HTTPError, URLError
 
-from src.bootstrap.exchange import BootstrapDeniedError
+from src.bootstrap.exchange import BootstrapDeniedError, BootstrapUnreservedError, perform_warm_binding as _perform_warm_binding
 from src.bootstrap.proof import load_or_create_proof_key as _load_or_create_proof_key, rfc7638_thumbprint as _rfc7638_thumbprint
 from src.constants import PROTOCOL_VERSION
 from src.attempts.continuation import (
@@ -1004,6 +1004,50 @@ class RuntimeWarmBindingGateTests(unittest.TestCase):
             start_warm_readiness_server=lambda _port, _pod, _profile: object(),
         )
         self.assertEqual(opened, [])
+
+    def test_explicit_unreserved_response_retries_before_opening_a_stream(self) -> None:
+        """A generic Pod stays alive until the controller saves its reservation."""
+        bindings = 0
+
+        def _bind(_url: str, _token: str, _key: dict) -> str:
+            nonlocal bindings
+            bindings += 1
+            if bindings == 1:
+                raise BootstrapUnreservedError("reservation is pending")
+            return "attempt-model-key"
+
+        class _Stop(Exception):
+            """Sentinel raised after the retry reaches the outbound stream."""
+
+        def _open(_url: str, _token: str, _instance: str, _pod: str, *, attempt_model_key: str) -> int:
+            self.assertEqual(attempt_model_key, "attempt-model-key")
+            raise _Stop()
+
+        with mock.patch("src.runtime.time.sleep") as sleep:
+            with self.assertRaises(_Stop):
+                run_forever(
+                    open_stream=_open,
+                    perform_warm_binding=_bind,
+                    generate_key=lambda: self._proof_key,
+                    start_warm_readiness_server=lambda _port, _pod, _profile: object(),
+                )
+
+        self.assertEqual(bindings, 2)
+        sleep.assert_called_once()
+
+    def test_only_the_explicit_unreserved_response_is_retryable(self) -> None:
+        """Another binding conflict remains a permanent refusal even when it is HTTP 409."""
+        conflict = HTTPError("http://opencrane/bind", 409, "conflict", {}, io.BytesIO(b'{"error":"warm_runtime_binding_conflict"}'))
+        with mock.patch("src.bootstrap.exchange.urlopen", side_effect=conflict):
+            with self.assertRaises(BootstrapDeniedError):
+                _perform_warm_binding("http://opencrane", "token", self._proof_key)
+
+    def test_explicit_unreserved_response_is_the_only_retryable_http_conflict(self) -> None:
+        """Only the server's exact generic-Pod code crosses the retry boundary."""
+        unreserved = HTTPError("http://opencrane/bind", 409, "unreserved", {}, io.BytesIO(b'{"error":"warm_runtime_binding_unreserved"}'))
+        with mock.patch("src.bootstrap.exchange.urlopen", side_effect=unreserved):
+            with self.assertRaises(BootstrapUnreservedError):
+                _perform_warm_binding("http://opencrane", "token", self._proof_key)
 
     def test_successful_warm_binding_precedes_the_stream(self) -> None:
         """Readiness and one warm binding happen before the command stream opens."""

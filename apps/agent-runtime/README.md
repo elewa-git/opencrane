@@ -39,7 +39,8 @@ external services, and saves durable state. The runtime never calls an external 
 - It exposes two small in-Pod readiness paths used only by the controller.
 - It saves only public proof evidence in the Pod's temporary `emptyDir`, so a container restart on
   the same Pod can replay the exact binding.
-- A permanent binding refusal stops the process before a command stream opens.
+- An explicit unreserved generic-Pod response retries with bounded backoff until the controller
+  saves a reservation; every other binding refusal stops the process before a command stream opens.
 - It rereads the projected Kubernetes token on every bind retry and stream reconnect.
 - It keeps the attempt-scoped LiteLLM key only in process memory. There is no mounted-key fallback.
 - It opens one outbound command stream and accepts start, resume, and cancel commands for the bound

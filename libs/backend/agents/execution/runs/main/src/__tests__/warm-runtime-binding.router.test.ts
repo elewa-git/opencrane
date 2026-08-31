@@ -69,4 +69,14 @@ describe("warm runtime binding router", function _Suite()
 		expect(response.status).toBe(409);
 		expect(response.body).toEqual({ error: "warm_runtime_binding_conflict" });
 	});
+
+	it("marks an unreserved generic warm Pod as retryable", async function _ReportsUnreserved()
+	{
+		const dependencies = _Dependencies();
+		(dependencies.authority.bind as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ outcome: "unreserved" });
+		const response = await request(_App(dependencies)).post("/bind").set("authorization", "Bearer projected-token").send(_Proof());
+
+		expect(response.status).toBe(409);
+		expect(response.body).toEqual({ error: "warm_runtime_binding_unreserved" });
+	});
 });

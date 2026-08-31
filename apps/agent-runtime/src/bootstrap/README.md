@@ -3,8 +3,9 @@
 > [agent-runtime](../../README.md) › bootstrap
 
 This package generates fresh public proof-key evidence and binds a reviewed warm Pod to its saved
-database reservation. The server returns the attempt model key only after that binding is saved. A
-permanent refusal ends the process before any command stream is opened.
+database reservation. The server returns the attempt model key only after that binding is saved. An
+explicit unreserved generic-Pod response is retryable while the controller saves its reservation.
+Every other refusal ends the process before any command stream is opened.
 
 The public JWK and thumbprint are saved in the Pod's temporary `emptyDir` before the first request.
 A container restart on the same Pod reuses them for an exact binding replay. The file never contains

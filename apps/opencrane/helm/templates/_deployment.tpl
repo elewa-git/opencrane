@@ -21,6 +21,12 @@
 {{- if and (eq $membership.mode "standalone") (empty $standaloneMembership.invitationSigningKeyKey) -}}
 {{- fail "clustertenantManager.membership.standalone.invitationSigningKeyKey is required in standalone mode" -}}
 {{- end -}}
+{{- if and (eq $membership.mode "standalone") (empty $standaloneMembership.membershipSigningExistingSecret) -}}
+{{- fail "clustertenantManager.membership.standalone.membershipSigningExistingSecret is required in standalone mode" -}}
+{{- end -}}
+{{- if and (eq $membership.mode "standalone") (or (empty $standaloneMembership.membershipSigningKeyKey) (empty $standaloneMembership.issuerId) (empty $standaloneMembership.issuerKeyId)) -}}
+{{- fail "standalone membership signing key, issuer id, and issuer key id are required" -}}
+{{- end -}}
 {{- if and (eq $membership.mode "fleet") (empty $fleetMembership.billingGatewayUrl) -}}
 {{- fail "clustertenantManager.membership.fleet.billingGatewayUrl is required in fleet mode" -}}
 {{- end -}}
@@ -165,6 +171,12 @@ spec:
               value: {{ $standaloneMembership.publicBaseUrl | default (printf "https://%s" $controlPlaneHost) | quote }}
             - name: OPENCRANE_INVITATION_TTL_SECONDS
               value: {{ $standaloneMembership.invitationTtlSeconds | quote }}
+            - name: OPENCRANE_MEMBERSHIP_ISSUER_ID
+              value: {{ $standaloneMembership.issuerId | quote }}
+            - name: OPENCRANE_MEMBERSHIP_KEY_ID
+              value: {{ $standaloneMembership.issuerKeyId | quote }}
+            - name: OPENCRANE_MEMBERSHIP_PRIVATE_KEY_FILE
+              value: /var/run/opencrane/standalone-membership/private-key.pem
             {{- end }}
             {{- if $firstUser.email }}
             # One-time standalone owner admission stays subject-bound: email merely selects the
@@ -315,6 +327,9 @@ spec:
             - name: invitation-signing-key
               mountPath: /var/run/opencrane/invitation-signing
               readOnly: true
+            - name: standalone-membership-signing-key
+              mountPath: /var/run/opencrane/standalone-membership
+              readOnly: true
             {{- end }}
             {{- if eq $membership.mode "fleet" }}
             - name: membership-verification-key
@@ -370,6 +385,13 @@ spec:
             items:
               - key: {{ $standaloneMembership.invitationSigningKeyKey | quote }}
                 path: key
+        - name: standalone-membership-signing-key
+          secret:
+            secretName: {{ $standaloneMembership.membershipSigningExistingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ $standaloneMembership.membershipSigningKeyKey | quote }}
+                path: private-key.pem
         {{- end }}
         {{- if eq $membership.mode "fleet" }}
         - name: membership-verification-key

@@ -1,3 +1,6 @@
+import { createPublicKey } from "node:crypto";
+import { readFileSync } from "node:fs";
+
 import type { FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 import { _CreateMountedPublicKeySource } from "@opencrane/backend/server/infra/auth";
 
@@ -11,15 +14,27 @@ const _MAXIMUM_STALENESS_MILLISECONDS = 24 * 60 * 60 * 1_000;
 /** Placeholder issuer id for standalone mode; it matches no real issuer, so lookups find nothing. */
 const _STANDALONE_ISSUER_ID = "opencrane-standalone-unconfigured";
 
+/** Complete local issuer coordinates read only from the server's protected deployment settings. */
+interface StandaloneMembershipIssuer
+{
+	/** Stable issuer identity recorded on each standalone snapshot. */
+	readonly issuerId: string;
+	/** Identifier of the local Ed25519 signing key. */
+	readonly issuerKeyId: string;
+	/** Absolute path of the mounted private key from which verification derives the public key. */
+	readonly privateKeyPath: string;
+}
+
 /**
  * Reads this deployment's membership trust settings out of the environment.
  *
  * `OPENCRANE_MEMBERSHIP_MODE` must say `fleet` or `standalone`; there is no default, because
  * guessing would decide whether unsigned membership is possible. In `fleet` mode the issuer id, key
  * id, and public-key file are all required, and the key file is re-read before every signature check
- * so rotating the mounted key takes effect without a restart. In `standalone` mode there is no key,
- * so the verifier returned refuses every revision — the silo simply has no fleet membership yet
- * rather than an unchecked one.
+ * so rotating the mounted key takes effect without a restart. In `standalone` mode, a complete
+ * dedicated local signing-key configuration derives its public verification key from the mounted
+ * private key. Without that complete configuration the verifier refuses every revision rather than
+ * treating a local OrgMembership row or browser session as admission evidence.
  *
  * Called by: apps/opencrane/src/index.ts, apps/opencrane/src/app/channel-target-composition.ts, and
  * libs/backend/server/agents/agent-services/main/src/managed-execution-evidence.factory.ts.
@@ -33,14 +48,38 @@ export function _CreateFleetMembershipEvidenceConfig(environment: NodeJS.Process
 	const mode = _DeploymentMode(environment);
 	const maximumStalenessMs = _PositiveInteger(environment, "OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS", _MAXIMUM_STALENESS_MILLISECONDS);
 	if (mode === FleetMembershipDeploymentModes.Standalone)
-	{
-		return { trustedIssuerId: _STANDALONE_ISSUER_ID, maximumStalenessMs, verifier: _CreateStandaloneDenyVerifier() };
-	}
+		return _CreateStandaloneEvidenceConfig(environment, maximumStalenessMs);
 	const trustedIssuerId = _Required(environment, "OPENCRANE_MEMBERSHIP_ISSUER_ID");
 	const issuerKeyId = _Required(environment, "OPENCRANE_MEMBERSHIP_KEY_ID");
 	const publicKeyPath = _Required(environment, "OPENCRANE_MEMBERSHIP_PUBLIC_KEY_FILE");
 	const source = _CreateMountedPublicKeySource(publicKeyPath);
 	return { trustedIssuerId, maximumStalenessMs, verifier: _CreateReloadingVerifier(source.read, issuerKeyId) };
+}
+
+/** Builds a local signed-membership verifier only when the complete standalone issuer is mounted. */
+function _CreateStandaloneEvidenceConfig(environment: NodeJS.ProcessEnv, maximumStalenessMs: number): FleetMembershipEvidenceConfig
+{
+	const issuer = _ReadStandaloneIssuer(environment);
+	if (issuer === null)
+		return { trustedIssuerId: _STANDALONE_ISSUER_ID, maximumStalenessMs, verifier: _CreateStandaloneDenyVerifier() };
+	const readPublicKey = function _ReadPublicKey(): string
+	{
+		const privateKey = readFileSync(issuer.privateKeyPath, "utf8");
+		return createPublicKey(privateKey).export({ type: "spki", format: "pem" }).toString();
+	};
+	return { trustedIssuerId: issuer.issuerId, maximumStalenessMs, verifier: _CreateReloadingVerifier(readPublicKey, issuer.issuerKeyId) };
+}
+
+/** Reads an all-or-nothing standalone issuer, retaining the deny-only verifier when every field is absent. */
+function _ReadStandaloneIssuer(environment: NodeJS.ProcessEnv): StandaloneMembershipIssuer | null
+{
+	const values = [environment["OPENCRANE_MEMBERSHIP_ISSUER_ID"]?.trim() ?? "", environment["OPENCRANE_MEMBERSHIP_KEY_ID"]?.trim() ?? "", environment["OPENCRANE_MEMBERSHIP_PRIVATE_KEY_FILE"]?.trim() ?? ""];
+	if (values.every(function _Empty(value) { return value.length === 0; }))
+		return null;
+	if (values.some(function _Empty(value) { return value.length === 0; }))
+		throw new Error("standalone membership issuer requires OPENCRANE_MEMBERSHIP_ISSUER_ID, OPENCRANE_MEMBERSHIP_KEY_ID, and OPENCRANE_MEMBERSHIP_PRIVATE_KEY_FILE together");
+	const [issuerId, issuerKeyId, privateKeyPath] = values;
+	return { issuerId, issuerKeyId, privateKeyPath };
 }
 
 /** Reads the configured mode; a missing or unknown value throws instead of defaulting to fleet. */

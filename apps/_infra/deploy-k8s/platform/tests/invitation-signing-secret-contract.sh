@@ -46,6 +46,10 @@ kubectl()
 
 openssl()
 {
+  if [[ "$1" == "genpkey" ]]; then
+    printf '%s\n' '-----BEGIN PRIVATE KEY-----' > "$5"
+    return 0
+  fi
   printf '%s\n' "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 }
 
@@ -78,6 +82,15 @@ assert_rejected_without_replacement()
   [[ ! -s "$MOCK_KUBECTL_LOG" ]]
 }
 
+assert_standalone_membership_key_created_only_when_absent()
+{
+  MOCK_SECRET_STATE="absent"
+  : > "$MOCK_KUBECTL_LOG"
+  ensure_standalone_membership_signing_secret "test" "opencrane-standalone-membership-signing"
+  grep -qx "create" "$MOCK_KUBECTL_LOG"
+  grep -qx "apply" "$MOCK_KUBECTL_LOG"
+}
+
 assert_membership_helm_args()
 {
   MEMBERSHIP_MODE=standalone
@@ -86,10 +99,15 @@ assert_membership_helm_args()
   [[ " ${MEMBERSHIP_HELM_ARGS[*]} " == *" clustertenantManager.membership.mode=standalone "* ]]
   [[ " ${MEMBERSHIP_HELM_ARGS[*]} " == *" clustertenantManager.membership.standalone.invitationSigningExistingSecret=custom-invitation-signing "* ]]
   [[ " ${MEMBERSHIP_HELM_ARGS[*]} " == *" clustertenantManager.membership.standalone.invitationSigningKeyKey=key "* ]]
+  [[ " ${MEMBERSHIP_HELM_ARGS[*]} " == *" clustertenantManager.membership.standalone.membershipSigningExistingSecret=opencrane-standalone-membership-signing "* ]]
+  [[ " ${MEMBERSHIP_HELM_ARGS[*]} " == *" clustertenantManager.membership.standalone.membershipSigningKeyKey=private-key.pem "* ]]
+  [[ " ${MEMBERSHIP_HELM_ARGS[*]} " == *" clustertenantManager.membership.standalone.issuerId=opencrane-standalone-opencrane "* ]]
+  [[ " ${MEMBERSHIP_HELM_ARGS[*]} " == *" clustertenantManager.membership.standalone.issuerKeyId=local-ed25519-1 "* ]]
   MEMBERSHIP_MODE=fleet
   build_membership_helm_args
   [[ " ${MEMBERSHIP_HELM_ARGS[*]} " == *" clustertenantManager.membership.mode=fleet "* ]]
   [[ " ${MEMBERSHIP_HELM_ARGS[*]} " != *" invitationSigningExistingSecret="* ]]
+  [[ " ${MEMBERSHIP_HELM_ARGS[*]} " != *" membershipSigningExistingSecret="* ]]
 }
 
 assert_created_only_when_absent
@@ -97,6 +115,7 @@ assert_retained_when_valid
 assert_rejected_without_replacement "missing"
 assert_rejected_without_replacement "empty"
 assert_rejected_without_replacement "malformed"
+assert_standalone_membership_key_created_only_when_absent
 assert_membership_helm_args
 
 echo "invitation signing Secret contract passed"

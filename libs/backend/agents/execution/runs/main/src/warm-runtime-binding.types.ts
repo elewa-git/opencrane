@@ -25,6 +25,7 @@ export interface WarmRuntimeBindingSubmission
 /** Successful first binding or exact replay of the same proof key. */
 export type WarmRuntimeBindingResult =
 	| { readonly outcome: "bound" | "idempotent"; readonly receiptId: string; readonly attemptModelKey: string }
+	| { readonly outcome: "unreserved" }
 	| { readonly outcome: "conflict" };
 
 /**
@@ -38,6 +39,7 @@ export type WarmRuntimeBindingResult =
  * Called by: {@link PrismaWarmRuntimeBindingUnitOfWork.bind}.
  */
 export type WarmRuntimeDatabaseBindingResult =
+	| { readonly outcome: "unreserved" }
 	| { readonly outcome: "conflict" }
 	| { readonly outcome: "bound" | "idempotent"; readonly receiptId: string; readonly runId: string; readonly attempt: number; readonly siloId: string; readonly modelRoute: unknown; readonly budgetPolicy: unknown; readonly credentialExpiresAt: Date; readonly mintAuthorizationId: string };
 
@@ -57,7 +59,7 @@ export interface WarmRuntimeBindingPersistenceRepository
 	 *
 	 * @param identity - Pod identity returned by Kubernetes TokenReview.
 	 * @param submission - Public proof key and thumbprint supplied by that Pod.
-	 * @returns `bound`, `idempotent`, or a pre-write `conflict` with the expiry that limits later credentials.
+	 * @returns `bound`, `idempotent`, `unreserved`, or a pre-write `conflict` with the expiry that limits later credentials.
 	 * @throws WarmRuntimeBindingConflict When ownership, state, expiry, or a compare-and-set changes after checks begin.
 	 */
 	bind(identity: WarmRuntimeBindingIdentity, submission: WarmRuntimeBindingSubmission): Promise<WarmRuntimeDatabaseBindingResult>;

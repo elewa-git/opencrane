@@ -19,7 +19,7 @@ from urllib.error import HTTPError, URLError
 # These aliases mark where the process is composed: the entrypoint chooses concrete implementations,
 # while ``run_forever`` receives callables so lifecycle policy can be tested without real identity,
 # network, or model infrastructure. Lower-level packages must not import this composition root.
-from .bootstrap.exchange import BootstrapDeniedError, perform_warm_binding as _perform_warm_binding
+from .bootstrap.exchange import BootstrapDeniedError, BootstrapUnreservedError, perform_warm_binding as _perform_warm_binding
 from .bootstrap.proof import load_or_create_proof_key as _load_or_create_proof_key
 from .config import (
     environment,
@@ -78,8 +78,8 @@ def run_forever(
     start_warm_readiness_server(readiness_port, pod_uid, claimed_profile)
     log("runtime_started", runtime_instance_id=runtime_instance_id)
 
-    # Bind public proof evidence exactly once. Transient failures retry the same evidence; a control-
-    # plane refusal is final and no command stream is opened.
+    # Bind public proof evidence exactly once. Transient failures and the explicit generic-Pod race
+    # retry the same evidence; a control-plane refusal is final and no command stream is opened.
     attempts = 0
     attempt_model_key = None
     while True:
@@ -101,6 +101,16 @@ def run_forever(
                 error_type=type(error).__name__,
             )
             return
+        except BootstrapUnreservedError as error:
+            attempts += 1
+            delay_seconds = retry_delay(attempts)
+            log(
+                "bootstrap_waiting_for_reservation",
+                runtime_instance_id=runtime_instance_id,
+                error_type=type(error).__name__,
+                retry_in_seconds=round(delay_seconds, 2),
+            )
+            time.sleep(delay_seconds)
         except (HTTPError, URLError, OSError, RuntimeError) as error:
             # Log the exception type only. URLs, headers, or mounted-file details may contain
             # sensitive deployment information.

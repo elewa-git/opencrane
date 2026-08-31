@@ -53,6 +53,19 @@ named restored database. Deploy paths must override this value in that case.
 {{- end }}
 
 {{/*
+Reject broad DNS destinations before Helm can render a NetworkPolicy that makes
+the default-deny boundary meaningless. NodeLocal DNS is a single host, never a
+subnet or a public resolver range.
+*/}}
+{{- define "opencrane.validateDnsResolverCidrs" -}}
+{{- range $cidr := (.Values.networkPolicy.dnsResolverCidrs | default (list)) -}}
+{{- if not (or (regexMatch "^([0-9]{1,3}\\.){3}[0-9]{1,3}/32$" $cidr) (regexMatch "^[0-9A-Fa-f:]+/128$" $cidr)) -}}
+{{- fail (printf "networkPolicy.dnsResolverCidrs entry %q must be one IPv4 /32 or IPv6 /128 address" $cidr) -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Resolve deployment environment for validation rules.
 */}}
 {{- define "opencrane.environment" -}}

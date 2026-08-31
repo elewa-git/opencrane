@@ -1,8 +1,9 @@
 """Bind public proof-key evidence to one reviewed warm Pod.
 
 Binding runs before the command stream. A client error means the reservation or proof does not match
-and is permanent for this process. Transport and server errors stay retryable in ``runtime.py``
-because the control plane may not have evaluated the one-use claim.
+and is permanent for this process, except the explicit unreserved-generic-Pod race. Transport and
+server errors stay retryable in ``runtime.py`` because the control plane may not have evaluated the
+one-use claim.
 """
 
 import json
@@ -14,6 +15,10 @@ from ..observability import log
 
 class BootstrapDeniedError(RuntimeError):
     """Signal a permanent binding refusal that must terminate this runtime."""
+
+
+class BootstrapUnreservedError(RuntimeError):
+    """Signal that the controller has not yet reserved this generic warm Pod."""
 
 
 def perform_warm_binding(
@@ -48,6 +53,8 @@ def perform_warm_binding(
             if response.status < 200 or response.status >= 300 or len(raw) > 16 * 1024:
                 raise BootstrapDeniedError("warm binding returned an invalid response")
     except HTTPError as error:
+        if error.code == 409 and _is_unreserved_binding(error):
+            raise BootstrapUnreservedError("warm binding is waiting for a reservation") from error
         if 400 <= error.code < 500:
             raise BootstrapDeniedError(f"warm binding refused with status {error.code}") from error
         raise
@@ -60,3 +67,15 @@ def perform_warm_binding(
         raise BootstrapDeniedError("warm binding returned no attempt model key")
     log("warm_runtime_bound", thumbprint=proof_key["thumbprint"])
     return attempt_model_key
+
+
+def _is_unreserved_binding(error: HTTPError) -> bool:
+    """Accept only the server's explicit retryable generic-Pod response."""
+    try:
+        raw = error.read(16 * 1024 + 1)
+        if len(raw) > 16 * 1024:
+            return False
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return isinstance(parsed, dict) and parsed == {"error": "warm_runtime_binding_unreserved"}

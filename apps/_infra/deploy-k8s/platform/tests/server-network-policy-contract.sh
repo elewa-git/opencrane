@@ -23,6 +23,12 @@ runtime_rendered="$(helm template opencrane-silo "$CHART_DIR" \
   --set-string opencrane-mcp-executor.mcpExecutor.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
   --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')"
+if helm template opencrane-silo "$CHART_DIR" \
+  "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set-string 'networkPolicy.dnsResolverCidrs[0]=0.0.0.0/0' >/dev/null 2>&1; then
+  echo "DNS resolver NetworkPolicy egress must reject non-host CIDRs" >&2
+  exit 1
+fi
 lease_rendered="$(helm template opencrane-silo "$CHART_DIR" \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set opencrane-mcp-executor.mcpExecutor.controllerClaimLeaseSeconds=47 \

@@ -236,6 +236,18 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    {{- if .Values.networkPolicy.dnsResolverCidrs }}
+    - to:
+        {{- range .Values.networkPolicy.dnsResolverCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
     {{- end }}
     {{- if .Values.observability.otel.enabled }}
     - to:

@@ -213,6 +213,17 @@ function dnsEgress()
   };
 }
 
+function nodeLocalDnsEgress()
+{
+  return {
+    to: [{ ipBlock: { cidr: '169.254.20.10/32' } }],
+    ports: [
+      { port: 53, protocol: 'UDP' },
+      { port: 53, protocol: 'TCP' },
+    ],
+  };
+}
+
 function componentEgress(component, port)
 {
   return {
@@ -342,6 +353,7 @@ for (const pool of poolProfiles) {
     ingress: [],
     egress: [
       dnsEgress(),
+      nodeLocalDnsEgress(),
       componentEgress('opencrane-server', 8081),
     ],
   }, `NetworkPolicy/${pool.namespace}/${policyPrefix}-generic has unexpected reachability`);
@@ -357,6 +369,7 @@ for (const pool of poolProfiles) {
     ingress: [controllerIngress()],
     egress: [
       dnsEgress(),
+      nodeLocalDnsEgress(),
       componentEgress('opencrane-server', 8081),
       componentEgress('litellm', 4000),
     ],
@@ -384,6 +397,10 @@ assert.deepStrictEqual(controllerPolicy.spec?.podSelector, {
   matchLabels: releasePodLabels('agent-controller'),
 }, 'agent-controller NetworkPolicy must select this release');
 assert.deepStrictEqual(controllerPolicy.spec?.ingress, [], 'agent-controller must deny ingress');
+assert.deepStrictEqual(rulesOnPort(controllerPolicy.spec?.egress, 53), [
+  dnsEgress(),
+  nodeLocalDnsEgress(),
+], 'agent-controller DNS egress must select CoreDNS and the configured NodeLocal resolver only');
 assert.deepStrictEqual(rulesOnPort(controllerPolicy.spec?.egress, 8081), [{
   to: [sameReleasePeer('opencrane-server')],
   ports: [{ protocol: 'TCP', port: 8081 }],

@@ -157,6 +157,7 @@ BASE_DOMAIN="${OPENCRANE_BASE_DOMAIN:-}"
 STORAGE_CLASS=""        # empty → cluster default StorageClass
 ARTIFACT_STORAGE_CLASS="" # resolved class for the durable, expandable ArtifactStore PVC
 INVITATION_SIGNING_SECRET="${OPENCRANE_INVITATION_SIGNING_SECRET:-opencrane-invitation-signing}"
+STANDALONE_MEMBERSHIP_SIGNING_SECRET="${OPENCRANE_STANDALONE_MEMBERSHIP_SIGNING_SECRET:-opencrane-standalone-membership-signing}"
 RUNTIME_CONTINUATION_KEYRING_SECRET="${OPENCRANE_RUNTIME_CONTINUATION_KEYRING_SECRET:-opencrane-runtime-continuation}"
 MEMBERSHIP_MODE="${OPENCRANE_MEMBERSHIP_MODE:-standalone}"
 [[ "$MEMBERSHIP_MODE" == "standalone" || "$MEMBERSHIP_MODE" == "fleet" ]] || { echo "OPENCRANE_MEMBERSHIP_MODE must be standalone or fleet." >&2; exit 2; }
@@ -614,6 +615,7 @@ _copy_cnpg_uri_secret() {
 # Creates the standalone signing Secret before the application chart renders the membership settings.
 if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
   ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"
+  ensure_standalone_membership_signing_secret "$NAMESPACE" "$STANDALONE_MEMBERSHIP_SIGNING_SECRET"
 fi
 ensure_runtime_continuation_keyring_secret "$NAMESPACE" "$RUNTIME_CONTINUATION_KEYRING_SECRET"
 install_postgres_release true
@@ -621,13 +623,11 @@ POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
-prepare_database_release_transition || exit $?
-# Publish the pooler URI before enabling the Job because the migrator reads this Secret as DATABASE_URL.
-# Five OpenCrane connections keep PgBouncer's thirty-connection logical-database budget authoritative.
+# Publish the pooler URI for the chart workloads. Five OpenCrane connections keep PgBouncer's
+# thirty-connection logical-database budget authoritative.
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
 publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
-finish_database_release_transition || exit $?
 
 _assert_distinct_cnpg_app_credentials() {
   local app_secrets=("$@")

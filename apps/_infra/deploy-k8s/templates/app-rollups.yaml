@@ -1,4 +1,5 @@
 {{- $skillAuthoring := index .Values "opencrane-skill-authoring" -}}
+{{- include "opencrane.validateDnsResolverCidrs" . -}}
 {{ include "opencrane.server.certificate" . }}
 ---
 {{ include "opencrane.server.deployment" . }}
