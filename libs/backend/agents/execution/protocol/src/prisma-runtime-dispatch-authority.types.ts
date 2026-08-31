@@ -1,15 +1,21 @@
-import type { Prisma, RuntimeCommandKind } from "@prisma/client";
+import type { AgentRunTerminalReason, Prisma, RuntimeCommandKind, WorkloadKind } from "@prisma/client";
 
-import type { CompiledRunInput, RunInputSnapshot } from "@opencrane/contracts";
+import type { CompiledRunInput, RunInputSnapshot, RuntimeAssignmentIdentity, RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import type { ExpireElicitationBatchCommand, OpenElicitationCommand, RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import type { JsonValue } from "@opencrane/util";
+import type { ToolInvocationRunRecoveryAuthority } from "@opencrane/backend/server/iam/authorization";
 
 import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types";
+import type { RuntimeWaitReasons } from "./runtime-wait-reasons.types";
+import type { RuntimeExternalActionAuthorizationEvidence } from "./runtime-external-action-authorization.types";
+
+/** Exact Prisma transaction shared by runtime admission collaborators. */
+export type RuntimeDispatchTransaction = Prisma.TransactionClient;
 
 /**
  * Turns an immutable snapshot into the literal input carried on `start_attempt`.
  *
- * The dispatch authority calls it inside the same locked transaction that loads the snapshot, so it
+ * The dispatch authority calls it inside the same Serializable transaction that loads the snapshot, so it
  * reads only immutable records and must return byte-identical output for a given snapshot and live
  * attempt on every mint and idempotent redelivery. The runtime treats the returned payload as opaque.
  */
@@ -64,6 +70,30 @@ export interface RuntimeEventReporter
 {
 	/** Validate and persist an already-fenced canonical runtime event in the current transaction. */
 	reportInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly sourceIsStartAttempt: boolean; readonly eventType: string; readonly payload: JsonValue }): Promise<{ readonly outcome: "reported" | "denied"; readonly reason?: string }>;
+}
+
+/** Runs-owned recovery transition used when no safe runtime command can be built. */
+export type RuntimeDispatchRecoveryAuthority = Pick<ToolInvocationRunRecoveryAuthority, "enterRecoveryRequiredInTransaction">;
+
+/** Rechecks current product authority before dispatch admits one durable external effect. */
+export interface RuntimeExternalActionAuthorization
+{
+	/**
+	 * Admit the exact frozen tool action through the central authority on the dispatch transaction.
+	 *
+	 * The implementation must recheck current lifecycle and grant state. Returning null leaves both
+	 * the candidate id and its ToolInvocation absent, so a runtime can never interpret a stale frozen
+	 * snapshot as current permission. An admitted result carries all authority-derived evidence that
+	 * the caller must persist with the ToolInvocation on this transaction.
+	 */
+	admitInTransaction(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, candidate: RuntimeExternalActionCandidate, now: Date): Promise<RuntimeExternalActionAuthorizationEvidence | null>;
+}
+
+/** Transaction-bound lifecycle and central-grant adapter used by runtime effect admission. */
+export interface RuntimeExternalActionAuthorizationRepository
+{
+	/** Recheck and record the exact external action using this repository's transaction. */
+	admit(context: RuntimeDispatchContext, candidate: RuntimeExternalActionCandidate, now: Date): Promise<RuntimeExternalActionAuthorizationEvidence | null>;
 }
 
 /**
@@ -122,6 +152,13 @@ export interface RuntimeElicitationUnitOfWorkFactory
 export interface RuntimeCommandDecisionUnitOfWork
 {
 	/**
+	 * Read every server-proven wait reason while the caller still holds the run lock.
+	 *
+	 * @param context - Exact run, attempt, and current run state.
+	 * @returns A deduplicated, stable-order list containing no participant or tool content.
+	 */
+	readWaitReasons(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }): Promise<readonly RuntimeWaitReasons[]>;
+	/**
 	 * Close overdue approvals while the caller holds the lock on the waiting run.
 	 *
 	 * @param context - Run, attempt, and current run state.
@@ -146,6 +183,77 @@ export interface RuntimeCommandDecisionUnitOfWork
 	decide(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }, commands: readonly { readonly kind: RuntimeCommandKind }[]): Promise<RuntimeCommandKind | null>;
 }
 
+/** Owns the one-use runtime-instance binding inside the dispatch transaction. */
+export interface RuntimeStreamBindingRepository
+{
+	/** Binds an empty stream, keeps the same owner, or rejects a competing runtime instance. */
+	bind(context: { readonly runId: string; readonly attempt: number }, runtimeInstanceId: string): Promise<string | null>;
+}
+
+/** Database facts about one connected runtime Pod's run and assignment. */
+export interface RuntimeDispatchContext
+{
+	/** Run authorised for the connected Pod. */
+	readonly runId: string;
+	/** Run attempt this workload assignment was issued for. */
+	readonly attempt: number;
+	/** AgentService executed by the workload. */
+	readonly agentServiceId: string;
+	/** Immutable AgentRevision the runtime runs. */
+	readonly agentRevisionId: string;
+	/** Silo in which the assignment is valid. */
+	readonly siloId: string;
+	/** State of the owning run. */
+	readonly runState: RuntimeAdmissionRunState;
+	/** Why the run is ending. */
+	readonly terminalReason: AgentRunTerminalReason | null;
+	/** Digest of the assignment's fixed identity fields. */
+	readonly assignmentDigest: string;
+	/** Digest of the immutable input snapshot. */
+	readonly inputSnapshotDigest: string;
+	/** Immutable input snapshot sent with the first command. */
+	readonly snapshot: RunInputSnapshot;
+	/** Agent-session conversation from the snapshot. */
+	readonly conversationId: string | null;
+	/** Approved persona revision, when present. */
+	readonly personaRevisionId: string | null;
+	/** User or managed-service execution identity. */
+	readonly identity: RuntimeAssignmentIdentity;
+	/** Digest of the capability set proved for this attempt. */
+	readonly capabilitySetDigest: string;
+	/** Expected Kubernetes ServiceAccount. */
+	readonly serviceAccountName: string;
+	/** Kubernetes workload kind. */
+	readonly workloadKind: WorkloadKind;
+	/** Registered runtime Pod UID. */
+	readonly podUid: string;
+	/** Assignment lease expiry in epoch milliseconds. */
+	readonly leaseExpiresAtEpochMs: number;
+	/** Assignment issue time. */
+	readonly assignmentIssuedAt: string;
+	/** Assignment expiry time. */
+	readonly assignmentExpiresAt: string;
+}
+
+/** Stored command fields needed for redelivery and sequence checks. */
+export interface DispatchedCommandRow
+{
+	/** Server-issued idempotency key. */
+	readonly commandId: string;
+	/** Monotonic command sequence. */
+	readonly sequence: number;
+	/** Stored command kind. */
+	readonly kind: RuntimeCommandKind;
+	/** Lease fence carried by the command. */
+	readonly fence: number;
+	/** Saved resume payload, when present. */
+	readonly payload: Prisma.JsonValue | null;
+	/** Command issue time. */
+	readonly issuedAt: Date;
+	/** Command expiry time. */
+	readonly expiresAt: Date;
+}
+
 /**
  * The answer to one candidate the runtime offered.
  *
@@ -156,7 +264,7 @@ export interface RuntimeCommandDecisionUnitOfWork
  * acceptance performs an effect the server has no record of, and nothing will ever deliver its
  * result.
  *
- * The reasons fall into four groups, and the right response differs for each.
+ * The reasons fall into five groups, and the right response differs for each.
  * - Stale connection - `namespace_mismatch`, `unknown_workload`, `no_active_stream`,
  *   `runtime_instance_mismatch`, `fence_mismatch`, `assignment_mismatch`, `expired`,
  *   `command_not_accepted`: this Pod no longer owns the work. Stop and let the stream be rebound;
@@ -167,6 +275,8 @@ export interface RuntimeCommandDecisionUnitOfWork
  * - The runtime asked for something it may not do - `invalid_candidate`, `unsupported_protocol`,
  *   `runtime_cancellation_not_authoritative`, `runtime_tool_lifecycle_not_authoritative`,
  *   `external_action_invalid`: a bug in the runtime, not a race. Do not retry.
+ * - Current permission was withdrawn - `external_action_not_authorized`: abandon the exact action;
+ *   a new run admission is required before current grants may authorize another proposal.
  * - The server could not take it - `event_reporter_unavailable`, `event_report_denied` or any
  *   reason the injected event reporter returns, `external_action_conflict`,
  *   `external_action_replay_conflict`: nothing was written.

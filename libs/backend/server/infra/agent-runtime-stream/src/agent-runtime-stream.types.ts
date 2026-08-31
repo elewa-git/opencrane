@@ -1,4 +1,4 @@
-import type { RuntimeCandidate, RuntimeCommandEnvelope, RuntimeStreamOpen } from "@opencrane/contracts";
+import type { RuntimeCandidate, RuntimeCommandEnvelope, RuntimeContinuationSaveRequest, RuntimeStreamOpen } from "@opencrane/contracts";
 import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
 import type { RuntimeCommandWakeup } from "./runtime-command-wakeup";
@@ -49,6 +49,8 @@ export interface RuntimeCommandStreamAuthority
 	 *         so the runtime does not treat an outage as a permanent refusal.
 	 */
 	__AdmitCandidate(identity: RuntimeWorkloadIdentity, candidate: RuntimeCandidate): Promise<RuntimeCandidateAdmission>;
+	/** Saves a waiting attempt's continuation, or returns a refusal that the transport maps to 409. */
+	__SaveContinuation(identity: RuntimeWorkloadIdentity, request: RuntimeContinuationSaveRequest): Promise<RuntimeContinuationAdmission>;
 	/**
 	 * Tell the decision-maker that this stream is gone, so it can unbind the attempt from a
 	 * Pod that is no longer listening. Called exactly once per closed stream, from the
@@ -62,6 +64,20 @@ export interface RuntimeCommandStreamAuthority
 	 * @param open     - The stream-open message for the stream that closed.
 	 */
 	__ReleaseStream?(identity: RuntimeWorkloadIdentity, open: RuntimeStreamOpen): Promise<void>;
+}
+
+/**
+ * Tells the private continuation route whether a save succeeded or was refused.
+ *
+ * `accepted` and `idempotent` map to 202 because either lets the runtime finish entering its waiting
+ * state. `denied` maps to 409 and carries at most a reason that contains no continuation content.
+ */
+export interface RuntimeContinuationAdmission
+{
+	/** Selects `accepted`, `idempotent`, or `denied` for the HTTP response mapping. */
+	readonly outcome: string;
+	/** Explains a refusal without including model state, tool arguments, or participant answers. */
+	readonly reason?: string;
 }
 
 /**

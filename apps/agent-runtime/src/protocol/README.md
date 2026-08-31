@@ -38,6 +38,12 @@ the runtime computes the canonical payload digest and never accepts one from mod
 question is accepted per command. The adapter still consumes the rest of that framework response so
 any sibling deferred external calls are correlated before the command waits for server-owned results.
 
+The projector exposes a closed set of command wait reasons: `external_action` and
+`participant_input`. Both can be present together. These reasons suppress local `run.completed` and
+appear in bounded runtime evidence, but they do not say that a tool needs approval. Only the server
+can establish approval after it rechecks the frozen tool revision, schema, arguments, capabilities,
+and policy.
+
 The neutral seam also recognizes three explicit A2UI inputs: rendering begun, surface updated, and
 data-model updated. It forwards only an adapter-supplied complete envelope. The default Pydantic AI
 adapter emits none of these and this package never invents a surface, component, version, or

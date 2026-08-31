@@ -6,6 +6,7 @@ import { PersonaApprovalInterviewStates, PersonaApprovalRevisionStates } from ".
 import { PersonaAgentRevisionSelectionStatuses } from "../../approval/persona-authority.types";
 import { PrismaPersonaPersistenceUnitOfWork } from "../prisma-persona-persistence-unit-of-work";
 import type { PersonaAgentRevisionSelectionFactory } from "../prisma-persona-persistence-composition.types";
+import type { PersonaProductAuthorizationFactory, PersonaProductAuthorizationRepository } from "../persona-product-authorization.types";
 
 /** Builds a root client whose transaction boundary rejects with the supplied failure. */
 function _Prisma(error: Error): PrismaClient
@@ -25,6 +26,12 @@ function _SelectionFactory(): PersonaAgentRevisionSelectionFactory
 	return { create() { return { select() { return Promise.resolve({ status: PersonaAgentRevisionSelectionStatuses.Selected }); } }; } };
 }
 
+/** Allows product authorization while keeping unit-of-work tests independent of grant storage. */
+function _AuthorizationFactory(overrides: Partial<PersonaProductAuthorizationRepository> = {}): PersonaProductAuthorizationFactory<Prisma.TransactionClient>
+{
+	return { create() { return { canRead: vi.fn().mockResolvedValue(true), admitEdit: vi.fn().mockResolvedValue(true), admitCollectionCreate: vi.fn().mockResolvedValue(true), reconcileCreator: vi.fn().mockResolvedValue(undefined), ...overrides }; } };
+}
+
 describe("PrismaPersonaPersistenceUnitOfWork", function _DescribePersonaPersistenceUnitOfWork()
 {
 	it("constructs persona repositories inside the exact serializable transaction callback", async function _BindsRepositoriesToTransaction()
@@ -36,20 +43,20 @@ describe("PrismaPersonaPersistenceUnitOfWork", function _DescribePersonaPersiste
 				return work(transaction);
 			}),
 		} as unknown as PrismaClient;
-		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(prisma, _Logger(), _SelectionFactory());
+		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(prisma, _Logger(), _SelectionFactory(), _AuthorizationFactory());
 
-		await expect(unitOfWork.readStatus("silo-1", "user-1")).resolves.toEqual({ state: "interview", interviewId: null, answeredQuestionCount: 0, questionCount: 0, personaRevisionId: null, questions: [], resolution: null, result: null });
+		await expect(unitOfWork.readStatus("silo-1", "principal-1", "user-1")).resolves.toEqual({ state: "interview", interviewId: null, answeredQuestionCount: 0, questionCount: 0, personaRevisionId: null, questions: [], resolution: null, result: null });
 		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-		expect(transaction.personaProfile.findUnique).toHaveBeenCalledOnce();
+		expect(transaction.personaProfile.findUnique).toHaveBeenCalledTimes(2);
 	});
 
 	it("logs and translates an unexpected onboarding transaction failure exactly once", async function _TranslatesOnboardingFailure()
 	{
 		const error = new Error("database unavailable");
 		const logger = _Logger();
-		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(_Prisma(error), logger, _SelectionFactory());
+		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(_Prisma(error), logger, _SelectionFactory(), _AuthorizationFactory());
 
-		await expect(unitOfWork.ensureAtomically({ siloId: "silo-1", userId: "user-1", provisionedAt: "2026-07-26T12:00:00.000Z" })).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
+		await expect(unitOfWork.ensureAtomically({ siloId: "silo-1", principalId: "principal-1", userId: "user-1", provisionedAt: "2026-07-26T12:00:00.000Z" })).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
 		expect(logger.error).toHaveBeenCalledOnce();
 		expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ err: error, operation: "persona.onboarding.provision", siloId: "silo-1" }), "Persona onboarding provisioning is unavailable");
 	});
@@ -58,28 +65,39 @@ describe("PrismaPersonaPersistenceUnitOfWork", function _DescribePersonaPersiste
 	{
 		const conflict = new Prisma.PrismaClientKnownRequestError("could not serialize access", { code: "P2034", clientVersion: "test" });
 		const logger = _Logger();
-		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(_Prisma(conflict), logger, _SelectionFactory());
+		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(_Prisma(conflict), logger, _SelectionFactory(), _AuthorizationFactory());
 
-		await expect(unitOfWork.completeAtomically({ userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", completedAt: "2026-07-23T09:02:00.000Z" })).resolves.toEqual({ status: "conflict" });
+		await expect(unitOfWork.completeAtomically({ siloId: "silo-1", principalId: "principal-1", userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", completedAt: "2026-07-23T09:02:00.000Z" })).resolves.toEqual({ status: "conflict" });
 		expect(logger.error).not.toHaveBeenCalled();
+	});
+
+	it("does not enter interview persistence when central Edit authorization denies", async function _DeniesBeforeMutation()
+	{
+		const transaction = { personaInterview: { create: vi.fn() } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(work: (client: unknown) => Promise<unknown>) { return work(transaction); }) } as unknown as PrismaClient;
+		const authorization = _AuthorizationFactory({ admitEdit: vi.fn().mockResolvedValue(false) });
+		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(prisma, _Logger(), _SelectionFactory(), authorization);
+
+		await expect(unitOfWork.startAtomically({ siloId: "silo-1", principalId: "principal-1", userId: "user-1", personaProfileId: "profile-1", refreshConfigurationChangeId: null, questionSetId: "onboarding", questionSetVersion: 1, scoringPolicyId: "policy", scoringPolicyVersion: 1, interpolationMapId: "map", interpolationMapVersion: 1, startedAt: "2026-07-23T09:00:00.000Z" })).resolves.toEqual({ status: "not_found_or_wrong_owner" });
+		expect(transaction.personaInterview.create).not.toHaveBeenCalled();
 	});
 
 	it("logs an unexpected draft failure and returns a fail-closed persistence denial", async function _TranslatesDraftFailure()
 	{
 		const error = new Prisma.PrismaClientKnownRequestError("connection pool timeout", { code: "P2024", clientVersion: "test" });
 		const logger = _Logger();
-		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(_Prisma(error), logger, _SelectionFactory());
+		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(_Prisma(error), logger, _SelectionFactory(), _AuthorizationFactory());
 
-		await expect(unitOfWork.createFromInterviewAtomically({ siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", authoredAt: "2026-07-26T12:00:00.000Z" })).resolves.toEqual({ status: "persistence_unavailable" });
+		await expect(unitOfWork.createFromInterviewAtomically({ siloId: "silo-1", principalId: "principal-1", userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", authoredAt: "2026-07-26T12:00:00.000Z" })).resolves.toEqual({ status: "persistence_unavailable" });
 		expect(logger.error).toHaveBeenCalledOnce();
 	});
 
 	it("translates an approval commit race to the authority's explicit conflict result", async function _TranslatesApprovalConflict()
 	{
 		const conflict = new Prisma.PrismaClientKnownRequestError("could not serialize access", { code: "P2034", clientVersion: "test" });
-		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(_Prisma(conflict), _Logger(), _SelectionFactory());
+		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(_Prisma(conflict), _Logger(), _SelectionFactory(), _AuthorizationFactory());
 
-		await expect(unitOfWork.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-26T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: "conflict" });
+		await expect(unitOfWork.approveAndActivateAtomically({ siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-26T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: "conflict" });
 	});
 
 	it("rejects the transaction before translating a stale bound refresh to conflict", async function _RollsBackStaleRefresh()
@@ -106,9 +124,9 @@ describe("PrismaPersonaPersistenceUnitOfWork", function _DescribePersonaPersiste
 				}
 			}),
 		} as unknown as PrismaClient;
-		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(prisma, _Logger(), _SelectionFactory());
+		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(prisma, _Logger(), _SelectionFactory(), _AuthorizationFactory());
 
-		await expect(unitOfWork.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-26T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: "conflict" });
+		await expect(unitOfWork.approveAndActivateAtomically({ siloId: "silo-1", principalId: "principal-1", personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-26T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: "conflict" });
 		expect(rolledBack).toBe(true);
 		expect(transaction.personaRevision.updateMany).toHaveBeenCalledOnce();
 		expect(transaction.personaProfile.updateMany).toHaveBeenCalledOnce();

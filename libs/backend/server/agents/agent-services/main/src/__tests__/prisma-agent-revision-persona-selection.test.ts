@@ -24,7 +24,7 @@ function _Source(personaRevisionId = "persona-old")
 		createdAt: new Date("2026-08-17T08:00:00.000Z"),
 		publishedAt: new Date("2026-08-17T08:00:00.000Z"),
 		skillAssignments: [],
-		integrationAssignments: [],
+		mcpToolAssignments: [],
 		boundaryAttachments: [],
 	};
 }
@@ -62,6 +62,7 @@ function _Command()
 	return {
 		siloId: "silo-1",
 		subjectId: "user-1",
+		principalId: "principal-1",
 		agentServiceId: "service-1",
 		expectedSourceRevisionId: "agent-revision-1",
 		targetPersonaRevisionId: "persona-new",
@@ -71,34 +72,49 @@ function _Command()
 	};
 }
 
+/** Creates an observable central-effect seam for persona-selection tests. */
+function _ProductEffects()
+{
+	return {
+		resolveCaller: vi.fn().mockResolvedValue({ siloId: "silo-1", subjectId: "user-1", principalId: "principal-1" }),
+		reconcileCurrent: vi.fn().mockResolvedValue(undefined),
+		admitInitialCreation: vi.fn().mockResolvedValue(undefined),
+		admitInitialPublication: vi.fn().mockResolvedValue(undefined),
+		admitRevisionSelection: vi.fn().mockResolvedValue(undefined),
+		admitRevisionPublication: vi.fn().mockResolvedValue(undefined),
+	};
+}
+
 describe("PrismaAgentRevisionPersonaSelectionRepository", function _PersonaSelectionSuite()
 {
 	it("copies every source field while changing only personaRevisionId", async function _CopiesOnlyPersonaSelection()
 	{
 		const fake = _Transaction();
-		const repository = new PrismaAgentRevisionPersonaSelectionRepository(fake.transaction);
+		const productEffects = _ProductEffects();
+		const repository = new PrismaAgentRevisionPersonaSelectionRepository(fake.transaction, productEffects);
 
 		await expect(repository.materialize(_Command())).resolves.toEqual({ status: AgentRevisionPersonaSelectionMaterializationCodes.Materialized, agentRevisionId: "agent-revision-2", sourceRevisionId: "agent-revision-1" });
 		expect(fake.agentRevisionCreate).toHaveBeenCalledWith({
 			data: expect.objectContaining({
 				revision: 8,
-				parentRevision: { connect: { id: "agent-revision-1" } },
+				parentRevision: { connect: { id_siloId: { id: "agent-revision-1", siloId: "silo-1" } } },
 				personaRevisionId: "persona-new",
-				modelDefinition: { connect: { id: "model-1" } },
+				modelDefinition: { connect: { id_siloId: { id: "model-1", siloId: "silo-1" } } },
 				budget: { maxTurns: 64, maxTokens: 256_000, maxDurationMs: 3_600_000 },
 				promptPolicyVersion: "prompt-v1",
 			}),
 			include: expect.any(Object),
 		});
-		expect(fake.agentRevisionUpdate).toHaveBeenCalledWith({ where: { id: "agent-revision-2" }, data: { state: "Published", publishedAt: _Command().materializedAt } });
+		expect(fake.agentRevisionUpdate).toHaveBeenCalledWith({ where: { id_siloId: { id: "agent-revision-2", siloId: "silo-1" } }, data: { state: "Published", publishedAt: _Command().materializedAt } });
 		expect(fake.agentServiceUpdateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "service-1", activeRevisionId: "agent-revision-1" }), data: { activeRevisionId: "agent-revision-2", updatedAt: _Command().materializedAt } });
-		expect(fake.auditDecisionCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1", actorId: "user-1", agentServiceId: "service-1", agentRevisionId: "agent-revision-2", reasonCode: "approved_persona_selected" }) });
+		expect(productEffects.admitRevisionSelection).toHaveBeenCalledWith(expect.objectContaining({ caller: expect.objectContaining({ principalId: "principal-1" }), source: expect.objectContaining({ agentServiceId: "service-1" }), target: expect.objectContaining({ personaProfileId: "profile-1", modelDefinitionId: "model-1" }) }));
+		expect(productEffects.admitRevisionPublication).toHaveBeenCalledWith(expect.objectContaining({ target: expect.objectContaining({ agentRevisionId: expect.any(String) }) }));
 	});
 
 	it("returns AlreadyCurrent without writing when the active revision already selects the target", async function _KeepsCurrentRevision()
 	{
 		const fake = _Transaction({ sourcePersonaId: "persona-new" });
-		const repository = new PrismaAgentRevisionPersonaSelectionRepository(fake.transaction);
+		const repository = new PrismaAgentRevisionPersonaSelectionRepository(fake.transaction, _ProductEffects());
 
 		await expect(repository.materialize(_Command())).resolves.toEqual({ status: AgentRevisionPersonaSelectionMaterializationCodes.AlreadyCurrent, agentRevisionId: "agent-revision-1", sourceRevisionId: "agent-revision-1" });
 		expect(fake.agentRevisionCreate).not.toHaveBeenCalled();
@@ -109,7 +125,7 @@ describe("PrismaAgentRevisionPersonaSelectionRepository", function _PersonaSelec
 	it("returns StaleSource before writing when the active pointer moved", async function _RejectsStaleSource()
 	{
 		const fake = _Transaction({ activeRevisionId: "agent-revision-newer" });
-		const repository = new PrismaAgentRevisionPersonaSelectionRepository(fake.transaction);
+		const repository = new PrismaAgentRevisionPersonaSelectionRepository(fake.transaction, _ProductEffects());
 
 		await expect(repository.materialize(_Command())).resolves.toEqual({ status: AgentRevisionPersonaSelectionMaterializationCodes.StaleSource, sourceRevisionId: "agent-revision-1" });
 		expect(fake.agentRevisionCreate).not.toHaveBeenCalled();
@@ -118,7 +134,7 @@ describe("PrismaAgentRevisionPersonaSelectionRepository", function _PersonaSelec
 	it("returns NotApplicable when persona approval finds no personal service", async function _AllowsOwnerWithoutAgent()
 	{
 		const fake = _Transaction({ services: [] });
-		const repository = new PrismaAgentRevisionPersonaSelectionRepository(fake.transaction);
+		const repository = new PrismaAgentRevisionPersonaSelectionRepository(fake.transaction, _ProductEffects());
 
 		await expect(repository.materializeForOwner({ siloId: "silo-1", subjectId: "user-1", targetPersonaRevisionId: "persona-new", authoredBy: "user-1", materializedAt: _Command().materializedAt, changeMessage: "Select approved persona revision persona-new" })).resolves.toEqual({ status: AgentRevisionPersonaSelectionMaterializationCodes.NotApplicable, sourceRevisionId: null });
 		expect(fake.agentRevisionCreate).not.toHaveBeenCalled();
@@ -127,7 +143,7 @@ describe("PrismaAgentRevisionPersonaSelectionRepository", function _PersonaSelec
 	it("fails closed when more than one personal service matches the owner", async function _RejectsAmbiguousServices()
 	{
 		const fake = _Transaction({ services: [{ id: "service-1", activeRevisionId: "agent-revision-1" }, { id: "service-2", activeRevisionId: "agent-revision-2" }] });
-		const repository = new PrismaAgentRevisionPersonaSelectionRepository(fake.transaction);
+		const repository = new PrismaAgentRevisionPersonaSelectionRepository(fake.transaction, _ProductEffects());
 
 		await expect(repository.materializeForOwner({ siloId: "silo-1", subjectId: "user-1", targetPersonaRevisionId: "persona-new", authoredBy: "user-1", materializedAt: _Command().materializedAt, changeMessage: "Select approved persona revision persona-new" })).resolves.toEqual({ status: AgentRevisionPersonaSelectionMaterializationCodes.Unavailable, sourceRevisionId: "" });
 		expect(fake.agentRevisionCreate).not.toHaveBeenCalled();

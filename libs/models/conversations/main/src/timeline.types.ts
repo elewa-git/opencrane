@@ -81,13 +81,13 @@ export interface ConversationSystemTimelineEntry extends ConversationTimelineEnt
 	readonly systemEventId: string;
 }
 
-/** Timeline position referencing one sanitized immediate-child delivery. */
+/** References an agent-thread delivery appended to its immediate parent conversation. */
 export interface ConversationParentDeliveryTimelineEntry extends ConversationTimelineEntryBase
 {
-	/** Discriminant selecting the child-delivery source. */
+	/** Selects this entry as an agent-thread delivery to a parent conversation. */
 	readonly kind: ConversationTimelineEntryKinds.ParentDelivery;
-	/** Child run whose idempotent delivery was appended to its immediate parent. */
-	readonly parentDeliveryChildRunId: string;
+	/** Identifies the agent-thread delivery appended to the immediate parent conversation. */
+	readonly parentDeliveryAgentThreadId: string;
 }
 
 /** Exact source reference occupying one canonical conversation timeline position. */

@@ -1,9 +1,12 @@
 import { AgentRunState, ExternalActionClaimKind, ExternalActionRecoveryMode, ToolInvocationState, type Prisma, type PrismaClient } from "@prisma/client";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 
 import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates } from "../tool-invocation-lifecycle.types";
-import { PrismaToolInvocationRepository, __AdmitPreparingToolInvocationInTransaction } from "../prisma-tool-invocation-repository";
+import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { PrismaToolInvocationRepository } from "../prisma-tool-invocation-repository";
 import { PrismaToolInvocationUnitOfWork } from "../prisma-tool-invocation-unit-of-work";
+import { __AdmitPreparingToolInvocationInTransaction } from "../tool-invocation-transaction";
 import { ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults } from "../tool-invocation.types";
 
 /** Build one complete persistence row around a focused state override. */
@@ -11,6 +14,7 @@ function _row(overrides: Readonly<Record<string, unknown>> = {}): Record<string,
 {
 	return {
 		id: "invocation-row-1", siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1", subjectId: "user-1",
+		authorizationPrincipalId: null, authorizationActorKind: null, authorizationCoordinates: null, authorizationDecisionDigests: [], authorizationMembershipRevision: null, authorizationAssignmentDigest: null, authorizationEvidenceDigest: null,
 		runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1", toolRevisionId: "integration:calendar:create", toolInvocationId: "tool-1",
 		arguments: { title: "Proposed" }, argumentsDigest: "sha256:proposed", effectiveArguments: { title: "Proposed" }, effectiveArgumentsDigest: "sha256:proposed", requestFingerprint: "sha256:fingerprint", requestIdentity: {}, approvalRequired: false,
 		recoveryMode: ExternalActionRecoveryMode.Manual, recoveryKey: null, state: ToolInvocationState.Preparing, preparationAttempt: 1,
@@ -18,6 +22,25 @@ function _row(overrides: Readonly<Record<string, unknown>> = {}): Record<string,
 		claimKind: null, claimFence: 0, claimExpiresAt: null, recoveryRequiredAt: null, result: null, failureCode: null, revision: 0,
 		createdAt: new Date("2026-08-11T10:00:00.000Z"), updatedAt: new Date("2026-08-11T10:00:00.000Z"), completedAt: null, ...overrides,
 	};
+}
+
+/** Build complete structured authorization evidence around the fixed invocation fixture. */
+function _authorizationEvidence()
+{
+	const assignmentDigest = `sha256:${"a".repeat(64)}` as const;
+	const evidence = {
+		principalId: "principal-1",
+		actorKind: "user" as const,
+		coordinates: [{ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "integration:calendar:create" }, action: ProductAuthorizationActions.Invoke }],
+		decisionDigests: [`sha256:${"b".repeat(64)}`] as const,
+		membershipRevision: 3,
+		agentRevisionId: "revision-1",
+		runId: "run-1",
+		attempt: 2,
+		argumentsDigest: "sha256:proposed",
+		assignmentDigest,
+	};
+	return { ...evidence, evidenceDigest: ___DigestCanonicalJson(evidence as unknown as JsonValue) };
 }
 
 /** Fixed provider-free retry policy approved for production. */
@@ -33,20 +56,20 @@ describe("PrismaToolInvocationRepository", function _suite()
 		const created = _row({ preparationAttempt: 0 });
 		const create = vi.fn().mockResolvedValue(created);
 		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValue(null), create } } as unknown as Prisma.TransactionClient;
-		const intent = { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1", subjectId: "user-1", requestIdentity: { runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1" }, toolRevisionId: "integration:calendar:create", toolInvocationId: "tool-1", arguments: { title: "Proposed" }, argumentsDigest: "sha256:proposed", requestFingerprint: "sha256:fingerprint", approvalRequired: false, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null } as const;
+		const intent = { siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1", subjectId: "user-1", authorizationEvidence: _authorizationEvidence(), requestIdentity: { runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1" }, toolRevisionId: "integration:calendar:create", toolInvocationId: "tool-1", arguments: { title: "Proposed" }, argumentsDigest: "sha256:proposed", requestFingerprint: "sha256:fingerprint", approvalRequired: false, recoveryMode: ExternalActionRecoveryModes.Manual, recoveryKey: null } as const;
 		const result = await __AdmitPreparingToolInvocationInTransaction(transaction, intent, new Date("2026-08-11T10:00:00.000Z"), _policy());
 		expect(result.outcome).toBe("admitted");
 		expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ effectiveArguments: { title: "Proposed" }, effectiveArgumentsDigest: "sha256:proposed", retryDeadlineAt: new Date("2026-08-11T10:05:00.000Z") }) });
 	});
 
-	it("selects work only when its stored attempt matches the current running attempt", async function _findRunnable()
+	it("selects current-attempt work only when central authorization evidence is present", async function _findRunnable()
 	{
 		const stale = { ..._row({ id: "stale", attempt: 1 }), run: { attempt: 2 } };
 		const current = { ..._row({ id: "current", attempt: 2 }), run: { attempt: 2 } };
 		const findMany = vi.fn().mockResolvedValue([stale, current]);
 		const repository = new PrismaToolInvocationRepository({ toolInvocation: { findMany } } as unknown as Prisma.TransactionClient);
 		await expect(repository.findNextRunnable(new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ id: "current" }));
-		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: expect.arrayContaining([
+		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { mcpRuntimeExecution: { is: null }, authorizationEvidenceDigest: { not: null }, OR: expect.arrayContaining([
 			expect.objectContaining({ run: { is: { state: AgentRunState.Running } }, OR: expect.arrayContaining([expect.objectContaining({ state: ToolInvocationState.AwaitingApproval, claimKind: null }), expect.objectContaining({ state: ToolInvocationState.Ready, claimKind: null })]) }),
 			expect.objectContaining({ run: { is: { state: AgentRunState.Cancelling } }, state: { in: [ToolInvocationState.Claimed, ToolInvocationState.Reconciling] }, claimKind: { not: null }, claimExpiresAt: { lte: expect.any(Date) } }),
 		]) } }));

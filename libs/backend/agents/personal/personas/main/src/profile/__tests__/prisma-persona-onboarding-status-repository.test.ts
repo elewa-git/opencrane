@@ -24,19 +24,19 @@ describe("PrismaPersonaOnboardingStatusRepository", function _suite()
 	it("prioritizes an in-progress retake over an older active approved revision", async function _retake()
 	{
 		const repository = new PrismaPersonaOnboardingStatusRepository(_prisma("InProgress"));
-		await expect(repository.readStatus("silo-1", "user-1")).resolves.toEqual({ state: PersonaOnboardingApiStates.Interview, interviewId: "retake-1", answeredQuestionCount: 1, questionCount: 2, personaRevisionId: null, questions: [{ id: "role", category: "Pace", prompt: "Role", ordinal: 1, choices: [], selectedChoiceId: "a" }, { id: "tone", category: "Tone", prompt: "Tone", ordinal: 2, choices: [], selectedChoiceId: null }], resolution: null, result: null });
+		await expect(repository.readStatus("silo-1", "principal-1", "user-1")).resolves.toEqual({ state: PersonaOnboardingApiStates.Interview, interviewId: "retake-1", answeredQuestionCount: 1, questionCount: 2, personaRevisionId: null, questions: [{ id: "role", category: "Pace", prompt: "Role", ordinal: 1, choices: [], selectedChoiceId: "a" }, { id: "tone", category: "Tone", prompt: "Tone", ordinal: 2, choices: [], selectedChoiceId: null }], resolution: null, result: null });
 	});
 
 	it("keeps a completed retake resumable until it has a new draft", async function _completedRetake()
 	{
 		const repository = new PrismaPersonaOnboardingStatusRepository(_prisma("Completed"));
-		await expect(repository.readStatus("silo-1", "user-1")).resolves.toEqual({ state: PersonaOnboardingApiStates.Interview, interviewId: "retake-1", answeredQuestionCount: 1, questionCount: 2, personaRevisionId: null, questions: [{ id: "role", category: "Pace", prompt: "Role", ordinal: 1, choices: [], selectedChoiceId: "a" }, { id: "tone", category: "Tone", prompt: "Tone", ordinal: 2, choices: [], selectedChoiceId: null }], resolution: null, result: null });
+		await expect(repository.readStatus("silo-1", "principal-1", "user-1")).resolves.toEqual({ state: PersonaOnboardingApiStates.Interview, interviewId: "retake-1", answeredQuestionCount: 1, questionCount: 2, personaRevisionId: null, questions: [{ id: "role", category: "Pace", prompt: "Role", ordinal: 1, choices: [], selectedChoiceId: "a" }, { id: "tone", category: "Tone", prompt: "Tone", ordinal: 2, choices: [], selectedChoiceId: null }], resolution: null, result: null });
 	});
 
 	it("fails closed when a draft carries malformed durable scoring evidence", async function _invalidDraftEvidence()
 	{
 		const repository = new PrismaPersonaOnboardingStatusRepository(_prismaWithRevision({ colours: { red: 2, yellow: 1, green: 0, blue: 2, total: 99 } }));
 
-		await expect(repository.readStatus("silo-1", "user-1")).rejects.toThrow("invalid scoring evidence");
+		await expect(repository.readStatus("silo-1", "principal-1", "user-1")).rejects.toThrow("invalid scoring evidence");
 	});
 });

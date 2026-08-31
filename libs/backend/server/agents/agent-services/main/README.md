@@ -7,8 +7,8 @@
 This package owns the **agent definition plane** — the side of OpenCrane that turns a saved
 managed or personal agent definition into something the runtime can execute. An *agent service* is the stable identity
 of one agent (its name and lifecycle); an *agent revision* is one immutable, versioned snapshot of
-how that agent behaves (its prompt policy, registered model definition, budget, and the skills and
-integrations it may use). A service always points at exactly one *active* revision.
+how that agent behaves (its prompt policy, registered model definition, budget, skills, and immutable
+MCP tool revisions). A service always points at exactly one *active* revision.
 
 This package owns the whole definition plane and the authoritative management API. It creates a
 managed service with its first draft revision, accepting only the deployed `managed-default`
@@ -28,7 +28,7 @@ to one Group, one stored Group subtree, or one Personal boundary, and never impl
 Context Protocol tools, models, credentials, or another boundary.
 
 ```
- author a draft AgentRevision   (prompt policy · registered model · budget · assigned skills + integrations)
+ author a draft AgentRevision   (prompt policy · registered model · budget · skills · MCP tools)
         │
         ▼
  ┌────────────────────────────────────┐
@@ -40,20 +40,39 @@ Context Protocol tools, models, credentials, or another boundary.
  runtime executes the service's active revision
 ```
 
-**In this flow:** [skills](../../skills/main/README.md) · [integrations](../../../gateways/integrations/main/README.md) *(a revision assigns these)*
+**In this flow:** [skills](../../skills/main/README.md) · [MCP](../../../gateways/mcp/main/README.md) *(a revision assigns these)*
 
 Invariant: a revision is only published when it belongs to the named service, is still a draft, and
 carries every executable field (a positive version, a digest, prompt and registered model definition,
-and positive turn/token/duration budgets). Every assigned integration tool must carry a non-empty,
-unambiguous name, reviewed description, valid object input schema, and matching canonical digest:
-colons are rejected because the runtime compiles the frozen
-assignment into `integration:<integrationId>:<toolName>`. The model is a foreign-key reference to the
+and positive turn/token/duration budgets). Every assigned MCP tool must point to one immutable,
+ready tool revision with a non-empty name, valid object input schema, and matching canonical digest.
+The model is a foreign-key reference to the
 gateway-owned catalogue, so an author cannot turn an arbitrary provider alias into executable
 behaviour. A model is available only when it is platform-global or belongs to the service's tenant
 scope; the database checks the same rule as the application. The publish and the pointer flip happen
 as a single compare-and-swap, so two people publishing at once cannot both win — the second sees a
 conflict, and a crash never leaves a half-published service. Anything missing or stale is refused
 with a plain reason.
+
+Every management mutation uses the central `AuthorizationAuthority` inside the same database
+transaction as its write. Creating, revising, restoring, publishing, and changing lifecycle state
+require the caller's current `Organization(siloId) / Administer` grant. Schedule creation instead
+checks `Schedule(agentServiceId) / Create`; each schedule item uses its own stable identifier for
+`Read`, `Edit`, and `Delete`. The creation transactions seed those exact creator grants, together
+with `AgentService / Discover, Read` and immutable `AgentRevision / Read` grants. Attaching
+a Group subtree additionally requires a winning grant whose stored boundary coverage includes
+descendants; an exact grant cannot widen into subtree access. The HTTP router only authenticates and
+passes the durable Principal id. Catalogue, comparison, history, and schedule-list reads are filtered
+through the same authority; the router does not make role-based permission decisions.
+
+Run-now is deliberately different from management: it checks the human caller's exact
+`AgentService(serviceId) / Invoke` grant in run admission, then separately checks the managed
+service Principal's own current invocation grant and signed membership. The immutable run snapshot
+freezes the winning decision digests and configured ceilings as evidence, but that evidence is not a
+reusable grant. Any later external effect must recheck current authority.
+`PrismaRuntimeAgentEffectEligibilityAuthority` performs that effect-time lifecycle check for the app:
+the service must still be active and the exact assigned revision must still be its published active
+revision.
 
 ### Personal onboarding handoff
 
@@ -75,13 +94,17 @@ questionnaire may become complete. The app binds that transaction to this packag
    resolver into `InitialPersonalAgentDefaultModelResolver`. Agent-services consumes only its stable
    definition identifier or fail-closed denial state; it never reads routing defaults or recreates
    their precedence policy.
-5. That publisher creates a `Personal` service in `Draft`, writes revision 1 through the shared
-   immutable revision writer, publishes that revision, activates the service, and appends
-   publication audit evidence. The onboarding transaction commits all of this with completion, or
-   none of it.
+5. Agent-services resolves the trusted onboarding subject to one local Principal. It projects the
+   owner's exact service, revision, Persona, and model grants through the shared managed-grant
+   repository, then asks the central transaction-bound `AuthorizationAuthority` to admit Persona
+   and model use plus service/revision creation and publication.
+6. Only after those decisions does the publisher create a `Personal` service in `Draft`, write
+   revision 1 through the shared immutable revision writer, publish that revision, and activate the
+   service. The onboarding transaction commits grants, central decision evidence, publication, and
+   completion together, or none of them.
 
 The initial revision uses the package-owned initial personal-Agent policy and the
-`personal-default` runtime profile. Its skills, integrations, and knowledge-boundary attachments are
+`personal-default` runtime profile. Its skills, MCP tools, and knowledge-boundary attachments are
 empty. Personal memory access is not silently granted during onboarding; it follows the separate
 user-elicitation and consent flow.
 
@@ -116,11 +139,14 @@ onboarding completion unit of work (owns Serializable commit/retry)
         │ app adapter binds its transaction
         ▼
 PrismaPersonalAgentBootstrapRepository
-        │ validates persona + service authority
+        │ validates persona + service eligibility and resolves the local Principal
+        ▼
+PrismaPersonalAgentProductEffectsAuthority
+        │ projects managed grants + records central decisions
         ▼
 PrismaInitialPersonalAgentPublicationRepository
         │ consumes model-routing's resolved definition id
-        │ writes service + revision + publication + audit
+        │ writes service + revision + publication
         ▼
 ready personal AgentService, or a fail-closed denial
 ```
@@ -131,7 +157,7 @@ ready personal AgentService, or a fail-closed denial
   compare / publish / restore / enable / pause / run-now / history / retire); the UI and parity client are
   clients of it. Composed with `AgentServicesRouterDependencies`, `ManagementCaller`, `ManagementClock`.
 - `_CreateAgentServicesRouter` — the ready-to-mount Prisma composition. It maps the authenticated
-  request principal into `ManagementCaller`, owns all database adapters and audit-evidence wiring,
+  request principal into `ManagementCaller`, and owns all database adapters,
   and accepts only the shared run-admission port plus the process logger from the app.
 - Lifecycle use cases: `__CreateManagedAgentService`, `__ReviseAgentRevision`, `__RestoreAgentRevision`,
   `__ChangeAgentServiceState`, `__CompareAgentRevisions`, `__ReadAgentServiceHistory`, `__AdmitManagedRunNow`.
@@ -148,7 +174,9 @@ ready personal AgentService, or a fail-closed denial
 - `PrismaAgentRevisionPersonaSelectionRepository` — the transaction-scoped strategy for persona
   approval and onboarding repair. It proves one stable personal service and its latest published
   source, copies every executable field while replacing only `personaRevisionId`, publishes the
-  next revision, moves the active pointer, and appends audit evidence before the caller commits.
+  next revision, and moves the active pointer. Before writing, it projects current owner grants and
+  records the AgentService edit, AgentRevision create/publish, and Persona use decisions through the
+  shared central authority.
 - `AgentRevisionPersonaSelectionMaterializationCodes` — distinguishes a new revision, an
   idempotent already-current revision, a stale source, unavailable authority, and the valid case
   where persona approval finds no personal agent to update.
@@ -161,10 +189,9 @@ ready personal AgentService, or a fail-closed denial
 - Schedule plane: `__CreateAgentSchedule`, `__UpdateAgentSchedule`, the shared
   `AgentScheduleOverlapPolicies` vocabulary, and the `/:serviceId/schedules` management surface
   (list/create/update/delete). Evaluation into due runs lives in sibling `scheduling`.
-- Boundary attach-authority + effective access: `__ValidateBoundaryAttachAuthority`,
-  `__ResolveEffectiveBoundaryAttachments`, and `__IntersectBoundaryAttachments`. The resolver
-  evaluates stored generic grants by capability and resource, including current validity, priority,
-  deny precedence, and Group ancestry; an exact allow never widens into a descendants attachment.
+- Boundary attachment admission is part of the lifecycle transaction. The central authority
+  evaluates current generic grants, deny precedence, validity, and Group ancestry; an exact allow
+  never widens into a descendants attachment.
 - Managed execution evidence derives the stored Principal relation from the active managed service,
   verifies its reserved internal origin and current signed fleet membership, intersects the active
   revision's non-personal boundary attachments with effective grants, and digests the complete
@@ -178,11 +205,15 @@ ready personal AgentService, or a fail-closed denial
   `AtomicAgentRevisionPublication*`). The shared `AgentRevisionContent` domain value lives in
   `@opencrane/models/agents`.
 
-- `PrismaPersonalAgentBootstrapRepository(transaction, defaultModelResolver)` and
+- `PrismaPersonalAgentBootstrapRepository(transaction, defaultModelResolver, productEffects)` and
   `PersonalAgentBootstrapStatuses` — the
   exported app-composition adapter and its ready/denied result. The package-internal
   `PrismaInitialPersonalAgentPublicationRepository` is used only after bootstrap proves that no
   personal service exists.
+- `PrismaPersonalAgentProductEffectsAuthority` — the transaction-scoped adapter that resolves the trusted
+  subject to a local Principal, projects relation-derived grants through the shared managed-grant
+  mechanism, and delegates every decision to `AuthorizationAuthority`. It contains no policy
+  evaluator of its own.
 - `InitialPersonalAgentDefaultModelResolver` and
   `InitialPersonalAgentDefaultModelResolutionStatuses` — the narrow app-provided port and closed
   result vocabulary consumed before initial publication writes anything.
@@ -190,22 +221,26 @@ ready personal AgentService, or a fail-closed denial
 ## Boundary
 
 The application mounts the exported Prisma composition and supplies the cross-domain run-admission
-port. This package owns its router, caller mapping, database adapters, revision persistence, and
-publication-audit wiring. A cross-domain unit of work may bind the model- or persona-selection repository to its
+port. This package owns its router, caller mapping, database adapters, and revision persistence. The
+central authorization admission is the sole publication permission decision and audit source; this
+package does not synthesize a second publication authorization record. A cross-domain unit of work may bind the model- or persona-selection repository to its
 transaction, but personal configuration cannot reproduce its revision projection, Prisma mapping,
 or lifecycle. Persona selection never creates an AgentService: no existing personal service is a
 documented no-op, while more than one matching service fails closed. The app may likewise construct the personal bootstrap repository with onboarding's
 open transaction, but onboarding cannot reproduce AgentService persistence, revision
-digests, publication, activation, or publication audit evidence. The bootstrap repository cannot
+digests, publication, activation, or central decision evidence. The bootstrap repository cannot
 complete onboarding or commit the transaction. Model-routing owns configured-default precedence and
 accessible-definition resolution; the app only translates its result vocabulary into this package's
 narrow port. This package does not run agents or resolve
-skills/integrations itself. It fails closed:
+skills or MCP tools itself. It fails closed:
 any doubt is a `denied` outcome, never a silent partial publish.
 
 ## Database adapters
 
-`src/db/` holds the Prisma repositories, transaction factories, row mappers, and revision writer.
+`src/db/` keeps lifecycle persistence and transaction orchestration separate. The lifecycle
+repository reads and writes against a transaction supplied by its caller, while the lifecycle unit
+of work opens that serializable transaction and evaluates central authorization before delegating.
+The directory also holds the other Prisma repositories, transaction factories, row mappers, and revision writer.
 Keeping those details together leaves the package root for domain policies, ports, route assembly,
 and process configuration. The router and environment factory compose the adapters; they do not
 live in `db/` because they own HTTP and deployment concerns rather than database access.
@@ -213,15 +248,13 @@ live in `db/` because they own HTTP and deployment concerns rather than database
 ## Dependency direction
 
 Tagged `scope:agent-services`: it may depend only on `scope:agent-services`, `scope:agents` (shared
-agent models), `scope:audit`, `scope:auth`, `scope:authorization`, `scope:grants`,
+agent models), `scope:audit`, `scope:auth`, `scope:authorization`,
 `scope:membership`, and `scope:shared` — never on apps, gateways, or knowledge domains. The
 `scope:auth` edge resolves only the backend-type-free request principal; run admission remains an
-injected port, so this package never imports `scope:execution-runs`. The `scope:grants` edge is real and
-load-bearing: `PrismaBoundaryGrantRepository` calls the generic IAM decision authority so `__ValidateBoundaryAttachAuthority`
-(a caller must administer every boundary they attach) and `__ResolveEffectiveBoundaryAttachments` (the
-runtime intersection, so a stored attachment grants nothing beyond the agent's actual compiled
-grants) both use the same subject, boundary, capability, resource, priority, and deny semantics.
-The grant subject identifies the receiving Principal or direct-membership Group; its separate Group
+injected port, so this package never imports `scope:execution-runs`. The central authorization edge
+is load-bearing: lifecycle attachment admission and managed run admission use the same subject,
+boundary, capability, resource, priority, and deny semantics. The grant subject identifies the
+receiving Principal or direct-membership Group; its separate Group
 or Personal boundary identifies the knowledge target, so a receiver can never be mistaken for the
 resource boundary. The membership edge is equally narrow: managed
 execution freezes fresh signed service-principal evidence into its immutable snapshot. Boundary
@@ -232,7 +265,7 @@ attachments remain silo-bounded and administrator-gated.
 Owns the `AgentService`, `AgentRevision` (with `parentRevisionId`/`sourceRevisionId`/`changeMessage`
 lineage and a required `ModelDefinition` reference), `AgentRevisionBoundaryAttachment`
 (`Group` or `Personal`, with exact or stored-descendant coverage), `AgentRevisionSkillAssignment`,
-`AgentRevisionIntegrationAssignment`, and `AgentServiceSchedule` (cron, timezone, overlap policy,
+`AgentRevisionMcpToolAssignment`, and `AgentServiceSchedule` (cron, timezone, overlap policy,
 enabled, catch-up window) models in `apps/opencrane/prisma/schema/agent-services.prisma`.
 
 ## See also

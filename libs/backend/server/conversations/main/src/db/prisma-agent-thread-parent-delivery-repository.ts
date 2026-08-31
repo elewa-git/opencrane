@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { AgentRunState, AgentThreadDeliveryKind, WorkloadAssignmentState, type Prisma } from "@prisma/client";
+import { AgentRunState, AgentThreadDeliveryKind, WarmRuntimeReservationState, WorkloadAssignmentState, type Prisma } from "@prisma/client";
 
 import { AgentThreadDeliveryKinds, type AgentThreadParentDelivery } from "@opencrane/backend/conversations/agent-threads";
 
@@ -65,8 +65,10 @@ export class PrismaAgentThreadParentDeliveryRepository implements AgentThreadPar
 	 */
 	async deliver(identity: AgentThreadRuntimeIdentity, command: AgentThreadParentDeliveryCommand): Promise<DeliverAgentThreadParentResult>
 	{
-		const assignment = await this.transaction.workloadAssignment.findFirst({ where: { runId: command.runId, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, podUid: identity.podUid, state: WorkloadAssignmentState.Registered, expiresAt: { gt: new Date() }, run: { state: AgentRunState.Running } }, select: { siloId: true, agentServiceId: true, attempt: true, run: { select: { attempt: true } } } });
-		if (assignment === null || assignment.attempt !== assignment.run.attempt) return { outcome: "denied", reason: "authority_unavailable" };
+		const now = new Date();
+		const assignment = await this.transaction.workloadAssignment.findFirst({ where: { runId: command.runId, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, state: WorkloadAssignmentState.Registered, expiresAt: { gt: now }, run: { state: AgentRunState.Running } }, select: { siloId: true, agentServiceId: true, attempt: true, bindingGeneration: true, run: { select: { attempt: true } }, warmRuntimeReservations: { where: { namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, podUid: identity.podUid, state: WarmRuntimeReservationState.Claimed, idleDeadline: { gt: now } }, select: { generation: true } } } });
+		if (assignment === null || assignment.attempt !== assignment.run.attempt || !assignment.warmRuntimeReservations.some(function _CurrentGeneration(reservation) { return reservation.generation === assignment.bindingGeneration; }))
+			return { outcome: "denied", reason: "authority_unavailable" };
 
 		const thread = await this.transaction.conversationAgentThread.findFirst({ where: { childConversationId: command.childConversationId, siloId: assignment.siloId, agentServiceId: assignment.agentServiceId, childConversation: { lifecycle: "Open" } }, select: { parentConversationId: true } });
 		if (thread === null) return { outcome: "denied", reason: "authority_unavailable" };

@@ -14,6 +14,8 @@ export interface ConversationCaller
 {
 	/** ClusterTenant (silo) the request host resolves to; scopes every read and write below it. */
 	readonly siloId: string;
+	/** Durable local Principal resolved from the verified issuer and subject. */
+	readonly principalId: string;
 	/** The user's OIDC `sub`, already verified by the session layer; matched against conversation participant rows. */
 	readonly subjectId: string;
 	/** Verified OIDC issuer that namespaces the subject for Principal resolution. */

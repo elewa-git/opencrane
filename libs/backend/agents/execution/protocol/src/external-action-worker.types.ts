@@ -50,7 +50,7 @@ export type ExternalActionProviderOutcome =
  * The frozen input an external action is allowed to see.
  *
  * Deliberately nothing but the admitted snapshot. Every decision an action makes - which dataset to
- * recall from, which integration to resolve, which subject it acts as - must come from here, so a
+ * recall from, which MCP tool revision to invoke, which subject it acts as - must come from here, so a
  * runtime that has since changed its mind cannot widen what the action may do.
  *
  * @see ExternalActionExecutionContextLoader which produces it.
@@ -102,6 +102,13 @@ export interface ExternalActionExecutionContextUnitOfWork extends ExternalAction
  */
 export type ExternalActionWorkerInvocation = ToolInvocationRecord;
 
+/** A ToolInvocation owned by one exact AgentRun attempt rather than by a standalone MCP task. */
+export type AgentRunExternalActionWorkerInvocation = ExternalActionWorkerInvocation & {
+	readonly runId: string;
+	readonly attempt: number;
+	readonly mcpTaskId: null;
+};
+
 /**
  * Finds the next saved invocation the worker should act on.
  *
@@ -124,6 +131,13 @@ export interface ToolInvocationWorkSource
 	 * than by whichever read first.
 	 */
 	findNextRunnable(now: Date): Promise<ExternalActionWorkerInvocation | null>;
+}
+
+/** Routes a ready ToolInvocation into a class-specific durable executor before generic dispatch. */
+export interface ExternalActionClassAdmission
+{
+	/** Admit one saved invocation, identify a recognized but unavailable class, or report that the generic provider worker owns it. */
+	admitInvocation(toolInvocationRowId: string): Promise<"admitted" | "idempotent" | "not_ready" | "not_mcp">;
 }
 
 /**
@@ -281,6 +295,8 @@ export interface ExternalActionWorkerDependencies
 {
 	/** Finds the next saved invocation to work on. */
 	readonly source: ToolInvocationWorkSource;
+	/** Gives class-specific executors first refusal before the generic provider adapter can claim work. */
+	readonly classAdmission: ExternalActionClassAdmission;
 	/** Writes ToolInvocation state; each write only succeeds if the row is still on the revision it read. */
 	readonly invocations: ExternalActionWorkerUnitOfWork;
 	/** Loads the run's frozen snapshot. */

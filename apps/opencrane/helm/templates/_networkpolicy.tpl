@@ -1,6 +1,4 @@
 {{- define "opencrane.server.networkPolicy" -}}
-{{- $managedPlane := (index .Values "managedAgentRuntimePlane").managedAgentRuntime -}}
-{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
 {{- if .Values.networkPolicy.enabled }}
 # Network policy for the OpenCrane server.
 #
@@ -12,7 +10,7 @@
 #     to this port, so the internal routes are unreachable from the internet even though the
 #     org ingress forwards `/api`. Permitted to the internal port:
 #       - Channel proxy: /api/internal/channel-targets:resolve (TokenReview + delegated session).
-#       - Per-attempt agent-runtime Job: outbound `/api/internal/agent-runtime/*` only; its projected
+#       - Fixed warm-runtime Pod: outbound `/api/internal/agent-runtime/*` only; its projected
 #         ServiceAccount token is TokenReviewed inside the route, so this rule only opens the network path — it proves no identity.
 #       - Governed skill Jobs: bootstrap acknowledgement, authoring input, and terminal completion only.
 #         Their default-deny namespaces permit this single server destination and DNS; TokenReview binds
@@ -95,26 +93,28 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
-    # Runtime Jobs own no listener and can only initiate this connection. TokenReview fixes each
-    # personal or managed audience to its distinct namespace and ServiceAccount subject in-process.
+    # Warm runtime Pods own no public listener and can only initiate this connection. TokenReview
+    # fixes each personal or managed audience to its namespace and ServiceAccount in-process.
     {{- if .Values.agentController.enabled }}
+    {{- $personalRuntimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
+    {{- $managedRuntimeNamespace := include "opencrane.agentController.managedRuntimeNamespace" . }}
     - from:
         - namespaceSelector:
             matchLabels:
+              kubernetes.io/metadata.name: {{ $personalRuntimeNamespace | quote }}
               opencrane.ai/runtime-release: {{ include "opencrane.agentController.runtimeNamespaceLabelValue" . | quote }}
           podSelector:
             matchLabels:
-              app.kubernetes.io/component: agent-runtime
-      ports:
-        - protocol: TCP
-          port: {{ .Values.clustertenantManager.service.internalPort }}
-    - from:
+              app.kubernetes.io/component: warm-runtime
+              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-personal-warm
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ $managedRuntimeNamespace | quote }}
+              opencrane.ai/runtime-release: {{ include "opencrane.agentController.runtimeNamespaceLabelValue" . | quote }}
           podSelector:
             matchLabels:
-              app.kubernetes.io/component: agent-runtime
+              app.kubernetes.io/component: warm-runtime
+              opencrane.ai/warm-runtime-pool: {{ include "opencrane.fullname" . }}-managed-warm
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
@@ -130,13 +130,15 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
+    # OCI MCP companions can reach only the internal command API. TokenReview then binds the
+    # projected credential to mcp-executor-default and the registered Pod UID.
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ (index .Values "opencrane-tool-runner").toolRunner.namespace | quote }}
+              kubernetes.io/metadata.name: {{ (index .Values "opencrane-mcp-executor").mcpExecutor.namespace | quote }}
           podSelector:
             matchLabels:
-              app.kubernetes.io/component: tool-runner
+              app.kubernetes.io/component: mcp-executor
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
@@ -188,14 +190,15 @@ spec:
           port: 5432
     # Kubernetes API calls and external OIDC/provider APIs use HTTPS. Standard
     # NetworkPolicy cannot select the API Service or constrain external FQDNs, so
-    # this is intentionally port-scoped; use Cilium to narrow external hostnames.
+    # this is intentionally port-scoped. A separately qualified Cilium policy can narrow hostnames.
     - ports:
         - protocol: TCP
           port: 443
     {{- if and (eq .Values.clustertenantManager.membership.mode "fleet") (ne (int .Values.clustertenantManager.membership.fleet.billingGatewayEgressPort) 443) }}
     # Fleet is the fail-closed membership and paid-seat authority in this mode. The application
     # refuses non-HTTPS receiver origins. Standard NetworkPolicy cannot select its external FQDN,
-    # so the operator supplies the exact TLS port and may narrow the hostname with Cilium.
+    # so the operator supplies the exact TLS port. A separately qualified Cilium policy may narrow
+    # the hostname.
     - ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.membership.fleet.billingGatewayEgressPort }}
@@ -220,17 +223,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.litellm.service.port }}
-    {{- end }}
-    {{- if and .Values.mcpGateway.enabled (ne (include "opencrane.mcpGatewayShared" .) "true") }}
-    # Release-local Obot transport for server-owned custody and durable action execution.
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: mcp-gateway
-      ports:
-        - protocol: TCP
-          port: {{ .Values.mcpGateway.service.port }}
     {{- end }}
     {{- if .Values.channelProxy.enabled }}
     # Release-local live conversation-event delivery lets the server check the channel proxy.
@@ -283,8 +275,7 @@ spec:
 {{- $serverSelector := include "opencrane.selectorLabels" . }}
 {{- $internalPort := .Values.clustertenantManager.service.internalPort }}
 {{- range $worker := (list
-  (dict "name" "skill-authoring-bootstrap" "namespace" (index $.Values "opencrane-skill-authoring").skillAuthoring.namespace "component" "skill-authoring")
-  (dict "name" "tool-runner-bootstrap" "namespace" (index $.Values "opencrane-tool-runner").toolRunner.namespace "component" "tool-runner")) }}
+  (dict "name" "skill-authoring-bootstrap" "namespace" (index $.Values "opencrane-skill-authoring").skillAuthoring.namespace "component" "skill-authoring")) }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

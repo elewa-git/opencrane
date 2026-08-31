@@ -15,3 +15,16 @@ export interface LiteLlmCredentialUpsert
   /** The raw upstream provider API key. Never logged, never returned to a caller. */
   apiKey: string;
 }
+
+/** Outcomes of one fixed-name LiteLLM credential mutation. */
+export enum LiteLlmCredentialMutationOutcomes
+{
+  /** LiteLLM confirmed that it applied the requested credential state. */
+  Applied = "applied",
+  /** No LiteLLM endpoint is configured, so no upstream request was attempted. */
+  Skipped = "skipped",
+  /** LiteLLM returned a response that rejected the requested mutation. */
+  Rejected = "rejected",
+  /** The request ended without a response, so LiteLLM may still have applied the mutation. */
+  Uncertain = "uncertain",
+}

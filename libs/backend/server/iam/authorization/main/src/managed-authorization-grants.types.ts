@@ -44,8 +44,6 @@ export interface ManagedAuthorizationGrantPlan
 /** Writes grants owned by one product editor while preserving grants from every other source. */
 export interface ManagedAuthorizationGrantRepository
 {
-	/** Lists one editor's live grants for an exact resource. */
-	listManagedResourceGrants(siloId: string, managerId: string, resource: AuthorizationResourceLocator): Promise<readonly ManagedAuthorizationGrantSpec[]>;
 	/** Reconciles one editor's grants and soft-revokes entries omitted from the desired set. */
 	reconcileManagedResourceGrants(command: ReconcileManagedAuthorizationGrantsCommand): Promise<number>;
 }

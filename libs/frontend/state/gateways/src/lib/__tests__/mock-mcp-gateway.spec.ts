@@ -105,26 +105,4 @@ describe("MockMcpGateway", () =>
 		expect(reenabled.approvalStatus).toBe(McpApprovalStatus.Published);
 	});
 
-	it("reads and replaces a server's access policy", async () =>
-	{
-		const gateway = new MockMcpGateway();
-
-		const before = await gateway.getAccessPolicy("github");
-		expect(before.groups).toContainEqual({ id: "group-engineering", name: "Engineering" });
-
-		const saved = await gateway.updateAccessPolicy("github", { ...before, groups: [{ id: "group-engineering", name: "Engineering" }] });
-		expect(saved.groups).toEqual([{ id: "group-engineering", name: "Engineering" }]);
-
-		const reread = await gateway.getAccessPolicy("github");
-		expect(reread.groups).toEqual([{ id: "group-engineering", name: "Engineering" }]);
-	});
-
-	it("lists directory candidates for the access-policy editor", async () =>
-	{
-		const gateway = new MockMcpGateway();
-		const directory = await gateway.getDirectory();
-
-		expect(directory.users.length).toBeGreaterThan(0);
-		expect(directory.groups).toContainEqual({ id: "group-engineering", name: "Engineering" });
-	});
 });

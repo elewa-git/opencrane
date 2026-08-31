@@ -1,7 +1,7 @@
 import { EventType } from "@ag-ui/core";
 import { describe, expect, it } from "vitest";
 
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgentThreadDeliveryKinds, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_RUN_WAIT_STATE_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgentThreadDeliveryKinds, AgUiA2uiSurfaceStates, AgUiRunWaitOperations, AgUiRunWaitReasons, AgUiRunWaitSources, AgUiToolRecoveryProviderOutcomes } from "@opencrane/contracts";
 
 import { __DecodeAgUiSocketRecord } from "../ag-ui-socket-decoder";
 import { __AgUiResumeCursor, __CreateAgUiStreamState, __ReduceAgUiStream } from "../ag-ui-stream";
@@ -51,6 +51,12 @@ function _Recovery(overrides: Readonly<Record<string, unknown>> = {}): Readonly<
 		providerOutcome: AgUiToolRecoveryProviderOutcomes.UnknownAfterDispatch,
 		...overrides,
 	};
+}
+
+/** Build one strict versioned wait-state custom event. */
+function _Wait(source: AgUiRunWaitSources, operation: AgUiRunWaitOperations, waits: readonly Readonly<Record<string, unknown>>[]): object
+{
+	return { type: EventType.CUSTOM, name: AG_UI_RUN_WAIT_STATE_EVENT, value: { version: AG_UI_RUN_WAIT_STATE_EVENT, runId: "run-1", source, operation, waits } };
 }
 
 describe("AG-UI stream state", function _Suite()
@@ -195,6 +201,32 @@ describe("AG-UI stream state", function _Suite()
 		state = __ReduceAgUiStream(state, _Record(undefined, { type: EventType.CUSTOM, name: AG_UI_INTERRUPTS_CLEARED_EVENT, value: { eventType: AG_UI_INTERRUPTS_CLEARED_EVENT } }));
 		expect(state.interrupts).toEqual([]);
 		expect(state.cursor).toBe("cursor-1");
+	});
+
+	it("keeps sibling outside action, participant input, approval, and memory waits distinct", function _TracksWaitReasons()
+	{
+		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-wait-1", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" }));
+		state = __ReduceAgUiStream(state, _Record("cursor-wait-2", _Wait(AgUiRunWaitSources.Runtime, AgUiRunWaitOperations.Add, [{ id: "tool:tool-1", reason: AgUiRunWaitReasons.ExternalAction }])));
+		state = __ReduceAgUiStream(state, _Record(undefined, { type: EventType.RUN_FINISHED, threadId: "conversation-1", runId: "run-1", outcome: { type: "interrupt", interrupts: [{ id: "input-1", reason: "runtime_input" }, { id: "approval-1", reason: "tool_approval" }, { id: "memory-1", reason: "personal_memory_permission" }] } }));
+		state = __ReduceAgUiStream(state, _Record(undefined, _Wait(AgUiRunWaitSources.Participant, AgUiRunWaitOperations.Replace, [{ id: "interrupt:input-1", reason: AgUiRunWaitReasons.ParticipantInput }, { id: "interrupt:approval-1", reason: AgUiRunWaitReasons.Approval }, { id: "interrupt:memory-1", reason: AgUiRunWaitReasons.PersonalMemoryPermission }])));
+
+		expect(state.runWaitReasons).toEqual([AgUiRunWaitReasons.ExternalAction, AgUiRunWaitReasons.ParticipantInput, AgUiRunWaitReasons.Approval, AgUiRunWaitReasons.PersonalMemoryPermission]);
+		expect(state.runWaits.size).toBe(4);
+		expect(state.runStatus).toBe(AgUiRunStatuses.Interrupted);
+
+		state = __ReduceAgUiStream(state, _Record("cursor-wait-3", _Wait(AgUiRunWaitSources.Runtime, AgUiRunWaitOperations.Remove, [{ id: "tool:tool-1", reason: AgUiRunWaitReasons.ExternalAction }])));
+		expect(state.runWaitReasons).toEqual([AgUiRunWaitReasons.ParticipantInput, AgUiRunWaitReasons.Approval, AgUiRunWaitReasons.PersonalMemoryPermission]);
+		state = __ReduceAgUiStream(state, _Record(undefined, { type: EventType.CUSTOM, name: AG_UI_INTERRUPTS_CLEARED_EVENT, value: { eventType: AG_UI_INTERRUPTS_CLEARED_EVENT } }));
+		expect(state.runWaitReasons).toEqual([]);
+		expect(state.runWaits.size).toBe(0);
+		expect(state.runStatus).toBe(AgUiRunStatuses.Running);
+	});
+
+	it("rejects approval asserted by the runtime wait source", function _RejectsRuntimeApproval()
+	{
+		const frame = { type: "conversation.event", id: "cursor-invalid-wait", event: "ag-ui", data: _Wait(AgUiRunWaitSources.Runtime, AgUiRunWaitOperations.Add, [{ id: "tool:tool-1", reason: AgUiRunWaitReasons.Approval }]) };
+
+		expect(__DecodeAgUiSocketRecord(frame)).toBeNull();
 	});
 
 	it("keeps failure and cancellation truthful against later success", function _TruthfulTerminal()

@@ -1,16 +1,39 @@
 /// Scope at which a provider credential or model definition is owned (Track AIR).
-/// Provider keys are installation-wide (Global) or owned by one ClusterTenant.
+/// Provider keys are organisation-wide within one silo (Global) or owned by one ClusterTenant.
 enum ModelRoutingScope {
   Global        @map("global")
   ClusterTenant @map("clusterTenant")
 }
 
-/// A provider API credential owned at opencrane-ui (Global) or ClusterTenant scope.
+/// External provider operations admitted by the product database before Kubernetes or LiteLLM runs.
+enum ProviderEffectCommandKind {
+  SetByokKey    @map("set_byok_key")
+  DeleteByokKey @map("delete_byok_key")
+  RegisterModel @map("register_model")
+}
+
+/// Delivery state for one admitted provider operation. A claim is leased so a crashed executor can retry.
+enum ProviderEffectCommandState {
+  Pending          @map("pending")
+  AwaitingMaterial @map("awaiting_material")
+  Claimed          @map("claimed")
+  Succeeded        @map("succeeded")
+  Failed           @map("failed")
+}
+
+/// Whether an executor can replay a command from stored data or needs a secret supplied in memory.
+enum ProviderEffectMaterialRequirement {
+  None                 @map("none")
+  EphemeralProviderKey @map("ephemeral_provider_key")
+}
+
+/// A provider API credential owned at silo-global or ClusterTenant scope.
 /// OpenCrane stores only a REFERENCE to the External-Secrets-synced k8s Secret holding the key —
 /// never the raw key. `litellmCredentialName` is set only when registered via LiteLLM /credentials
 /// for the dynamic no-restart path; the baseline rides `os.environ/<KEY>` from the synced Secret.
 model ProviderCredential {
   id                    String            @id @default(cuid())
+  siloId                String            @map("silo_id")
   scope                 ModelRoutingScope @default(Global)
   clusterTenant         String?           @map("cluster_tenant")
   provider              String
@@ -21,8 +44,9 @@ model ProviderCredential {
 
   models ModelDefinition[]
 
-  @@unique([scope, clusterTenant, provider])
-  @@index([clusterTenant])
+  @@unique([id, siloId])
+  @@unique([siloId, scope, clusterTenant, provider])
+  @@index([siloId, clusterTenant])
   @@map("provider_credentials")
 }
 
@@ -31,10 +55,11 @@ model ProviderCredential {
 /// deployment id here; access is scoped per tenant via the virtual key's `models[]` allowlist.
 model ModelDefinition {
   id                          String            @id @default(cuid())
+  siloId                      String            @map("silo_id")
   scope                       ModelRoutingScope @default(Global)
   clusterTenant               String?           @map("cluster_tenant")
   publicModelName             String            @map("public_model_name")
-  litellmModelId              String            @unique @map("litellm_model_id")
+  litellmModelId              String            @map("litellm_model_id")
   upstreamModel               String            @map("upstream_model")
   apiBase                     String?           @map("api_base")
   isDefault                   Boolean           @default(false) @map("is_default")
@@ -43,10 +68,55 @@ model ModelDefinition {
   createdAt                   DateTime          @default(now()) @map("created_at")
   updatedAt                   DateTime          @updatedAt @map("updated_at")
 
-  providerCredential ProviderCredential? @relation(fields: [providerCredentialId], references: [id], onDelete: SetNull)
+  providerCredential ProviderCredential? @relation(fields: [providerCredentialId, siloId], references: [id, siloId], onDelete: Restrict)
   agentRevisions     AgentRevision[]
 
-  @@unique([scope, clusterTenant, publicModelName])
-  @@index([clusterTenant])
+  @@unique([id, siloId])
+  @@unique([siloId, litellmModelId], map: "model_definitions_silo_id_litellm_model_id_key")
+  @@unique([siloId, scope, clusterTenant, publicModelName])
+  @@index([siloId, clusterTenant])
   @@map("model_definitions")
+}
+
+/// One authorization-bound instruction for the control plane to change provider custody or LiteLLM.
+/// Payload stores identifiers and non-secret routing arguments. A raw provider key is represented only
+/// by `argumentsDigest` and must be supplied again in memory if execution has not reached Secret custody.
+model ProviderEffectCommand {
+  id                              String                            @id @default(cuid())
+  siloId                          String                            @map("silo_id")
+  principalId                     String                            @map("principal_id")
+  kind                            ProviderEffectCommandKind
+  resourceKind                    String                            @map("resource_kind")
+  resourceId                      String                            @map("resource_id")
+  resourceRevision                String                            @map("resource_revision")
+  desiredGeneration               Int                               @map("desired_generation")
+  argumentsDigest                 String                            @map("arguments_digest")
+  materialVerifier                String?                           @map("material_verifier")
+  authorizationDecisionDigest     String                            @map("authorization_decision_digest")
+  authorizationPolicyRevisionHash String                            @map("authorization_policy_revision_hash")
+  effectiveAuthorizationDigest    String                            @map("effective_authorization_digest")
+  executorProfile                 String                            @map("executor_profile")
+  materialRequirement             ProviderEffectMaterialRequirement @default(None) @map("material_requirement")
+  payload                         Json
+  state                           ProviderEffectCommandState        @default(Pending)
+  deliveryCount                   Int                               @default(0) @map("delivery_count")
+  claimFence                      String?                           @map("claim_fence")
+  claimExpiresAt                  DateTime?                         @map("claim_expires_at")
+  followUpCommandId               String?                           @map("follow_up_command_id")
+  result                          Json?
+  failureCode                     String?                           @map("failure_code")
+  createdAt                       DateTime                          @default(now()) @map("created_at")
+  updatedAt                       DateTime                          @updatedAt @map("updated_at")
+  completedAt                     DateTime?                         @map("completed_at")
+
+  followUpCommand ProviderEffectCommand?  @relation("ProviderEffectCommandFollowUp", fields: [followUpCommandId], references: [id], onDelete: Restrict)
+  followUpParents ProviderEffectCommand[] @relation("ProviderEffectCommandFollowUp")
+
+  @@unique([siloId, kind, resourceId, resourceRevision], map: "provider_effect_commands_silo_kind_resource_revision_key")
+  @@unique([siloId, resourceKind, resourceId, desiredGeneration])
+  @@index([siloId, resourceKind, resourceId, desiredGeneration(sort: Desc)])
+  @@index([state, claimExpiresAt])
+  @@index([followUpCommandId])
+  @@index([siloId, createdAt])
+  @@map("provider_effect_commands")
 }

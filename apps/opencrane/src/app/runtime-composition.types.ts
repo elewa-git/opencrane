@@ -15,16 +15,14 @@ import type { Router } from "express";
  */
 export interface InternalRuntimeComposition
 {
-	/** Controller-only router for claiming and committing run attempts. */
-	readonly agentControllerRunDispatch: Router;
-	/** Controller-only router for governed skill workload dispatch. */
-	readonly skillWorkloadDispatch: Router;
-	/** Runtime router for one-use workload bootstrap claims. */
-	readonly skillWorkloadBootstrap: Router;
-	/** Runtime router for reading fenced skill-authoring input. */
-	readonly skillAuthoringInput: Router;
-	/** Runtime router for committing fenced skill-authoring completion. */
-	readonly skillAuthoringCompletion: Router;
+	/** Controller-only router that serves one durable AgentRun workflow task. */
+	readonly agentRunWorkflowController: Router;
+	/** Controller-only router for one admitted skill-authoring validation workflow. */
+	readonly skillAuthoringValidationController: Router;
+	/** Worker-only protocol for one task-bound Python skill validation Job. */
+	readonly skillAuthoringValidationWorker: Router;
+	/** Optional controller router for task-bound PDF preprocessing Jobs. */
+	readonly artifactPreprocessController: Router | null;
 	/** Optional preprocessor router, present only when the restricted worker plane is enabled. */
 	readonly artifactPreprocessor: Router | null;
 	/** Optional malware-scanner router, present only when its isolated worker plane is enabled. */
@@ -33,11 +31,11 @@ export interface InternalRuntimeComposition
 	readonly conversationReplay: Router | null;
 	/** Router that resolves a browser channel for a workload-authenticated caller, alongside the replay receiver. */
 	readonly channelTargetResolver: Router | null;
-	/** Runtime router that binds a workload proof key once. */
-	readonly runtimeBootstrap: Router;
-	/** Runtime server-sent-event stream and candidate-ingest router. */
-	readonly runtimeStream: Router;
-	/** Runtime-only broker for generated conversation-file output. */
+	/** Warm runtime router that finds and binds a ready claim from reviewed Pod identity. */
+	readonly warmRuntimeBinding: Router;
+	/** Warm runtime stream using only the dedicated warm projected-token reviewer. */
+	readonly warmRuntimeStream: Router;
+	/** Warm-runtime-only broker for generated conversation-file output. */
 	readonly conversationAssetOutputs: Router;
 	/**
 	 * Runtime-only router that accepts one display-safe delivery from an Agent-thread child up to its
@@ -55,17 +53,11 @@ export interface InternalRuntimeComposition
 /** The subset of routers built by the controller-only composition step. */
 export type ControllerRuntimeComposition = Pick<
 	InternalRuntimeComposition,
-	"agentControllerRunDispatch" | "skillWorkloadDispatch"
->;
-
-/** The subset of routers built by the isolated skill-workload composition step. */
-export type SkillWorkloadRuntimeComposition = Pick<
-	InternalRuntimeComposition,
-	"skillWorkloadBootstrap" | "skillAuthoringInput" | "skillAuthoringCompletion"
+	"agentRunWorkflowController" | "skillAuthoringValidationController"
 >;
 
 /** The subset of routers built by the runtime-protocol composition step. */
-export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream" | "conversationAssetOutputs" | "agentThreadParentDeliveries">;
+export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "warmRuntimeBinding" | "warmRuntimeStream" | "conversationAssetOutputs" | "agentThreadParentDeliveries">;
 
 /** The subset of routers built by the optional worker and replay composition step. */
-export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessor" | "artifactScanner" | "channelTargetResolver" | "conversationReplay">;
+export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessController" | "artifactPreprocessor" | "artifactScanner" | "channelTargetResolver" | "conversationReplay">;

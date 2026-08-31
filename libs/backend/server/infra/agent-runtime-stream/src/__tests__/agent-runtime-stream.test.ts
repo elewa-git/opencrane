@@ -4,14 +4,14 @@ import type { AddressInfo } from "node:net";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, ElicitationBodyKinds, ElicitationPurposes, RuntimeCandidateKinds, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_VERSION, ElicitationBodyKinds, ElicitationPurposes, RuntimeCandidateKinds, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 
 import { _RegisterInternalAgentRuntimeStream } from "../agent-runtime-stream";
 import { RuntimeCommandWakeup } from "../runtime-command-wakeup";
 import type { RuntimeCommandStreamAuthority } from "../agent-runtime-stream.types";
 
 /** Build a transport app with a deterministic projected-token reviewer. */
-function _CreateApp(admit: RuntimeCommandStreamAuthority["__AdmitCandidate"], commandWakeup?: RuntimeCommandWakeup)
+function _CreateApp(admit: RuntimeCommandStreamAuthority["__AdmitCandidate"], commandWakeup?: RuntimeCommandWakeup, saveContinuation?: RuntimeCommandStreamAuthority["__SaveContinuation"])
 {
 	const app = express();
 	app.use(_RegisterInternalAgentRuntimeStream({
@@ -26,6 +26,7 @@ function _CreateApp(admit: RuntimeCommandStreamAuthority["__AdmitCandidate"], co
 		authority: {
 			async __NextCommand() { return null; },
 			__AdmitCandidate: admit,
+			async __SaveContinuation(identity, continuation) { return saveContinuation ? saveContinuation(identity, continuation) : { outcome: "accepted" }; },
 		},
 		maxBodyBytes: 64 * 1024,
 		heartbeatMilliseconds: 60_000,
@@ -37,7 +38,7 @@ function _CreateApp(admit: RuntimeCommandStreamAuthority["__AdmitCandidate"], co
 
 /** Minimum valid event candidate, with its durable admission intentionally stubbed. */
 const _candidate: RuntimeCandidate = {
-	protocolVersion: AGENT_RUNTIME_PROTOCOL_V1,
+	protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION,
 	runtimeInstanceId: "runtime-1234",
 	commandId: "command-1",
 	candidateId: "candidate-1",
@@ -61,7 +62,7 @@ const _externalActionCandidate: RuntimeCandidate = {
 
 /** Valid stream-open identity for the deterministic projected-token test reviewer. */
 const _streamOpen = {
-	protocolVersion: AGENT_RUNTIME_PROTOCOL_V1,
+	protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION,
 	runtimeInstanceId: "runtime-1234",
 	podUid: "11111111-1111-1111-1111-111111111111",
 };
@@ -132,11 +133,20 @@ describe("_RegisterInternalAgentRuntimeStream", function _runtimeTransportSuite(
 	it("forwards only strict bounded runtime elicitation proposals", async function _ElicitationCandidate()
 	{
 		const admit = vi.fn<RuntimeCommandStreamAuthority["__AdmitCandidate"]>().mockResolvedValue({ accepted: true });
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: _candidate.runtimeInstanceId, commandId: _candidate.commandId, candidateId: "elicitation-1", runId: _candidate.runId, attempt: 1, fence: 1, kind: RuntimeCandidateKinds.Elicitation, proposal: { requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, body: { kind: ElicitationBodyKinds.FreeText, prompt: "What should I do next?", maximumLength: 500, allowEmpty: false }, purposePayloadDigest: `sha256:${"a".repeat(64)}`, expiresInSeconds: 300 } };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION, runtimeInstanceId: _candidate.runtimeInstanceId, commandId: _candidate.commandId, candidateId: "elicitation-1", runId: _candidate.runId, attempt: 1, fence: 1, kind: RuntimeCandidateKinds.Elicitation, proposal: { requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, body: { kind: ElicitationBodyKinds.FreeText, prompt: "What should I do next?", maximumLength: 500, allowEmpty: false }, purposePayloadDigest: `sha256:${"a".repeat(64)}`, expiresInSeconds: 300 } };
 
 		await request(_CreateApp(admit)).post("/candidates").set("Authorization", "Bearer valid-token").send(candidate).expect(202);
 		await request(_CreateApp(admit)).post("/candidates").set("Authorization", "Bearer valid-token").send({ ...candidate, proposal: { ...candidate.proposal, purpose: ElicitationPurposes.ToolApproval } }).expect(401);
 		expect(admit).toHaveBeenCalledTimes(1);
+	});
+
+	it("forwards an authenticated protocol-v2 continuation to the injected authority", async function _ContinuationSave()
+	{
+		const admit = vi.fn<RuntimeCommandStreamAuthority["__AdmitCandidate"]>();
+		const save = vi.fn<RuntimeCommandStreamAuthority["__SaveContinuation"]>().mockResolvedValue({ outcome: "accepted" });
+		const body = { protocolVersion: AGENT_RUNTIME_PROTOCOL_VERSION, runtimeInstanceId: "runtime-1234", commandId: "command-1", runId: "run-1", attempt: 1, fence: 1, inputGeneration: 0, continuation: { version: "opaque-to-transport" } };
+		await request(_CreateApp(admit, undefined, save)).post("/continuations").set("Authorization", "Bearer valid-token").send(body).expect(202);
+		expect(save).toHaveBeenCalledTimes(1);
 	});
 
 	it("keeps one response alive for heartbeats and multiple strictly newer commands", async function _commandPump()
@@ -148,7 +158,7 @@ describe("_RegisterInternalAgentRuntimeStream", function _runtimeTransportSuite(
 		const app = express();
 		app.use(_RegisterInternalAgentRuntimeStream({
 			tokenReviewer: { async __Review() { return { subject: "system:serviceaccount:tenant:agent-runtime", namespace: "tenant", serviceAccountName: "agent-runtime", podUid: _streamOpen.podUid }; } },
-			authority: { __NextCommand: nextCommand, async __AdmitCandidate() { return { accepted: false }; } },
+			authority: { __NextCommand: nextCommand, async __AdmitCandidate() { return { accepted: false }; }, async __SaveContinuation() { return { outcome: "accepted" }; } },
 			maxBodyBytes: 64 * 1024,
 			heartbeatMilliseconds: 5,
 			commandRecoveryMilliseconds: 2,
@@ -195,7 +205,7 @@ describe("_RegisterInternalAgentRuntimeStream", function _runtimeTransportSuite(
 		const app = express();
 		app.use(_RegisterInternalAgentRuntimeStream({
 			tokenReviewer: { async __Review() { return { subject: "system:serviceaccount:tenant:agent-runtime", namespace: "tenant", serviceAccountName: "agent-runtime", podUid: _streamOpen.podUid }; } },
-			authority: { async __NextCommand() { return null; }, async __AdmitCandidate() { return { accepted: false }; }, __ReleaseStream: release },
+			authority: { async __NextCommand() { return null; }, async __AdmitCandidate() { return { accepted: false }; }, async __SaveContinuation() { return { outcome: "accepted" }; }, __ReleaseStream: release },
 			maxBodyBytes: 64 * 1024,
 			heartbeatMilliseconds: 5,
 			commandRecoveryMilliseconds: 2,

@@ -65,7 +65,8 @@ export type AuthorizationDecisionReason =
 	| "invalid_request_time"
 	| "invalid_grant_priority"
 	| "invalid_grant_validity"
-	| "invalid_grant_boundary";
+	| "invalid_grant_boundary"
+	| "insufficient_boundary_coverage";
 
 /** The two possible outcomes: allow or deny. There is no third, indeterminate answer — evaluation always resolves. */
 export enum AuthorizationDecisionOutcomes

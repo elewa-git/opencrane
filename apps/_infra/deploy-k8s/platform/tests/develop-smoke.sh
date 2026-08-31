@@ -42,7 +42,6 @@ SMOKE_IMAGES=(
 SMOKE_IMAGE_LABEL="opencrane.develop-smoke=true"
 
 POSTGRES_CREDENTIALS_SECRET="develop-smoke-opencrane-postgres"
-OBOT_POSTGRES_CREDENTIALS_SECRET="develop-smoke-obot-postgres"
 LITELLM_POSTGRES_CREDENTIALS_SECRET="develop-smoke-litellm-postgres"
 POSTGRES_ADMIN_CREDENTIALS_SECRET="develop-smoke-postgres-admin"
 
@@ -355,6 +354,7 @@ _wait_for_job()
   return 1
 }
 
+# Proves the retained LiteLLM owner cannot cross into OpenCrane's logical database.
 _assert_database_isolation()
 {
   local job_name="develop-smoke-database-isolation"
@@ -370,7 +370,7 @@ spec:
   template:
     metadata:
       labels:
-        app.kubernetes.io/component: mcp-gateway
+        app.kubernetes.io/component: litellm
     spec:
       automountServiceAccountToken: false
       restartPolicy: Never
@@ -380,9 +380,9 @@ spec:
           command: ["/bin/sh", "-ceu"]
           args:
             - |
-              until psql -v ON_ERROR_STOP=1 -d obot -c 'SELECT 1' >/dev/null 2>&1; do sleep 2; done
+              until psql -v ON_ERROR_STOP=1 -d litellm -c 'SELECT 1' >/dev/null 2>&1; do sleep 2; done
               if psql -v ON_ERROR_STOP=1 -d opencrane -c 'SELECT 1' >/dev/null 2>&1; then
-                echo "Obot authority unexpectedly connected to the OpenCrane database" >&2
+                echo "LiteLLM authority unexpectedly connected to the OpenCrane database" >&2
                 exit 1
               fi
           env:
@@ -391,23 +391,22 @@ spec:
             - name: PGUSER
               valueFrom:
                 secretKeyRef:
-                  name: ${OBOT_POSTGRES_CREDENTIALS_SECRET}
+                  name: ${LITELLM_POSTGRES_CREDENTIALS_SECRET}
                   key: username
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: ${OBOT_POSTGRES_CREDENTIALS_SECRET}
+                  name: ${LITELLM_POSTGRES_CREDENTIALS_SECRET}
                   key: password
 EOF
   _wait_for_job "$job_name"
 }
 
 # Proves the public health report is complete and every service the smoke can provision is
-# healthy. Model routing is the one exception: CI holds no provider credentials, so LiteLLM
-# serves an empty estate and the models probe reports unavailable. Seeding a placeholder key
-# instead made the server fetch a BYOK Secret through the API server and exit fatally when that
-# call failed, so the report is asserted as-is and models is allowed to be unavailable. Reporting
-# an unconfigured estate as disabled rather than unavailable is tracked separately.
+# healthy. Model routing is the one exception: CI holds no provider credentials, so LiteLLM serves
+# an empty estate and the models probe reports unavailable. Provider setup now begins only through
+# the authenticated durable command path, so a fresh server remains ready while that estate is
+# intentionally empty. Reporting it as disabled rather than unavailable is tracked separately.
 _assert_ingress_health()
 {
   local health_url="https://${CONTROL_PLANE_HOST}:8443/healthz"
@@ -417,7 +416,7 @@ _assert_ingress_health()
     --resolve "${CONTROL_PLANE_HOST}:8443:127.0.0.1" "$health_url" 2>/dev/null)" \
     && jq -e '
       .ready == true
-      and (.services | keys == ["api", "channels", "database", "files", "integrations", "memory", "models"])
+      and (.services | keys == ["api", "channels", "database", "files", "memory", "models"])
       and ([.services | to_entries[] | select(.key != "models") | .value]
         | all(. == "available" or . == "disabled"))
       and (.services.models == "available" or .services.models == "unavailable")
@@ -493,7 +492,6 @@ kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -
 
 echo "[develop-smoke] Creating isolated database and fleet-verification inputs"
 _create_database_credentials "$POSTGRES_CREDENTIALS_SECRET" opencrane "$(_random_secret)"
-_create_database_credentials "$OBOT_POSTGRES_CREDENTIALS_SECRET" obot "$(_random_secret)"
 _create_database_credentials "$LITELLM_POSTGRES_CREDENTIALS_SECRET" litellm "$(_random_secret)"
 _create_database_credentials "$POSTGRES_ADMIN_CREDENTIALS_SECRET" opencrane_database_admin "$(_random_secret)"
 
@@ -528,7 +526,6 @@ export TIMEOUT_SECONDS
   --cognee-tag develop-smoke \
   --storage-class "$SMOKE_STORAGE_CLASS" \
   --postgres-credentials-secret "$POSTGRES_CREDENTIALS_SECRET" \
-  --obot-postgres-credentials-secret "$OBOT_POSTGRES_CREDENTIALS_SECRET" \
   --litellm-postgres-credentials-secret "$LITELLM_POSTGRES_CREDENTIALS_SECRET" \
   --postgres-admin-credentials-secret "$POSTGRES_ADMIN_CREDENTIALS_SECRET" \
   --postgres-values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-postgres-values.yaml" \

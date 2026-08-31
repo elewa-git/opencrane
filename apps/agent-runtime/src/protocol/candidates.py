@@ -53,14 +53,29 @@ def command_coordinates(
     """
     assignment = command.get("assignment")
     command_id = command.get("commandId")
+    protocol_version = command.get("protocolVersion")
+    command_runtime_instance_id = command.get("runtimeInstanceId")
+    sequence = command.get("sequence")
     fence = command.get("fence")
     # Validate the whole outer authority tuple before reading nested coordinates. Partial fallback
     # would let a candidate inherit identity from local process state instead of the accepted command.
-    if not isinstance(assignment, dict) or not isinstance(command_id, str) or not isinstance(fence, int):
+    if (
+        protocol_version != PROTOCOL_VERSION
+        or command_runtime_instance_id != runtime_instance_id
+        or not isinstance(assignment, dict)
+        or not isinstance(command_id, str)
+        or not command_id
+        or not isinstance(sequence, int)
+        or isinstance(sequence, bool)
+        or sequence < 1
+        or not isinstance(fence, int)
+        or isinstance(fence, bool)
+        or fence < 1
+    ):
         return None
     run_id = assignment.get("runId")
     attempt = assignment.get("attempt")
-    if not isinstance(run_id, str) or not isinstance(attempt, int):
+    if not isinstance(run_id, str) or not run_id or not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
         return None
     # Coordinates are copied rather than retaining the command mapping. Downstream candidate shaping
     # therefore cannot accidentally echo compiled input or other command-only material.
@@ -68,6 +83,7 @@ def command_coordinates(
         "protocolVersion": PROTOCOL_VERSION,
         "runtimeInstanceId": runtime_instance_id,
         "commandId": command_id,
+        "sequence": sequence,
         "runId": run_id,
         "attempt": attempt,
         "fence": fence,

@@ -16,7 +16,6 @@ function _run(overrides: Record<string, unknown> = {})
 function _transaction(run: ReturnType<typeof _run> | null, updateCount = 1, unresolvedInvocations = 0, pendingResults = 0)
 {
 	return {
-		$queryRaw: vi.fn().mockResolvedValue([]),
 		agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: updateCount }) },
 		toolInvocation: { count: vi.fn().mockResolvedValue(unresolvedInvocations) },
 		toolResultDelivery: { count: vi.fn().mockResolvedValue(pendingResults) },
@@ -40,7 +39,7 @@ describe("PrismaRuntimeTerminalReporter", function _describeReporter()
 
 		await expect(reporter.reportInTransaction(transaction as never, _command("run.completed"))).resolves.toEqual({ outcome: "reported" });
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 1, state: AgentRunState.Running }, data: expect.objectContaining({ state: AgentRunState.Completed, terminalReason: AgentRunTerminalReason.Success }) });
-		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", sequence: 5, type: "run.completed", payload: { terminalReason: "success" } }) });
+		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", attempt: 1, sequence: 5, type: "run.completed", payload: { terminalReason: "success" } }) });
 	});
 
 	it("commits runtime failure when candidate delivery failed before any durable tool work existed", async function _reportsPreAdmissionFailure()
@@ -50,7 +49,7 @@ describe("PrismaRuntimeTerminalReporter", function _describeReporter()
 
 		await expect(reporter.reportInTransaction(transaction as never, _command("run.failed"))).resolves.toEqual({ outcome: "reported" });
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 1, state: AgentRunState.Running }, data: expect.objectContaining({ state: AgentRunState.Failed, terminalReason: AgentRunTerminalReason.RuntimeFailure }) });
-		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", sequence: 5, type: "run.failed", payload: { terminalReason: "runtime_failure" } }) });
+		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", attempt: 1, sequence: 5, type: "run.failed", payload: { terminalReason: "runtime_failure" } }) });
 	});
 
 	it("refuses success while an external action or saved result is unresolved", async function _deniesPrematureSuccess()

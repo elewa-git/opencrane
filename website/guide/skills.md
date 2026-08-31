@@ -9,8 +9,8 @@ across a team or the whole organisation without trusting mutable runtime-local f
 `GET /api/v1/skills` serves a live, read-only catalogue of your organisation's skills (name,
 description, lifecycle state) — enough to see what exists. Authoring a new skill from a
 conversation, reviewing and publishing one, and sharing it across scopes are not exposed as
-end-user product surfaces yet; the isolated authoring-job and publication authority described
-below already exist underneath.
+end-user product surfaces yet. The isolated validation authority and database publication
+invariants already exist underneath; the publication application service does not.
 :::
 
 ## What a skill contains
@@ -26,6 +26,16 @@ Published, a skill is an immutable **SkillRevision** whose content digest is wha
 contracts reference. There is no "latest" that can drift underneath a running agent: an agent
 revision pins the skill revisions it was reviewed with.
 
+Today a `SkillRevision` pins an immutable bundle in ArtifactStore; it is not itself an OCI image.
+Run admission already authorises and freezes the exact skill and artifact revisions. The current
+prompt compiler identifies the skill revision in the run instructions, but does not yet stream the
+bundle's `SKILL.md` text into the runtime prompt. Instruction skills therefore need no separate
+container, but their complete bundle-loading path is still being finished. Planned sandboxed Python
+skills will use a fixed OpenCrane runner image that loads the reviewed bundle. A future
+containerized-code class may instead pin its own governed OCI image when native libraries, another
+language, or custom binaries genuinely require one. See
+[Governed packages and container images](/integrators/governed-packages).
+
 ## The publication lifecycle
 
 Skills move from draft to shared ability through a governed pipeline:
@@ -36,18 +46,20 @@ Skills move from draft to shared ability through a governed pipeline:
    scratch. Invoking that tool will start this pipeline; it will never shortcut it. Drafting can be
    cheap and conversational, but the draft holds no authority until it has passed the steps below.
 2. **Isolated authoring job.** A dedicated Job with only a draft-workspace capability — no
-   production MCP credentials, default-deny egress — runs formatting, types and tests,
-   dependency and licence checks, secret and malware scans, and policy validation.
-3. **Review.** A human or an authorised publishing workflow reviews the diff and the test and
+   production MCP credentials, default-deny egress — runs formatting, types and tests, rejects
+   dependency declarations and plaintext secrets, and scans with its fixed offline malware database.
+3. **Review (🔶 publication workflow).** A human or an authorised publishing workflow reviews the diff and the test and
    scan evidence.
-4. **Sign and publish.** OpenCrane signs and publishes the immutable SkillRevision and advances
+4. **Sign and publish (🔶 application service).** OpenCrane signs and publishes the immutable SkillRevision and advances
    the skill's current pointer atomically. The publication service accepts only an exact
    `SkillRevision`/`ArtifactRevision` pair with successful evidence, a signature, and a revision
    already in review.
 
-The implementation of the publication authority lives in
+The live validation authority is implemented in
 [`libs/backend/server/agents/skills/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/agents/skills/main).
-The public product workflow builds on that authority.
+The database already rejects publication without successful test and scan reports, review identity,
+signature and signer identity. The application service that performs that transition remains part of
+the public product workflow.
 
 Sharing follows the platform's scope model — personal, project, department, organisation — and
 promotion across scopes is an explicit review boundary: a skill drafted from a personal
@@ -57,18 +69,18 @@ retroactive access to the conversation that produced it. See
 
 ## How skills execute
 
-A skill is a context ingredient, not an agent. Loading one changes what an agent *knows how to
-do*; it does not by itself create any new identity or authority. Which execution tier a skill
-uses is decided by what the skill demands:
+A skill is a context ingredient, not an agent. Assigning one does not create any new identity or
+authority: run admission rechecks `SkillRevision/Use` through the central authority and freezes the
+exact revision. The execution tiers below are the target behaviour after full bundle loading lands.
 
-### Tier 0 — inline load
+### Tier 0 — inline load 🔶
 
-The default. The agent pulls the SkillRevision's instructions into its **current** context and
+The target default. The agent pulls the SkillRevision's instructions into its **current** context and
 follows them right there — same run, same capabilities, same budget. Right for procedures the
 agent should apply in place: a formatting standard, a runbook, a checklist. The only cost is
 context space, which motivates the next tier.
 
-### Tier 1 — in-process specialist (agent-as-tool)
+### Tier 1 — in-process specialist (agent-as-tool) 🔶
 
 The agent runs the skill in a **fresh sub-context inside the same run** and gets back only the
 result — useful when a skill's instructions and intermediate work are heavy and would pollute the
@@ -76,20 +88,21 @@ main conversation. Same identity, same capabilities, same budget, part of the sa
 if the specialist proposes a governed action, it surfaces through the *parent's* approval path.
 This tier is a convenience for context hygiene — it is **not** a security boundary.
 
-### Tier 2 — governed child run or tool job
+### Tier 2 — governed child run 🔶
 
 When a skill demands more than instructions, execution crosses a real boundary:
 
 - A skill that needs **capabilities the agent shouldn't hold open**, **its own budget**, or a
   **lifetime beyond the conversation** runs as a [child run](/guide/child-runs) — its own
   identity, its own (smaller) capability set, its own audit trail.
-- **Organisation-authored Python never executes inside an agent runtime Job.** Trusted image-baked
-  tools may run in-process, but user-authored code executes through an isolated tool Job with
-  exactly the capability its declared requirements were reviewed against.
+- **Organisation-authored Python never executes inside a claimed agent runtime Pod.** Trusted
+  image-baked tools may run in-process. User-authored code is currently rejected because the
+  isolated Job transport is not available yet.
 
-**Rule of thumb:** pure instructions → tier 0 or 1; capabilities, spend, or code execution →
-tier 2. The tier is a property of what the skill was reviewed to need — an agent cannot quietly
-upgrade a checklist into a code-executing specialist.
+**Rule of thumb:** pure instructions → tier 0 or 1; capabilities or spend → tier 2; user-authored
+code → unavailable until the isolated Job transport ships. The tier is a property of what the skill
+was reviewed to need — an agent cannot quietly upgrade a checklist into a code-executing
+specialist.
 
 ## What comes next
 
@@ -99,4 +112,6 @@ department and organisation scopes. Until those surfaces are mounted, there is n
 end-user skill-publishing workflow — only the read-only catalogue above.
 
 > See also: [Agent delegation (child runs)](/guide/child-runs) ·
-> [Control access](/guide/permissions) · [Architecture](/advanced/architecture)
+> [Control access](/guide/permissions) ·
+> [Governed packages and container images](/integrators/governed-packages) ·
+> [Architecture](/advanced/architecture)

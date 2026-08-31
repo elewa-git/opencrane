@@ -7,7 +7,7 @@ import type { OrganizationMemberRepository } from "../organization-member-reposi
 import { _CreateOrganizationProductAccessMiddleware } from "../product-access.middleware";
 
 /** Authenticated identity used by the product-access boundary. */
-const _CALLER: OrganizationMembershipCaller = { siloId: "acme", subjectId: "invitee-1", verifiedEmail: "new@acme.test", displayName: "Invitee" };
+const _CALLER: OrganizationMembershipCaller = { siloId: "acme", principalId: "principal-invitee-1", subjectId: "invitee-1", verifiedEmail: "new@acme.test", displayName: "Invitee" };
 
 /** Builds an app whose acceptance handler makes the following request an active member. */
 function _app(initiallyActive: boolean, failure?: Error)
@@ -48,7 +48,7 @@ describe("standalone product membership access", function _Suite()
 	{
 		const missing = _app(false);
 		await request(missing.app).post("/api/v1/me/onboarding/chat/start").expect(403);
-		expect(missing.hasActiveMembership).toHaveBeenCalledWith({ siloId: "acme", subjectId: "invitee-1", verifiedEmail: "new@acme.test", displayName: "Invitee" });
+		expect(missing.hasActiveMembership).toHaveBeenCalledWith({ siloId: "acme", principalId: "principal-invitee-1", subjectId: "invitee-1", verifiedEmail: "new@acme.test", displayName: "Invitee" });
 		await request(_app(false, new Error("database unavailable")).app).post("/api/v1/me/onboarding/chat/start").expect(500, { error: "database unavailable" });
 	});
 });

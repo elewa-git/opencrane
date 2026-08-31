@@ -44,7 +44,7 @@ digest in the current release manifest.
 | Path | What it owns |
 | --- | --- |
 | `apps/*/helm/` | The deployment contract for that app's workloads. |
-| `apps/_infra/{cognee,litellm,obot}/` | Pinned third-party workload wrappers. |
+| `apps/_infra/{cognee,litellm}/` | Pinned third-party workload wrappers. |
 | `apps/_infra/deploy-k8s/` | The organisation umbrella chart and deploy entrypoint. |
 | `apps/_infra/deploy-k8s/platform/` | Shared Helm helpers, deploy engine, values profiles, Terraform, and platform contract tests. |
 | `apps/postgres/` | OpenCrane-owned CloudNativePG deployment and clean database bootstrap. |

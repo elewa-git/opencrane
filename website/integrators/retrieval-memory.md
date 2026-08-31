@@ -6,7 +6,7 @@ integrator can see what a running agent may receive, what it may propose, and wh
 server-owned.
 
 > See also: [Governed agent runtime](/integrators/agent-runtime) (runtime and action custody),
-> [MCP gateway](/integrators/mcp-gateway) (provider execution),
+> [OCI MCP runtime](/integrators/oci-mcp-runtime) (tool execution),
 > [Long-term memory, Cognee and dreaming](/integrators/long-term-memory-cognee) (datasets and
 > consolidation), and [Silo IAM](/integrators/silo-iam) (scope and grants).
 
@@ -64,7 +64,7 @@ runtime, not another store.
 ┌───────┴──────────┐  ┌──────────────────┐               ┌─────────────────┐
 │ session history │  │ semantic memory  │               │ authority ledger│
 │ messages/events │  │ fact content     │               │ scope, approval,│
-│ OpenCrane       │  │ Cognee (target)  │               │ receipts/outcome│
+│ OpenCrane       │  │ Cognee (target)  │               │ decisions/result│
 └──────────────────┘  └──────────────────┘               └─────────────────┘
 ```
 
@@ -115,7 +115,7 @@ authorised conversation history + current grants
                         │ compiled non-memory context
                         ▼
                 ┌───────────────┐
-                │ runtime Job   │
+                │ claimed Pod   │
                 │ bounded loop  │
                 └───────┬───────┘
                         │ proposes memory_recall
@@ -147,7 +147,7 @@ invocation; the action then returns `safe_delivery_required` before Cognee is co
 | Write | 🔶 The schema, provenance validation, content-free catalogue command and outbox contract exist, but no production writer or outbox dispatcher is composed. Gateway writes fail closed. | Cognee accepts content first; OpenCrane then atomically records its external id, digest, consent, provenance and outbox intent. |
 | Manage | ✅ Personal dataset selection is identity-bound at admission. Dataset and fact metadata have active, correction and forgetting states, but generic record/correct/forget execution is not composed. | Governance changes retain an explainable metadata trail without duplicating fact text. |
 | Read | 🔶 The private gateway accepts only authenticated, bounded search. A personal run can propose an approval-required recall, but its content delivery is blocked before the gateway. | The server delivers gateway-originated results transiently to the exact active attempt, then resumes the paused loop. |
-| Audit | ✅ Run snapshots, action invocations, approvals, receipts, ordered events and terminal outcomes are durable authorities. | Memory actions join the same evidence chain once safe delivery and writing are enabled. |
+| Audit | ✅ Run snapshots, ToolInvocations, approvals, decision evidence, ordered events and terminal outcomes are durable authorities. | Memory actions join the same evidence chain once safe delivery and writing are enabled. |
 
 Exactly one provenance source is required for a future fact record: an artifact revision, a
 conversation message or an explicit user statement. An explicit statement must name the same
@@ -166,7 +166,7 @@ saved result may return to the same active attempt.
                                   ▲       │
         attempt-scoped LiteLLM request    │ model output
                                   │       ▼
-                                agent-runtime Job
+                              claimed runtime Pod
                                         │
       ┌──────────────┬──────────────────┼─────────────────┬────────────────┐
       │              │                  │                 │                │
@@ -179,7 +179,7 @@ saved result may return to the same active attempt.
  + purpose      + approval         quarantine scan   authority        fences attempt
       │              │                  │                 │                │
       ▼              ▼                  ▼                 ▼                ├──► durable outcome
- saved result   Obot integration   verified receipt  saved display-   ├──► release / cleanup
+ saved result   OCI MCP executor   verified receipt  saved display-   ├──► release / cleanup
       │         or fail-closed      + ready/failed    safe delivery    └──► ordered event
       │         memory/sandbox      state
       │              │
@@ -211,10 +211,10 @@ personal-memory permission, return an outcome or receipt instead of recalled fac
 
 ✅ A runtime's `external_action` candidate becomes a durable `ToolInvocation` before any provider
 I/O. The server reconstructs the frozen context, rechecks arguments and policy, obtains an
-approval where required, claims the invocation, and calls the selected custody boundary. The
-runtime receives only a saved, validated result on resume. Obot holds integration credentials.
-The sandbox executor and memory-recall transport currently fail closed. An unclear provider outcome
-enters visible recovery rather than being repeated blindly.
+approval where required, and issues a claim for the selected executor class. OCI MCP calls run in a
+one-use Job whose fixed companion returns one checked result. The runtime receives only the saved,
+validated result on resume. The sandbox executor and memory-recall transport currently fail closed.
+An unclear provider outcome enters visible recovery rather than being repeated blindly.
 
 ### Parent delivery and child runs
 

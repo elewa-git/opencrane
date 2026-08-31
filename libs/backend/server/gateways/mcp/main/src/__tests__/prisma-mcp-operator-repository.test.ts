@@ -23,7 +23,7 @@ function _Registration(): McpRemoteServerRegistrationRecord
 /** Return the stored draft selected by registration operations. */
 function _Server(registration: McpRemoteServerRegistrationRecord): McpOperatorServerRecord
 {
-	return { id: "server-1", name: registration.name, description: registration.description, publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "PendingReview", credentialSchema: [], entitlementSummary: null, endpoint: registration.endpoint, registrationKeyDigest: registration.registrationKeyDigest, registrationDigest: registration.registrationDigest, eraProbeStatus: McpEraProbeStates.Pending, eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
+	return { id: "server-1", name: registration.name, description: registration.description, publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "PendingReview", status: "Draft", latestReadyRevision: null, credentialSchema: [], entitlementSummary: null, endpoint: registration.endpoint, registrationKeyDigest: registration.registrationKeyDigest, registrationDigest: registration.registrationDigest, eraProbeStatus: McpEraProbeStates.Pending, eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
 }
 
 /** Derive the exact fixed-width claim identity expected from the adapter. */
@@ -91,5 +91,39 @@ describe("Prisma MCP approval transitions", function _ApprovalTransitionsSuite()
 		expect(result).toBeNull();
 		expect(updateMany).toHaveBeenCalledWith({ where: { id: "server-1", siloId: "silo-1", eraProbeStatus: { in: ["Accepted", "NotRequired"] }, approvalStatus: "Approved" }, data: { approvalStatus: "Published" } });
 		expect(findFirst).not.toHaveBeenCalled();
+	});
+});
+
+describe("Prisma MCP authoring catalogue", function _AuthoringCatalogueSuite()
+{
+	it("filters the user catalogue to Published Active servers with a Ready revision", async function _FiltersExecutableServers()
+	{
+		const findMany = vi.fn().mockResolvedValue([]);
+		const transaction = { mcpServer: { findMany } } as unknown as Prisma.TransactionClient;
+
+		await new PrismaMcpOperatorRepository(transaction).listPublishedServers("silo-1");
+
+		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+			where: { siloId: "silo-1", approvalStatus: "Published", status: "Active", revisions: { some: { state: "Ready" } } },
+		}));
+	});
+
+	it("selects the newest Ready revision and orders its tools deterministically", async function _SelectsLatestReadyRevision()
+	{
+		const findMany = vi.fn().mockResolvedValue([]);
+		const transaction = { mcpServer: { findMany } } as unknown as Prisma.TransactionClient;
+
+		await new PrismaMcpOperatorRepository(transaction).listAllServers("silo-1");
+
+		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+			select: expect.objectContaining({
+				revisions: {
+					where: { state: "Ready" },
+					orderBy: [{ revision: "desc" }, { id: "asc" }],
+					take: 1,
+					select: expect.objectContaining({ tools: expect.objectContaining({ orderBy: [{ name: "asc" }, { id: "asc" }] }) }),
+				},
+			}),
+		}));
 	});
 });

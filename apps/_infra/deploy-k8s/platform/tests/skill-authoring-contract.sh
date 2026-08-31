@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
+
+prepare_current_chart_sources
+trap cleanup_current_chart_sources EXIT
+CHART_DIR="$(current_chart_sources_dir)"
+MEMORY_GATEWAY_API_ARGS=(--set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')
+
+rendered="$(helm template opencrane-silo "$CHART_DIR" \
+  "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set-string opencrane-skill-authoring.skillAuthoring.namespace=authoring-contract \
+  --set-string opencrane-skill-authoring.skillAuthoring.quota.pods=7)"
+
+grep -Fq 'name: authoring-contract' <<<"$rendered"
+grep -Fq 'namespace: authoring-contract' <<<"$rendered"
+grep -A1 -F 'name: SKILL_AUTHORING_NAMESPACE' <<<"$rendered" | grep -Fq 'value: "authoring-contract"'
+grep -Fq 'pods: "7"' <<<"$rendered"
+if helm template opencrane-silo "$CHART_DIR" --set-string opencrane-skill-authoring.skillAuthoring.namespace="$(printf 'a%.0s' {1..64})" >/dev/null 2>&1; then
+  echo "expected overlength skill-authoring namespace to be rejected" >&2
+  exit 1
+fi
+
+echo "skill-authoring umbrella contract: PASS"

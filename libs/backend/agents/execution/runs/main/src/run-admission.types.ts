@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { AgentRevisionId, AgentRunId, AgentServiceId, AgentServiceKind, SiloId } from "@opencrane/models/agents";
 import type { ConversationId, MessageContentBlock, MessageId } from "@opencrane/models/conversations";
@@ -8,7 +9,7 @@ export interface InitialRunAuthority
 {
 	/** Stable AgentService executed by the logical run. */
 	readonly agentServiceId: AgentServiceId;
-	/** Published revision locked for the complete logical run. */
+	/** Published revision frozen for the complete logical run. */
 	readonly agentRevisionId: AgentRevisionId;
 	/** Product boundary deciding whether an approved persona is required. */
 	readonly agentKind: AgentServiceKind;
@@ -33,7 +34,7 @@ export interface RunAdmissionCommandCoordinates
 	readonly runId: AgentRunId;
 	/** Silo containing every authority fact and the durable run. */
 	readonly siloId: SiloId;
-	/** AgentService whose row is locked first, before any other input is re-read. */
+	/** AgentService re-read with every other input in the admission transaction. */
 	readonly agentServiceId: AgentServiceId;
 	/** Conversation permanently bound to the admitted input snapshot, or null for non-conversational work. */
 	readonly conversationId: ConversationId | null;
@@ -61,6 +62,8 @@ export interface UserRunAdmissionCommand extends RunAdmissionCommandCoordinates
 /** Initial admission requested for an autonomous managed AgentService. */
 export interface ServiceRunAdmissionCommand extends RunAdmissionCommandCoordinates
 {
+	/** Human Principal that explicitly invoked the service, or null for scheduler admission. */
+	readonly requestingPrincipalId: string | null;
 	/** Discriminant that prevents a caller from supplying a user-shaped service identity. */
 	readonly identityKind: "service";
 	/** Managed roots are admitted by an explicit invocation or the scheduler, never interactively. */
@@ -75,6 +78,8 @@ export interface RunAdmissionTransaction
 {
 	/** Prisma transaction through which all admission reads and durable writes must occur. */
 	readonly prisma: Prisma.TransactionClient;
+	/** Central product authority bound to this exact admission transaction. */
+	readonly authorization?: Pick<AuthorizationAuthority, "admit" | "admitPrincipal" | "admitPrincipalBatch" | "listPrincipalEntitled">;
 	/** Canonical server-owned admission time used by every fenced authority read and immutable snapshot. */
 	readonly admittedAt: string;
 	/** Epoch-millisecond form of the same canonical server-owned admission time. */
@@ -178,7 +183,7 @@ export type RunAdmissionResult<TDenial> = { readonly outcome: "accepted" | "idem
  *
  * Use it when a row must not be able to exist without its run. The conversation caller writes the
  * user's message here, so a stored message without a run is impossible. It runs last, once the run,
- * its snapshot and its outbox events are already inserted, so it may read anything admission wrote
+ * its snapshot and its workflow task are already inserted, so it may read anything admission wrote
  * and may use `value.snapshot.runId` as a foreign key. Throwing rolls the whole admission back.
  *
  * Called by: `PrismaConversationMessageAdmissionUnitOfWork` (server/conversations/main), through
@@ -192,7 +197,7 @@ export type RunAdmissionCommit = (transaction: RunAdmissionTransaction, value: R
  * This exists for one situation: the run's own inputs do not exist yet. A group `@agent` mention has
  * to create the child conversation, its participants and the parent message first, because the
  * conversation input loader then reads that child conversation inside the same transaction to freeze
- * the transcript. So preparation runs after the AgentService row is locked and before `build`.
+ * the transcript. So preparation runs after duplicate detection and before `build`.
  *
  * It is skipped entirely for a duplicate request: a repeat of an already-admitted key returns the
  * original snapshot without preparing anything, so the child conversation is created once however
@@ -214,24 +219,23 @@ export type RunAdmissionPrepare = (transaction: RunAdmissionTransaction) => Prom
 /**
  * The single transaction in which a logical run becomes real.
  *
- * It works through a fixed order, one caller at a time for a given idempotency key: resolves
- * duplicates, locks the service row, optionally lets the caller write the rows its own inputs need
+ * It works through a fixed order at Serializable isolation: resolves committed duplicates,
+ * optionally lets the caller write the rows its own inputs need
  * ({@link RunAdmissionPrepare}), re-reads every authority input, and writes the run, its snapshot and
- * its first dispatch outbox row. Running them one at a time is the point — it is what stops two
- * callers with the same key from creating two runs, and what stops an input that changed mid-assembly
- * from reaching a committed snapshot.
+ * its Absurd workflow task. The unique request key chooses one winner, and a concurrent input
+ * change makes the transaction retry instead of reaching a committed snapshot.
  *
  * Called by: `__AssembleRunInputSnapshot` in
  * `execution/inputs/main/src/session-assembly.ts`, which passes its own compile step as the
  * `build` callback. Wired by `prisma-session-assembly-authorities.ts`; implemented by
- * `PrismaRunAdmissionRepository`.
+ * `PrismaRunAdmissionUnitOfWork`.
  */
 export interface RunAdmissionRepository
 {
 	/**
 	 * Admits one run, or returns the run a previous identical request already admitted.
 	 *
-	 * `build` runs inside the transaction, with the service row already locked, and must re-read
+		 * `build` runs inside the Serializable transaction and must re-read
 	 * every input it depends on rather than trusting anything read before the call. If `build`
 	 * returns `denied`, the whole transaction is rolled back and nothing is written. `commit` runs
 	 * last, in the same transaction, for callers that need extra rows written atomically with the

@@ -1,6 +1,8 @@
-import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
+import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
+import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthority, ArtifactPreprocessControllerRecord, ArtifactPreprocessOutcome, ArtifactPreprocessPodBindCommand, ArtifactPreprocessRecoveryCommand, ArtifactPreprocessWorkloadBindCommand } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
+import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
-import type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ClaimNextArtifactPreprocessJobResult, CompleteArtifactPreprocessJobResult, FailArtifactPreprocessJobResult, IssueArtifactPreprocessOutputLeaseResult } from "./artifact-preprocessing.types";
+import type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, CompleteArtifactPreprocessJobResult, FailArtifactPreprocessJobResult, IssueArtifactPreprocessOutputLeaseResult } from "./artifact-preprocessing.types";
 import type { ArtifactPreprocessUnitOfWork } from "./artifact-unit-of-work.types";
 
 /**
@@ -16,7 +18,7 @@ import type { ArtifactPreprocessUnitOfWork } from "./artifact-unit-of-work.types
  *
  * Called by: `_CreateArtifactPreprocessAuthority` in prisma-artifact-authority.composition.ts.
  */
-export class _ArtifactPreprocessAuthority implements ArtifactPreprocessRepository
+export class _ArtifactPreprocessAuthority implements ArtifactPreprocessRepository, ArtifactPreprocessControllerAuthority
 {
 	/** The only thing here allowed to open a transaction, so router and broker code never holds one. */
 	private readonly unitOfWork: ArtifactPreprocessUnitOfWork;
@@ -27,12 +29,66 @@ export class _ArtifactPreprocessAuthority implements ArtifactPreprocessRepositor
 		this.unitOfWork = unitOfWork;
 	}
 
-	/** Claims the next eligible job and allocates its fresh fence atomically. */
-	claimNextAtomically(): Promise<ClaimNextArtifactPreprocessJobResult>
+	/** Issues or reloads the controller delivery for the exact admitted task. */
+	claimForTask(preprocessJobId: string, task: IWorkflowTaskReceipt): Promise<ArtifactPreprocessControllerRecord | null>
 	{
 		return this.unitOfWork.run(async function _Claim(repository)
 		{
-			return repository.claimNextAtomically();
+			return repository.claimForTask(preprocessJobId, task);
+		});
+	}
+
+	/** Saves the immutable Job UID and hashed bootstrap under the current delivery. */
+	bindWorkload(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessWorkloadBindCommand): Promise<"bound" | "idempotent" | "conflict">
+	{
+		return this.unitOfWork.run(async function _Bind(repository)
+		{
+			return repository.bindWorkload(preprocessJobId, task, command);
+		});
+	}
+
+	/** Saves the immutable first Pod UID beneath the accepted Job. */
+	bindFirstPod(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessPodBindCommand): Promise<"bound" | "idempotent" | "conflict">
+	{
+		return this.unitOfWork.run(async function _Bind(repository)
+		{
+			return repository.bindFirstPod(preprocessJobId, task, command);
+		});
+	}
+
+	/** Persists a controller-observed Job failure through the exact saved delivery fence. */
+	recordUnreportedFailure(preprocessJobId: string, task: IWorkflowTaskReceipt, command: ArtifactPreprocessRecoveryCommand): Promise<ArtifactPreprocessOutcome | null>
+	{
+		return this.unitOfWork.run(async function _RecordFailure(repository)
+		{
+			return repository.recordUnreportedFailure(preprocessJobId, task, command);
+		});
+	}
+
+	/** Loads one server-owned delivery outcome through its admitted task. */
+	loadOutcome(preprocessJobId: string, deliveryCount: number, task: IWorkflowTaskReceipt): Promise<ArtifactPreprocessOutcome | null>
+	{
+		return this.unitOfWork.run(async function _LoadOutcome(repository)
+		{
+			return repository.loadOutcome(preprocessJobId, deliveryCount, task);
+		});
+	}
+
+	/** Consumes matching completion evidence and makes the job terminal once. */
+	complete(preprocessJobId: string, completion: ArtifactPreprocessCompletion, task: IWorkflowTaskReceipt): Promise<"completed" | "idempotent" | "conflict">
+	{
+		return this.unitOfWork.run(async function _Complete(repository)
+		{
+			return repository.complete(preprocessJobId, completion, task);
+		});
+	}
+
+	/** Exchanges the mounted Job reference for the active controller delivery. */
+	loadWorkerBootstrap(reference: string, namespace: string): Promise<ArtifactPreprocessorJobClaim | null>
+	{
+		return this.unitOfWork.run(async function _Load(repository)
+		{
+			return repository.loadWorkerBootstrap(reference, namespace);
 		});
 	}
 
@@ -54,7 +110,7 @@ export class _ArtifactPreprocessAuthority implements ArtifactPreprocessRepositor
 		});
 	}
 
-	/** Publishes one verified derived revision and closes the live claim atomically. */
+	/** Publishes one verified derived revision and records its completion inbox atomically. */
 	completeAtomically(command: ArtifactPreprocessCompletionRequest): Promise<CompleteArtifactPreprocessJobResult>
 	{
 		return this.unitOfWork.run(async function _Complete(repository)

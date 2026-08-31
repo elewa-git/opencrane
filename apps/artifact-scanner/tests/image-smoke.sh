@@ -2,8 +2,32 @@
 set -euo pipefail
 
 image="opencrane-artifact-scanner:smoke"
+runtime_log="$(mktemp)"
+trap 'rm -f "$runtime_log"' EXIT
 
 docker build -t "$image" -f apps/artifact-scanner/deploy/Dockerfile .
+set +e
+docker run --rm --network none "$image" >"$runtime_log" 2>&1
+runtime_result=$?
+set -e
+
+if test "$runtime_result" -eq 0; then
+  cat "$runtime_log" >&2
+  printf "artifact scanner unexpectedly started without configuration\n" >&2
+  exit 1
+fi
+if grep -Fq "ERR_MODULE_NOT_FOUND" "$runtime_log"; then
+  cat "$runtime_log" >&2
+  exit 1
+fi
+first_config_error="$(grep -oE '[A-Z][A-Z0-9_]+ is required' "$runtime_log" | head -n 1 || true)"
+if test "$first_config_error" != "OPENCRANE_INTERNAL_URL is required"; then
+  cat "$runtime_log" >&2
+  printf "artifact scanner did not reach its first required configuration check\n" >&2
+  exit 1
+fi
+printf "offline artifact-scanner startup reached its first required configuration check\n"
+
 docker run --rm --network none --entrypoint /bin/sh "$image" -ec '
   test "$(id -u)" = 65532
   test -x /usr/bin/clamscan

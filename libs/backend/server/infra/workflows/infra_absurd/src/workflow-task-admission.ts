@@ -1,7 +1,8 @@
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
 import type { IWorkflowTaskAdmission, IWorkflowTaskAdmissionReceipt, IWorkflowTaskAdmissionRequest } from "./workflow-task-admission.types";
+import { _RequireWorkflowTransactionClient } from "./workflow-transaction-client";
 
 /** Represents the raw row that Absurd returns after it accepts or matches a task. */
 interface IAdmissionResultRow
@@ -35,22 +36,6 @@ function _RequiredString(name: string, value: string): string
 export function _TaskScopedIdempotencyKey(taskName: string, idempotencyKey: string): string
 {
 	return JSON.stringify([_RequiredString("taskName", taskName), _RequiredString("idempotencyKey", idempotencyKey)]);
-}
-
-/**
- * Narrows the opaque transaction at the one adapter boundary allowed to know Prisma.
- *
- * The workflow contract keeps this value opaque so domain code cannot issue raw database calls.
- * A root Prisma client exposes `$transaction`, unlike the transaction client passed to this method,
- * so this check rejects it before the task can be admitted outside the product transaction.
- */
-function _RequireTransactionClient(client: unknown): Prisma.TransactionClient
-{
-	if (typeof client !== "object" || client === null || typeof Reflect.get(client, "$queryRaw") !== "function" || typeof Reflect.get(client, "$transaction") === "function")
-	{
-		throw new Error("Workflow task spawn requires a caller-owned Prisma TransactionClient.");
-	}
-	return client as Prisma.TransactionClient;
 }
 
 /**
@@ -117,7 +102,8 @@ export class WorkflowTaskAdmission implements IWorkflowTaskAdmission
 	async admit(transactionClient: unknown, request: IWorkflowTaskAdmissionRequest): Promise<IWorkflowTaskAdmissionReceipt>
 	{
 		// 1. Verify the supplied object is the product transaction that owns the commit decision.
-		const client = _RequireTransactionClient(transactionClient);
+		_RequireWorkflowTransactionClient(transactionClient);
+		const client = transactionClient as Prisma.TransactionClient;
 		// 2. Validate identity and serialize input before the fixed query receives any values.
 		const taskName = _RequiredString("taskName", request.taskName);
 		const idempotencyKey = _RequiredString("idempotencyKey", request.idempotencyKey);
@@ -143,10 +129,10 @@ export class WorkflowTaskAdmission implements IWorkflowTaskAdmission
 		const admissionOptions = JSON.stringify({ idempotency_key: _TaskScopedIdempotencyKey(taskName, idempotencyKey), max_attempts: request.maximumAttempts, retry_strategy: retryStrategy });
 		try
 		{
-			const rows = await client.$queryRaw<readonly IAdmissionResultRow[]>(Prisma.sql`
+			const rows = await client.$queryRaw<readonly IAdmissionResultRow[]>`
 				SELECT task_id, run_id, attempt, created
 				FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)
-			`);
+			`;
 			return _AdmissionReceipt(rows);
 		}
 		catch (cause)

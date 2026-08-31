@@ -32,9 +32,15 @@ on:
           - none
           - bootstrap
           - artifact
+          - all
           - qualification
           - server
           - ui
+      validation_override_sha:
+        description: Full workflow commit SHA authorized for publication despite failed validation
+        required: false
+        type: string
+        default: ""
 
 # One live run per ref: a new push supersedes the in-flight PR validation of the stale commit.
 # Pushes to the integration branches are never cancelled mid-publish.
@@ -270,6 +276,12 @@ jobs:
 
       - name: Prove the Prisma-boundary classifier
         run: npm run test:prisma-boundaries
+
+      - name: Enforce central authorization adoption
+        run: npm run check:authorization-enforcement
+
+      - name: Prove the authorization-enforcement classifier
+        run: npm run test:authorization-enforcement
 
       - name: Enforce workflow engine boundaries
         run: npm run check:workflow-boundary
@@ -515,9 +527,8 @@ jobs:
           node-version: 24
           cache: npm
 
-      # The production deploy wrapper resolves and schema-validates the database transition before
-      # it mutates the cluster. The smoke job is a fresh checkout, so restore the same exact
-      # lockfile-bound runtime dependencies that the prepare and test jobs use.
+      # The production deploy wrapper checks that an upgrade starts from the release manifest's
+      # immediate predecessor. Restore node_modules because that check runs during the smoke deploy.
       - name: Restore node_modules
         id: node-modules
         uses: actions/cache@v4
@@ -608,16 +619,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [prepare, test, database, api_contract, storybook_visual, develop_smoke, image_smoke]
+    # Manual publication bypasses failed validation only when the operator repeats this workflow's SHA.
+    # The exact match prevents approval for one commit from publishing a different commit.
     if: >-
       ${{
         always() &&
         needs.prepare.outputs.has_deployables == 'true' &&
-        needs.test.result == 'success' &&
-        needs.database.result == 'success' &&
-        (needs.api_contract.result == 'success' || needs.api_contract.result == 'skipped') &&
-        needs.storybook_visual.result == 'success' &&
-        (needs.develop_smoke.result == 'success' || needs.develop_smoke.result == 'skipped') &&
-        (needs.image_smoke.result == 'success' || needs.image_smoke.result == 'skipped')
+        ((github.event_name == 'workflow_dispatch' &&
+          inputs.publish_deployables != 'none' &&
+          inputs.validation_override_sha != '' &&
+          inputs.validation_override_sha == github.sha) ||
+         (needs.test.result == 'success' &&
+          needs.database.result == 'success' &&
+          (needs.api_contract.result == 'success' || needs.api_contract.result == 'skipped') &&
+          needs.storybook_visual.result == 'success' &&
+          (needs.develop_smoke.result == 'success' || needs.develop_smoke.result == 'skipped') &&
+          (needs.image_smoke.result == 'success' || needs.image_smoke.result == 'skipped')))
       }}
     permissions:
       contents: read
@@ -654,6 +671,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
           push: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_deployables != 'none') }}
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}

@@ -1,4 +1,4 @@
-import type { CompiledMessage, CompiledModelRoute, CompiledToolDefinition, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
+import type { CompiledMessage, CompiledModelRoute, CompiledToolDefinition, RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 /**
@@ -16,17 +16,17 @@ export interface PromptCompilerRepositories
 	/** Resolve ordered conversation turns for the exact message references, preserving snapshot order. */
 	loadMessages(messageIds: readonly string[]): Promise<readonly CompiledMessage[]>;
 	/**
-	 * Resolve the tool schemas exposed by immutable revision-selected integration assignments.
+	 * Resolve the tool schemas from the MCP tool revisions selected by the saved agent revision.
 	 *
 	 * The returned order is not significant: the compiler re-sorts tool definitions by name before
 	 * sealing the compiled output, so grant/repository iteration order can never change the compiled
 	 * payload or its digest.
 	 */
-	loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): Promise<readonly CompiledToolDefinition[]>;
+	loadToolDefinitions(mcpTools: readonly RunInputSnapshotMcpTool[]): Promise<readonly CompiledToolDefinition[]>;
 	/** Resolve one-line availability summaries for the immutable artifact revisions offered to the run. */
 	loadArtifactSummaries(artifactRevisionIds: readonly string[]): Promise<readonly string[]>;
 	/** Resolve one-line availability summaries for the immutable skill revisions offered to the run. */
 	loadSkillSummaries(skillRevisionIds: readonly string[]): Promise<readonly string[]>;
-	/** Resolve the model route without provider credentials for the snapshot's server-selected route. */
-	resolveModelRoute(modelRoute: JsonValue): Promise<CompiledModelRoute>;
+	/** Resolve the exact frozen model definition within the snapshot's trusted silo. */
+	resolveModelRoute(siloId: string, modelRoute: JsonValue): Promise<CompiledModelRoute>;
 }

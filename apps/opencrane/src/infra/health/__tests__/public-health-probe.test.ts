@@ -40,7 +40,7 @@ describe("public health HTTP probes", function _Suite()
 		const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 		vi.stubGlobal("fetch", fetch);
 		await _CreateModelHealthProbe({ LITELLM_ENDPOINT: "http://litellm.svc:4000", LITELLM_MASTER_KEY: "master-key" }).check();
-		expect(fetch).toHaveBeenCalledWith(new URL("http://litellm.svc:4000/model/info"), expect.objectContaining({
+		expect(fetch).toHaveBeenCalledWith(new URL("http://litellm.svc:4000/v1/models"), expect.objectContaining({
 			headers: { authorization: "Bearer master-key" },
 		}));
 	});

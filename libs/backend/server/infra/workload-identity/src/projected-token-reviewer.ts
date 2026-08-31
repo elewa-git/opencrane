@@ -1,9 +1,9 @@
 import * as k8s from "@kubernetes/client-node";
 
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME, SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE, SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME, WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE, WARM_RUNTIME_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, ReviewedSkillWorkloadIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity, SkillWorkloadTokenReviewer } from "./workload-identity.types";
+import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity } from "./workload-identity.types";
 
 /** Return whether one value is a bounded Kubernetes namespace DNS label. */
 function _IsNamespace(value: string): boolean
@@ -124,6 +124,19 @@ export function _CreateAgentControllerTokenReviewer(authApi: ProjectedTokenRevie
 	return _CreateFixedServiceAccountTokenReviewer(authApi, AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, namespace, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME);
 }
 
+/** Build the Pod-bound reviewer for the isolated OCI MCP executor companion. */
+export function _CreateMcpExecutorTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): RuntimeTokenReviewer
+{
+	return {
+		async __Review(token: string): Promise<RuntimeWorkloadIdentity | null>
+		{
+			const status = await _ReviewProjectedToken(authApi, token, [MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE]);
+			const podUid = _ReadReviewedPodUid(status?.user?.extra);
+			return _ParseRuntimeSubject(status?.user?.username ?? "", namespace, podUid, function _IsMcpExecutorServiceAccount(value): boolean { return value === MCP_EXECUTOR_SERVICE_ACCOUNT_NAME; });
+		},
+	};
+}
+
 /** Build the fixed TokenReview adapter for the dedicated artifact-preprocessor identity. */
 export function _CreateArtifactPreprocessorTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): FixedServiceAccountTokenReviewer
 {
@@ -134,6 +147,19 @@ export function _CreateArtifactPreprocessorTokenReviewer(authApi: ProjectedToken
 export function _CreateArtifactScannerTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): FixedServiceAccountTokenReviewer
 {
 	return _CreateFixedServiceAccountTokenReviewer(authApi, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, namespace, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME);
+}
+
+/** Build the Pod-bound reviewer for the sole Python skill-validation workload identity. */
+export function _CreateSkillAuthoringValidationTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): RuntimeTokenReviewer
+{
+	return {
+		async __Review(token: string): Promise<RuntimeWorkloadIdentity | null>
+		{
+			const status = await _ReviewProjectedToken(authApi, token, [SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE]);
+			const podUid = _ReadReviewedPodUid(status?.user?.extra);
+			return _ParseRuntimeSubject(status?.user?.username ?? "", namespace, podUid, function _IsSkillAuthoringValidationServiceAccount(value): boolean { return value === SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME; });
+		},
+	};
 }
 
 /** Build the fixed TokenReview adapter for one deployment-owned channel-proxy identity. */
@@ -149,32 +175,6 @@ export function _CreateMemoryGatewayServerTokenReviewer(authApi: ProjectedTokenR
 	return _CreateFixedServiceAccountTokenReviewer(authApi, config.audience, config.namespace, config.serviceAccountName);
 }
 
-/**
- * Build the reviewer for authoring workers. Unlike the fixed reviewers, it fixes NO
- * identity: the audience is supplied per call, and any valid ServiceAccount token with a
- * bound Pod UID is returned. Deciding whether that worker is the expected one is left to
- * the stored bootstrap record, so a non-null result here is authentication only, never
- * authorization.
- *
- * Called by: apps/opencrane/src/app/runtime-composition.ts.
- *
- * @param authApi - Kubernetes client used only to submit TokenReviews.
- * @returns A reviewer returning the worker's namespace, ServiceAccount name, and Pod UID,
- *          or null when the token is invalid for the requested audience or has no Pod UID.
- */
-export function _CreateSkillWorkloadTokenReviewer(authApi: ProjectedTokenReviewApi): SkillWorkloadTokenReviewer
-{
-	return {
-		async __Review(token: string, audience: string): Promise<ReviewedSkillWorkloadIdentity | null>
-		{
-			const status = await _ReviewProjectedToken(authApi, token, [audience]);
-			const subject = _ParseServiceAccountSubject(status?.user?.username ?? "");
-			const podUid = _ReadReviewedPodUid(status?.user?.extra);
-			return subject && podUid ? { ...subject, podUid } : null;
-		},
-	};
-}
-
 /** Return the runtime identity only when the subject parses, its namespace is the expected one, its ServiceAccount name passes the supplied name check, and the token carried a bound Pod UID. */
 function _ParseRuntimeSubject(subject: string, expectedNamespace: string, podUid: string | null, isServiceAccountName: (value: string) => boolean): RuntimeWorkloadIdentity | null
 {
@@ -183,44 +183,18 @@ function _ParseRuntimeSubject(subject: string, expectedNamespace: string, podUid
 	return { subject, ...parsed, podUid };
 }
 
-/**
- * Build the reviewer the runtime stream transport uses to authenticate agent runtimes.
- *
- * It submits the token for BOTH runtime audiences at once and then requires exactly one of
- * them to have been accepted. A token accepted for both, or for neither, is rejected: the
- * audience is what distinguishes a personal runtime from a managed one, and that choice
- * then decides which namespace and which ServiceAccount naming rule must match. Allowing
- * both would let one class of runtime be checked against the other's rules.
- *
- * After that, the ServiceAccount subject must parse, its namespace must equal the
- * configured namespace for that class, its name must satisfy that class's naming rule, and
- * the token must carry a bound Pod UID. Any failure returns null.
- *
- * Called by: apps/opencrane/src/app/runtime-composition.ts; the result is
- * passed to both the runtime bootstrap router and the runtime stream transport.
- *
- * @param authApi - Kubernetes client used only to submit TokenReviews.
- * @param config  - The two validated runtime namespaces; see
- *                  {@link _ValidateRuntimeIdentityNamespaces}.
- * @returns A reviewer that returns a verified identity or null; it never explains why.
- * @see https://kubernetes.io/docs/reference/access-authn-authz/authentication/ — TokenReview,
- *      token audiences, and the extra fields that carry the bound Pod UID.
- */
-export function _CreateRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi, config: RuntimeTokenReviewerConfig): RuntimeTokenReviewer
+/** Build the Pod-bound reviewer used only by warm binding and warm command-stream routes. */
+export function _CreateWarmRuntimeTokenReviewer(authApi: ProjectedTokenReviewApi, config: RuntimeTokenReviewerConfig): RuntimeTokenReviewer
 {
 	return {
 		async __Review(token: string): Promise<RuntimeWorkloadIdentity | null>
 		{
-			const audiences = [AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE];
-			const status = await _ReviewProjectedToken(authApi, token, audiences);
-			if (!status) return null;
-			const personal = status.audiences?.includes(AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE) === true;
-			const managed = status.audiences?.includes(MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE) === true;
-			if (personal === managed) return null;
-			const podUid = _ReadReviewedPodUid(status.user?.extra);
-			return personal
-				? _ParseRuntimeSubject(status.user?.username ?? "", config.personalRuntimeNamespace, podUid, ___IsAgentRuntimeServiceAccountName)
-				: _ParseRuntimeSubject(status.user?.username ?? "", config.managedRuntimeNamespace, podUid, ___IsManagedAgentRuntimeServiceAccountName);
+			const status = await _ReviewProjectedToken(authApi, token, [WARM_RUNTIME_PROJECTED_TOKEN_AUDIENCE]);
+			const subject = _ParseServiceAccountSubject(status?.user?.username ?? "");
+			const podUid = _ReadReviewedPodUid(status?.user?.extra);
+			if (!subject || !podUid || subject.serviceAccountName !== WARM_RUNTIME_SERVICE_ACCOUNT_NAME || (subject.namespace !== config.personalRuntimeNamespace && subject.namespace !== config.managedRuntimeNamespace))
+				return null;
+			return { subject: status?.user?.username ?? "", ...subject, podUid };
 		},
 	};
 }

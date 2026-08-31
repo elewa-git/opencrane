@@ -19,9 +19,12 @@ export class PrismaApprovedPersonaSource implements ApprovedPersonaSource
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ApprovedPersonaInput>>
 	{
 		// 1. Managed services get no persona: their published revision already holds all their instructions.
-		if (run.agentKind === "managed") return { outcome: "loaded", value: { personaRevisionId: null } };
-		if (command.identityKind !== "user") return { outcome: "denied", reason: "persona_unavailable" };
-		if (run.delegatedUserId === null || run.delegatedUserId !== command.executionSubjectId) return { outcome: "denied", reason: "persona_unavailable" };
+		if (run.agentKind === "managed")
+			return { outcome: "loaded", value: { personaRevisionId: null, personaId: null } };
+		if (command.identityKind !== "user")
+			return { outcome: "denied", reason: "persona_unavailable" };
+		if (run.delegatedUserId === null || run.delegatedUserId !== command.executionSubjectId)
+			return { outcome: "denied", reason: "persona_unavailable" };
 
 		// 2. Read the profile through its silo-and-user unique key, never through a revision selected by the caller or service.
 		const profile = await transaction.prisma.personaProfile.findUnique({
@@ -32,6 +35,6 @@ export class PrismaApprovedPersonaSource implements ApprovedPersonaSource
 		// 3. Refuse when there is no active revision, or it is not approved, so an unapproved persona never reaches a saved run.
 		const revision = profile?.activeRevision;
 		if (revision === null || revision === undefined || revision.state !== PersonaRevisionState.Approved || revision.personaProfileId.trim().length === 0) return { outcome: "denied", reason: "persona_unavailable" };
-		return { outcome: "loaded", value: { personaRevisionId: revision.id } };
+		return { outcome: "loaded", value: { personaRevisionId: revision.id, personaId: revision.personaProfileId } };
 	}
 }

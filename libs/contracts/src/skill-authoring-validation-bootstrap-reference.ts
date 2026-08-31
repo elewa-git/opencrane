@@ -1,0 +1,65 @@
+/** Prefix that marks a reference as a skill-worker bootstrap reference rather than an agent-runtime one, so the two cannot be swapped. */
+const _SKILL_AUTHORING_VALIDATION_BOOTSTRAP_PREFIX = "skill-bootstrap-v1_";
+
+/** Audience fixed on every projected token used by the Python skill-validation Job. */
+export const SKILL_AUTHORING_VALIDATION_PROJECTED_TOKEN_AUDIENCE = "opencrane-skill-authoring";
+
+/** ServiceAccount fixed on every Python skill-validation Job. */
+export const SKILL_AUTHORING_VALIDATION_SERVICE_ACCOUNT_NAME = "skill-authoring-default";
+
+/**
+ * Build the bootstrap reference used by one Python skill-validation Job.
+ *
+ * The result is mounted into that workload's Job and nowhere else. It is not a credential: on its
+ * own it grants nothing, and the server stores only its hash, so a leaked reference cannot be
+ * reversed into the validation id. Store it with
+ * {@link __HashSkillAuthoringValidationBootstrapReference}, never in plain form.
+ *
+ * Called by: the authoring-validation handler before it binds a Job.
+ * @param validationId - Validation id; must match `[a-zA-Z0-9_-]{1,128}`.
+ * @returns The prefixed reference, safe to mount into the Job.
+ * @throws Error when `validationId` contains any other character, so an unsafe id cannot reach a capability reference.
+ */
+export async function __CreateSkillAuthoringValidationBootstrapReference(validationId: string): Promise<string>
+{
+	if (!/^[a-zA-Z0-9_-]{1,128}$/.test(validationId))
+		throw new Error("skill validation id is not safe to project into a capability reference");
+	return `${_SKILL_AUTHORING_VALIDATION_BOOTSTRAP_PREFIX}${await _Sha256Hex(validationId)}`;
+}
+
+/**
+ * Hash a bootstrap reference so it can be stored and looked up without keeping the reference itself.
+ *
+ * Postgres holds only this hash. A worker presents the plain reference; the server hashes what it
+ * receives and matches on the result, so a database read never yields a usable reference.
+ *
+ * Called by: the authoring-validation server authority and worker router when they store or match a reference.
+ * @param reference - The plain bootstrap reference presented by a worker.
+ * @returns Lowercase `sha256:<hex>` digest, the form stored in the database.
+ */
+export async function __HashSkillAuthoringValidationBootstrapReference(reference: string): Promise<`sha256:${string}`>
+{
+	return `sha256:${await _Sha256Hex(reference)}`;
+}
+
+/**
+ * Return whether a value looks like a skill-worker bootstrap reference.
+ *
+ * A shape check only — it proves nothing about whether the reference was issued or is still
+ * valid. Call it to reject malformed input early, then match the hash to authorize.
+ *
+ * Called by: the authoring-validation worker router before it asks its database authority to match the presented reference hash.
+ * @param value - Untrusted value from a request.
+ * @returns True only for the prefix followed by 64 lowercase hex characters.
+ */
+export function __IsSkillAuthoringValidationBootstrapReference(value: unknown): value is string
+{
+	return typeof value === "string" && /^skill-bootstrap-v1_[a-f0-9]{64}$/.test(value);
+}
+
+/** Calculates canonical lowercase SHA-256 with browser and server Web Crypto, never a Node-only import. */
+async function _Sha256Hex(value: string): Promise<string>
+{
+	const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+	return Array.from(new Uint8Array(digest), function _Hex(byte): string { return byte.toString(16).padStart(2, "0"); }).join("");
+}

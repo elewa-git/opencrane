@@ -99,9 +99,6 @@ upgrade, while the digest keeps the selected bytes immutable.
 {{- if lt (int .Values.postgresql.maxConnections) 1 -}}
 {{- fail "postgresql.maxConnections must be positive" -}}
 {{- end -}}
-{{- if not (kindIs "bool" .Values.superuserAccess.enabled) -}}
-{{- fail "superuserAccess.enabled must be a boolean" -}}
-{{- end -}}
 {{- if lt (int .Values.pooler.instances) 1 -}}
 {{- fail "pooler.instances must be positive" -}}
 {{- end -}}
@@ -135,7 +132,7 @@ metadata:
 spec:
   instances: {{ .Values.instances }}
   imageName: {{ .Values.image | quote }}
-  enableSuperuserAccess: {{ .Values.superuserAccess.enabled }}
+  enableSuperuserAccess: false
   postgresql:
     shared_preload_libraries:
       - pg_cron

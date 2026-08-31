@@ -18,8 +18,6 @@ CHART_CACHE_DIR=""
 INGRESS_ARCHIVE=""
 CERT_MANAGER_ARCHIVE=""
 CNPG_ARCHIVE=""
-DATABASE_PROOF_COMPUTE_CLASS="opencrane-database-proof"
-DATABASE_PROOF_COMPUTE_CLASS_MANIFEST="$PROFILE_DIR/database-proof-compute-class.yaml"
 
 log()
 {
@@ -262,28 +260,6 @@ validate_existing_ownership()
     "${CNPG_CLUSTER_RESOURCES[@]}"
 }
 
-database_proof_compute_class_is_bootstrap_owned()
-{
-  local managed_by profile
-  managed_by="$(kubectl --context "$EXPECTED_CONTEXT" get "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" \
-    --output=jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}')"
-  profile="$(kubectl --context "$EXPECTED_CONTEXT" get "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" \
-    --output=jsonpath='{.metadata.annotations.opencrane\.ai/prerequisite-profile}')"
-  [[ "$managed_by" == "opencrane-prerequisite-bootstrap" && "$profile" == "gke-autopilot-dev" ]]
-}
-
-validate_database_proof_compute_class()
-{
-  [[ -f "$DATABASE_PROOF_COMPUTE_CLASS_MANIFEST" ]] || fail \
-    "database proof ComputeClass manifest is missing: $DATABASE_PROOF_COMPUTE_CLASS_MANIFEST"
-  resource_exists "crd/computeclasses.cloud.google.com" || fail \
-    "GKE ComputeClass CRD is absent; the gke-autopilot-dev profile requires computeclasses.cloud.google.com"
-  if resource_exists "computeclass/$DATABASE_PROOF_COMPUTE_CLASS"; then
-    database_proof_compute_class_is_bootstrap_owned || fail \
-      "ComputeClass '$DATABASE_PROOF_COMPUTE_CLASS' exists without OpenCrane bootstrap ownership; refusing to adopt it"
-  fi
-}
-
 sha256_file()
 {
   local path="$1"
@@ -412,12 +388,6 @@ install_prerequisites()
     "$CNPG_ARCHIVE" \
     "$CNPG_NAMESPACE" \
     "$PROFILE_DIR/cloudnative-pg.yaml"
-
-  log "applying GKE Autopilot database-proof ComputeClass..."
-  kubectl --context "$EXPECTED_CONTEXT" apply \
-    --server-side \
-    --field-manager=opencrane-prerequisite-bootstrap \
-    --filename="$DATABASE_PROOF_COMPUTE_CLASS_MANIFEST" >/dev/null
 }
 
 wait_for_ingress_address()
@@ -464,18 +434,6 @@ verify_prerequisites()
   kubectl --context "$EXPECTED_CONTEXT" get ingressclass nginx >/dev/null
   wait_for_established_crds "${CERT_MANAGER_CLUSTER_RESOURCES[@]}"
   wait_for_established_crds "${CNPG_CLUSTER_RESOURCES[@]}"
-  kubectl --context "$EXPECTED_CONTEXT" wait \
-    --for=condition=Health "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" --timeout=2m || fail \
-    "ComputeClass '$DATABASE_PROOF_COMPUTE_CLASS' did not reach Health=True; inspect CrdMisconfigured"
-  local compute_class_json
-  compute_class_json="$(kubectl --context "$EXPECTED_CONTEXT" get \
-    "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" --output=json)"
-  jq -e '(any(.status.conditions[]?; .type == "Health" and .status == "True"))
-    and (all(.status.conditions[]?; .type != "CrdMisconfigured" or .status != "True"))
-    and (.spec.autopilot.enabled == true) and (.spec.whenUnsatisfiable == "ScaleUpAnyway")
-    and (.spec.priorities == [{"podFamily":"general-purpose"}])' \
-    <<<"$compute_class_json" >/dev/null || fail \
-    "ComputeClass '$DATABASE_PROOF_COMPUTE_CLASS' does not match its healthy Autopilot database-proof contract"
   wait_for_ingress_address
 
   log "shared prerequisites are ready; ingress address: $INGRESS_ADDRESS_IP"
@@ -488,7 +446,6 @@ main()
   validate_context
   validate_ingress_address
   validate_existing_ownership
-  validate_database_proof_compute_class
   render_pinned_charts
   confirm_mutation
   install_prerequisites

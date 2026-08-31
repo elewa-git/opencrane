@@ -2,17 +2,9 @@ import { AgentRevisionState, Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { __DigestAgentRevisionContent, RevisionBoundaryCoverages, RevisionBoundaryKinds } from "@opencrane/models/agents";
-import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _PersonalConfigurationMaterializer } from "../materialization/personal-configuration-materializer";
 import { PrismaPersonalConfigurationMaterializationUnitOfWork } from "../materialization/prisma-personal-configuration-materialization-unit-of-work";
-
-/** Builds a tool definition that materialisation must copy to the new revision. */
-function _Tool()
-{
-	const parametersSchema = { type: "object", additionalProperties: false } as const;
-	return { name: "calendar.read", description: "Read a calendar", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
-}
 
 /** Trusted materialization command shared by transaction-level tests. */
 function _Command()
@@ -50,12 +42,7 @@ function _SourceRevision()
 		modelDefinitionId: "old-model",
 		budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
 		skillAssignments: [{ skillId: "skill-1", skillRevisionId: "skill-revision-1" }],
-		integrationAssignments: [{
-			integrationId: "integration-1",
-			siloId: "silo-1",
-			custodyReferenceId: "custody-1",
-			toolDefinitions: [_Tool()],
-		}],
+		mcpToolAssignments: [{ toolRevisionId: "mcp-tool-revision-1" }],
 		boundaryAttachments: [{
 			boundaryKind: "Personal",
 			boundaryGroupId: null,
@@ -68,7 +55,17 @@ function _SourceRevision()
 /** Composes the application materializer with its Prisma unit-of-work adapter. */
 function _Materializer(prisma: never, logger?: never): _PersonalConfigurationMaterializer
 {
-	return new _PersonalConfigurationMaterializer(new PrismaPersonalConfigurationMaterializationUnitOfWork(prisma), logger);
+	return new _PersonalConfigurationMaterializer(new PrismaPersonalConfigurationMaterializationUnitOfWork(prisma, function _ProductEffects()
+	{
+		return {
+			resolveCaller: vi.fn().mockResolvedValue({ siloId: "silo-1", subjectId: "user-1", principalId: "principal-1" }),
+			reconcileCurrent: vi.fn().mockResolvedValue(undefined),
+			admitInitialCreation: vi.fn().mockResolvedValue(undefined),
+			admitInitialPublication: vi.fn().mockResolvedValue(undefined),
+			admitRevisionSelection: vi.fn().mockResolvedValue(undefined),
+			admitRevisionPublication: vi.fn().mockResolvedValue(undefined),
+		};
+	}), logger);
 }
 
 /** Build a complete transaction mock for one serializable materialization attempt. */
@@ -91,6 +88,12 @@ function _Transaction(options: { readonly proposal?: unknown; readonly activePer
 			findFirst: vi.fn(async function _FindProfile()
 			{
 				return { activeRevisionId: options.activePersonaRevisionId ?? "persona-1" };
+			}),
+		},
+		personaRevision: {
+			findFirst: vi.fn(async function _FindPersona()
+			{
+				return { personaProfileId: "profile-1" };
 			}),
 		},
 		agentService: {
@@ -147,11 +150,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 			modelDefinitionId: "tenant-model",
 			budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
 			skills: [{ skillId: "skill-1", revisionId: "skill-revision-1" }],
-			integrationAssignments: [{
-				integrationId: "integration-1",
-				custodyReferenceId: "custody-1",
-				toolDefinitions: [_Tool()],
-			}],
+			mcpToolRevisionIds: ["mcp-tool-revision-1"],
 			boundaryAttachments: [{
 				boundaryKind: RevisionBoundaryKinds.Personal,
 				boundaryId: "principal-1",
@@ -174,13 +173,13 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 			isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
 		});
 		expect(transaction.modelDefinition.findMany).toHaveBeenCalledWith(expect.objectContaining({
-			where: expect.objectContaining({ publicModelName: "careful-model" }),
+			where: expect.objectContaining({ siloId: "silo-1", publicModelName: "careful-model" }),
 		}));
 		expect(transaction.agentRevision.create).toHaveBeenCalledWith(expect.objectContaining({
 			data: expect.objectContaining({
 				revision: 2,
-				parentRevision: { connect: { id: "agent-1" } },
-				modelDefinition: { connect: { id: "tenant-model" } },
+				parentRevision: { connect: { id_siloId: { id: "agent-1", siloId: "silo-1" } } },
+				modelDefinition: { connect: { id_siloId: { id: "tenant-model", siloId: "silo-1" } } },
 				changeMessage: "Owner accepted model alias: careful-model",
 				promptPolicyVersion: "prompt-v1",
 				personaRevisionId: "persona-1",
@@ -191,13 +190,8 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 						skillRevisionId: "skill-revision-1",
 					}],
 				},
-				integrationAssignments: {
-					create: [{
-						integrationId: "integration-1",
-						siloId: "silo-1",
-						custodyReferenceId: "custody-1",
-						toolDefinitions: [_Tool()],
-					}],
+				mcpToolAssignments: {
+					create: [{ toolRevisionId: "mcp-tool-revision-1", agentServiceId: "service-1", siloId: "silo-1" }],
 				},
 				boundaryAttachments: {
 					create: [{
@@ -211,7 +205,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 			}),
 		}));
 		expect(transaction.agentRevision.update).toHaveBeenCalledWith({
-			where: { id: "agent-2" },
+			where: { id_siloId: { id: "agent-2", siloId: "silo-1" } },
 			data: {
 				state: AgentRevisionState.Published,
 				publishedAt: new Date(_Command().materializedAt),

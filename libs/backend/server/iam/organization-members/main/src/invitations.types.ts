@@ -116,7 +116,7 @@ export interface CreateOrganizationInvitationsResult
 /** Command for rotating one pending invitation generation. */
 export interface ResendOrganizationInvitationCommand
 {
-	/** Verified active administrator. */
+	/** Verified caller whose current product authorization is checked by the selected authority. */
 	readonly caller: OrganizationMembershipCaller;
 	/** Opaque invitation coordinate from the directory. */
 	readonly invitationId: string;

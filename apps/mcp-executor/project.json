@@ -1,0 +1,15 @@
+{
+  "name": "mcp-executor",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "metadata": { "release": { "adaptedVersion": "0.10.0" } },
+  "sourceRoot": "apps/mcp-executor/src",
+  "tags": ["type:app", "layer:entrypoint", "scope:mcp-runtime"],
+  "targets": {
+    "build": { "executor": "nx:run-commands", "outputs": ["{workspaceRoot}/dist/apps/mcp-executor"], "options": { "command": "rm -rf dist/apps/mcp-executor && esbuild apps/mcp-executor/src/index.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/apps/mcp-executor/index.js" } },
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "apps/mcp-executor" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run --root apps/mcp-executor && bash apps/mcp-executor/tests/helm-contract.sh && bash apps/mcp-executor/tests/image-contract.sh", "cwd": "." } },
+    "helm-lint": { "executor": "nx:run-commands", "options": { "command": "helm lint apps/mcp-executor/helm" } },
+    "container": { "executor": "nx:run-commands", "metadata": { "release": { "image": "opencrane-mcp-executor", "dockerfile": "apps/mcp-executor/deploy/Dockerfile" } }, "options": { "command": "docker build -f apps/mcp-executor/deploy/Dockerfile ." } }
+  }
+}

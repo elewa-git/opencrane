@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** The field rules both the run-attempt and skill-workload controller validators build on, so the two APIs cannot drift apart on what an id or an instant looks like. */
+/** The field rules used by the private run-attempt controller protocol. */
 
 /** Return whether one value is a bounded, non-empty identifier without ASCII control characters. */
 function _IsBoundedIdentifier(value: unknown): value is string
@@ -58,7 +58,7 @@ export function _ParseAgentControllerCommand<T>(schema: z.ZodType<T>, value: unk
 	return parsed.success ? parsed.data : null;
 }
 
-/** Return whether a claim request body is empty. A claim carries no caller-supplied fields, so any field at all means the request is malformed. */
+/** Return whether a controller claim body is empty, because the server alone selects the work. */
 export function ___IsEmptyAgentControllerCommand(value: unknown): boolean
 {
 	return _EmptyCommandSchema.safeParse(value).success;

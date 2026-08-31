@@ -1,35 +1,7 @@
-import type { ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
+import type { ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
 import type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, FailArtifactPreprocessJobResult } from "./artifact-preprocessing.types";
-
-/**
- * Take the next PDF conversion job and return only what the worker is allowed to know.
- *
- * The repository selects and fences the job; this trims the result down to the fenced claim, the
- * fixed media type, and the source size. Everything else the database returned - the silo, the
- * source artifact and revision ids - is dropped here, which is why the worker cannot name a
- * revision or reach storage on its own.
- *
- * Called by: the `POST /jobs:claim` handler in artifact-preprocessing.router.ts.
- *
- * @param repository - The preprocessing repository, one transaction per call.
- * @returns The claim to send to the worker, or null when no job is ready, which the router
- *   answers as HTTP 204 so the worker keeps polling.
- * @throws Whatever the repository throws, including when a stored source size is too large to
- *   represent exactly in JavaScript. The router logs it and answers 503.
- */
-export async function __ClaimArtifactPreprocessJob(repository: ArtifactPreprocessRepository): Promise<ArtifactPreprocessorJobClaim | null>
-{
-	const result = await repository.claimNextAtomically();
-	if (result.status === "none") return null;
-	const claim = result.claim;
-	return {
-		lease: { jobId: claim.jobId, attempt: claim.attempt, claimFence: claim.claimFence, expiresAt: claim.claimExpiresAt.toISOString() },
-		sourceMediaType: "application/pdf",
-		sourceByteLength: claim.sourceByteLength,
-	};
-}
 
 /**
  * Reserve write permission for text the server has already received and hashed.
@@ -50,9 +22,15 @@ export async function __ClaimArtifactPreprocessJob(repository: ArtifactPreproces
  */
 export async function __IssueArtifactPreprocessOutputLease(repository: ArtifactPreprocessRepository, command: ArtifactPreprocessOutputLeaseRequest): Promise<ArtifactPreprocessOutputLeaseProjection | "completed" | null>
 {
-	if (!_IsValidOutputLeaseCommand(command)) return null;
+	if (!_IsValidOutputLeaseCommand(command))
+	{
+		return null;
+	}
 	const result = await repository.issueOutputLeaseAtomically(command);
-	if (result.status === "completed") return "completed";
+	if (result.status === "completed")
+	{
+		return "completed";
+	}
 	return result.status === "issued" ? result.lease : null;
 }
 

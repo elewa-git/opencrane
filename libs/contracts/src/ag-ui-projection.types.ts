@@ -14,7 +14,7 @@ import type { SafeToolTechnicalDetails } from "./conversation-elicitation.types"
  * it does not understand.
  * @see https://docs.ag-ui.com
  */
-export const AG_UI_PROJECTION_VERSION = "opencrane.ag-ui.v1";
+export const AG_UI_PROJECTION_VERSION = "opencrane.ag-ui.v2";
 
 /**
  * Version tag for the A2UI payload OpenCrane carries inside an AG-UI CUSTOM event.
@@ -44,6 +44,80 @@ export const AG_UI_TOOL_FAILURE_EVENT = "opencrane.tool_failed";
 
 /** Custom event name for a run whose provider outcome is unknown and needs a manual recovery step. The run can still be cancelled. */
 export const AG_UI_TOOL_RECOVERY_REQUIRED_EVENT = "opencrane.tool_recovery_required";
+
+/** Versioned custom event name for the server-projected run wait collection. */
+export const AG_UI_RUN_WAIT_STATE_EVENT = "opencrane.run_wait.v1";
+
+/**
+ * Display-safe reasons a conversation run has not completed yet.
+ *
+ * The server projection sends these values to the browser. They describe current state but grant no
+ * authority to answer, approve, retry, or recover anything. Unknown values invalidate the envelope.
+ */
+export enum AgUiRunWaitReasons
+{
+	/** An outside action is still being prepared, executed, or returned; no person is necessarily needed. */
+	ExternalAction = "external_action",
+	/** A server-selected participant must answer ordinary or reviewed A2UI input. */
+	ParticipantInput = "participant_input",
+	/** Server preparation proved that a tool invocation needs an approval decision. */
+	Approval = "approval",
+	/** The execution user must grant one-use access to personal memory. */
+	PersonalMemoryPermission = "personal_memory_permission",
+	/** A provider outcome is unclear and requires a manual recovery decision. */
+	RecoveryRequired = "recovery_required",
+}
+
+/**
+ * Authority group that owns one subset of the projected wait collection.
+ *
+ * The browser applies replacement operations within one source so a reconnecting participant
+ * snapshot cannot erase active runtime work or manual recovery evidence.
+ */
+export enum AgUiRunWaitSources
+{
+	/** Runtime-proposed outside actions after server admission. */
+	Runtime = "runtime",
+	/** Server-owned participant, approval, and personal-memory requests. */
+	Participant = "participant",
+	/** Server-owned manual recovery requirements. */
+	Recovery = "recovery",
+}
+
+/** How one projected envelope changes the wait collection owned by its source. */
+export enum AgUiRunWaitOperations
+{
+	/** Add or update the listed waits without changing siblings. */
+	Add = "add",
+	/** Remove the listed wait identifiers without changing siblings. */
+	Remove = "remove",
+	/** Replace every current wait from this source, including with an empty list. */
+	Replace = "replace",
+}
+
+/** One display-safe wait in the source-owned collection. */
+export interface AgUiRunWait
+{
+	/** Stable identifier used to update or remove this wait without exposing request content. */
+	readonly id: string;
+	/** Server-projected category the browser may display. */
+	readonly reason: AgUiRunWaitReasons;
+}
+
+/** Versioned mutation of one authority-owned subset of a run's wait collection. */
+export interface AgUiRunWaitStateEnvelope
+{
+	/** Exact custom event version. */
+	readonly version: typeof AG_UI_RUN_WAIT_STATE_EVENT;
+	/** Active run whose wait collection changes. */
+	readonly runId: string;
+	/** Authority group that owns the listed waits. */
+	readonly source: AgUiRunWaitSources;
+	/** Collection operation the browser applies. */
+	readonly operation: AgUiRunWaitOperations;
+	/** Bounded waits containing fixed categories and opaque identifiers only. */
+	readonly waits: readonly AgUiRunWait[];
+}
 
 /**
  * The display states the server assigns to one A2UI surface in the browser.

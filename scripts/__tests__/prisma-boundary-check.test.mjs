@@ -1,18 +1,21 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { findingDelta, inspectPrismaBoundary, prepareBasePolicyForComparison, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy, validateRawProcedureDeclarations } from "../prisma-boundary/core.mjs";
+import { rawPrismaMethodMatches } from "../prisma-boundary/prisma-bindings.mjs";
+import { inspectRawProcedureCall } from "../prisma-boundary/raw-procedure-inspection.mjs";
 
 /** Fixture directory for deterministic ownership examples. */
 const _FIXTURES = fileURLToPath(new URL("./fixtures/prisma-boundary/", import.meta.url));
 /** Repository root used to verify reviewer pipeline integration. */
 const _ROOT = fileURLToPath(new URL("../../", import.meta.url));
-/** Prisma boundary checker copied into temporary Git repositories for CLI regression coverage. */
+/** Prisma boundary checker entrypoint used with temporary Git repositories for CLI coverage. */
 const _CHECKER = fileURLToPath(new URL("../prisma-boundary-check.mjs", import.meta.url));
 /** Authoritative owner contracts used by checker fixtures. */
 const _OWNERS = {
@@ -21,7 +24,7 @@ const _OWNERS = {
 	compositions: [],
 };
 /** The sole policy-owned raw database procedure used by the workflow engine adapter. */
-const _RAW_PROCEDURE_CALLS = [{
+const _RAW_PROCEDURE_CALL = {
 	path: "libs/widgets/workflow-task-admission.ts",
 	adapter: "WorkflowTaskAdmission",
 	contract: "IWorkflowTaskAdmission",
@@ -29,7 +32,21 @@ const _RAW_PROCEDURE_CALLS = [{
 	method: "$queryRaw",
 	sqlTemplate: "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)",
 	reason: "The test models the reviewed task-admission procedure boundary.",
-}];
+};
+
+/** Reads the checked Prisma-boundary policy used by the live repository. */
+function _LivePolicy()
+{
+	return JSON.parse(readFileSync(join(_ROOT, "docs/agents/prisma-boundary-policy.json"), "utf8"));
+}
+
+/** Returns structural evidence only when one raw-method match uses the declared method. */
+function _RawProcedureEvidence(source, procedure = _RAW_PROCEDURE_CALL)
+{
+	const matches = rawPrismaMethodMatches(source);
+	if (matches.length !== 1 || matches[0].method !== procedure.method) return undefined;
+	return inspectRawProcedureCall(source, matches[0], procedure, "Prisma");
+}
 
 /** Reads one TypeScript fixture stored as inert text. */
 function _Fixture(name)
@@ -42,6 +59,35 @@ test("allows imported repository and unit-of-work contract owners", function _Al
 	assert.doesNotThrow(function _ValidPolicy() { validatePolicy({ version: 1, owners: _OWNERS, rawProcedureCalls: [], exemptions: [] }); });
 	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-widget-repository.ts", _Fixture("positive-repository"), ["widget"], _OWNERS), []);
 	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work"), ["widget"], _OWNERS), []);
+});
+
+test("recognizes only the exact central authorization transaction helper import", function _AuthorizationTransactionHelper()
+{
+	const exactHelper = `
+import type { Prisma, PrismaClient } from "@prisma/client";
+import { ___RunSerializableAuthorizationTransaction } from "@opencrane/backend/server/iam/authorization";
+import { PrismaWidgetRepository } from "./prisma-widget-repository.js";
+import type { WidgetUnitOfWork } from "./widget.types.js";
+
+export class PrismaWidgetUnitOfWork implements WidgetUnitOfWork
+{
+	private readonly prisma: PrismaClient;
+	constructor(prisma: PrismaClient) { this.prisma = prisma; }
+	run(): Promise<unknown>
+	{
+		return ___RunSerializableAuthorizationTransaction(this.prisma, async function _Run(transaction, _authorization)
+		{
+			return new PrismaWidgetRepository(transaction);
+		});
+	}
+}
+`;
+	const lookalikeHelper = exactHelper.replace('from "@opencrane/backend/server/iam/authorization"', 'from "@lookalike/authorization"');
+	const exactFindings = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", exactHelper, ["widget"], _OWNERS);
+	const lookalikeFindings = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", lookalikeHelper, ["widget"], _OWNERS);
+
+	assert.equal(exactFindings.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), false);
+	assert.equal(lookalikeFindings.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
 });
 
 test("treats an older base policy as having no approved raw procedures", function _AllowsOlderBasePolicy()
@@ -59,11 +105,8 @@ test("normalizes only a historical policy when the diff CLI compares schema revi
 	{
 		return execFileSync("git", arguments_, { cwd: repository, encoding: "utf8" }).trim();
 	}
-	mkdirSync(join(repository, "scripts/prisma-boundary"), { recursive: true });
 	mkdirSync(join(repository, "docs/agents"), { recursive: true });
 	mkdirSync(join(repository, "apps/opencrane/prisma/schema"), { recursive: true });
-	cpSync(_CHECKER, join(repository, "scripts/prisma-boundary-check.mjs"));
-	cpSync(fileURLToPath(new URL("../prisma-boundary", import.meta.url)), join(repository, "scripts/prisma-boundary"), { recursive: true });
 	writeFileSync(join(repository, "apps/opencrane/prisma/schema/core.prisma"), "model Widget {\n id String @id\n}\n");
 	const olderPolicy = { version: 1, owners: { repositories: [], unitsOfWork: [], compositions: [] }, exemptions: [] };
 	writeFileSync(join(repository, "docs/agents/prisma-boundary-policy.json"), JSON.stringify(olderPolicy));
@@ -75,10 +118,65 @@ test("normalizes only a historical policy when the diff CLI compares schema revi
 	_Git("commit", "-m", "older policy");
 	const base = _Git("rev-parse", "HEAD");
 	writeFileSync(join(repository, "docs/agents/prisma-boundary-policy.json"), JSON.stringify({ ...olderPolicy, rawProcedureCalls: [] }));
-	const output = execFileSync(process.execPath, ["scripts/prisma-boundary-check.mjs", "--diff", base], { cwd: repository, encoding: "utf8" });
+	const output = execFileSync(process.execPath, [_CHECKER, "--diff", base], { cwd: repository, encoding: "utf8" });
 	assert.match(output, /0 error\(s\)/u);
 	writeFileSync(join(repository, "docs/agents/prisma-boundary-policy.json"), JSON.stringify(olderPolicy));
-	assert.throws(function _RejectCurrentPolicy() { execFileSync(process.execPath, ["scripts/prisma-boundary-check.mjs", "--all"], { cwd: repository, stdio: "pipe" }); }, /Command failed/u);
+	assert.throws(function _RejectCurrentPolicy() { execFileSync(process.execPath, [_CHECKER, "--all"], { cwd: repository, stdio: "pipe" }); }, /Command failed/u);
+});
+
+test("checks unchanged sources when policy permissions are removed", function _RejectsRemovedPolicyPermissions(context)
+{
+	const repository = mkdtempSync(join(tmpdir(), "opencrane-prisma-policy-removal-"));
+	context.after(function _Cleanup() { rmSync(repository, { recursive: true, force: true }); });
+	function _Git(...arguments_)
+	{
+		return execFileSync("git", arguments_, { cwd: repository, encoding: "utf8" }).trim();
+	}
+	const rawProcedure = _LivePolicy().rawProcedureCalls[0];
+	const historicalRawProcedure = { ...rawProcedure };
+	delete historicalRawProcedure.sourceSha256;
+	const basePolicy = {
+		version: 1,
+		owners: {
+			repositories: [_OWNERS.repositories[0]],
+			unitsOfWork: [],
+			compositions: ["libs/widgets/composition.ts"],
+		},
+		rawProcedureCalls: [historicalRawProcedure],
+		exemptions: [{ path: "libs/widgets/exempt-service.ts", operations: ["delegate"], owner: "workflow-team", reason: "The fixture proves removal inspects unchanged exempted source.", expiresOn: "2099-12-31" }],
+	};
+	mkdirSync(join(repository, "docs/agents"), { recursive: true });
+	mkdirSync(join(repository, "apps/opencrane/prisma/schema"), { recursive: true });
+	mkdirSync(join(repository, "libs/widgets"), { recursive: true });
+	mkdirSync(join(repository, rawProcedure.path, ".."), { recursive: true });
+	writeFileSync(join(repository, "apps/opencrane/prisma/schema/core.prisma"), "model Widget {\n id String @id\n}\n");
+	writeFileSync(join(repository, "libs/widgets/prisma-widget-repository.ts"), _Fixture("positive-repository"));
+	writeFileSync(join(repository, "libs/widgets/composition.ts"), 'import { PrismaClient } from "@prisma/client";\nexport const prisma = new PrismaClient();\n');
+	writeFileSync(join(repository, "libs/widgets/exempt-service.ts"), "export function loadWidget() { return prisma.widget.findFirst({}); }\n");
+	writeFileSync(join(repository, rawProcedure.path), readFileSync(join(_ROOT, rawProcedure.path), "utf8"));
+	writeFileSync(join(repository, "docs/agents/prisma-boundary-policy.json"), JSON.stringify(basePolicy));
+	_Git("init", "-q");
+	_Git("config", "user.name", "OpenCrane test");
+	_Git("config", "user.email", "test@opencrane.invalid");
+	_Git("config", "commit.gpgSign", "false");
+	_Git("add", ".");
+	_Git("commit", "-m", "policy-owned sources");
+	const base = _Git("rev-parse", "HEAD");
+	writeFileSync(join(repository, "docs/agents/prisma-boundary-policy.json"), JSON.stringify({ version: 1, owners: { repositories: [], unitsOfWork: [], compositions: [] }, rawProcedureCalls: [], exemptions: [] }));
+	let output = "";
+	try
+	{
+		execFileSync(process.execPath, [_CHECKER, "--diff", base], { cwd: repository, encoding: "utf8", stdio: "pipe" });
+	}
+	catch (cause)
+	{
+		output = `${cause.stdout ?? ""}\n${cause.stderr ?? ""}`;
+	}
+	assert.match(output, /prisma-widget-repository\.ts.*PRISMA-IMPORT-OWNER/su);
+	assert.match(output, /composition\.ts.*PRISMA-IMPORT-OWNER/su);
+	assert.match(output, /exempt-service\.ts.*PRISMA-DELEGATE-OWNER/su);
+	assert.match(output, /workflow-task-admission\.ts.*PRISMA-RAW-QUERY-FORBIDDEN/su);
+	assert.match(output, /4 production TypeScript file\(s\) checked/u);
 });
 
 test("allows exact live contracts without empty repository aliases", function _AllowsLiveContracts()
@@ -132,27 +230,55 @@ test("forbids every raw Prisma method inside a policy-authorized repository", fu
 
 test("allows only the fixed typed Absurd task-admission call", function _AllowsRawTaskAdmission()
 {
-	const source = "import { Prisma } from \"@prisma/client\";\nimport type { IWorkflowTaskAdmission } from \"./workflow-task-admission.types\";\nexport class WorkflowTaskAdmission implements IWorkflowTaskAdmission { async admit(client: Prisma.TransactionClient) { return client.$queryRaw(Prisma.sql`SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)`); } }\n";
-	const alteredTemplate = source.replace("attempt, created", "attempt, created, ignored");
-	assert.deepEqual(inspectPrismaBoundary("libs/widgets/workflow-task-admission.ts", source, ["widget"], _OWNERS, new Set(), _RAW_PROCEDURE_CALLS), []);
-	assert.equal(inspectPrismaBoundary("libs/widgets/workflow-task-admission.ts", alteredTemplate, ["widget"], _OWNERS, new Set(), _RAW_PROCEDURE_CALLS).some(function _Raw(finding) { return finding.rule === "PRISMA-RAW-QUERY-FORBIDDEN"; }), true);
-	assert.deepEqual(validateRawProcedureDeclarations("libs/widgets/workflow-task-admission.ts", source, _RAW_PROCEDURE_CALLS), []);
-	assert.equal(validateRawProcedureDeclarations("libs/widgets/workflow-task-admission.ts", source.replace("client.$queryRaw", "client.$executeRaw"), _RAW_PROCEDURE_CALLS).some(function _Policy(finding) { return finding.rule === "PRISMA-POLICY-RAW-PROCEDURE"; }), true);
+	const direct = "import type { Prisma } from \"@prisma/client\";\nimport type { IWorkflowTaskAdmission } from \"./workflow-task-admission.types\";\nimport { _RequireWorkflowTransactionClient } from \"./workflow-transaction-client\";\nexport class WorkflowTaskAdmission implements IWorkflowTaskAdmission { async admit(transactionClient: unknown) { _RequireWorkflowTransactionClient(transactionClient); const client = transactionClient as Prisma.TransactionClient; return client.$queryRaw<readonly unknown[]>`SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)`; } }\n";
+	const mutations = [
+		direct.replace("attempt, created", "attempt, created, ignored"),
+		direct.replace("<readonly unknown[]>", ""),
+		direct.replace("$queryRaw<readonly unknown[]>`", "$queryRaw<readonly unknown[]>(sql`"),
+		direct.replace("$queryRaw", "$queryRawUnsafe"),
+		direct.replace("`; } }", "`, extra; } }"),
+		direct.replace("client.$queryRaw", "this.rootClient.$queryRaw"),
+		direct.replace("client.$queryRaw", "otherClient.$queryRaw"),
+		direct.replace("_RequireWorkflowTransactionClient(transactionClient);", ""),
+		direct.replace("const client = transactionClient as", "const client = rootClient as"),
+		direct.replace("_RequireWorkflowTransactionClient(transactionClient);", "if (false) { _RequireWorkflowTransactionClient(transactionClient); }"),
+		direct.replace("return client.$queryRaw", "{ const client = this.rootClient; return client.$queryRaw"),
+		direct.replace("async admit(", "async decoy(client: Prisma.TransactionClient) { return client; } async admit(").replace("const client = transactionClient as", "const client = this.rootClient as"),
+		direct.replace("return client.$queryRaw", "Reflect.set(transactionClient, \"$\" + \"queryRaw\", Reflect.get(this.rootClient, \"$\" + \"queryRaw\")); return client.$queryRaw"),
+		direct.replace("return client.$queryRaw", "Reflect.set(arguments[0], \"$\" + \"queryRaw\", Reflect.get(this.rootClient, \"$\" + \"queryRaw\")); return client.$queryRaw"),
+		direct.replace("return client.$queryRaw", "Reflect.set(transactio\\u006eClient, \"$\" + \"queryRaw\", Reflect.get(this.rootClient, \"$\" + \"queryRaw\")); return client.$queryRaw"),
+		direct.replace("return client.$queryRaw", "Reflect.set(eval(\"transaction\" + \"Client\"), \"$\" + \"queryRaw\", Reflect.get(this.rootClient, \"$\" + \"queryRaw\")); return client.$queryRaw"),
+		direct.replace("return client.$queryRaw", "const rootTag = Reflect.get(this.rootClient, \"$\" + \"queryRaw\").bind(this.rootClient); await rootTag`SELECT dangerous_root_write()`; return client.$queryRaw"),
+		direct.replace("return client.$queryRaw", "await Reflect.apply(Reflect.get(this.rootClient, \"$\" + \"queryRawUnsafe\"), this.rootClient, [\"SELECT dangerous_root_write()\"]); return client.$queryRaw"),
+		direct.replace("transactionClient: unknown)", "transactionClient: unknown, alias = transactionClient)"),
+	];
+	assert.equal(_RawProcedureEvidence(direct), _RAW_PROCEDURE_CALL.sqlTemplate);
+	for (const mutation of mutations)
+	{
+		assert.notEqual(_RawProcedureEvidence(mutation), _RAW_PROCEDURE_CALL.sqlTemplate);
+	}
+	const duplicate = direct.replace("return client.$queryRaw", "client.$queryRaw<readonly unknown[]>`SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)`; return client.$queryRaw");
+	assert.equal(_RawProcedureEvidence(duplicate), undefined);
 });
 
-test("reads the former task-admission declaration only when a diff loads its base policy", function _AllowsLegacyRawProcedureInBase()
+test("accepts only checker-pinned live raw procedure sources", function _AllowsPinnedRawProcedureSources()
 {
-	const legacy = {
-		path: "libs/widgets/prisma-db-procedure-gateway.ts",
-		adapter: "PrismaDbProcedureGateway",
-		contract: "AbsurdTaskAdmissionProcedure",
-		contractImportPath: "./absurd-transaction-spawner.types",
-		method: "$queryRaw",
-		sqlTemplate: "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${options}::jsonb)",
-		reason: "The old policy proves that the diff reads the previous exact database boundary.",
-	};
-	assert.throws(function _CurrentPolicyRejectsLegacy() { validatePolicy({ version: 1, owners: _OWNERS, rawProcedureCalls: [legacy], exemptions: [] }); }, /invalid raw procedure call/u);
-	assert.doesNotThrow(function _BasePolicyAcceptsLegacy() { validatePolicy({ version: 1, owners: _OWNERS, rawProcedureCalls: [legacy], exemptions: [] }, true); });
+	const policy = _LivePolicy();
+	assert.doesNotThrow(function _ValidLivePolicy() { validatePolicy(policy); });
+	for (const procedure of policy.rawProcedureCalls)
+	{
+		const source = readFileSync(join(_ROOT, procedure.path), "utf8");
+		assert.deepEqual(inspectPrismaBoundary(procedure.path, source, [], policy.owners, new Set(), policy.rawProcedureCalls), []);
+		assert.deepEqual(validateRawProcedureDeclarations(procedure.path, source, policy.rawProcedureCalls), []);
+	}
+
+	const procedure = policy.rawProcedureCalls[0];
+	const source = `${readFileSync(join(_ROOT, procedure.path), "utf8")}\n`;
+	const coordinatedPin = createHash("sha256").update(source.replace(/\r\n?/gu, "\n")).digest("hex");
+	const changedProcedures = [{ ...procedure, sourceSha256: coordinatedPin }, ...policy.rawProcedureCalls.slice(1)];
+	assert.throws(function _RejectsCoordinatedPolicyPin() { validatePolicy({ ...policy, rawProcedureCalls: changedProcedures }); }, /invalid raw procedure call/u);
+	assert.equal(inspectPrismaBoundary(procedure.path, source, [], policy.owners, new Set(), changedProcedures).some(function _Raw(finding) { return finding.rule === "PRISMA-RAW-QUERY-FORBIDDEN"; }), true);
+	assert.equal(validateRawProcedureDeclarations(procedure.path, source, changedProcedures).some(function _Policy(finding) { return finding.rule === "PRISMA-POLICY-RAW-PROCEDURE"; }), true);
 });
 
 test("requires transaction-scoped repository construction to match the owning policy entry", function _RejectsUndeclaredConstruction()
@@ -172,6 +298,23 @@ test("requires transaction-scoped repository construction to match the owning po
 	assert.equal(nestedRootClient.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
 	assert.equal(aliasedRootClient.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
 	assert.equal(namedRootConfig.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
+});
+
+test("treats a transaction-bound authority like a repository construction", function _AcceptsAuthorityConstruction()
+{
+	const source = _Fixture("positive-unit-of-work")
+		.replaceAll("PrismaWidgetRepository", "PrismaWidgetAuthority")
+		.replaceAll("WidgetRepository", "WidgetAuthority");
+	const owners = {
+		..._OWNERS,
+		unitsOfWork: [{
+			..._OWNERS.unitsOfWork[0],
+			constructs: [{ adapter: "PrismaWidgetAuthority", importPath: "./prisma-widget-repository.js" }],
+		}],
+	};
+	assert.doesNotThrow(function _ValidPolicy() { validatePolicy({ version: 1, owners, rawProcedureCalls: [], exemptions: [] }); });
+	const findings = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", source, ["widget"], owners);
+	assert.equal(findings.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION" || finding.rule === "PRISMA-POLICY-CONSTRUCTION"; }), false);
 });
 
 test("fails closed when live owner declarations drift from policy", function _RejectsStaleOwnerPolicy()
@@ -260,7 +403,9 @@ test("fails closed on broad, ownerless, stale, or malformed exemptions", functio
 	assert.throws(function _InvalidPolicy() { validatePolicy({ version: 2, owners: { repositories: [], unitsOfWork: [], compositions: [] }, rawProcedureCalls: [], exemptions: [] }); }, /invalid Prisma-boundary policy schema/u);
 	assert.throws(function _BroadOwner() { validatePolicy({ version: 1, owners: { repositories: [{ path: "libs/*/repository.ts", adapter: "PrismaWidgetRepository", contract: "WidgetRepository", contractImportPath: "./widget.types.js", constructs: [] }], unitsOfWork: [], compositions: [] }, rawProcedureCalls: [], exemptions: [] }); }, /invalid Prisma-boundary owner/u);
 	assert.throws(function _WrongAdapterKind() { validatePolicy({ version: 1, owners: { repositories: [{ path: "libs/widget.ts", adapter: "PrismaWidgetService", contract: "WidgetPort", contractImportPath: "./widget.types.js", constructs: [] }], unitsOfWork: [], compositions: [] }, rawProcedureCalls: [], exemptions: [] }); }, /invalid Prisma-boundary owner/u);
-	assert.throws(function _WrongRawProcedure() { validatePolicy({ version: 1, owners: _OWNERS, rawProcedureCalls: [{ ..._RAW_PROCEDURE_CALLS[0], method: "$queryRawUnsafe" }], exemptions: [] }); }, /invalid raw procedure call/u);
+	const livePolicy = _LivePolicy();
+	assert.throws(function _WrongRawProcedureMethod() { validatePolicy({ ...livePolicy, rawProcedureCalls: [{ ...livePolicy.rawProcedureCalls[0], method: "$queryRawUnsafe" }, ...livePolicy.rawProcedureCalls.slice(1)] }); }, /invalid raw procedure call/u);
+	assert.throws(function _WrongRawProcedureDigest() { validatePolicy({ ...livePolicy, rawProcedureCalls: [{ ...livePolicy.rawProcedureCalls[0], sourceSha256: "0".repeat(64) }, ...livePolicy.rawProcedureCalls.slice(1)] }); }, /invalid raw procedure call/u);
 });
 
 test("keeps review, style, package, and CI surfaces on the boundary check", function _VerifiesPipeline()

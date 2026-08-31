@@ -1,6 +1,11 @@
 import type { JsonValue } from "@opencrane/util";
 
 import { TOOL_INVOCATION_PREPARATION_POLICY, type ExternalActionClaimKinds, type ExternalActionRecoveryModes, type ToolInvocationStates } from "./tool-invocation-lifecycle.types";
+import type { McpTaskToolInvocationAuthorizationEvidence, ToolInvocationAuthorizationEvidence } from "./tool-invocation-authorization-evidence.types";
+
+export type { McpTaskToolInvocationAuthorizationEvidence, ToolInvocationAuthorizationCoordinate, ToolInvocationAuthorizationEvidence } from "./tool-invocation-authorization-evidence.types";
+export { ToolInvocationRunRecoveryEnterResults } from "./tool-invocation-recovery.types";
+export type { ToolInvocationRecoveryEvent, ToolInvocationRecoveryEventSink, ToolInvocationRunRecoveryAuthority, ToolInvocationRunRecoveryCommand, ToolInvocationRunRecoveryEnterResult } from "./tool-invocation-recovery.types";
 
 /** Retry limits for the preparation phase, which runs before any provider is called. */
 export interface ToolInvocationPreparationPolicy
@@ -36,9 +41,11 @@ export interface ToolInvocationIntent
 	/** Agent service executed by the attempt. */
 	readonly agentServiceId: string;
 	/** Immutable agent revision executed by the attempt. */
-	readonly agentRevisionId: string;
+	readonly agentRevisionId: string | null;
 	/** Trusted execution subject from the immutable snapshot. */
 	readonly subjectId: string;
+	/** Current central authorization evidence bound to this run, attempt, revision, and arguments. */
+	readonly authorizationEvidence: ToolInvocationAuthorizationEvidence;
 	/** Admitted stream, command, and candidate identity. */
 	readonly requestIdentity: ToolInvocationRequestIdentity;
 	/** Immutable tool revision admitted from the compiled input. */
@@ -67,13 +74,17 @@ export interface ToolInvocationRecord
 	/** Silo in which the invocation authority is valid. */
 	readonly siloId: string;
 	/** Immutable agent revision that selected the tool. */
-	readonly agentRevisionId: string;
+	readonly agentRevisionId: string | null;
 	/** Trusted execution subject on whose behalf the action runs. */
 	readonly subjectId: string;
+	/** Central effect evidence shaped for either the owning AgentRun or caller-owned MCP task. */
+	readonly authorizationEvidence: ToolInvocationAuthorizationEvidence | McpTaskToolInvocationAuthorizationEvidence | null;
 	/** Run owning the invocation. */
-	readonly runId: string;
+	readonly runId: string | null;
 	/** Attempt owning the invocation. */
-	readonly attempt: number;
+	readonly attempt: number | null;
+	/** Caller-owned MCP task when this invocation does not belong to an AgentRun. */
+	readonly mcpTaskId: string | null;
 	/** Candidate id accepted with the invocation. */
 	readonly candidateId: string;
 	/** Id the runtime gave this tool call; repeat calls with the same id must not run twice. */
@@ -197,6 +208,17 @@ export type ToolResultDeliveryPayload =
 	| { readonly toolInvocationId: string; readonly outcome: "succeeded"; readonly result: JsonValue }
 	| { readonly toolInvocationId: string; readonly outcome: "failed"; readonly failureCode: string };
 
+/** Results of saving one fenced provider completion. */
+export enum ToolInvocationCompletionOutcomes
+{
+	/** This worker stored the result and its delivery. */
+	Completed = "completed",
+	/** Another durable result already won the fence. */
+	Winner = "winner",
+	/** The invocation no longer exists. */
+	Missing = "missing",
+}
+
 /**
  * What happened when a worker tried to record a finished provider call.
  *
@@ -206,9 +228,9 @@ export type ToolResultDeliveryPayload =
  * call the provider again. `missing` means the invocation row is gone.
  */
 export type ToolInvocationCompletionResult =
-	| { readonly outcome: "completed"; readonly invocation: ToolInvocationRecord; readonly delivery: ToolResultDeliveryPayload }
-	| { readonly outcome: "winner"; readonly invocation: ToolInvocationRecord }
-	| { readonly outcome: "missing" };
+	| { readonly outcome: ToolInvocationCompletionOutcomes.Completed; readonly invocation: ToolInvocationRecord; readonly delivery: ToolResultDeliveryPayload }
+	| { readonly outcome: ToolInvocationCompletionOutcomes.Winner; readonly invocation: ToolInvocationRecord }
+	| { readonly outcome: ToolInvocationCompletionOutcomes.Missing };
 
 /**
  * Whether this transaction actually changed the invocation, and the row as it now stands.
@@ -256,111 +278,6 @@ export interface ToolInvocationLifecycleEventSink
 	 *   ./prisma-tool-invocation-unit-of-work.ts throws so the transaction rolls back.
 	 */
 	appendInTransaction(transaction: unknown, event: ToolInvocationLifecycleEvent): Promise<boolean>;
-}
-
-/** Run event written when automatic recovery gives up and a person must decide what happened. */
-export interface ToolInvocationRecoveryEvent
-{
-	/** Run entering its explicit recovery-required state. */
-	readonly runId: string;
-	/** Attempt fence visible to the cancellation API. */
-	readonly expectedAttempt: number;
-	/** Public runtime tool-call coordinate. */
-	readonly toolInvocationId: string;
-	/** Provider-free preparation attempts consumed before dispatch. */
-	readonly preparationRetryCount: number;
-	/** Fixed provider-free preparation attempt limit. */
-	readonly preparationRetryLimit: typeof TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit;
-	/** Fixed safe classification, never a provider message or body. */
-	readonly providerOutcome: "unknown_after_dispatch";
-}
-
-/**
- * Appends recovery events using the caller's transaction, so this package does not have to depend on the runs package.
- * @see ToolInvocationRunRecoveryAuthority
- */
-export interface ToolInvocationRecoveryEventSink
-{
-	/**
-	 * Adds one manual-recovery entry using the caller's open transaction.
-	 * @param transaction - The Prisma transaction moving the invocation into `RecoveryRequired`.
-	 * @param event - Fixed, non-secret summary; never a provider message or body.
-	 * @returns True when the entry was written. False means the caller must abort the transition, so
-	 *   an invocation can never reach `RecoveryRequired` invisibly.
-	 */
-	appendInTransaction(transaction: unknown, event: ToolInvocationRecoveryEvent): Promise<boolean>;
-}
-
-/** Run and attempt whose state may change, and only in the same transaction as an invocation entering recovery. */
-export interface ToolInvocationRunRecoveryCommand
-{
-	/** Run whose automatic provider work is changing its recovery state. */
-	readonly runId: string;
-	/** Current attempt protected by the run-state compare-and-set. */
-	readonly attempt: number;
-}
-
-/**
- * What the runs package answers when this package asks to move a run into manual recovery.
- *
- * The caller must react differently to each one, and ./prisma-tool-invocation-unit-of-work.ts
- * (`_enterRecoveryRequired`) does:
- * - `Entered` and `AlreadyRecoveryRequired` -> write the recovery entry and commit. The second is
- *   a replay after a retried transaction, not an error.
- * - `Cancelling` -> commit the invocation change but write NO recovery entry. The run is already
- *   being torn down, and a recovery entry would ask a person to act on work that is going away.
- *   The cleared provider claim still commits so cancellation can finish without repeating the
- *   provider call.
- * - `Conflict` -> throw. The run id, attempt, or state does not match, which means we are looking
- *   at the wrong attempt; committing anyway would strand a run in the wrong state.
- *
- * These are string values on purpose because they cross a package boundary.
- * Called by: libs/backend/agents/execution/runs/main/src/prisma-tool-invocation-run-recovery-authority.ts
- * (returns them) and ./prisma-tool-invocation-unit-of-work.ts (branches on them).
- * @see {@link ToolInvocationRunRecoveryAuthority}
- */
-export enum ToolInvocationRunRecoveryEnterResults
-{
-	/** This transaction moved the exact run attempt into manual recovery. */
-	Entered = "entered",
-	/** The exact run attempt was already in the required manual-recovery state. */
-	AlreadyRecoveryRequired = "already_recovery_required",
-	/** The exact run attempt is cancelling and must remain under cancellation authority. */
-	Cancelling = "cancelling",
-	/** The run identity, attempt, or state does not permit this recovery transition. */
-	Conflict = "conflict",
-}
-
-/** Exact runs-owned decision when an invocation requires manual recovery. */
-export type ToolInvocationRunRecoveryEnterResult = ToolInvocationRunRecoveryEnterResults;
-
-/** Run-state operations the runs package provides, called inside this package's invocation transaction. */
-export interface ToolInvocationRunRecoveryAuthority
-{
-	/**
-	 * Moves one run attempt into its manual-recovery state.
-	 * @param transaction - The Prisma transaction already changing the invocation. Typed `unknown`
-	 *   so this package holds no Prisma dependency from the runs side.
-	 * @param command - The run id and the attempt the caller believes is current; the runs package
-	 *   checks the attempt itself and answers `Conflict` if it moved on.
-	 * @returns Which of the four {@link ToolInvocationRunRecoveryEnterResults} happened. The caller
-	 *   must branch on all four — see that enum for what each one obliges it to do.
-	 */
-	enterRecoveryRequiredInTransaction(transaction: unknown, command: ToolInvocationRunRecoveryCommand): Promise<ToolInvocationRunRecoveryEnterResult>;
-	/**
-	 * Puts a recovered run attempt back to running.
-	 *
-	 * Only legal once no invocation on that attempt is still in `RecoveryRequired` — resuming while
-	 * one is unresolved would let the worker pick up an action whose real-world outcome is still
-	 * unknown. The caller is responsible for that check; this port does not make it.
-	 * @param transaction - The Prisma transaction performing the resume.
-	 * @param command - Run id and the attempt expected to still be current.
-	 * @returns True when the run moved back to running. False when the attempt or state no longer
-	 *   matches, which the caller must treat as "someone else changed this run".
-	 * Called by: no caller in this repo yet — only the runs-side implementation and its tests
-	 * (libs/backend/agents/execution/runs/main/src/prisma-tool-invocation-run-recovery-authority.ts).
-	 */
-	resumeRunningInTransaction(transaction: unknown, command: ToolInvocationRunRecoveryCommand): Promise<boolean>;
 }
 
 /** Public UnitOfWork operations for one ToolInvocation-owned external-action lifecycle. */
@@ -466,7 +383,7 @@ export interface ToolInvocationAdmissionUnitOfWork
  *
  * Called by: libs/backend/agents/execution/protocol/src/prisma-runtime-dispatch-authority.ts.
  * Implemented by: `__AdmitPreparingToolInvocationInTransaction` in
- * ./prisma-tool-invocation-repository.ts.
+ * ./tool-invocation-transaction.ts.
  * @param transaction - Prisma transaction accepting the runtime candidate, typed `unknown` to keep
  *   Prisma out of this contract.
  * @param intent - The frozen candidate facts to persist.

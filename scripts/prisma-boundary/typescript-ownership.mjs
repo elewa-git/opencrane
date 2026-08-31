@@ -48,11 +48,11 @@ export function authorizedOwner(owner, imports, allowedContracts, path)
 	});
 }
 
-/** Finds repository constructions and resolves their exact import source. */
+/** Finds transaction-scoped repository and authority constructions and resolves their import. */
 export function repositoryConstructions(source, classCandidates, imports)
 {
 	const constructions = [];
-	const pattern = /\bnew\s+([A-Za-z_$][\w$]*Repository)\s*\(/gu;
+	const pattern = /\bnew\s+([A-Za-z_$][\w$]*(?:Repository|Authority))\s*\(/gu;
 	for (const match of source.matchAll(pattern))
 	{
 		const owner = enclosingClass(classCandidates, match.index ?? 0);
@@ -87,10 +87,32 @@ export function isTransactionScopedConstruction(source, construction, imports)
 		const property = construction.argument.slice("this.".length);
 		return _TransactionClientProperties(source, construction.owner, imports).has(property);
 	}
-	return _TransactionCallbackBindings(source).some(function _OwnsBinding(binding)
+	if (_TransactionConstructorParameters(source, construction.owner, imports).has(construction.argument)) return true;
+	return _TransactionCallbackBindings(source, imports).some(function _OwnsBinding(binding)
 	{
 		return binding.name === construction.argument && binding.start <= construction.index && construction.index <= binding.end;
 	});
+}
+
+/** Finds constructor parameters whose imported type is exactly Prisma.TransactionClient. */
+function _TransactionConstructorParameters(source, owner, imports)
+{
+	const names = new Set();
+	if (owner === undefined) return names;
+	const types = _TransactionClientTypes(imports);
+	if (types.length === 0) return names;
+	const body = source.slice(owner.start, owner.end + 1);
+	const constructor = /\bconstructor\s*\(/u.exec(body);
+	if (constructor === null) return names;
+	const open = constructor.index + constructor[0].lastIndexOf("(");
+	const close = _MatchingDelimiter(body, open, "(", ")");
+	const transactionPattern = new RegExp(`^\\s*(?:readonly\\s+)?([A-Za-z_$][\\w$]*)\\s*:\\s*(?:${types.join("|")})\\b`, "u");
+	for (const parameter of _SplitTopLevel(body.slice(open + 1, close)))
+	{
+		const match = transactionPattern.exec(parameter);
+		if (match !== null) names.add(match[1]);
+	}
+	return names;
 }
 
 /** Returns whether a repository constructor accepts an imported Prisma TransactionClient. */
@@ -329,7 +351,7 @@ function _PrismaClientTypes(imports)
 }
 
 /** Finds the exact callback parameter and body for each direct Prisma transaction. */
-function _TransactionCallbackBindings(source)
+function _TransactionCallbackBindings(source, imports)
 {
 	const bindings = [];
 	const pattern = /\.\$transaction\s*\(\s*async\s+(?:function\s+[A-Za-z_$][\w$]*\s*)?\(\s*([A-Za-z_$][\w$]*)(?:\s*:[^,)]+)?\s*\)\s*(?::\s*[^={]+)?(?:=>\s*)?\{/gu;
@@ -337,6 +359,38 @@ function _TransactionCallbackBindings(source)
 	{
 		const open = (match.index ?? 0) + match[0].lastIndexOf("{");
 		bindings.push({ name: match[1], start: open, end: _MatchingBrace(source, open) });
+	}
+	bindings.push(..._SerializableAuthorizationTransactionCallbackBindings(source, imports));
+	return bindings;
+}
+
+/**
+ * Finds callbacks passed to the one reviewed central authorization transaction helper.
+ *
+ * Import resolution is exact so a local function or another package cannot gain transaction-client
+ * authority by copying the helper's name.
+ */
+function _SerializableAuthorizationTransactionCallbackBindings(source, imports)
+{
+	const bindings = [];
+	const helperNames = [...imports.entries()].filter(function _ExactHelper([, binding])
+	{
+		return binding.imported === "___RunSerializableAuthorizationTransaction"
+			&& binding.importPath === "@opencrane/backend/server/iam/authorization";
+	}).map(function _LocalName([local]) { return local; });
+	for (const helperName of helperNames)
+	{
+		const invocation = new RegExp(`\\b${_EscapeRegex(helperName)}\\s*\\(`, "gu");
+		for (const match of source.matchAll(invocation))
+		{
+			const openCall = (match.index ?? 0) + match[0].lastIndexOf("(");
+			const closeCall = _MatchingDelimiter(source, openCall, "(", ")");
+			const argumentsSource = source.slice(openCall + 1, closeCall);
+			const callback = /^\s*(?:this\.)?[A-Za-z_$][\w$]*\s*,\s*async\s+function\s+[A-Za-z_$][\w$]*\s*\(\s*([A-Za-z_$][\w$]*)\s*,[^)]*\)\s*(?::\s*[^={]+)?\{/u.exec(argumentsSource);
+			if (callback === null) continue;
+			const openBody = openCall + 1 + (callback.index ?? 0) + callback[0].lastIndexOf("{");
+			bindings.push({ name: callback[1], start: openBody, end: _MatchingBrace(source, openBody) });
+		}
 	}
 	return bindings;
 }

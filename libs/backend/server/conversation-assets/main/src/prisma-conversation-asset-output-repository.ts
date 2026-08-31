@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 
-import { ArtifactKind, ArtifactRevisionState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, ConversationLifecycle, ConversationTimelineEntryKind, WorkloadAssignmentState, type Prisma } from "@prisma/client";
+import { ArtifactKind, ArtifactRevisionState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, ConversationLifecycle, ConversationTimelineEntryKind, WarmRuntimeReservationState, WorkloadAssignmentState, type Prisma } from "@prisma/client";
 
 import type { ArtifactPromotionReceiptClaims } from "@opencrane/backend/artifacts/authorization";
 import { ConversationAssetScanLifecycleStates } from "@opencrane/backend/server/agents/artifacts";
+import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DecideConversationAssetBatch } from "@opencrane/models/conversation-assets";
 import { ConversationSystemEventTypes } from "@opencrane/models/conversations";
 import { ConversationAssetOutputDenialReasons, ConversationAssetOutputPublishOutcomes, ConversationAssetOutputReservationOutcomes, ConversationAssetOutputTargetStatuses, type ConversationAssetOutputRepository, type ConversationAssetOutputReservationResult, type ConversationAssetOutputRuntimeIdentity, type ConversationAssetOutputTarget, type ConversationAssetOutputPublishResult, type ReserveConversationAssetOutput } from "./conversation-asset-output.types";
+import { PrismaConversationAssetProductAuthorizationRepository } from "./conversation-asset-product-authorization";
 
 /** Persisted runtime-event value owned by the execution authority but referenced through its database contract. */
 const _MESSAGE_STARTED_EVENT_TYPE = "message.started";
@@ -16,9 +18,10 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 {
 	/** Transaction client that atomically owns the complete generated-output aggregate. */
 	private readonly transaction: Prisma.TransactionClient;
+	private readonly authorization: PrismaConversationAssetProductAuthorizationRepository;
 
 	/** Binds generated-output operations to an already-open transaction. */
-	constructor(transaction: Prisma.TransactionClient) { this.transaction = transaction; }
+	constructor(transaction: Prisma.TransactionClient) { this.transaction = transaction; this.authorization = new PrismaConversationAssetProductAuthorizationRepository(transaction); }
 
 	/** Atomically creates the ticket, generated artifact, exact write lease, and hidden asset row. */
 	async reserve(identity: ConversationAssetOutputRuntimeIdentity, command: ReserveConversationAssetOutput): Promise<ConversationAssetOutputReservationResult>
@@ -39,13 +42,17 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 		// 3. Apply the approved count, media, and 200 MiB total policy to this whole assistant message.
 		const messageAssets = await this.transaction.conversationAsset.findMany({ where: { conversationId: assignment.run.conversationId, runId: command.runId, runAttempt: command.runAttempt, runMessageId: command.messageId, provenance: ConversationAssetProvenance.AgentOutput }, select: { mediaType: true, byteLength: true } });
 		const batch = messageAssets.map(function _File(asset) { return { mediaType: asset.mediaType, byteLength: Number(asset.byteLength ?? 0n) }; });
-		if (!___DecideConversationAssetBatch([...batch, { mediaType: command.mediaType, byteLength: command.byteLength }]).accepted) return { outcome: ConversationAssetOutputReservationOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.InvalidRequest };
+		if (!___DecideConversationAssetBatch([...batch, { mediaType: command.mediaType, byteLength: command.byteLength }]).accepted)
+			return { outcome: ConversationAssetOutputReservationOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.InvalidRequest };
+		if (!await this.authorization.admitAs({ siloId: assignment.siloId, principalId: ownerPrincipalId }, "workload", identity.podUid, { kind: ProductAuthorizationResourceKinds.ArtifactCollection, id: assignment.siloId }, ProductAuthorizationActions.Create, { runId: command.runId, runAttempt: command.runAttempt, messageId: command.messageId, idempotencyKey: command.idempotencyKey, displayName: command.displayName, mediaType: command.mediaType, byteLength: command.byteLength, contentAddress: command.contentAddress, conversationId: assignment.run.conversationId }))
+			return { outcome: ConversationAssetOutputReservationOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.RuntimeUnavailable };
 		const ticketId = randomUUID();
 		const artifactId = randomUUID();
 		const leaseId = randomUUID();
 		// 4. Create the ticket, artifact, exact-content lease, and hidden browser asset in one transaction.
 		await this.transaction.conversationAssetOutputTicket.create({ data: { id: ticketId, siloId: assignment.siloId, conversationId: assignment.run.conversationId, runId: command.runId, runAttempt: command.runAttempt, runEventSequence: messageStarted.sequence, outputMessageId: command.messageId, idempotencyKey: command.idempotencyKey, expiresAt: assignment.expiresAt } });
 		await this.transaction.artifact.create({ data: { id: artifactId, siloId: assignment.siloId, ownerPrincipalId, kind: ArtifactKind.Generated } });
+		await this.authorization.reconcileArtifactOwner( assignment.siloId, artifactId, ownerPrincipalId, new Date());
 		await this.transaction.artifactUploadLease.create({ data: { id: leaseId, artifactId, siloId: assignment.siloId, capabilityJti: randomUUID(), expectedContentAddress: command.contentAddress, expectedByteLength: BigInt(command.byteLength), mediaType: command.mediaType, expiresAt: assignment.expiresAt } });
 		await this.transaction.conversationAsset.create({ data: { id: randomUUID(), siloId: assignment.siloId, conversationId: assignment.run.conversationId, runId: command.runId, runAttempt: command.runAttempt, runEventSequence: messageStarted.sequence, runMessageId: command.messageId, artifactId, uploadLeaseId: leaseId, outputTicketId: ticketId, idempotencyKey: command.idempotencyKey, provenance: ConversationAssetProvenance.AgentOutput, state: ConversationAssetState.Uploading, displayName: command.displayName.trim(), mediaType: command.mediaType, byteLength: BigInt(command.byteLength) } });
 		return { outcome: ConversationAssetOutputReservationOutcomes.Issued, ticketId };
@@ -114,13 +121,15 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 	/** Requires the exact live attempt and exact projected pod identity on every operation. */
 	private async _assignment(identity: ConversationAssetOutputRuntimeIdentity, runId: string, runAttempt: number)
 	{
-		return this.transaction.workloadAssignment.findFirst({ where: { runId, attempt: runAttempt, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, podUid: identity.podUid, state: WorkloadAssignmentState.Registered, expiresAt: { gt: new Date() }, run: { attempt: runAttempt } }, include: { run: true } });
+		const now = new Date();
+		const assignment = await this.transaction.workloadAssignment.findFirst({ where: { runId, attempt: runAttempt, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, state: WorkloadAssignmentState.Registered, expiresAt: { gt: now }, run: { attempt: runAttempt } }, include: { run: true, warmRuntimeReservations: { where: { namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, podUid: identity.podUid, state: WarmRuntimeReservationState.Claimed, idleDeadline: { gt: now } }, select: { generation: true } } } });
+		return assignment !== null && assignment.warmRuntimeReservations.some(function _CurrentGeneration(reservation) { return reservation.generation === assignment.bindingGeneration; }) ? assignment : null;
 	}
 
 	/** Requires the canonical assistant message-start coordinate owned by this run. */
 	private async _messageStarted(conversationId: string, command: ReserveConversationAssetOutput): Promise<{ readonly sequence: number } | null>
 	{
-		const event = await this.transaction.conversationRunEvent.findFirst({ where: { conversationId, runId: command.runId, type: _MESSAGE_STARTED_EVENT_TYPE, messageId: command.messageId }, select: { sequence: true, payload: true } });
+		const event = await this.transaction.conversationRunEvent.findFirst({ where: { conversationId, runId: command.runId, attempt: command.runAttempt, type: _MESSAGE_STARTED_EVENT_TYPE, messageId: command.messageId }, select: { sequence: true, payload: true } });
 		return event !== null && _MessagePayloadMatches(event.payload, command.messageId) ? { sequence: event.sequence } : null;
 	}
 

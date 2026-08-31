@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 
 import type { PrismaClient } from "@prisma/client";
 
-import { __AssembleRunInputSnapshot, __CreatePrismaManagedSessionAssemblyAuthorities, ManagedExecutionIdentityEnvelopeSource, PrismaSkillRevisionEligibilitySource } from "@opencrane/backend/agents/execution/inputs";
-import { PrismaRunAdmissionRepository } from "@opencrane/backend/agents/execution/runs";
+import { __AssembleRunInputSnapshot, __CreatePrismaManagedSessionAssemblyAuthorities, ManagedExecutionIdentityEnvelopeSource } from "@opencrane/backend/agents/execution/inputs";
+import { PrismaRunAdmissionUnitOfWork } from "@opencrane/backend/agents/execution/runs";
 import type { RunAdmissionConcurrencyPolicy } from "@opencrane/backend/agents/execution/runs";
 import type { ManagedExecutionEvidenceAuthority, ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _CreateManagedRunAdmissionPortWithGate } from "./managed-run-admission";
 import type { ManagedSnapshotAssembler, RunAdmissionCapacityGate } from "./managed-run-admission.types";
@@ -52,16 +53,17 @@ export function __ReadRunAdmissionConcurrencyPolicy(environment: NodeJS.ProcessE
  * Called by: apps/opencrane/src/index.ts.
  *
  * @param prisma - The product database client.
+ * @param workflow - Guarded workflow engine that saves the AgentRun task in the admission transaction.
  * @param capacityGate - The shared capacity gate, also used by personal admissions. Pass the same
  * instance, not a second gate.
  * @param evidenceAuthority - Checks the service's signed identity and its scope capabilities.
  * @returns A fail-closed, capacity-bounded managed run admission port.
  */
-export function __CreateManagedRunAdmissionPort(prisma: PrismaClient, capacityGate: RunAdmissionCapacityGate, evidenceAuthority: ManagedExecutionEvidenceAuthority): ManagedRunAdmissionPort
+export function __CreateManagedRunAdmissionPort(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">, capacityGate: RunAdmissionCapacityGate, evidenceAuthority: ManagedExecutionEvidenceAuthority): ManagedRunAdmissionPort
 {
-	const admission = new PrismaRunAdmissionRepository(prisma);
+	const admission = new PrismaRunAdmissionUnitOfWork(prisma, workflow);
 	const identityEnvelope = new ManagedExecutionIdentityEnvelopeSource(evidenceAuthority);
-	const authorities = __CreatePrismaManagedSessionAssemblyAuthorities(admission, identityEnvelope, new PrismaSkillRevisionEligibilitySource());
+	const authorities = __CreatePrismaManagedSessionAssemblyAuthorities(admission, identityEnvelope);
 	const assemble: ManagedSnapshotAssembler = async function _assemble(command)
 	{
 		return __AssembleRunInputSnapshot({
@@ -71,6 +73,7 @@ export function __CreateManagedRunAdmissionPort(prisma: PrismaClient, capacityGa
 			conversationId: null,
 			identityKind: "service",
 			trigger: command.trigger,
+			requestingPrincipalId: command.requestedByPrincipalId,
 			requestIdempotencyKey: command.requestIdempotencyKey,
 		}, authorities);
 	};

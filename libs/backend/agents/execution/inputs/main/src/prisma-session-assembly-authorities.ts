@@ -7,11 +7,14 @@ import { ManagedNoPersonalMemoryScopeSource } from "./managed-no-personal-memory
 import { PersonalMemoryPreferenceFactSource } from "./personal-memory-preference-fact-source";
 import { PersonalMemoryScopeSource } from "./personal-memory-scope-source";
 import { PrismaApprovedPersonaSource } from "./prisma-approved-persona-source";
+import { PrismaMcpToolAdmissionClaimRepository } from "./prisma-mcp-tool-admission-claim-repository";
 import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "./prisma-revision-tool-policy-source";
+import { PrismaSkillRevisionEligibilityRepository, PrismaSkillRevisionEligibilitySource } from "./prisma-skill-revision-eligibility-source";
 import { PrismaRunAuthoritySource } from "./prisma-run-authority-source";
+import { TransactionBoundProductResourceAuthorizationSource } from "./product-resource-authorization-source";
 import { PrismaConversationContextRepository } from "./prisma-conversation-context-repository";
 import { TransactionBoundConversationContextSource } from "./prisma-conversation-context-source";
-import type { IdentityEnvelopeSource, SessionAssemblyAuthorities, SkillRevisionEligibilitySource } from "./session-assembly.types";
+import type { IdentityEnvelopeSource, SessionAssemblyAuthorities } from "./session-assembly.types";
 
 /**
  * Builds the managed-service set of input sources.
@@ -29,7 +32,7 @@ import type { IdentityEnvelopeSource, SessionAssemblyAuthorities, SkillRevisionE
  * @returns The full source set for {@link __AssembleRunInputSnapshot}. Do not mix these with
  * personal sources.
  */
-export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource, skillEligibility: SkillRevisionEligibilitySource): SessionAssemblyAuthorities
+export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource): SessionAssemblyAuthorities
 {
 	return {
 		admission,
@@ -38,8 +41,9 @@ export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAd
 		conversationContext: new TransactionBoundConversationContextSource(_CreateConversationContextRepository),
 		preferenceFacts: { load: async function _LoadManagedEmptyPreferences() { return { outcome: "loaded", value: [] }; } },
 		memoryScope: new ManagedNoPersonalMemoryScopeSource(),
-		toolPolicy: new PrismaRevisionToolPolicySource(),
-		skillEligibility,
+		toolPolicy: new PrismaRevisionToolPolicySource(_CreateMcpToolAdmissionClaimRepository),
+		skillEligibility: new PrismaSkillRevisionEligibilitySource(_CreateSkillRevisionEligibilityRepository),
+		productAuthorization: new TransactionBoundProductResourceAuthorizationSource(),
 		budgetPolicy: new PrismaRevisionBudgetPolicySource(),
 		identityEnvelope,
 	};
@@ -55,7 +59,7 @@ export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAd
  * read through adapters bound to the same admission transaction. Recall remains unreachable until
  * the declared memory tool obtains an exact accepted permission receipt.
  */
-export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource, skillEligibility: SkillRevisionEligibilitySource): SessionAssemblyAuthorities
+export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource): SessionAssemblyAuthorities
 {
 	// Keep all common session inputs identical to managed admission; only personal identity-scoped inputs differ.
 	return {
@@ -65,8 +69,9 @@ export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunA
 		conversationContext: new TransactionBoundConversationContextSource(_CreateConversationContextRepository),
 		preferenceFacts: new PersonalMemoryPreferenceFactSource(_CreatePersonalMemory),
 		memoryScope: new PersonalMemoryScopeSource(_CreatePersonalMemory),
-		toolPolicy: new PrismaRevisionToolPolicySource(),
-		skillEligibility,
+		toolPolicy: new PrismaRevisionToolPolicySource(_CreateMcpToolAdmissionClaimRepository),
+		skillEligibility: new PrismaSkillRevisionEligibilitySource(_CreateSkillRevisionEligibilityRepository),
+		productAuthorization: new TransactionBoundProductResourceAuthorizationSource(),
 		budgetPolicy: new PrismaRevisionBudgetPolicySource(),
 		identityEnvelope,
 	};
@@ -82,4 +87,16 @@ function _CreatePersonalMemory(transaction: RunAdmissionTransaction): PrismaPers
 function _CreateConversationContextRepository(transaction: RunAdmissionTransaction): PrismaConversationContextRepository
 {
 	return new PrismaConversationContextRepository(transaction.prisma);
+}
+
+/** Bind the MCP admission claim to the exact final-admission transaction. */
+function _CreateMcpToolAdmissionClaimRepository(transaction: RunAdmissionTransaction): PrismaMcpToolAdmissionClaimRepository
+{
+	return new PrismaMcpToolAdmissionClaimRepository(transaction.prisma);
+}
+
+/** Bind the skill eligibility reader to the exact final-admission transaction. */
+function _CreateSkillRevisionEligibilityRepository(transaction: RunAdmissionTransaction): PrismaSkillRevisionEligibilityRepository
+{
+	return new PrismaSkillRevisionEligibilityRepository(transaction.prisma);
 }

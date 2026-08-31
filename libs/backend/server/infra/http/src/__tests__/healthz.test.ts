@@ -27,7 +27,6 @@ function _Report(ready: boolean, status: PublicHealthStatuses): PublicHealthRepo
 			[PublicHealthServiceNames.Memory]: PublicHealthServiceStatuses.Available,
 			[PublicHealthServiceNames.Files]: PublicHealthServiceStatuses.Available,
 			[PublicHealthServiceNames.Channels]: PublicHealthServiceStatuses.Available,
-			[PublicHealthServiceNames.Integrations]: PublicHealthServiceStatuses.Disabled,
 		},
 	};
 }

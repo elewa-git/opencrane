@@ -22,11 +22,11 @@ if [[ "$1" == "status" ]]; then
   exit 0
 fi
 if [[ "$1" == "get" && "$2" == "metadata" && "$3" == "opencrane-testlynn-postgres" ]]; then
-  printf '%s\n' '{"chart":"postgres","version":"0.9.3"}'
+  printf '%s\n' '{"chart":"postgres","version":"0.10.0"}'
   exit 0
 fi
 if [[ "$1" == "get" && "$2" == "metadata" && "$3" == "opencrane-testlynn" ]]; then
-  printf '{"chart":"opencrane-silo","version":"%s"}\n' "${MOCK_SILO_VERSION:-0.9.3}"
+  printf '{"chart":"opencrane-silo","version":"%s"}\n' "${MOCK_SILO_VERSION:-0.10.0}"
   exit 0
 fi
 exit 1

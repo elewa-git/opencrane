@@ -211,9 +211,11 @@ or dependency boundary, run its current boundary guard before review:
 - In Claude Code, a **Haiku agent hook** reads that context plus `.claude/review-policy.md` in
   parallel with the pre-filter. It judges whether the change carries real risk (auth, secrets,
   network, IAM, money, or non-trivial production control flow) and blocks only when warranted.
-- In Codex, `.codex/hooks/require-review.sh` runs the same pre-filter and translates `JUDGE` into a
-  blocking `Stop` continuation that requires the independent review agent. Only a fresh, explicit
-  `SKIP` lets the turn end; a checker crash, missing context, or unknown verdict blocks closed.
+- In Codex, `.codex/hooks/require-review.sh` runs the same pre-filter. Codex has no separate judge
+  model, so `JUDGE` becomes a `Stop` continuation that makes the model judge its own change against
+  the same judgment guidance, and run the independent review agent when that guidance says the
+  change carries real risk. An explicit `SKIP` lets the turn end; a checker crash, missing context,
+  or unknown verdict blocks closed and requires the full review.
 
 **`.claude/review-policy.md` is the single tunable surface.** If review fires too often
 and burns tokens — or misses something — edit that file (threshold, `always-review`

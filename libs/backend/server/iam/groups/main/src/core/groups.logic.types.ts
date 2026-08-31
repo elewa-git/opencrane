@@ -1,4 +1,17 @@
+import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { Group, GroupMembershipAuthorities } from "@opencrane/contracts";
+
+/** Authenticated local Principal that requests one group operation. */
+export interface GroupOperationCaller
+{
+	/** Silo derived from the trusted request host. */
+	readonly siloId: string;
+	/** Durable local Principal admitted by authentication middleware. */
+	readonly principalId: string;
+}
+
+/** Constructs the central authority over the transaction that owns a group operation. */
+export type GroupAuthorizationAuthorityFactory<Transaction> = (transaction: Transaction) => AuthorizationAuthority;
 
 /**
  * Carries the validated fields required to create a group in one silo.
@@ -85,14 +98,29 @@ export interface GroupMutationResponse
  */
 export interface GroupRepository
 {
-	/** Lists the silo's groups and their direct memberships. */
+	/** Lists the groups the current Principal may read. */
+	list(caller: GroupOperationCaller): Promise<GroupResponse[]>;
+	/** Reads the group when it belongs to the silo and the Principal may read it. */
+	get(caller: GroupOperationCaller, groupId: string): Promise<GroupResponse | null>;
+	/** Creates a group after atomically admitting the collection-level create action. */
+	create(caller: GroupOperationCaller, body: GroupCreateCommand): Promise<GroupMutationResponse>;
+	/** Updates a group after atomically admitting the exact resource action. */
+	update(caller: GroupOperationCaller, groupId: string, body: GroupUpdateCommand): Promise<GroupMutationResponse>;
+	/** Deletes a group after atomically admitting the exact resource action. */
+	delete(caller: GroupOperationCaller, groupId: string): Promise<GroupMutationResponse>;
+}
+
+/** Transaction-scoped persistence port used after the UnitOfWork owns authorization. */
+export interface GroupTransactionRepository
+{
+	/** Lists lifecycle-eligible groups inside one silo. */
 	list(siloId: string): Promise<GroupResponse[]>;
-	/** Reads the group when it belongs to `siloId`, otherwise returns `null`. */
+	/** Reads one lifecycle-eligible group inside one silo. */
 	get(siloId: string, groupId: string): Promise<GroupResponse | null>;
-	/** Creates a group and returns its ID with the `created` status. */
+	/** Creates one already-admitted group. */
 	create(siloId: string, body: GroupCreateCommand): Promise<GroupMutationResponse>;
-	/** Updates a group and returns its ID with the `updated` status. */
+	/** Updates one already-admitted group. */
 	update(siloId: string, groupId: string, body: GroupUpdateCommand): Promise<GroupMutationResponse>;
-	/** Deletes a group and returns its ID with the `deleted` status. */
+	/** Deletes one already-admitted group. */
 	delete(siloId: string, groupId: string): Promise<GroupMutationResponse>;
 }

@@ -21,6 +21,10 @@ export enum PersonaApprovalInterviewStates
 /** Request to approve and activate one exact persona draft. */
 export interface ApprovePersonaCommand
 {
+	/** Silo selected from the trusted request host. */
+	readonly siloId: string;
+	/** Stable local Principal approving the persona draft. */
+	readonly principalId: string;
 	/** Persona profile owned by the approving user. */
 	readonly personaProfileId: string;
 	/** Exact draft revision being approved. */

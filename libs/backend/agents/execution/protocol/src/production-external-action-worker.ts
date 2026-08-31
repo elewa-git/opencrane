@@ -22,6 +22,7 @@ export function __CreateProductionExternalActionWorker(dependencies: ProductionE
 {
 	return new ExternalActionWorker({
 		source: dependencies.invocations,
+		classAdmission: dependencies.classAdmission,
 		invocations: dependencies.invocations,
 		contexts: dependencies.contexts,
 		events: dependencies.events,

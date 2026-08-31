@@ -7,7 +7,7 @@ import { findingDelta, inspectPrismaBoundary, isProductionTypeScript, prepareBas
 
 /** Repository root for all path and Git operations. */
 const _ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-/** Checked-in exception policy for otherwise unexpressible legacy boundaries. */
+/** Points to the checked-in policy that declares current Prisma owners and reviewed exceptions. */
 const _POLICY_PATH = join(_ROOT, "docs/agents/prisma-boundary-policy.json");
 
 /** Executes the diff-scoped Prisma repository/unit-of-work architecture check. */
@@ -32,7 +32,18 @@ function _Main()
 	const scope = _Scope(process.argv.slice(2));
 	const basePolicy = scope.base === undefined ? undefined : _BasePolicy(scope.base);
 	const baseExemptions = basePolicy === undefined ? undefined : resolveExemptions(basePolicy.exemptions, today);
-	const files = _Unique([...scope.files, ...policy.rawProcedureCalls.map(function _Path(procedure) { return procedure.path; })]);
+	const basePolicyPaths = (basePolicy === undefined ? [] : _PolicyPaths(basePolicy)).map(function _CurrentPath(path)
+	{
+		return _CurrentPathForBase(path, scope.basePaths);
+	});
+	const forceCurrentPaths = basePolicy === undefined
+		? new Set()
+		: _RemovedPolicyPermissionPaths(policy, basePolicy, scope.basePaths);
+	const files = _Unique([
+		...scope.files,
+		..._PolicyPaths(policy),
+		...basePolicyPaths,
+	]);
 	let findings = 0;
 	const ownerPaths = [...new Set([...policy.owners.repositories, ...policy.owners.unitsOfWork].map(function _Path(entry) { return entry.path; }))];
 	for (const path of ownerPaths)
@@ -86,7 +97,8 @@ function _Main()
 		const base = baseSource === undefined || basePolicy === undefined || baseExemptions === undefined
 			? []
 			: inspectPrismaBoundary(basePath, baseSource, delegates, basePolicy.owners, baseExemptions.active.get(basePath), basePolicy.rawProcedureCalls);
-		for (const finding of scope.base === undefined ? current : findingDelta(base, current))
+		const reported = scope.base === undefined || forceCurrentPaths.has(path) ? current : findingDelta(base, current);
+		for (const finding of reported)
 		{
 			console.error(`${finding.path}:${finding.line}\tERROR\t${finding.rule}\t${finding.message}`);
 			findings += 1;
@@ -94,6 +106,65 @@ function _Main()
 	}
 	console.log(`prisma-boundary-check: ${files.filter(isProductionTypeScript).length} production TypeScript file(s) checked — ${findings} error(s).`);
 	if (findings > 0) process.exitCode = 1;
+}
+
+/** Returns current-tree paths whose base policy permission no longer exists. */
+function _RemovedPolicyPermissionPaths(policy, basePolicy, basePaths)
+{
+	const currentKeys = new Set(_PolicyPermissions(policy).map(function _Key(permission) { return permission.key; }));
+	const removedPaths = _PolicyPermissions(basePolicy, function _CurrentPath(path) { return _CurrentPathForBase(path, basePaths); })
+		.filter(function _Removed(permission) { return !currentKeys.has(permission.key); })
+		.map(function _Path(permission) { return permission.path; });
+	return new Set(removedPaths);
+}
+
+/** Lists each policy permission with the identity that grants its source-path access. */
+function _PolicyPermissions(policy, mapPath = function _SamePath(path) { return path; })
+{
+	const permissions = [];
+	for (const entry of policy.owners.repositories)
+	{
+		const path = mapPath(entry.path);
+		permissions.push({ key: `repository\u0000${path}\u0000${entry.adapter}`, path });
+	}
+	for (const entry of policy.owners.unitsOfWork)
+	{
+		const path = mapPath(entry.path);
+		permissions.push({ key: `unit-of-work\u0000${path}\u0000${entry.adapter}`, path });
+	}
+	for (const sourcePath of policy.owners.compositions)
+	{
+		const path = mapPath(sourcePath);
+		permissions.push({ key: `composition\u0000${path}`, path });
+	}
+	for (const entry of policy.rawProcedureCalls)
+	{
+		const path = mapPath(entry.path);
+		permissions.push({ key: `raw-procedure\u0000${path}\u0000${entry.adapter}\u0000${entry.method}`, path });
+	}
+	for (const entry of policy.exemptions)
+	{
+		const path = mapPath(entry.path);
+		const operations = [...entry.operations].sort().join(",");
+		permissions.push({ key: `exemption\u0000${path}\u0000${operations}`, path });
+	}
+	return permissions;
+}
+
+/** Lists every TypeScript path whose permissions or ownership come from one policy revision. */
+function _PolicyPaths(policy)
+{
+	return _PolicyPermissions(policy).map(function _Path(permission) { return permission.path; });
+}
+
+/** Maps a policy path from the base tree onto its renamed current-tree path. */
+function _CurrentPathForBase(basePath, basePaths)
+{
+	for (const [path, candidateBasePath] of basePaths ?? [])
+	{
+		if (candidateBasePath === basePath) return path;
+	}
+	return basePath;
 }
 
 /** Resolves explicit, branch-diff, working-tree, or full-scan file scope. */
@@ -149,7 +220,7 @@ function _DiffChanges(base)
 	return { files, basePaths };
 }
 
-/** Loads the policy from the base tree so moved legacy code is compared against its former owner. */
+/** Loads the historical policy so a diff can compare its permissions with current ownership. */
 function _BasePolicy(base)
 {
 	const source = _BaseSource(base, "docs/agents/prisma-boundary-policy.json");

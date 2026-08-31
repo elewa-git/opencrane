@@ -1,0 +1,30 @@
+mcpExecutor:
+  namespace: opencrane-mcp-executors
+  serverNamespace: ""
+  serviceAccountName: mcp-executor-default
+  image:
+    repository: ghcr.io/elewa-git/opencrane-mcp-executor
+    digest: ""
+    pullPolicy: IfNotPresent
+  projectedTokenTtlSeconds: 600
+  controllerClaimLeaseSeconds: 30
+  companionClaimLeaseSeconds: 150
+  scratchSize: 64Mi
+  activeDeadlineSeconds: 600
+  serverResources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+  companionResources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { cpu: 250m, memory: 128Mi }
+  quota:
+    pods: "10"
+    jobs: "10"
+    requestsCpu: "10"
+    requestsMemory: 20Gi
+    limitsCpu: "40"
+    limitsMemory: 40Gi
+  egress:
+    executorPodComponent: mcp-executor
+    serverComponent: opencrane-server
+    serverInternalPort: 8081

@@ -1,11 +1,11 @@
 import { __DigestRunInputSnapshot } from "@opencrane/backend/agents/execution/runs";
 import type { InitialRunAuthority, RunAdmissionCommit, RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
-import type { RunInputSnapshot, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
-import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
+import type { RunInputSnapshot } from "@opencrane/contracts";
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
 import { _IsIdentityFresh } from "./utils/canonical-inputs";
+import { __AreRunInputSnapshotMcpToolsValid } from "./mcp-tool-snapshot.validator";
 import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "./session-assembly-result.types";
 import type { ApprovedPersonaInput, IdentityEnvelopeInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, ConversationContextInput, ToolPolicyInput } from "./session-assembly.types";
 
@@ -64,7 +64,7 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 	// source below can read a conversation the caller has only just created.
 	const admitted = await authorities.admission.admit(command, async function _compileWithinAdmission(transaction)
 	{
-		// 3. Load the run and its locked revision first; every later source needs them.
+		// 3. Load the run and its frozen revision first; every later source needs them.
 		const run = await authorities.runAuthority.load(command, transaction);
 		if (run.outcome === "denied") return run;
 
@@ -91,9 +91,15 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		if (memory.outcome === "denied") return memory;
 		const tools = await authorities.toolPolicy.load(command, run.value, transaction);
 		if (tools.outcome === "denied") return tools;
-		if (!_areIntegrationAssignmentsValid(tools.value.integrationAssignments)) return { outcome: "denied", reason: "tool_policy_unavailable" } as const;
+		if (!__AreRunInputSnapshotMcpToolsValid(tools.value.mcpTools))
+		{
+			return { outcome: "denied", reason: "tool_policy_unavailable" } as const;
+		}
 		const skills = await authorities.skillEligibility.load(command, run.value, tools.value, transaction);
 		if (skills.outcome === "denied") return skills;
+		const productAuthorization = await authorities.productAuthorization.load(command, identity.value, persona.value, memory.value, tools.value, transaction);
+		if (productAuthorization.outcome === "denied")
+			return productAuthorization;
 		const budget = await authorities.budgetPolicy.load(command, run.value, transaction);
 		if (budget.outcome === "denied") return budget;
 		// 8. Compile the immutable snapshot only after every source has re-checked its data inside this transaction.
@@ -138,7 +144,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		artifactRevisionIds: ___SortBy([...tools.artifactRevisionIds]),
 		skillRevisionIds: ___SortBy([...tools.skillRevisionIds]),
 		memoryQueryPolicy: ___CloneCanonicalJson(memory.memoryQueryPolicy),
-		integrationAssignments: _canonicalIntegrationAssignments(tools.integrationAssignments),
+		mcpTools: _canonicalMcpTools(tools.mcpTools),
 		modelRoute: ___CloneCanonicalJson(tools.modelRoute),
 		budgetPolicy: ___CloneCanonicalJson(budgetPolicy),
 		identitySnapshot: _SnapshotIdentity(identity),
@@ -151,64 +157,20 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 	return { ...withoutDigest, digest };
 }
 
+/** Copies and canonically orders exact MCP tool revisions before sealing the run snapshot. */
+function _canonicalMcpTools(tools: ToolPolicyInput["mcpTools"]): ToolPolicyInput["mcpTools"]
+{
+	return [...tools]
+		.map(function _McpTool(tool)
+		{
+			return { toolRevisionId: tool.toolRevisionId, name: tool.name, description: tool.description, inputSchema: ___CloneCanonicalJson(tool.inputSchema), inputSchemaDigest: tool.inputSchemaDigest };
+		})
+		.sort(function _ByRevision(left, right): number { return left.toolRevisionId.localeCompare(right.toolRevisionId); });
+}
+
 /** Drops `capabilitySetDigest`, which is only used during assembly, and keeps every other identity field for the snapshot. */
 function _SnapshotIdentity(identity: IdentityEnvelopeInput): RunInputSnapshot["identitySnapshot"]
 {
 	const { capabilitySetDigest: _capabilitySetDigest, ...snapshotIdentity } = identity;
 	return snapshotIdentity;
-}
-
-/** Canonicalises revision-selected integration tools before sealing them into a snapshot. */
-function _canonicalIntegrationAssignments(assignments: readonly RunInputSnapshotIntegrationAssignment[]): readonly RunInputSnapshotIntegrationAssignment[]
-{
-	return [...assignments]
-		.map(function _assignment(assignment): RunInputSnapshotIntegrationAssignment
-		{
-			return { integrationId: assignment.integrationId, toolDefinitions: _canonicalToolDefinitions(assignment.toolDefinitions) };
-		})
-		.sort(function _byIntegration(left, right): number { return left.integrationId.localeCompare(right.integrationId); });
-}
-
-/**
- * Copies one integration's tools into a fixed shape: sorted by name, with each schema's keys
- * put into a set order by the clone.
- *
- * Assembly hashes the finished snapshot, and the hash is taken over the whole thing as text.
- * So order matters: without this step, the same tools arriving in a different order would hash
- * to a different value, and the run would look like it had been given different inputs.
- *
- * @see https://www.rfc-editor.org/rfc/rfc8785 - JSON Canonicalization Scheme, the serialisation that
- * hash is taken over. It is what puts each schema's keys in a set order; array order it leaves to
- * the caller, which is the sort above.
- * @see https://modelcontextprotocol.io/specification/2025-06-18 - MCP, revision 2025-06-18 as pinned
- * by `_MCP_PROTOCOL_VERSION` in server/infra/obot-custody. Each `parametersSchema` here is an MCP
- * tool's argument schema, and it reaches the model unchanged.
- */
-function _canonicalToolDefinitions(toolDefinitions: RunInputSnapshotIntegrationAssignment["toolDefinitions"]): RunInputSnapshotIntegrationAssignment["toolDefinitions"]
-{
-	return [...toolDefinitions]
-		.map(function _tool(definition) { return { name: definition.name, description: definition.description, parametersSchema: ___CloneCanonicalJson(definition.parametersSchema), parametersSchemaDigest: definition.parametersSchemaDigest }; })
-		.sort(function _byTool(left, right): number { return left.name.localeCompare(right.name); });
-}
-
-/**
- * Returns whether every integration assignment can name one unambiguous tool revision: a non-blank
- * id with no ":" in it, plus valid tool definitions.
- *
- * The ":" rule exists because the runtime's tool revision id is built as
- * `integration:<integrationId>:<toolName>` (see execution/protocol/src/prisma-run-input-compiler.ts).
- * A colon inside the integration id would make that id ambiguous to parse.
- *
- * @see https://modelcontextprotocol.io/specification/2025-06-18 - MCP, revision 2025-06-18 as
- * pinned by `_MCP_PROTOCOL_VERSION` in server/infra/obot-custody. These are MCP tools, and their
- * names and JSON Schemas are what eventually reach the model.
- */
-function _areIntegrationAssignmentsValid(assignments: readonly RunInputSnapshotIntegrationAssignment[]): boolean
-{
-	return assignments.every(function _assignment(assignment): boolean
-	{
-		return assignment.integrationId.trim().length > 0
-			&& !assignment.integrationId.includes(":")
-			&& __AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions as readonly ReviewedIntegrationToolDefinition[]);
-	});
 }

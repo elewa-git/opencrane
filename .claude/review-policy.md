@@ -82,3 +82,6 @@ Record changes here so the feedback loop is visible to the team.
   that are dangerous on their own (secret/credential/rbac/networkpolicy/egress — `token`,
   `session`, `middleware`, `budget` matched half the codebase); uncertainty default flipped
   from block to allow. Restore the defensive posture at the MVP release.
+- 2026-08-31: carry the same relaxation into Codex — its Stop hook asked for a full review on
+  every `JUDGE` verdict because Codex has no judge model, so it now hands the change to the model
+  to judge against this guidance instead.

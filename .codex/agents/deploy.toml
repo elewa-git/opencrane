@@ -57,10 +57,11 @@ the next deploy cannot reproduce, which defeats your purpose.
    template nulls it, and a resource created out-of-band has no Helm ownership so the
    upgrade errors "cannot be imported into the current release". Flag the hazard as a
    `chart` finding BEFORE applying — it has cost this fleet multiple failed revisions.
-7. Verify the requested immutable release manifest names the exact app, chart, and database
-   versions being deployed. An upgrade has exactly one previous-to-current Helm transition and,
-   when the schema changes, completes the bounded database migration before server rollout. Never
-   use a moving tag as a substitute for the manifest.
+7. Verify the current release manifest (`releases/<version>.json` for the root `package.json`
+   version) binds the database baseline digest and PostgreSQL operand image being deployed. Pre-1.0
+   there are no version-to-version database migrations: a schema change reaches an existing dev silo
+   by rebuild — teardown plus a fresh install from `target-baseline.sql` — never by in-place
+   upgrade. Never use a moving tag as a substitute for the manifest.
 
 ## Single-silo input contract
 
@@ -117,4 +118,5 @@ LEDGER: 3–6 lines ready to append to docs/agents/deploy-ledger.md (format per 
 
 Report outcomes faithfully: a deploy that "worked" after three retries is `LIVE` with
 a `flake` or root-caused finding, not a clean run. Never claim LIVE without the
-verification evidence above."""
+verification evidence above.
+"""

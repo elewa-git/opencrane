@@ -1,11 +1,11 @@
 import type { Prisma } from "@prisma/client";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import { __DigestCanonicalJson, PrismaAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
+import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import { __VerifyCurrentFleetMembershipEvidence, FleetMembershipEvidenceOutcomes, PrismaFleetMembershipAuthorityRepository, type FleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
 import { AgentServiceKinds } from "@opencrane/models/agents";
-import { AuthorizationBoundaryKinds } from "@opencrane/models/authorization";
-import type { JsonValue } from "@opencrane/util";
+import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { IdentityEnvelopeInput, IdentityEnvelopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 import { PrismaPersonalExecutionIdentityAuthorityRepository } from "./prisma-personal-execution-identity-authority-repository";
@@ -73,9 +73,11 @@ export class PersonalExecutionIdentityEnvelopeSource implements IdentityEnvelope
 		// 2. Resolve the stable local Principal and one current signed silo-membership assertion.
 		const identityAuthority = new PrismaPersonalExecutionIdentityAuthorityRepository(prisma);
 		const principalId = await identityAuthority.resolvePrincipalId(command.siloId, command.executionIssuer, command.executionSubjectId);
-		if (principalId === null) return { outcome: "denied", reason: "identity_unavailable" };
+		if (principalId === null)
+			return { outcome: "denied", reason: "identity_unavailable" };
 		const assertion = await identityAuthority.loadLatestPersonalAssertion(this.config.trustedIssuerId, command.siloId, command.executionSubjectId);
-		if (assertion === null) return { outcome: "denied", reason: "membership_stale" };
+		if (assertion === null)
+			return { outcome: "denied", reason: "membership_stale" };
 
 		// 3. Check the signature, freshness, and monotonic revision high-watermark in this transaction.
 		const membership = await __VerifyCurrentFleetMembershipEvidence(new PrismaFleetMembershipAuthorityRepository(prisma), this.config.verifier, {
@@ -96,17 +98,18 @@ export class PersonalExecutionIdentityEnvelopeSource implements IdentityEnvelope
 			return { outcome: "denied", reason: "membership_stale" };
 		}
 
-		// 4. Hash the membership and active-revision facts into one digest before later sources add runtime inputs.
-		const authorization = new PrismaAuthorizationGrantRepository(prisma);
-		const subjects = await authorization.resolvePrincipalSubjects(command.siloId, principalId);
-		const grants = (await authorization.listSubjectGrants(command.siloId, subjects)).filter(function _IsActivePersonalGrant(grant): boolean
+		// 4. Recheck exact service invocation authority before freezing the run's maximum access.
+		const authorization = transaction.authorization;
+		if (authorization === undefined)
+			return { outcome: "denied", reason: "identity_unavailable" };
+		const argumentsValue = { agentServiceId: run.agentServiceId, agentRevisionId: run.agentRevisionId, effectiveContractDigest: run.effectiveContractDigest };
+		const admission = await authorization.admitPrincipal({ siloId: command.siloId, principalId, actorKind: "user", actorId: principalId, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: run.agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest: ___DigestCanonicalJson(argumentsValue as JsonValue), membershipRevision: membership.evidence.revision, nowEpochMs: transaction.admittedAtEpochMs });
+		if (admission.outcome !== AuthorizationDecisionOutcomes.Allow || admission.evidence === null)
 		{
-			return grant.boundary.kind === AuthorizationBoundaryKinds.Personal
-				&& grant.boundary.principalId === principalId
-				&& grant.validFromEpochMs <= transaction.admittedAtEpochMs
-				&& grant.revokedAtEpochMs === null
-				&& (grant.expiresAtEpochMs === null || grant.expiresAtEpochMs > transaction.admittedAtEpochMs);
-		});
+			return { outcome: "denied", reason: "identity_unavailable" };
+		}
+
+		// 5. Hash the verified membership and winning central decision into the frozen ceiling.
 		const capabilitySetDigest = __DigestCanonicalJson({
 			siloId: command.siloId,
 			executionSubjectId: command.executionSubjectId,
@@ -117,12 +120,9 @@ export class PersonalExecutionIdentityEnvelopeSource implements IdentityEnvelope
 			fleetMembershipRevision: membership.evidence.revision,
 			fleetMembershipPayloadDigest: membership.evidence.payloadDigest,
 			personalBoundaryPrincipalId: principalId,
-			effectivePersonalGrants: grants
-				.map(function _CanonicalGrant(grant)
-				{
-					return { catalogId: grant.capability.catalog.catalogId, catalogRevision: grant.capability.catalog.revision, catalogDigest: grant.capability.catalog.digest, capabilityId: grant.capability.capabilityId, resourceKind: grant.resource.kind, resourceId: grant.resource.id, effect: grant.effect, priority: grant.priority, validFrom: new Date(grant.validFromEpochMs).toISOString(), expiresAt: grant.expiresAtEpochMs === null ? null : new Date(grant.expiresAtEpochMs).toISOString() };
-				})
-				.sort(function _ByGrant(left, right): number { return _CompareCanonicalGrant(left, right); }),
+			authorizationDecisionDigest: admission.evidence.decisionDigest,
+			authorizationPolicyRevisionHash: admission.evidence.policyRevisionHash,
+			effectiveAuthorizationDigest: admission.evidence.effectiveAuthorizationDigest,
 		} as JsonValue);
 		return {
 			outcome: "loaded",
@@ -141,21 +141,4 @@ export class PersonalExecutionIdentityEnvelopeSource implements IdentityEnvelope
 			},
 		};
 	}
-}
-
-/**
- * Compares two grants on all their fields, so the capability digest never depends on the order rows
- * came back in.
- *
- * @see https://www.rfc-editor.org/rfc/rfc8785 - JSON Canonicalization Scheme, used by
- * `__DigestCanonicalJson` for `capabilitySetDigest`. It fixes object key order but not array order,
- * so the grants array must be sorted before it is hashed.
- */
-function _CompareCanonicalGrant(left: { readonly catalogId: string; readonly catalogRevision: number; readonly catalogDigest: string; readonly capabilityId: string; readonly resourceKind: string; readonly resourceId: string; readonly effect: string; readonly priority: number; readonly validFrom: string; readonly expiresAt: string | null }, right: { readonly catalogId: string; readonly catalogRevision: number; readonly catalogDigest: string; readonly capabilityId: string; readonly resourceKind: string; readonly resourceId: string; readonly effect: string; readonly priority: number; readonly validFrom: string; readonly expiresAt: string | null }): number
-{
-	const leftKey = `${left.catalogId}\u0000${left.catalogRevision}\u0000${left.catalogDigest}\u0000${left.capabilityId}\u0000${left.resourceKind}\u0000${left.resourceId}\u0000${left.effect}\u0000${left.priority}\u0000${left.validFrom}\u0000${left.expiresAt ?? ""}`;
-	const rightKey = `${right.catalogId}\u0000${right.catalogRevision}\u0000${right.catalogDigest}\u0000${right.capabilityId}\u0000${right.resourceKind}\u0000${right.resourceId}\u0000${right.effect}\u0000${right.priority}\u0000${right.validFrom}\u0000${right.expiresAt ?? ""}`;
-	if (leftKey < rightKey) return -1;
-	if (leftKey > rightKey) return 1;
-	return 0;
 }

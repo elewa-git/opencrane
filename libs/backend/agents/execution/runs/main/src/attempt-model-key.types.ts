@@ -7,7 +7,7 @@
  */
 export interface AttemptModelKeyMintRequest
 {
-	/** Attempt- and delivery-unique key alias satisfying the issuer's `attempt-<...>` grammar. */
+	/** Attempt-stable key alias satisfying the issuer's `attempt-<...>` grammar. */
 	readonly keyAlias: string;
 	/** Single model alias the minted key may call, taken from the snapshot's model route. */
 	readonly modelAlias: string;
@@ -17,6 +17,15 @@ export interface AttemptModelKeyMintRequest
 	readonly maxBudgetUsd: number;
 	/** Key lifetime in seconds, bounded to the attempt assignment lifetime. */
 	readonly expirySeconds: number;
+}
+
+/** Carries one unused raw key only to the model-routing revocation operation. */
+export interface AttemptModelKeyRevocation
+{
+	/** Names the key for safe tracing and auditing. */
+	readonly keyAlias: string;
+	/** Carries the transient raw key that the server must revoke without logging or persisting it. */
+	readonly key: string;
 }
 
 /** A minted attempt-scoped model key. Carries only the transient key value — never persisted. */
@@ -33,4 +42,13 @@ export interface MintedAttemptModelKey
  * key stays in the server process that already holds it, and the minted virtual key only rides the
  * claim response.
  */
-export type AttemptModelKeyIssuer = (request: AttemptModelKeyMintRequest) => Promise<MintedAttemptModelKey>;
+export interface AttemptModelKeyIssuer
+{
+	/** Mints one scoped transient key after the task's database transaction has committed. */
+	(request: AttemptModelKeyMintRequest): Promise<MintedAttemptModelKey>;
+	/** Revokes one unused minted key without recording its raw value. */
+	revokeAttemptKey?(request: AttemptModelKeyRevocation): Promise<void>;
+}
+
+/** Requires an issuer to support both minting and immediate unused-key revocation. */
+export type AttemptModelKeyIssuerWithRevocation = AttemptModelKeyIssuer & Required<Pick<AttemptModelKeyIssuer, "revokeAttemptKey">>;

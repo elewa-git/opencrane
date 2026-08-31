@@ -1,7 +1,8 @@
 # Hosting and deployment
 
 OpenCrane installs as one **organisation silo** on a conformant Kubernetes cluster. The
-umbrella chart composes the trusted services and separate, restricted Job namespaces.
+umbrella chart composes the trusted services, separate warm runtime pools and restricted worker
+namespaces.
 
 > See also: [Deployment configuration](/operators/deployment-configuration) (public Helm inputs),
 > [Organisation boundary](/operators/organisation-boundary) (what one silo serves),
@@ -19,17 +20,19 @@ Kubernetes cluster
     │   ├── agent controller
     │   └── supporting services
     ├── personal runtime namespace
-    │   └── fresh Job per admitted attempt
+    │   └── fixed warm Deployment; one claimed Pod per admitted attempt
     ├── managed runtime namespace
-    │   └── fresh Job per scheduled or managed attempt
+    │   └── fixed warm Deployment; one claimed Pod per managed attempt
     └── restricted worker namespaces
         ├── skill authoring
-        ├── tool runner
+        ├── MCP executor
         └── artifact preprocessor
 ```
 
-The runtime image is not a long-lived Deployment. The controller creates a suspended Job
-only after OpenCrane has durably admitted the run, then releases that exact Kubernetes UID.
+Each runtime namespace has one Helm-owned warm Deployment. Its generic Pods have no attempt data or
+authority. After OpenCrane durably admits a run, the controller claims one exact Pod UID, activates
+the fixed personal or managed network profile, and deletes that Pod when the attempt ends. The
+Deployment creates the replacement spare.
 
 ## Prerequisites
 
@@ -66,8 +69,8 @@ apps/_infra/deploy-k8s/deploy.sh \
   --cluster-tenant acme \
   --acme-email operator@example.com \
   --postgres-credentials-secret opencrane-postgres-bootstrap \
-  --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
-  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
+  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
+  --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap
 # Add --registry-pull-secret opencrane-ghcr-pull for private images.
 ```
 

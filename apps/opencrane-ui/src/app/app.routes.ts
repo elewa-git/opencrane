@@ -43,8 +43,7 @@ export const APP_ROUTES: Routes =
 		}
 	},
 	{
-		// MCP admin console (catalogue governance + access policy). Each screen
-		// gates in-component on the customerAdmin capability.
+		// The MCP catalogue screen gates in-component on the customerAdmin capability.
 		path: "admin",
 		canActivate: [___OperatorAccessGuard],
 		loadChildren: function loadMcpAdminRoutes()

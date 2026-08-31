@@ -14,6 +14,8 @@ export interface PersonaOnboardingCaller
 	readonly siloId: string;
 	/** Stable subject who is the only owner of this persona flow. */
 	readonly userId: string;
+	/** Stable local Principal resolved during authenticated request admission. */
+	readonly principalId: string;
 }
 
 /** Clock injected by the app so router tests never depend on the wall clock. */

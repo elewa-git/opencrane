@@ -23,8 +23,15 @@ export class PrismaPersonaOnboardingStatusRepository implements PersonaOnboardin
 		this.scoring = new PrismaPersonaScoringRepository(this.transaction);
 	}
 
+	/** Returns the owner-narrowed profile id used for central read authorization. */
+	async findOwnedProfileId(siloId: string, userId: string): Promise<string | null>
+	{
+		const profile = await this.transaction.personaProfile.findUnique({ where: { siloId_userId: { siloId, userId } }, select: { id: true } });
+		return profile?.id ?? null;
+	}
+
 	/** Read frozen questions, progress, tie state, and review result without persona instructions. */
-	async readStatus(siloId: string, userId: string): Promise<PersonaOnboardingStatus>
+	async readStatus(siloId: string, _principalId: string, userId: string): Promise<PersonaOnboardingStatus>
 	{
 		const profile = await this.transaction.personaProfile.findUnique({ where: { siloId_userId: { siloId, userId } }, select: { id: true, activeRevisionId: true, interviews: { orderBy: { startedAt: "desc" }, take: 1, select: { id: true, state: true, answers: { select: { questionId: true, choiceId: true } }, questionSet: { select: { questions: { select: { id: true, category: true, prompt: true, ordinal: true, choices: { select: { id: true, label: true, ordinal: true }, orderBy: { ordinal: "asc" } } }, orderBy: { ordinal: "asc" } } } } } } } });
 		if (profile === null) return _ProjectPersonaOnboardingStatus({ hasProfile: false, activeRevisionId: null, interview: null, revision: null, score: null });

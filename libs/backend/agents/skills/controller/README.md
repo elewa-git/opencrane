@@ -1,22 +1,20 @@
-# @opencrane/backend/agents/skills/controller — governed skill Job reconciliation
+# @opencrane/backend/agents/skills/controller — skill-authoring validation Job controller
 
 > [backend](../../../../README.md) › [agents](../../../README.md) › [skills](../README.md) › controller
 
 ## What it owns
 
-This package is the outbound reconciliation step between the durable skill-work authority and
-Kubernetes. A **reconciler** repeatedly makes an external system match a durable desired state. It
-claims one authorised workload, builds a hardened but still-suspended Job from its fixed class
-profile, and commits the Kubernetes-issued Job UID plus the Job's stable opaque reference back to
-OpenCrane.
+This package contains the Kubernetes work for skill-authoring validation Jobs. A workflow is a saved task that can wait,
+retry, and continue after a restart. The agent controller registers the Python validation workflow
+handler and uses it to create, observe, and clean up one restricted Job.
 
 ```
- Postgres workload claim ──► controller ◄── HERE ──► suspended Job
-          │                         │                   │
-          └──── database fence ◄────┴──── immutable UID ┘
+ saved Python validation task ──► controller ◄── HERE ──► restricted authoring Job
+                                      │                         │
+                                      └─ saved UID and Pod identity ─┘
 ```
 
-**In this flow:** [execution authority](../execution/main/README.md) ·
+**In this flow:** the shared [workflow task contract](../workflows/contract/README.md) and the
 [Job builder](../k8s-launcher/README.md).
 
 The Job stays suspended until a separate, database-fenced release claim authorises one conditional
@@ -26,29 +24,26 @@ Python code running.
 
 ## Public surface
 
-- `__ReconcileNextSkillWorkload` — handles at most one fenced claim and suspended Job assignment.
-- `__ReconcileNextSkillWorkloadRelease` — conditionally releases one assigned Job and registers its
-  exact first worker Pod.
-- `__RunSkillWorkloadController` — polls until process shutdown while isolating one failed claim.
-- `__ValidateSkillWorkloadControllerProfiles` — validates the two deployment-owned job-class profiles.
-- `__CreateHttpSkillWorkloadControllerAuthority` — bounds and decodes internal responses, then
-  delegates every wire shape and echo invariant to the model-adjacent Zod validators in
-  `@opencrane/contracts`.
+- `__CreateKubernetesSkillAuthoringValidationStore` — supplies authoring-validation labels and trace names to
+  the shared exact governed Job store.
+- `__CreateSkillAuthoringValidationHandler` — returns the registered workflow handler. It records
+  Job and Pod IDs, checks the saved result every second, retries expired delivery claims, and removes
+  only the exact Job it recorded.
 
 ## Boundary
 
 This package accepts ports for OpenCrane and Kubernetes; it does not use Prisma, issue a capability,
-read artifact bytes, duplicate controller wire validators, or run a worker. It releases only an exact UID-bound Job under a short durable
-release claim, then binds one Kubernetes-issued Pod UID. A later worker protocol must exchange the
-non-secret Job reference through a separately authenticated boundary before any code can run.
+read artifact bytes, duplicate controller wire validators, or run a worker. The workflow handler
+records a Job ID before release and a Pod ID before it can accept a worker result.
 
 ## Dependency direction
 
-Tagged `scope:skills-controller` and `layer:infra`, it may depend only on the pure skill Job builder
-and shared contracts. The deployable agent-controller app composes its HTTP and Kubernetes adapters.
+Tagged `scope:skills-controller` and `layer:infra`, it may depend on the pure skill Job builder, the
+shared exact governed Job controller, engine-neutral workflow contract, dependency-light skill task
+contract, and shared contracts. It does not import the backend workflow-admission implementation.
+The deployable agent-controller app composes its HTTP and Kubernetes adapters.
 
 ## See also
 
 - Parent group: [skills](../README.md)
-- Durable authority: [execution](../execution/main/README.md)
-- Manifest policy: [k8s launcher](../k8s-launcher/README.md)
+- Task facts: [workflow contract](../workflows/contract/README.md)

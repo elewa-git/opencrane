@@ -11,16 +11,10 @@ writer, no lost / reordered / late event after a terminal, no unbounded retry, a
 
 import io
 import json
-import tempfile
 import threading
 import unittest
 
-from src.constants import MAX_FRAME_BYTES as _MAX_FRAME_BYTES
-from src.model_loop.checkpoints import (
-    checkpoint_path as _checkpoint_path,
-    read_checkpoint as _read_checkpoint,
-    write_checkpoint as _write_checkpoint,
-)
+from src.constants import MAX_FRAME_BYTES as _MAX_FRAME_BYTES, PROTOCOL_VERSION
 from src.attempts.execution import (
     execute_cancel_attempt as _execute_cancel_attempt,
     execute_start_attempt as _execute_start_attempt,
@@ -33,18 +27,6 @@ from src.protocol.candidates import (
 )
 from src.runtime import retry_delay as _retry_delay
 from src.transport.stream import iter_commands as _iter_commands
-
-
-class _ReversingCipher:
-    """A reversible in-test cipher so stale-coordinate checkpoints can be exercised without crypto."""
-
-    def encrypt(self, data: bytes) -> bytes:
-        return b"v:" + data[::-1]
-
-    def decrypt(self, token: bytes) -> bytes:
-        if not token.startswith(b"v:"):
-            raise ValueError("bad token")
-        return token[len(b"v:"):][::-1]
 
 
 def _compiled_input() -> dict:
@@ -66,7 +48,10 @@ def _start_command() -> dict:
     """One structurally valid ``start_attempt`` command for terminal and cancellation scenarios."""
     return {
         "kind": "start_attempt",
+        "protocolVersion": PROTOCOL_VERSION,
+        "runtimeInstanceId": "instance-fault",
         "commandId": "cmd-start",
+        "sequence": 1,
         "fence": 4,
         "assignment": {"runId": "run-fault", "attempt": 2},
         "payload": {"snapshot": {"inputGeneration": 5}, "compiledInput": _compiled_input()},
@@ -77,7 +62,10 @@ def _cancel_command() -> dict:
     """One structurally valid ``cancel_attempt`` command sharing the start coordinates."""
     return {
         "kind": "cancel_attempt",
+        "protocolVersion": PROTOCOL_VERSION,
+        "runtimeInstanceId": "instance-fault",
         "commandId": "cmd-cancel",
+        "sequence": 2,
         "fence": 4,
         "assignment": {"runId": "run-fault", "attempt": 2},
         "payload": {"reason": "superseded"},
@@ -167,25 +155,6 @@ class FaultStreamLossTests(unittest.TestCase):
 
 class FaultStaleAuthorityTests(unittest.TestCase):
     """Wrong or stale assignment, fence, generation, revision, and args are refused fail-closed."""
-
-    def test_stale_generation_or_wrong_assignment_discards_the_local_checkpoint(self) -> None:
-        """A checkpoint disagreeing on run, attempt, or input generation is discarded, never trusted."""
-        with tempfile.TemporaryDirectory() as directory:
-            cipher = _ReversingCipher()
-            _write_checkpoint("run-fault", 2, 5, {"compiledInput": {}}, cipher=cipher, checkpoint_dir=directory)
-            self.assertIsNone(_read_checkpoint("run-fault", 2, 6, cipher=cipher, checkpoint_dir=directory))
-            self.assertIsNone(_read_checkpoint("other-run", 2, 5, cipher=cipher, checkpoint_dir=directory))
-            self.assertIsNone(_read_checkpoint("run-fault", 3, 5, cipher=cipher, checkpoint_dir=directory))
-
-    def test_forged_checkpoint_version_is_discarded(self) -> None:
-        """A checkpoint tagged with an unknown version is discarded rather than replayed as state."""
-        with tempfile.TemporaryDirectory() as directory:
-            cipher = _ReversingCipher()
-            path = _checkpoint_path(directory)
-            forged = cipher.encrypt(json.dumps({"checkpointVersion": 404, "runId": "run-fault", "attempt": 2, "inputGeneration": 5, "state": {}}, sort_keys=True, separators=(",", ":")).encode("utf-8"))
-            with open(path, "wb") as handle:
-                handle.write(forged)
-            self.assertIsNone(_read_checkpoint("run-fault", 2, 5, cipher=cipher, checkpoint_dir=directory))
 
     def test_ungranted_or_altered_tool_revision_is_a_hard_unknown_tool_error(self) -> None:
         """A tool naming a revision outside the compiled grant set is a hard error, never an action."""

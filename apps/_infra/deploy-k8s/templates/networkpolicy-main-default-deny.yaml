@@ -1,5 +1,5 @@
 {{- if and .Values.multiCt.enabled (not .Values.networkPolicy.mainNetworkDefaultDeny.enabled) }}
-{{- fail "multiCt.enabled=true requires networkPolicy.mainNetworkDefaultDeny.enabled=true: the platform-namespace default-deny (OpenCrane, channel-proxy, LiteLLM, Cognee, and Obot) is mandatory under a multi-ClusterTenant install — a shared platform namespace serving many ClusterTenants must never stay open by default. Set networkPolicy.mainNetworkDefaultDeny.enabled=true (after validating plane-to-plane connectivity per the values.yaml note), or drop the --multi-ct profile for a single-tenant box." }}
+{{- fail "multiCt.enabled=true requires networkPolicy.mainNetworkDefaultDeny.enabled=true: the platform-namespace default-deny (OpenCrane, channel-proxy, LiteLLM, and Cognee) is mandatory under a multi-ClusterTenant install — a shared platform namespace serving many ClusterTenants must never stay open by default. Set networkPolicy.mainNetworkDefaultDeny.enabled=true (after validating plane-to-plane connectivity per the values.yaml note), or drop the --multi-ct profile for a single-tenant box." }}
 {{- end }}
 {{- if and .Values.networkPolicy.enabled (or .Values.networkPolicy.mainNetworkDefaultDeny.enabled .Values.multiCt.enabled) }}
 {{- /*
@@ -8,7 +8,7 @@
 
   CONTEXT: the operator emits a per-silo default-deny into each ClusterTenant's own namespace
   at runtime (_BuildSiloBaselineNetworkPolicy). This template is the missing counterpart for
-  the PLATFORM namespace itself — where OpenCrane, channel-proxy, LiteLLM, Cognee, and Obot
+  the PLATFORM namespace itself — where OpenCrane, channel-proxy, LiteLLM, and Cognee
   run — which had no default-deny before this change.
 
   RELATION TO OTHER POLICIES: networkpolicy-planes.yaml + the app-owned OpenCrane ingress template
@@ -22,7 +22,8 @@
 
   FQDN-BASED EGRESS: rule 7 allows port 443 to ANY external destination (conservative — a
   NetworkPolicy cannot match on FQDN). Replace with CiliumNetworkPolicy scoped to
-  networkPolicy.defaultAllowedDomains / your Zitadel host if the cluster runs Cilium.
+  networkPolicy.defaultAllowedDomains / your Zitadel host only when the cluster serves and
+  enforces that exact API.
 */}}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -33,15 +34,15 @@ metadata:
     {{- include "opencrane.labels" . | nindent 4 }}
     app.kubernetes.io/component: platform-default-deny
 spec:
-  # ArtifactStore, agent-controller, and the PostgreSQL pooler have app-owned policies; each
-  # agent-runtime Job has a controller-built policy. Excluding them prevents this generic
-  # allow-list from widening their stricter boundaries. CNPG identifies generated pooler pods
-  # with cnpg.io/poolerName rather than preserving the Pooler CR's application labels.
+  # ArtifactStore, agent-controller, warm runtimes, LiteLLM, and the PostgreSQL pooler have
+  # app-owned policies. Excluding them prevents this generic allow-list from widening their
+  # stricter boundaries. CNPG identifies generated pooler pods with cnpg.io/poolerName rather
+  # than preserving the Pooler CR's application labels.
   podSelector:
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: NotIn
-        values: [artifact-service, agent-controller, agent-runtime, cognee, memory-gateway]
+        values: [artifact-service, agent-controller, warm-runtime, cognee, litellm, memory-gateway]
       - key: cnpg.io/poolerName
         operator: DoesNotExist
   policyTypes:
@@ -65,10 +66,6 @@ spec:
             matchLabels:
               {{- include "opencrane.selectorLabels" . | nindent 14 }}
               app.kubernetes.io/component: cognee
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: mcp-gateway
         - podSelector:
             matchLabels:
               {{- include "opencrane.selectorLabels" . | nindent 14 }}
@@ -115,10 +112,6 @@ spec:
             matchLabels:
               {{- include "opencrane.selectorLabels" . | nindent 14 }}
               app.kubernetes.io/component: cognee
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: mcp-gateway
         - podSelector:
             matchLabels:
               {{- include "opencrane.selectorLabels" . | nindent 14 }}

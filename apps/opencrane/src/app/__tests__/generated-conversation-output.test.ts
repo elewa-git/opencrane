@@ -1,9 +1,10 @@
-import { ArtifactRevisionState, ArtifactScanJobState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, ConversationLifecycle, WorkloadAssignmentState } from "@prisma/client";
+import { ArtifactRevisionState, ArtifactScanJobState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, ConversationLifecycle, PrincipalProvenance, WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaArtifactScanUnitOfWork } from "@opencrane/backend/server/agents/artifacts";
 import { PrismaConversationAssetOutputRepository, PrismaConversationAssetOutputUnitOfWork } from "@opencrane/backend/server/conversation-assets";
 import { ArtifactScannerVerdict } from "@opencrane/contracts";
+import { ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
 
 const _NOW = new Date("2026-08-11T10:00:00.000Z");
 const _CONTENT = new Uint8Array([137, 80, 78, 71]);
@@ -19,7 +20,31 @@ function _Database()
 	let asset: Record<string, unknown> | null = null;
 	let revision: Record<string, unknown> | null = null;
 	let scanJob: Record<string, unknown> | null = null;
-	const assignment = { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, podUid: _IDENTITY.podUid, state: WorkloadAssignmentState.Registered, expiresAt: new Date("2030-01-01T00:00:00.000Z"), run: { id: "run-1", attempt: 2, conversationId: "conversation-1" } };
+	const assignment = { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, bindingGeneration: 2, state: WorkloadAssignmentState.Registered, expiresAt: new Date("2030-01-01T00:00:00.000Z"), run: { id: "run-1", attempt: 2, conversationId: "conversation-1" }, warmRuntimeReservations: [{ generation: 2 }] };
+	const capability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.ArtifactCollection, ProductAuthorizationActions.Create);
+	if (capability === null) throw new Error("artifact collection create capability is missing");
+	const collectionGrant = {
+		id: "grant-1",
+		siloId: "silo-1",
+		subjectKind: "Principal",
+		subjectGroupId: null,
+		subjectPrincipalId: "principal-1",
+		boundaryKind: "Personal",
+		boundaryGroupId: null,
+		boundaryPrincipalId: "principal-1",
+		boundaryCoverage: "Exact",
+		catalogId: capability.catalog.catalogId,
+		catalogRevision: capability.catalog.revision,
+		catalogDigest: capability.catalog.digest,
+		capabilityId: capability.capabilityId,
+		resourceKind: ProductAuthorizationResourceKinds.ArtifactCollection,
+		resourceId: "silo-1",
+		effect: "Allow",
+		priority: 0,
+		validFrom: new Date("2026-01-01T00:00:00.000Z"),
+		expiresAt: null,
+		revokedAt: null,
+	};
 
 	function _TicketWithAsset(): Record<string, unknown> | null
 	{
@@ -28,9 +53,20 @@ function _Database()
 
 	const transaction = {
 		artifactAuthorityClock: { findUnique: vi.fn().mockImplementation(async function _Clock() { return { now: _NOW }; }) },
-		principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]) },
+		principal: {
+			findMany: vi.fn().mockResolvedValue([{ id: "principal-1" }]),
+			findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1", provenance: PrincipalProvenance.Internal }),
+		},
+		groupMembership: { findMany: vi.fn().mockResolvedValue([]) },
+		authorizationGrant: {
+			findMany: vi.fn().mockResolvedValueOnce([collectionGrant]).mockResolvedValue([]),
+			updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+			create: vi.fn().mockResolvedValue({}),
+		},
+		auditDecision: { create: vi.fn().mockResolvedValue({}) },
+		auditEntry: { create: vi.fn().mockResolvedValue({}) },
 		workloadAssignment: { findFirst: vi.fn().mockResolvedValue(assignment) },
-		conversationRunEvent: { findFirst: vi.fn().mockResolvedValue({ sequence: 7, payload: { messageId: "assistant:command-1", role: "assistant" } }) },
+		conversationRunEvent: { findFirst: vi.fn().mockResolvedValue({ attempt: 2, sequence: 7, payload: { messageId: "assistant:command-1", role: "assistant" } }) },
 		conversationAssetOutputTicket: {
 			findUnique: vi.fn().mockImplementation(async function _FindTicket(args: { readonly where: Record<string, unknown> }) { return Object.hasOwn(args.where, "id") ? _TicketWithAsset() : null; }),
 			create: vi.fn().mockImplementation(async function _CreateTicket(args: { readonly data: Record<string, unknown> }) { ticket = { ...args.data, finalizedAt: null }; journey.push("reserve"); return ticket; }),
@@ -87,7 +123,7 @@ describe("generated conversation output journey", function _Suite()
 		if (reservation.outcome === "denied") throw new Error("test reservation was denied");
 		await expect(outputs.publish(_IDENTITY, reservation.ticketId, (async function* _Bytes() { yield _CONTENT; })())).resolves.toEqual({ outcome: "accepted" });
 
-		const scanner = new PrismaArtifactScanUnitOfWork(database.prisma as never, 300_000, function _ConversationAssets(transaction) { return new PrismaConversationAssetOutputRepository(transaction); });
+		const scanner = new PrismaArtifactScanUnitOfWork(database.prisma as never, 300_000, function _ConversationAssets(transaction) { return new PrismaConversationAssetOutputRepository(transaction); }, { spawn: vi.fn() });
 		const claim = await scanner.claim();
 		expect(claim).not.toBeNull();
 		await expect(scanner.complete({ jobId: claim!.lease.jobId, attempt: claim!.lease.attempt, claimFence: claim!.lease.claimFence, verdict: ArtifactScannerVerdict.Clean, scannerVersion: "clamav-pinned" })).resolves.toBe("completed");

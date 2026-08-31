@@ -12,7 +12,8 @@ const _packageRoot = path.dirname(fileURLToPath(import.meta.url));
  *
  * The schema is a multi-file folder (`prisma/schema/`), with the `datasource` block living in
  * `prisma/schema/base.prisma`. Database creation consumes the separate app-owned target baseline;
- * Prisma remains a build-time schema and client generator, not a runtime migration authority.
+ * Pre-1.0 there is no migration ledger: the reviewed target baseline creates every database, and a
+ * schema change edits that baseline (see docs/agents/versioning.md).
  */
 export default defineConfig({
   schema: path.join(_packageRoot, "prisma", "schema"),

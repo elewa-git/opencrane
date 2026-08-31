@@ -1,6 +1,6 @@
 {
   "name": "opencrane-platform",
-  "version": "0.9.3",
+  "version": "0.10.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",
@@ -24,6 +24,8 @@
     "test:prisma-boundaries": "node --test scripts/__tests__/prisma-boundary-check.test.mjs",
     "check:workflow-boundary": "node scripts/workflow-boundary-check.mjs",
     "test:workflow-boundary": "node --test scripts/__tests__/workflow-boundary-check.test.mjs",
+    "check:authorization-enforcement": "node scripts/authorization-enforcement-check.mjs",
+    "test:authorization-enforcement": "node --test scripts/__tests__/authorization-enforcement-check.test.mjs",
     "test:affected-deployables": "node --test scripts/__tests__/affected-deployables.test.mjs",
     "test:config-docs-coverage": "node --test scripts/__tests__/config-docs-coverage.test.mjs",
     "check:pr-stack-integrity": "node scripts/pr-stack-integrity.mjs",

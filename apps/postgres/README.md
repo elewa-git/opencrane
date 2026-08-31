@@ -9,8 +9,8 @@ boundaries. CNPG owns the database process itself.
 ## What it owns
 
 A **silo** is one customer's isolated OpenCrane installation. This chart creates one PostgreSQL
-Cluster for that silo, with separate logical databases and credentials for the OpenCrane server,
-LiteLLM, and Obot. It also creates a PgBouncer connection pool and database privilege Jobs.
+Cluster for that silo, with separate logical databases and credentials for the OpenCrane server
+and LiteLLM. It also creates a PgBouncer connection pool and database privilege Jobs.
 
 ```
   application release
@@ -22,11 +22,11 @@ LiteLLM, and Obot. It also creates a PgBouncer connection pool and database priv
   └───────────────────────────────┘
           │ connection Secrets
           ▼
-  server · LiteLLM · Obot
+  server · LiteLLM
 ```
 
 **In this flow:** [OpenCrane server](../opencrane/README.md) ·
-[LiteLLM](../_infra/litellm/README.md) · [Obot](../_infra/obot/README.md)
+[LiteLLM](../_infra/litellm/README.md)
 
 The schema is created once, by CNPG `initdb` from the app-owned target baseline (the baseline
 publisher prepends the `pg_cron` prerequisite). There is no version-to-version migration Job

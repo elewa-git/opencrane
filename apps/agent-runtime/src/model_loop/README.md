@@ -2,8 +2,8 @@
 
 > [agent-runtime](../../README.md) › model loop
 
-This package adapts the attempt-scoped Pydantic AI loop into framework-neutral events and stores only
-an encrypted, replaceable local checkpoint subordinate to canonical server state.
+This package adapts the attempt-scoped Pydantic AI loop into framework-neutral events. It converts
+Pydantic message history to compact JSON inside the continuation owned by `attempts/`.
 
 ```text
 compiled run input
@@ -22,17 +22,15 @@ framework-neutral events
 | `openai_generated_outputs.py` | Maps admitted OpenAI capabilities and final provider events into queued or in-memory neutral outputs. |
 | `openai_container_files.py` | Retrieves queued OpenAI container files once with the attempt-scoped client and returns no provider metadata. |
 | `generated_output_policy.py` | Owns the provider-neutral file limits, byte classification, safe names, batch validation, and output order. |
-| `checkpoints.py` | Replaces encrypted checkpoints and validates their server coordinates. |
-| `histories.py` | Retains bounded same-process Pydantic message history for exact deferred-tool resume. |
 
-The loop cannot execute tools or make its local checkpoint authoritative. Server-compiled tool
+The loop cannot execute tools or make its continuation authoritative. Server-compiled tool
 schemas are exposed through Pydantic AI's execution-free `ExternalToolset`; every proposed call is
 handed back as a neutral event and must cross server admission, approval, and worker authority.
 The execution-free model toolset always includes `opencrane_request_input`, even when the run has no
 compiled external tools. Its Pydantic call id is retained only to correlate the server-owned
 elicitation result back into the same deferred-tool history. On resume, exact validated
 participant-input results share the existing `DeferredToolResults` mapping. Ordinary answer content
-is never logged or checkpointed; protected A2UI answers arrive only as redacted terminal markers.
+is never logged; protected A2UI answers arrive only as redacted terminal markers.
 Completed Pydantic `FilePart` values become neutral generated-output
 events only after the whole response stays within ten files, 200 MiB total, and the approved media
 types. The immutable compiled route alone enables pinned PNG image generation or code execution.

@@ -16,14 +16,13 @@ root version in the same slice. Documentation-only changes do not advance an app
 | [`apps/opencrane-ui`](../../apps/opencrane-ui/README.md) | Angular web client for organisation and employee surfaces. |
 | [`apps/channel-proxy`](../../apps/channel-proxy/README.md) | Inbound channel authentication and routing boundary. |
 | [`apps/memory-gateway`](../../apps/memory-gateway/README.md) | Private Cognee transport boundary that TokenReviews the server identity. |
-| [`apps/agent-controller`](../../apps/agent-controller/README.md) | Sole Kubernetes mutator for governed run-attempt Jobs. |
-| [`apps/agent-runtime`](../../apps/agent-runtime/README.md) | Outbound-only process for one personal or managed run attempt. |
-| [`apps/managed-agent-runtime`](../../apps/managed-agent-runtime/README.md) | Isolated namespace and identity profile for scheduled and triggered managed runs. |
+| [`apps/agent-controller`](../../apps/agent-controller/README.md) | Warm AgentRun pool owner and sole Kubernetes mutator for governed one-shot Jobs. |
+| [`apps/mcp-executor`](../../apps/mcp-executor/README.md) | One-shot token-holding companion for OCI-backed MCP Jobs. |
+| [`apps/agent-runtime`](../../apps/agent-runtime/README.md) | Outbound-only process claimed once from a personal or managed warm pool. |
 | [`apps/artifact-service`](../../apps/artifact-service/README.md) | Governed artifact byte promotion and receipt service. |
 | [`apps/artifact-preprocessor`](../../apps/artifact-preprocessor/README.md) | Broker-only document extraction worker. |
 | [`apps/artifact-scanner`](../../apps/artifact-scanner/README.md) | Broker-only malware scanner for quarantined revisions. |
 | [`apps/skill-authoring`](../../apps/skill-authoring/README.md) | Isolated candidate-skill Job plane. |
-| [`apps/tool-runner`](../../apps/tool-runner/README.md) | Isolated governed tool-execution Job plane. |
 | [`apps/postgres`](../../apps/postgres/README.md) | OpenCrane-owned PostgreSQL deployment and clean baseline bootstrap. |
 | [`apps/_infra`](../../apps/_infra/README.md) | Third-party deployment wrappers and the Kubernetes release composer. |
 
@@ -35,21 +34,24 @@ app's source.
 | Group | Responsibility |
 | --- | --- |
 | `libs/backend/agents/personal/*` | Persona, verified personal-memory selection, and configuration authorities owned by a person. |
-| `libs/backend/agents/memory/*` | Generic durable fact metadata and catalog-outbox authority; fact content remains in Cognee. |
 | `libs/backend/agents/execution/*` | Immutable run inputs, run lifecycle, and runtime protocol admission. |
 | [`libs/backend/agents/execution/elicitation`](../../libs/backend/agents/execution/elicitation/main/README.md) | Recoverable participant input, exact response authority, and purpose-specific completion. |
-| `libs/backend/agents/runtime/*` | Kubernetes Job projection and controller orchestration. |
-| `libs/backend/agents/skills/*` | Governed skill authoring and execution workloads. |
+| `libs/backend/agents/runtime/*` | Kubernetes Job projection, controller orchestration, and class-neutral workload claim contracts. |
+| `libs/backend/agents/skills/*` | Governed skill authoring, workflow admission, and execution workloads. |
 | `libs/backend/artifacts/*` | Artifact authorization, storage, preprocessing, and fenced malware scanning. |
+| [`libs/backend/artifacts/preprocessor`](../../libs/backend/artifacts/preprocessor/README.md) | PDF workflow controller, one-shot Job policy, and broker-only worker. |
 | [`libs/backend/channel-proxy`](../../libs/backend/channel-proxy/main/README.md) | Reusable inbound-channel trust-boundary logic. |
 | [`libs/backend/conversations/projection`](../../libs/backend/conversations/projection/main/README.md) | Transport-neutral redaction, AG-UI mapping, cursoring, and live streaming for every conversation mode. |
 | [`libs/backend/server`](../../libs/backend/server/README.md) | API capabilities grouped by agents, IAM, gateways, knowledge, reporting, and organisation scope. |
 | [`libs/backend/server/iam/organization-members`](../../libs/backend/server/iam/organization-members/main/README.md) | Settings member directory and standalone invitation authority, or fail-closed delegation of the whole capability to Fleet billing. |
+| [`libs/backend/server/iam/audit-writer`](../../libs/backend/server/iam/audit-writer/main/README.md) | Transaction-scoped append-only authorization decision evidence with no read or policy dependency. |
 | [`libs/backend/server/agents/onboarding`](../../libs/backend/server/agents/onboarding/main/README.md) | Durable, session-owner-bound onboarding route state and exact persona/bootstrap references. |
 | [`libs/backend/server/conversations`](../../libs/backend/server/conversations/main/README.md) | Mode-correct conversation authority, participant visibility, canonical timeline, authorised stream readers, and HTTP routes. |
 | [`libs/backend/server/conversation-assets`](../../libs/backend/server/conversation-assets/main/README.md) | Participant upload, quarantine, scan, and message-attachment authority. |
 | [`libs/backend/server/infra`](../../libs/backend/server/infra/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
+| [`libs/backend/server/infra/agent-runtime-continuation`](../../libs/backend/server/infra/agent-runtime-continuation/README.md) | Secret-backed encryption for durable AgentRun continuation checkpoints. |
 | [`libs/backend/server/infra/workflows`](../../libs/backend/server/infra/workflows/README.md) | Workflow-engine task contract, guardrails, finite respawn chains, the Absurd adapter, and deterministic test support. |
+| [`libs/backend/server/infra/oci-registry`](../../libs/backend/server/infra/oci-registry/README.md) | Digest-checked OCI Distribution client used by image admission. |
 | [`libs/backend/server/infra/organization-membership-gateway`](../../libs/backend/server/infra/organization-membership-gateway/README.md) | HTTPS and projected-token transport to Fleet membership and billing authority. |
 | [`libs/backend/observability`](../../libs/backend/observability/README.md) | Cross-cutting structured logging and execution tracing. |
 

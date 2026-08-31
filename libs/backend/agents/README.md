@@ -9,9 +9,8 @@ general: a personal assistant and a future managed agent both need an identity, 
 safe execution boundary.
 
 `personal/` is the current specialization. It owns employee-specific policy — a person's
-configuration-change provenance, verified memory selection, and approved persona. Generic durable
-fact metadata and its outbox intent live in `memory/`, so a future managed scope does not need to
-depend on personal policy. Conversation modes, participant visibility, the canonical timeline, and
+configuration-change provenance, verified memory selection, durable personal fact metadata, and an
+approved persona. Conversation modes, participant visibility, the canonical timeline, and
 replay are owned by [`libs/backend/server/conversations`](../server/conversations/main/README.md).
 This tier is deliberately distinct from
 [`libs/backend/server`](../server/README.md), the **control plane** that governs identity,
@@ -25,20 +24,21 @@ agent principles rather than becoming personal-only by proximity.
 | [`personal/configuration`](./personal/configuration/README.md) | Personal specialization: future-snapshot configuration-change provenance. |
 | [`personal/memory`](./personal/memory/README.md) | Personal specialization: verified dataset and preference-fact selection. |
 | [`personal/personas`](./personal/personas/README.md) | Personal specialization: persona approval process. |
-| [`memory`](./memory/main/README.md) | Shared: durable fact metadata and outbox intent, not fact content. |
 | [`execution/inputs`](./execution/inputs/main/README.md) | Shared: immutable run-input assembly. |
 | [`execution/admission`](./execution/admission/main/README.md) | Shared: trusted personal and managed entrypoints into immutable run admission. |
 | [`execution/runs`](./execution/runs/main/README.md) | Shared: run and attempt authority. |
 | [`execution/protocol`](./execution/protocol/README.md) | Shared: language-neutral command and candidate authority. |
-| [`runtime`](./runtime/README.md) | Shared: Kubernetes Job projection and controller. |
+| [`runtime`](./runtime/README.md) | Shared: warm runtime Pod claims plus class-specific worker Job controllers. |
+| [`runtime/workloads/contract`](./runtime/workloads/contract/README.md) | Shared claim lease and binding fields for class-specific workloads. |
+| [`runtime/workloads/k8s-controller`](./runtime/workloads/k8s-controller/README.md) | Exact Job adoption, release, and Pod checks shared by workload classes. |
 
 ```
  personal specialization                shared agent execution
- configuration · personal memory · personas ──► inputs ──► runs ──► protocol ──► runtime Job
+ configuration · personal memory · personas ──► inputs ──► runs ──► protocol ──► claimed warm Pod
                                                      ▲
                                              admission (trusted entry)
                    │                           frozen input  attempt   bounded executor boundary
-                   └── verified catalog coordinates ──► memory metadata/outbox
+                   └── verified catalog coordinates ──► personal memory metadata
 ```
 
 The diagram intentionally leaves room for future managed specializations without inventing packages
@@ -48,9 +48,9 @@ owns the model loop or a second run/event store.
 ## Dependency rule for this tier
 
 Each domain carries `layer:backend` and its own scope (`scope:execution-runs`,
-`scope:personal-configuration`, `scope:personal-memory`, `scope:personal-personas`, `scope:memory`).
-A domain may import the shared models it needs — the agent model (`scope:agents`), and for generic
-memory the artifacts model — plus shared contracts (`scope:shared`) and its own scope.
+`scope:personal-configuration`, `scope:personal-memory`, `scope:personal-personas`).
+A domain may import the shared models it needs, such as the agent and artifact models, plus shared
+contracts (`scope:shared`) and its own scope.
 It may **not** import an unrelated specialization or a control-plane (`libs/backend/server`) domain.
 Cross-domain contact happens above, in the app that composes them. Never import an app.
 

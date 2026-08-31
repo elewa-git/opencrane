@@ -6,6 +6,40 @@ const _MINIMUM_TRIGGERS = 101;
 const _MINIMUM_CONSTRAINTS = 235;
 const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE FUNCTION "enforce_authorization_grant_update"()',
+	'CREATE TABLE "provider_effect_commands"',
+	'"desired_generation" INTEGER NOT NULL',
+	'CREATE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__idx" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation" DESC)',
+	'CREATE INDEX "provider_effect_commands_follow_up_command_id_idx" ON "provider_effect_commands"("follow_up_command_id")',
+	'CREATE UNIQUE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__key" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation")',
+	'CREATE UNIQUE INDEX "provider_credentials_global_provider_key" ON "provider_credentials"("silo_id", "provider") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
+	'CREATE UNIQUE INDEX "model_definitions_global_public_model_name_key" ON "model_definitions"("silo_id", "public_model_name") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
+	'CREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions"("silo_id") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL AND "is_default"',
+	'CREATE UNIQUE INDEX "model_definitions_silo_id_litellm_model_id_key" ON "model_definitions"("silo_id", "litellm_model_id")',
+	'CREATE UNIQUE INDEX "model_routing_defaults_global_key" ON "model_routing_defaults"("silo_id") WHERE "scope" = \'global\' AND "cluster_tenant" IS NULL',
+	'ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_id_silo_id_fkey" FOREIGN KEY ("model_definition_id", "silo_id") REFERENCES "model_definitions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE',
+	'ALTER TABLE "model_definitions" ADD CONSTRAINT "model_definitions_provider_credential_id_silo_id_fkey" FOREIGN KEY ("provider_credential_id", "silo_id") REFERENCES "provider_credentials"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE',
+	'CREATE UNIQUE INDEX "provider_effect_commands_silo_kind_resource_revision_key" ON "provider_effect_commands"("silo_id", "kind", "resource_id", "resource_revision")',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_material_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_claim_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_completion_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_follow_up_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_follow_up_command_id_fkey" FOREIGN KEY ("follow_up_command_id") REFERENCES "provider_effect_commands"("id") ON DELETE RESTRICT ON UPDATE CASCADE',
+	'"state" = \'claimed\' AND "completed_at" IS NULL AND "result" IS NOT NULL AND "failure_code" = \'provider_effect_finalization_blocked\'',
+	'"failure_code" <> \'provider_effect_finalization_blocked\'',
+	'"kind" = \'set_byok_key\' AND "state" = \'succeeded\' AND "follow_up_command_id" <> "id"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_payload_check"',
+	'ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_resource_binding_check"',
+	'"material_verifier" IS NOT NULL AND "material_verifier" ~ \'^sha256:[0-9a-f]{64}$\'',
+	'"desired_generation" > 0',
+	'"payload" - ARRAY[\'provider\', \'secretRef\', \'litellmCredentialName\'] = \'{}\'::jsonb',
+	'"payload" - ARRAY[\'modelDefinitionId\', \'publicModelName\', \'upstreamModel\', \'scope\', \'clusterTenant\', \'apiBase\', \'apiKeyEnvRef\', \'litellmCredentialName\', \'routingDefaultId\', \'selectedModelDefinitionId\'] = \'{}\'::jsonb',
+	'jsonb_typeof("payload"->\'routingDefaultId\') = \'null\' AND jsonb_typeof("payload"->\'selectedModelDefinitionId\') = \'null\'',
+	'"payload"->>\'selectedModelDefinitionId\' <> "payload"->>\'modelDefinitionId\'',
+	'"payload"->>\'scope\' = \'global\'',
+	'"payload"->>\'publicModelName\' = \'auto\'',
+	'"resource_kind" = \'model-definition\'\n        AND "payload"->>\'modelDefinitionId\' = "resource_id"',
+	'"resource_kind" = \'provider-connection\'\n        AND "resource_id" = \'byok:\' || "silo_id" || \':\' || ("payload"->>\'provider\')',
 	'NEW."subject_kind" IS DISTINCT FROM OLD."subject_kind"',
 	'NEW."boundary_coverage" IS DISTINCT FROM OLD."boundary_coverage"',
 	'NEW."manager_id" IS DISTINCT FROM OLD."manager_id"',
@@ -15,13 +49,23 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'ResourceShareRecipient must link its exact active manager-owned grant',
 	'ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check"',
 	"'capability-catalog-resource-sharing-v1',\n    'opencrane-resource-sharing',\n    1,\n    'sha256:03c84ee77c531ddc95d5c379e195e12d94aed9129783a07105066a875d24c775'",
-	"'capability-catalog-opencrane-core-v1',\n    'opencrane-core',\n    1,\n    'sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6'",
 	'CREATE FUNCTION "enforce_agent_revision_assignment_immutability"()',
+	'CREATE TRIGGER "agent_revision_mcp_tool_assignments_immutable"',
 	'CREATE CONSTRAINT TRIGGER agent_runs_input_snapshot_complete',
 	'CREATE VIEW "artifact_authority_clock" AS\n    SELECT 1::INTEGER AS "singleton", date_trunc(\'milliseconds\', clock_timestamp())::TIMESTAMP(3) AS "now";',
 	'CREATE VIEW "skill_authority_clock" AS\n    SELECT 1::INTEGER AS "singleton", date_trunc(\'milliseconds\', clock_timestamp())::TIMESTAMP(3) AS "now";',
-	'bootstrap_expires_at TIMESTAMP(3); requested_lease INTERVAL;\n        transition_time TIMESTAMP(3) := date_trunc(\'milliseconds\', clock_timestamp())::TIMESTAMP(3);',
-	'DECLARE workload_kind "SkillWorkloadKind"; workload_state "SkillWorkloadState"; assigned_uid TEXT; assigned_pod_uid TEXT;\n        transition_time TIMESTAMP(3) := date_trunc(\'milliseconds\', clock_timestamp())::TIMESTAMP(3);',
+	'CREATE VIEW "mcp_runtime_clock" AS\n    SELECT 1::INTEGER AS "singleton", date_trunc(\'milliseconds\', clock_timestamp())::TIMESTAMP(3) AS "now";',
+	'CREATE FUNCTION "select_mcp_runtime_claim_candidate"()',
+	'FOR UPDATE OF execution SKIP LOCKED',
+	'CREATE VIEW "mcp_runtime_claim_candidates" AS SELECT * FROM "select_mcp_runtime_claim_candidate"();',
+	'CREATE FUNCTION "select_mcp_runtime_release_claim_candidate"()',
+	'CREATE VIEW "mcp_runtime_release_claim_candidates" AS SELECT * FROM "select_mcp_runtime_release_claim_candidate"();',
+	'CREATE FUNCTION "enforce_mcp_runtime_execution_authority"()',
+	'McpRuntimeExecution controller claim requires an expired prior fence and a bounded lease proposal',
+	'McpRuntimeExecution companion fence is immutable outside claim or expired discovery reset',
+	'CREATE TRIGGER "mcp_runtime_executions_authority"',
+	'CREATE FUNCTION "enforce_mcp_server_revision_runtime_completion"()',
+	'CREATE TRIGGER "mcp_server_revisions_runtime_completion"',
 	'INSERT INTO "persona_question_sets" ("question_set_id", "version") VALUES (\'personal-agent-onboarding\', 1);',
 	'(OLD."state" = \'survey_pending\' AND NEW."state" = \'survey_in_progress\')',
 	'OLD."state" = \'survey_in_progress\' AND NEW."state" = \'survey_in_progress\'',
@@ -42,16 +86,22 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE TRIGGER "conversation_timeline_entries_allocate"',
 	'"activity_sequence" BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL',
 	'"activity_sequence" = DEFAULT',
+	'jsonb_typeof("mcp_tools") = \'array\'',
 	'CREATE UNIQUE INDEX "conversations_activity_sequence_key"',
 	'CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"',
-	'CREATE FUNCTION "has_reviewed_tool_definitions"(JSONB)',
-	'"tool_definitions" JSONB NOT NULL',
+	'CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"(\n  "silo_id", "subject_kind", COALESCE("subject_group_id", \'\'), COALESCE("subject_principal_id", \'\'),\n  "boundary_kind", COALESCE("boundary_group_id", \'\'), COALESCE("boundary_principal_id", \'\'), "boundary_coverage",\n  "catalog_id", "catalog_revision", "capability_id", "resource_kind", COALESCE("resource_id", \'\'), "effect", "priority", COALESCE("manager_id", \'\')\n) WHERE "revoked_at" IS NULL',
+	'CONSTRAINT "model_definitions_generated_output_capabilities_check"',
 	'CREATE TYPE "ToolInvocationState" AS ENUM (\'preparing\', \'awaiting_approval\', \'ready\', \'claimed\', \'reconciling\', \'succeeded\', \'failed\', \'recovery_required\');',
 	'CREATE TABLE "tool_result_deliveries"',
 	'CREATE FUNCTION "enforce_tool_result_delivery_identity"()',
 	'CREATE TRIGGER "tool_result_deliveries_invocation_identity" BEFORE INSERT OR UPDATE OF "tool_invocation_id", "payload" ON "tool_result_deliveries"',
 	'CREATE FUNCTION "enforce_tool_invocation_lifecycle"()',
 	'CREATE TRIGGER "tool_invocations_lifecycle_guard"',
+	'CREATE FUNCTION "enforce_tool_invocation_authorization_evidence"()',
+	'NEW."authorization_actor_kind" IS DISTINCT FROM \'user\'::"ToolInvocationAuthorizationActorKind"',
+	'NEW."authorization_membership_revision" IS NOT NULL',
+	'task-owned ToolInvocation requires complete central authorization evidence without AgentRun fields',
+	'CREATE TRIGGER "tool_invocations_authorization_evidence"',
 	'ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_identity_check"',
 	'ALTER TABLE "tool_result_deliveries" ADD CONSTRAINT "tool_result_deliveries_exact_check"',
 	'CREATE TYPE "PersonalMemoryPermissionReceiptState" AS ENUM (\'active\', \'consumed\');',
@@ -69,8 +119,14 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'ALTER TABLE "conversations" ADD CONSTRAINT "conversations_identity_check"',
 	'ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_reference_shape_check"',
 	'ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_run_id_run_attempt_fkey"',
-	'ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_run_event_sequence_fkey"',
-	'CREATE UNIQUE INDEX "conversation_run_events_one_message_start"',
+	'ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_r_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_attempt", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence")',
+	'ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_run_attempt_run_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_attempt", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "attempt", "sequence")',
+	'CREATE UNIQUE INDEX "conversation_run_events_conversation_id_run_id_attempt_sequ_key"',
+	'CREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "attempt", "message_id")',
+	'CREATE UNIQUE INDEX "child_run_completion_deliveries_one_delivery_per_attempt"',
+	'RunEvent must bind the current AgentRun attempt',
+	'RunEvent attempt stream is terminal',
+	'delivered child completion requires exact parent attempt event',
 	'ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_exact_output_ticket_fkey"',
 	'CREATE FUNCTION "enforce_conversation_asset_output_ticket_lifecycle"()',
 	'CREATE TRIGGER "conversation_asset_output_tickets_lifecycle_guard"',
@@ -81,6 +137,8 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'"provenance" = \'agent_output\' AND "created_by_user_id" IS NULL AND "message_id" IS NULL',
 ];
 const _FORBIDDEN_AUTHORITY_MARKERS = [
+	'CREATE UNIQUE INDEX "model_definitions_litellm_model_id_key" ON "model_definitions"("litellm_model_id")',
+	'CREATE UNIQUE INDEX "provider_effect_commands_kind_resource_id_resource_revision_key" ON "provider_effect_commands"("kind", "resource_id", "resource_revision")',
 	'NEW."scope_kind" IS DISTINCT FROM OLD."scope_kind"',
 	'CREATE UNIQUE INDEX "memory_datasets_exact_scope_key"',
 	'btrim("organization_id") <> \'\' AND\n        (("scope_kind" = \'organization\'',
@@ -93,12 +151,30 @@ const _FORBIDDEN_AUTHORITY_MARKERS = [
 	'"allowed_tools"',
 	'has_nonempty_distinct_tool_ids',
 	'runtime_external_action_retries',
+	'run.attempt_requested',
+	'run.workload_release_requested',
+	'"parent_delivery_child_run_id"',
+	'CREATE INDEX "conversation_run_events_run_id_message_id_idx"',
+	'RunEvent stream is terminal',
+	"'capability-catalog-opencrane-core-v1'",
+	"'opencrane-core'",
 ];
 
 /** Counts statements which begin at a SQL line boundary. */
 function _CountStatements(baseline, pattern)
 {
 	return (baseline.match(pattern) ?? []).length;
+}
+
+/** Rejects duplicate names introduced when generated Prisma SQL and reviewed authority SQL are combined. */
+function _VerifyUniqueNames(baseline, pattern, kind)
+{
+	const names = [...baseline.matchAll(pattern)].map(function _Name(match) { return match[1]; });
+	const duplicates = [...new Set(names.filter(function _Duplicate(name, index) { return names.indexOf(name) !== index; }))];
+	if (duplicates.length > 0)
+	{
+		throw new Error(`target baseline repeats ${kind}: ${duplicates.join(", ")}`);
+	}
 }
 
 /** Rejects a Prisma-only baseline that has silently discarded the reviewed authority SQL layer. */
@@ -108,6 +184,12 @@ function _Verify()
 	const functions = _CountStatements(baseline, /^CREATE FUNCTION /gmu);
 	const triggers = _CountStatements(baseline, /^CREATE (?:CONSTRAINT )?TRIGGER /gmu);
 	const constraints = _CountStatements(baseline, /^ALTER TABLE .* ADD CONSTRAINT /gmu);
+	_VerifyUniqueNames(baseline, /ADD CONSTRAINT "([^"]+)"/gmu, "constraints");
+	_VerifyUniqueNames(baseline, /CREATE TYPE "([^"]+)"/gmu, "types");
+	_VerifyUniqueNames(baseline, /CREATE TABLE "([^"]+)"/gmu, "tables");
+	_VerifyUniqueNames(baseline, /CREATE (?:UNIQUE )?INDEX "([^"]+)"/gmu, "indexes");
+	_VerifyUniqueNames(baseline, /CREATE FUNCTION "([^"]+)"/gmu, "functions");
+	_VerifyUniqueNames(baseline, /CREATE (?:CONSTRAINT )?TRIGGER "?([A-Za-z0-9_]+)"?/gmu, "triggers");
 	if (functions < _MINIMUM_FUNCTIONS || triggers < _MINIMUM_TRIGGERS || constraints < _MINIMUM_CONSTRAINTS)
 	{
 		throw new Error(`target baseline lost reviewed authority SQL: expected at least ${_MINIMUM_FUNCTIONS} functions, ${_MINIMUM_TRIGGERS} triggers, and ${_MINIMUM_CONSTRAINTS} constraints; found ${functions} functions, ${triggers} triggers, and ${constraints} constraints`);
