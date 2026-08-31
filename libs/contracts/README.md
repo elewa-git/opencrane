@@ -84,6 +84,14 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - `AG_UI_TOOL_FAILURE_EVENT` / `AgUiToolFailureEnvelope` — display-safe failed-tool marker carrying
   only the public call id and an optional server-selected technical classification, never provider
   text, raw arguments, credentials, or retry authority.
+- `ConversationEntry`, its human/agent/service/system authors, encrypted message payload references,
+  explicit log variants, and A2UI mutations — the canonical participant-visible event contract for
+  a `conversation-{id}` history stream. `___ConversationEntrySchema` validates storage and
+  receipt-transformer records; `___ConversationComputerEntrySchema` is stricter and refuses a
+  computer-provided service attestation. Receipt verification and the bound writer's computer/stream
+  checks remain context-specific boundaries outside these structural parsers. Both carry opaque
+  payload and artifact coordinates, never plaintext bodies, storage credentials, or general
+  event-store access.
 - Hand-written DTOs/enums: hierarchical `Group` with nullable `parentId`, `ClusterTenant*`,
   `Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, memory-gateway constants, `ThirdPartySource*`, `RuntimeAssignment`,

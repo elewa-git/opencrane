@@ -80,7 +80,7 @@ export interface ManagedAgentIdentity extends ConstructedAgentIdentityBase
  * The parent identity, parent conversation, and requester remain explicit so an authority can
  * evaluate the sub-chat in its originating context instead of treating it as its parent.
  */
-export interface ManagedSubchatAgentIdentity extends ConstructedAgentIdentityBase
+export interface ManagedSubChatAgentIdentity extends ConstructedAgentIdentityBase
 {
 	/** Selects the managed-subchat identity handler. */
 	readonly kind: "managed_subchat";
@@ -95,7 +95,7 @@ export interface ManagedSubchatAgentIdentity extends ConstructedAgentIdentityBas
 }
 
 /** Lists the constructed identity records a loader may construct. */
-export type ConstructedAgentIdentity = ManagedAgentIdentity | ManagedSubchatAgentIdentity;
+export type ConstructedAgentIdentity = ManagedAgentIdentity | ManagedSubChatAgentIdentity;
 
 /**
  * Lists every concrete identity record a loader may construct.
