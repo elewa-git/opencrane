@@ -1024,9 +1024,14 @@ fi
 # the fleet-manager, the silo chart the clustertenant-manager. A fleet-only (or silo-only)
 # install has just one, so guard each wait on the deployment existing rather than waiting
 # unconditionally (which NotFound-errored on the absent component after the split).
+FINAL_RELEASE_VALUES="$(helm get values "$RELEASE" --namespace "$NAMESPACE" --all -o json)" || exit $?
+FINAL_SCANNER_NAMESPACE="$(jq -r '.artifactScanner.namespace // empty' <<<"$FINAL_RELEASE_VALUES")"
+FINAL_SCANNER_NAMESPACE="${FINAL_SCANNER_NAMESPACE:-${RELEASE}-artifact-scanning}"
 for _comp in fleet-manager clustertenant-manager; do
   wait_for_final_deployment_if_present "${RELEASE}-${_comp}" || exit $?
 done
+wait_for_final_deployment_if_present "${RELEASE}-agent-controller" || exit $?
+wait_for_final_deployment_if_present "${RELEASE}-artifact-scanner" "$FINAL_SCANNER_NAMESPACE" || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-opencrane-ui-spa" || exit $?
 _verify_control_plane_spa_rollout || exit $?
 wait_for_final_deployment_if_present "${RELEASE}-cognee" || exit $?
@@ -1037,7 +1042,6 @@ wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NA
 
 _wait_for_release_certificate || exit $?
 if [[ "$RELEASE_VERSION" == "0.10.0" && "$FROM_RELEASE_VERSION" == "0.9.2" && "$ALLOW_TAG_FLOAT" != "1" ]]; then
-  FINAL_RELEASE_VALUES="$(helm get values "$RELEASE" --namespace "$NAMESPACE" --all -o json)" || exit $?
   FINAL_SERVER_REPOSITORY="$(jq -r '.clustertenantManager.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
   FINAL_CONTROLLER_REPOSITORY="$(jq -r '.agentController.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
   FINAL_SCANNER_REPOSITORY="$(jq -r '.artifactScanner.image.repository // empty' <<<"$FINAL_RELEASE_VALUES")"
@@ -1046,10 +1050,8 @@ if [[ "$RELEASE_VERSION" == "0.10.0" && "$FROM_RELEASE_VERSION" == "0.9.2" && "$
     err "The final release values do not identify every replacement image repository, so the retired Obot server remains in place."
     exit 1
   fi
-  FINAL_SCANNER_NAMESPACE="$(jq -r '.artifactScanner.namespace // empty' <<<"$FINAL_RELEASE_VALUES")"
   FINAL_PERSONAL_RUNTIME_NAMESPACE="$(jq -r '.agentController.runtimeNamespace // empty' <<<"$FINAL_RELEASE_VALUES")"
   FINAL_MANAGED_RUNTIME_NAMESPACE="$(jq -r '.agentController.warmRuntime.managedNamespace // empty' <<<"$FINAL_RELEASE_VALUES")"
-  FINAL_SCANNER_NAMESPACE="${FINAL_SCANNER_NAMESPACE:-${RELEASE}-artifact-scanning}"
   FINAL_PERSONAL_RUNTIME_NAMESPACE="${FINAL_PERSONAL_RUNTIME_NAMESPACE:-${RELEASE}-runtime}"
   FINAL_MANAGED_RUNTIME_NAMESPACE="${FINAL_MANAGED_RUNTIME_NAMESPACE:-${RELEASE}-managed-runtime}"
   verify_legacy_obot_replacement_ready "$NAMESPACE" "$RELEASE" "$TIMEOUT" \

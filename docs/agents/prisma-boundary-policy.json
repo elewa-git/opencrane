@@ -2233,6 +2233,7 @@
       "contractImportPath": "./workflow-task-admission.types",
       "method": "$queryRaw",
       "sqlTemplate": "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)",
+      "sourceSha256": "eaaec9a78dc51cae458385b93640e85888a3032da656632022f3e6e892833acf",
       "reason": "Task admission owns the one parameterized vendor procedure call that shares the caller's product transaction."
     },
     {
@@ -2242,6 +2243,7 @@
       "contractImportPath": "./workflow-task-event-admission.types",
       "method": "$queryRaw",
       "sqlTemplate": "SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb)",
+      "sourceSha256": "fd789bf1efe78a9b0134f75e9ef1446cd6eebbc295bd328b7c3451ea88b01625",
       "reason": "Task event admission owns the one parameterized vendor procedure call that shares a persisted product outcome's transaction."
     }
   ],

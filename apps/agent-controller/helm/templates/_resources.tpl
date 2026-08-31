@@ -463,6 +463,7 @@ metadata:
     app.kubernetes.io/component: agent-controller
 spec:
   replicas: {{ .Values.agentController.replicas }}
+  minReadySeconds: 10
   selector:
     matchLabels:
       {{- include "opencrane.selectorLabels" . | nindent 6 }}

@@ -116,7 +116,11 @@ outside the app root.
 The image runs as an unprivileged numeric user with a read-only root filesystem. Helm provides two
 separate projected tokens: one for OpenCrane and one for the Kubernetes API. Structured logs go to
 standard output, and OpenTelemetry spans cover every HTTP and Kubernetes input/output call. Enabling
-the chart requires immutable SHA-256 digests for both the controller and runtime images. Helm derives
+the chart requires immutable SHA-256 digests for both the controller and runtime images. The
+`image-smoke` target starts the production command without networking or configuration and requires
+it to reach the first configuration check, proving that every external runtime package is installed.
+The Deployment must stay available continuously for ten seconds before Kubernetes completes its
+rollout, so a transient process start cannot qualify the execution plane. Helm derives
 one personal `<release>-runtime` namespace and one managed `<release>-managed-runtime` namespace by
 default. This chart owns both namespaces, their warm Deployments, quotas, default-deny networking,
 and the admission rule that permits only the exact generic-to-claimed profile change or discard.

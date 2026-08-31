@@ -3,14 +3,27 @@
 _LEGACY_OBOT_HASH="db3d4e4b60f0b6f402e41dfef18e4ecb2cfb49eb"
 _LEGACY_OBOT_OWNER="sms1obot-mcp-server"
 
-# Waits for a required replacement Deployment and checks the image that became ready.
+# Checks minReadySeconds when requested, then waits for the Deployment and verifies its image.
 _require_legacy_obot_replacement_deployment()
 {
   local namespace="$1"
   local deployment="$2"
   local expected_image="$3"
   local timeout="$4"
+  local minimum_ready_seconds="${5:-}"
   local live_image
+  local live_minimum_ready_seconds
+  if [[ -n "$minimum_ready_seconds" ]]; then
+    live_minimum_ready_seconds="$(kubectl get "deployment/$deployment" --namespace "$namespace" -o 'jsonpath={.spec.minReadySeconds}' --request-timeout="${timeout}s")" || return 1
+    if [[ ! "$live_minimum_ready_seconds" =~ ^[0-9]+$ ]]; then
+      err "Replacement Deployment '$deployment' does not declare minReadySeconds, so the retired Obot server remains in place."
+      return 1
+    fi
+    if (( 10#$live_minimum_ready_seconds < minimum_ready_seconds )); then
+      err "Replacement Deployment '$deployment' declares minReadySeconds=$live_minimum_ready_seconds; at least $minimum_ready_seconds seconds are required before Obot retirement."
+      return 1
+    fi
+  fi
   if ! kubectl rollout status "deployment/$deployment" --namespace "$namespace" --timeout="${timeout}s"; then
     err "Replacement Deployment '$deployment' is not ready, so the retired Obot server remains in place."
     return 1
@@ -36,8 +49,8 @@ verify_legacy_obot_replacement_ready()
   local personal_runtime_namespace="$9"
   local managed_runtime_namespace="${10}"
   _require_legacy_obot_replacement_deployment "$namespace" "${release}-opencrane-server" "$server_image" "$timeout" || return 1
-  _require_legacy_obot_replacement_deployment "$namespace" "${release}-agent-controller" "$controller_image" "$timeout" || return 1
-  _require_legacy_obot_replacement_deployment "$scanner_namespace" "${release}-artifact-scanner" "$scanner_image" "$timeout" || return 1
+  _require_legacy_obot_replacement_deployment "$namespace" "${release}-agent-controller" "$controller_image" "$timeout" 10 || return 1
+  _require_legacy_obot_replacement_deployment "$scanner_namespace" "${release}-artifact-scanner" "$scanner_image" "$timeout" 10 || return 1
   _require_legacy_obot_replacement_deployment "$personal_runtime_namespace" "${release}-personal-warm" "$runtime_image" "$timeout" || return 1
   _require_legacy_obot_replacement_deployment "$managed_runtime_namespace" "${release}-managed-warm" "$runtime_image" "$timeout" || return 1
 }
