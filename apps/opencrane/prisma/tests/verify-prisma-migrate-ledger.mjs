@@ -8,6 +8,7 @@ const ledgerRoot = join(prismaRoot, "prisma-migrations");
 const baseline = readFileSync(join(ledgerRoot, "20260826000000_0_9_2_baseline/migration.sql"), "utf8");
 const migration = readFileSync(join(ledgerRoot, "20260827000000_0_10_0_workflow_cutover/migration.sql"), "utf8");
 const authorizationMigration = readFileSync(join(ledgerRoot, "20260829000000_central_authorization_authority/migration.sql"), "utf8");
+const controlPlaneQueueRepair = readFileSync(join(ledgerRoot, "20260831000000_control_plane_queue_forward_repair/migration.sql"), "utf8");
 const candidateForwardRepair = readFileSync(join(prismaRoot, "migrations/untagged-0.9.3-candidate-forward-repair/migration.sql"), "utf8");
 const targetBaseline = readFileSync(join(prismaRoot, "bootstrap/target-baseline.sql"), "utf8");
 const releasedCutoverChecksum = createHash("sha256").update(migration).digest("hex");
@@ -553,10 +554,13 @@ for (const name of [
 	_Require(_NormalizedSql(_MigrationFunction(name)) === _NormalizedSql(_TargetFunction(name)), `fresh and upgraded databases must install the exact MCP runtime function ${name}`);
 }
 
-for (const queue of ["control-plane", "artifact-preprocessing", "skill-authoring", "agent-runs"])
+for (const queue of ["artifact-preprocessing", "skill-authoring", "agent-runs"])
 {
+	_Require(migration.includes(`SELECT absurd.create_queue('${queue}');`), `the 0.10 cutover must install the ${queue} workflow queue`);
 	_Require(targetBaseline.includes(`SELECT absurd.create_queue('${queue}');`), `clean target must install the ${queue} workflow queue`);
 }
+_Require(controlPlaneQueueRepair.includes("SELECT absurd.create_queue('control-plane');"), "the forward repair must install the control-plane workflow queue on upgraded databases");
+_Require(targetBaseline.includes("SELECT absurd.create_queue('control-plane');"), "clean target must install the control-plane workflow queue");
 for (const table of ["conversation_assets", "conversation_asset_output_tickets"])
 {
 	const foreignKeys = targetBaseline.split("\n").filter(function _IsRunEventKey(line)
