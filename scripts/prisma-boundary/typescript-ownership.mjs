@@ -360,23 +360,31 @@ function _TransactionCallbackBindings(source, imports)
 		const open = (match.index ?? 0) + match[0].lastIndexOf("{");
 		bindings.push({ name: match[1], start: open, end: _MatchingBrace(source, open) });
 	}
-	bindings.push(..._SerializableAuthorizationTransactionCallbackBindings(source, imports));
+	bindings.push(..._ReviewedTransactionHelperCallbackBindings(source, imports));
 	return bindings;
 }
 
+/** The reviewed transaction helpers whose work callback receives a transaction client. */
+const _REVIEWED_TRANSACTION_HELPERS = [
+	{ imported: "___RunSerializableAuthorizationTransaction", importPath: "@opencrane/backend/server/iam/authorization" },
+	{ imported: "___RunInPrismaUnitOfWork", importPath: "@opencrane/backend/server/infra/prisma-unit-of-work" },
+];
+
 /**
- * Finds callbacks passed to the one reviewed central authorization transaction helper.
+ * Finds callbacks passed to a reviewed transaction helper.
  *
  * Import resolution is exact so a local function or another package cannot gain transaction-client
- * authority by copying the helper's name.
+ * authority by copying a helper's name. The callback's first parameter is the transaction client.
  */
-function _SerializableAuthorizationTransactionCallbackBindings(source, imports)
+function _ReviewedTransactionHelperCallbackBindings(source, imports)
 {
 	const bindings = [];
 	const helperNames = [...imports.entries()].filter(function _ExactHelper([, binding])
 	{
-		return binding.imported === "___RunSerializableAuthorizationTransaction"
-			&& binding.importPath === "@opencrane/backend/server/iam/authorization";
+		return _REVIEWED_TRANSACTION_HELPERS.some(function _Matches(helper)
+		{
+			return binding.imported === helper.imported && binding.importPath === helper.importPath;
+		});
 	}).map(function _LocalName([local]) { return local; });
 	for (const helperName of helperNames)
 	{
@@ -386,7 +394,7 @@ function _SerializableAuthorizationTransactionCallbackBindings(source, imports)
 			const openCall = (match.index ?? 0) + match[0].lastIndexOf("(");
 			const closeCall = _MatchingDelimiter(source, openCall, "(", ")");
 			const argumentsSource = source.slice(openCall + 1, closeCall);
-			const callback = /^\s*(?:this\.)?[A-Za-z_$][\w$]*\s*,\s*async\s+function\s+[A-Za-z_$][\w$]*\s*\(\s*([A-Za-z_$][\w$]*)\s*,[^)]*\)\s*(?::\s*[^={]+)?\{/u.exec(argumentsSource);
+			const callback = /^\s*(?:this\.)?[A-Za-z_$][\w$]*\s*,\s*async\s+function\s+[A-Za-z_$][\w$]*\s*\(\s*([A-Za-z_$][\w$]*)\s*(?::[^,)]+)?\s*(?:,[^)]*)?\)\s*(?::\s*[^={]+)?\{/u.exec(argumentsSource);
 			if (callback === null) continue;
 			const openBody = openCall + 1 + (callback.index ?? 0) + callback[0].lastIndexOf("{");
 			bindings.push({ name: callback[1], start: openBody, end: _MatchingBrace(source, openBody) });
