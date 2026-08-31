@@ -1,0 +1,100 @@
+{{- $v := .Values.mcpExecutor -}}
+{{- $serverNamespace := default .Release.Namespace $v.serverNamespace -}}
+{{- if or (gt (len $v.namespace) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $v.namespace)) (eq $v.namespace $serverNamespace) -}}
+{{- fail "mcpExecutor.namespace must be a valid namespace distinct from the server" -}}
+{{- end -}}
+{{- if ne $v.serviceAccountName "mcp-executor-default" -}}
+{{- fail "mcpExecutor.serviceAccountName must be the exact mcp-executor-default identity" -}}
+{{- end -}}
+{{- if not (regexMatch "^([1-9]|10)$" (toString $v.quota.pods)) -}}
+{{- fail "mcpExecutor.quota.pods must be between 1 and 10" -}}
+{{- end -}}
+{{- if not (regexMatch "^([1-9]|10)$" (toString $v.quota.jobs)) -}}
+{{- fail "mcpExecutor.quota.jobs must be between 1 and 10" -}}
+{{- end -}}
+{{- if or (lt (int $v.egress.serverInternalPort) 1) (gt (int $v.egress.serverInternalPort) 65535) -}}
+{{- fail "mcpExecutor.egress.serverInternalPort must be a valid port" -}}
+{{- end -}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $v.namespace }}
+  labels:
+    app.kubernetes.io/part-of: opencrane
+    app.kubernetes.io/component: mcp-executor
+    opencrane.ai/retirement-owner: {{ .Release.Name | quote }}
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $v.serviceAccountName }}
+  namespace: {{ $v.namespace }}
+  labels:
+    app.kubernetes.io/part-of: opencrane
+    app.kubernetes.io/component: mcp-executor
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: mcp-executor-jobs
+  namespace: {{ $v.namespace }}
+spec:
+  hard:
+    pods: {{ $v.quota.pods | quote }}
+    count/jobs.batch: {{ $v.quota.jobs | quote }}
+    requests.cpu: {{ $v.quota.requestsCpu | quote }}
+    requests.memory: {{ $v.quota.requestsMemory | quote }}
+    limits.cpu: {{ $v.quota.limitsCpu | quote }}
+    limits.memory: {{ $v.quota.limitsMemory | quote }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-executor-default-deny
+  namespace: {{ $v.namespace }}
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+  ingress: []
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-executor-egress
+  namespace: {{ $v.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $v.egress.executorPodComponent }}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $serverNamespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: {{ $v.egress.serverComponent }}
+      ports:
+        - protocol: TCP
+          port: {{ $v.egress.serverInternalPort }}

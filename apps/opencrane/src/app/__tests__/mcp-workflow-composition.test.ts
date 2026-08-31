@@ -32,6 +32,6 @@ describe("MCP workflow application translation", function _McpWorkflowTranslatio
 		new McpEraProbeTransportError("http_404"),
 	])("maps %s to an invalid-response rejection", function _Invalid(error)
 	{
-		expect(_McpEraProbeFailure(error).code).toBe(McpEraProbeFailureCodes.InvalidResponse);
+		expect(_McpEraProbeFailure(error).code).toBe(McpEraProbeFailureCodes.NotMcpServer);
 	});
 });

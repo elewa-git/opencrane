@@ -435,6 +435,37 @@ agentController:
       cpu: 250m
       memory: 256Mi
 
+opencrane-mcp-executor:
+  mcpExecutor:
+    namespace: opencrane-mcp-executors
+    serverNamespace: ""
+    serviceAccountName: mcp-executor-default
+    image:
+      repository: ghcr.io/elewa-git/opencrane-mcp-executor
+      digest: ""
+      pullPolicy: IfNotPresent
+    projectedTokenTtlSeconds: 600
+    controllerClaimLeaseSeconds: 30
+    companionClaimLeaseSeconds: 150
+    scratchSize: 64Mi
+    activeDeadlineSeconds: 600
+    serverResources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    companionResources:
+      requests: { cpu: 25m, memory: 64Mi }
+      limits: { cpu: 250m, memory: 128Mi }
+    quota:
+      pods: "10"
+      jobs: "10"
+      requestsCpu: "10"
+      requestsMemory: 20Gi
+      limitsCpu: "40"
+      limitsMemory: 40Gi
+    egress:
+      executorPodComponent: mcp-executor
+      serverComponent: opencrane-server
+      serverInternalPort: 8081
 # -- Control plane settings
 clustertenantManager:
   # -- The server image runs as the Node.js uid/gid. The fsGroup makes projected
@@ -473,6 +504,15 @@ clustertenantManager:
     pollIntervalMilliseconds: 100
     mcpEraProbeTimeoutMilliseconds: 5000
     mcpEraProbeMaximumResponseBytes: 65536
+    # -- OCI Image Layout ZIP admission imports accepted MCP images into this fixed repository.
+    # The reserved .invalid default is non-routable; a deployment profile must name its registry.
+    ociRegistry:
+      baseUrl: https://registry.invalid
+      repository: opencrane/mcp-images
+      requestTimeoutMilliseconds: 30000
+      authorization:
+        existingSecret: ""
+        secretKey: authorization
   # -- Optional first model credential. The deploy engine creates the named provider-custody
   # Secret from OPENCRANE_INITIAL_MODEL_API_KEY, then the server seeds it through LiteLLM before
   # becoming ready. Keep both fields empty for a deliberately model-unconfigured install.

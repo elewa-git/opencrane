@@ -5,6 +5,7 @@ import type { ExternalActionWorker } from "@opencrane/backend/agents/execution/p
 import { __CreateRuntimeWorkloadCleanupUseCase, type RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import { __CreateKubernetesRuntimeWorkloadCleanupStore } from "@opencrane/backend/agents/runtime/cleanup";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
+import type { McpRuntimeAuthority } from "@opencrane/backend/server/gateways/mcp";
 import { _CreateScheduleTicker, PrismaScheduleTickerUnitOfWork } from "@opencrane/backend/server/agents/scheduling";
 import type { IWorkflowWorkerRuntime } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -22,13 +23,16 @@ const _RUNTIME_CLEANUP_REQUEST_TIMEOUT_MILLISECONDS = 5_000;
 /** Delay between bounded durable external-action passes. */
 const _EXTERNAL_ACTION_INTERVAL_MILLISECONDS = 1_000;
 
+/** Delay between server-owned checks for a lost MCP invocation completion report. */
+const _MCP_INVOCATION_RECOVERY_INTERVAL_MILLISECONDS = 1_000;
+
 /**
  * Start all bounded workers that intentionally share the control-plane database and identity.
  *
  * The returned stop handle is the lifecycle boundary: every loop must be stopped before Prisma is
  * disconnected, and none may keep the Node process alive on its own.
  */
-export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runtimeRepairRepository: RunCancellationRepository, config: OpenCraneProcessConfig, externalActions: ExternalActionWorker, workflowRuntime: IWorkflowWorkerRuntime): Promise<OpenCraneBackgroundWorkers>
+export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runtimeRepairRepository: RunCancellationRepository, config: OpenCraneProcessConfig, externalActions: ExternalActionWorker, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime): Promise<OpenCraneBackgroundWorkers>
 {
 	// 1. Prepare optional schedule admission through the same capacity port used by run-now requests.
 	const scheduleTicker = _CreateScheduleTicker(new PrismaScheduleTickerUnitOfWork(prisma), managedRunAdmission, _log);
@@ -71,6 +75,8 @@ export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8
 	// 6. Poll at most one durable action per pass; the worker itself prevents overlapping provider I/O.
 	const externalActionHandle = setInterval(function _externalAction() { void externalActions.runOnce().catch(function _onError(error: unknown) { _log.error({ err: error }, "external action worker pass failed"); }); }, _EXTERNAL_ACTION_INTERVAL_MILLISECONDS);
 	externalActionHandle.unref();
+	const mcpRecoveryHandle = setInterval(function _recoverMcpInvocation() { void mcpRuntime.recoverExpiredInvocation().catch(function _onError(error: unknown) { _log.error({ err: error }, "MCP invocation recovery pass failed"); }); }, _MCP_INVOCATION_RECOVERY_INTERVAL_MILLISECONDS);
+	mcpRecoveryHandle.unref();
 
 	return {
 		async stop(): Promise<void>
@@ -78,6 +84,7 @@ export async function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8
 			if (schedulerHandle !== null)
 				clearInterval(schedulerHandle);
 			clearInterval(externalActionHandle);
+			clearInterval(mcpRecoveryHandle);
 			runtimeRepair.stop();
 			clearInterval(runtimeCleanupHandle);
 			runtimeCleanupShutdown.abort();

@@ -9,6 +9,7 @@ import type { InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
 import { _RegisterInternalRoutes } from "./routes";
 import { _CreateHttpRequestLogger } from "./telemetry";
+import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
 
 /**
  * Build the workload-facing Express application.
@@ -16,13 +17,14 @@ import { _CreateHttpRequestLogger } from "./telemetry";
  * It shares the public listener's signed-session middleware only so channel-proxy can delegate the
  * browser cookie. Every resolver request independently TokenReviews the proxy workload identity.
  */
-export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[]): Express
+export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, sessionMiddleware: readonly RequestHandler[], mcpRuntime: McpRuntimeComposition): Express
 {
 	const app = express();
 
 	// 1. Apply route-specific body ceilings before the generic parser consumes the request stream.
 	app.set("trust proxy", 1);
 	app.use("/api/internal/agent-runtime", express.json({ limit: 64 * 1_024, strict: true }));
+	app.use("/api/internal/mcp-executor", express.json({ limit: 4_456_448, strict: true }));
 	app.use("/api/internal/artifact-scanner", express.json({ limit: 16 * 1_024, strict: true }));
 	app.use("/api/internal/artifact-preprocessor/jobs/:jobId/output", express.raw({ type: "text/plain", limit: config.artifactPreprocessorMaximumOutputBytes }));
 	app.use(express.json());
@@ -33,7 +35,7 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 	app.use(_CreateHttpRequestLogger(_log));
 
 	// 3. Mount only workload-facing routes and terminate failures through the structured handler.
-	_RegisterInternalRoutes(app, prisma, authApi, config);
+	_RegisterInternalRoutes(app, prisma, authApi, config, mcpRuntime);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

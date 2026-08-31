@@ -33,7 +33,8 @@ function _HasOnlyKeys(value: Readonly<Record<string, unknown>>, expected: readon
 /** Rebuild a resource map with only `cpu` and `memory`, dropping every other Kubernetes resource type. */
 function _ResourceMap(value: unknown): Readonly<Record<"cpu" | "memory", string>> | null
 {
-	if (!_IsRecord(value) || !_HasOnlyKeys(value, ["cpu", "memory"]) || typeof value["cpu"] !== "string" || typeof value["memory"] !== "string") return null;
+	if (!_IsRecord(value) || !_HasOnlyKeys(value, ["cpu", "memory"]) || typeof value["cpu"] !== "string" || typeof value["memory"] !== "string")
+		return null;
 	return { cpu: value["cpu"], memory: value["memory"] };
 }
 
@@ -41,17 +42,21 @@ function _ResourceMap(value: unknown): Readonly<Record<"cpu" | "memory", string>
 function _SkillWorkloadJobProfile(value: unknown): SkillWorkloadJobProfile | null
 {
 	// 1. Check the workload class first, because the checks after this depend on which class it is.
-	if (!_IsRecord(value) || !_HasOnlyKeys(value, ["kind", "image", "imagePullPolicy", "serverNamespace", "namespace", "serviceAccountName", "capabilityTokenAudience", "bootstrapUrl", "capabilityTokenPath", "bootstrapReferencePath", "scratchSize", "activeDeadlineSeconds", "ttlSecondsAfterFinished", "resources"]) || (value["kind"] !== "authoring" && value["kind"] !== "tool-runner")) return null;
+	if (!_IsRecord(value) || !_HasOnlyKeys(value, ["kind", "image", "imagePullPolicy", "serverNamespace", "namespace", "serviceAccountName", "capabilityTokenAudience", "bootstrapUrl", "capabilityTokenPath", "bootstrapReferencePath", "scratchSize", "activeDeadlineSeconds", "ttlSecondsAfterFinished", "resources"]) || (value["kind"] !== "authoring" && value["kind"] !== "tool-runner"))
+		return null;
 
 	// 2. Check every simple field at runtime, so the builder never gets a value that only a TypeScript cast made look valid.
-	if (typeof value["image"] !== "string" || (value["imagePullPolicy"] !== "Always" && value["imagePullPolicy"] !== "IfNotPresent" && value["imagePullPolicy"] !== "Never") || typeof value["serverNamespace"] !== "string" || typeof value["namespace"] !== "string" || typeof value["serviceAccountName"] !== "string" || typeof value["capabilityTokenAudience"] !== "string" || typeof value["bootstrapUrl"] !== "string" || typeof value["capabilityTokenPath"] !== "string" || typeof value["bootstrapReferencePath"] !== "string" || typeof value["scratchSize"] !== "string" || typeof value["activeDeadlineSeconds"] !== "number" || typeof value["ttlSecondsAfterFinished"] !== "number") return null;
+	if (typeof value["image"] !== "string" || (value["imagePullPolicy"] !== "Always" && value["imagePullPolicy"] !== "IfNotPresent" && value["imagePullPolicy"] !== "Never") || typeof value["serverNamespace"] !== "string" || typeof value["namespace"] !== "string" || typeof value["serviceAccountName"] !== "string" || typeof value["capabilityTokenAudience"] !== "string" || typeof value["bootstrapUrl"] !== "string" || typeof value["capabilityTokenPath"] !== "string" || typeof value["bootstrapReferencePath"] !== "string" || typeof value["scratchSize"] !== "string" || typeof value["activeDeadlineSeconds"] !== "number" || typeof value["ttlSecondsAfterFinished"] !== "number")
+		return null;
 
 	// 3. Copy the resource and profile fields one by one, so no extra field from the caller reaches Kubernetes.
 	const resources = value["resources"];
-	if (!_IsRecord(resources) || !_HasOnlyKeys(resources, ["requests", "limits"])) return null;
+	if (!_IsRecord(resources) || !_HasOnlyKeys(resources, ["requests", "limits"]))
+		return null;
 	const requests = _ResourceMap(resources["requests"]);
 	const limits = _ResourceMap(resources["limits"]);
-	if (requests === null || limits === null) return null;
+	if (requests === null || limits === null)
+		return null;
 	return { kind: value["kind"], image: value["image"], imagePullPolicy: value["imagePullPolicy"], serverNamespace: value["serverNamespace"], namespace: value["namespace"], serviceAccountName: value["serviceAccountName"], capabilityTokenAudience: value["capabilityTokenAudience"], bootstrapUrl: value["bootstrapUrl"], capabilityTokenPath: value["capabilityTokenPath"], bootstrapReferencePath: value["bootstrapReferencePath"], scratchSize: value["scratchSize"], activeDeadlineSeconds: value["activeDeadlineSeconds"], ttlSecondsAfterFinished: value["ttlSecondsAfterFinished"], resources: { requests, limits } };
 }
 
@@ -92,7 +97,8 @@ export async function __ReconcileNextSkillWorkloadRelease(options: SkillWorkload
 	{
 		// 1. Take a release claim from the database. Kubernetes never decides what to release, and never rebuilds this state.
 		const claim = await options.authority.__ClaimRelease(signal);
-		if (claim === null) return { outcome: SkillWorkloadControllerReconcileOutcomes.Idle };
+		if (claim === null)
+			return { outcome: SkillWorkloadControllerReconcileOutcomes.Idle };
 
 		// 2. Rebuild the same Job manifest from the deployment profile for this class plus the bootstrap reference.
 		const profile = options.profiles[claim.kind];
@@ -104,16 +110,19 @@ export async function __ReconcileNextSkillWorkloadRelease(options: SkillWorkload
 		const job = __BuildGovernedSkillWorkloadJob({ jobId: claim.workloadId, siloId: claim.siloId, namespace: profile.namespace, capabilityReference }, profile);
 
 		// 3. Flip suspend from true to false with a compare-and-swap, then record the release against the same claim.
-		await options.kubernetes.__EnsureSkillJobReleased(job, claim.workloadUid, claim.expiresAt);
+		await options.kubernetes.releaseJob(job, claim.workloadUid, claim.expiresAt);
 		const released = await options.authority.__CommitRelease(claim.workloadId, { releaseClaimedAt: claim.releaseClaimedAt, releaseDeliveryCount: claim.releaseDeliveryCount, workloadUid: claim.workloadUid }, signal);
-		if (released === "conflict") throw new Error("governed skill workload release lost its database claim fence");
+		if (released === "conflict")
+			throw new Error("governed skill workload release lost its database claim fence");
 
 		// 4. Record the first Pod this Job owns. A worker cannot trade its bootstrap reference until that Pod is recorded.
-		const pod = await options.kubernetes.__FindFirstSkillWorkloadPod(job, claim.workloadUid, profile.serviceAccountName);
-		if (pod === null) return { outcome: SkillWorkloadControllerReconcileOutcomes.PendingPod, workloadId: claim.workloadId, workloadUid: claim.workloadUid };
+		const pod = await options.kubernetes.findFirstPod(job, claim.workloadUid, profile.serviceAccountName);
+		if (pod === null)
+			return { outcome: SkillWorkloadControllerReconcileOutcomes.PendingPod, workloadId: claim.workloadId, workloadUid: claim.workloadUid };
 		const podUid = _RequirePodUid(pod.metadata?.uid);
 		const registered = await options.authority.__RegisterFirstPod(claim.workloadId, { releaseClaimedAt: claim.releaseClaimedAt, releaseDeliveryCount: claim.releaseDeliveryCount, workloadUid: claim.workloadUid, podUid }, signal);
-		if (registered === "conflict") throw new Error("governed skill workload Pod registration lost its durable release fence");
+		if (registered === "conflict")
+			throw new Error("governed skill workload Pod registration lost its durable release fence");
 		options.log.info({ workloadId: claim.workloadId, workloadUid: claim.workloadUid, podUid, outcome: registered }, "governed skill workload released and first Pod registered");
 		return { outcome: registered === "registered" ? SkillWorkloadControllerReconcileOutcomes.Registered : SkillWorkloadControllerReconcileOutcomes.Idempotent, workloadId: claim.workloadId, workloadUid: claim.workloadUid, podUid };
 	});
@@ -126,7 +135,8 @@ export async function __ReconcileNextSkillWorkload(options: SkillWorkloadControl
 	{
 		// 1. Read what the OpenCrane server says should run. Kubernetes never decides which work may run.
 		const claim = await options.authority.__Claim(signal);
-		if (claim === null) return { outcome: SkillWorkloadControllerReconcileOutcomes.Idle };
+		if (claim === null)
+			return { outcome: SkillWorkloadControllerReconcileOutcomes.Idle };
 
 		// 2. Rebuild the same suspended Job manifest from this class's profile plus the bootstrap reference.
 		const profile = options.profiles[claim.kind];
@@ -134,7 +144,7 @@ export async function __ReconcileNextSkillWorkload(options: SkillWorkloadControl
 		const job = __BuildGovernedSkillWorkloadJob({ jobId: claim.workloadId, siloId: claim.siloId, namespace: profile.namespace, capabilityReference }, profile);
 
 		// 3. Create the suspended Job, or adopt an identical one that already exists, and use only the UID Kubernetes returned.
-		const persistedJob = await options.kubernetes.__EnsureSuspendedJob(job);
+		const persistedJob = await options.kubernetes.ensureSuspendedJob(job);
 		const workloadUid = _RequireWorkloadUid(persistedJob.metadata?.uid);
 
 		// 4. Write the assignment back against the same claim, so an out-of-date controller replica cannot assign this Job.

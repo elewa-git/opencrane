@@ -26,8 +26,10 @@ export { __OpenDeferredToolApproval } from "./prisma-deferred-tool-approval-open
 export { __AdmitPreparingToolInvocationInTransaction } from "./prisma-tool-invocation-repository";
 export { PrismaToolInvocationElicitationRepository } from "./prisma-tool-invocation-elicitation-repository";
 export { PrismaToolInvocationUnitOfWork } from "./prisma-tool-invocation-unit-of-work";
+export { __CreatePrismaMcpToolInvocationParticipantFactory } from "./prisma-mcp-tool-invocation-participant";
+export type { McpToolInvocationTransactionParticipant, McpToolInvocationTransactionParticipantFactory } from "./mcp-tool-invocation-participant.types";
 export type { ApproveElicitedToolInvocationCommand, RejectElicitedToolInvocationCommand, ToolInvocationElicitationRepository } from "./tool-invocation-elicitation-authority.types";
-export { ToolInvocationAdmissionOutcomes, ToolInvocationClaimOutcomes, ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults, ToolResultDeliveryOutcomes } from "./tool-invocation.types";
+export { ToolInvocationAdmissionOutcomes, ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults, ToolResultDeliveryOutcomes } from "./tool-invocation.types";
 export type { AdmitPreparingToolInvocation, ToolInvocationAdmissionResult, ToolInvocationAdmissionUnitOfWork, ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationIntent, ToolInvocationLifecycleEvent, ToolInvocationLifecycleEventSink, ToolInvocationPreparationPolicy, ToolInvocationRecord, ToolInvocationRecoveryEvent, ToolInvocationRecoveryEventSink, ToolInvocationRequestIdentity, ToolInvocationRunRecoveryAuthority, ToolInvocationRunRecoveryCommand, ToolInvocationRunRecoveryEnterResult, ToolInvocationTransitionResult, ToolInvocationUnitOfWork, ToolResultDeliveryPayload } from "./tool-invocation.types";
 export { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle";
 export { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types";

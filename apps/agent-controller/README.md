@@ -19,6 +19,11 @@ Secrets or choose a worker identity in either skill namespace. A separate fail-c
 policy permits only the pinned, class-specific worker shape, so the controller cannot use its Job
 permission to create arbitrary work.
 
+The controller also projects admitted OCI-backed MCP servers into their dedicated executor
+namespace. The server chooses the imported image digest; deployment configuration fixes the
+OpenCrane companion, ServiceAccount, endpoint, lifetime, and resources. The controller records the
+Job UID before release and records the first Pod UID before the companion may claim work.
+
 Each released skill Job receives an audience-bound projected token and opaque bootstrap reference
 through separate read-only files. Helm fixes the acknowledgement URL to the same-silo OpenCrane
 Service; it does not inherit the controller's configurable runtime endpoint. The worker can only
@@ -101,6 +106,9 @@ outside the app root.
 - `AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON` — exactly one immutable authoring and tool-runner
   profile, each using a class-bound ServiceAccount, projected-token audience, and fixed bootstrap
   file paths and same-silo acknowledgement URL.
+- `AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON` — one immutable profile for OCI-backed MCP Jobs. It
+  fixes the companion image, isolated namespace, zero-RBAC ServiceAccount, internal endpoint,
+  projected-token lifetime, scratch size, deadline, and both containers' resources.
 
 The development entrypoint additionally reads the selected `OPENCRANE_DEVELOPMENT_PROFILE`,
 separate controller-token and runtime-launch-secret paths, repository root, and loopback OpenCrane
@@ -144,3 +152,4 @@ TokenReview remains reachable through the exact API-server egress rules.
 - Controller capability: [runtime/controller](../../libs/backend/agents/runtime/controller/README.md)
 - Runtime process: [agent-runtime](../agent-runtime/README.md)
 - Manifest builder: [k8s-launcher](../../libs/backend/agents/runtime/k8s-launcher/README.md)
+- MCP executor controller: [runtime/mcp-executor/controller](../../libs/backend/agents/runtime/mcp-executor/controller/README.md)

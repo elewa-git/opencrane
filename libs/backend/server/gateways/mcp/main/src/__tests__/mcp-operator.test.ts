@@ -19,8 +19,8 @@ import { mcpOperatorRouter } from "../routes/mcp-operator";
 import { PrismaMcpOperatorUnitOfWork } from "../core/prisma-mcp-operator-unit-of-work";
 import { McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeWorkflow } from "../era-probe/mcp-era-probe.types";
-import type { McpbBundleArtifactResolver } from "../mcpb-validation/mcpb-validation-submission.types";
-import type { McpbValidationWorkflow } from "../mcpb-validation/mcpb-validation.types";
+import type { OciImageLayoutArtifactResolver } from "../oci-image-validation/oci-image-validation-submission.types";
+import type { OciImageValidationWorkflow } from "../oci-image-validation/oci-image-validation.types";
 
 /**
  * Covers the MCP operator routes: the organization-admin gate, published entries filtered by
@@ -107,7 +107,7 @@ function _buildApp(prisma: PrismaClient, user?: _SessionUser, eraProbeWorkflow: 
     });
   }
   const directory: AuthenticatedPrincipalDirectory = { resolveAuthenticatedPrincipal: vi.fn().mockResolvedValue({ siloId: "silo-1", principalId: "principal-1" }) };
-  app.use("/api/v1/mcp", mcpOperatorRouter(new PrismaMcpOperatorUnitOfWork(prisma), directory, eraProbeWorkflow, _McpbWorkflow(), _McpbArtifacts()));
+  app.use("/api/v1/mcp", mcpOperatorRouter(new PrismaMcpOperatorUnitOfWork(prisma), directory, eraProbeWorkflow, _OciImageWorkflow(), _OciImageArtifacts()));
   return app;
 }
 
@@ -119,14 +119,14 @@ function _EraProbeWorkflow(): McpEraProbeWorkflow
   };
 }
 
-/** Return bundle task admission for router cases that do not exercise MCPB submission. */
-function _McpbWorkflow(): McpbValidationWorkflow
+/** Return OCI image task admission for router cases that do not exercise image submission. */
+function _OciImageWorkflow(): OciImageValidationWorkflow
 {
-	return { admit: vi.fn().mockResolvedValue({ taskKey: "workflows:mcpb-validation:test", receipt: { taskId: "task-2", taskName: "mcpb-validation.verify", idempotencyKey: "workflows:mcpb-validation:test" } }) };
+	return { admit: vi.fn().mockResolvedValue({ taskKey: "workflows:oci-image-validation:test", receipt: { taskId: "task-2", taskName: "oci-image-validation.verify", idempotencyKey: "workflows:oci-image-validation:test" } }) };
 }
 
-/** Return no artifact for router cases that do not exercise MCPB submission. */
-function _McpbArtifacts(): McpbBundleArtifactResolver
+/** Return no artifact for router cases that do not exercise OCI image submission. */
+function _OciImageArtifacts(): OciImageLayoutArtifactResolver
 {
 	return { resolve: vi.fn().mockResolvedValue(null) };
 }

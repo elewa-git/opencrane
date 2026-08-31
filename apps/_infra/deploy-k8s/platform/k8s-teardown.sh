@@ -160,6 +160,7 @@ EXPECTED_AUX_NAMESPACES=(
   "${RELEASE}-artifact-preprocessing"
   "${RELEASE}-skill-authoring"
   "${RELEASE}-tools"
+  "${RELEASE}-mcp-executors"
 )
 RETIREMENT_OWNER_LABEL="opencrane.ai/retirement-owner"
 OWNED_AUX_NAMESPACES=()
@@ -247,6 +248,8 @@ for auxiliary_namespace in "${EXPECTED_AUX_NAMESPACES[@]}"; do
         assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount skill-authoring-default 'app\.kubernetes\.io/component' skill-authoring ;;
       "${RELEASE}-tools")
         assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount tool-runner-default 'app\.kubernetes\.io/component' tool-runner ;;
+      "${RELEASE}-mcp-executors")
+        assert_auxiliary_namespace_owner "$auxiliary_namespace" serviceaccount mcp-executor-default 'app\.kubernetes\.io/component' mcp-executor ;;
     esac
     OWNED_AUX_NAMESPACES+=("$auxiliary_namespace")
   fi

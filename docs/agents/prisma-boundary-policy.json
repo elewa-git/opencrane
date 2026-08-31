@@ -621,10 +621,31 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/server/gateways/mcp/main/src/mcpb-validation/prisma-mcpb-validation-repository.ts",
-        "adapter": "PrismaMcpbValidationRepository",
-        "contract": "McpbValidationRepository",
-        "contractImportPath": "./mcpb-validation-repository.types",
+        "path": "libs/backend/server/gateways/mcp/main/src/oci-image-validation/prisma-oci-image-validation-repository.ts",
+        "adapter": "PrismaOciImageValidationRepository",
+        "contract": "OciImageValidationRepository",
+        "contractImportPath": "./oci-image-validation-repository.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/gateways/mcp/main/src/runtime/prisma-mcp-runtime-catalog-repository.ts",
+        "adapter": "PrismaMcpRuntimeCatalogRepository",
+        "contract": "McpRuntimeCatalogRepository",
+        "contractImportPath": "./mcp-runtime.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/gateways/mcp/main/src/runtime/prisma-mcp-runtime-controller-repository.ts",
+        "adapter": "PrismaMcpRuntimeControllerRepository",
+        "contract": "McpRuntimeControllerRepository",
+        "contractImportPath": "./mcp-runtime.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/gateways/mcp/main/src/runtime/prisma-mcp-runtime-companion-repository.ts",
+        "adapter": "PrismaMcpRuntimeCompanionRepository",
+        "contract": "McpRuntimeCompanionRepository",
+        "contractImportPath": "./mcp-runtime.types",
         "constructs": []
       },
       {
@@ -1135,6 +1156,18 @@
 		]
 	  },
 	  {
+		"path": "libs/backend/server/iam/authorization/main/src/prisma-mcp-tool-invocation-participant.ts",
+		"adapter": "PrismaMcpToolInvocationParticipantUnitOfWork",
+		"contract": "McpToolInvocationTransactionParticipant",
+		"contractImportPath": "./mcp-tool-invocation-participant.types",
+		"constructs": [
+		  {
+			"adapter": "PrismaToolInvocationRepository",
+			"importPath": "./prisma-tool-invocation-repository"
+		  }
+		]
+	  },
+	  {
 		"path": "libs/backend/agents/execution/protocol/src/prisma-runtime-command-decision-unit-of-work.ts",
 		"adapter": "PrismaRuntimeCommandDecisionUnitOfWork",
 		"contract": "RuntimeCommandDecisionUnitOfWork",
@@ -1272,8 +1305,8 @@
             "importPath": "./prisma-mcp-operator-repository"
           },
           {
-            "adapter": "PrismaMcpbValidationRepository",
-            "importPath": "../mcpb-validation/prisma-mcpb-validation-repository"
+            "adapter": "PrismaOciImageValidationRepository",
+            "importPath": "../oci-image-validation/prisma-oci-image-validation-repository"
           },
           {
             "adapter": "PrismaAuthorizationGrantRepository",
@@ -1288,6 +1321,26 @@
             "importPath": "@opencrane/backend/server/iam/authorization"
           }
         ]
+      },
+      {
+        "path": "libs/backend/server/gateways/mcp/main/src/runtime/prisma-mcp-runtime-authority.ts",
+        "adapter": "PrismaMcpRuntimeUnitOfWork",
+        "contract": "McpRuntimeAuthority",
+        "contractImportPath": "./mcp-runtime.types",
+        "constructs": [
+          {
+            "adapter": "PrismaMcpRuntimeCatalogRepository",
+            "importPath": "./prisma-mcp-runtime-catalog-repository"
+          },
+          {
+            "adapter": "PrismaMcpRuntimeControllerRepository",
+            "importPath": "./prisma-mcp-runtime-controller-repository"
+          },
+          {
+            "adapter": "PrismaMcpRuntimeCompanionRepository",
+            "importPath": "./prisma-mcp-runtime-companion-repository"
+          }
+        ]
       }
     ],
     "compositions": [
@@ -1297,6 +1350,7 @@
       "libs/backend/server/iam/groups/main/src/routes/groups.ts",
       "apps/opencrane/src/app/external-action-composition.ts",
 	  "apps/opencrane/src/app/mcp-workflow-composition.ts",
+	  "apps/opencrane/src/app/mcp-runtime-composition.ts",
       "apps/opencrane/src/app/runtime-composition.ts",
 		"apps/opencrane/src/development/internal-app.ts",
 		"apps/opencrane/src/development/internal-runtime.ts",

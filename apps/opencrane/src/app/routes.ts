@@ -37,6 +37,7 @@ import type { ResourceSharesRouteOptions, RouteMount } from "./routes.types";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition";
 import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
+import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
 
 /**
  * Register the authenticated product API from functional route lists.
@@ -55,9 +56,10 @@ import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
  * @param artifactScannerEnabled - Whether upload admission has a live scanner consumer.
  * @param organizationMembersRouter - Startup-selected standalone or Fleet member authority.
  * @param mcpWorkflows - Shared transaction and worker authority for saved MCP jobs.
+ * @param mcpRuntime - Runtime routes, or null when the application profile omits Kubernetes workloads.
  * @returns The configured public listener.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, artifactServiceEnabled: boolean, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition | null): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, artifactServiceEnabled: boolean, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition | null, mcpRuntime: McpRuntimeComposition | null): Express
 {
 	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner);
 	const identityAndAccessRoutes: readonly RouteMount[] = [
@@ -85,6 +87,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 	];
 	const gatewayRoutes: readonly RouteMount[] = [
 		..._CreateMcpRoutes(prisma, mcpWorkflows),
+		..._OptionalRoute("/api/v1/mcp", mcpRuntime?.promotion ?? null),
 		{ method: "use", path: "/api/v1/integrations", handler: _CreateIntegrationCustodyRouter(prisma, obotCustody, _log) },
 		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma) },
 		{ method: "use", path: "/api/v1/providers/credentials", handler: providerCredentialsRouter(prisma) },
@@ -126,7 +129,7 @@ function _CreateMcpRoutes(prisma: PrismaClient, workflows: McpWorkflowCompositio
 	return [{
 		method: "use",
 		path: "/api/v1/mcp",
-		handler: mcpOperatorRouter(workflows.unitOfWork, new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma), workflows.eraProbeWorkflow, workflows.mcpbValidationWorkflow, workflows.mcpbArtifacts)
+		handler: mcpOperatorRouter(workflows.unitOfWork, new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma), workflows.eraProbeWorkflow, workflows.ociImageValidationWorkflow, workflows.ociImageArtifacts)
 	}];
 }
 
@@ -218,12 +221,16 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition): void
 {
 	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config);
 	const internalControllerRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentControllerRunDispatch },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillWorkloadDispatch },
+		{ method: "use", path: "/api/internal/agent-controller", handler: mcpRuntime.controller },
+	];
+	const internalMcpExecutorRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/internal/mcp-executor", handler: mcpRuntime.companion },
 	];
 	const internalRuntimeRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillWorkloadBootstrap },
@@ -238,7 +245,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	const internalScannerRoutes = _OptionalRoute("/api/internal/artifact-scanner", runtime.artifactScanner);
 	const internalChannelTargetRoutes = _OptionalRoute("/api/internal/channel-targets:resolve", runtime.channelTargetResolver);
 	const internalReplayRoutes = _OptionalRoute("/api/internal/conversation-replay", runtime.conversationReplay);
-	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalWorkerRoutes, internalScannerRoutes, internalChannelTargetRoutes, internalReplayRoutes]);
+	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalMcpExecutorRoutes, internalWorkerRoutes, internalScannerRoutes, internalChannelTargetRoutes, internalReplayRoutes]);
 }
 
 /** Return a one-entry route list for a router, or an empty list when the router is null. */

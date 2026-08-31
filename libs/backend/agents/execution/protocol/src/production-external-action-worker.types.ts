@@ -2,7 +2,7 @@ import type { UpgradeSessionProposalRepository } from "@opencrane/backend/agents
 import type { PersonalMemoryPermissionAuthority } from "@opencrane/backend/agents/execution/elicitation";
 import type { Logger } from "@opencrane/backend/observability";
 
-import type { ExternalActionApprovalOpener, ExternalActionExecutionContextLoader, ExternalActionWorkerEventSink, ExternalActionWorkerUnitOfWork, ToolInvocationWorkSource } from "./external-action-worker.types";
+import type { ExternalActionApprovalOpener, ExternalActionClassAdmission, ExternalActionExecutionContextLoader, ExternalActionWorkerEventSink, ExternalActionWorkerUnitOfWork, ToolInvocationWorkSource } from "./external-action-worker.types";
 import type { ProductionExternalActionTransports } from "./external-action-executor.types";
 
 /** One port that both finds runnable invocations and writes their state. */
@@ -13,6 +13,8 @@ export interface ProductionExternalActionWorkerDependencies
 {
 	/** Finds runnable invocations, and writes claims, recoveries, and completions. */
 	readonly invocations: ProductionExternalActionInvocationAuthority;
+	/** Class-specific durable execution admission checked before generic provider dispatch. */
+	readonly classAdmission: ExternalActionClassAdmission;
 	/** Loads the run's frozen snapshot; implemented in this package. */
 	readonly contexts: ExternalActionExecutionContextLoader;
 	/** Saves tool lifecycle events. */

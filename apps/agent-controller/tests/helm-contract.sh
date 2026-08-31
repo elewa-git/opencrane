@@ -34,6 +34,7 @@ render_enabled() {
     --set-string managedAgentRuntimePlane.managedAgentRuntime.serviceAccountName=managed-agent-runtime-default \
     --set-string agentController.skillWorkloadProfiles.authoring.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
     --set-string agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
+    --set-string opencrane-mcp-executor.mcpExecutor.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
     --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
     --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
     --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
@@ -132,12 +133,25 @@ if grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -E '
   exit 1
 fi
 
+# OCI-backed MCP Jobs have the same create/register/release verbs in their own namespace, without
+# Secret access or any broader workload mutation.
+grep -A16 -F 'namespace: opencrane-mcp-executors' "$MANIFEST" | grep -F 'name: agent-controller-mcp-executor' >/dev/null
+grep -A16 -F 'name: agent-controller-mcp-executor' "$MANIFEST" | grep -F 'resources: ["jobs"]' >/dev/null
+grep -A16 -F 'name: agent-controller-mcp-executor' "$MANIFEST" | grep -F 'verbs: ["get", "create", "patch"]' >/dev/null
+grep -A16 -F 'name: agent-controller-mcp-executor' "$MANIFEST" | grep -F 'resources: ["pods"]' >/dev/null
+if grep -A16 -F 'name: agent-controller-mcp-executor' "$MANIFEST" | grep -Eq 'resources: \["secrets"\]|"(delete|update|watch)"' >/dev/null; then
+  echo "MCP executor Role exceeds fenced Job release and Pod discovery authority" >&2
+  exit 1
+fi
+
 # The controller receives both profile-owned namespaces in one immutable map; it never gets a
 # process-wide runtime namespace that could let one profile borrow another's RoleBinding.
 grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"namespace\":\"oc-opencrane-runtime\"' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"namespace\":\"oc-opencrane-managed-runtime\"' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"identityProfile\":\"managed\"' >/dev/null
 grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"serviceAccountName\":\"managed-agent-runtime-default\"' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"namespace\":\"opencrane-mcp-executors\"' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON' "$MANIFEST" | grep -F '\"companionImage\":\"ghcr.io/elewa-git/opencrane-mcp-executor@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"' >/dev/null
 grep -B8 -A8 -F 'name: oc-opencrane-agent-controller' "$MANIFEST" | grep -F 'namespace: server-ns' >/dev/null
 
 # Helm, not the controller, owns the namespace-wide network boundary.
@@ -207,6 +221,20 @@ grep -Fq "object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_SKIL
 grep -Fq "object.spec.template.spec.volumes[1].name == 'bootstrap-reference'" "$ADMISSION"
 grep -Fq "object.spec.template.spec.volumes[1].downwardAPI.items[0].fieldRef.fieldPath == \"metadata.annotations['opencrane.ai/capability-reference']\"" "$ADMISSION"
 grep -Fq "object.spec.template.spec.volumes[2].name == 'scratch'" "$ADMISSION"
+
+# OCI-backed MCP admission fixes the companion, token boundary, resources, and one-use release while
+# leaving only the imported server digest dynamic.
+grep -Eq 'name: .*mcp-executor' "$ADMISSION"
+grep -Fq "object.metadata.name.matches('^mcp-exec-[a-f0-9]{24}$')" "$ADMISSION"
+grep -Fq "request.operation == 'UPDATE' || object.spec.suspend == true" "$ADMISSION"
+grep -Fq "object.spec.template.spec.initContainers[0].name == 'mcp-server'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.initContainers[0].image.matches('^[a-z0-9]" "$ADMISSION"
+grep -Fq "object.spec.template.spec.initContainers[0].env" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].name == 'mcp-companion'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/elewa-git/opencrane-mcp-executor@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"" "$ADMISSION"
+grep -Fq "object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-mcp-executor'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.initContainers[0].volumeMounts.size() == 1" "$ADMISSION"
+grep -Fq "object.spec.template.metadata.annotations == object.metadata.annotations" "$ADMISSION"
 grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://oc-opencrane-opencrane-server.server-ns.svc.cluster.local:8081/api/internal/agent-runtime' >/dev/null
 if grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://override.example:8081' >/dev/null; then
   echo "governed worker bootstrap must not inherit the mutable runtime endpoint override" >&2

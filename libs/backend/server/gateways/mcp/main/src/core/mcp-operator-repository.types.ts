@@ -1,6 +1,6 @@
 import type { AuthorizationContextRepository, CapabilityCatalogRepository, ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
 import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
-import type { McpbValidationRepository } from "../mcpb-validation/mcpb-validation-repository.types";
+import type { OciImageValidationRepository } from "../oci-image-validation/oci-image-validation-repository.types";
 
 import type { McpEraProbeStates, McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
 
@@ -326,8 +326,8 @@ export interface McpOperatorTransaction
 {
 	/** Reads and changes MCP catalog, install, directory, and audit records. */
 	readonly mcp: IMcpOperatorRepository;
-	/** Reads and changes MCP bundle validation records. */
-	readonly mcpbValidations: McpbValidationRepository;
+	/** Reads and changes OCI image-layout validation records. */
+	readonly ociImageValidations: OciImageValidationRepository;
 	/** Resolves the caller's principal and group subjects for entitlement decisions. */
 	readonly authorization: AuthorizationContextRepository;
 	/** Finds the MCP-use capability required to evaluate entitlement grants. */

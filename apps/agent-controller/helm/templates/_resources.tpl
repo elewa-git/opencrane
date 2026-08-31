@@ -44,6 +44,10 @@
 {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.skillWorkloadProfiles.toolRunner.image.digest) }}
 {{- fail "agentController.enabled=true requires an immutable sha256 tool-runner worker image digest" }}
 {{- end }}
+{{- $mcpExecutorValues := (index .Values "opencrane-mcp-executor").mcpExecutor -}}
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" $mcpExecutorValues.image.digest) }}
+{{- fail "agentController.enabled=true requires an immutable sha256 MCP companion image digest" }}
+{{- end }}
 {{- $controllerName := "agent-controller" -}}
 {{- $runtimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
 {{- $runtimeNamespaceLabel := include "opencrane.agentController.runtimeNamespaceLabelValue" . -}}
@@ -77,12 +81,16 @@
 {{- $toolRunnerImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.toolRunner.image.repository .Values.agentController.skillWorkloadProfiles.toolRunner.image.digest -}}
 {{- $authoringNamespace := (index .Values "opencrane-skill-authoring").skillAuthoring.namespace -}}
 {{- $toolRunnerNamespace := (index .Values "opencrane-tool-runner").toolRunner.namespace -}}
-{{- if or (eq $authoringNamespace .Release.Namespace) (eq $toolRunnerNamespace .Release.Namespace) (eq $authoringNamespace $toolRunnerNamespace) }}
-{{- fail "governed skill workload namespaces must be distinct from the server and from each other" }}
+{{- $mcpExecutorNamespace := $mcpExecutorValues.namespace -}}
+{{- if or (eq $authoringNamespace .Release.Namespace) (eq $toolRunnerNamespace .Release.Namespace) (eq $mcpExecutorNamespace .Release.Namespace) (eq $authoringNamespace $toolRunnerNamespace) (eq $authoringNamespace $mcpExecutorNamespace) (eq $toolRunnerNamespace $mcpExecutorNamespace) }}
+{{- fail "governed workload namespaces must be distinct from the server and from each other" }}
 {{- end }}
+{{- $mcpCompanionImage := printf "%s@%s" $mcpExecutorValues.image.repository $mcpExecutorValues.image.digest -}}
+{{- $mcpInternalUrl := printf "http://%s-opencrane-server.%s.svc.cluster.local:%v/api/internal/mcp-executor" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
 {{- $controllerImage := printf "%s@%s" .Values.agentController.image.repository .Values.agentController.image.digest -}}
 {{- $controllerUsername := printf "system:serviceaccount:%s:%s" .Release.Namespace $controllerName -}}
 {{- $skillAdmissionName := printf "%s-skill-workloads" (include "opencrane.agentController.admissionName" .) -}}
+{{- $mcpAdmissionName := printf "%s-mcp-executor" (include "opencrane.agentController.admissionName" .) | trunc 63 | trimSuffix "-" -}}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -251,6 +259,39 @@ roleRef:
 ---
 {{- end }}
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $controllerName }}-mcp-executor
+  namespace: {{ $mcpExecutorNamespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-controller
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "create", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $controllerName }}-mcp-executor
+  namespace: {{ $mcpExecutorNamespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-controller
+subjects:
+  - kind: ServiceAccount
+    name: {{ $controllerName }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $controllerName }}-mcp-executor
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -306,6 +347,8 @@ spec:
               value: {{ dict .Values.agentController.runtimeProfile.name $personalProfileEnv $managedRuntimeProfileName $managedProfileEnv | toJson | quote }}
             - name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON
               value: {{ dict "authoring" (dict "kind" "authoring" "image" $authoringImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.authoring.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $authoringNamespace "serviceAccountName" "skill-authoring-default" "capabilityTokenAudience" "opencrane-skill-authoring" "bootstrapUrl" $skillBootstrapUrl "capabilityTokenPath" "/var/run/opencrane/tokens/capability.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.skillWorkloadProfiles.authoring.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.authoring.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.authoring.resources) "tool-runner" (dict "kind" "tool-runner" "image" $toolRunnerImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.toolRunner.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $toolRunnerNamespace "serviceAccountName" "tool-runner-default" "capabilityTokenAudience" "opencrane-tool-runner" "bootstrapUrl" $skillBootstrapUrl "capabilityTokenPath" "/var/run/opencrane/tokens/capability.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.skillWorkloadProfiles.toolRunner.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.toolRunner.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.toolRunner.resources) | toJson | quote }}
+            - name: AGENT_CONTROLLER_MCP_EXECUTOR_PROFILE_JSON
+              value: {{ dict "companionImage" $mcpCompanionImage "imagePullPolicy" $mcpExecutorValues.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $mcpExecutorNamespace "serviceAccountName" $mcpExecutorValues.serviceAccountName "opencraneInternalUrl" $mcpInternalUrl "projectedTokenTtlSeconds" $mcpExecutorValues.projectedTokenTtlSeconds "scratchSize" $mcpExecutorValues.scratchSize "activeDeadlineSeconds" $mcpExecutorValues.activeDeadlineSeconds "serverResources" $mcpExecutorValues.serverResources "companionResources" $mcpExecutorValues.companionResources | toJson | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "agent-controller") | nindent 12 }}
           volumeMounts:
             - name: opencrane-token
@@ -483,6 +526,176 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+---
+# The MCP controller may create only the fixed two-container envelope. The uploaded image is the
+# sole dynamic field and must remain an immutable registry digest; it receives no projected token.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $mcpAdmissionName }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp-executor
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    matchPolicy: Exact
+    resourceRules:
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs"]
+        scope: "Namespaced"
+    namespaceSelector:
+      matchLabels:
+        app.kubernetes.io/component: mcp-executor
+  validations:
+    - expression: request.userInfo.username == {{ $controllerUsername | toJson }}
+      message: only this release's controller ServiceAccount may create MCP executor Jobs
+    - expression: >-
+        object.metadata.namespace == {{ $mcpExecutorNamespace | toJson }} &&
+        object.metadata.name.matches('^mcp-exec-[a-f0-9]{24}$') &&
+        object.metadata.labels.size() == 3 &&
+        object.metadata.labels['app.kubernetes.io/name'] == 'opencrane-mcp-executor' &&
+        object.metadata.labels['app.kubernetes.io/component'] == 'mcp-executor' &&
+        object.metadata.labels['opencrane.ai/mcp-workload'] == object.metadata.name &&
+        object.metadata.annotations.size() == 5 &&
+        object.metadata.annotations['opencrane.ai/mcp-claim-id'].size() > 0 &&
+        object.metadata.annotations['opencrane.ai/silo-id'].size() > 0 &&
+        object.metadata.annotations['opencrane.ai/mcp-delivery-count'].matches('^[1-9][0-9]*$') &&
+        object.metadata.annotations['opencrane.ai/mcp-profile'].size() > 0 &&
+        object.metadata.annotations['opencrane.ai/mcp-execution-reference'].size() > 0 &&
+        (!has(object.metadata.ownerReferences) || object.metadata.ownerReferences.size() == 0) &&
+        (!has(object.metadata.finalizers) || object.metadata.finalizers.size() == 0)
+      message: MCP executor Job identity must match one saved claim
+    - expression: >-
+        (request.operation == 'UPDATE' || object.spec.suspend == true) &&
+        object.spec.parallelism == 1 && object.spec.completions == 1 && object.spec.backoffLimit == 0 &&
+        object.spec.ttlSecondsAfterFinished == 0 && object.spec.activeDeadlineSeconds > 0 &&
+        object.spec.activeDeadlineSeconds <= {{ $mcpExecutorValues.activeDeadlineSeconds }} &&
+        object.spec.template.spec.serviceAccountName == 'mcp-executor-default' &&
+        object.spec.template.spec.automountServiceAccountToken == false &&
+        object.spec.template.spec.enableServiceLinks == false &&
+        object.spec.template.spec.restartPolicy == 'Never' &&
+        object.spec.template.spec.terminationGracePeriodSeconds == 0 &&
+        object.spec.template.spec.securityContext.runAsNonRoot == true &&
+        object.spec.template.spec.securityContext.runAsUser == 65532 &&
+        object.spec.template.spec.securityContext.runAsGroup == 65532 &&
+        object.spec.template.spec.securityContext.fsGroup == 65532 &&
+        object.spec.template.spec.securityContext.seccompProfile.type == 'RuntimeDefault' &&
+        object.spec.template.spec.initContainers.size() == 1 &&
+        (!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0) &&
+        object.spec.template.spec.initContainers[0].name == 'mcp-server' &&
+        object.spec.template.spec.initContainers[0].restartPolicy == 'Always' &&
+        object.spec.template.spec.initContainers[0].image.matches('^[a-z0-9][a-z0-9._:-]*(/[a-z0-9][a-z0-9._/-]*)+@sha256:[a-f0-9]{64}$') &&
+        object.spec.template.spec.initContainers[0].imagePullPolicy == {{ $mcpExecutorValues.image.pullPolicy | toJson }} &&
+        object.spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation == false &&
+        object.spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem == true &&
+        object.spec.template.spec.initContainers[0].securityContext.capabilities.drop == ['ALL'] &&
+        (!has(object.spec.template.spec.initContainers[0].securityContext.capabilities.add) || object.spec.template.spec.initContainers[0].securityContext.capabilities.add.size() == 0) &&
+        (!has(object.spec.template.spec.initContainers[0].command) || object.spec.template.spec.initContainers[0].command.size() == 0) &&
+        (!has(object.spec.template.spec.initContainers[0].args) || object.spec.template.spec.initContainers[0].args.size() == 0) &&
+        !has(object.spec.template.spec.initContainers[0].lifecycle) &&
+        !has(object.spec.template.spec.initContainers[0].livenessProbe) &&
+        !has(object.spec.template.spec.initContainers[0].readinessProbe) &&
+        !has(object.spec.template.spec.initContainers[0].startupProbe) &&
+        !has(object.spec.template.spec.initContainers[0].env) &&
+        !has(object.spec.template.spec.initContainers[0].envFrom) &&
+        object.spec.template.spec.initContainers[0].resources.requests.cpu == {{ $mcpExecutorValues.serverResources.requests.cpu | toString | toJson }} &&
+        object.spec.template.spec.initContainers[0].resources.requests.memory == {{ $mcpExecutorValues.serverResources.requests.memory | toString | toJson }} &&
+        object.spec.template.spec.initContainers[0].resources.limits.cpu == {{ $mcpExecutorValues.serverResources.limits.cpu | toString | toJson }} &&
+        object.spec.template.spec.initContainers[0].resources.limits.memory == {{ $mcpExecutorValues.serverResources.limits.memory | toString | toJson }} &&
+        object.spec.template.spec.initContainers[0].volumeMounts.size() == 1 &&
+        object.spec.template.spec.initContainers[0].volumeMounts[0].name == 'server-scratch' &&
+        object.spec.template.spec.initContainers[0].volumeMounts[0].mountPath == '/tmp' &&
+        object.spec.template.spec.containers.size() == 1 &&
+        object.spec.template.spec.containers[0].name == 'mcp-companion' &&
+        object.spec.template.spec.containers[0].image == {{ $mcpCompanionImage | toJson }} &&
+        object.spec.template.spec.containers[0].imagePullPolicy == {{ $mcpExecutorValues.image.pullPolicy | toJson }} &&
+        object.spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation == false &&
+        object.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem == true &&
+        object.spec.template.spec.containers[0].securityContext.capabilities.drop == ['ALL'] &&
+        (!has(object.spec.template.spec.containers[0].securityContext.capabilities.add) || object.spec.template.spec.containers[0].securityContext.capabilities.add.size() == 0) &&
+        (!has(object.spec.template.spec.containers[0].command) || object.spec.template.spec.containers[0].command.size() == 0) &&
+        (!has(object.spec.template.spec.containers[0].args) || object.spec.template.spec.containers[0].args.size() == 0) &&
+        !has(object.spec.template.spec.containers[0].lifecycle) &&
+        !has(object.spec.template.spec.containers[0].livenessProbe) &&
+        !has(object.spec.template.spec.containers[0].readinessProbe) &&
+        !has(object.spec.template.spec.containers[0].startupProbe) &&
+        !has(object.spec.template.spec.containers[0].envFrom) &&
+        object.spec.template.spec.containers[0].env.size() == 5 &&
+        object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_MCP_EXECUTOR_URL' &&
+        object.spec.template.spec.containers[0].env[0].value == {{ $mcpInternalUrl | toJson }} &&
+        object.spec.template.spec.containers[0].env[1].name == 'OPENCRANE_MCP_SERVER_URL' &&
+        object.spec.template.spec.containers[0].env[1].value == 'http://127.0.0.1:3000/mcp' &&
+        object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_MCP_TOKEN_PATH' &&
+        object.spec.template.spec.containers[0].env[2].value == '/var/run/opencrane/tokens/executor.token' &&
+        object.spec.template.spec.containers[0].env[3].name == 'OPENCRANE_MCP_CLAIM_REFERENCE_PATH' &&
+        object.spec.template.spec.containers[0].env[3].value == '/var/run/opencrane/claim/reference' &&
+        object.spec.template.spec.containers[0].env[4].name == 'POD_UID' &&
+        object.spec.template.spec.containers[0].env[4].valueFrom.fieldRef.fieldPath == 'metadata.uid' &&
+        object.spec.template.spec.containers[0].resources.requests.cpu == {{ $mcpExecutorValues.companionResources.requests.cpu | toString | toJson }} &&
+        object.spec.template.spec.containers[0].resources.requests.memory == {{ $mcpExecutorValues.companionResources.requests.memory | toString | toJson }} &&
+        object.spec.template.spec.containers[0].resources.limits.cpu == {{ $mcpExecutorValues.companionResources.limits.cpu | toString | toJson }} &&
+        object.spec.template.spec.containers[0].resources.limits.memory == {{ $mcpExecutorValues.companionResources.limits.memory | toString | toJson }} &&
+        object.spec.template.spec.containers[0].volumeMounts.size() == 3 &&
+        object.spec.template.spec.containers[0].volumeMounts[0].name == 'executor-token' &&
+        object.spec.template.spec.containers[0].volumeMounts[0].mountPath == '/var/run/opencrane/tokens' &&
+        object.spec.template.spec.containers[0].volumeMounts[0].readOnly == true &&
+        object.spec.template.spec.containers[0].volumeMounts[1].name == 'claim-reference' &&
+        object.spec.template.spec.containers[0].volumeMounts[1].mountPath == '/var/run/opencrane/claim' &&
+        object.spec.template.spec.containers[0].volumeMounts[1].readOnly == true &&
+        object.spec.template.spec.containers[0].volumeMounts[2].name == 'companion-scratch' &&
+        object.spec.template.spec.containers[0].volumeMounts[2].mountPath == '/tmp' &&
+        object.spec.template.spec.volumes.size() == 4 &&
+        object.spec.template.spec.volumes[0].name == 'executor-token' &&
+        object.spec.template.spec.volumes[0].projected.defaultMode == 288 &&
+        object.spec.template.spec.volumes[0].projected.sources.size() == 1 &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-mcp-executor' &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.path == 'executor.token' &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.expirationSeconds == {{ $mcpExecutorValues.projectedTokenTtlSeconds }} &&
+        object.spec.template.spec.volumes[1].name == 'claim-reference' &&
+        object.spec.template.spec.volumes[1].downwardAPI.defaultMode == 288 &&
+        object.spec.template.spec.volumes[1].downwardAPI.items.size() == 1 &&
+        object.spec.template.spec.volumes[1].downwardAPI.items[0].path == 'reference' &&
+        object.spec.template.spec.volumes[1].downwardAPI.items[0].fieldRef.fieldPath == "metadata.annotations['opencrane.ai/mcp-execution-reference']" &&
+        object.spec.template.spec.volumes[2].name == 'server-scratch' &&
+        quantity(object.spec.template.spec.volumes[2].emptyDir.sizeLimit).compareTo(quantity({{ $mcpExecutorValues.scratchSize | toJson }})) == 0 &&
+        object.spec.template.spec.volumes[3].name == 'companion-scratch' &&
+        quantity(object.spec.template.spec.volumes[3].emptyDir.sizeLimit).compareTo(quantity({{ $mcpExecutorValues.scratchSize | toJson }})) == 0 &&
+        object.spec.template.metadata.labels == object.metadata.labels &&
+        object.spec.template.metadata.annotations == object.metadata.annotations &&
+        (!has(object.spec.template.metadata.ownerReferences) || object.spec.template.metadata.ownerReferences.size() == 0) &&
+        (!has(object.spec.template.metadata.finalizers) || object.spec.template.metadata.finalizers.size() == 0) &&
+        (!has(object.spec.template.metadata.name) || object.spec.template.metadata.name == '') &&
+        (!has(object.spec.template.metadata.generateName) || object.spec.template.metadata.generateName == '') &&
+        (!has(object.spec.template.metadata.namespace) || object.spec.template.metadata.namespace == '')
+      message: MCP executor Job must keep the fixed token-isolated two-container shape
+    - expression: >-
+        request.operation == 'CREATE' ||
+        (oldObject.spec.suspend == true && object.spec.suspend == false &&
+         object.metadata.name == oldObject.metadata.name && object.metadata.labels == oldObject.metadata.labels &&
+         object.metadata.annotations == oldObject.metadata.annotations && object.spec.parallelism == oldObject.spec.parallelism &&
+         object.spec.completions == oldObject.spec.completions && object.spec.backoffLimit == oldObject.spec.backoffLimit &&
+         object.spec.ttlSecondsAfterFinished == oldObject.spec.ttlSecondsAfterFinished &&
+         object.spec.activeDeadlineSeconds > 0 && object.spec.activeDeadlineSeconds <= oldObject.spec.activeDeadlineSeconds &&
+         object.spec.template == oldObject.spec.template)
+      message: an MCP executor Job update may only release its saved suspended template once
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $mcpAdmissionName }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp-executor
+spec:
+  policyName: {{ $mcpAdmissionName }}
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        app.kubernetes.io/component: mcp-executor
 ---
 # The skill controller has Job create/get in these two namespaces only. Admission makes that generic
 # Kubernetes verb safe: it can create only the exact suspended worker envelopes produced by the

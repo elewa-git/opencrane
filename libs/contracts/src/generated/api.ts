@@ -160,7 +160,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/mcp/bundle-validations": {
+    "/mcp/oci-image-validations": {
         parameters: {
             query?: never;
             header?: never;
@@ -169,25 +169,42 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Save an MCP bundle validation job. Org-admin only */
-        post: operations["submitMcpbValidation"];
+        /** Save an OCI image admission job. Org-admin only */
+        post: operations["submitOciImageValidation"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/mcp/bundle-validations/{id}": {
+    "/mcp/oci-image-validations/{id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Read one saved MCP bundle validation. Org-admin only */
-        get: operations["getMcpbValidation"];
+        /** Read one saved OCI image admission. Org-admin only */
+        get: operations["getOciImageValidation"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/oci-image-validations/{id}/server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create an MCP server revision from an imported OCI image and start discovery. Org-admin only */
+        post: operations["promoteOciImageValidationToMcpServer"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1647,8 +1664,8 @@ export interface components {
             /** @description All local groups eligible to receive an MCP authorization grant. */
             groups: components["schemas"]["EntitledGroup"][];
         };
-        /** @description An organisation-admin request to verify one exact published MCP bundle. The idempotency key makes a retried request return the same saved validation. */
-        McpbValidationSubmission: {
+        /** @description An organisation-admin request to admit one exact published OCI image. The idempotency key makes a retried request return the same saved record. */
+        OciImageValidationSubmission: {
             /** @description Caller-chosen key that safely retries this submission. */
             idempotencyKey: string;
             /** @description Published artifact identifier in the caller's silo. */
@@ -1656,8 +1673,8 @@ export interface components {
             /** @description Exact immutable published revision to verify. */
             artifactRevisionId: string;
         };
-        /** @description Saved status of one MCP bundle validation. A background workflow verifies the signed package and its manifest after this record is created. */
-        McpbValidation: {
+        /** @description Saved status of one OCI image admission. A background workflow checks the full layout and imports every referenced blob into the configured registry. */
+        OciImageValidation: {
             /** @description Stable validation identifier. */
             id: string;
             /** @description Published artifact identifier selected at submission. */
@@ -1671,25 +1688,23 @@ export interface components {
             /** @description Digest that binds the background job to its immutable input. */
             submissionDigest: string;
             /**
-             * @description Current validation result.
+             * @description Current admission result.
              * @enum {string}
              */
-            state: "Pending" | "Verified" | "Rejected";
-            /** @description Verified bundle name, or null until verification succeeds. */
-            manifestName?: string | null;
-            /** @description Verified bundle version, or null until verification succeeds. */
-            bundleVersion?: string | null;
-            /** @description Digest of the verified root manifest, or null until verification succeeds. */
-            manifestDigest?: string | null;
-            /** @description Trusted signing certificate publisher, or null until verification succeeds. */
-            publisher?: string | null;
-            /** @description Trusted signing certificate fingerprint, or null until verification succeeds. */
-            signerFingerprint?: string | null;
+            state: "Pending" | "Imported" | "Rejected";
+            /** @description Digest of the verified OCI layout index, or null until verification succeeds. */
+            indexDigest?: string | null;
+            /** @description Digest of the selected OCI image manifest, or null until verification succeeds. */
+            imageManifestDigest?: string | null;
+            /** @description Digest of the selected OCI image configuration, or null until verification succeeds. */
+            configDigest?: string | null;
+            /** @description Digest-pinned image reference in the configured registry, or null until import succeeds. */
+            registryReference?: string | null;
             /**
-             * @description Bounded rejection reason, or null while pending or verified.
+             * @description Bounded rejection reason, or null while pending or imported.
              * @enum {string|null}
              */
-            failureCode?: "artifact_mismatch" | "bundle_too_large" | "invalid_archive" | "invalid_manifest" | "invalid_signature" | "unsupported_manifest_version" | null;
+            failureCode?: "artifact_mismatch" | "bundle_too_large" | "malformed_zip_package" | "not_oci_image_layout" | "invalid_layout" | "invalid_index" | "invalid_image_manifest" | "validation_failed" | "registry_import_failed" | null;
         };
         /** @description A direct file, chat, or dataset share. Each recipient relation is backed by an explicit authorization grant. */
         ResourceShare: {
@@ -2610,7 +2625,7 @@ export interface operations {
             };
         };
     };
-    submitMcpbValidation: {
+    submitOciImageValidation: {
         parameters: {
             query?: never;
             header?: never;
@@ -2619,20 +2634,20 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["McpbValidationSubmission"];
+                "application/json": components["schemas"]["OciImageValidationSubmission"];
             };
         };
         responses: {
-            /** @description Bundle validation and background job saved. */
+            /** @description OCI image admission and background import job saved. */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["McpbValidation"];
+                    "application/json": components["schemas"]["OciImageValidation"];
                 };
             };
-            /** @description Bundle validation fields are invalid. */
+            /** @description OCI image admission fields are invalid. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2650,7 +2665,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description MCP bundle artifact revision not found. */
+            /** @description OCI image artifact revision not found. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2659,7 +2674,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Submission key conflicts with another immutable bundle input. */
+            /** @description Submission key conflicts with another immutable OCI image input. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2670,7 +2685,7 @@ export interface operations {
             };
         };
     };
-    getMcpbValidation: {
+    getOciImageValidation: {
         parameters: {
             query?: never;
             header?: never;
@@ -2681,16 +2696,16 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Saved bundle validation. */
+            /** @description Saved OCI image admission. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["McpbValidation"];
+                    "application/json": components["schemas"]["OciImageValidation"];
                 };
             };
-            /** @description Bundle validation identifier is invalid. */
+            /** @description OCI image admission identifier is invalid. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2708,8 +2723,112 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description MCP bundle validation not found. */
+            /** @description OCI image validation not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    promoteOciImageValidationToMcpServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    description: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The same imported image was already promoted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "idempotent";
+                        serverId: string;
+                        serverRevisionId: string;
+                        executionId: string;
+                    };
+                };
+            };
+            /** @description MCP server revision and discovery execution saved. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "created";
+                        serverId: string;
+                        serverRevisionId: string;
+                        executionId: string;
+                    };
+                };
+            };
+            /** @description Promotion fields are invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Authenticated principal is unavailable. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Caller is not an organisation admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description OCI image validation not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The image is not imported or its server promotion conflicts. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description MCP runtime authority is unavailable. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

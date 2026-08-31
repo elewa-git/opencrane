@@ -70,6 +70,7 @@ async function _Main(): Promise<void>
 		false,
 		false,
 		health,
+		null,
 		null
 	);
 	const conversationSockets = _CreatePrismaSelfConversationSocketServer(
