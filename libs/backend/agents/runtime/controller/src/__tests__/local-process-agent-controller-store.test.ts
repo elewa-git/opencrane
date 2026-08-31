@@ -4,13 +4,13 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import type { WarmRuntimePoolProfiles } from "@opencrane/backend/agents/runtime/controller";
 import { LocalAgentRuntimeModelStrategies } from "@opencrane/models/local-development";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { __CreateLocalAgentRuntimeTokenReviewer } from "../local-agent-runtime-token";
 import { __CreateLocalProcessWarmRuntimeStore } from "../local-process-agent-controller-store";
 import type { LocalAgentRuntimeSpawnOptions } from "../local-process-agent-controller-store.types";
+import type { WarmRuntimePoolProfiles } from "../warm-runtime-controller.types";
 
 const _temporaryDirectories: string[] = [];
 
