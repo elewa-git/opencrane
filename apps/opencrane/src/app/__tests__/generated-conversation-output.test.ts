@@ -20,7 +20,9 @@ function _Database()
 	let asset: Record<string, unknown> | null = null;
 	let revision: Record<string, unknown> | null = null;
 	let scanJob: Record<string, unknown> | null = null;
+	/** Lets the output repository locate the active run attempt before it verifies the Pod lease. */
 	const assignment = { runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, bindingGeneration: 2, state: WorkloadAssignmentState.Registered, revokedAt: null, expiresAt: new Date("2030-01-01T00:00:00.000Z"), workloadKind: WorkloadKind.Deployment, run: { id: "run-1", attempt: 2, conversationId: "conversation-1" } };
+	/** Gives the matching generation and Pod identity that the output repository requires for the lease. */
 	const reservation = { generation: 2, state: WarmRuntimeReservationState.Claimed, namespace: _IDENTITY.namespace, serviceAccountName: _IDENTITY.serviceAccountName, podUid: _IDENTITY.podUid, idleDeadline: new Date("2030-01-01T00:00:00.000Z") };
 	const capability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.ArtifactCollection, ProductAuthorizationActions.Create);
 	if (capability === null) throw new Error("artifact collection create capability is missing");
